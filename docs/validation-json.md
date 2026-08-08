@@ -2220,6 +2220,8 @@ Current unhealthy reason values are:
 - `decode_stage_failed`
 - `missing_python_zlib_diff_artifact`
 - `python_zlib_diff_failed`
+- `missing_zstd_native_summary_artifact`
+- `zstd_native_summary_undercovered`
 - `missing_native_tier_corpus_discovery_artifact`
 - `native_tier_corpus_discovery_failed`
 
@@ -2723,7 +2725,7 @@ each `vort.dashboard_index.validation_unhealthy_reasons` enum value so new
 aggregate health reasons must be backed by real failing dashboard inputs before
 the smoke artifact can pass. The expected reason/check/fixture matrix lives in
 `tools/dashboard_strict_validation_reasons.json`; the `strict-validation-health`
-mode minimums must cover every configured reason, currently 23. A synthetic long-output check
+mode minimums must cover every configured reason, currently 25. A synthetic long-output check
 keeps the truncation path covered so `actual_output_truncated=true` is exercised
 in CI.
 

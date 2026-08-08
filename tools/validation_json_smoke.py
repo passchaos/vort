@@ -837,6 +837,7 @@ def main() -> int:
             and dashboard["fuzz_corpus_healthy"]
             and dashboard["decode_stage_healthy"]
             and dashboard["python_zlib_diff_healthy"]
+            and dashboard["zstd_native_summary_healthy"]
             and dashboard["native_tier_corpus_discovery_healthy"]
         )
         assert dashboard["validation_unhealthy_reasons"] == ([] if dashboard["validation_healthy"] else dashboard["validation_unhealthy_reasons"])

@@ -22,6 +22,7 @@ FUZZ_CORPUS_ARTIFACT = "vort-deflate-wrapper-fuzz-corpus.json"
 FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
 DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
 PYTHON_ZLIB_DIFF_ARTIFACT = "vort-python-zlib-diff-smoke.json"
+ZSTD_NATIVE_SUMMARY_ARTIFACT = "vort-zstd-native-stream-summary.json"
 NATIVE_TIER_RANGE_ARTIFACT = "vort-native-tier-range-bench-gate.json"
 NATIVE_TIER_RANGE_FILES_ARTIFACT = "vort-native-tier-range-files-bench-gate.json"
 NATIVE_TIER_RANGE_CORPUS_ARTIFACT = "vort-native-tier-range-corpus-bench-gate.json"
@@ -63,6 +64,8 @@ def write_producer_map(
     include_decode_stage_smoke: bool = True,
     include_python_zlib_exact: bool = True,
     include_python_zlib_smoke: bool = True,
+    include_zstd_native_summary_exact: bool = True,
+    include_zstd_native_summary_smoke: bool = True,
     include_native_tier_exact: bool = True,
     include_native_tier_smoke: bool = True,
     required_names: list[str] | None = None,
@@ -108,6 +111,11 @@ def write_producer_map(
             "expected_format": "json",
             "smoke_gate": "zig build run-python-zlib-diff-dashboard",
         }
+    if include_zstd_native_summary_smoke:
+        artifact_metadata[ZSTD_NATIVE_SUMMARY_ARTIFACT] = {
+            "expected_format": "json",
+            "smoke_gate": "zig build run-zstd-native-summary-dashboard",
+        }
     if include_native_tier_smoke:
         for artifact, smoke_gate in NATIVE_TIER_RANGE_ARTIFACTS:
             artifact_metadata[artifact] = {
@@ -131,6 +139,8 @@ def write_producer_map(
         exact[DECODE_STAGE_ARTIFACT] = "zig build run-deflate-decode-stage-report-dashboard"
     if include_python_zlib_exact:
         exact[PYTHON_ZLIB_DIFF_ARTIFACT] = "zig build run-python-zlib-diff-dashboard"
+    if include_zstd_native_summary_exact:
+        exact[ZSTD_NATIVE_SUMMARY_ARTIFACT] = "zig build run-zstd-native-summary-dashboard"
     if include_native_tier_exact:
         for artifact, smoke_gate in NATIVE_TIER_RANGE_ARTIFACTS:
             exact[artifact] = smoke_gate
@@ -581,6 +591,23 @@ def write_python_zlib_diff_report(path: Path, *, ok: bool = True) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def write_zstd_native_summary(path: Path, *, healthy: bool = True) -> None:
+    payload = {
+        "schema": "vort.zstd_native_stream_summary",
+        "schema_version": 1,
+        "compressed_bytes": 48 if healthy else 0,
+        "frame_count": 2 if healthy else 1,
+        "skippable_frame_count": 1 if healthy else 0,
+        "block_count": 2 if healthy else 1,
+        "compressed_block_count": 0,
+        "rle_block_count": 0,
+        "raw_block_count": 2 if healthy else 1,
+        "payload_bytes": 6 if healthy else 0,
+        "skippable_payload_bytes": 16 if healthy else 0,
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
 def write_native_tier_range_summary(path: Path, *, ok: bool = True, source: str = "built_in", rows: int = 9, fixture_count: int = 3) -> None:
     floors = NATIVE_TIER_RANGE_FLOORS.get(source, NATIVE_TIER_RANGE_FLOORS["custom"])
     payload = {
@@ -645,6 +672,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_fuzz_coverage_report(root / FUZZ_COVERAGE_ARTIFACT)
     write_decode_stage_report(root / DECODE_STAGE_ARTIFACT)
     write_python_zlib_diff_report(root / PYTHON_ZLIB_DIFF_ARTIFACT)
+    write_zstd_native_summary(root / ZSTD_NATIVE_SUMMARY_ARTIFACT)
     write_native_tier_range_summaries(root)
 
 
@@ -1159,6 +1187,12 @@ def main() -> int:
                 write_producer_map(producer_map)
             elif fixture == "python_zlib_diff_failed":
                 write_python_zlib_diff_report(fixture_root / PYTHON_ZLIB_DIFF_ARTIFACT, ok=False)
+                write_producer_map(producer_map)
+            elif fixture == "missing_zstd_native_summary_artifact":
+                (fixture_root / ZSTD_NATIVE_SUMMARY_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "zstd_native_summary_undercovered":
+                write_zstd_native_summary(fixture_root / ZSTD_NATIVE_SUMMARY_ARTIFACT, healthy=False)
                 write_producer_map(producer_map)
             elif fixture == "missing_native_tier_corpus_discovery_artifact":
                 (fixture_root / NATIVE_TIER_RANGE_CORPUS_DISCOVERY_ARTIFACT).unlink()

@@ -77,6 +77,9 @@ hangs. Dashboard validation also surfaces the timed-out probe count plus Zstd
 frame and dictionary probe case counts directly, making timeout regressions and
 loss of public Zstd sequence-table/repeat-offset coverage visible instead of
 relying only on aggregate capability totals.
+The retained Zstd native stream summary artifact also participates in aggregate
+dashboard validation health, with strict-mode fixtures for missing and
+undercovered summary outputs.
 `run-native-library-bench` now accepts repeated `--path` arguments plus `--limit` for focused
 project-file payloads, and `run-native-library-bench-path-gate` and `run-native-library-bench-releasefast-path-gate` keep that code path covered with a small fixture in Debug and ReleaseFast builds. `run-native-library-bench-gate` is the lightweight Debug public API benchmark
 CSV gate; `run-native-library-bench-releasefast-gate` runs the same 93-row matrix

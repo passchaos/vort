@@ -772,42 +772,33 @@
         }
       },
       "collections": {
-        "dashboard_strict_missing_modes": {
-          "allow_empty": true,
-          "enums": {
-            "mode": [
-              "all",
-              "strict-producers",
-              "strict-smoke-gates",
-              "strict-header-inspect",
-              "strict-validation-health",
-              "synthetic"
-            ]
-          },
+        "native_tier_range_source_details": {
           "fields": {
-            "min_checks": "int",
-            "min_expected_failures": "int",
-            "min_matched": "int",
-            "mode": "str"
+            "source": "str",
+            "summary_count": "int",
+            "ok_count": "int",
+            "rows": "int",
+            "fixture_count": "int",
+            "enforced_count": "int",
+            "missing": "bool",
+            "min_range_mib_s_by_tier": "dict",
+            "range_mib_s_floor_by_tier": "dict"
+          },
+          "enums": {
+            "source": [
+              "built_in",
+              "project_files",
+              "standard_corpus",
+              "custom",
+              "legacy"
+            ]
           }
         },
-        "header_inspect_missing_workflows": {
+        "native_tier_corpus_discovery_selected_cases": {
           "allow_empty": true,
-          "enums": {
-            "format": [
-              "raw",
-              "zlib",
-              "gzip"
-            ],
-            "workflow": [
-              "hex",
-              "file"
-            ]
-          },
           "fields": {
-            "command": "str",
-            "format": "str",
-            "workflow": "str"
+            "label": "str",
+            "bytes": "int"
           }
         }
       },
@@ -1018,37 +1009,6 @@
         "size_bytes": "int",
         "smoke_gate": "str"
       },
-      "collections": {
-        "native_tier_range_source_details": {
-          "fields": {
-            "source": "str",
-            "summary_count": "int",
-            "ok_count": "int",
-            "rows": "int",
-            "fixture_count": "int",
-            "enforced_count": "int",
-            "missing": "bool",
-            "min_range_mib_s_by_tier": "dict",
-            "range_mib_s_floor_by_tier": "dict"
-          },
-          "enums": {
-            "source": [
-              "built_in",
-              "project_files",
-              "standard_corpus",
-              "custom",
-              "legacy"
-            ]
-          }
-        },
-        "native_tier_corpus_discovery_selected_cases": {
-          "allow_empty": true,
-          "fields": {
-            "label": "str",
-            "bytes": "int"
-          }
-        }
-      },
       "enums": {
         "native_tier_corpus_discovery_source_mode": [
           "",
@@ -1084,6 +1044,8 @@
           "decode_stage_failed",
           "missing_python_zlib_diff_artifact",
           "python_zlib_diff_failed",
+          "missing_zstd_native_summary_artifact",
+          "zstd_native_summary_undercovered",
           "missing_native_tier_corpus_discovery_artifact",
           "native_tier_corpus_discovery_failed"
         ]
@@ -1329,6 +1291,8 @@
               "validation_decode_stage_failed",
               "validation_missing_python_zlib_diff_artifact",
               "validation_python_zlib_diff_failed",
+              "validation_missing_zstd_native_summary_artifact",
+              "validation_zstd_native_summary_undercovered",
               "validation_missing_native_tier_corpus_discovery_artifact",
               "validation_native_tier_corpus_discovery_failed"
             ],
@@ -1354,6 +1318,8 @@
               "decode_stage_failed",
               "missing_python_zlib_diff_artifact",
               "python_zlib_diff_failed",
+              "missing_zstd_native_summary_artifact",
+              "zstd_native_summary_undercovered",
               "missing_native_tier_corpus_discovery_artifact",
               "native_tier_corpus_discovery_failed"
             ]
@@ -1383,7 +1349,9 @@
                 "validation_missing_native_tier_corpus_discovery_artifact": "missing_native_tier_corpus_discovery_artifact",
                 "validation_native_tier_corpus_discovery_failed": "native_tier_corpus_discovery_failed",
                 "validation_python_zlib_diff_failed": "python_zlib_diff_failed",
-                "validation_sidecar_corrupt_failed": "sidecar_corrupt_failed"
+                "validation_sidecar_corrupt_failed": "sidecar_corrupt_failed",
+                "validation_missing_zstd_native_summary_artifact": "missing_zstd_native_summary_artifact",
+                "validation_zstd_native_summary_undercovered": "zstd_native_summary_undercovered"
               },
               "target": "reason"
             }
@@ -1467,6 +1435,8 @@
           "validation_decode_stage_failed",
           "validation_missing_python_zlib_diff_artifact",
           "validation_python_zlib_diff_failed",
+          "validation_missing_zstd_native_summary_artifact",
+          "validation_zstd_native_summary_undercovered",
           "validation_missing_native_tier_corpus_discovery_artifact",
           "validation_native_tier_corpus_discovery_failed",
           "truncated_output",
@@ -1518,6 +1488,8 @@
           "validation_decode_stage_failed",
           "validation_missing_python_zlib_diff_artifact",
           "validation_python_zlib_diff_failed",
+          "validation_missing_zstd_native_summary_artifact",
+          "validation_zstd_native_summary_undercovered",
           "validation_missing_native_tier_corpus_discovery_artifact",
           "validation_native_tier_corpus_discovery_failed"
         ],
@@ -1543,6 +1515,8 @@
           "decode_stage_failed",
           "missing_python_zlib_diff_artifact",
           "python_zlib_diff_failed",
+          "missing_zstd_native_summary_artifact",
+          "zstd_native_summary_undercovered",
           "missing_native_tier_corpus_discovery_artifact",
           "native_tier_corpus_discovery_failed"
         ],
@@ -1568,6 +1542,8 @@
           "decode_stage_failed",
           "missing_python_zlib_diff_artifact",
           "python_zlib_diff_failed",
+          "missing_zstd_native_summary_artifact",
+          "zstd_native_summary_undercovered",
           "missing_native_tier_corpus_discovery_artifact",
           "native_tier_corpus_discovery_failed"
         ]
@@ -1597,7 +1573,9 @@
             "validation_missing_native_tier_corpus_discovery_artifact": "missing_native_tier_corpus_discovery_artifact",
             "validation_native_tier_corpus_discovery_failed": "native_tier_corpus_discovery_failed",
             "validation_python_zlib_diff_failed": "python_zlib_diff_failed",
-            "validation_sidecar_corrupt_failed": "sidecar_corrupt_failed"
+            "validation_sidecar_corrupt_failed": "sidecar_corrupt_failed",
+            "validation_missing_zstd_native_summary_artifact": "missing_zstd_native_summary_artifact",
+            "validation_zstd_native_summary_undercovered": "zstd_native_summary_undercovered"
           },
           "target": "reason"
         },
@@ -1625,7 +1603,9 @@
             "missing_native_tier_corpus_discovery_artifact": "missing_native_tier_corpus_discovery_artifact",
             "native_tier_corpus_discovery_failed": "native_tier_corpus_discovery_failed",
             "python_zlib_diff_failed": "python_zlib_diff_failed",
-            "sidecar_corrupt_failed": "sidecar_corrupt_failed"
+            "sidecar_corrupt_failed": "sidecar_corrupt_failed",
+            "missing_zstd_native_summary_artifact": "missing_zstd_native_summary_artifact",
+            "zstd_native_summary_undercovered": "zstd_native_summary_undercovered"
           },
           "target": "reason"
         }

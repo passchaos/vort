@@ -1649,7 +1649,9 @@ architecture blindly.
   summary fields, and runs in `ci-smoke`. The retained
   `run-zstd-native-summary-dashboard` step now writes
   `zig-out/vort-zstd-native-stream-summary.json` and is indexed by the dashboard
-  producer/category manifests.
+  producer/category manifests. Dashboard strict validation now treats missing or
+  undercovered Zstd native stream summary artifacts as aggregate validation
+  health failures with dedicated negative fixtures.
 
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but

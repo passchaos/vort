@@ -108,6 +108,16 @@
       "fixture": "python_zlib_diff_failed"
     },
     {
+      "reason": "missing_zstd_native_summary_artifact",
+      "check": "validation_missing_zstd_native_summary_artifact",
+      "fixture": "missing_zstd_native_summary_artifact"
+    },
+    {
+      "reason": "zstd_native_summary_undercovered",
+      "check": "validation_zstd_native_summary_undercovered",
+      "fixture": "zstd_native_summary_undercovered"
+    },
+    {
       "reason": "missing_native_tier_corpus_discovery_artifact",
       "check": "validation_missing_native_tier_corpus_discovery_artifact",
       "fixture": "missing_native_tier_corpus_discovery_artifact"

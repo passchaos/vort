@@ -906,7 +906,7 @@ def main() -> int:
     python_zlib_healthy = python_zlib_health["healthy"]
     zstd_native_summary_healthy = zstd_native_summary["healthy"]
     native_tier_discovery_healthy = native_tier_discovery_health["healthy"]
-    validation_healthy = producer_healthy and smoke_gate_healthy and header_healthy and strict_healthy and sidecar_corrupt_healthy and huffman_healthy and fuzz_healthy and decode_stage_healthy and python_zlib_healthy and native_tier_discovery_healthy
+    validation_healthy = producer_healthy and smoke_gate_healthy and header_healthy and strict_healthy and sidecar_corrupt_healthy and huffman_healthy and fuzz_healthy and decode_stage_healthy and python_zlib_healthy and zstd_native_summary_healthy and native_tier_discovery_healthy
     validation_unhealthy_reasons = []
     if not producer_healthy:
         validation_unhealthy_reasons.append("missing_producer_steps")
@@ -950,6 +950,10 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_python_zlib_diff_artifact")
     elif not python_zlib_healthy:
         validation_unhealthy_reasons.append("python_zlib_diff_failed")
+    if not zstd_native_summary["present"]:
+        validation_unhealthy_reasons.append("missing_zstd_native_summary_artifact")
+    elif not zstd_native_summary_healthy:
+        validation_unhealthy_reasons.append("zstd_native_summary_undercovered")
     if not native_tier_discovery_health["present"]:
         validation_unhealthy_reasons.append("missing_native_tier_corpus_discovery_artifact")
     elif not native_tier_discovery_healthy:
