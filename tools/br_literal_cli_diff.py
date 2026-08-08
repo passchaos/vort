@@ -2529,6 +2529,10 @@ def main() -> int:
             node_compress(bytes.fromhex("6261707469736d"), quality=5, lgwin=10),
             bytes.fromhex("6261707469736d"),
         ),
+        "node-static-dictionary-upstream8192-33316-window": (
+            node_compress(bytes.fromhex("61206272696566"), quality=5, lgwin=10),
+            bytes.fromhex("61206272696566"),
+        ),
         "node-static-dictionary-leading-space-black-q5-lgwin10": (
             node_compress(b" black", quality=5, lgwin=10),
             b" black",

@@ -18154,6 +18154,158 @@
     },
     {
       "copy_len": 7,
+      "raw_word": "a brief",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "a brief",
+      "word_index": 1871
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "; width",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "; width",
+      "word_index": 1874
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "enzymes",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "enzymes",
+      "word_index": 1875
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "in late",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "in late",
+      "word_index": 1877
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "{return",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "{return",
+      "word_index": 1878
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "a point",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "a point",
+      "word_index": 1880
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "inks\">\n",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "inks\">\n",
+      "word_index": 1882
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "a place",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "a place",
+      "word_index": 1884
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "tr>\r\n\t\t",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "tr>\r\n\t\t",
+      "word_index": 1887
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "ccount ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "ccount ",
+      "word_index": 1888
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "<SCRIPT",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "<SCRIPT",
+      "word_index": 1890
+    },
+    {
+      "copy_len": 7,
+      "raw_word": " if (wi",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": " if (wi",
+      "word_index": 1898
+    },
+    {
+      "copy_len": 7,
+      "raw_word": " Under ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": " Under ",
+      "word_index": 1901
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "fear of",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "fear of",
+      "word_index": 1906
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "in each",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "in each",
+      "word_index": 1911
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "a&quot;",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "a&quot;",
+      "word_index": 1912
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "ustomVa",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "ustomVa",
+      "word_index": 1919
+    },
+    {
+      "copy_len": 7,
+      "raw_word": ";&gt;</",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": ";&gt;</",
+      "word_index": 1920
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "or that",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "or that",
+      "word_index": 1922
+    },
+    {
+      "copy_len": 7,
       "raw_word": " size=\"",
       "transform": 0,
       "transform_kind": "identity",
@@ -18162,11 +18314,459 @@
     },
     {
       "copy_len": 7,
+      "raw_word": "a class",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "a class",
+      "word_index": 1927
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Host = ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Host = ",
+      "word_index": 1929
+    },
+    {
+      "copy_len": 7,
       "raw_word": "Whether",
       "transform": 0,
       "transform_kind": "identity",
       "transformed_word": "Whether",
       "word_index": 1930
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "fertile",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "fertile",
+      "word_index": 1931
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Various",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Various",
+      "word_index": 1932
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "=[];(fu",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "=[];(fu",
+      "word_index": 1933
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "/></td>",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "/></td>",
+      "word_index": 1935
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "In some",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "In some",
+      "word_index": 1937
+    },
+    {
+      "copy_len": 7,
+      "raw_word": " <br />",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": " <br />",
+      "word_index": 1940
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Beijing",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Beijing",
+      "word_index": 1941
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "deutsch",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "deutsch",
+      "word_index": 1943
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "euskara",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "euskara",
+      "word_index": 1945
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "gaeilge",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "gaeilge",
+      "word_index": 1946
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "svenska",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "svenska",
+      "word_index": 1947
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "mensaje",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "mensaje",
+      "word_index": 1949
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "usuario",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "usuario",
+      "word_index": 1950
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "trabajo",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "trabajo",
+      "word_index": 1951
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "m\u00e9xico",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "m\u00e9xico",
+      "word_index": 1952
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "p\u00e1gina",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "p\u00e1gina",
+      "word_index": 1953
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "sistema",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "sistema",
+      "word_index": 1955
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "durante",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "durante",
+      "word_index": 1957
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "a\u00f1adir",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "a\u00f1adir",
+      "word_index": 1958
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "empresa",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "empresa",
+      "word_index": 1959
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "nuestro",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "nuestro",
+      "word_index": 1961
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "gracias",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "gracias",
+      "word_index": 1964
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "calidad",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "calidad",
+      "word_index": 1968
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "n\u00famero",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "n\u00famero",
+      "word_index": 1970
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "acuerdo",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "acuerdo",
+      "word_index": 1971
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "derecho",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "derecho",
+      "word_index": 1978
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "adem\u00e1s",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "adem\u00e1s",
+      "word_index": 1979
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "posible",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "posible",
+      "word_index": 1983
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "sevilla",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "sevilla",
+      "word_index": 1985
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "\u00faltimo",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u00faltimo",
+      "word_index": 1987
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "anuncio",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "anuncio",
+      "word_index": 1993
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "embargo",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "embargo",
+      "word_index": 1994
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "mercado",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "mercado",
+      "word_index": 1995
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "estudio",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "estudio",
+      "word_index": 1997
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "mejores",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "mejores",
+      "word_index": 1998
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "febrero",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "febrero",
+      "word_index": 1999
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "turismo",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "turismo",
+      "word_index": 2001
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "c\u00f3digo",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "c\u00f3digo",
+      "word_index": 2002
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "espacio",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "espacio",
+      "word_index": 2004
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "antonio",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "antonio",
+      "word_index": 2006
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "permite",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "permite",
+      "word_index": 2007
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "t\u00edtulo",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "t\u00edtulo",
+      "word_index": 2014
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "conocer",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "conocer",
+      "word_index": 2015
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "m\u00e1laga",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "m\u00e1laga",
+      "word_index": 2023
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "ingreso",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "ingreso",
+      "word_index": 2028
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "garc\u00eda",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "garc\u00eda",
+      "word_index": 2029
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "quienes",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "quienes",
+      "word_index": 2032
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "materia",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "materia",
+      "word_index": 2035
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "ma\u00f1ana",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "ma\u00f1ana",
+      "word_index": 2039
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "ning\u00fan",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "ning\u00fan",
+      "word_index": 2044
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "podemos",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "podemos",
+      "word_index": 2046
+    },
+    {
+      "copy_len": 8,
+      "raw_word": "business",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "business",
+      "word_index": 1
+    },
+    {
+      "copy_len": 8,
+      "raw_word": "homepage",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "homepage",
+      "word_index": 2
+    },
+    {
+      "copy_len": 8,
+      "raw_word": "security",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "security",
+      "word_index": 3
     },
     {
       "copy_len": 8,
@@ -20001,7 +20601,7 @@
       "word_index": 285
     }
   ],
-  "entry_count": 2500,
+  "entry_count": 2575,
   "schema": "vort.br_static_dictionary_source_anchors",
   "schema_version": 1,
   "source": "RFC 7932 Brotli static dictionary data as exposed by upstream common/dictionary_inc.h and common/transform.c"

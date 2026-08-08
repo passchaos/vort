@@ -2253,3 +2253,9 @@ architecture blindly.
   probe and reindexed tail exposed 73 direct 7-byte identity tuples and 145
   unique failing Node frames; all observed addresses are source-anchored and
   unit-tested, and the reindexed 1024-row window now has no Vort failures.
+
+- Continued upstream8192 with the 33316-34340 candidate window. The initial
+  probe and reindexed tail exposed 75 direct identity tuples (72 7-byte and
+  three 8-byte words) and 153 unique failing Node frames; all observed
+  addresses are source-anchored and unit-tested, and the reindexed 1024-row
+  window now has no Vort failures.
