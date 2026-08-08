@@ -65,6 +65,9 @@ pub const snappyEncodeFrameAppend = snappy.encodeFrameAppend;
 pub const snappyEncodeFrameInto = snappy.encodeFrameInto;
 pub const snappyEncodedFrameBound = snappy.encodedFrameBound;
 pub const SnappyEncoder = snappy.Encoder;
+pub const SnappyFrameSummary = snappy.FrameSummary;
+pub const snappySummarizeFrame = snappy.summarizeFrame;
+pub const snappySummarizeFrameChunks = snappy.summarizeFrameChunks;
 pub const snappyDecodeBlockAlloc = snappy.decodeBlockAlloc;
 pub const snappyDecodeBlockAllocExactSize = snappy.decodeBlockAllocExactSize;
 pub const snappyDecodeBlockAllocLimited = snappy.decodeBlockAllocLimited;
@@ -1302,6 +1305,9 @@ test "root exports lz4 and zstd codec helpers" {
     _ = snappyEncodeFrameInto;
     _ = snappyEncodedFrameBound;
     _ = SnappyEncoder;
+    _ = SnappyFrameSummary;
+    _ = snappySummarizeFrame;
+    _ = snappySummarizeFrameChunks;
     _ = snappyDecodeBlockAlloc;
     _ = snappyDecodeBlockAllocExactSize;
     _ = snappyDecodeBlockAllocLimited;
@@ -1954,6 +1960,9 @@ test "root snappy framed stream helpers round trip" {
     defer std.testing.allocator.free(encoded);
 
     try std.testing.expect(encoded.len <= try snappyEncodedFrameBound("hello".len));
+    const summary = try snappySummarizeFrame(encoded);
+    try std.testing.expectEqual(@as(usize, 1), summary.stream_identifier_count);
+    try std.testing.expectEqual(@as(usize, 5), summary.decoded_bytes);
     try std.testing.expectEqual(@as(usize, 5), try snappyDecodedFrameSize(encoded));
     try std.testing.expectError(error.OutputLimitExceeded, snappyDecodedFrameSizeLimited(encoded, 4));
 
@@ -2012,6 +2021,9 @@ test "root snappy chunked decode helpers round trip" {
     defer std.testing.allocator.free(frame_scratch);
 
     try std.testing.expectEqual(payload.len, try snappyDecodedFrameChunksSize(&frame_chunks, frame_scratch));
+    const frame_summary = try snappySummarizeFrameChunks(&frame_chunks, frame_scratch);
+    try std.testing.expectEqual(payload.len, frame_summary.decoded_bytes);
+    try std.testing.expectEqual(@as(usize, 1), frame_summary.stream_identifier_count);
     var frame_output: [payload.len]u8 = undefined;
     try std.testing.expectEqual(payload.len, try snappyDecodeFrameChunksInto(&frame_chunks, frame_scratch, &frame_output));
     try std.testing.expectEqualSlices(u8, payload, &frame_output);

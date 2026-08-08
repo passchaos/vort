@@ -23,6 +23,17 @@ const Header = struct {
     index: usize,
 };
 
+pub const FrameSummary = struct {
+    stream_identifier_count: usize = 0,
+    compressed_chunk_count: usize = 0,
+    uncompressed_chunk_count: usize = 0,
+    skippable_chunk_count: usize = 0,
+    skippable_payload_bytes: usize = 0,
+    decoded_bytes: usize = 0,
+    compressed_payload_bytes: usize = 0,
+    uncompressed_payload_bytes: usize = 0,
+};
+
 pub fn encodedBlockBound(input_len: usize) Error!usize {
     _ = try checkedUsizeToU32(input_len);
     var bound = try varintEncodedLen(input_len);
@@ -185,6 +196,45 @@ pub fn encodeFrameInto(input: []const u8, output: []u8) Error!usize {
         offset += chunk_len;
     }
     return out.items.len;
+}
+
+pub fn summarizeFrame(frame: []const u8) Error!FrameSummary {
+    var iterator = try FrameChunkIterator.init(frame);
+    var summary: FrameSummary = .{};
+    while (try iterator.next()) |chunk| {
+        switch (chunk.kind) {
+            .stream_identifier => summary.stream_identifier_count += 1,
+            .skippable => {
+                summary.skippable_chunk_count += 1;
+                summary.skippable_payload_bytes = try checkedAdd(summary.skippable_payload_bytes, chunk.payload.len);
+            },
+            .uncompressed => {
+                const payload = chunk.payload[4..];
+                summary.uncompressed_chunk_count += 1;
+                summary.uncompressed_payload_bytes = try checkedAdd(summary.uncompressed_payload_bytes, payload.len);
+                summary.decoded_bytes = try checkedAdd(summary.decoded_bytes, payload.len);
+                try verifyMaskedChecksum(payload, std.mem.readInt(u32, chunk.payload[0..4], .little));
+            },
+            .compressed => {
+                const payload = chunk.payload[4..];
+                summary.compressed_chunk_count += 1;
+                summary.compressed_payload_bytes = try checkedAdd(summary.compressed_payload_bytes, payload.len);
+                const decoded_len = try decodedBlockSize(payload);
+                if (decoded_len > max_uncompressed_chunk_len) return error.CorruptFrame;
+                summary.decoded_bytes = try checkedAdd(summary.decoded_bytes, decoded_len);
+                var decoded: [max_uncompressed_chunk_len]u8 = undefined;
+                const written = try decodeBlockInto(payload, decoded[0..decoded_len]);
+                if (written != decoded_len) return error.SizeMismatch;
+                try verifyMaskedChecksum(decoded[0..decoded_len], std.mem.readInt(u32, chunk.payload[0..4], .little));
+            },
+        }
+    }
+    return summary;
+}
+
+pub fn summarizeFrameChunks(chunks: []const []const u8, compressed_scratch: []u8) Error!FrameSummary {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try summarizeFrame(joined);
 }
 
 pub fn decodeBlockAlloc(allocator: std.mem.Allocator, block: []const u8) Error![]u8 {
@@ -1195,6 +1245,37 @@ test "snappy framed stream decodes compressed and skippable chunks" {
     const decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "hello hello", decoded);
+
+    const summary = try summarizeFrame(frame.items);
+    try std.testing.expectEqual(@as(usize, 1), summary.stream_identifier_count);
+    try std.testing.expectEqual(@as(usize, 1), summary.compressed_chunk_count);
+    try std.testing.expectEqual(@as(usize, 0), summary.uncompressed_chunk_count);
+    try std.testing.expectEqual(@as(usize, 1), summary.skippable_chunk_count);
+    try std.testing.expectEqual(@as(usize, "metadata".len), summary.skippable_payload_bytes);
+    try std.testing.expectEqual(@as(usize, "hello hello".len), summary.decoded_bytes);
+    try std.testing.expectEqual(block.len, summary.compressed_payload_bytes);
+    try std.testing.expectEqual(@as(usize, 0), summary.uncompressed_payload_bytes);
+
+    const chunks = [_][]const u8{ frame.items[0..4], frame.items[4..@min(frame.items.len, 13)], frame.items[@min(frame.items.len, 13)..] };
+    const scratch = try std.testing.allocator.alloc(u8, frame.items.len);
+    defer std.testing.allocator.free(scratch);
+    const chunked_summary = try summarizeFrameChunks(&chunks, scratch);
+    try std.testing.expectEqual(summary.stream_identifier_count, chunked_summary.stream_identifier_count);
+    try std.testing.expectEqual(summary.compressed_chunk_count, chunked_summary.compressed_chunk_count);
+    try std.testing.expectEqual(summary.skippable_payload_bytes, chunked_summary.skippable_payload_bytes);
+    try std.testing.expectEqual(summary.decoded_bytes, chunked_summary.decoded_bytes);
+
+    var corrupt = try std.testing.allocator.dupe(u8, frame.items);
+    defer std.testing.allocator.free(corrupt);
+    var corrupt_iterator = try FrameChunkIterator.init(corrupt);
+    while (try corrupt_iterator.next()) |chunk| {
+        if (chunk.kind == .compressed) {
+            const checksum_offset = @intFromPtr(chunk.payload.ptr) - @intFromPtr(corrupt.ptr);
+            corrupt[checksum_offset] ^= 1;
+            break;
+        }
+    }
+    try std.testing.expectError(error.ChecksumMismatch, summarizeFrame(corrupt));
 }
 
 test "snappy framed stream decodes concatenated streams with repeated identifier" {

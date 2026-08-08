@@ -1580,6 +1580,11 @@ architecture blindly.
   caller-owned encode buffers before using `snappyEncode*Into`, with tests
   proving the bounds cover one-shot output for literal and compressed frames.
 
+- Added Snappy framed-stream summary helpers. `snappySummarizeFrame` and the
+  split-input variant validate chunk structure/checksums while reporting stream
+  identifiers, compressed/uncompressed chunks, skippable payload bytes, and total
+  decoded bytes before callers materialize output.
+
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
   root and CLI encode paths can now select a legal stored-stream window size,
