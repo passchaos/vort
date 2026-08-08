@@ -2205,3 +2205,9 @@ architecture blindly.
   identity tuples, mostly 7-byte English dictionary words plus several 8-byte
   identity alternatives selected for affix-equivalent payloads; all 506 observed
   failing frames are now pinned by source anchors and unit coverage.
+
+- Continued upstream8192 with the next 1024-row candidate window starting at
+  index 24100. The probe exposed 101 actual identity tuples, mostly 7-byte
+  English/markup words plus a handful of 8-byte identity alternatives selected
+  by Node for affix-equivalent payloads; the original 356 failing frames plus
+  reindexed-tail frames are source-anchored and unit-tested.

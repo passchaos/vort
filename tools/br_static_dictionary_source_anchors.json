@@ -11906,11 +11906,75 @@
     },
     {
       "copy_len": 7,
+      "raw_word": "setting",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "setting",
+      "word_index": 204
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "disease",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "disease",
+      "word_index": 205
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "exhibit",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "exhibit",
+      "word_index": 208
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "outline",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "outline",
+      "word_index": 213
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "(window",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "(window",
+      "word_index": 216
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "purpose",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "purpose",
+      "word_index": 217
+    },
+    {
+      "copy_len": 7,
       "raw_word": "Mobile ",
       "transform": 0,
       "transform_kind": "identity",
       "transformed_word": "Mobile ",
       "word_index": 219
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Italian",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Italian",
+      "word_index": 222
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "-1']);\n",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "-1']);\n",
+      "word_index": 226
     },
     {
       "copy_len": 7,
@@ -11922,11 +11986,67 @@
     },
     {
       "copy_len": 7,
+      "raw_word": "advance",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "advance",
+      "word_index": 229
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Germany",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Germany",
+      "word_index": 235
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "related",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "related",
+      "word_index": 236
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "</form>",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "</form>",
+      "word_index": 237
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "include",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "include",
+      "word_index": 238
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "whether",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "whether",
+      "word_index": 239
+    },
+    {
+      "copy_len": 7,
       "raw_word": "Science",
       "transform": 0,
       "transform_kind": "identity",
       "transformed_word": "Science",
       "word_index": 241
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "catalog",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "catalog",
+      "word_index": 242
     },
     {
       "copy_len": 7,
@@ -11938,11 +12058,179 @@
     },
     {
       "copy_len": 7,
+      "raw_word": "uniform",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "uniform",
+      "word_index": 246
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "sidebar",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "sidebar",
+      "word_index": 248
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Chicago",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Chicago",
+      "word_index": 249
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "holiday",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "holiday",
+      "word_index": 250
+    },
+    {
+      "copy_len": 7,
       "raw_word": "General",
       "transform": 0,
       "transform_kind": "identity",
       "transformed_word": "General",
       "word_index": 251
+    },
+    {
+      "copy_len": 7,
+      "raw_word": ",&quot;",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": ",&quot;",
+      "word_index": 253
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "animate",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "animate",
+      "word_index": 254
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "feeling",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "feeling",
+      "word_index": 255
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "passing",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "passing",
+      "word_index": 257
+    },
+    {
+      "copy_len": 7,
+      "raw_word": ".\n\nThe ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": ".\n\nThe ",
+      "word_index": 260
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "but not",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "but not",
+      "word_index": 261
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "density",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "density",
+      "word_index": 262
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Chinese",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Chinese",
+      "word_index": 264
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "tribute",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "tribute",
+      "word_index": 266
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Ireland",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Ireland",
+      "word_index": 267
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "\" data-",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\" data-",
+      "word_index": 268
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "that is",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "that is",
+      "word_index": 271
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "husband",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "husband",
+      "word_index": 273
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "in fact",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "in fact",
+      "word_index": 274
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Charles",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Charles",
+      "word_index": 276
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "brought",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "brought",
+      "word_index": 278
+    },
+    {
+      "copy_len": 7,
+      "raw_word": ":lang=\"",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": ":lang=\"",
+      "word_index": 281
     },
     {
       "copy_len": 7,
@@ -11954,11 +12242,35 @@
     },
     {
       "copy_len": 7,
+      "raw_word": "premium",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "premium",
+      "word_index": 285
+    },
+    {
+      "copy_len": 7,
       "raw_word": "America",
       "transform": 0,
       "transform_kind": "identity",
       "transformed_word": "America",
       "word_index": 287
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Edition",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Edition",
+      "word_index": 288
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "]&quot;",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "]&quot;",
+      "word_index": 289
     },
     {
       "copy_len": 7,
@@ -11970,11 +12282,131 @@
     },
     {
       "copy_len": 7,
+      "raw_word": "need to",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "need to",
+      "word_index": 291
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "believe",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "believe",
+      "word_index": 296
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "-mobile",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "-mobile",
+      "word_index": 298
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "want to",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "want to",
+      "word_index": 300
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "kind of",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "kind of",
+      "word_index": 301
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Firefox",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Firefox",
+      "word_index": 302
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "similar",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "similar",
+      "word_index": 304
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "maximum",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "maximum",
+      "word_index": 306
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "rapidly",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "rapidly",
+      "word_index": 308
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "climate",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "climate",
+      "word_index": 309
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "pioneer",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "pioneer",
+      "word_index": 314
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "how to ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "how to ",
+      "word_index": 317
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "economy",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "economy",
+      "word_index": 320
+    },
+    {
+      "copy_len": 7,
       "raw_word": "Results",
       "transform": 0,
       "transform_kind": "identity",
       "transformed_word": "Results",
       "word_index": 321
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "brother",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "brother",
+      "word_index": 322
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "soldier",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "soldier",
+      "word_index": 323
     },
     {
       "copy_len": 7,
@@ -11986,11 +12418,203 @@
     },
     {
       "copy_len": 7,
+      "raw_word": "Edward ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Edward ",
+      "word_index": 328
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "segment",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "segment",
+      "word_index": 329
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Robert ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Robert ",
+      "word_index": 330
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Pacific",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Pacific",
+      "word_index": 332
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "we have",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "we have",
+      "word_index": 336
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Angeles",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Angeles",
+      "word_index": 337
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "_search",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "_search",
+      "word_index": 339
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "acquire",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "acquire",
+      "word_index": 341
+    },
+    {
+      "copy_len": 7,
+      "raw_word": ": false",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": ": false",
+      "word_index": 344
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "treated",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "treated",
+      "word_index": 345
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "benefit",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "benefit",
+      "word_index": 347
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "driving",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "driving",
+      "word_index": 348
+    },
+    {
+      "copy_len": 7,
       "raw_word": "Studies",
       "transform": 0,
       "transform_kind": "identity",
       "transformed_word": "Studies",
       "word_index": 349
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "perhaps",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "perhaps",
+      "word_index": 351
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "morning",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "morning",
+      "word_index": 352
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "is used",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "is used",
+      "word_index": 354
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "reverse",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "reverse",
+      "word_index": 355
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "variant",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "variant",
+      "word_index": 356
+    },
+    {
+      "copy_len": 7,
+      "raw_word": " role=\"",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": " role=\"",
+      "word_index": 357
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "achieve",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "achieve",
+      "word_index": 359
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "promote",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "promote",
+      "word_index": 360
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "someone",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "someone",
+      "word_index": 362
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "restore",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "restore",
+      "word_index": 364
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "bottom:",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "bottom:",
+      "word_index": 365
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "evolved",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "evolved",
+      "word_index": 366
     },
     {
       "copy_len": 7,
@@ -12002,11 +12626,75 @@
     },
     {
       "copy_len": 7,
+      "raw_word": "way to ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "way to ",
+      "word_index": 370
+    },
+    {
+      "copy_len": 7,
+      "raw_word": " August",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": " August",
+      "word_index": 371
+    },
+    {
+      "copy_len": 7,
       "raw_word": "Company",
       "transform": 0,
       "transform_kind": "identity",
       "transformed_word": "Company",
       "word_index": 373
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "})();\r\n",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "})();\r\n",
+      "word_index": 378
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "payment",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "payment",
+      "word_index": 379
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "monitor",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "monitor",
+      "word_index": 386
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "winning",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "winning",
+      "word_index": 388
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "explore",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "explore",
+      "word_index": 389
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "adapted",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "adapted",
+      "word_index": 390
     },
     {
       "copy_len": 7,
@@ -12106,6 +12794,14 @@
     },
     {
       "copy_len": 7,
+      "raw_word": "Natural",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Natural",
+      "word_index": 647
+    },
+    {
+      "copy_len": 7,
       "raw_word": "Privacy",
       "transform": 0,
       "transform_kind": "identity",
@@ -12170,6 +12866,14 @@
     },
     {
       "copy_len": 7,
+      "raw_word": "Affairs",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Affairs",
+      "word_index": 747
+    },
+    {
+      "copy_len": 7,
       "raw_word": "Options",
       "transform": 0,
       "transform_kind": "identity",
@@ -12186,6 +12890,14 @@
     },
     {
       "copy_len": 7,
+      "raw_word": "Records",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Records",
+      "word_index": 873
+    },
+    {
+      "copy_len": 7,
       "raw_word": "Comment",
       "transform": 0,
       "transform_kind": "identity",
@@ -12194,11 +12906,35 @@
     },
     {
       "copy_len": 7,
+      "raw_word": "Related",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Related",
+      "word_index": 889
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Economy",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Economy",
+      "word_index": 890
+    },
+    {
+      "copy_len": 7,
       "raw_word": " return",
       "transform": 0,
       "transform_kind": "identity",
       "transformed_word": " return",
       "word_index": 899
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Station",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Station",
+      "word_index": 929
     },
     {
       "copy_len": 7,
@@ -12279,6 +13015,14 @@
       "transform_kind": "identity",
       "transformed_word": " simple",
       "word_index": 1182
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Explore",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Explore",
+      "word_index": 1233
     },
     {
       "copy_len": 7,
@@ -12402,6 +13146,14 @@
     },
     {
       "copy_len": 7,
+      "raw_word": "Against",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Against",
+      "word_index": 1639
+    },
+    {
+      "copy_len": 7,
       "raw_word": "Certain",
       "transform": 0,
       "transform_kind": "identity",
@@ -12497,6 +13249,14 @@
       "word_index": 1925
     },
     {
+      "copy_len": 7,
+      "raw_word": "Whether",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Whether",
+      "word_index": 1930
+    },
+    {
       "copy_len": 8,
       "raw_word": "language",
       "transform": 0,
@@ -12527,6 +13287,14 @@
       "transform_kind": "identity",
       "transformed_word": "internet",
       "word_index": 79
+    },
+    {
+      "copy_len": 8,
+      "raw_word": " title=\"",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": " title=\"",
+      "word_index": 212
     },
     {
       "copy_len": 8,
@@ -12562,11 +13330,27 @@
     },
     {
       "copy_len": 8,
+      "raw_word": " maximum",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": " maximum",
+      "word_index": 370
+    },
+    {
+      "copy_len": 8,
       "raw_word": "history.",
       "transform": 0,
       "transform_kind": "identity",
       "transformed_word": "history.",
       "word_index": 425
+    },
+    {
+      "copy_len": 8,
+      "raw_word": "General ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "General ",
+      "word_index": 436
     },
     {
       "copy_len": 8,
@@ -12618,11 +13402,35 @@
     },
     {
       "copy_len": 8,
+      "raw_word": ",&quot; ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": ",&quot; ",
+      "word_index": 549
+    },
+    {
+      "copy_len": 8,
       "raw_word": "quality ",
       "transform": 0,
       "transform_kind": "identity",
       "transformed_word": "quality ",
       "word_index": 550
+    },
+    {
+      "copy_len": 8,
+      "raw_word": "height: ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "height: ",
+      "word_index": 553
+    },
+    {
+      "copy_len": 8,
+      "raw_word": " Company",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": " Company",
+      "word_index": 557
     },
     {
       "copy_len": 8,
@@ -14177,7 +14985,7 @@
       "word_index": 285
     }
   ],
-  "entry_count": 1772,
+  "entry_count": 1873,
   "schema": "vort.br_static_dictionary_source_anchors",
   "schema_version": 1,
   "source": "RFC 7932 Brotli static dictionary data as exposed by upstream common/dictionary_inc.h and common/transform.c"
