@@ -90,6 +90,14 @@
     },
     {
       "copy_len": 5,
+      "raw_word": "money",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "money",
+      "word_index": 56
+    },
+    {
+      "copy_len": 5,
       "raw_word": "press",
       "transform": 0,
       "transform_kind": "identity",
@@ -825,7 +833,7 @@
       "word_index": 614
     }
   ],
-  "entry_count": 103,
+  "entry_count": 104,
   "schema": "vort.br_static_dictionary_source_anchors",
   "schema_version": 1,
   "source": "RFC 7932 Brotli static dictionary data as exposed by upstream common/dictionary_inc.h and common/transform.c"

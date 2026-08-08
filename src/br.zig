@@ -687,6 +687,7 @@ const minimal_static_dictionary_entries = [_]StaticDictionaryEntry{
     .{ .transform = 0, .copy_len = 5, .word_index = 42, .word = "large" },
     .{ .transform = 0, .copy_len = 5, .word_index = 43, .word = "words" },
     .{ .transform = 0, .copy_len = 5, .word_index = 44, .word = "games" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 56, .word = "money" },
     .{ .transform = 0, .copy_len = 5, .word_index = 81, .word = "press" },
     .{ .transform = 0, .copy_len = 5, .word_index = 101, .word = "other" },
     .{ .transform = 0, .copy_len = 5, .word_index = 107, .word = "quick" },
@@ -2407,6 +2408,13 @@ test "br minimal static dictionary upstream1024 identity words decode leading-sp
     try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x84, 0x14 }, " media");
     try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x84, 0x24 }, " white");
     try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x84, 0x34 }, " close");
+}
+
+test "br minimal static dictionary upstream2048 identity money decodes leading-space Node frame" {
+    // The first upstream2048 incremental probe failure is another concrete
+    // example where Node uses one literal space plus an identity dictionary
+    // word rather than the transform-equivalent leading-space address.
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0xc4, 0xd5 }, " money");
 }
 
 test "br minimal compressed stream selects literal context tree through signed mode" {

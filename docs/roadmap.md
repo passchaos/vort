@@ -2115,6 +2115,11 @@ architecture blindly.
   requires both Vort decode success and no compressed-size winners so future
   upstream1024 candidate drift is visible.
 
+- Started the upstream2048 Brotli static-dictionary expansion from the first
+  incremental 1024-row probe. The first uncovered Node frame was ` money`, which
+  again used a literal leading space plus the identity source tuple `money`; that
+  tuple is now anchored and covered by both unit and CLI differential tests.
+
 - Ran the full generated-candidate Node probe and resolved its remaining five
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,

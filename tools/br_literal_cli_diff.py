@@ -2441,6 +2441,10 @@ def main() -> int:
             node_compress(b" government", quality=5, lgwin=10),
             b" government",
         ),
+        "node-static-dictionary-leading-space-money-q5-lgwin10": (
+            node_compress(b" money", quality=5, lgwin=10),
+            b" money",
+        ),
         "node-static-dictionary-leading-space-first-q5-lgwin10": (
             node_compress(b" first", quality=5, lgwin=10),
             b" first",

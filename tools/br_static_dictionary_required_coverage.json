@@ -406,6 +406,15 @@
       "source_case": "node-static-dictionary-leading-space-close-q5-lgwin10",
       "reason": "upstream1024 window Node frame source tuple emitted after one literal space",
       "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 56,
+      "word": "money",
+      "source_case": "node-static-dictionary-leading-space-money-q5-lgwin10",
+      "reason": "upstream2048 window Node frame source tuple emitted after one literal space",
+      "category": "identity"
     }
   ]
 }
