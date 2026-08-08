@@ -10,6 +10,9 @@ pub fn main(init: std.process.Init) !void {
     var checked: usize = 0;
     var non_lib_generated_cases: usize = 0;
     if (filter.runHandcrafted()) {
+        try checkEncodedBoundHeaderWidths(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
         try checkDirectHuffmanBoundaries(init.gpa);
         checked += 1;
         non_lib_generated_cases += 1;
@@ -245,6 +248,90 @@ fn printCoverage(stdout: anytype, marker: []const u8, default_cases: usize, capa
         }
         try stdout.print("{s}_coverage capability={s} cases={d}\n", .{ marker, capability, cases });
     }
+}
+
+fn fillNonRlePayload(payload: []u8) void {
+    for (payload, 0..) |*byte, i| {
+        // Keep these bound fixtures out of the raw/RLE split heuristics: a
+        // full-period byte progression has no long same-byte runs, so exact
+        // encoded-bound checks stay about frame-header sizing rather than RLE
+        // block planning.
+        byte.* = @intCast((i * 73 + 19) & 0xff);
+    }
+}
+
+fn checkEncodedBoundHeaderWidths(allocator: std.mem.Allocator) !void {
+    const cases = [_]struct {
+        len: usize,
+        expected_descriptor: u8,
+        expected_payload_offset: usize,
+    }{
+        .{ .len = 0, .expected_descriptor = 0x20, .expected_payload_offset = 6 },
+        .{ .len = 255, .expected_descriptor = 0x20, .expected_payload_offset = 6 },
+        .{ .len = 300, .expected_descriptor = 0x60, .expected_payload_offset = 7 },
+        .{ .len = 70_000, .expected_descriptor = 0xa0, .expected_payload_offset = 9 },
+    };
+
+    for (cases) |case| {
+        const payload = try allocator.alloc(u8, case.len);
+        defer allocator.free(payload);
+        fillNonRlePayload(payload);
+
+        const options: vort.ZstdNativeFrameOptions = .{
+            .selection = .raw_or_rle,
+            .content_checksum = false,
+        };
+        const encoded = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, payload, options);
+        defer allocator.free(encoded.frame);
+        try expect(encoded.mode == .raw_or_rle);
+        try expect(encoded.frame.len == try vort.zstdEncodedNativeFrameBoundWithOptions(payload.len, options));
+        try expect(encoded.frame[4] == case.expected_descriptor);
+        const header = try vort.zstdInspectNativeFrameHeader(encoded.frame);
+        try expect(header.payload_offset == case.expected_payload_offset);
+        try expect(header.content_size.? == @as(u64, case.len));
+
+        const into = try allocator.alloc(u8, encoded.frame.len);
+        defer allocator.free(into);
+        const into_result = try vort.zstdEncodeNativeFrameIntoSlice(allocator, payload, options, into);
+        try expect(into_result.mode == .raw_or_rle);
+        try expect(into_result.written == encoded.frame.len);
+        try expectEqualSlices(encoded.frame, into[0..into_result.written]);
+        try expectError(error.OutputTooSmall, vort.zstdEncodeNativeFrameIntoSlice(allocator, payload, options, into[0 .. into.len - 1]));
+    }
+
+    const payload = try allocator.alloc(u8, 300);
+    defer allocator.free(payload);
+    fillNonRlePayload(payload);
+
+    const no_size_options: vort.ZstdNativeFrameOptions = .{
+        .selection = .raw_or_rle,
+        .content_checksum = false,
+        .include_content_size = false,
+    };
+    const no_size = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, payload, no_size_options);
+    defer allocator.free(no_size.frame);
+    try expect(no_size.frame.len == try vort.zstdEncodedNativeFrameBoundWithOptions(payload.len, no_size_options));
+    try expect(no_size.frame[4] == 0x00);
+    try expect((try vort.zstdInspectNativeFrameHeader(no_size.frame)).payload_offset == 6);
+
+    const dictionary_options: vort.ZstdNativeFrameOptions = .{
+        .selection = .raw_or_rle,
+        .content_checksum = false,
+        .dictionary_id = 0x1234,
+    };
+    const with_dictionary_id = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, payload, dictionary_options);
+    defer allocator.free(with_dictionary_id.frame);
+    try expect(with_dictionary_id.frame.len == try vort.zstdEncodedNativeFrameBoundWithOptions(payload.len, dictionary_options));
+    const dictionary_header = try vort.zstdInspectNativeFrameHeader(with_dictionary_id.frame);
+    try expect(dictionary_header.dictionary_id == 0x1234);
+    try expect(dictionary_header.payload_offset == 9);
+
+    const dict = vort.ZstdNativeDictionary.init(0x1234, "bound dictionary history");
+    const dictionary_bound = try vort.zstdEncodedNativeFrameBoundWithDictionary(payload.len, .{
+        .selection = .raw_or_rle,
+        .content_checksum = false,
+    }, dict);
+    try expect(dictionary_bound == with_dictionary_id.frame.len);
 }
 
 fn checkDirectHuffmanBoundaries(allocator: std.mem.Allocator) !void {

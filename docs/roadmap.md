@@ -1667,6 +1667,12 @@ architecture blindly.
   dictionary IDs, no-content-size window descriptors, checksums, and large
   widths remain covered by the same helper.
 
+- Promoted the tightened Zstd native encoded-bound behavior into the public
+  frame probe. The probe now checks exact raw/RLE caller-owned encode bounds for
+  one-, two-, and four-byte single-segment content-size fields, no-content-size
+  window descriptors, and Dictionary_ID header bytes so dashboard counts catch
+  future bound/writer drift.
+
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
   root and CLI encode paths can now select a legal stored-stream window size,
