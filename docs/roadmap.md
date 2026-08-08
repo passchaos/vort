@@ -2259,3 +2259,9 @@ architecture blindly.
   three 8-byte words) and 153 unique failing Node frames; all observed
   addresses are source-anchored and unit-tested, and the reindexed 1024-row
   window now has no Vort failures.
+
+- Continued upstream8192 with the 34340-35364 candidate window. The initial
+  probe and reindexed tail exposed 136 actual addresses: 127 direct 8-byte
+  identity tuples and nine alternate 9-byte identity/omit-last-one tuples
+  selected by Node. All 501 unique failing frames are source-anchored and
+  unit-tested, and the reindexed 1024-row window now has no Vort failures.
