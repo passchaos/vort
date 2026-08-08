@@ -1773,18 +1773,22 @@ raw/zlib/gzip decode vectors, dynamic/adaptive encode vectors, preset-dictionary
 decode/encode vectors, file-command vectors, and expected-failure checks visible
 to dashboard health gates without parsing console text. `large_file_payloads`
 counts corpus entries routed through file-based CLI commands so the harness does
-not depend on platform-specific per-argument limits. Schema version `2` makes
-that coverage count required for healthy reports.
+not depend on platform-specific per-argument limits. `file_hex_encode_cases`
+counts raw/zlib/gzip file-to-hex encoder outputs decoded by Python so the
+dashboard can distinguish file-transport coverage from command-specific
+file-hex encoder coverage. Schema version `3` makes both coverage counts
+required for healthy reports.
 
 Example:
 
 ```json
 {
   "schema": "vort.python_zlib_diff_smoke",
-  "schema_version": 2,
+  "schema_version": 3,
   "ok": true,
   "payloads": 11,
   "large_file_payloads": 1,
+  "file_hex_encode_cases": 3,
   "match_heavy_payloads": 3,
   "dynamic_payloads": 3,
   "dictionary_cases": 3,
@@ -2240,6 +2244,7 @@ Top-level fields:
 - `python_zlib_diff_present`, `python_zlib_diff_ok`,
   `python_zlib_diff_healthy`, `python_zlib_diff_payloads`,
   `python_zlib_diff_large_file_payloads`,
+  `python_zlib_diff_file_hex_encode_cases`,
   `python_zlib_diff_match_heavy_payloads`,
   `python_zlib_diff_dynamic_payloads`, `python_zlib_diff_dictionary_cases`,
   `python_zlib_diff_zlib_dict_encode_cases`,
@@ -2378,6 +2383,7 @@ Example:
   "python_zlib_diff_healthy": false,
   "python_zlib_diff_payloads": 0,
   "python_zlib_diff_large_file_payloads": 0,
+  "python_zlib_diff_file_hex_encode_cases": 0,
   "python_zlib_diff_match_heavy_payloads": 0,
   "python_zlib_diff_dynamic_payloads": 0,
   "python_zlib_diff_dictionary_cases": 0,

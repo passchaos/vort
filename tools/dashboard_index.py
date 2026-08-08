@@ -506,6 +506,7 @@ def python_zlib_diff_health(artifacts: list[Path]) -> dict:
             continue
         payloads = int(data.get("payloads") or 0)
         large_file_payloads = int(data.get("large_file_payloads") or 0)
+        file_hex_encode_cases = int(data.get("file_hex_encode_cases") or 0)
         match_heavy_payloads = int(data.get("match_heavy_payloads") or 0)
         dynamic_payloads = int(data.get("dynamic_payloads") or 0)
         dictionary_cases = int(data.get("dictionary_cases") or 0)
@@ -520,6 +521,7 @@ def python_zlib_diff_health(artifacts: list[Path]) -> dict:
             "ok": bool(data.get("ok")),
             "payloads": payloads,
             "large_file_payloads": large_file_payloads,
+            "file_hex_encode_cases": file_hex_encode_cases,
             "match_heavy_payloads": match_heavy_payloads,
             "dynamic_payloads": dynamic_payloads,
             "dictionary_cases": dictionary_cases,
@@ -532,6 +534,7 @@ def python_zlib_diff_health(artifacts: list[Path]) -> dict:
             "healthy": bool(data.get("ok"))
             and payloads > 0
             and large_file_payloads > 0
+            and file_hex_encode_cases > 0
             and match_heavy_payloads > 0
             and dynamic_payloads > 0
             and dictionary_cases > 0
@@ -547,6 +550,7 @@ def python_zlib_diff_health(artifacts: list[Path]) -> dict:
         "ok": False,
         "payloads": 0,
         "large_file_payloads": 0,
+        "file_hex_encode_cases": 0,
         "match_heavy_payloads": 0,
         "dynamic_payloads": 0,
         "dictionary_cases": 0,
@@ -910,7 +914,7 @@ def main() -> int:
         f"- huffman length oracle: {huffman_health['optimal_rows']}/{huffman_health['row_count']} production optimal rows, {huffman_health['package_merge_optimal_rows']}/{huffman_health['row_count']} package-merge optimal rows, gaps {huffman_health['worst_gap_bits']}/{huffman_health['package_merge_worst_gap_bits']}, malformed rows {huffman_health['malformed_rows']}, healthy `{huffman_healthy}`",
         f"- fuzz corpus coverage: {fuzz_health['matched_rows']}/{fuzz_health['cases']} rows matched, exact-error rows {fuzz_health['exact_error_expectations']}, coverage requirements {fuzz_health['coverage_mode_requirements']}/{fuzz_health['coverage_error_requirements']}, healthy `{fuzz_healthy}`",
         f"- decode-stage smoke: {decode_stage_health_summary['matched_error_rows']}/{decode_stage_health_summary['error_rows']} error rows matched across {decode_stage_health_summary['rows']} timing rows, healthy `{decode_stage_healthy}`",
-        f"- Python zlib differential: payloads {python_zlib_health['payloads']}, dynamic {python_zlib_health['dynamic_payloads']}, dictionary encode raw/zlib {python_zlib_health['raw_dict_encode_cases']}/{python_zlib_health['zlib_dict_encode_cases']}, CLI successes/failures {python_zlib_health['cli_successes']}/{python_zlib_health['expected_failures']}, healthy `{python_zlib_healthy}`",
+        f"- Python zlib differential: payloads {python_zlib_health['payloads']} (large-file {python_zlib_health['large_file_payloads']}, file-hex encodes {python_zlib_health['file_hex_encode_cases']}), dynamic {python_zlib_health['dynamic_payloads']}, dictionary encode raw/zlib {python_zlib_health['raw_dict_encode_cases']}/{python_zlib_health['zlib_dict_encode_cases']}, CLI successes/failures {python_zlib_health['cli_successes']}/{python_zlib_health['expected_failures']}, healthy `{python_zlib_healthy}`",
         f"- native codec probes: {native_codec_health['ok_probe_count']}/{native_codec_health['probe_count']} probes ok, capabilities {native_codec_health['ok_capability_count']}/{native_codec_health['capability_count']} ok, cases total/lib/incremental/chunked/reusable-chunked/fse-repeat {native_codec_health['total_cases']}/{native_codec_health['lib_generated_cases']}/{native_codec_health['incremental_cases']}/{native_codec_health['chunked_cases']}/{native_codec_health['reusable_chunked_cases']}/{native_codec_health['fse_repeat_cases']}, healthy `{native_codec_health['healthy']}`",
         f"- native tier range bench: {native_tier_health['ok_count']}/{native_tier_health['summary_count']} summaries ok across {native_tier_health['rows']} rows ({native_tier_health['enforced_count']} throughput-enforced), sources built-in/project/standard/custom/legacy {native_tier_health['built_in_summary_count']}/{native_tier_health['project_files_summary_count']}/{native_tier_health['standard_corpus_summary_count']}/{native_tier_health['custom_summary_count']}/{native_tier_health['legacy_summary_count']} missing {','.join(native_tier_health['missing_sources']) or 'none'}, min range MiB/s seek_fast/balanced/ratio {native_tier_health['seek_fast_min_range_mib_s']:.2f}/{native_tier_health['balanced_min_range_mib_s']:.2f}/{native_tier_health['ratio_min_range_mib_s']:.2f}, healthy `{native_tier_health['healthy']}`",
         f"- native tier corpus discovery: source mode `{native_tier_discovery_health['source_mode']}`, sources {native_tier_discovery_health['source_count']}/{native_tier_discovery_health['candidate_count']}, selected cases {native_tier_discovery_health['selected_case_count']}, missing reason `{native_tier_discovery_health['missing_reason'] or 'none'}`, healthy `{native_tier_discovery_health['healthy']}`",
@@ -1064,6 +1068,7 @@ def main() -> int:
                 "python_zlib_diff_healthy": python_zlib_healthy,
                 "python_zlib_diff_payloads": python_zlib_health["payloads"],
                 "python_zlib_diff_large_file_payloads": python_zlib_health["large_file_payloads"],
+                "python_zlib_diff_file_hex_encode_cases": python_zlib_health["file_hex_encode_cases"],
                 "python_zlib_diff_match_heavy_payloads": python_zlib_health["match_heavy_payloads"],
                 "python_zlib_diff_dynamic_payloads": python_zlib_health["dynamic_payloads"],
                 "python_zlib_diff_dictionary_cases": python_zlib_health["dictionary_cases"],

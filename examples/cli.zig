@@ -918,12 +918,28 @@ pub fn main(init: std.process.Init) !void {
         const written = try vort.lz4DecodeBlockWithPrefixIntoSliceNoAlloc(block, decoded, decoded_len, prefix);
         if (written != decoded_len) return error.SizeMismatch;
         try printDecoded(stdout, "lz4_block_prefix", block.len, decoded);
+    } else if (std.mem.eql(u8, command, "encode-raw-best-file-hex")) {
+        const path = args.next() orelse return error.MissingCorpusPath;
+        const data = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(data);
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeRawBestAlloc(init.gpa, data, options);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-zlib-best-file-hex")) {
         const path = args.next() orelse return error.MissingCorpusPath;
         const data = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(data);
         const options = parseCompressionOptions(args.next());
         const encoded = try vort.encodeZlibBestAlloc(init.gpa, data, options);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-gzip-best-file-hex")) {
+        const path = args.next() orelse return error.MissingCorpusPath;
+        const data = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(data);
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeGzipBestAlloc(init.gpa, data, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-vort-best-file")) {
@@ -1733,6 +1749,12 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Encode raw deflate that may reference preset dictionary history
         \\  encode-zlib-dict-best-hex [text] [dict] [level]
         \\                              Encode a zlib FDICT/DICTID frame requiring a preset dictionary
+        \\  encode-raw-best-file-hex <in> [level]
+        \\                              Encode raw deflate file bytes and print best-block hex
+        \\  encode-zlib-best-file-hex <in> [level]
+        \\                              Encode zlib-compatible file bytes and print best-block hex
+        \\  encode-gzip-best-file-hex <in> [level]
+        \\                              Encode gzip-compatible file bytes and print best-block hex
         \\  encode-vort-best-file <in> <out>
         \\                              Encode one native Vort best frame
         \\  encode-raw-fixed-file <in> <out> [level]

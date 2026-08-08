@@ -26,6 +26,7 @@ INLINE_ARG_BYTES = 32 * 1024
 METRICS = {
     "cli_successes": 0,
     "expected_failures": 0,
+    "file_hex_encode_cases": 0,
 }
 
 
@@ -131,6 +132,16 @@ def exercise_payload_via_files(
             out = run_cli(command, str(input_path), str(encoded_path), "default")
             assert int(parse_field(out, "input_bytes")) == len(data), out
             assert zlib.decompress(encoded_path.read_bytes(), wbits=wbits) == data, command
+
+        file_hex_cases = (
+            ("encode-raw-best-file-hex", -zlib.MAX_WBITS),
+            ("encode-zlib-best-file-hex", zlib.MAX_WBITS),
+            ("encode-gzip-best-file-hex", 31),
+        )
+        for command, wbits in file_hex_cases:
+            encoded = bytes.fromhex(run_cli(command, str(input_path), "default"))
+            assert zlib.decompress(encoded, wbits=wbits) == data, command
+            METRICS["file_hex_encode_cases"] += 1
 
 
 def check_payload_transport_policy() -> None:
@@ -554,10 +565,11 @@ def main() -> int:
 
     summary = {
         "schema": "vort.python_zlib_diff_smoke",
-        "schema_version": 2,
+        "schema_version": 3,
         "ok": True,
         "payloads": len(payloads),
         "large_file_payloads": large_file_payloads,
+        "file_hex_encode_cases": METRICS["file_hex_encode_cases"],
         "match_heavy_payloads": 3,
         "dynamic_payloads": len(dynamic_payloads),
         "dictionary_cases": len(dict_cases),
@@ -573,6 +585,7 @@ def main() -> int:
     print(
         "python zlib differential smoke: "
         f"payloads={len(payloads)} large_file_payloads={large_file_payloads} "
+        f"file_hex_encode_cases={METRICS['file_hex_encode_cases']} "
         f"match_heavy=3 dynamic_payloads={len(dynamic_payloads)} "
         f"malformed_wrapper_cases={len(malformed_wrapper_cases)} "
         f"malformed_deflate_cases={len(malformed_deflate_cases)} "

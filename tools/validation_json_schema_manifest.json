@@ -707,6 +707,8 @@
           ],
           "positive": [
             "python_zlib_diff_payloads",
+            "python_zlib_diff_large_file_payloads",
+            "python_zlib_diff_file_hex_encode_cases",
             "python_zlib_diff_match_heavy_payloads",
             "python_zlib_diff_dynamic_payloads",
             "python_zlib_diff_dictionary_cases",
@@ -889,6 +891,7 @@
         "python_zlib_diff_dictionary_cases": "int",
         "python_zlib_diff_dynamic_payloads": "int",
         "python_zlib_diff_expected_failures": "int",
+        "python_zlib_diff_file_hex_encode_cases": "int",
         "python_zlib_diff_healthy": "bool",
         "python_zlib_diff_large_file_payloads": "int",
         "python_zlib_diff_malformed_deflate_cases": "int",
@@ -2752,6 +2755,7 @@
           "positive": [
             "payloads",
             "large_file_payloads",
+            "file_hex_encode_cases",
             "match_heavy_payloads",
             "dynamic_payloads",
             "dictionary_cases",
@@ -2769,6 +2773,7 @@
         "dictionary_cases": "int",
         "dynamic_payloads": "int",
         "expected_failures": "int",
+        "file_hex_encode_cases": "int",
         "large_file_payloads": "int",
         "malformed_deflate_cases": "int",
         "malformed_wrapper_cases": "int",

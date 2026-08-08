@@ -1608,6 +1608,13 @@ architecture blindly.
   cover both aliases. The existing `decode-gzip-*` commands remain compatible
   and continue to decode concatenated members.
 
+- Added raw/gzip file-to-hex best encoder CLI commands (`encode-raw-best-file-hex`
+  and `encode-gzip-best-file-hex`) to match the existing zlib file-hex helper,
+  and extended the Python zlib differential smoke to decode all three file-hex
+  outputs with Python's raw/zlib/gzip modes. The retained smoke/dashboard
+  schema now records `file_hex_encode_cases`, so raw/zlib/gzip file-to-hex
+  coverage is a first-class health gate instead of an unreported assertion.
+
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
   root and CLI encode paths can now select a legal stored-stream window size,
