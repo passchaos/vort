@@ -2032,6 +2032,11 @@ architecture blindly.
   fails if future generated candidates become smaller than their payloads until
   they are either promoted or intentionally investigated.
 
+- Extended the no-size-winner gate to the opt-in `upstream256` Node probe after
+  the current source-limit 256 slice reached zero remaining size winners. This
+  gives the larger official-dictionary prefix the same explicit backlog guard as
+  the anchor-derived full probe.
+
 - Extended the Brotli static-dictionary candidate report with an optional
   upstream-source mode. When a local Brotli `common/` checkout is supplied with
   `--source-limit`, the report merges bounded official dictionary raw words into

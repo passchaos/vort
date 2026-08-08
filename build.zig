@@ -1111,6 +1111,7 @@ pub fn build(b: *std.Build) void {
         "zig-out/vort-br-static-dictionary-node-probe-upstream256.md",
         "--all-candidates",
         "--require-vort-ok",
+        "--require-no-size-winners",
     });
     br_static_dictionary_node_probe_upstream256.step.dependOn(&br_static_dictionary_candidate_report_upstream256_for_probe.step);
     const br_static_dictionary_node_probe_upstream256_step = b.step("run-br-static-dictionary-node-probe-upstream256", "Probe local upstream source-limit 256 Brotli candidates (pass -- --brotli-common-dir <path>)");
