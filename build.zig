@@ -1157,6 +1157,7 @@ pub fn build(b: *std.Build) void {
         "zig-out/vort-br-static-dictionary-node-probe-upstream512.md",
         "--all-candidates",
         "--require-vort-ok",
+        "--require-no-size-winners",
     });
     br_static_dictionary_node_probe_upstream512.step.dependOn(&br_static_dictionary_candidate_report_upstream512_for_probe.step);
     const br_static_dictionary_node_probe_upstream512_step = b.step("run-br-static-dictionary-node-probe-upstream512", "Probe local upstream source-limit 512 Brotli candidates (pass -- --brotli-common-dir <path>)");
