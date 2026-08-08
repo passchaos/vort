@@ -4139,6 +4139,21 @@ fn checkHandcraftedHeaderAndSkippableValidation(allocator: std.mem.Allocator) !u
     try expectNativeHeaderAndStreamError(allocator, &truncated_content_size, error.TruncatedFrame);
     checked += 1;
 
+    // A no-content-size frame with window descriptor 0 has a 1 KiB block
+    // window. A raw/RLE block whose regenerated size exceeds that window should
+    // be rejected from the block header before payload allocation or copying.
+    const raw_block_exceeds_window = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x00, // no checksum, no content size; window descriptor follows.
+        0x00, // 1 KiB window descriptor.
+        0x08, 0x20, 0x00, // last raw block, payload length 1025.
+    };
+    const window_header = try vort.zstdInspectNativeFrameHeader(&raw_block_exceeds_window);
+    try expect(window_header.window_size == 1024);
+    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameFirstBlock(&raw_block_exceeds_window));
+    try expectNativeStreamOnlyError(allocator, &raw_block_exceeds_window, error.CorruptFrame);
+    checked += 1;
+
     const truncated_skippable = try handcraftedSkippableFrame(allocator, 6, "abc");
     defer allocator.free(truncated_skippable);
     try expectError(error.TruncatedFrame, vort.zstdInspectNativeSkippableFrame(truncated_skippable));

@@ -121,7 +121,7 @@ Current interpretation:
   `rep0 - 1` rejection, valid cross-block `rep0 - 1` after a
   direct-offset update including the minimum non-zero `rep0 - 1 == 1`
   boundary, and Repeat_Mode replay of that `rep0 - 1` selector
-  after the repeated-offset ring mutates, multi-sequence predefined-table state transitions, mixed RLE/predefined sequence modes, repeated mixed-table modes across blocks, non-dictionary LL/ML/OF=FSE Repeat_Mode replay, and invalid-magic/skippable-adjacent header diagnostics, plus pure library-level libzstd-generated frame differentials. It also
+  after the repeated-offset ring mutates, multi-sequence predefined-table state transitions, mixed RLE/predefined sequence modes, repeated mixed-table modes across blocks, non-dictionary LL/ML/OF=FSE Repeat_Mode replay, invalid-magic/skippable-adjacent header diagnostics, and no-content-size window/block-size rejection, plus pure library-level libzstd-generated frame differentials. It also
   validates Vort's dependency-free native encoder on the same generated/file
   byte payloads through `encode-zstd-native-bytes-hex` in `auto`, `raw_or_rle`,
   and `literal_only` modes, including both 4-divisible and non-4-divisible
