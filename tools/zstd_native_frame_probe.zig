@@ -4096,6 +4096,14 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
 fn checkHandcraftedHeaderAndSkippableValidation(allocator: std.mem.Allocator) !usize {
     var checked: usize = 0;
 
+    // Non-zstd magic should remain distinct from a syntactically zstd-looking
+    // frame with a reserved descriptor bit. Pin both the direct header API and
+    // stream/iterator facades so invalid leading bytes do not get reported as a
+    // generic corruption or truncation error.
+    const invalid_magic = "not-zstd";
+    try expectNativeHeaderAndStreamError(allocator, invalid_magic, error.InvalidMagic);
+    checked += 1;
+
     // Bit 3 of the frame descriptor is reserved by the Zstandard format and
     // must be rejected before any block parsing. The neighboring bit 4 is only
     // unused and accepted by reference decoders, so keep this public probe
@@ -4168,6 +4176,32 @@ fn checkHandcraftedHeaderAndSkippableValidation(allocator: std.mem.Allocator) !u
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, reserved_then_skippable));
     try expectError(error.CorruptFrame, vort.zstdSummarizeNativeStream(reserved_then_skippable));
     try expectStreamIteratorError(reserved_then_skippable, error.CorruptFrame);
+    checked += 1;
+
+    const skippable_then_invalid_magic = try std.mem.concat(allocator, u8, &.{ leading_skippable, invalid_magic });
+    defer allocator.free(skippable_then_invalid_magic);
+    try expectError(error.InvalidMagic, vort.zstdDecodedNativeFrameSize(skippable_then_invalid_magic));
+    try expectError(error.InvalidMagic, vort.zstdDecodeNativeFrameInto(skippable_then_invalid_magic, &stream_output));
+    try expectAllocError(allocator, error.InvalidMagic, vort.zstdDecodeNativeFrameAlloc(allocator, skippable_then_invalid_magic));
+    try expectError(error.InvalidMagic, vort.zstdSummarizeNativeStream(skippable_then_invalid_magic));
+    var invalid_after_skip_iterator = vort.zstdIterateNativeStream(skippable_then_invalid_magic);
+    const skip_before_invalid = (try invalid_after_skip_iterator.next()) orelse return error.ZstdNativeFrameProbeMismatch;
+    switch (skip_before_invalid) {
+        .frame => return error.ZstdNativeFrameProbeMismatch,
+        .skippable => |skippable| try expectEqualSlices("metadata", skippable.payload),
+    }
+    if (invalid_after_skip_iterator.next()) |_| {
+        return error.ZstdNativeFrameProbeExpectedError;
+    } else |err| if (err != error.InvalidMagic) return err;
+    checked += 1;
+
+    const invalid_magic_then_skippable = try std.mem.concat(allocator, u8, &.{ invalid_magic, leading_skippable });
+    defer allocator.free(invalid_magic_then_skippable);
+    try expectError(error.InvalidMagic, vort.zstdDecodedNativeFrameSize(invalid_magic_then_skippable));
+    try expectError(error.InvalidMagic, vort.zstdDecodeNativeFrameInto(invalid_magic_then_skippable, &stream_output));
+    try expectAllocError(allocator, error.InvalidMagic, vort.zstdDecodeNativeFrameAlloc(allocator, invalid_magic_then_skippable));
+    try expectError(error.InvalidMagic, vort.zstdSummarizeNativeStream(invalid_magic_then_skippable));
+    try expectStreamIteratorError(invalid_magic_then_skippable, error.InvalidMagic);
     checked += 1;
 
     return checked;
