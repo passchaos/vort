@@ -1679,6 +1679,12 @@ architecture blindly.
   decoded-size, limit, and caller-owned decode APIs without requiring huge
   output allocations.
 
+- Added public Zstd frame fixtures for one-, two-, and four-byte `Dictionary_ID`
+  fields. Each fixture verifies inspect offsets, missing-dictionary diagnostics,
+  dictionary-aware size preflight, output limits, and caller-owned decode so
+  header field-width regressions are visible without relying only on internal
+  unit tests.
+
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
   root and CLI encode paths can now select a legal stored-stream window size,

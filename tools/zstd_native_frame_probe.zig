@@ -3590,6 +3590,33 @@ fn checkRleContentSizeFrame(
     try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameInto(frame, into[0 .. into.len - 1]));
 }
 
+fn checkDictionaryIdWidthFrame(
+    frame: []const u8,
+    expected_dictionary_id: u32,
+    expected_payload_offset: usize,
+    dict_content: []const u8,
+) !void {
+    const header = try vort.zstdInspectNativeFrameHeader(frame);
+    try expect(header.dictionary_id == expected_dictionary_id);
+    try expect(header.content_size.? == 3);
+    try expect(header.payload_offset == expected_payload_offset);
+
+    try expectError(error.NeedDictionary, vort.zstdDecodedNativeFrameSize(frame));
+    var missing_into: [3]u8 = undefined;
+    try expectError(error.NeedDictionary, vort.zstdDecodeNativeFrameInto(frame, &missing_into));
+
+    const dictionary = vort.ZstdNativeDictionary.init(expected_dictionary_id, dict_content);
+    try expect((try vort.zstdDecodedNativeFrameSizeWithDictionary(frame, dictionary)) == 3);
+    try expect((try vort.zstdDecodedNativeFrameSizeLimitedWithDictionary(frame, 3, dictionary)) == 3);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimitedWithDictionary(frame, 2, dictionary));
+
+    var into: [3]u8 = undefined;
+    const written = try vort.zstdDecodeNativeFrameIntoWithDictionary(frame, &into, dictionary);
+    try expect(written == into.len);
+    try expectEqualSlices("abc", &into);
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameIntoWithDictionary(frame, into[0..2], dictionary));
+}
+
 fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     var checked: usize = 0;
 
@@ -3673,6 +3700,39 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
         'q',
     };
     try checkRleContentSizeFrame(&single_segment_8byte_size, 13, 13, 13, 'q');
+    checked += 1;
+
+    const one_byte_dictionary_id = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x21, // Single-segment, 1-byte Dictionary_ID, 1-byte content size.
+        0x7f, // Dictionary_ID.
+        0x03, // Decoded content size.
+        0x19, 0x00, 0x00, // Last raw block with three payload bytes.
+        'a',  'b',  'c',
+    };
+    try checkDictionaryIdWidthFrame(&one_byte_dictionary_id, 0x7f, 7, "zstd-dict-id-1");
+    checked += 1;
+
+    const two_byte_dictionary_id = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x22, // Single-segment, 2-byte Dictionary_ID, 1-byte content size.
+        0x34, 0x12, // Dictionary_ID.
+        0x03, // Decoded content size.
+        0x19, 0x00, 0x00, // Last raw block with three payload bytes.
+        'a',  'b',  'c',
+    };
+    try checkDictionaryIdWidthFrame(&two_byte_dictionary_id, 0x1234, 8, "zstd-dict-id-2");
+    checked += 1;
+
+    const four_byte_dictionary_id = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x23, // Single-segment, 4-byte Dictionary_ID, 1-byte content size.
+        0x78, 0x56, 0x34, 0x12, // Dictionary_ID.
+        0x03, // Decoded content size.
+        0x19, 0x00, 0x00, // Last raw block with three payload bytes.
+        'a',  'b',  'c',
+    };
+    try checkDictionaryIdWidthFrame(&four_byte_dictionary_id, 0x12345678, 10, "zstd-dict-id-4");
     checked += 1;
 
     const no_size_multi_block = [_]u8{
