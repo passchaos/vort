@@ -10377,6 +10377,526 @@
       "word_index": 1943
     },
     {
+      "copy_len": 6,
+      "raw_word": "\u0639\u0644\u064a",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0639\u0644\u064a",
+      "word_index": 1944
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u062d\u062a\u0649",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u062d\u062a\u0649",
+      "word_index": 1947
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0642\u0628\u0644",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0642\u0628\u0644",
+      "word_index": 1948
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0648\u062d\u0629",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0648\u062d\u0629",
+      "word_index": 1949
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0627\u062e\u0631",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0627\u062e\u0631",
+      "word_index": 1950
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0641\u0642\u0637",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0641\u0642\u0637",
+      "word_index": 1951
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0639\u0628\u062f",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0639\u0628\u062f",
+      "word_index": 1952
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0631\u0643\u0646",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0631\u0643\u0646",
+      "word_index": 1953
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0625\u0630\u0627",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0625\u0630\u0627",
+      "word_index": 1954
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0643\u0645\u0627",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0643\u0645\u0627",
+      "word_index": 1955
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0643\u064a\u0641",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0643\u064a\u0641",
+      "word_index": 1960
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0628\u062d\u062b",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0628\u062d\u062b",
+      "word_index": 1961
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0648\u0647\u0648",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0648\u0647\u0648",
+      "word_index": 1963
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0623\u0646\u0627",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0623\u0646\u0627",
+      "word_index": 1964
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0639\u0646\u062f",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0639\u0646\u062f",
+      "word_index": 1968
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0644\u064a\u0633",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0644\u064a\u0633",
+      "word_index": 1969
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0645\u0646\u0630",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0645\u0646\u0630",
+      "word_index": 1972
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0645\u062b\u0644",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0645\u062b\u0644",
+      "word_index": 1975
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0627\u0644\u0627",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0627\u0644\u0627",
+      "word_index": 1977
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u062d\u064a\u062b",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u062d\u064a\u062b",
+      "word_index": 1978
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0645\u0635\u0631",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0645\u0635\u0631",
+      "word_index": 1979
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0634\u0631\u062d",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0634\u0631\u062d",
+      "word_index": 1980
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u062d\u0648\u0644",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u062d\u0648\u0644",
+      "word_index": 1981
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0648\u0641\u064a",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0648\u0641\u064a",
+      "word_index": 1982
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0627\u0630\u0627",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0627\u0630\u0627",
+      "word_index": 1983
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0644\u0643\u0644",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0644\u0643\u0644",
+      "word_index": 1984
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0645\u0631\u0629",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0645\u0631\u0629",
+      "word_index": 1985
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0623\u0628\u0648",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0623\u0628\u0648",
+      "word_index": 1988
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0627\u0646\u0647",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0627\u0646\u0647",
+      "word_index": 1991
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0639\u0636\u0648",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0639\u0636\u0648",
+      "word_index": 1993
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0648\u0642\u062f",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0648\u0642\u062f",
+      "word_index": 1994
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0628\u0646\u062a",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0628\u0646\u062a",
+      "word_index": 1997
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0627\u0628\u0648",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0627\u0628\u0648",
+      "word_index": 2001
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0642\u0635\u0635",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0642\u0635\u0635",
+      "word_index": 2002
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0623\u062d\u062f",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0623\u062d\u062f",
+      "word_index": 2005
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0646\u062d\u0646",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0646\u062d\u0646",
+      "word_index": 2006
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0631\u0623\u064a",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0631\u0623\u064a",
+      "word_index": 2008
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0627\u062d\u0629",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0627\u062d\u0629",
+      "word_index": 2009
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0643\u062a\u0628",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0643\u062a\u0628",
+      "word_index": 2010
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u062f\u0648\u0646",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u062f\u0648\u0646",
+      "word_index": 2011
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u064a\u062c\u0628",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u064a\u062c\u0628",
+      "word_index": 2012
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u062c\u0647\u0629",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u062c\u0647\u0629",
+      "word_index": 2015
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0633\u0646\u0629",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0633\u0646\u0629",
+      "word_index": 2016
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u064a\u062a\u0645",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u064a\u062a\u0645",
+      "word_index": 2017
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0643\u0631\u0629",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0643\u0631\u0629",
+      "word_index": 2018
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0646\u0641\u0633",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0646\u0641\u0633",
+      "word_index": 2020
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0644\u0646\u0627",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0644\u0646\u0627",
+      "word_index": 2023
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u062a\u0644\u0643",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u062a\u0644\u0643",
+      "word_index": 2024
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0644\u0645\u0627",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0644\u0645\u0627",
+      "word_index": 2026
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0623\u0648\u0644",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0623\u0648\u0644",
+      "word_index": 2028
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0623\u0645\u0627",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0623\u0645\u0627",
+      "word_index": 2031
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0630\u0627\u062a",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0630\u0627\u062a",
+      "word_index": 2034
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0628\u0623\u0646",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0628\u0623\u0646",
+      "word_index": 2036
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u062d\u0633\u0646",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u062d\u0633\u0646",
+      "word_index": 2041
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0634\u0639\u0631",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0634\u0639\u0631",
+      "word_index": 2043
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0623\u0647\u0644",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0623\u0647\u0644",
+      "word_index": 2044
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0634\u0647\u0631",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0634\u0647\u0631",
+      "word_index": 2045
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0642\u0637\u0631",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0642\u0637\u0631",
+      "word_index": 2046
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u0637\u0644\u0628",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u0637\u0644\u0628",
+      "word_index": 2047
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "profile",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "profile",
+      "word_index": 0
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "default",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "default",
+      "word_index": 2
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "details",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "details",
+      "word_index": 4
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "support",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "support",
+      "word_index": 6
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "message",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "message",
+      "word_index": 8
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Service",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Service",
+      "word_index": 31
+    },
+    {
       "copy_len": 7,
       "raw_word": "history",
       "transform": 0,
@@ -10498,6 +11018,14 @@
     },
     {
       "copy_len": 7,
+      "raw_word": "Message",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Message",
+      "word_index": 290
+    },
+    {
+      "copy_len": 7,
       "raw_word": "english",
       "transform": 0,
       "transform_kind": "identity",
@@ -10543,6 +11071,14 @@
       "transform_kind": "identity",
       "transformed_word": "Online ",
       "word_index": 585
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Default",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Default",
+      "word_index": 693
     },
     {
       "copy_len": 7,
@@ -10639,6 +11175,14 @@
       "transform_kind": "identity",
       "transformed_word": " object",
       "word_index": 1305
+    },
+    {
+      "copy_len": 7,
+      "raw_word": "Famous ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "Famous ",
+      "word_index": 1371
     },
     {
       "copy_len": 7,
@@ -10839,6 +11383,14 @@
       "transform_kind": "identity",
       "transformed_word": "Examples",
       "word_index": 438
+    },
+    {
+      "copy_len": 8,
+      "raw_word": " Online ",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": " Online ",
+      "word_index": 540
     },
     {
       "copy_len": 8,
@@ -12377,7 +12929,7 @@
       "word_index": 285
     }
   ],
-  "entry_count": 1547,
+  "entry_count": 1616,
   "schema": "vort.br_static_dictionary_source_anchors",
   "schema_version": 1,
   "source": "RFC 7932 Brotli static dictionary data as exposed by upstream common/dictionary_inc.h and common/transform.c"

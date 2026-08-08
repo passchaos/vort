@@ -2185,6 +2185,10 @@ architecture blindly.
   6-byte dictionary entries; the observed frames are now source-anchored and
   unit-tested.
 
+- Continued upstream4096 with the 22463-23487 candidate window. The probe
+  exposed 69 unique actual identity tuples, covering late Arabic 6-byte words
+  and the first early 7-byte identity entries in this larger source slice.
+
 - Ran the full generated-candidate Node probe and resolved its remaining five
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,
