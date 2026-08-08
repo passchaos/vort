@@ -827,6 +827,8 @@ def main() -> int:
         assert dashboard["zstd_native_summary_declared_content_bytes"] == zstd_native_summary["declared_content_bytes"]
         assert dashboard["zstd_native_summary_block_count"] == zstd_native_summary["block_count"]
         assert dashboard["zstd_native_summary_raw_block_count"] == zstd_native_summary["raw_block_count"]
+        assert dashboard["zstd_native_summary_rle_block_count"] == zstd_native_summary["rle_block_count"]
+        assert dashboard["zstd_native_summary_compressed_block_count"] == zstd_native_summary["compressed_block_count"]
         assert dashboard["zstd_native_summary_compressed_bytes"] == zstd_native_summary["compressed_bytes"]
         assert dashboard["zstd_native_summary_payload_bytes"] == zstd_native_summary["payload_bytes"]
         assert dashboard["zstd_native_summary_skippable_payload_bytes"] == zstd_native_summary["skippable_payload_bytes"]

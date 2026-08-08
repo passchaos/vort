@@ -293,6 +293,8 @@ def main() -> int:
                 "zstd_native_summary_declared_content_bytes": 6,
                 "zstd_native_summary_block_count": 2,
                 "zstd_native_summary_raw_block_count": 2,
+                "zstd_native_summary_rle_block_count": 0,
+                "zstd_native_summary_compressed_block_count": 0,
                 "zstd_native_summary_compressed_bytes": 48,
                 "zstd_native_summary_payload_bytes": 6,
                 "zstd_native_summary_skippable_payload_bytes": 16,
