@@ -2229,3 +2229,8 @@ architecture blindly.
 - Continued upstream8192 with the 28196-29220 candidate window. The probe exposed 79 actual identity tuples, mostly 7-byte words with one
   8-byte alternate selected by Node; the initial 220 failing frames and
   reindexed-tail frames are source-anchored and unit-tested.
+
+- Continued upstream8192 with the 29220-30244 candidate window. The initial
+  probe exposed 69 actual identity tuples, almost all 7-byte words plus
+  one 8-byte alternate selected by Node; the observed failing frames are
+  source-anchored and unit-tested.
