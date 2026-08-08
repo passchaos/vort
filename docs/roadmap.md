@@ -2027,6 +2027,11 @@ architecture blindly.
   have Node quality-5 differential cases, source anchors, and required coverage
   metadata.
 
+- Added a no-size-winner gate to `run-br-static-dictionary-node-probe-full`.
+  After promoting the first size-winning rows, the full anchor-derived probe now
+  fails if future generated candidates become smaller than their payloads until
+  they are either promoted or intentionally investigated.
+
 - Extended the Brotli static-dictionary candidate report with an optional
   upstream-source mode. When a local Brotli `common/` checkout is supplied with
   `--source-limit`, the report merges bounded official dictionary raw words into

@@ -956,6 +956,7 @@ pub fn build(b: *std.Build) void {
         "zig-out/vort-br-static-dictionary-node-probe-full.md",
         "--all-candidates",
         "--require-vort-ok",
+        "--require-no-size-winners",
     });
     br_static_dictionary_node_probe_full.step.dependOn(br_static_dictionary_candidate_report_step);
     const br_static_dictionary_node_probe_full_step = b.step("run-br-static-dictionary-node-probe-full", "Probe every Brotli static dictionary candidate against Node and Vort");
