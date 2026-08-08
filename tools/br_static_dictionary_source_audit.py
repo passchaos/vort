@@ -325,21 +325,26 @@ def table_entries_from_anchors(anchors: list[dict[str, Any]]) -> list[dict[str, 
 
 def zig_escape(value: str) -> str:
     escaped: list[str] = []
-    for byte in value.encode("utf-8"):
-        if byte == ord('"'):
+    for char in value:
+        codepoint = ord(char)
+        if char == '"':
             escaped.append('\\"')
-        elif byte == ord("\\"):
+        elif char == "\\":
             escaped.append('\\\\')
-        elif byte == ord("\n"):
+        elif char == "\n":
             escaped.append('\\n')
-        elif byte == ord("\r"):
+        elif char == "\r":
             escaped.append('\\r')
-        elif byte == ord("\t"):
+        elif char == "\t":
             escaped.append('\\t')
-        elif 0x20 <= byte <= 0x7E:
-            escaped.append(chr(byte))
+        elif codepoint < 0x20 or codepoint == 0x7F:
+            escaped.append(f"\\x{codepoint:02x}")
         else:
-            escaped.append(f"\\x{byte:02x}")
+            # Keep non-ASCII dictionary words as real UTF-8 source text. The
+            # parser above uses Python Unicode string literals, so emitting byte
+            # escapes like \xE6 would round-trip as Latin-1 code points rather
+            # than the intended UTF-8 bytes.
+            escaped.append(char)
     return "".join(escaped)
 
 

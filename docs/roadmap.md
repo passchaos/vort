@@ -2199,3 +2199,9 @@ architecture blindly.
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,
   `  numbers`, and ` numbers.` through the same static dictionary address.
+
+- Started the upstream8192 Brotli static-dictionary expansion at the first
+  changed candidate window (`23076..24100`). The Node probe exposed 156 actual
+  identity tuples, mostly 7-byte English dictionary words plus several 8-byte
+  identity alternatives selected for affix-equivalent payloads; all 506 observed
+  failing frames are now pinned by source anchors and unit coverage.
