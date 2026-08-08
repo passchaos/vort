@@ -676,6 +676,13 @@ pub const StaticDictionaryEntry = struct {
 };
 
 const minimal_static_dictionary_entries = [_]StaticDictionaryEntry{
+    .{ .transform = 0, .copy_len = 5, .word_index = 0, .word = "first" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 1, .word = "video" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 2, .word = "light" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 3, .word = "world" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 4, .word = "media" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 5, .word = "white" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 6, .word = "close" },
     .{ .transform = 0, .copy_len = 5, .word_index = 35, .word = "about" },
     .{ .transform = 0, .copy_len = 5, .word_index = 42, .word = "large" },
     .{ .transform = 0, .copy_len = 5, .word_index = 43, .word = "words" },
@@ -2385,6 +2392,21 @@ test "br minimal static dictionary size winners decode Node quality-five frames"
     try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x60, 0x00, 0x00, 0x20, 0x01, 0x12, 0xc9, 0x04, 0x47, 0x04 }, "  Information");
     try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x80, 0x00, 0x00, 0x20, 0x01, 0x92, 0x83, 0x28, 0x82, 0x4c, 0x59, 0x1b, 0xbe, 0x7a }, "large number of  ");
     try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x50, 0x00, 0x00, 0x20, 0x01, 0x12, 0xc8, 0x04, 0xe5 }, " government");
+}
+
+test "br minimal static dictionary upstream1024 identity words decode leading-space Node frames" {
+    // The upstream1024 [5120, 6144) probe first exposed these through
+    // leading-space candidate payloads, but Node encodes the concrete frames as
+    // one literal space followed by an identity static-dictionary word. Pinning
+    // the actual source tuple keeps the decoder aligned with observed encoder
+    // output instead of assuming a transform-equivalent address.
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x04, 0x14 }, " first");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x44, 0x04 }, " video");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x44, 0x14 }, " light");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x84, 0x04 }, " world");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x84, 0x14 }, " media");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x84, 0x24 }, " white");
+    try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x84, 0x34 }, " close");
 }
 
 test "br minimal compressed stream selects literal context tree through signed mode" {

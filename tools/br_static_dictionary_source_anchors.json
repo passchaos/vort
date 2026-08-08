@@ -2,6 +2,62 @@
   "entries": [
     {
       "copy_len": 5,
+      "raw_word": "first",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "first",
+      "word_index": 0
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "video",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "video",
+      "word_index": 1
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "light",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "light",
+      "word_index": 2
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "world",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "world",
+      "word_index": 3
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "media",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "media",
+      "word_index": 4
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "white",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "white",
+      "word_index": 5
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "close",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "close",
+      "word_index": 6
+    },
+    {
+      "copy_len": 5,
       "raw_word": "about",
       "transform": 0,
       "transform_kind": "identity",
@@ -769,7 +825,7 @@
       "word_index": 614
     }
   ],
-  "entry_count": 96,
+  "entry_count": 103,
   "schema": "vort.br_static_dictionary_source_anchors",
   "schema_version": 1,
   "source": "RFC 7932 Brotli static dictionary data as exposed by upstream common/dictionary_inc.h and common/transform.c"

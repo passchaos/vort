@@ -2441,6 +2441,34 @@ def main() -> int:
             node_compress(b" government", quality=5, lgwin=10),
             b" government",
         ),
+        "node-static-dictionary-leading-space-first-q5-lgwin10": (
+            node_compress(b" first", quality=5, lgwin=10),
+            b" first",
+        ),
+        "node-static-dictionary-leading-space-video-q5-lgwin10": (
+            node_compress(b" video", quality=5, lgwin=10),
+            b" video",
+        ),
+        "node-static-dictionary-leading-space-light-q5-lgwin10": (
+            node_compress(b" light", quality=5, lgwin=10),
+            b" light",
+        ),
+        "node-static-dictionary-leading-space-world-q5-lgwin10": (
+            node_compress(b" world", quality=5, lgwin=10),
+            b" world",
+        ),
+        "node-static-dictionary-leading-space-media-q5-lgwin10": (
+            node_compress(b" media", quality=5, lgwin=10),
+            b" media",
+        ),
+        "node-static-dictionary-leading-space-white-q5-lgwin10": (
+            node_compress(b" white", quality=5, lgwin=10),
+            b" white",
+        ),
+        "node-static-dictionary-leading-space-close-q5-lgwin10": (
+            node_compress(b" close", quality=5, lgwin=10),
+            b" close",
+        ),
         "node-static-dictionary-children-q5-lgwin10": (
             node_compress(b"children", quality=5, lgwin=10),
             b"children",

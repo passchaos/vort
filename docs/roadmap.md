@@ -2097,6 +2097,14 @@ architecture blindly.
   validated in bounded chunks instead of requiring one very long all-candidate
   probe.
 
+- Promoted the first upstream1024 window failures into decoder coverage. The
+  `5120-6144` probe exposed seven leading-space 5-byte words (` first`,
+  ` video`, ` light`, ` world`, ` media`, ` white`, and ` close`). Node encodes
+  those concrete frames as one literal space plus identity dictionary words, so
+  the actual source tuples (`first`, `video`, `light`, `world`, `media`,
+  `white`, `close`) are now in the static dictionary table with source anchors
+  and leading-space Node differential cases.
+
 - Ran the full generated-candidate Node probe and resolved its remaining five
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,
