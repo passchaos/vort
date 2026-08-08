@@ -2138,6 +2138,11 @@ architecture blindly.
   first diverges from the upstream1024 candidate ordering, and cover through the
   current 12461-candidate tail with no Vort failures or size winners.
 
+- Started the upstream4096 Brotli static-dictionary expansion. The first changed
+  candidate window begins at index 12223 and exposed 126 additional 6-byte
+  identity source words; their observed Node frames are now pinned in unit
+  coverage while source anchors keep the imported subset tied to upstream data.
+
 - Ran the full generated-candidate Node probe and resolved its remaining five
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,
