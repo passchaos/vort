@@ -8769,6 +8769,830 @@
       "word_index": 1564
     },
     {
+      "copy_len": 6,
+      "raw_word": "\u53e3\u4ef7",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u53e3\u4ef7",
+      "word_index": 1565
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u5b89\u6392",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u5b89\u6392",
+      "word_index": 1568
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u6b66\u6c49",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u6b66\u6c49",
+      "word_index": 1569
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u91cc\u9762",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u91cc\u9762",
+      "word_index": 1570
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u521b\u5efa",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u521b\u5efa",
+      "word_index": 1571
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u5929\u7a7a",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u5929\u7a7a",
+      "word_index": 1572
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u9996\u5148",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u9996\u5148",
+      "word_index": 1573
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u9a71\u52a8",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u9a71\u52a8",
+      "word_index": 1575
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u9633\u5149",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u9633\u5149",
+      "word_index": 1580
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u82f1\u56fd",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u82f1\u56fd",
+      "word_index": 1581
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u6f02\u4eae",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u6f02\u4eae",
+      "word_index": 1582
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u519b\u4e8b",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u519b\u4e8b",
+      "word_index": 1583
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u73a9\u5bb6",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u73a9\u5bb6",
+      "word_index": 1584
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u7fa4\u4f17",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u7fa4\u4f17",
+      "word_index": 1585
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u5373\u53ef",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u5373\u53ef",
+      "word_index": 1587
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u52a8\u753b",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u52a8\u753b",
+      "word_index": 1590
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u60f3\u5230",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u60f3\u5230",
+      "word_index": 1591
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u5c0f\u5b66",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u5c0f\u5b66",
+      "word_index": 1593
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u6027\u80fd",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u6027\u80fd",
+      "word_index": 1594
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u8003\u7814",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u8003\u7814",
+      "word_index": 1595
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u6e05\u695a",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u6e05\u695a",
+      "word_index": 1598
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u641e\u7b11",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u641e\u7b11",
+      "word_index": 1599
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u9996\u9801",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u9996\u9801",
+      "word_index": 1600
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u9ec4\u91d1",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u9ec4\u91d1",
+      "word_index": 1601
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u9002\u7528",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u9002\u7528",
+      "word_index": 1602
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u6c5f\u82cf",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u6c5f\u82cf",
+      "word_index": 1603
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u9636\u6bb5",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u9636\u6bb5",
+      "word_index": 1606
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u8a3b\u518a",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u8a3b\u518a",
+      "word_index": 1607
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u7ffb\u8bd1",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u7ffb\u8bd1",
+      "word_index": 1608
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u6743\u5229",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u6743\u5229",
+      "word_index": 1609
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u505a\u597d",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u505a\u597d",
+      "word_index": 1610
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u901a\u8baf",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u901a\u8baf",
+      "word_index": 1612
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u65bd\u5de5",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u65bd\u5de5",
+      "word_index": 1613
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u72c0\u614b",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u72c0\u614b",
+      "word_index": 1614
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u4e5f\u8bb8",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u4e5f\u8bb8",
+      "word_index": 1615
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u73af\u4fdd",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u73af\u4fdd",
+      "word_index": 1616
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u57f9\u517b",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u57f9\u517b",
+      "word_index": 1617
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u673a\u7968",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u673a\u7968",
+      "word_index": 1620
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u533f\u540d",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u533f\u540d",
+      "word_index": 1622
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "cuando",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "cuando",
+      "word_index": 1623
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "enviar",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "enviar",
+      "word_index": 1624
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "madrid",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "madrid",
+      "word_index": 1625
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "inicio",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "inicio",
+      "word_index": 1627
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "tiempo",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "tiempo",
+      "word_index": 1628
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "porque",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "porque",
+      "word_index": 1629
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "cuenta",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "cuenta",
+      "word_index": 1630
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "nombre",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "nombre",
+      "word_index": 1636
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "manera",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "manera",
+      "word_index": 1639
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "ciudad",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "ciudad",
+      "word_index": 1641
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "aunque",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "aunque",
+      "word_index": 1643
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "dentro",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "dentro",
+      "word_index": 1645
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "precio",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "precio",
+      "word_index": 1647
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "seg\u00fan",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "seg\u00fan",
+      "word_index": 1648
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "volver",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "volver",
+      "word_index": 1650
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "semana",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "semana",
+      "word_index": 1652
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "hab\u00eda",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "hab\u00eda",
+      "word_index": 1653
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "agosto",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "agosto",
+      "word_index": 1654
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "carlos",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "carlos",
+      "word_index": 1657
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "equipo",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "equipo",
+      "word_index": 1658
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "ni\u00f1os",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "ni\u00f1os",
+      "word_index": 1659
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "muchos",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "muchos",
+      "word_index": 1660
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "alguna",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "alguna",
+      "word_index": 1661
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "mar\u00eda",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "mar\u00eda",
+      "word_index": 1666
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "hombre",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "hombre",
+      "word_index": 1667
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "empleo",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "empleo",
+      "word_index": 1668
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "verdad",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "verdad",
+      "word_index": 1669
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "l\u00ednea",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "l\u00ednea",
+      "word_index": 1674
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "miguel",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "miguel",
+      "word_index": 1683
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "cuatro",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "cuatro",
+      "word_index": 1685
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "europa",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "europa",
+      "word_index": 1689
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "dem\u00e1s",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "dem\u00e1s",
+      "word_index": 1693
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "cuerpo",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "cuerpo",
+      "word_index": 1703
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "siendo",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "siendo",
+      "word_index": 1704
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "prensa",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "prensa",
+      "word_index": 1705
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "llegar",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "llegar",
+      "word_index": 1706
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "murcia",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "murcia",
+      "word_index": 1709
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "podr\u00e1",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "podr\u00e1",
+      "word_index": 1710
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "diario",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "diario",
+      "word_index": 1712
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "propio",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "propio",
+      "word_index": 1716
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "crisis",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "crisis",
+      "word_index": 1717
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "cierto",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "cierto",
+      "word_index": 1718
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "seguro",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "seguro",
+      "word_index": 1719
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "muerte",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "muerte",
+      "word_index": 1720
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "fuente",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "fuente",
+      "word_index": 1721
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "cerrar",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "cerrar",
+      "word_index": 1722
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "grande",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "grande",
+      "word_index": 1723
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "efecto",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "efecto",
+      "word_index": 1724
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "ofrece",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "ofrece",
+      "word_index": 1728
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "tierra",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "tierra",
+      "word_index": 1729
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "e-mail",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "e-mail",
+      "word_index": 1730
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "riesgo",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "riesgo",
+      "word_index": 1736
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u00fanico",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "\u00fanico",
+      "word_index": 1739
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "camino",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "camino",
+      "word_index": 1740
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "raz\u00f3n",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "raz\u00f3n",
+      "word_index": 1742
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "debido",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "debido",
+      "word_index": 1743
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "prueba",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "prueba",
+      "word_index": 1744
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "toledo",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "toledo",
+      "word_index": 1745
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "ten\u00eda",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "ten\u00eda",
+      "word_index": 1746
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "jes\u00fas",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "jes\u00fas",
+      "word_index": 1747
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "cocina",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "cocina",
+      "word_index": 1749
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "tienda",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "tienda",
+      "word_index": 1751
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "ciento",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "ciento",
+      "word_index": 1752
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "c\u00e1diz",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "c\u00e1diz",
+      "word_index": 1753
+    },
+    {
       "copy_len": 7,
       "raw_word": "history",
       "transform": 0,
@@ -10385,6 +11209,110 @@
       "word_index": 1564
     },
     {
+      "copy_len": 6,
+      "raw_word": "riesgo",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " riesgo",
+      "word_index": 1736
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "\u00fanico",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " \u00fanico",
+      "word_index": 1739
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "camino",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " camino",
+      "word_index": 1740
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "raz\u00f3n",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " raz\u00f3n",
+      "word_index": 1742
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "debido",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " debido",
+      "word_index": 1743
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "prueba",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " prueba",
+      "word_index": 1744
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "toledo",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " toledo",
+      "word_index": 1745
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "ten\u00eda",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " ten\u00eda",
+      "word_index": 1746
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "jes\u00fas",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " jes\u00fas",
+      "word_index": 1747
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "cocina",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " cocina",
+      "word_index": 1749
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "tienda",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " tienda",
+      "word_index": 1751
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "ciento",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " ciento",
+      "word_index": 1752
+    },
+    {
+      "copy_len": 6,
+      "raw_word": "c\u00e1diz",
+      "transform": 6,
+      "transform_kind": "affix_identity",
+      "transformed_word": " c\u00e1diz",
+      "word_index": 1753
+    },
+    {
       "copy_len": 7,
       "raw_word": "release",
       "transform": 6,
@@ -10577,7 +11505,7 @@
       "word_index": 285
     }
   ],
-  "entry_count": 1322,
+  "entry_count": 1438,
   "schema": "vort.br_static_dictionary_source_anchors",
   "schema_version": 1,
   "source": "RFC 7932 Brotli static dictionary data as exposed by upstream common/dictionary_inc.h and common/transform.c"
