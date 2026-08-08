@@ -2105,6 +2105,11 @@ architecture blindly.
   `white`, `close`) are now in the static dictionary table with source anchors
   and leading-space Node differential cases.
 
+- Added the upstream1024 `5120-6144` Node/Vort probe window to `build.zig`,
+  dashboard producer metadata, required-artifact metadata, and validation JSON
+  docs. The window now has the same opt-in artifact path as earlier 1024-row
+  probe slices instead of requiring a one-off script invocation.
+
 - Ran the full generated-candidate Node probe and resolved its remaining five
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,

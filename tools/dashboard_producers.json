@@ -112,6 +112,14 @@
       "expected_format": "md",
       "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream1024-3072-4096 -- --brotli-common-dir <path>"
     },
+    "vort-br-static-dictionary-node-probe-upstream1024-5120-6144.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream1024-5120-6144 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-node-probe-upstream1024-5120-6144.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream1024-5120-6144 -- --brotli-common-dir <path>"
+    },
     "vort-br-static-dictionary-node-probe-upstream1024-4096-5120.json": {
       "expected_format": "json",
       "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream1024-4096-5120 -- --brotli-common-dir <path>"
@@ -619,6 +627,8 @@
     "vort-br-static-dictionary-node-probe-upstream1024-2048-3072.md": "zig build run-br-static-dictionary-node-probe-upstream1024-2048-3072 -- --brotli-common-dir <path>",
     "vort-br-static-dictionary-node-probe-upstream1024-3072-4096.json": "zig build run-br-static-dictionary-node-probe-upstream1024-3072-4096 -- --brotli-common-dir <path>",
     "vort-br-static-dictionary-node-probe-upstream1024-3072-4096.md": "zig build run-br-static-dictionary-node-probe-upstream1024-3072-4096 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream1024-5120-6144.json": "zig build run-br-static-dictionary-node-probe-upstream1024-5120-6144 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream1024-5120-6144.md": "zig build run-br-static-dictionary-node-probe-upstream1024-5120-6144 -- --brotli-common-dir <path>",
     "vort-br-static-dictionary-node-probe-upstream1024-4096-5120.json": "zig build run-br-static-dictionary-node-probe-upstream1024-4096-5120 -- --brotli-common-dir <path>",
     "vort-br-static-dictionary-node-probe-upstream1024-4096-5120.md": "zig build run-br-static-dictionary-node-probe-upstream1024-4096-5120 -- --brotli-common-dir <path>",
     "vort-br-static-dictionary-node-probe-upstream128.json": "zig build run-br-static-dictionary-node-probe-upstream128 -- --brotli-common-dir <path>",
