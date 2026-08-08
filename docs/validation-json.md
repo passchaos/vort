@@ -2151,6 +2151,36 @@ Example:
 }
 ```
 
+## `vort.zstd_native_stream_summary`
+
+Produced by:
+
+```sh
+zig build run -- summary-zstd-native-file /tmp/vort-readme.zst json
+```
+
+This schema is the machine-readable form of the Zstd native stream summary CLI.
+It reports data-frame, skippable-frame, block-type, compressed-payload, and
+skippable-payload counts without decoding the stream payload.
+
+Example:
+
+```json
+{
+  "schema": "vort.zstd_native_stream_summary",
+  "schema_version": 1,
+  "compressed_bytes": 48,
+  "frame_count": 2,
+  "skippable_frame_count": 1,
+  "block_count": 2,
+  "compressed_block_count": 0,
+  "rle_block_count": 0,
+  "raw_block_count": 2,
+  "payload_bytes": 6,
+  "skippable_payload_bytes": 16
+}
+```
+
 ## `vort.dashboard_index`
 
 Produced by:

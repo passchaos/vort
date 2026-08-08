@@ -1642,10 +1642,11 @@ architecture blindly.
   existing library-level Zstd native stream summary fields (data frames,
   skippable frames, block type counts, compressed payload bytes, and skippable
   payload bytes), matching the LZ4 native summary command and making
-  concatenated/skippable Zstd stream layout visible without decoding. The new
-  `run-zstd-native-summary-cli-probe` black-box smoke encodes single-frame and
-  concatenated/skippable streams through the CLI, checks the summary fields, and
-  runs in `ci-smoke`.
+  concatenated/skippable Zstd stream layout visible without decoding. The
+  command supports text and `vort.zstd_native_stream_summary` JSON output. The
+  new `run-zstd-native-summary-cli-probe` black-box smoke encodes single-frame
+  and concatenated/skippable streams through the CLI, checks both text and JSON
+  summary fields, and runs in `ci-smoke`.
 
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but

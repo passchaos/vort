@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import pathlib
+import json
 import struct
 import subprocess
 import sys
@@ -73,6 +74,13 @@ def main() -> int:
             },
             "single-frame summary",
         )
+        single_json = json.loads(run_cli(cli, "summary-zstd-native-file", str(first_frame), "json"))
+        assert single_json["schema"] == "vort.zstd_native_stream_summary"
+        assert single_json["schema_version"] == 1
+        assert single_json["compressed_bytes"] == single_summary["zstd_native_compressed_bytes"]
+        assert single_json["frame_count"] == single_summary["frames"]
+        assert single_json["skippable_frame_count"] == 0
+        assert single_json["raw_block_count"] == 1
 
         run_cli(cli, "encode-zstd-native-file", str(second_plain), str(second_frame), "raw_or_rle", "false", "true")
         skip_a = b"summary metadata a"
@@ -100,6 +108,12 @@ def main() -> int:
         )
         if stream_summary["zstd_native_compressed_bytes"] != stream_path.stat().st_size:
             raise AssertionError(f"summary compressed size mismatch: {stream_summary}")
+        stream_json = json.loads(run_cli(cli, "summary-zstd-native-file", str(stream_path), "json"))
+        assert stream_json["schema"] == "vort.zstd_native_stream_summary"
+        assert stream_json["compressed_bytes"] == stream_summary["zstd_native_compressed_bytes"]
+        assert stream_json["frame_count"] == stream_summary["frames"]
+        assert stream_json["skippable_frame_count"] == stream_summary["skippable_frames"]
+        assert stream_json["skippable_payload_bytes"] == stream_summary["skippable_payload_bytes"]
 
     print("zstd_native_summary_cli_probe=ok")
     return 0
