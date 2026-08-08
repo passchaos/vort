@@ -169,6 +169,9 @@ def main() -> int:
         br_static_dictionary_node_probe = json.loads((ROOT / "zig-out" / "vort-br-static-dictionary-node-probe.json").read_text())
         assert br_static_dictionary_node_probe["schema"] == "vort.br_static_dictionary_node_probe"
         assert br_static_dictionary_node_probe["ok"] is True
+        assert br_static_dictionary_node_probe["candidate_source_mode"] == "anchors"
+        assert br_static_dictionary_node_probe["candidate_source_limit"] == 0
+        assert br_static_dictionary_node_probe["candidate_upstream_raw_word_count"] == 0
         assert br_static_dictionary_node_probe["all_candidates"] is False
         assert br_static_dictionary_node_probe["probed_count"] >= 1
         assert br_static_dictionary_node_probe["node_decode_successes"] == br_static_dictionary_node_probe["probed_count"]

@@ -2011,6 +2011,11 @@ architecture blindly.
   Vort accepts Node frames, but also whether Node achieved a size win for each
   generated candidate payload.
 
+- Copied candidate-report source metadata into Brotli Node probe artifacts.
+  Probe JSON/Markdown now records whether rows came from anchors or upstream
+  slices, plus source limits and raw-word counts, so retained probe artifacts are
+  self-describing even when compared outside their generating build step.
+
 - Added explicit size-winner rows to the Brotli Node probe report. The JSON and
   Markdown artifacts now list every candidate whose Node Brotli frame is smaller
   than the original payload, sorted by byte savings, so high-value dictionary

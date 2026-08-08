@@ -115,6 +115,12 @@
         "schema_version": "int",
         "ok": "bool",
         "candidate_count": "int",
+        "candidate_source_mode": "str",
+        "candidate_source_limit": "int",
+        "candidate_source_entry_count": "int",
+        "candidate_anchor_raw_word_count": "int",
+        "candidate_upstream_raw_word_count": "int",
+        "candidate_raw_word_count": "int",
         "all_candidates": "bool",
         "limit": "int",
         "quality": "int",
@@ -199,6 +205,12 @@
             ]
           }
         }
+      },
+      "enums": {
+        "candidate_source_mode": [
+          "anchors",
+          "upstream"
+        ]
       },
       "item_collection": "rows",
       "item_enums": {

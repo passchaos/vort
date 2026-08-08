@@ -142,6 +142,7 @@ def kind_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 
+
 def size_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for cls in ("smaller", "equal", "larger"):
@@ -154,12 +155,19 @@ def size_winner_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     winners = [row for row in rows if row["size_class"] == "smaller"]
     return sorted(winners, key=lambda row: (row["size_delta_bytes"], row["index"]))
 
+
 def build_report(candidate_report: dict[str, Any], rows: list[dict[str, Any]], limit: int, quality: int, lgwin: int) -> dict[str, Any]:
     return {
         "schema": "vort.br_static_dictionary_node_probe",
         "schema_version": 1,
         "ok": all(row["node_ok"] for row in rows),
         "candidate_count": candidate_report["candidate_count"],
+        "candidate_source_mode": candidate_report["source_mode"],
+        "candidate_source_limit": candidate_report["source_limit"],
+        "candidate_source_entry_count": candidate_report["source_entry_count"],
+        "candidate_anchor_raw_word_count": candidate_report["anchor_raw_word_count"],
+        "candidate_upstream_raw_word_count": candidate_report["upstream_raw_word_count"],
+        "candidate_raw_word_count": candidate_report["raw_word_count"],
         "all_candidates": len(rows) == candidate_report["candidate_count"],
         "limit": limit,
         "quality": quality,
@@ -187,6 +195,9 @@ def write_markdown(path: Path, report: dict[str, Any]) -> None:
         "# Brotli static dictionary Node probe",
         "",
         f"- Candidate entries: {report['candidate_count']}",
+        f"- Candidate source mode: {report['candidate_source_mode']}",
+        f"- Candidate source limit: {report['candidate_source_limit']}",
+        f"- Candidate raw words: {report['candidate_raw_word_count']}",
         f"- Probed entries: {report['probed_count']}",
         f"- Node decode successes: {report['node_decode_successes']}",
         f"- Vort decode successes: {report['vort_decode_successes']}",
