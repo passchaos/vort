@@ -780,6 +780,12 @@ pub fn main(init: std.process.Init) !void {
         else
             try vort.snappyDecodedFrameSize(frame);
         try stdout.print("snappy_frame_compressed_bytes={d} decoded_bytes={d}\n", .{ frame.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "summary-snappy-frame-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const frame = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(frame);
+        const summary = try vort.snappySummarizeFrame(frame);
+        try printSnappyFrameSummary(stdout, frame.len, summary);
     } else if (std.mem.eql(u8, command, "encode-snappy-frame-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const payload = try hexToOwnedBytes(init.gpa, hex);
@@ -833,6 +839,12 @@ pub fn main(init: std.process.Init) !void {
         else
             try vort.snappyDecodedFrameSize(frame);
         try stdout.print("snappy_frame_compressed_bytes={d} decoded_bytes={d}\n", .{ frame.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "summary-snappy-frame-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const frame = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(frame);
+        const summary = try vort.snappySummarizeFrame(frame);
+        try printSnappyFrameSummary(stdout, frame.len, summary);
     } else if (std.mem.eql(u8, command, "size-lz4-block-prefix-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const prefix_hex = args.next() orelse return error.MissingHexInput;
@@ -1602,6 +1614,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Preflight Snappy raw block file decoded size
         \\  size-snappy-frame-hex [hex] [max_output]
         \\                              Preflight Snappy framed stream decoded size
+        \\  summary-snappy-frame-hex [hex]
+        \\                              Summarize Snappy framed stream chunks and decoded bytes
         \\  encode-snappy-frame-hex [hex]
         \\                              Encode Snappy framed stream
         \\  decode-snappy-frame-hex [hex] [max_output]
@@ -1612,6 +1626,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode Snappy framed stream file to output
         \\  size-snappy-frame-file [path] [max_output]
         \\                              Preflight Snappy framed stream file decoded size
+        \\  summary-snappy-frame-file [path]
+        \\                              Summarize Snappy framed stream file chunks and decoded bytes
         \\  size-lz4-block-prefix-hex [hex] [prefix_hex] [max_output]
         \\                              Preflight LZ4 block decoded size with prefix history
         \\  encode-lz4-block-prefix-hex [hex] [prefix_hex]
@@ -1757,6 +1773,23 @@ fn printDecoded(stdout: *std.Io.Writer, label: []const u8, compressed_len: usize
         vort.crc32(decoded),
         decoded,
     });
+}
+
+fn printSnappyFrameSummary(stdout: *std.Io.Writer, compressed_len: usize, summary: vort.SnappyFrameSummary) !void {
+    try stdout.print(
+        "snappy_frame_compressed_bytes={d} decoded_bytes={d} stream_identifiers={d} compressed_chunks={d} uncompressed_chunks={d} skippable_chunks={d} skippable_payload_bytes={d} compressed_payload_bytes={d} uncompressed_payload_bytes={d}\n",
+        .{
+            compressed_len,
+            summary.decoded_bytes,
+            summary.stream_identifier_count,
+            summary.compressed_chunk_count,
+            summary.uncompressed_chunk_count,
+            summary.skippable_chunk_count,
+            summary.skippable_payload_bytes,
+            summary.compressed_payload_bytes,
+            summary.uncompressed_payload_bytes,
+        },
+    );
 }
 
 fn printHex(stdout: *std.Io.Writer, bytes: []const u8) !void {

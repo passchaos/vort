@@ -112,6 +112,13 @@ def parse_hex(stdout):
     return bytes.fromhex(stdout.decode().strip())
 
 
+def require_fields(text: str, fields: dict[str, int], context: str) -> None:
+    for key, expected in fields.items():
+        marker = f"{key}={expected}"
+        if marker not in text:
+            raise RuntimeError(f"bad {context} summary: missing {marker!r} in {text!r}")
+
+
 def main():
     if len(sys.argv) != 2:
         raise SystemExit("usage: snappy_block_cli_probe.py <vort-cli>")
@@ -150,6 +157,16 @@ def main():
         size = run([str(cli), "size-snappy-frame-hex", encoded.hex(), str(len(payload))], root).stdout.decode()
         if f"decoded_bytes={len(payload)}" not in size:
             raise RuntimeError(f"bad frame size output: {size}")
+        summary = run([str(cli), "summary-snappy-frame-hex", encoded.hex()], root).stdout.decode()
+        require_fields(
+            summary,
+            {
+                "decoded_bytes": len(payload),
+                "stream_identifiers": 1,
+                "skippable_chunks": 0,
+            },
+            "frame hex",
+        )
         decoded = run([str(cli), "decode-snappy-frame-hex", encoded.hex(), str(len(payload))], root).stdout
         if f"decoded_bytes={len(payload)}".encode() not in decoded:
             raise RuntimeError(f"bad frame decode output: {decoded!r}")
@@ -163,6 +180,8 @@ def main():
     size = run([str(cli), "size-snappy-frame-hex", concatenated.hex(), "10"], root).stdout.decode()
     if "decoded_bytes=10" not in size:
         raise RuntimeError(f"bad concatenated frame size output: {size}")
+    summary = run([str(cli), "summary-snappy-frame-hex", concatenated.hex()], root).stdout.decode()
+    require_fields(summary, {"decoded_bytes": 10, "stream_identifiers": 2}, "concatenated frame")
     decoded = run([str(cli), "decode-snappy-frame-hex", concatenated.hex(), "10"], root).stdout
     if b"decoded_bytes=10" not in decoded:
         raise RuntimeError(f"bad concatenated frame decode output: {decoded!r}")
@@ -177,6 +196,17 @@ def main():
     output = run([str(cli), "decode-snappy-frame-hex", compressed_frame.hex(), str(len(known_payload))], root).stdout
     if f"decoded_bytes={len(known_payload)}".encode() not in output:
         raise RuntimeError(f"compressed frame decoded with unexpected output: {output!r}")
+    summary = run([str(cli), "summary-snappy-frame-hex", compressed_frame.hex()], root).stdout.decode()
+    require_fields(
+        summary,
+        {
+            "decoded_bytes": len(known_payload),
+            "compressed_chunks": 1,
+            "skippable_chunks": 1,
+            "skippable_payload_bytes": len(b"metadata"),
+        },
+        "compressed frame",
+    )
     checked += 1
 
     corrupt = bytearray(compressed_frame)
@@ -238,6 +268,8 @@ def main():
 
             run([str(cli), "encode-snappy-frame-file", str(src), str(frame)], root)
             run([str(cli), "size-snappy-frame-file", str(frame), str(len(payload))], root)
+            summary = run([str(cli), "summary-snappy-frame-file", str(frame)], root).stdout.decode()
+            require_fields(summary, {"decoded_bytes": len(payload), "stream_identifiers": 1}, "frame file")
             run([str(cli), "decode-snappy-frame-file-to", str(frame), str(frame_out), str(len(payload))], root)
             if frame_out.read_bytes() != payload:
                 raise RuntimeError(f"frame file roundtrip mismatch for case {i}")

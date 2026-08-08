@@ -1585,6 +1585,11 @@ architecture blindly.
   identifiers, compressed/uncompressed chunks, skippable payload bytes, and total
   decoded bytes before callers materialize output.
 
+- Exposed Snappy framed-stream summaries through the CLI as
+  `summary-snappy-frame-hex` and `summary-snappy-frame-file`, and extended the
+  black-box Snappy CLI probe to validate compressed, skippable, concatenated,
+  and file summary rows.
+
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
   root and CLI encode paths can now select a legal stored-stream window size,

@@ -235,7 +235,9 @@ zig build run -- encode-snappy-block-file README.md /tmp/vort-readme.snappy-bloc
 zig build run -- decode-snappy-block-file-to /tmp/vort-readme.snappy-block /tmp/vort-readme-snappy.out 1048576
 zig build run -- encode-snappy-frame-hex 68656c6c6f
 zig build run -- decode-snappy-frame-hex ff060000734e6150705901090000bb1f1c1968656c6c6f 5
+zig build run -- summary-snappy-frame-hex ff060000734e6150705901090000bb1f1c1968656c6c6f
 zig build run -- encode-snappy-frame-file README.md /tmp/vort-readme.sz
+zig build run -- summary-snappy-frame-file /tmp/vort-readme.sz
 zig build run -- decode-snappy-frame-file-to /tmp/vort-readme.sz /tmp/vort-readme-snappy-frame.out 1048576
 zig build run-snappy-block-cli-probe
 zig build run-snappy-report-gate
