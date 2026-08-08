@@ -2248,3 +2248,8 @@ architecture blindly.
   unit-tested; the reindexed 1024-row window now has no Vort failures. Static
   dictionary Markdown reports now render embedded control bytes as visible
   escapes, so CRLF-bearing dictionary words remain valid single table rows.
+
+- Continued upstream8192 with the 32292-33316 candidate window. The initial
+  probe and reindexed tail exposed 73 direct 7-byte identity tuples and 145
+  unique failing Node frames; all observed addresses are source-anchored and
+  unit-tested, and the reindexed 1024-row window now has no Vort failures.
