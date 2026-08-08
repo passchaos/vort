@@ -17056,6 +17056,726 @@
       "source_case": "node-static-dictionary-upstream8192-25124-window",
       "reason": "upstream8192 third-window reindexed Node frame actual identity source tuple",
       "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 579,
+      "word": "conduct",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 580,
+      "word": "get the",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 581,
+      "word": "January",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 588,
+      "word": "typical",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 592,
+      "word": "generat",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 594,
+      "word": "are not",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 595,
+      "word": "/search",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 597,
+      "word": "-image:",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 601,
+      "word": "convert",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 602,
+      "word": "violent",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 605,
+      "word": "circuit",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 606,
+      "word": "Finland",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 607,
+      "word": "chemist",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 610,
+      "word": "as such",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 612,
+      "word": "</span>",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 615,
+      "word": "a great",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 616,
+      "word": "mystery",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 617,
+      "word": "/index.",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 619,
+      "word": "due to ",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 622,
+      "word": "monster",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 625,
+      "word": "nuclear",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 630,
+      "word": "predict",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 631,
+      "word": "reforms",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 634,
+      "word": "lecture",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 642,
+      "word": "combine",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 643,
+      "word": "graphic",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 645,
+      "word": "<br /><",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 652,
+      "word": "Swedish",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 654,
+      "word": "Persian",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 655,
+      "word": "so much",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 663,
+      "word": "mapping",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 665,
+      "word": "jQuery(",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 666,
+      "word": "-width:",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 671,
+      "word": "Turkish",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 673,
+      "word": ".match(",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 679,
+      "word": "Richard",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 681,
+      "word": "plastic",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 685,
+      "word": "ul id=\"",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 688,
+      "word": "physics",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 690,
+      "word": "execute",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 695,
+      "word": ": true,",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 705,
+      "word": "diamond",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 706,
+      "word": "use the",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 707,
+      "word": "airline",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 708,
+      "word": "end -->",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 709,
+      "word": ").attr(",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 712,
+      "word": "#ffffff",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 714,
+      "word": "Vincent",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 716,
+      "word": " src=\"/",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 718,
+      "word": "despite",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 719,
+      "word": "diverse",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 720,
+      "word": "telling",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 721,
+      "word": "Public ",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 724,
+      "word": "theatre",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 725,
+      "word": "affects",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 726,
+      "word": "<style>",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 727,
+      "word": "a large",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 728,
+      "word": "doesn't",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 731,
+      "word": "favicon",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 733,
+      "word": "Hungary",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 734,
+      "word": "Airport",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 735,
+      "word": "see the",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 736,
+      "word": "so that",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 737,
+      "word": "Michael",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 740,
+      "word": "s, and ",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 742,
+      "word": "e&quot;",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 746,
+      "word": "Golden ",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 748,
+      "word": "grammar",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 972,
+      "word": "Despite",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 1075,
+      "word": "Physics",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 1109,
+      "word": "Title\">",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 1510,
+      "word": "Nuclear",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 1728,
+      "word": "See the",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 8,
+      "word_index": 298,
+      "word": "Michael ",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 8,
+      "word_index": 313,
+      "word": "Richard ",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 8,
+      "word_index": 504,
+      "word": "will be ",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window Node frame actual identity source tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 750,
+      "word": "destroy",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window reindexed Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 755,
+      "word": ".src = ",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window reindexed Node frame actual identity source tuple",
+      "category": "phrase"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 759,
+      "word": "Muslims",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window reindexed Node frame actual identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 7,
+      "word_index": 761,
+      "word": "in many",
+      "source_case": "node-static-dictionary-upstream8192-26148-window",
+      "reason": "upstream8192 fourth-window reindexed Node frame actual identity source tuple",
+      "category": "phrase"
     }
   ]
 }
