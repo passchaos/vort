@@ -2151,6 +2151,42 @@ Example:
 }
 ```
 
+## `vort.lz4_native_stream_summary`
+
+Produced by:
+
+```sh
+zig build run -- summary-lz4-native-file /tmp/vort-readme.lz4 json
+```
+
+This schema is the machine-readable form of the LZ4 native stream summary CLI.
+It reports data-frame, skippable-frame, checksum-frame, block-checksum-frame,
+Dictionary_ID-frame, content-size-frame, declared content-byte, block-type,
+compressed-payload, and skippable-payload counts without decoding the stream
+payload.
+
+Example:
+
+```json
+{
+  "schema": "vort.lz4_native_stream_summary",
+  "schema_version": 1,
+  "compressed_bytes": 64,
+  "frame_count": 2,
+  "skippable_frame_count": 1,
+  "content_size_frame_count": 2,
+  "checksum_frame_count": 2,
+  "block_checksum_frame_count": 0,
+  "dictionary_id_frame_count": 0,
+  "declared_content_bytes": 6,
+  "block_count": 2,
+  "compressed_block_count": 0,
+  "raw_block_count": 2,
+  "payload_bytes": 6,
+  "skippable_payload_bytes": 16
+}
+```
+
 ## `vort.zstd_native_stream_summary`
 
 Produced by:
@@ -2162,8 +2198,8 @@ zig build run -- summary-zstd-native-file /tmp/vort-readme.zst json
 
 This schema is the machine-readable form of the Zstd native stream summary CLI.
 It reports data-frame, skippable-frame, checksum-frame, Dictionary_ID-frame,
-block-type, compressed-payload, and skippable-payload counts without decoding
-the stream payload.
+content-size-frame, declared content-byte, block-type, compressed-payload, and
+skippable-payload counts without decoding the stream payload.
 
 Example:
 

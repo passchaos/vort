@@ -3388,6 +3388,25 @@
         "zlib_decoder_successes": "int"
       }
     },
+    "vort.lz4_native_stream_summary": {
+      "fields": {
+        "block_checksum_frame_count": "int",
+        "block_count": "int",
+        "checksum_frame_count": "int",
+        "compressed_block_count": "int",
+        "compressed_bytes": "int",
+        "content_size_frame_count": "int",
+        "declared_content_bytes": "int",
+        "dictionary_id_frame_count": "int",
+        "frame_count": "int",
+        "payload_bytes": "int",
+        "raw_block_count": "int",
+        "schema": "str",
+        "schema_version": "int",
+        "skippable_frame_count": "int",
+        "skippable_payload_bytes": "int"
+      }
+    },
     "vort.zstd_native_stream_summary": {
       "fields": {
         "block_count": "int",

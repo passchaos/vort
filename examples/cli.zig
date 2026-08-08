@@ -672,10 +672,11 @@ pub fn main(init: std.process.Init) !void {
         try stdout.print("lz4_native_compressed_bytes={d} decoded_bytes={d}\n", .{ frame.len, decoded_len });
     } else if (std.mem.eql(u8, command, "summary-lz4-native-file")) {
         const path = args.next() orelse return error.MissingCorpusPath;
+        const output_format = try parseHeaderInspectOutputFormat(args.next());
         const frame = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(frame);
         const summary = try vort.lz4SummarizeNativeStream(frame);
-        try printLz4NativeSummary(stdout, frame.len, summary);
+        try printLz4NativeSummary(stdout, frame.len, summary, output_format);
     } else if (std.mem.eql(u8, command, "decode-lz4-native-file-to")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -1650,7 +1651,7 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Encode file bytes as dependency-free native LZ4 frame
         \\  size-lz4-native-file [path] [max_output]
         \\                              Preflight dependency-free native LZ4 frame decoded size
-        \\  summary-lz4-native-file [path]
+        \\  summary-lz4-native-file [path] [text|json]
         \\                              Summarize dependency-free native LZ4 frame/stream blocks
         \\  decode-lz4-native-file-to <in> <out> [max_output]
         \\                              Decode dependency-free native LZ4 frame to output
@@ -1883,9 +1884,31 @@ fn printSnappyFrameSummary(stdout: *std.Io.Writer, compressed_len: usize, summar
     );
 }
 
-fn printLz4NativeSummary(stdout: *std.Io.Writer, compressed_len: usize, summary: vort.Lz4NativeStreamSummary) !void {
+fn printLz4NativeSummary(stdout: *std.Io.Writer, compressed_len: usize, summary: vort.Lz4NativeStreamSummary, output_format: HeaderInspectOutputFormat) !void {
+    if (output_format == .json) return printLz4NativeSummaryJson(stdout, compressed_len, summary);
     try stdout.print(
         "lz4_native_compressed_bytes={d} frames={d} skippable_frames={d} content_size_frames={d} checksum_frames={d} block_checksum_frames={d} dictionary_id_frames={d} declared_content_bytes={d} blocks={d} compressed_blocks={d} raw_blocks={d} payload_bytes={d} skippable_payload_bytes={d}\n",
+        .{
+            compressed_len,
+            summary.frame_count,
+            summary.skippable_frame_count,
+            summary.content_size_frame_count,
+            summary.checksum_frame_count,
+            summary.block_checksum_frame_count,
+            summary.dictionary_id_frame_count,
+            summary.declared_content_bytes,
+            summary.block_count,
+            summary.compressed_block_count,
+            summary.raw_block_count,
+            summary.payload_bytes,
+            summary.skippable_payload_bytes,
+        },
+    );
+}
+
+fn printLz4NativeSummaryJson(stdout: *std.Io.Writer, compressed_len: usize, summary: vort.Lz4NativeStreamSummary) !void {
+    try stdout.print(
+        "{{\"schema\":\"vort.lz4_native_stream_summary\",\"schema_version\":1,\"compressed_bytes\":{d},\"frame_count\":{d},\"skippable_frame_count\":{d},\"content_size_frame_count\":{d},\"checksum_frame_count\":{d},\"block_checksum_frame_count\":{d},\"dictionary_id_frame_count\":{d},\"declared_content_bytes\":{d},\"block_count\":{d},\"compressed_block_count\":{d},\"raw_block_count\":{d},\"payload_bytes\":{d},\"skippable_payload_bytes\":{d}}}\n",
         .{
             compressed_len,
             summary.frame_count,
