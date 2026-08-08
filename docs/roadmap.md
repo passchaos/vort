@@ -1638,6 +1638,12 @@ architecture blindly.
   multiple adjacent skippables remain covered through library APIs rather than
   only via single-skippable smoke.
 
+- Added `summary-zstd-native-file` to the CLI smoke surface. It prints the
+  existing library-level Zstd native stream summary fields (data frames,
+  skippable frames, block type counts, compressed payload bytes, and skippable
+  payload bytes), matching the LZ4 native summary command and making
+  concatenated/skippable Zstd stream layout visible without decoding.
+
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
   root and CLI encode paths can now select a legal stored-stream window size,

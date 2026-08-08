@@ -644,6 +644,12 @@ pub fn main(init: std.process.Init) !void {
         else
             try vort.zstdDecodedNativeFrameSize(compressed);
         try stdout.print("zstd_native_compressed_bytes={d} decoded_bytes={d}\n", .{ compressed.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "summary-zstd-native-file")) {
+        const path = args.next() orelse return error.MissingCorpusPath;
+        const frame = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(frame);
+        const summary = try vort.zstdSummarizeNativeStream(frame);
+        try printZstdNativeSummary(stdout, frame.len, summary);
     } else if (std.mem.eql(u8, command, "encode-lz4-native-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -1637,6 +1643,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Preflight dependency-free native-subset Zstandard decoded size
         \\  size-zstd-native-file [path] [max_output]
         \\                              Preflight dependency-free native-subset Zstandard file decoded size
+        \\  summary-zstd-native-file [path]
+        \\                              Summarize dependency-free native-subset Zstandard frame/stream blocks
         \\  encode-lz4-native-file <in> <out>
         \\                              Encode file bytes as dependency-free native LZ4 frame
         \\  size-lz4-native-file [path] [max_output]
@@ -1883,6 +1891,23 @@ fn printLz4NativeSummary(stdout: *std.Io.Writer, compressed_len: usize, summary:
             summary.skippable_frame_count,
             summary.block_count,
             summary.compressed_block_count,
+            summary.raw_block_count,
+            summary.payload_bytes,
+            summary.skippable_payload_bytes,
+        },
+    );
+}
+
+fn printZstdNativeSummary(stdout: *std.Io.Writer, compressed_len: usize, summary: vort.ZstdNativeStreamSummary) !void {
+    try stdout.print(
+        "zstd_native_compressed_bytes={d} frames={d} skippable_frames={d} blocks={d} compressed_blocks={d} rle_blocks={d} raw_blocks={d} payload_bytes={d} skippable_payload_bytes={d}\n",
+        .{
+            compressed_len,
+            summary.frame_count,
+            summary.skippable_frame_count,
+            summary.block_count,
+            summary.compressed_block_count,
+            summary.rle_block_count,
             summary.raw_block_count,
             summary.payload_bytes,
             summary.skippable_payload_bytes,
