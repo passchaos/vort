@@ -2234,3 +2234,9 @@ architecture blindly.
   probe exposed 69 actual identity tuples, almost all 7-byte words plus
   one 8-byte alternate selected by Node; the observed failing frames are
   source-anchored and unit-tested.
+
+- Continued upstream8192 with the 30244-31268 candidate window. The initial
+  probe and reindexed tail exposed 70 actual identity tuples: 67 direct
+  7-byte words and three alternate 5-, 6-, and 8-byte addresses selected by
+  Node. All 138 unique observed failing frames are source-anchored and
+  unit-tested; the reindexed 1024-row window now has no Vort failures.
