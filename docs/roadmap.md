@@ -2180,6 +2180,11 @@ architecture blindly.
   from CJK dictionary entries into Latin/Spanish words; the observed frames are
   now source-anchored and unit-tested.
 
+- Continued upstream4096 with the 21439-22463 candidate window. The probe
+  exposed 87 actual identity tuples spanning Latin/Spanish, Russian, and Hindi
+  6-byte dictionary entries; the observed frames are now source-anchored and
+  unit-tested.
+
 - Ran the full generated-candidate Node probe and resolved its remaining five
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,
