@@ -2,6 +2,20 @@
   "expected_artifacts": [
     {
       "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream1024-2048-3072.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream1024-2048-3072.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
       "name": "vort-br-static-dictionary-node-probe-upstream1024-1024-2048.md",
       "require_present": false,
       "require_producer_step": false,
