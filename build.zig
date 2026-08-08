@@ -1507,6 +1507,296 @@ pub fn build(b: *std.Build) void {
     const br_static_dictionary_node_probe_upstream2048_12281_tail_step = b.step("run-br-static-dictionary-node-probe-upstream2048-12281-tail", "Probe upstream2048 Brotli candidates [12281, end) against Node and Vort");
     br_static_dictionary_node_probe_upstream2048_12281_tail_step.dependOn(&br_static_dictionary_node_probe_upstream2048_12281_tail.step);
 
+    const br_static_dictionary_candidate_report_upstream4096 = b.addSystemCommand(&.{
+        "python3",
+        "tools/br_static_dictionary_candidate_report.py",
+        "--json",
+        "zig-out/vort-br-static-dictionary-candidates-upstream4096.json",
+        "--markdown",
+        "zig-out/vort-br-static-dictionary-candidates-upstream4096.md",
+        "--source-limit",
+        "4096",
+    });
+    if (b.args) |args| br_static_dictionary_candidate_report_upstream4096.addArgs(args);
+    const br_static_dictionary_candidate_report_upstream4096_step = b.step("run-br-static-dictionary-candidate-report-upstream4096", "Report Brotli candidates from a local upstream source-limit 4096 slice (pass -- --brotli-common-dir <path>)");
+    br_static_dictionary_candidate_report_upstream4096_step.dependOn(&br_static_dictionary_candidate_report_upstream4096.step);
+
+    const br_static_dictionary_node_probe_upstream4096_12223_13247 = b.addSystemCommand(&.{
+        "python3",
+        "tools/br_static_dictionary_node_probe.py",
+    });
+    br_static_dictionary_node_probe_upstream4096_12223_13247.addArtifactArg(cli_exe);
+    br_static_dictionary_node_probe_upstream4096_12223_13247.addArgs(&.{
+        "--candidates",
+        "zig-out/vort-br-static-dictionary-candidates-upstream4096.json",
+        "--json",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream4096-12223-13247.json",
+        "--markdown",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream4096-12223-13247.md",
+        "--start-index",
+        "12223",
+        "--limit",
+        "1024",
+        "--require-vort-ok",
+        "--require-no-size-winners",
+    });
+    br_static_dictionary_node_probe_upstream4096_12223_13247.step.dependOn(br_static_dictionary_candidate_report_upstream4096_step);
+    const br_static_dictionary_node_probe_upstream4096_12223_13247_step = b.step("run-br-static-dictionary-node-probe-upstream4096-12223-13247", "Probe upstream4096 Brotli candidates [12223, 13247) against Node and Vort");
+    br_static_dictionary_node_probe_upstream4096_12223_13247_step.dependOn(&br_static_dictionary_node_probe_upstream4096_12223_13247.step);
+
+    const br_static_dictionary_node_probe_upstream4096_13247_14271 = b.addSystemCommand(&.{
+        "python3",
+        "tools/br_static_dictionary_node_probe.py",
+    });
+    br_static_dictionary_node_probe_upstream4096_13247_14271.addArtifactArg(cli_exe);
+    br_static_dictionary_node_probe_upstream4096_13247_14271.addArgs(&.{
+        "--candidates",
+        "zig-out/vort-br-static-dictionary-candidates-upstream4096.json",
+        "--json",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream4096-13247-14271.json",
+        "--markdown",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream4096-13247-14271.md",
+        "--start-index",
+        "13247",
+        "--limit",
+        "1024",
+        "--require-vort-ok",
+        "--require-no-size-winners",
+    });
+    br_static_dictionary_node_probe_upstream4096_13247_14271.step.dependOn(br_static_dictionary_candidate_report_upstream4096_step);
+    const br_static_dictionary_node_probe_upstream4096_13247_14271_step = b.step("run-br-static-dictionary-node-probe-upstream4096-13247-14271", "Probe upstream4096 Brotli candidates [13247, 14271) against Node and Vort");
+    br_static_dictionary_node_probe_upstream4096_13247_14271_step.dependOn(&br_static_dictionary_node_probe_upstream4096_13247_14271.step);
+
+    const br_static_dictionary_node_probe_upstream4096_14271_15295 = b.addSystemCommand(&.{
+        "python3",
+        "tools/br_static_dictionary_node_probe.py",
+    });
+    br_static_dictionary_node_probe_upstream4096_14271_15295.addArtifactArg(cli_exe);
+    br_static_dictionary_node_probe_upstream4096_14271_15295.addArgs(&.{
+        "--candidates",
+        "zig-out/vort-br-static-dictionary-candidates-upstream4096.json",
+        "--json",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream4096-14271-15295.json",
+        "--markdown",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream4096-14271-15295.md",
+        "--start-index",
+        "14271",
+        "--limit",
+        "1024",
+        "--require-vort-ok",
+        "--require-no-size-winners",
+    });
+    br_static_dictionary_node_probe_upstream4096_14271_15295.step.dependOn(br_static_dictionary_candidate_report_upstream4096_step);
+    const br_static_dictionary_node_probe_upstream4096_14271_15295_step = b.step("run-br-static-dictionary-node-probe-upstream4096-14271-15295", "Probe upstream4096 Brotli candidates [14271, 15295) against Node and Vort");
+    br_static_dictionary_node_probe_upstream4096_14271_15295_step.dependOn(&br_static_dictionary_node_probe_upstream4096_14271_15295.step);
+
+    const br_static_dictionary_node_probe_upstream4096_15295_16319 = b.addSystemCommand(&.{
+        "python3",
+        "tools/br_static_dictionary_node_probe.py",
+    });
+    br_static_dictionary_node_probe_upstream4096_15295_16319.addArtifactArg(cli_exe);
+    br_static_dictionary_node_probe_upstream4096_15295_16319.addArgs(&.{
+        "--candidates",
+        "zig-out/vort-br-static-dictionary-candidates-upstream4096.json",
+        "--json",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream4096-15295-16319.json",
+        "--markdown",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream4096-15295-16319.md",
+        "--start-index",
+        "15295",
+        "--limit",
+        "1024",
+        "--require-vort-ok",
+        "--require-no-size-winners",
+    });
+    br_static_dictionary_node_probe_upstream4096_15295_16319.step.dependOn(br_static_dictionary_candidate_report_upstream4096_step);
+    const br_static_dictionary_node_probe_upstream4096_15295_16319_step = b.step("run-br-static-dictionary-node-probe-upstream4096-15295-16319", "Probe upstream4096 Brotli candidates [15295, 16319) against Node and Vort");
+    br_static_dictionary_node_probe_upstream4096_15295_16319_step.dependOn(&br_static_dictionary_node_probe_upstream4096_15295_16319.step);
+
+    const br_static_dictionary_node_probe_upstream4096_16319_17343 = b.addSystemCommand(&.{
+        "python3",
+        "tools/br_static_dictionary_node_probe.py",
+    });
+    br_static_dictionary_node_probe_upstream4096_16319_17343.addArtifactArg(cli_exe);
+    br_static_dictionary_node_probe_upstream4096_16319_17343.addArgs(&.{
+        "--candidates",
+        "zig-out/vort-br-static-dictionary-candidates-upstream4096.json",
+        "--json",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream4096-16319-17343.json",
+        "--markdown",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream4096-16319-17343.md",
+        "--start-index",
+        "16319",
+        "--limit",
+        "1024",
+        "--require-vort-ok",
+        "--require-no-size-winners",
+    });
+    br_static_dictionary_node_probe_upstream4096_16319_17343.step.dependOn(br_static_dictionary_candidate_report_upstream4096_step);
+    const br_static_dictionary_node_probe_upstream4096_16319_17343_step = b.step("run-br-static-dictionary-node-probe-upstream4096-16319-17343", "Probe upstream4096 Brotli candidates [16319, 17343) against Node and Vort");
+    br_static_dictionary_node_probe_upstream4096_16319_17343_step.dependOn(&br_static_dictionary_node_probe_upstream4096_16319_17343.step);
+
+    const br_static_dictionary_node_probe_upstream4096_17343_18367 = b.addSystemCommand(&.{
+        "python3",
+        "tools/br_static_dictionary_node_probe.py",
+    });
+    br_static_dictionary_node_probe_upstream4096_17343_18367.addArtifactArg(cli_exe);
+    br_static_dictionary_node_probe_upstream4096_17343_18367.addArgs(&.{
+        "--candidates",
+        "zig-out/vort-br-static-dictionary-candidates-upstream4096.json",
+        "--json",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream4096-17343-18367.json",
+        "--markdown",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream4096-17343-18367.md",
+        "--start-index",
+        "17343",
+        "--limit",
+        "1024",
+        "--require-vort-ok",
+        "--require-no-size-winners",
+    });
+    br_static_dictionary_node_probe_upstream4096_17343_18367.step.dependOn(br_static_dictionary_candidate_report_upstream4096_step);
+    const br_static_dictionary_node_probe_upstream4096_17343_18367_step = b.step("run-br-static-dictionary-node-probe-upstream4096-17343-18367", "Probe upstream4096 Brotli candidates [17343, 18367) against Node and Vort");
+    br_static_dictionary_node_probe_upstream4096_17343_18367_step.dependOn(&br_static_dictionary_node_probe_upstream4096_17343_18367.step);
+
+    const br_static_dictionary_node_probe_upstream4096_18367_19391 = b.addSystemCommand(&.{
+        "python3",
+        "tools/br_static_dictionary_node_probe.py",
+    });
+    br_static_dictionary_node_probe_upstream4096_18367_19391.addArtifactArg(cli_exe);
+    br_static_dictionary_node_probe_upstream4096_18367_19391.addArgs(&.{
+        "--candidates",
+        "zig-out/vort-br-static-dictionary-candidates-upstream4096.json",
+        "--json",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream4096-18367-19391.json",
+        "--markdown",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream4096-18367-19391.md",
+        "--start-index",
+        "18367",
+        "--limit",
+        "1024",
+        "--require-vort-ok",
+        "--require-no-size-winners",
+    });
+    br_static_dictionary_node_probe_upstream4096_18367_19391.step.dependOn(br_static_dictionary_candidate_report_upstream4096_step);
+    const br_static_dictionary_node_probe_upstream4096_18367_19391_step = b.step("run-br-static-dictionary-node-probe-upstream4096-18367-19391", "Probe upstream4096 Brotli candidates [18367, 19391) against Node and Vort");
+    br_static_dictionary_node_probe_upstream4096_18367_19391_step.dependOn(&br_static_dictionary_node_probe_upstream4096_18367_19391.step);
+
+    const br_static_dictionary_node_probe_upstream4096_19391_20415 = b.addSystemCommand(&.{
+        "python3",
+        "tools/br_static_dictionary_node_probe.py",
+    });
+    br_static_dictionary_node_probe_upstream4096_19391_20415.addArtifactArg(cli_exe);
+    br_static_dictionary_node_probe_upstream4096_19391_20415.addArgs(&.{
+        "--candidates",
+        "zig-out/vort-br-static-dictionary-candidates-upstream4096.json",
+        "--json",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream4096-19391-20415.json",
+        "--markdown",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream4096-19391-20415.md",
+        "--start-index",
+        "19391",
+        "--limit",
+        "1024",
+        "--require-vort-ok",
+        "--require-no-size-winners",
+    });
+    br_static_dictionary_node_probe_upstream4096_19391_20415.step.dependOn(br_static_dictionary_candidate_report_upstream4096_step);
+    const br_static_dictionary_node_probe_upstream4096_19391_20415_step = b.step("run-br-static-dictionary-node-probe-upstream4096-19391-20415", "Probe upstream4096 Brotli candidates [19391, 20415) against Node and Vort");
+    br_static_dictionary_node_probe_upstream4096_19391_20415_step.dependOn(&br_static_dictionary_node_probe_upstream4096_19391_20415.step);
+
+    const br_static_dictionary_node_probe_upstream4096_20415_21439 = b.addSystemCommand(&.{
+        "python3",
+        "tools/br_static_dictionary_node_probe.py",
+    });
+    br_static_dictionary_node_probe_upstream4096_20415_21439.addArtifactArg(cli_exe);
+    br_static_dictionary_node_probe_upstream4096_20415_21439.addArgs(&.{
+        "--candidates",
+        "zig-out/vort-br-static-dictionary-candidates-upstream4096.json",
+        "--json",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream4096-20415-21439.json",
+        "--markdown",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream4096-20415-21439.md",
+        "--start-index",
+        "20415",
+        "--limit",
+        "1024",
+        "--require-vort-ok",
+        "--require-no-size-winners",
+    });
+    br_static_dictionary_node_probe_upstream4096_20415_21439.step.dependOn(br_static_dictionary_candidate_report_upstream4096_step);
+    const br_static_dictionary_node_probe_upstream4096_20415_21439_step = b.step("run-br-static-dictionary-node-probe-upstream4096-20415-21439", "Probe upstream4096 Brotli candidates [20415, 21439) against Node and Vort");
+    br_static_dictionary_node_probe_upstream4096_20415_21439_step.dependOn(&br_static_dictionary_node_probe_upstream4096_20415_21439.step);
+
+    const br_static_dictionary_node_probe_upstream4096_21439_22463 = b.addSystemCommand(&.{
+        "python3",
+        "tools/br_static_dictionary_node_probe.py",
+    });
+    br_static_dictionary_node_probe_upstream4096_21439_22463.addArtifactArg(cli_exe);
+    br_static_dictionary_node_probe_upstream4096_21439_22463.addArgs(&.{
+        "--candidates",
+        "zig-out/vort-br-static-dictionary-candidates-upstream4096.json",
+        "--json",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream4096-21439-22463.json",
+        "--markdown",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream4096-21439-22463.md",
+        "--start-index",
+        "21439",
+        "--limit",
+        "1024",
+        "--require-vort-ok",
+        "--require-no-size-winners",
+    });
+    br_static_dictionary_node_probe_upstream4096_21439_22463.step.dependOn(br_static_dictionary_candidate_report_upstream4096_step);
+    const br_static_dictionary_node_probe_upstream4096_21439_22463_step = b.step("run-br-static-dictionary-node-probe-upstream4096-21439-22463", "Probe upstream4096 Brotli candidates [21439, 22463) against Node and Vort");
+    br_static_dictionary_node_probe_upstream4096_21439_22463_step.dependOn(&br_static_dictionary_node_probe_upstream4096_21439_22463.step);
+
+    const br_static_dictionary_node_probe_upstream4096_22463_23487 = b.addSystemCommand(&.{
+        "python3",
+        "tools/br_static_dictionary_node_probe.py",
+    });
+    br_static_dictionary_node_probe_upstream4096_22463_23487.addArtifactArg(cli_exe);
+    br_static_dictionary_node_probe_upstream4096_22463_23487.addArgs(&.{
+        "--candidates",
+        "zig-out/vort-br-static-dictionary-candidates-upstream4096.json",
+        "--json",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream4096-22463-23487.json",
+        "--markdown",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream4096-22463-23487.md",
+        "--start-index",
+        "22463",
+        "--limit",
+        "1024",
+        "--require-vort-ok",
+        "--require-no-size-winners",
+    });
+    br_static_dictionary_node_probe_upstream4096_22463_23487.step.dependOn(br_static_dictionary_candidate_report_upstream4096_step);
+    const br_static_dictionary_node_probe_upstream4096_22463_23487_step = b.step("run-br-static-dictionary-node-probe-upstream4096-22463-23487", "Probe upstream4096 Brotli candidates [22463, 23487) against Node and Vort");
+    br_static_dictionary_node_probe_upstream4096_22463_23487_step.dependOn(&br_static_dictionary_node_probe_upstream4096_22463_23487.step);
+
+    const br_static_dictionary_node_probe_upstream4096_23487_tail = b.addSystemCommand(&.{
+        "python3",
+        "tools/br_static_dictionary_node_probe.py",
+    });
+    br_static_dictionary_node_probe_upstream4096_23487_tail.addArtifactArg(cli_exe);
+    br_static_dictionary_node_probe_upstream4096_23487_tail.addArgs(&.{
+        "--candidates",
+        "zig-out/vort-br-static-dictionary-candidates-upstream4096.json",
+        "--json",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream4096-23487-tail.json",
+        "--markdown",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream4096-23487-tail.md",
+        "--start-index",
+        "23487",
+        "--limit",
+        "1024",
+        "--require-vort-ok",
+        "--require-no-size-winners",
+    });
+    br_static_dictionary_node_probe_upstream4096_23487_tail.step.dependOn(br_static_dictionary_candidate_report_upstream4096_step);
+    const br_static_dictionary_node_probe_upstream4096_23487_tail_step = b.step("run-br-static-dictionary-node-probe-upstream4096-23487-tail", "Probe upstream4096 Brotli candidates [23487, end) against Node and Vort");
+    br_static_dictionary_node_probe_upstream4096_23487_tail_step.dependOn(&br_static_dictionary_node_probe_upstream4096_23487_tail.step);
+
     const snappy_block_cli_probe = b.addSystemCommand(&.{ "python3", "tools/snappy_block_cli_probe.py" });
     snappy_block_cli_probe.addArtifactArg(cli_exe);
     const snappy_block_cli_probe_step = b.step("run-snappy-block-cli-probe", "Run black-box smoke for dependency-free Snappy raw blocks and framed streams");

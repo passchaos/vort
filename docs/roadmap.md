@@ -2189,6 +2189,12 @@ architecture blindly.
   exposed 69 unique actual identity tuples, covering late Arabic 6-byte words
   and the first early 7-byte identity entries in this larger source slice.
 
+- Added opt-in upstream4096 candidate-report and Node/Vort probe build steps,
+  plus dashboard producer/category metadata and validation JSON docs. The formal
+  windows start at candidate index 12223, where source-limit 4096 first diverges
+  from the upstream2048 candidate ordering, and cover through the current
+  23494-candidate tail with no Vort failures or size winners.
+
 - Ran the full generated-candidate Node probe and resolved its remaining five
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,

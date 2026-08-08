@@ -791,6 +791,7 @@ zig build run-br-static-dictionary-candidate-report-upstream256 -- --brotli-comm
 zig build run-br-static-dictionary-candidate-report-upstream512 -- --brotli-common-dir <path>
 zig build run-br-static-dictionary-candidate-report-upstream1024 -- --brotli-common-dir <path>
 zig build run-br-static-dictionary-candidate-report-upstream2048 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-candidate-report-upstream4096 -- --brotli-common-dir <path>
 ```
 
 This schema reports additional Brotli static-dictionary tuples that can be
@@ -799,7 +800,7 @@ understood by Vort. It can also use a local upstream Brotli `common/` checkout
 with a bounded `--source-limit` to include more raw dictionary words in the
 candidate pool; `run-br-static-dictionary-candidate-report-upstream80` is an
 opt-in retained report for a local source-limit 80 slice, with an analogous
-`upstream128`, `upstream256`, `upstream512`, `upstream1024`, and `upstream2048` steps for
+`upstream128`, `upstream256`, `upstream512`, `upstream1024`, `upstream2048`, and `upstream4096` steps for
 larger local slices. It is a planning artifact for expanding coverage from source
 data rather than hand-picking tuple literals. The report includes transform-kind
 and copy-length summaries so generated backlog size is visible without scanning
@@ -1015,6 +1016,18 @@ zig build run-br-static-dictionary-node-probe-upstream2048-9209-10233 -- --brotl
 zig build run-br-static-dictionary-node-probe-upstream2048-10233-11257 -- --brotli-common-dir <path>
 zig build run-br-static-dictionary-node-probe-upstream2048-11257-12281 -- --brotli-common-dir <path>
 zig build run-br-static-dictionary-node-probe-upstream2048-12281-tail -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream4096-12223-13247 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream4096-13247-14271 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream4096-14271-15295 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream4096-15295-16319 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream4096-16319-17343 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream4096-17343-18367 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream4096-18367-19391 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream4096-19391-20415 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream4096-20415-21439 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream4096-21439-22463 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream4096-22463-23487 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream4096-23487-tail -- --brotli-common-dir <path>
 python3 tools/br_static_dictionary_node_probe.py <vort-cli> --json zig-out/vort-br-static-dictionary-node-probe.json --start-index 0 --limit 48
 python3 tools/br_static_dictionary_node_probe.py <vort-cli> --json /tmp/probe.json --start-index 1024 --limit 1024
 ```

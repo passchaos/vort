@@ -16,6 +16,110 @@
       "expected_format": "md",
       "smoke_gate": "zig build run-br-static-dictionary-candidate-upstream-smoke"
     },
+    "vort-br-static-dictionary-candidates-upstream4096.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-br-static-dictionary-candidate-report-upstream4096 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-candidates-upstream4096.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-br-static-dictionary-candidate-report-upstream4096 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-node-probe-upstream4096-12223-13247.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream4096-12223-13247 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-node-probe-upstream4096-12223-13247.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream4096-12223-13247 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-node-probe-upstream4096-13247-14271.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream4096-13247-14271 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-node-probe-upstream4096-13247-14271.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream4096-13247-14271 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-node-probe-upstream4096-14271-15295.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream4096-14271-15295 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-node-probe-upstream4096-14271-15295.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream4096-14271-15295 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-node-probe-upstream4096-15295-16319.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream4096-15295-16319 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-node-probe-upstream4096-15295-16319.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream4096-15295-16319 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-node-probe-upstream4096-16319-17343.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream4096-16319-17343 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-node-probe-upstream4096-16319-17343.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream4096-16319-17343 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-node-probe-upstream4096-17343-18367.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream4096-17343-18367 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-node-probe-upstream4096-17343-18367.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream4096-17343-18367 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-node-probe-upstream4096-18367-19391.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream4096-18367-19391 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-node-probe-upstream4096-18367-19391.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream4096-18367-19391 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-node-probe-upstream4096-19391-20415.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream4096-19391-20415 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-node-probe-upstream4096-19391-20415.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream4096-19391-20415 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-node-probe-upstream4096-20415-21439.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream4096-20415-21439 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-node-probe-upstream4096-20415-21439.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream4096-20415-21439 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-node-probe-upstream4096-21439-22463.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream4096-21439-22463 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-node-probe-upstream4096-21439-22463.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream4096-21439-22463 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-node-probe-upstream4096-22463-23487.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream4096-22463-23487 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-node-probe-upstream4096-22463-23487.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream4096-22463-23487 -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-node-probe-upstream4096-23487-tail.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream4096-23487-tail -- --brotli-common-dir <path>"
+    },
+    "vort-br-static-dictionary-node-probe-upstream4096-23487-tail.md": {
+      "expected_format": "md",
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream4096-23487-tail -- --brotli-common-dir <path>"
+    },
     "vort-br-static-dictionary-candidates-upstream2048.json": {
       "expected_format": "json",
       "smoke_gate": "zig build run-br-static-dictionary-candidate-report-upstream2048 -- --brotli-common-dir <path>"
@@ -675,6 +779,32 @@
     "vort-br-static-dictionary-candidate-upstream-smoke.json": "zig build run-br-static-dictionary-candidate-upstream-smoke",
     "vort-br-static-dictionary-candidates-upstream.json": "zig build run-br-static-dictionary-candidate-upstream-smoke",
     "vort-br-static-dictionary-candidates-upstream.md": "zig build run-br-static-dictionary-candidate-upstream-smoke",
+    "vort-br-static-dictionary-candidates-upstream4096.json": "zig build run-br-static-dictionary-candidate-report-upstream4096 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-candidates-upstream4096.md": "zig build run-br-static-dictionary-candidate-report-upstream4096 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream4096-12223-13247.json": "zig build run-br-static-dictionary-node-probe-upstream4096-12223-13247 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream4096-12223-13247.md": "zig build run-br-static-dictionary-node-probe-upstream4096-12223-13247 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream4096-13247-14271.json": "zig build run-br-static-dictionary-node-probe-upstream4096-13247-14271 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream4096-13247-14271.md": "zig build run-br-static-dictionary-node-probe-upstream4096-13247-14271 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream4096-14271-15295.json": "zig build run-br-static-dictionary-node-probe-upstream4096-14271-15295 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream4096-14271-15295.md": "zig build run-br-static-dictionary-node-probe-upstream4096-14271-15295 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream4096-15295-16319.json": "zig build run-br-static-dictionary-node-probe-upstream4096-15295-16319 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream4096-15295-16319.md": "zig build run-br-static-dictionary-node-probe-upstream4096-15295-16319 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream4096-16319-17343.json": "zig build run-br-static-dictionary-node-probe-upstream4096-16319-17343 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream4096-16319-17343.md": "zig build run-br-static-dictionary-node-probe-upstream4096-16319-17343 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream4096-17343-18367.json": "zig build run-br-static-dictionary-node-probe-upstream4096-17343-18367 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream4096-17343-18367.md": "zig build run-br-static-dictionary-node-probe-upstream4096-17343-18367 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream4096-18367-19391.json": "zig build run-br-static-dictionary-node-probe-upstream4096-18367-19391 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream4096-18367-19391.md": "zig build run-br-static-dictionary-node-probe-upstream4096-18367-19391 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream4096-19391-20415.json": "zig build run-br-static-dictionary-node-probe-upstream4096-19391-20415 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream4096-19391-20415.md": "zig build run-br-static-dictionary-node-probe-upstream4096-19391-20415 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream4096-20415-21439.json": "zig build run-br-static-dictionary-node-probe-upstream4096-20415-21439 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream4096-20415-21439.md": "zig build run-br-static-dictionary-node-probe-upstream4096-20415-21439 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream4096-21439-22463.json": "zig build run-br-static-dictionary-node-probe-upstream4096-21439-22463 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream4096-21439-22463.md": "zig build run-br-static-dictionary-node-probe-upstream4096-21439-22463 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream4096-22463-23487.json": "zig build run-br-static-dictionary-node-probe-upstream4096-22463-23487 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream4096-22463-23487.md": "zig build run-br-static-dictionary-node-probe-upstream4096-22463-23487 -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream4096-23487-tail.json": "zig build run-br-static-dictionary-node-probe-upstream4096-23487-tail -- --brotli-common-dir <path>",
+    "vort-br-static-dictionary-node-probe-upstream4096-23487-tail.md": "zig build run-br-static-dictionary-node-probe-upstream4096-23487-tail -- --brotli-common-dir <path>",
     "vort-br-static-dictionary-candidates-upstream2048.json": "zig build run-br-static-dictionary-candidate-report-upstream2048 -- --brotli-common-dir <path>",
     "vort-br-static-dictionary-candidates-upstream2048.md": "zig build run-br-static-dictionary-candidate-report-upstream2048 -- --brotli-common-dir <path>",
     "vort-br-static-dictionary-node-probe-upstream2048-6137-7161.json": "zig build run-br-static-dictionary-node-probe-upstream2048-6137-7161 -- --brotli-common-dir <path>",
