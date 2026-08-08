@@ -1597,7 +1597,10 @@ architecture blindly.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
-  summary consistency for generated native frames.
+  summary consistency for generated native frames. The black-box
+  `run-lz4-native-summary-cli-probe` smoke now checks the user-facing summary
+  text fields for single-frame and concatenated/skippable streams, including
+  the frame-level checksum/content-size/Dictionary_ID metadata counters.
 
 - Added LZ4 raw-block summary helpers and CLI commands, including prefix-history
   variants. The summary validates block token structure while reporting decoded

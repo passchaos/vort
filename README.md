@@ -226,6 +226,7 @@ zig build run-native-codec-probes
 zig build run-native-codec-probes-dashboard
 zig build run-lz4-native-probe
 zig build run-lz4-native-dictionary-probe
+zig build run-lz4-native-summary-cli-probe
 zig build run-lz4-native-probe -- --path README.md --limit 4096
 zig build run-lz4-native-probe -- --dir docs --max-files 2 --limit 2048
 zig build run -- encode-lz4-native-file README.md /tmp/vort-readme.lz4
