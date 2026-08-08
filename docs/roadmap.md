@@ -2153,6 +2153,11 @@ architecture blindly.
   leading-space payloads plus a few 7-byte alternatives; these are now captured
   in the static dictionary subset and unit-frame coverage.
 
+- Continued upstream4096 with the 15295-16319 candidate window. The probe
+  exposed 125 unique actual identity tuples, including CJK/non-ASCII 6-byte
+  dictionary words and a few shorter alternate identities selected by Node; the
+  observed frames now extend the static dictionary subset and unit coverage.
+
 - Ran the full generated-candidate Node probe and resolved its remaining five
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,
