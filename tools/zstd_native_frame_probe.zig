@@ -3735,6 +3735,23 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try checkDictionaryIdWidthFrame(&four_byte_dictionary_id, 0x12345678, 10, "zstd-dict-id-4");
     checked += 1;
 
+    const zero_dictionary_id_field = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x21, // Single-segment, 1-byte Dictionary_ID field, 1-byte content size.
+        0x00, // Zero Dictionary_ID means no dictionary is required.
+        0x03, // Decoded content size.
+        0x19, 0x00, 0x00, // Last raw block with three payload bytes.
+        'a',  'b',  'c',
+    };
+    const zero_dict_header = try vort.zstdInspectNativeFrameHeader(&zero_dictionary_id_field);
+    try expect(zero_dict_header.dictionary_id == 0);
+    try expect(zero_dict_header.payload_offset == 7);
+    try expect((try vort.zstdDecodedNativeFrameSize(&zero_dictionary_id_field)) == 3);
+    var zero_dict_into: [3]u8 = undefined;
+    try expect((try vort.zstdDecodeNativeFrameInto(&zero_dictionary_id_field, &zero_dict_into)) == 3);
+    try expectEqualSlices("abc", &zero_dict_into);
+    checked += 1;
+
     const no_size_multi_block = [_]u8{
         0x28, 0xb5, 0x2f, 0xfd,
         0x00, // No content size; window descriptor follows.

@@ -1685,6 +1685,11 @@ architecture blindly.
   header field-width regressions are visible without relying only on internal
   unit tests.
 
+- Added a public Zstd frame fixture for an explicitly present but zero-valued
+  `Dictionary_ID` field. The probe verifies that header inspection preserves the
+  payload offset while size preflight and caller-owned decode treat ID zero as
+  dictionary-free instead of returning `NeedDictionary`.
+
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
   root and CLI encode paths can now select a legal stored-stream window size,
