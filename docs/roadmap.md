@@ -1623,7 +1623,10 @@ architecture blindly.
   writer shapes as fixed fixtures, so the probe still validates dictionary
   requirement, compressed literals, FSE-Huffman weights, sequence-table inspect,
   and decode behavior without repeating bootstrap match-planning work on every
-  smoke run.
+  smoke run. The native codec probe dashboard now also enforces a per-probe
+  timeout and records `timed_out`/`timeout_seconds` in retained JSON/Markdown,
+  so future probe-runtime regressions fail with a specific artifact instead of
+  hanging CI indefinitely.
 
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but

@@ -100,15 +100,31 @@ def probe_category(label: str) -> tuple[str, str]:
     return codec, surface
 
 
-def run_probe(label: str, exe: str) -> dict[str, object]:
-    completed = subprocess.run(
-        [exe],
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        check=False,
-    )
-    output = completed.stdout
+DEFAULT_PROBE_TIMEOUT_SECONDS = 120.0
+
+
+def run_probe(label: str, exe: str, timeout_seconds: float) -> dict[str, object]:
+    timed_out = False
+    try:
+        completed = subprocess.run(
+            [exe],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+            timeout=timeout_seconds,
+        )
+        output = completed.stdout
+        returncode = completed.returncode
+    except subprocess.TimeoutExpired as exc:
+        timed_out = True
+        raw_output = exc.stdout or ""
+        if isinstance(raw_output, bytes):
+            output = raw_output.decode(errors="replace")
+        else:
+            output = raw_output
+        output += f"\nprobe timed out after {timeout_seconds:g} seconds\n"
+        returncode = -1
     cases: int | None = None
     marker: str | None = None
     reported_capabilities: list[str] = []
@@ -129,12 +145,14 @@ def run_probe(label: str, exe: str) -> dict[str, object]:
             reported_capabilities.append(capability)
             reported_capability_cases[capability] = int(coverage_match.group("cases"))
     reported_capabilities = sorted(set(reported_capabilities))
-    ok = completed.returncode == 0 and cases is not None
+    ok = returncode == 0 and cases is not None and not timed_out
     return {
         "label": label,
         "executable": exe,
         "ok": ok,
-        "returncode": completed.returncode,
+        "returncode": returncode,
+        "timed_out": timed_out,
+        "timeout_seconds": timeout_seconds,
         "cases": cases,
         "marker": marker or "",
         "output": output,
@@ -250,17 +268,19 @@ def write_markdown(path: Path, summary: dict[str, object]) -> None:
             "",
             "## Probes",
             "",
-            "| probe | ok | cases | returncode |",
-            "| --- | --- | ---: | ---: |",
+            "| probe | ok | cases | returncode | timed out | timeout seconds |",
+            "| --- | --- | ---: | ---: | --- | ---: |",
         ]
     )
     for probe in summary["probes"]:  # type: ignore[index]
         lines.append(
-            "| {label} | `{ok}` | {cases} | {returncode} |".format(
+            "| {label} | `{ok}` | {cases} | {returncode} | `{timed_out}` | {timeout_seconds:g} |".format(
                 label=probe["label"],
                 ok=str(probe["ok"]).lower(),
                 cases=probe["cases"] if probe["cases"] is not None else "",
                 returncode=probe["returncode"],
+                timed_out=str(probe["timed_out"]).lower(),
+                timeout_seconds=probe["timeout_seconds"],
             )
         )
     lines.append("")
@@ -272,17 +292,25 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", required=True, type=Path)
     parser.add_argument("--markdown", required=True, type=Path)
+    parser.add_argument(
+        "--probe-timeout",
+        default=DEFAULT_PROBE_TIMEOUT_SECONDS,
+        type=float,
+        help="Maximum seconds to allow each probe executable to run",
+    )
     parser.add_argument("lz4_probe")
     parser.add_argument("lz4_dictionary_probe")
     parser.add_argument("zstd_frame_probe")
     parser.add_argument("zstd_dictionary_probe")
     args = parser.parse_args()
+    if args.probe_timeout <= 0:
+        parser.error("--probe-timeout must be positive")
 
     probes = [
-        run_probe("lz4-native-probe", args.lz4_probe),
-        run_probe("lz4-native-dictionary-probe", args.lz4_dictionary_probe),
-        run_probe("zstd-native-frame-probe", args.zstd_frame_probe),
-        run_probe("zstd-native-dictionary-probe", args.zstd_dictionary_probe),
+        run_probe("lz4-native-probe", args.lz4_probe, args.probe_timeout),
+        run_probe("lz4-native-dictionary-probe", args.lz4_dictionary_probe, args.probe_timeout),
+        run_probe("zstd-native-frame-probe", args.zstd_frame_probe, args.probe_timeout),
+        run_probe("zstd-native-dictionary-probe", args.zstd_dictionary_probe, args.probe_timeout),
     ]
     coverage = coverage_summary(probes)
     capabilities = capability_summary(probes)

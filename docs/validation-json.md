@@ -1816,7 +1816,10 @@ case counts from the frame and dictionary probe executables, adds a
 and adds a `capabilities` list for cross-cutting library behaviors such as
 lib-generated frames, incremental drains, chunked split input, reusable chunked
 decoder drains, dictionaries, dictionary training, malformed input, checksums,
-Huffman literals, sequence tables, and block APIs.
+Huffman literals, sequence tables, and block APIs. Each probe row also records
+`timed_out` and `timeout_seconds`; the dashboard treats a timeout as a failed
+probe and still writes JSON/Markdown artifacts so CI failures show which probe
+exceeded its budget.
 
 Example:
 
@@ -2003,6 +2006,8 @@ Example:
       "executable": "zig-out/bin/lz4-native-probe",
       "ok": true,
       "returncode": 0,
+      "timed_out": false,
+      "timeout_seconds": 120.0,
       "cases": 113,
       "marker": "lz4_native_probe",
       "output": "lz4_native_probe_ok cases=113\nlz4_native_probe_coverage capability=block cases=113\nlz4_native_probe_coverage capability=bounded-limits cases=113\nlz4_native_probe_coverage capability=checksum cases=113\nlz4_native_probe_coverage capability=chunked cases=63\nlz4_native_probe_coverage capability=reusable-chunked cases=63\nlz4_native_probe_coverage capability=dictionary cases=113\nlz4_native_probe_coverage capability=dictionary-set cases=113\nlz4_native_probe_coverage capability=incremental cases=63\nlz4_native_probe_coverage capability=lib-generated cases=63\nlz4_native_probe_coverage capability=malformed cases=113\nlz4_native_probe_coverage capability=native-generated cases=113\nlz4_native_probe_coverage capability=skippable cases=113\n",
@@ -2041,6 +2046,8 @@ Example:
       "executable": "zig-out/bin/lz4-native-dictionary-probe",
       "ok": true,
       "returncode": 0,
+      "timed_out": false,
+      "timeout_seconds": 120.0,
       "cases": 11,
       "marker": "lz4_native_dictionary_probe",
       "output": "lz4_native_dictionary_probe_ok cases=11\nlz4_native_dictionary_probe_coverage capability=bounded-limits cases=1\nlz4_native_dictionary_probe_coverage capability=checksum cases=3\nlz4_native_dictionary_probe_coverage capability=chunked cases=1\nlz4_native_dictionary_probe_coverage capability=dictionary cases=11\nlz4_native_dictionary_probe_coverage capability=dictionary-training cases=1\nlz4_native_dictionary_probe_coverage capability=dictionary-set cases=4\nlz4_native_dictionary_probe_coverage capability=incremental cases=3\n",
@@ -2069,6 +2076,8 @@ Example:
       "executable": "zig-out/bin/zstd-native-frame-probe",
       "ok": true,
       "returncode": 0,
+      "timed_out": false,
+      "timeout_seconds": 120.0,
       "cases": 212,
       "marker": "zstd_native_frame_probe",
       "output": "zstd_native_frame_probe_ok cases=212\nzstd_native_frame_probe_coverage capability=bounded-limits cases=212\nzstd_native_frame_probe_coverage capability=checksum cases=212\nzstd_native_frame_probe_coverage capability=chunked cases=134\nzstd_native_frame_probe_coverage capability=reusable-chunked cases=134\nzstd_native_frame_probe_coverage capability=fse-repeat cases=5\nzstd_native_frame_probe_coverage capability=huffman cases=212\nzstd_native_frame_probe_coverage capability=incremental cases=134\nzstd_native_frame_probe_coverage capability=lib-generated cases=124\nzstd_native_frame_probe_coverage capability=malformed cases=212\nzstd_native_frame_probe_coverage capability=native-generated cases=212\nzstd_native_frame_probe_coverage capability=sequence-tables cases=212\nzstd_native_frame_probe_coverage capability=skippable cases=212\n",
@@ -2107,6 +2116,8 @@ Example:
       "executable": "zig-out/bin/zstd-native-dictionary-probe",
       "ok": true,
       "returncode": 0,
+      "timed_out": false,
+      "timeout_seconds": 120.0,
       "cases": 25,
       "marker": "zstd_native_dictionary_probe",
       "output": "zstd_native_dictionary_probe_ok cases=25\nzstd_native_dictionary_probe_coverage capability=bounded-limits cases=3\nzstd_native_dictionary_probe_coverage capability=checksum cases=4\nzstd_native_dictionary_probe_coverage capability=chunked cases=2\nzstd_native_dictionary_probe_coverage capability=dictionary cases=25\nzstd_native_dictionary_probe_coverage capability=dictionary-training cases=1\nzstd_native_dictionary_probe_coverage capability=dictionary-set cases=4\nzstd_native_dictionary_probe_coverage capability=fse-repeat cases=3\nzstd_native_dictionary_probe_coverage capability=incremental cases=4\nzstd_native_dictionary_probe_coverage capability=malformed cases=2\nzstd_native_dictionary_probe_coverage capability=sequence-tables cases=7\n",

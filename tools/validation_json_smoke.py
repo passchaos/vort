@@ -262,6 +262,8 @@ def main() -> int:
         assert native_codec_probes["capability_count"] >= 10
         assert native_codec_probes["total_cases"] >= 4
         assert all(probe["ok"] is True for probe in native_codec_probes["probes"])
+        assert all(probe["timed_out"] is False for probe in native_codec_probes["probes"])
+        assert all(probe["timeout_seconds"] > 0 for probe in native_codec_probes["probes"])
         assert all(probe["reported_capability_count"] == len(probe["reported_capabilities"]) for probe in native_codec_probes["probes"])
         assert all(probe["reported_capability_count"] >= 1 for probe in native_codec_probes["probes"])
         assert all(set(probe["reported_capabilities"]) == set(probe["reported_capability_cases"]) for probe in native_codec_probes["probes"])

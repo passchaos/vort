@@ -70,7 +70,10 @@ Huffman, FSE sequence-table, repeat-mode, truncation, and checksum coverage.
 The Zstd dictionary probe similarly keeps the expensive dictionary
 Huffman/sequence-table writer outputs as fixed fixtures and validates them
 through public inspect/decode APIs, preserving coverage without rerunning the
-bootstrap planner on every dashboard smoke.
+bootstrap planner on every dashboard smoke. The dashboard runner enforces a
+per-probe timeout and records timeout status in retained artifacts, so runtime
+regressions produce actionable probe-level failures rather than unbounded CI
+hangs.
 `run-native-library-bench` now accepts repeated `--path` arguments plus `--limit` for focused
 project-file payloads, and `run-native-library-bench-path-gate` and `run-native-library-bench-releasefast-path-gate` keep that code path covered with a small fixture in Debug and ReleaseFast builds. `run-native-library-bench-gate` is the lightweight Debug public API benchmark
 CSV gate; `run-native-library-bench-releasefast-gate` runs the same 93-row matrix

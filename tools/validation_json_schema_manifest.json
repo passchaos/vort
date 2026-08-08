@@ -2699,7 +2699,9 @@
         "reported_capabilities": "list",
         "reported_capability_cases": "dict",
         "reported_capability_count": "int",
-        "returncode": "int"
+        "returncode": "int",
+        "timed_out": "bool",
+        "timeout_seconds": "float"
       }
     },
     "vort.png_scratch_report": {

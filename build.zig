@@ -1913,6 +1913,10 @@ pub fn build(b: *std.Build) void {
     const native_codec_probes_dashboard_step = b.step("run-native-codec-probes-dashboard", "Run native codec probes and retain JSON/Markdown artifacts");
     native_codec_probes_dashboard_step.dependOn(&native_codec_probes_dashboard.step);
 
+    const native_codec_probes_dashboard_timeout_smoke = b.addSystemCommand(&.{ "python3", "tools/native_codec_probes_dashboard_timeout_smoke.py" });
+    const native_codec_probes_dashboard_timeout_smoke_step = b.step("run-native-codec-probes-dashboard-timeout-smoke", "Validate native codec probe dashboard timeout handling");
+    native_codec_probes_dashboard_timeout_smoke_step.dependOn(&native_codec_probes_dashboard_timeout_smoke.step);
+
     const header_inspect_smoke = b.addSystemCommand(&.{ "python3", "tools/header_inspect_smoke.py" });
     header_inspect_smoke.addArtifactArg(cli_exe);
     const header_inspect_smoke_step = b.step("run-header-inspect-smoke", "Run raw/zlib/gzip header inspection CLI smoke");
@@ -3115,6 +3119,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(zstd_native_cli_diff_step);
     ci_smoke_step.dependOn(zstd_native_probe_step);
     ci_smoke_step.dependOn(native_codec_probes_dashboard_step);
+    ci_smoke_step.dependOn(native_codec_probes_dashboard_timeout_smoke_step);
     ci_smoke_step.dependOn(snappy_report_gate_step);
     ci_smoke_step.dependOn(header_inspect_smoke_step);
     ci_smoke_step.dependOn(header_inspect_dashboard_step);
