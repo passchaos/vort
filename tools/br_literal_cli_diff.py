@@ -2473,6 +2473,10 @@ def main() -> int:
             node_compress(" 简单".encode("utf-8"), quality=5, lgwin=10),
             " 简单".encode("utf-8"),
         ),
+        "node-static-dictionary-upstream4096-19391-window": (
+            node_compress(" 宝贝".encode("utf-8"), quality=5, lgwin=10),
+            " 宝贝".encode("utf-8"),
+        ),
         "node-static-dictionary-leading-space-black-q5-lgwin10": (
             node_compress(b" black", quality=5, lgwin=10),
             b" black",

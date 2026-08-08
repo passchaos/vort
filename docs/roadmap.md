@@ -2171,6 +2171,10 @@ architecture blindly.
   exposed another 110 actual identity tuples from the CJK-heavy 6-byte range;
   these observed frames are now source-anchored and covered by unit tests.
 
+- Continued upstream4096 with the 19391-20415 candidate window. The probe
+  exposed 119 additional actual identity tuples in the CJK-heavy 6-byte range;
+  their observed Node frames are now source-anchored and unit-tested.
+
 - Ran the full generated-candidate Node probe and resolved its remaining five
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,
