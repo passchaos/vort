@@ -1690,6 +1690,11 @@ architecture blindly.
   payload offset while size preflight and caller-owned decode treat ID zero as
   dictionary-free instead of returning `NeedDictionary`.
 
+- Added a no-content-size Zstd frame fixture with a non-default 1536-byte
+  `Window_Descriptor` and an RLE block. This covers window decoding beyond the
+  1 KiB descriptor through header inspect, bounded decoded-size preflight, and
+  caller-owned decode without adding a large fixture payload.
+
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
   root and CLI encode paths can now select a legal stored-stream window size,
