@@ -34,6 +34,17 @@ pub const FrameSummary = struct {
     uncompressed_payload_bytes: usize = 0,
 };
 
+pub const BlockSummary = struct {
+    decoded_bytes: usize = 0,
+    literal_count: usize = 0,
+    literal_bytes: usize = 0,
+    copy_count: usize = 0,
+    copy_bytes: usize = 0,
+    copy1_count: usize = 0,
+    copy2_count: usize = 0,
+    copy4_count: usize = 0,
+};
+
 pub fn encodedBlockBound(input_len: usize) Error!usize {
     _ = try checkedUsizeToU32(input_len);
     var bound = try varintEncodedLen(input_len);
@@ -291,6 +302,75 @@ pub fn summarizeFrameChunks(chunks: []const []const u8, compressed_scratch: []u8
     return try summarizeFrame(joined);
 }
 
+pub fn summarizeBlock(block: []const u8) Error!BlockSummary {
+    return try summarizeBlockLimited(block, std.math.maxInt(usize));
+}
+
+pub fn summarizeBlockLimited(block: []const u8, max_output_len: usize) Error!BlockSummary {
+    const header = try readHeader(block);
+    if (header.decoded_len > max_output_len) return error.OutputLimitExceeded;
+    var input_index = header.index;
+    var written: usize = 0;
+    var summary = BlockSummary{ .decoded_bytes = header.decoded_len };
+    while (input_index < block.len) {
+        if (written == header.decoded_len) return error.TrailingData;
+        const tag = block[input_index];
+        input_index += 1;
+        switch (tag & 0x03) {
+            0 => {
+                const literal_len = try readLiteralLen(tag, block, &input_index);
+                if (literal_len > header.decoded_len - written) return error.SizeMismatch;
+                if (block.len - input_index < literal_len) return error.TruncatedFrame;
+                input_index += literal_len;
+                written += literal_len;
+                summary.literal_count += 1;
+                summary.literal_bytes = try checkedAdd(summary.literal_bytes, literal_len);
+            },
+            1 => {
+                const len: usize = 4 + ((tag >> 2) & 0x07);
+                if (block.len - input_index < 1) return error.TruncatedFrame;
+                const offset: usize = (@as(usize, tag & 0xe0) << 3) | block[input_index];
+                input_index += 1;
+                try validateCopy(written, header.decoded_len, offset, len);
+                written += len;
+                summary.copy_count += 1;
+                summary.copy1_count += 1;
+                summary.copy_bytes = try checkedAdd(summary.copy_bytes, len);
+            },
+            2 => {
+                const len: usize = 1 + (tag >> 2);
+                if (block.len - input_index < 2) return error.TruncatedFrame;
+                const offset = std.mem.readInt(u16, block[input_index..][0..2], .little);
+                input_index += 2;
+                try validateCopy(written, header.decoded_len, offset, len);
+                written += len;
+                summary.copy_count += 1;
+                summary.copy2_count += 1;
+                summary.copy_bytes = try checkedAdd(summary.copy_bytes, len);
+            },
+            3 => {
+                const len: usize = 1 + (tag >> 2);
+                if (block.len - input_index < 4) return error.TruncatedFrame;
+                const offset = std.mem.readInt(u32, block[input_index..][0..4], .little);
+                input_index += 4;
+                try validateCopy(written, header.decoded_len, offset, len);
+                written += len;
+                summary.copy_count += 1;
+                summary.copy4_count += 1;
+                summary.copy_bytes = try checkedAdd(summary.copy_bytes, len);
+            },
+            else => unreachable,
+        }
+    }
+    if (written != header.decoded_len) return error.TruncatedFrame;
+    return summary;
+}
+
+pub fn summarizeBlockChunks(chunks: []const []const u8, compressed_scratch: []u8) Error!BlockSummary {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try summarizeBlock(joined);
+}
+
 pub fn decodeBlockAlloc(allocator: std.mem.Allocator, block: []const u8) Error![]u8 {
     return try decodeBlockAllocLimited(allocator, block, std.math.maxInt(usize));
 }
@@ -457,51 +537,7 @@ pub fn decodedBlockSize(block: []const u8) Error!usize {
 }
 
 pub fn decodedBlockSizeLimited(block: []const u8, max_output_len: usize) Error!usize {
-    const header = try readHeader(block);
-    if (header.decoded_len > max_output_len) return error.OutputLimitExceeded;
-    var input_index = header.index;
-    var written: usize = 0;
-    while (input_index < block.len) {
-        if (written == header.decoded_len) return error.TrailingData;
-        const tag = block[input_index];
-        input_index += 1;
-        switch (tag & 0x03) {
-            0 => {
-                const literal_len = try readLiteralLen(tag, block, &input_index);
-                if (literal_len > header.decoded_len - written) return error.SizeMismatch;
-                if (block.len - input_index < literal_len) return error.TruncatedFrame;
-                input_index += literal_len;
-                written += literal_len;
-            },
-            1 => {
-                const len: usize = 4 + ((tag >> 2) & 0x07);
-                if (block.len - input_index < 1) return error.TruncatedFrame;
-                const offset: usize = (@as(usize, tag & 0xe0) << 3) | block[input_index];
-                input_index += 1;
-                try validateCopy(written, header.decoded_len, offset, len);
-                written += len;
-            },
-            2 => {
-                const len: usize = 1 + (tag >> 2);
-                if (block.len - input_index < 2) return error.TruncatedFrame;
-                const offset = std.mem.readInt(u16, block[input_index..][0..2], .little);
-                input_index += 2;
-                try validateCopy(written, header.decoded_len, offset, len);
-                written += len;
-            },
-            3 => {
-                const len: usize = 1 + (tag >> 2);
-                if (block.len - input_index < 4) return error.TruncatedFrame;
-                const offset = std.mem.readInt(u32, block[input_index..][0..4], .little);
-                input_index += 4;
-                try validateCopy(written, header.decoded_len, offset, len);
-                written += len;
-            },
-            else => unreachable,
-        }
-    }
-    if (written != header.decoded_len) return error.TruncatedFrame;
-    return header.decoded_len;
+    return (try summarizeBlockLimited(block, max_output_len)).decoded_bytes;
 }
 
 pub fn decodedBlockChunksSize(chunks: []const []const u8, compressed_scratch: []u8) Error!usize {
@@ -1076,6 +1112,11 @@ test "snappy raw block round trips repeated payload with copy tokens" {
     defer std.testing.allocator.free(encoded);
     try std.testing.expect(encoded.len < payload.len);
     try std.testing.expectEqual(payload.len, try decodedBlockSize(encoded));
+    const summary = try summarizeBlock(encoded);
+    try std.testing.expectEqual(payload.len, summary.decoded_bytes);
+    try std.testing.expect(summary.literal_count > 0);
+    try std.testing.expect(summary.copy_count > 0);
+    try std.testing.expectEqual(payload.len, summary.literal_bytes + summary.copy_bytes);
     const decoded = try decodeBlockAllocLimited(std.testing.allocator, encoded, payload.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
@@ -1095,6 +1136,9 @@ test "snappy raw block chunked input helpers mirror one-shot decode" {
     const scratch = try std.testing.allocator.alloc(u8, encoded.len);
     defer std.testing.allocator.free(scratch);
     try std.testing.expectEqual(payload.len, try decodedBlockChunksSize(&chunks, scratch));
+    const summary = try summarizeBlockChunks(&chunks, scratch);
+    try std.testing.expectEqual(payload.len, summary.decoded_bytes);
+    try std.testing.expectEqual(payload.len, summary.literal_bytes + summary.copy_bytes);
     try std.testing.expectError(error.OutputLimitExceeded, decodedBlockChunksSizeLimited(&chunks, scratch, payload.len - 1));
 
     var output: [payload.len]u8 = undefined;

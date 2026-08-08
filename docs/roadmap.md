@@ -1590,6 +1590,11 @@ architecture blindly.
   black-box Snappy CLI probe to validate compressed, skippable, concatenated,
   and file summary rows.
 
+- Added Snappy raw-block summary helpers and CLI commands. The block summary
+  validates Snappy tokens while reporting literal/copy token counts and bytes,
+  with split-input and file/hex CLI probe coverage for encoded and known-copy
+  blocks.
+
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
   root and CLI encode paths can now select a legal stored-stream window size,

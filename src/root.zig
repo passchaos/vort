@@ -66,6 +66,9 @@ pub const snappyEncodeFrameInto = snappy.encodeFrameInto;
 pub const snappyEncodedFrameBound = snappy.encodedFrameBound;
 pub const SnappyEncoder = snappy.Encoder;
 pub const SnappyFrameSummary = snappy.FrameSummary;
+pub const SnappyBlockSummary = snappy.BlockSummary;
+pub const snappySummarizeBlock = snappy.summarizeBlock;
+pub const snappySummarizeBlockChunks = snappy.summarizeBlockChunks;
 pub const snappySummarizeFrame = snappy.summarizeFrame;
 pub const snappySummarizeFrameChunks = snappy.summarizeFrameChunks;
 pub const snappyDecodeBlockAlloc = snappy.decodeBlockAlloc;
@@ -1306,6 +1309,9 @@ test "root exports lz4 and zstd codec helpers" {
     _ = snappyEncodedFrameBound;
     _ = SnappyEncoder;
     _ = SnappyFrameSummary;
+    _ = SnappyBlockSummary;
+    _ = snappySummarizeBlock;
+    _ = snappySummarizeBlockChunks;
     _ = snappySummarizeFrame;
     _ = snappySummarizeFrameChunks;
     _ = snappyDecodeBlockAlloc;
@@ -1927,6 +1933,10 @@ test "root snappy raw block helpers round trip" {
     defer std.testing.allocator.free(encoded);
 
     try std.testing.expect(encoded.len <= try snappyEncodedBlockBound("hello".len));
+    const summary = try snappySummarizeBlock(encoded);
+    try std.testing.expectEqual(@as(usize, 5), summary.decoded_bytes);
+    try std.testing.expectEqual(@as(usize, 1), summary.literal_count);
+    try std.testing.expectEqual(@as(usize, 0), summary.copy_count);
     try std.testing.expectEqual(@as(usize, 5), try snappyDecodedBlockSize(encoded));
     try std.testing.expectError(error.OutputLimitExceeded, snappyDecodedBlockSizeLimited(encoded, 4));
 
@@ -2001,6 +2011,9 @@ test "root snappy chunked decode helpers round trip" {
     defer std.testing.allocator.free(block_scratch);
 
     try std.testing.expectEqual(payload.len, try snappyDecodedBlockChunksSize(&block_chunks, block_scratch));
+    const block_summary = try snappySummarizeBlockChunks(&block_chunks, block_scratch);
+    try std.testing.expectEqual(payload.len, block_summary.decoded_bytes);
+    try std.testing.expect(block_summary.copy_count > 0);
     var block_output: [payload.len]u8 = undefined;
     try std.testing.expectEqual(payload.len, try snappyDecodeBlockChunksInto(&block_chunks, block_scratch, &block_output));
     try std.testing.expectEqualSlices(u8, payload, &block_output);
