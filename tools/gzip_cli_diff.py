@@ -99,6 +99,8 @@ def main() -> int:
     expect_cli_failure("decode-gzip-hex", bytes(second_bad_isize).hex(), error_name="SizeMismatch")
     out = run_cli("decode-gzip-hex", concatenated_with_empty.hex())
     assert int(parse_field(out, "decoded_bytes")) == len(concatenated_plain), out
+    concat_alias = run_cli("decode-gzip-concat-hex", concatenated_with_empty.hex(), str(len(concatenated_plain)))
+    assert int(parse_field(concat_alias, "decoded_bytes")) == len(concatenated_plain), concat_alias
     third_missing_trailer = concatenated_with_empty[:-8]
     expect_cli_failure("decode-gzip-hex", third_missing_trailer.hex(), error_name="TruncatedFrame")
     third_bad_crc = bytearray(concatenated_with_empty)
@@ -119,6 +121,10 @@ def main() -> int:
         out = run_cli("decode-gzip-file", str(compressed_path), str(limited_path), str(len(concatenated_plain)))
         assert int(parse_field(out, "decoded_bytes")) == len(concatenated_plain), out
         assert limited_path.read_bytes() == concatenated_plain, out
+        alias_path = tmp / "cat-alias.out"
+        alias = run_cli("decode-gzip-concat-file", str(compressed_path), str(alias_path), str(len(concatenated_plain)))
+        assert int(parse_field(alias, "decoded_bytes")) == len(concatenated_plain), alias
+        assert alias_path.read_bytes() == concatenated_plain, alias
         expect_cli_failure("decode-gzip-file", str(compressed_path), str(tmp / "cat-too-small.out"), str(len(concatenated_plain) - 1), error_name="OutputLimitExceeded")
         empty_path = tmp / "empty.gz"
         empty_path.write_bytes(b"")

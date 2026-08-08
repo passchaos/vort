@@ -1423,7 +1423,7 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(decoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
         try stdout.print("compressed_bytes={d} dictionary_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, dictionary.len, decoded.len, output_path });
-    } else if (std.mem.eql(u8, command, "decode-gzip-file")) {
+    } else if (std.mem.eql(u8, command, "decode-gzip-file") or std.mem.eql(u8, command, "decode-gzip-concat-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -1542,7 +1542,7 @@ pub fn main(init: std.process.Init) !void {
             try vort.decodeZlibAllocWithDictionary(init.gpa, compressed, dictionary);
         defer init.gpa.free(decoded);
         try printDecoded(stdout, "zlib_dict", compressed.len, decoded);
-    } else if (std.mem.eql(u8, command, "decode-gzip-hex")) {
+    } else if (std.mem.eql(u8, command, "decode-gzip-hex") or std.mem.eql(u8, command, "decode-gzip-concat-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const max_output_len = try parseOptionalLimit(args.next());
         const compressed = try hexToOwnedBytes(init.gpa, hex);

@@ -217,6 +217,8 @@ zig build run-gzip-diff
 zig build run-python-zlib-diff
 zig build run-python-zlib-diff-dashboard
 zig build run-gzip-cli-diff
+# gzip concatenated decode has explicit aliases as well:
+# decode-gzip-concat-hex / decode-gzip-concat-file
 zig build run-native-codec-probes
 zig build run-native-codec-probes-dashboard
 zig build run-lz4-native-probe

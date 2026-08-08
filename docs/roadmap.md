@@ -1603,6 +1603,11 @@ architecture blindly.
   variants. The summary validates block token structure while reporting decoded
   bytes, literal token/byte counts, and match token/byte counts.
 
+- Added explicit gzip concatenated decode CLI aliases (`decode-gzip-concat-hex`
+  and `decode-gzip-concat-file`) and extended the gzip CLI differential smoke to
+  cover both aliases. The existing `decode-gzip-*` commands remain compatible
+  and continue to decode concatenated members.
+
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
   root and CLI encode paths can now select a legal stored-stream window size,
