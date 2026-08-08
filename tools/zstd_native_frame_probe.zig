@@ -140,6 +140,9 @@ pub fn main(init: std.process.Init) !void {
         try checkSkippableOnlyStream(init.gpa);
         checked += 1;
         non_lib_generated_cases += 1;
+        try checkMultipleSkippableBetweenDataFrames(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
         const handcrafted_frame_cases = try checkHandcraftedFrameValidation(init.gpa);
         checked += handcrafted_frame_cases;
         non_lib_generated_cases += handcrafted_frame_cases;
@@ -3389,6 +3392,78 @@ fn checkSkippableOnlyStream(allocator: std.mem.Allocator) !void {
             try expect(skippable.header.skippable_id == 9);
             try expectEqualSlices("metadata-only-zstd", skippable.payload);
         },
+    }
+    if ((try iterator.next()) != null) return error.ZstdNativeFrameProbeMismatch;
+}
+
+fn checkMultipleSkippableBetweenDataFrames(allocator: std.mem.Allocator) !void {
+    const first_payload = "first-zstd-member";
+    const second_payload = "second-zstd-member";
+    const first = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, first_payload, .{
+        .selection = .raw_or_rle,
+        .content_checksum = false,
+    });
+    defer allocator.free(first.frame);
+    const skip_a = try vort.zstdEncodeSkippableFrameAlloc(allocator, 1, "metadata-a");
+    defer allocator.free(skip_a);
+    const skip_b = try vort.zstdEncodeSkippableFrameAlloc(allocator, 15, "metadata-bb");
+    defer allocator.free(skip_b);
+    const second = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, second_payload, .{
+        .selection = .raw_or_rle,
+        .content_checksum = false,
+    });
+    defer allocator.free(second.frame);
+
+    const stream = try std.mem.concat(allocator, u8, &.{ first.frame, skip_a, skip_b, second.frame });
+    defer allocator.free(stream);
+    const expected = first_payload ++ second_payload;
+
+    const summary = try vort.zstdSummarizeNativeStream(stream);
+    try expect(summary.frame_count == 2);
+    try expect(summary.skippable_frame_count == 2);
+    try expect(summary.skippable_payload_bytes == "metadata-a".len + "metadata-bb".len);
+
+    try expect((try vort.zstdDecodedNativeConcatenatedFrameSize(stream)) == expected.len);
+    try expect((try vort.zstdDecodedNativeConcatenatedFrameSizeLimited(stream, expected.len)) == expected.len);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeConcatenatedFrameSizeLimited(stream, expected.len - 1));
+
+    const decoded = try vort.zstdDecodeNativeConcatenatedFrameAllocExactSize(allocator, stream, expected.len);
+    defer allocator.free(decoded);
+    try expectEqualSlices(expected, decoded);
+    try expectAllocError(allocator, error.SizeMismatch, vort.zstdDecodeNativeConcatenatedFrameAllocExactSize(allocator, stream, expected.len - 1));
+
+    var into: [expected.len]u8 = undefined;
+    const written = try vort.zstdDecodeNativeConcatenatedFrameInto(stream, &into);
+    try expect(written == expected.len);
+    try expectEqualSlices(expected, into[0..written]);
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeConcatenatedFrameInto(stream, into[0 .. into.len - 1]));
+
+    var iterator = vort.zstdIterateNativeStream(stream);
+    const first_element = (try iterator.next()) orelse return error.ZstdNativeFrameProbeMismatch;
+    switch (first_element) {
+        .frame => |frame| try expectEqualSlices(first.frame, frame.bytes),
+        .skippable => return error.ZstdNativeFrameProbeMismatch,
+    }
+    const first_skip = (try iterator.next()) orelse return error.ZstdNativeFrameProbeMismatch;
+    switch (first_skip) {
+        .frame => return error.ZstdNativeFrameProbeMismatch,
+        .skippable => |skippable| {
+            try expect(skippable.header.skippable_id == 1);
+            try expectEqualSlices("metadata-a", skippable.payload);
+        },
+    }
+    const second_skip = (try iterator.next()) orelse return error.ZstdNativeFrameProbeMismatch;
+    switch (second_skip) {
+        .frame => return error.ZstdNativeFrameProbeMismatch,
+        .skippable => |skippable| {
+            try expect(skippable.header.skippable_id == 15);
+            try expectEqualSlices("metadata-bb", skippable.payload);
+        },
+    }
+    const second_element = (try iterator.next()) orelse return error.ZstdNativeFrameProbeMismatch;
+    switch (second_element) {
+        .frame => |frame| try expectEqualSlices(second.frame, frame.bytes),
+        .skippable => return error.ZstdNativeFrameProbeMismatch,
     }
     if ((try iterator.next()) != null) return error.ZstdNativeFrameProbeMismatch;
 }

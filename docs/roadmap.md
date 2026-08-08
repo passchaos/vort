@@ -1631,6 +1631,13 @@ architecture blindly.
   broad capability totals cannot hide timeout regressions or accidental loss of
   the public Zstd sequence-table/repeat-offset fixtures.
 
+- Extended the public Zstd native frame probe with a concatenated stream that
+  places two skippable metadata frames between two data frames. The fixture
+  validates stream summary counts, iterator order, concatenated size preflight,
+  allocator exact-size decode, caller-buffer decode, and output-limit errors so
+  multiple adjacent skippables remain covered through library APIs rather than
+  only via single-skippable smoke.
+
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
   root and CLI encode paths can now select a legal stored-stream window size,
