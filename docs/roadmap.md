@@ -1685,10 +1685,10 @@ architecture blindly.
   header field-width regressions are visible without relying only on internal
   unit tests.
 
-- Added a public Zstd frame fixture for an explicitly present but zero-valued
-  `Dictionary_ID` field. The probe verifies that header inspection preserves the
-  payload offset while size preflight and caller-owned decode treat ID zero as
-  dictionary-free instead of returning `NeedDictionary`.
+- Added public Zstd frame fixtures for explicitly present but zero-valued one-,
+  two-, and four-byte `Dictionary_ID` fields. The probe verifies that header
+  inspection preserves the payload offset while size preflight and caller-owned
+  decode treat ID zero as dictionary-free instead of returning `NeedDictionary`.
 
 - Added a no-content-size Zstd frame fixture with a non-default 1536-byte
   `Window_Descriptor` and an RLE block. This covers window decoding beyond the

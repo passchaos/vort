@@ -3617,6 +3617,22 @@ fn checkDictionaryIdWidthFrame(
     try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameIntoWithDictionary(frame, into[0..2], dictionary));
 }
 
+fn checkZeroDictionaryIdFieldFrame(frame: []const u8, expected_payload_offset: usize) !void {
+    const header = try vort.zstdInspectNativeFrameHeader(frame);
+    try expect(header.dictionary_id == 0);
+    try expect(header.content_size.? == 3);
+    try expect(header.payload_offset == expected_payload_offset);
+
+    try expect((try vort.zstdDecodedNativeFrameSize(frame)) == 3);
+    try expect((try vort.zstdDecodedNativeFrameSizeLimited(frame, 3)) == 3);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(frame, 2));
+
+    var into: [3]u8 = undefined;
+    try expect((try vort.zstdDecodeNativeFrameInto(frame, &into)) == 3);
+    try expectEqualSlices("abc", &into);
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameInto(frame, into[0..2]));
+}
+
 fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     var checked: usize = 0;
 
@@ -3753,7 +3769,7 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try checkDictionaryIdWidthFrame(&four_byte_dictionary_id, 0x12345678, 10, "zstd-dict-id-4");
     checked += 1;
 
-    const zero_dictionary_id_field = [_]u8{
+    const zero_dictionary_id_1byte_field = [_]u8{
         0x28, 0xb5, 0x2f, 0xfd,
         0x21, // Single-segment, 1-byte Dictionary_ID field, 1-byte content size.
         0x00, // Zero Dictionary_ID means no dictionary is required.
@@ -3761,13 +3777,29 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
         0x19, 0x00, 0x00, // Last raw block with three payload bytes.
         'a',  'b',  'c',
     };
-    const zero_dict_header = try vort.zstdInspectNativeFrameHeader(&zero_dictionary_id_field);
-    try expect(zero_dict_header.dictionary_id == 0);
-    try expect(zero_dict_header.payload_offset == 7);
-    try expect((try vort.zstdDecodedNativeFrameSize(&zero_dictionary_id_field)) == 3);
-    var zero_dict_into: [3]u8 = undefined;
-    try expect((try vort.zstdDecodeNativeFrameInto(&zero_dictionary_id_field, &zero_dict_into)) == 3);
-    try expectEqualSlices("abc", &zero_dict_into);
+    try checkZeroDictionaryIdFieldFrame(&zero_dictionary_id_1byte_field, 7);
+    checked += 1;
+
+    const zero_dictionary_id_2byte_field = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x22, // Single-segment, 2-byte Dictionary_ID field, 1-byte content size.
+        0x00, 0x00, // Zero Dictionary_ID means no dictionary is required.
+        0x03, // Decoded content size.
+        0x19, 0x00, 0x00, // Last raw block with three payload bytes.
+        'a',  'b',  'c',
+    };
+    try checkZeroDictionaryIdFieldFrame(&zero_dictionary_id_2byte_field, 8);
+    checked += 1;
+
+    const zero_dictionary_id_4byte_field = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x23, // Single-segment, 4-byte Dictionary_ID field, 1-byte content size.
+        0x00, 0x00, 0x00, 0x00, // Zero Dictionary_ID means no dictionary is required.
+        0x03, // Decoded content size.
+        0x19, 0x00, 0x00, // Last raw block with three payload bytes.
+        'a',  'b',  'c',
+    };
+    try checkZeroDictionaryIdFieldFrame(&zero_dictionary_id_4byte_field, 10);
     checked += 1;
 
     const no_size_multi_block = [_]u8{
