@@ -3644,6 +3644,26 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try checkRleContentSizeFrame(&non_single_segment_8byte_size, 13, 1024, 14, 'z');
     checked += 1;
 
+    const single_segment_2byte_size = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x60, // Single-segment frame with 2-byte content-size field.
+        0x2c, 0x00, // Encoded content size 44 => decoded size 300.
+        0x63, 0x09, 0x00, // Last RLE block, regenerated size 300.
+        'r',
+    };
+    try checkRleContentSizeFrame(&single_segment_2byte_size, 300, 300, 7, 'r');
+    checked += 1;
+
+    const single_segment_4byte_size = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0xa0, // Single-segment frame with 4-byte content-size field.
+        0x0d, 0x00, 0x00, 0x00, // Decoded content size 13, encoded as u32.
+        0x6b, 0x00, 0x00, // Last RLE block, regenerated size 13.
+        's',
+    };
+    try checkRleContentSizeFrame(&single_segment_4byte_size, 13, 13, 9, 's');
+    checked += 1;
+
     const single_segment_8byte_size = [_]u8{
         0x28, 0xb5, 0x2f, 0xfd,
         0xe0, // Single-segment frame with 8-byte content-size field.

@@ -1673,10 +1673,11 @@ architecture blindly.
   window descriptors, and Dictionary_ID header bytes so dashboard counts catch
   future bound/writer drift.
 
-- Added a public single-segment Zstd frame fixture with an eight-byte
-  `Frame_Content_Size` field and an RLE block. This pins the largest
-  content-size header width through inspect, block summary, decoded-size, limit,
-  and caller-owned decode APIs without requiring a huge output allocation.
+- Added public single-segment Zstd frame fixtures for two-, four-, and eight-byte
+  `Frame_Content_Size` fields with RLE blocks. These pin the larger
+  single-segment content-size header widths through inspect, block summary,
+  decoded-size, limit, and caller-owned decode APIs without requiring huge
+  output allocations.
 
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
