@@ -280,6 +280,8 @@ def main() -> int:
                 "native_codec_probes_dictionary_cases": 139,
                 "native_codec_probes_malformed_cases": 223,
                 "native_codec_probes_total_cases": 257,
+                "native_codec_probes_zstd_frame_cases": 118,
+                "native_codec_probes_zstd_dictionary_cases": 25,
                 "native_tier_range_present": True,
                 "native_tier_range_healthy": True,
                 "native_tier_range_summary_count": 1,

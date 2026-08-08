@@ -2275,7 +2275,9 @@ Top-level fields:
   `native_codec_probes_fse_repeat_cases`,
   `native_codec_probes_dictionary_cases`,
   `native_codec_probes_malformed_cases`,
-  `native_codec_probes_total_cases`
+  `native_codec_probes_total_cases`,
+  `native_codec_probes_zstd_frame_cases`,
+  `native_codec_probes_zstd_dictionary_cases`
 - `artifacts`
 
 Each artifact includes:
@@ -2419,6 +2421,8 @@ Example:
   "native_codec_probes_dictionary_cases": 0,
   "native_codec_probes_malformed_cases": 0,
   "native_codec_probes_total_cases": 0,
+  "native_codec_probes_zstd_frame_cases": 0,
+  "native_codec_probes_zstd_dictionary_cases": 0,
   "native_tier_range_present": true,
   "native_tier_range_healthy": true,
   "native_tier_range_summary_count": 3,

@@ -793,6 +793,12 @@ def main() -> int:
         assert dashboard["native_codec_probes_dictionary_cases"] == capabilities_by_name["dictionary"]["cases"]
         assert dashboard["native_codec_probes_malformed_cases"] == capabilities_by_name["malformed"]["cases"]
         assert dashboard["native_codec_probes_total_cases"] == native_codec_probes["total_cases"]
+        probes_by_label = {
+            probe["label"]: probe
+            for probe in native_codec_probes["probes"]
+        }
+        assert dashboard["native_codec_probes_zstd_frame_cases"] == probes_by_label["zstd-native-frame-probe"]["cases"]
+        assert dashboard["native_codec_probes_zstd_dictionary_cases"] == probes_by_label["zstd-native-dictionary-probe"]["cases"]
         assert dashboard["native_tier_corpus_discovery_present"] is True
         assert dashboard["native_tier_corpus_discovery_ok"] is True
         assert dashboard["native_tier_corpus_discovery_healthy"] is True

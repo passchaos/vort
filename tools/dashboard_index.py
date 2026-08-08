@@ -573,6 +573,11 @@ def native_codec_probes_health(artifacts: list[Path]) -> dict:
         if not isinstance(probes, list):
             probes = []
         ok_probes = sum(1 for probe in probes if isinstance(probe, dict) and probe.get("ok") is True)
+        probe_cases = {
+            str(probe.get("label")): int(probe.get("cases") or 0)
+            for probe in probes
+            if isinstance(probe, dict)
+        }
         capabilities = data.get("capabilities")
         if not isinstance(capabilities, list):
             capabilities = []
@@ -597,7 +602,9 @@ def native_codec_probes_health(artifacts: list[Path]) -> dict:
             and capability_cases.get("incremental", 0) > 0
             and capability_cases.get("chunked", 0) > 0
             and capability_cases.get("reusable-chunked", 0) > 0
-            and capability_cases.get("fse-repeat", 0) > 0,
+            and capability_cases.get("fse-repeat", 0) > 0
+            and probe_cases.get("zstd-native-frame-probe", 0) >= 213
+            and probe_cases.get("zstd-native-dictionary-probe", 0) >= 25,
             "probe_count": int(data.get("probe_count") or 0),
             "ok_probe_count": ok_probes,
             "capability_count": capability_count,
@@ -610,6 +617,8 @@ def native_codec_probes_health(artifacts: list[Path]) -> dict:
             "dictionary_cases": capability_cases.get("dictionary", 0),
             "malformed_cases": capability_cases.get("malformed", 0),
             "total_cases": total_cases,
+            "zstd_frame_cases": probe_cases.get("zstd-native-frame-probe", 0),
+            "zstd_dictionary_cases": probe_cases.get("zstd-native-dictionary-probe", 0),
         }
     return {
         "present": False,
@@ -627,6 +636,8 @@ def native_codec_probes_health(artifacts: list[Path]) -> dict:
         "dictionary_cases": 0,
         "malformed_cases": 0,
         "total_cases": 0,
+        "zstd_frame_cases": 0,
+        "zstd_dictionary_cases": 0,
     }
 
 
@@ -1093,6 +1104,8 @@ def main() -> int:
                 "native_codec_probes_dictionary_cases": native_codec_health["dictionary_cases"],
                 "native_codec_probes_malformed_cases": native_codec_health["malformed_cases"],
                 "native_codec_probes_total_cases": native_codec_health["total_cases"],
+                "native_codec_probes_zstd_frame_cases": native_codec_health["zstd_frame_cases"],
+                "native_codec_probes_zstd_dictionary_cases": native_codec_health["zstd_dictionary_cases"],
                 "native_tier_range_present": native_tier_health["present"],
                 "native_tier_range_healthy": native_tier_health["healthy"],
                 "native_tier_range_summary_count": native_tier_health["summary_count"],
