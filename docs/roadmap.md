@@ -1705,6 +1705,11 @@ architecture blindly.
   that the unused neighboring bit can still decode through inspect, size, and
   caller-owned output APIs like reference decoders.
 
+- Added a handcrafted Zstd checksum-success fixture beside the existing mismatch
+  and truncated-checksum cases. The public frame probe now exercises checksum
+  presence, decoded-size preflight, allocator decode, and caller-owned decode
+  for a valid raw/RLE frame without depending on the generated encoder path.
+
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
   root and CLI encode paths can now select a legal stored-stream window size,

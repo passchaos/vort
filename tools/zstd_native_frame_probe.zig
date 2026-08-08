@@ -3869,6 +3869,22 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectStreamIteratorError(&no_size_multi_truncated_checksum, error.TruncatedFrame);
     checked += 1;
 
+    const checksum_ok_payload = "zstd-checksum-ok";
+    var good_checksum: [4]u8 = undefined;
+    std.mem.writeInt(u32, &good_checksum, @truncate(std.hash.XxHash64.hash(0, checksum_ok_payload)), .little);
+    const checksum_ok = try handcraftedRawFrame(allocator, checksum_ok_payload.len, checksum_ok_payload, &good_checksum, true);
+    defer allocator.free(checksum_ok);
+    const checksum_ok_header = try vort.zstdInspectNativeFrameHeader(checksum_ok);
+    try expect(checksum_ok_header.has_checksum);
+    try expect((try vort.zstdDecodedNativeFrameSize(checksum_ok)) == checksum_ok_payload.len);
+    const checksum_ok_decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, checksum_ok);
+    defer allocator.free(checksum_ok_decoded);
+    try expectEqualSlices(checksum_ok_payload, checksum_ok_decoded);
+    var checksum_ok_into: [checksum_ok_payload.len]u8 = undefined;
+    try expect((try vort.zstdDecodeNativeFrameInto(checksum_ok, &checksum_ok_into)) == checksum_ok_payload.len);
+    try expectEqualSlices(checksum_ok_payload, &checksum_ok_into);
+    checked += 1;
+
     const checksum_payload = "zstd-checksum";
     var wrong_checksum: [4]u8 = undefined;
     std.mem.writeInt(u32, &wrong_checksum, @as(u32, @truncate(std.hash.XxHash64.hash(0, checksum_payload))) ^ 0x01, .little);
