@@ -683,10 +683,46 @@ const minimal_static_dictionary_entries = [_]StaticDictionaryEntry{
     .{ .transform = 0, .copy_len = 5, .word_index = 4, .word = "media" },
     .{ .transform = 0, .copy_len = 5, .word_index = 5, .word = "white" },
     .{ .transform = 0, .copy_len = 5, .word_index = 6, .word = "close" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 7, .word = "black" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 9, .word = "small" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 10, .word = "books" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 11, .word = "place" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 12, .word = "music" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 13, .word = "field" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 14, .word = "order" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 16, .word = "value" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 17, .word = "level" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 18, .word = "table" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 19, .word = "board" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 20, .word = "house" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 21, .word = "group" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 23, .word = "years" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 26, .word = "water" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 27, .word = "start" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 28, .word = "style" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 29, .word = "death" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 30, .word = "power" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 31, .word = "phone" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 32, .word = "night" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 33, .word = "error" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 34, .word = "input" },
     .{ .transform = 0, .copy_len = 5, .word_index = 35, .word = "about" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 36, .word = "terms" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 39, .word = "event" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 40, .word = "local" },
     .{ .transform = 0, .copy_len = 5, .word_index = 42, .word = "large" },
     .{ .transform = 0, .copy_len = 5, .word_index = 43, .word = "words" },
     .{ .transform = 0, .copy_len = 5, .word_index = 44, .word = "games" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 45, .word = "short" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 46, .word = "space" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 47, .word = "focus" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 48, .word = "clear" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 50, .word = "block" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 51, .word = "guide" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 52, .word = "radio" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 53, .word = "share" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 54, .word = "women" },
+    .{ .transform = 0, .copy_len = 5, .word_index = 55, .word = "again" },
     .{ .transform = 0, .copy_len = 5, .word_index = 56, .word = "money" },
     .{ .transform = 0, .copy_len = 5, .word_index = 81, .word = "press" },
     .{ .transform = 0, .copy_len = 5, .word_index = 101, .word = "other" },
@@ -2420,6 +2456,57 @@ test "br minimal static dictionary upstream2048 identity money decodes leading-s
     // example where Node uses one literal space plus an identity dictionary
     // word rather than the transform-equivalent leading-space address.
     try expectBrStaticDictionaryFrame(&[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0xc4, 0xd5 }, " money");
+}
+
+test "br minimal static dictionary upstream2048 identity five-byte tail decodes leading-space Node frames" {
+    // Node encoded these leading-space upstream2048 candidates as one literal
+    // space followed by the corresponding 5-byte identity dictionary word.
+    // Keeping the observed frames here prevents the generated-probe failures
+    // from regressing while full dictionary import remains future work.
+    const cases = [_]struct {
+        encoded: []const u8,
+        expected: []const u8,
+    }{
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0xc4, 0x04 }, .expected = " black" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0xc4, 0x24 }, .expected = " small" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0xc4, 0x34 }, .expected = " books" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x04, 0x05 }, .expected = " place" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x04, 0x15 }, .expected = " music" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x04, 0x25 }, .expected = " field" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x04, 0x35 }, .expected = " order" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x04, 0x55 }, .expected = " value" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x04, 0x65 }, .expected = " level" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x04, 0x75 }, .expected = " table" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x44, 0x05 }, .expected = " board" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x44, 0x15 }, .expected = " house" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x44, 0x25 }, .expected = " group" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x44, 0x45 }, .expected = " years" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x44, 0x75 }, .expected = " water" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x84, 0x05 }, .expected = " start" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x84, 0x15 }, .expected = " style" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x84, 0x25 }, .expected = " death" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x84, 0x35 }, .expected = " power" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x84, 0x45 }, .expected = " phone" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x84, 0x55 }, .expected = " night" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x84, 0x65 }, .expected = " error" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x84, 0x75 }, .expected = " input" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x84, 0x95 }, .expected = " terms" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x84, 0xc5 }, .expected = " event" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0x84, 0xd5 }, .expected = " local" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0xc4, 0x25 }, .expected = " short" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0xc4, 0x35 }, .expected = " space" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0xc4, 0x45 }, .expected = " focus" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0xc4, 0x55 }, .expected = " clear" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0xc4, 0x75 }, .expected = " block" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0xc4, 0x85 }, .expected = " guide" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0xc4, 0x95 }, .expected = " radio" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0xc4, 0xa5 }, .expected = " share" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0xc4, 0xb5 }, .expected = " women" },
+        .{ .encoded = &[_]u8{ 0xa1, 0x28, 0x00, 0x00, 0x20, 0x01, 0x12, 0x8b, 0xc4, 0xc5 }, .expected = " again" },
+    };
+    for (cases) |case| {
+        try expectBrStaticDictionaryFrame(case.encoded, case.expected);
+    }
 }
 
 test "br minimal static dictionary upstream2048 identity six-byte tail decodes Node frames" {

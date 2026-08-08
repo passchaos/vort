@@ -460,6 +460,330 @@
       "source_case": "node-static-dictionary-banner-q5-lgwin10",
       "reason": "upstream2048 tail Node frame identity source tuple",
       "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 7,
+      "word": "black",
+      "source_case": "node-static-dictionary-leading-space-black-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 9,
+      "word": "small",
+      "source_case": "node-static-dictionary-leading-space-small-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 10,
+      "word": "books",
+      "source_case": "node-static-dictionary-leading-space-books-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 11,
+      "word": "place",
+      "source_case": "node-static-dictionary-leading-space-place-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 12,
+      "word": "music",
+      "source_case": "node-static-dictionary-leading-space-music-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 13,
+      "word": "field",
+      "source_case": "node-static-dictionary-leading-space-field-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 14,
+      "word": "order",
+      "source_case": "node-static-dictionary-leading-space-order-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 16,
+      "word": "value",
+      "source_case": "node-static-dictionary-leading-space-value-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 17,
+      "word": "level",
+      "source_case": "node-static-dictionary-leading-space-level-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 18,
+      "word": "table",
+      "source_case": "node-static-dictionary-leading-space-table-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 19,
+      "word": "board",
+      "source_case": "node-static-dictionary-leading-space-board-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 20,
+      "word": "house",
+      "source_case": "node-static-dictionary-leading-space-house-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 21,
+      "word": "group",
+      "source_case": "node-static-dictionary-leading-space-group-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 23,
+      "word": "years",
+      "source_case": "node-static-dictionary-leading-space-years-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 26,
+      "word": "water",
+      "source_case": "node-static-dictionary-leading-space-water-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 27,
+      "word": "start",
+      "source_case": "node-static-dictionary-leading-space-start-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 28,
+      "word": "style",
+      "source_case": "node-static-dictionary-leading-space-style-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 29,
+      "word": "death",
+      "source_case": "node-static-dictionary-leading-space-death-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 30,
+      "word": "power",
+      "source_case": "node-static-dictionary-leading-space-power-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 31,
+      "word": "phone",
+      "source_case": "node-static-dictionary-leading-space-phone-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 32,
+      "word": "night",
+      "source_case": "node-static-dictionary-leading-space-night-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 33,
+      "word": "error",
+      "source_case": "node-static-dictionary-leading-space-error-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 34,
+      "word": "input",
+      "source_case": "node-static-dictionary-leading-space-input-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 36,
+      "word": "terms",
+      "source_case": "node-static-dictionary-leading-space-terms-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 39,
+      "word": "event",
+      "source_case": "node-static-dictionary-leading-space-event-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 40,
+      "word": "local",
+      "source_case": "node-static-dictionary-leading-space-local-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 45,
+      "word": "short",
+      "source_case": "node-static-dictionary-leading-space-short-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 46,
+      "word": "space",
+      "source_case": "node-static-dictionary-leading-space-space-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 47,
+      "word": "focus",
+      "source_case": "node-static-dictionary-leading-space-focus-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 48,
+      "word": "clear",
+      "source_case": "node-static-dictionary-leading-space-clear-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 50,
+      "word": "block",
+      "source_case": "node-static-dictionary-leading-space-block-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 51,
+      "word": "guide",
+      "source_case": "node-static-dictionary-leading-space-guide-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 52,
+      "word": "radio",
+      "source_case": "node-static-dictionary-leading-space-radio-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 53,
+      "word": "share",
+      "source_case": "node-static-dictionary-leading-space-share-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 54,
+      "word": "women",
+      "source_case": "node-static-dictionary-leading-space-women-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
+    },
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 55,
+      "word": "again",
+      "source_case": "node-static-dictionary-leading-space-again-q5-lgwin10",
+      "reason": "upstream2048 leading-space Node frame identity source tuple",
+      "category": "identity"
     }
   ]
 }

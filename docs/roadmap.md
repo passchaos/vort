@@ -2126,6 +2126,12 @@ architecture blindly.
   dictionary aligned with actual encoder output while the full dictionary import
   remains future work.
 
+- Backfilled the upstream2048 insertion-window gap that appeared before the old
+  upstream1024 tail boundary. The window produced 36 leading-space 5-byte
+  identity-source misses (`black` through `again` with sparse official word
+  indexes); these Node frames now have source anchors, required coverage, CLI
+  differential cases, and direct unit coverage.
+
 - Ran the full generated-candidate Node probe and resolved its remaining five
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,

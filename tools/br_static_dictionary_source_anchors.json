@@ -58,11 +58,219 @@
     },
     {
       "copy_len": 5,
+      "raw_word": "black",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "black",
+      "word_index": 7
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "small",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "small",
+      "word_index": 9
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "books",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "books",
+      "word_index": 10
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "place",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "place",
+      "word_index": 11
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "music",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "music",
+      "word_index": 12
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "field",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "field",
+      "word_index": 13
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "order",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "order",
+      "word_index": 14
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "value",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "value",
+      "word_index": 16
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "level",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "level",
+      "word_index": 17
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "table",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "table",
+      "word_index": 18
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "board",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "board",
+      "word_index": 19
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "house",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "house",
+      "word_index": 20
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "group",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "group",
+      "word_index": 21
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "years",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "years",
+      "word_index": 23
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "water",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "water",
+      "word_index": 26
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "start",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "start",
+      "word_index": 27
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "style",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "style",
+      "word_index": 28
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "death",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "death",
+      "word_index": 29
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "power",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "power",
+      "word_index": 30
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "phone",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "phone",
+      "word_index": 31
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "night",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "night",
+      "word_index": 32
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "error",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "error",
+      "word_index": 33
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "input",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "input",
+      "word_index": 34
+    },
+    {
+      "copy_len": 5,
       "raw_word": "about",
       "transform": 0,
       "transform_kind": "identity",
       "transformed_word": "about",
       "word_index": 35
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "terms",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "terms",
+      "word_index": 36
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "event",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "event",
+      "word_index": 39
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "local",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "local",
+      "word_index": 40
     },
     {
       "copy_len": 5,
@@ -87,6 +295,86 @@
       "transform_kind": "identity",
       "transformed_word": "games",
       "word_index": 44
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "short",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "short",
+      "word_index": 45
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "space",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "space",
+      "word_index": 46
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "focus",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "focus",
+      "word_index": 47
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "clear",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "clear",
+      "word_index": 48
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "block",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "block",
+      "word_index": 50
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "guide",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "guide",
+      "word_index": 51
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "radio",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "radio",
+      "word_index": 52
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "share",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "share",
+      "word_index": 53
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "women",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "women",
+      "word_index": 54
+    },
+    {
+      "copy_len": 5,
+      "raw_word": "again",
+      "transform": 0,
+      "transform_kind": "identity",
+      "transformed_word": "again",
+      "word_index": 55
     },
     {
       "copy_len": 5,
@@ -873,7 +1161,7 @@
       "word_index": 614
     }
   ],
-  "entry_count": 109,
+  "entry_count": 145,
   "schema": "vort.br_static_dictionary_source_anchors",
   "schema_version": 1,
   "source": "RFC 7932 Brotli static dictionary data as exposed by upstream common/dictionary_inc.h and common/transform.c"

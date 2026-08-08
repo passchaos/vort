@@ -2445,6 +2445,150 @@ def main() -> int:
             node_compress(b" money", quality=5, lgwin=10),
             b" money",
         ),
+        "node-static-dictionary-leading-space-black-q5-lgwin10": (
+            node_compress(b" black", quality=5, lgwin=10),
+            b" black",
+        ),
+        "node-static-dictionary-leading-space-small-q5-lgwin10": (
+            node_compress(b" small", quality=5, lgwin=10),
+            b" small",
+        ),
+        "node-static-dictionary-leading-space-books-q5-lgwin10": (
+            node_compress(b" books", quality=5, lgwin=10),
+            b" books",
+        ),
+        "node-static-dictionary-leading-space-place-q5-lgwin10": (
+            node_compress(b" place", quality=5, lgwin=10),
+            b" place",
+        ),
+        "node-static-dictionary-leading-space-music-q5-lgwin10": (
+            node_compress(b" music", quality=5, lgwin=10),
+            b" music",
+        ),
+        "node-static-dictionary-leading-space-field-q5-lgwin10": (
+            node_compress(b" field", quality=5, lgwin=10),
+            b" field",
+        ),
+        "node-static-dictionary-leading-space-order-q5-lgwin10": (
+            node_compress(b" order", quality=5, lgwin=10),
+            b" order",
+        ),
+        "node-static-dictionary-leading-space-value-q5-lgwin10": (
+            node_compress(b" value", quality=5, lgwin=10),
+            b" value",
+        ),
+        "node-static-dictionary-leading-space-level-q5-lgwin10": (
+            node_compress(b" level", quality=5, lgwin=10),
+            b" level",
+        ),
+        "node-static-dictionary-leading-space-table-q5-lgwin10": (
+            node_compress(b" table", quality=5, lgwin=10),
+            b" table",
+        ),
+        "node-static-dictionary-leading-space-board-q5-lgwin10": (
+            node_compress(b" board", quality=5, lgwin=10),
+            b" board",
+        ),
+        "node-static-dictionary-leading-space-house-q5-lgwin10": (
+            node_compress(b" house", quality=5, lgwin=10),
+            b" house",
+        ),
+        "node-static-dictionary-leading-space-group-q5-lgwin10": (
+            node_compress(b" group", quality=5, lgwin=10),
+            b" group",
+        ),
+        "node-static-dictionary-leading-space-years-q5-lgwin10": (
+            node_compress(b" years", quality=5, lgwin=10),
+            b" years",
+        ),
+        "node-static-dictionary-leading-space-water-q5-lgwin10": (
+            node_compress(b" water", quality=5, lgwin=10),
+            b" water",
+        ),
+        "node-static-dictionary-leading-space-start-q5-lgwin10": (
+            node_compress(b" start", quality=5, lgwin=10),
+            b" start",
+        ),
+        "node-static-dictionary-leading-space-style-q5-lgwin10": (
+            node_compress(b" style", quality=5, lgwin=10),
+            b" style",
+        ),
+        "node-static-dictionary-leading-space-death-q5-lgwin10": (
+            node_compress(b" death", quality=5, lgwin=10),
+            b" death",
+        ),
+        "node-static-dictionary-leading-space-power-q5-lgwin10": (
+            node_compress(b" power", quality=5, lgwin=10),
+            b" power",
+        ),
+        "node-static-dictionary-leading-space-phone-q5-lgwin10": (
+            node_compress(b" phone", quality=5, lgwin=10),
+            b" phone",
+        ),
+        "node-static-dictionary-leading-space-night-q5-lgwin10": (
+            node_compress(b" night", quality=5, lgwin=10),
+            b" night",
+        ),
+        "node-static-dictionary-leading-space-error-q5-lgwin10": (
+            node_compress(b" error", quality=5, lgwin=10),
+            b" error",
+        ),
+        "node-static-dictionary-leading-space-input-q5-lgwin10": (
+            node_compress(b" input", quality=5, lgwin=10),
+            b" input",
+        ),
+        "node-static-dictionary-leading-space-terms-q5-lgwin10": (
+            node_compress(b" terms", quality=5, lgwin=10),
+            b" terms",
+        ),
+        "node-static-dictionary-leading-space-event-q5-lgwin10": (
+            node_compress(b" event", quality=5, lgwin=10),
+            b" event",
+        ),
+        "node-static-dictionary-leading-space-local-q5-lgwin10": (
+            node_compress(b" local", quality=5, lgwin=10),
+            b" local",
+        ),
+        "node-static-dictionary-leading-space-short-q5-lgwin10": (
+            node_compress(b" short", quality=5, lgwin=10),
+            b" short",
+        ),
+        "node-static-dictionary-leading-space-space-q5-lgwin10": (
+            node_compress(b" space", quality=5, lgwin=10),
+            b" space",
+        ),
+        "node-static-dictionary-leading-space-focus-q5-lgwin10": (
+            node_compress(b" focus", quality=5, lgwin=10),
+            b" focus",
+        ),
+        "node-static-dictionary-leading-space-clear-q5-lgwin10": (
+            node_compress(b" clear", quality=5, lgwin=10),
+            b" clear",
+        ),
+        "node-static-dictionary-leading-space-block-q5-lgwin10": (
+            node_compress(b" block", quality=5, lgwin=10),
+            b" block",
+        ),
+        "node-static-dictionary-leading-space-guide-q5-lgwin10": (
+            node_compress(b" guide", quality=5, lgwin=10),
+            b" guide",
+        ),
+        "node-static-dictionary-leading-space-radio-q5-lgwin10": (
+            node_compress(b" radio", quality=5, lgwin=10),
+            b" radio",
+        ),
+        "node-static-dictionary-leading-space-share-q5-lgwin10": (
+            node_compress(b" share", quality=5, lgwin=10),
+            b" share",
+        ),
+        "node-static-dictionary-leading-space-women-q5-lgwin10": (
+            node_compress(b" women", quality=5, lgwin=10),
+            b" women",
+        ),
+        "node-static-dictionary-leading-space-again-q5-lgwin10": (
+            node_compress(b" again", quality=5, lgwin=10),
+            b" again",
+        ),
         "node-static-dictionary-quot-q5-lgwin10": (
             node_compress(b"&quot;", quality=5, lgwin=10),
             b"&quot;",
