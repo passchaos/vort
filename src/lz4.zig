@@ -3736,6 +3736,11 @@ pub const NativeSkippableFrameHeader = struct {
 pub const NativeStreamSummary = struct {
     frame_count: usize = 0,
     skippable_frame_count: usize = 0,
+    content_size_frame_count: usize = 0,
+    checksum_frame_count: usize = 0,
+    block_checksum_frame_count: usize = 0,
+    dictionary_id_frame_count: usize = 0,
+    declared_content_bytes: u64 = 0,
     block_count: usize = 0,
     compressed_block_count: usize = 0,
     raw_block_count: usize = 0,
@@ -3974,6 +3979,14 @@ pub fn summarizeNativeStream(frames: []const u8) Error!NativeStreamSummary {
         if (magic == frame_magic_u32) {
             const start = offset;
             const end = try findFrameEnd(frames, &offset);
+            const header = try inspectNativeFrameHeader(frames[start..end]);
+            if (header.expected_content_size) |content_size| {
+                summary.content_size_frame_count += 1;
+                summary.declared_content_bytes = std.math.add(u64, summary.declared_content_bytes, content_size) catch return error.IntegerOverflow;
+            }
+            if (header.content_checksum) summary.checksum_frame_count += 1;
+            if (header.block_checksum) summary.block_checksum_frame_count += 1;
+            if (header.dictionary_id != null) summary.dictionary_id_frame_count += 1;
             const frame_summary = try summarizeNativeFrameBlocks(frames[start..end]);
             summary.frame_count += 1;
             summary.block_count = std.math.add(usize, summary.block_count, frame_summary.block_count) catch return error.IntegerOverflow;

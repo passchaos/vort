@@ -1722,6 +1722,12 @@ architecture blindly.
   decoded-size preflight, and caller-owned decode for a legal sequence-free
   compressed block whose count is not encoded in the single-byte short form.
 
+- Extended LZ4 native stream summaries with frame-level metadata counts for
+  content-size fields, content checksums, block checksums, Dictionary_ID fields,
+  and the total declared content bytes. The LZ4 native probe now checks those
+  fields for ordinary data frames, skippable-only streams, and checksum-mismatch
+  streams so summary drift is visible through public APIs.
+
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
   root and CLI encode paths can now select a legal stored-stream window size,

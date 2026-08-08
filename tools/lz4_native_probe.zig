@@ -249,6 +249,11 @@ fn checkFrameRoundTrips(allocator: std.mem.Allocator, case: Case) !void {
     if (native_stream_summary.frame_count != 1) return error.Lz4ProbeMismatch;
     if (native_stream_summary.block_count == 0 and case.payload.len != 0) return error.Lz4ProbeMismatch;
     if (native_stream_summary.skippable_frame_count != 0) return error.Lz4ProbeMismatch;
+    if (native_stream_summary.content_size_frame_count != 1) return error.Lz4ProbeMismatch;
+    if (native_stream_summary.declared_content_bytes != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    if (native_stream_summary.checksum_frame_count != 1) return error.Lz4ProbeMismatch;
+    if (native_stream_summary.block_checksum_frame_count != 1) return error.Lz4ProbeMismatch;
+    if (native_stream_summary.dictionary_id_frame_count != 0) return error.Lz4ProbeMismatch;
     if (native_stream_summary.payload_bytes == 0 and case.payload.len != 0) return error.Lz4ProbeMismatch;
     const native_block_summary = try vort.lz4SummarizeNativeFrameBlocks(native_frame);
     if (native_block_summary.block_count != native_stream_summary.block_count) return error.Lz4ProbeMismatch;
@@ -1302,6 +1307,11 @@ fn checkSkippableOnlyStream(allocator: std.mem.Allocator) !void {
     const summary = try vort.lz4SummarizeNativeStream(skip);
     if (summary.frame_count != 0) return error.Lz4ProbeMismatch;
     if (summary.skippable_frame_count != 1) return error.Lz4ProbeMismatch;
+    if (summary.content_size_frame_count != 0) return error.Lz4ProbeMismatch;
+    if (summary.checksum_frame_count != 0) return error.Lz4ProbeMismatch;
+    if (summary.block_checksum_frame_count != 0) return error.Lz4ProbeMismatch;
+    if (summary.dictionary_id_frame_count != 0) return error.Lz4ProbeMismatch;
+    if (summary.declared_content_bytes != 0) return error.Lz4ProbeSizeMismatch;
     if (summary.skippable_payload_bytes != "metadata-only".len) return error.Lz4ProbeSizeMismatch;
 
     var iterator = vort.lz4IterateNativeStream(skip);
@@ -2056,6 +2066,10 @@ fn checkSkippableChecksumAndTrailingStreams(allocator: std.mem.Allocator) !usize
 
     const checksum_summary = try vort.lz4SummarizeNativeStream(checksum_stream);
     if (checksum_summary.skippable_frame_count != 1 or checksum_summary.frame_count != 1) return error.Lz4ProbeMismatch;
+    if (checksum_summary.checksum_frame_count != 1) return error.Lz4ProbeMismatch;
+    if (checksum_summary.block_checksum_frame_count != 0) return error.Lz4ProbeMismatch;
+    if (checksum_summary.content_size_frame_count != 0) return error.Lz4ProbeMismatch;
+    if (checksum_summary.declared_content_bytes != 0) return error.Lz4ProbeSizeMismatch;
     if (try vort.lz4DecodedNativeConcatenatedFrameSize(checksum_stream) != checksum_payload.len) return error.Lz4ProbeSizeMismatch;
     var checksum_output: [checksum_payload.len]u8 = undefined;
     if (vort.lz4DecodeNativeConcatenatedFrameInto(checksum_stream, &checksum_output)) |_| {

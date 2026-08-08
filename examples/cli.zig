@@ -1885,11 +1885,16 @@ fn printSnappyFrameSummary(stdout: *std.Io.Writer, compressed_len: usize, summar
 
 fn printLz4NativeSummary(stdout: *std.Io.Writer, compressed_len: usize, summary: vort.Lz4NativeStreamSummary) !void {
     try stdout.print(
-        "lz4_native_compressed_bytes={d} frames={d} skippable_frames={d} blocks={d} compressed_blocks={d} raw_blocks={d} payload_bytes={d} skippable_payload_bytes={d}\n",
+        "lz4_native_compressed_bytes={d} frames={d} skippable_frames={d} content_size_frames={d} checksum_frames={d} block_checksum_frames={d} dictionary_id_frames={d} declared_content_bytes={d} blocks={d} compressed_blocks={d} raw_blocks={d} payload_bytes={d} skippable_payload_bytes={d}\n",
         .{
             compressed_len,
             summary.frame_count,
             summary.skippable_frame_count,
+            summary.content_size_frame_count,
+            summary.checksum_frame_count,
+            summary.block_checksum_frame_count,
+            summary.dictionary_id_frame_count,
+            summary.declared_content_bytes,
             summary.block_count,
             summary.compressed_block_count,
             summary.raw_block_count,
