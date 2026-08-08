@@ -1831,7 +1831,7 @@ Example:
   "capability_count": 16,
   "coverage_count": 4,
   "probe_count": 4,
-  "total_cases": 367,
+  "total_cases": 368,
   "capabilities": [
     {
       "capability": "lib-generated",
@@ -1843,7 +1843,7 @@ Example:
     },
     {
       "capability": "native-generated",
-      "cases": 331,
+      "cases": 332,
       "ok": true,
       "ok_probe_count": 2,
       "present": true,
@@ -1907,7 +1907,7 @@ Example:
     },
     {
       "capability": "skippable",
-      "cases": 331,
+      "cases": 332,
       "ok": true,
       "ok_probe_count": 2,
       "present": true,
@@ -1915,7 +1915,7 @@ Example:
     },
     {
       "capability": "malformed",
-      "cases": 333,
+      "cases": 334,
       "ok": true,
       "ok_probe_count": 3,
       "present": true,
@@ -1923,7 +1923,7 @@ Example:
     },
     {
       "capability": "checksum",
-      "cases": 338,
+      "cases": 339,
       "ok": true,
       "ok_probe_count": 4,
       "present": true,
@@ -1931,7 +1931,7 @@ Example:
     },
     {
       "capability": "bounded-limits",
-      "cases": 335,
+      "cases": 336,
       "ok": true,
       "ok_probe_count": 4,
       "present": true,
@@ -1939,7 +1939,7 @@ Example:
     },
     {
       "capability": "huffman",
-      "cases": 218,
+      "cases": 219,
       "ok": true,
       "ok_probe_count": 1,
       "present": true,
@@ -1947,7 +1947,7 @@ Example:
     },
     {
       "capability": "sequence-tables",
-      "cases": 225,
+      "cases": 226,
       "ok": true,
       "ok_probe_count": 2,
       "present": true,
@@ -1982,7 +1982,7 @@ Example:
       "surface": "dictionary"
     },
     {
-      "cases": 218,
+      "cases": 219,
       "codec": "zstd",
       "ok": true,
       "ok_probe_count": 1,
@@ -2078,9 +2078,9 @@ Example:
       "returncode": 0,
       "timed_out": false,
       "timeout_seconds": 120.0,
-      "cases": 218,
+      "cases": 219,
       "marker": "zstd_native_frame_probe",
-      "output": "zstd_native_frame_probe_ok cases=218\nzstd_native_frame_probe_coverage capability=bounded-limits cases=218\nzstd_native_frame_probe_coverage capability=checksum cases=218\nzstd_native_frame_probe_coverage capability=chunked cases=134\nzstd_native_frame_probe_coverage capability=reusable-chunked cases=134\nzstd_native_frame_probe_coverage capability=fse-repeat cases=5\nzstd_native_frame_probe_coverage capability=huffman cases=218\nzstd_native_frame_probe_coverage capability=incremental cases=134\nzstd_native_frame_probe_coverage capability=lib-generated cases=124\nzstd_native_frame_probe_coverage capability=malformed cases=218\nzstd_native_frame_probe_coverage capability=native-generated cases=218\nzstd_native_frame_probe_coverage capability=sequence-tables cases=218\nzstd_native_frame_probe_coverage capability=skippable cases=218\n",
+      "output": "zstd_native_frame_probe_ok cases=219\nzstd_native_frame_probe_coverage capability=bounded-limits cases=219\nzstd_native_frame_probe_coverage capability=checksum cases=219\nzstd_native_frame_probe_coverage capability=chunked cases=134\nzstd_native_frame_probe_coverage capability=reusable-chunked cases=134\nzstd_native_frame_probe_coverage capability=fse-repeat cases=5\nzstd_native_frame_probe_coverage capability=huffman cases=219\nzstd_native_frame_probe_coverage capability=incremental cases=134\nzstd_native_frame_probe_coverage capability=lib-generated cases=124\nzstd_native_frame_probe_coverage capability=malformed cases=219\nzstd_native_frame_probe_coverage capability=native-generated cases=219\nzstd_native_frame_probe_coverage capability=sequence-tables cases=219\nzstd_native_frame_probe_coverage capability=skippable cases=219\n",
       "reported_capabilities": [
         "bounded-limits",
         "checksum",
@@ -2096,18 +2096,18 @@ Example:
         "skippable"
       ],
       "reported_capability_cases": {
-        "bounded-limits": 218,
-        "checksum": 218,
+        "bounded-limits": 219,
+        "checksum": 219,
         "chunked": 134,
         "fse-repeat": 5,
-        "huffman": 218,
+        "huffman": 219,
         "incremental": 134,
         "lib-generated": 124,
-        "malformed": 218,
-        "native-generated": 218,
+        "malformed": 219,
+        "native-generated": 219,
         "reusable-chunked": 134,
-        "sequence-tables": 218,
-        "skippable": 218
+        "sequence-tables": 219,
+        "skippable": 219
       },
       "reported_capability_count": 12
     },

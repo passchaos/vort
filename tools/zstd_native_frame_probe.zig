@@ -3488,6 +3488,25 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameInto(no_size_frame, no_size_into[0 .. no_size_into.len - 1]));
     checked += 1;
 
+    const non_single_segment_2byte_size = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x40, // Non-single-segment frame with 2-byte content-size field.
+        0x00, // 1 KiB window descriptor.
+        0x2c, 0x00, // Encoded content size 44 => decoded size 300.
+        0x63, 0x09, 0x00, // Last RLE block, regenerated size 300.
+        'x',
+    };
+    const non_single_header = try vort.zstdInspectNativeFrameHeader(&non_single_segment_2byte_size);
+    try expect(non_single_header.content_size.? == 300);
+    try expect(non_single_header.window_size == 1024);
+    try expect((try vort.zstdDecodedNativeFrameSize(&non_single_segment_2byte_size)) == 300);
+    var non_single_into: [300]u8 = undefined;
+    const non_single_written = try vort.zstdDecodeNativeFrameInto(&non_single_segment_2byte_size, &non_single_into);
+    try expect(non_single_written == non_single_into.len);
+    for (&non_single_into) |byte| try expect(byte == 'x');
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameInto(&non_single_segment_2byte_size, non_single_into[0..299]));
+    checked += 1;
+
     const no_size_multi_block = [_]u8{
         0x28, 0xb5, 0x2f, 0xfd,
         0x00, // No content size; window descriptor follows.
