@@ -243,6 +243,31 @@ pub fn decodeBlockInto(block: []const u8, output: []u8) Error!usize {
     return written;
 }
 
+pub fn decodeBlockChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8) Error![]u8 {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeBlockAlloc(allocator, joined);
+}
+
+pub fn decodeBlockChunksAllocLimited(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error![]u8 {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeBlockAllocLimited(allocator, joined, max_output_len);
+}
+
+pub fn decodeBlockChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeBlockAppend(allocator, out, joined);
+}
+
+pub fn decodeBlockChunksAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeBlockAppendLimited(allocator, out, joined, max_output_len);
+}
+
+pub fn decodeBlockChunksInto(chunks: []const []const u8, compressed_scratch: []u8, output: []u8) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeBlockInto(joined, output);
+}
+
 pub fn decodedBlockSize(block: []const u8) Error!usize {
     return try decodedBlockSizeLimited(block, std.math.maxInt(usize));
 }
@@ -293,6 +318,16 @@ pub fn decodedBlockSizeLimited(block: []const u8, max_output_len: usize) Error!u
     }
     if (written != header.decoded_len) return error.TruncatedFrame;
     return header.decoded_len;
+}
+
+pub fn decodedBlockChunksSize(chunks: []const []const u8, compressed_scratch: []u8) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodedBlockSize(joined);
+}
+
+pub fn decodedBlockChunksSizeLimited(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodedBlockSizeLimited(joined, max_output_len);
 }
 
 pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![]u8 {
@@ -357,6 +392,31 @@ pub fn decodeFrameInto(frame: []const u8, output: []u8) Error!usize {
     return written;
 }
 
+pub fn decodeFrameChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8) Error![]u8 {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeFrameAlloc(allocator, joined);
+}
+
+pub fn decodeFrameChunksAllocLimited(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error![]u8 {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeFrameAllocLimited(allocator, joined, max_output_len);
+}
+
+pub fn decodeFrameChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeFrameAppend(allocator, out, joined);
+}
+
+pub fn decodeFrameChunksAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeFrameAppendLimited(allocator, out, joined, max_output_len);
+}
+
+pub fn decodeFrameChunksInto(chunks: []const []const u8, compressed_scratch: []u8, output: []u8) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeFrameInto(joined, output);
+}
+
 pub fn decodedFrameSize(frame: []const u8) Error!usize {
     return try decodedFrameSizeLimited(frame, std.math.maxInt(usize));
 }
@@ -389,6 +449,16 @@ pub fn decodedFrameSizeLimited(frame: []const u8, max_output_len: usize) Error!u
         }
     }
     return total;
+}
+
+pub fn decodedFrameChunksSize(chunks: []const []const u8, compressed_scratch: []u8) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodedFrameSize(joined);
+}
+
+pub fn decodedFrameChunksSizeLimited(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodedFrameSizeLimited(joined, max_output_len);
 }
 
 const FrameChunkKind = enum {
@@ -453,6 +523,23 @@ const FrameChunkIterator = struct {
         if (!self.saw_identifier) return error.InvalidMagic;
     }
 };
+
+fn joinChunks(chunks: []const []const u8, compressed_scratch: []u8) Error![]const u8 {
+    // Snappy's current decoders operate on contiguous compressed bytes.  The
+    // chunked convenience APIs deliberately require caller-owned scratch so
+    // split-input users do not get a hidden allocation or global buffer.
+    var total: usize = 0;
+    for (chunks) |chunk| {
+        total = std.math.add(usize, total, chunk.len) catch return error.IntegerOverflow;
+    }
+    if (compressed_scratch.len < total) return error.OutputTooSmall;
+    var offset: usize = 0;
+    for (chunks) |chunk| {
+        @memcpy(compressed_scratch[offset..][0..chunk.len], chunk);
+        offset += chunk.len;
+    }
+    return compressed_scratch[0..total];
+}
 
 fn readHeader(block: []const u8) Error!Header {
     var result: usize = 0;
@@ -643,6 +730,39 @@ test "snappy raw block round trips repeated payload with copy tokens" {
     try std.testing.expectError(error.OutputLimitExceeded, decodedBlockSizeLimited(encoded, payload.len - 1));
 }
 
+test "snappy raw block chunked input helpers mirror one-shot decode" {
+    const payload = "chunked snappy raw payload " ** 32;
+    const encoded = try encodeBlockAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const chunks = [_][]const u8{
+        encoded[0..1],
+        encoded[1..@min(encoded.len, 5)],
+        encoded[@min(encoded.len, 5)..],
+    };
+
+    const scratch = try std.testing.allocator.alloc(u8, encoded.len);
+    defer std.testing.allocator.free(scratch);
+    try std.testing.expectEqual(payload.len, try decodedBlockChunksSize(&chunks, scratch));
+    try std.testing.expectError(error.OutputLimitExceeded, decodedBlockChunksSizeLimited(&chunks, scratch, payload.len - 1));
+
+    var output: [payload.len]u8 = undefined;
+    try std.testing.expectEqual(payload.len, try decodeBlockChunksInto(&chunks, scratch, &output));
+    try std.testing.expectEqualSlices(u8, payload, &output);
+
+    const decoded = try decodeBlockChunksAllocLimited(std.testing.allocator, &chunks, scratch, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try decodeBlockChunksAppend(std.testing.allocator, &appended, &chunks, scratch));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, appended.items);
+
+    var too_small: [1]u8 = undefined;
+    try std.testing.expectError(error.OutputTooSmall, decodedBlockChunksSize(&chunks, &too_small));
+}
+
 test "snappy reusable encoder matches one-shot block and frame output" {
     const payload = "snappy reusable encoder payload " ** 256;
     var encoder = Encoder.init(std.testing.allocator);
@@ -723,6 +843,40 @@ test "snappy framed stream round trips and enforces output limits" {
     const decoded = try decodeFrameAllocLimited(std.testing.allocator, encoded, payload.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "snappy framed stream chunked input helpers mirror one-shot decode" {
+    const payload = "chunked snappy frame payload" ** 512;
+    const encoded = try encodeFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const chunks = [_][]const u8{
+        encoded[0..3],
+        encoded[3..@min(encoded.len, 11)],
+        encoded[@min(encoded.len, 11)..@min(encoded.len, 29)],
+        encoded[@min(encoded.len, 29)..],
+    };
+
+    const scratch = try std.testing.allocator.alloc(u8, encoded.len);
+    defer std.testing.allocator.free(scratch);
+    try std.testing.expectEqual(payload.len, try decodedFrameChunksSize(&chunks, scratch));
+    try std.testing.expectError(error.OutputLimitExceeded, decodedFrameChunksSizeLimited(&chunks, scratch, payload.len - 1));
+
+    var output: [payload.len]u8 = undefined;
+    try std.testing.expectEqual(payload.len, try decodeFrameChunksInto(&chunks, scratch, &output));
+    try std.testing.expectEqualSlices(u8, payload, &output);
+
+    const decoded = try decodeFrameChunksAllocLimited(std.testing.allocator, &chunks, scratch, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try decodeFrameChunksAppend(std.testing.allocator, &appended, &chunks, scratch));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, appended.items);
+
+    var too_small: [8]u8 = undefined;
+    try std.testing.expectError(error.OutputTooSmall, decodedFrameChunksSize(&chunks, &too_small));
 }
 
 test "snappy framed stream decodes compressed and skippable chunks" {

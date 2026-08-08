@@ -1563,6 +1563,12 @@ architecture blindly.
   gate requires their encoded sizes to match the one-shot rows, keeping the
   reusable path covered without letting it drift from public one-shot behavior.
 
+- Added split-input Snappy decode helpers for both raw blocks and framed
+  streams. Library callers can now preflight, decode into caller buffers, append
+  to existing output, or allocate with limits from `[]const []const u8` chunks
+  using caller-provided compressed scratch, matching the chunked convenience
+  shape already available for deflate and LZ4 without adding hidden buffering.
+
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
   root and CLI encode paths can now select a legal stored-stream window size,

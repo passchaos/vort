@@ -202,14 +202,20 @@ def main():
         run([str(cli), "decode-snappy-frame-hex", truncated_checked_payload.hex(), "0"], root, expect_ok=False)
         checked += 1
 
-    oversized_payload = b"x" * (64 * 1024 + 1)
-    oversized_frame = snappy_identifier() + checked_chunk(0x00, oversized_payload, literal_block(oversized_payload))
-    run([str(cli), "size-snappy-frame-hex", oversized_frame.hex(), str(len(oversized_payload))], root, expect_ok=False)
-    run([str(cli), "decode-snappy-frame-hex", oversized_frame.hex(), str(len(oversized_payload))], root, expect_ok=False)
-    checked += 1
-
     with tempfile.TemporaryDirectory(prefix="vort-snappy-") as td:
         tmp = pathlib.Path(td)
+        oversized_payload = b"x" * (64 * 1024 + 1)
+        oversized_frame = snappy_identifier() + checked_chunk(0x00, oversized_payload, literal_block(oversized_payload))
+        oversized_path = tmp / "oversized.sz"
+        oversized_out = tmp / "oversized.out"
+        oversized_path.write_bytes(oversized_frame)
+        # This frame is intentionally too large for a single Snappy framed
+        # compressed chunk.  Keep it on disk rather than passing a 128 KiB+
+        # hex argument, which can exceed per-argument limits on some CI hosts.
+        run([str(cli), "size-snappy-frame-file", str(oversized_path), str(len(oversized_payload))], root, expect_ok=False)
+        run([str(cli), "decode-snappy-frame-file-to", str(oversized_path), str(oversized_out), str(len(oversized_payload))], root, expect_ok=False)
+        checked += 1
+
         for i, payload in enumerate(PAYLOADS):
             src = tmp / f"case-{i}.bin"
             block = tmp / f"case-{i}.snappy-block"
