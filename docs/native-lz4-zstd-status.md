@@ -73,9 +73,10 @@ through public inspect/decode APIs, preserving coverage without rerunning the
 bootstrap planner on every dashboard smoke. The dashboard runner enforces a
 per-probe timeout and records timeout status in retained artifacts, so runtime
 regressions produce actionable probe-level failures rather than unbounded CI
-hangs. Dashboard validation also surfaces Zstd frame and dictionary probe case
-counts directly, making loss of public Zstd sequence-table/repeat-offset
-coverage visible instead of relying only on aggregate capability totals.
+hangs. Dashboard validation also surfaces the timed-out probe count plus Zstd
+frame and dictionary probe case counts directly, making timeout regressions and
+loss of public Zstd sequence-table/repeat-offset coverage visible instead of
+relying only on aggregate capability totals.
 `run-native-library-bench` now accepts repeated `--path` arguments plus `--limit` for focused
 project-file payloads, and `run-native-library-bench-path-gate` and `run-native-library-bench-releasefast-path-gate` keep that code path covered with a small fixture in Debug and ReleaseFast builds. `run-native-library-bench-gate` is the lightweight Debug public API benchmark
 CSV gate; `run-native-library-bench-releasefast-gate` runs the same 93-row matrix

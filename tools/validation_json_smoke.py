@@ -783,6 +783,7 @@ def main() -> int:
         assert dashboard["native_codec_probes_healthy"] is True
         assert dashboard["native_codec_probes_probe_count"] == native_codec_probes["probe_count"]
         assert dashboard["native_codec_probes_ok_probe_count"] == native_codec_probes["probe_count"]
+        assert dashboard["native_codec_probes_timed_out_probes"] == 0
         assert dashboard["native_codec_probes_capability_count"] == native_codec_probes["capability_count"]
         assert dashboard["native_codec_probes_ok_capability_count"] == native_codec_probes["capability_count"]
         assert dashboard["native_codec_probes_lib_generated_cases"] == capabilities_by_name["lib-generated"]["cases"]

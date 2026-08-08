@@ -270,6 +270,7 @@ def main() -> int:
                 "native_codec_probes_healthy": True,
                 "native_codec_probes_probe_count": 4,
                 "native_codec_probes_ok_probe_count": 4,
+                "native_codec_probes_timed_out_probes": 0,
                 "native_codec_probes_capability_count": 16,
                 "native_codec_probes_ok_capability_count": 16,
                 "native_codec_probes_lib_generated_cases": 126,

@@ -695,6 +695,9 @@
             "native_codec_probes_probe_count",
             "native_codec_probes_ok_probe_count",
             "native_codec_probes_total_cases"
+          ],
+          "zero": [
+            "native_codec_probes_timed_out_probes"
           ]
         },
         "producer_healthy": {
@@ -874,6 +877,7 @@
         "native_codec_probes_capability_count": "int",
         "native_codec_probes_chunked_cases": "int",
         "native_codec_probes_reusable_chunked_cases": "int",
+        "native_codec_probes_timed_out_probes": "int",
         "native_codec_probes_fse_repeat_cases": "int",
         "native_codec_probes_dictionary_cases": "int",
         "native_codec_probes_incremental_cases": "int",

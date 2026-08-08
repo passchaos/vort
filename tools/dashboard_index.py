@@ -573,6 +573,7 @@ def native_codec_probes_health(artifacts: list[Path]) -> dict:
         if not isinstance(probes, list):
             probes = []
         ok_probes = sum(1 for probe in probes if isinstance(probe, dict) and probe.get("ok") is True)
+        timed_out_probes = sum(1 for probe in probes if isinstance(probe, dict) and probe.get("timed_out") is True)
         probe_cases = {
             str(probe.get("label")): int(probe.get("cases") or 0)
             for probe in probes
@@ -595,6 +596,7 @@ def native_codec_probes_health(artifacts: list[Path]) -> dict:
             "healthy": bool(data.get("ok"))
             and ok_probes == int(data.get("probe_count") or 0)
             and ok_probes == 4
+            and timed_out_probes == 0
             and capability_count > 0
             and ok_capabilities == capability_count
             and total_cases > 0
@@ -607,6 +609,7 @@ def native_codec_probes_health(artifacts: list[Path]) -> dict:
             and probe_cases.get("zstd-native-dictionary-probe", 0) >= 25,
             "probe_count": int(data.get("probe_count") or 0),
             "ok_probe_count": ok_probes,
+            "timed_out_probes": timed_out_probes,
             "capability_count": capability_count,
             "ok_capability_count": ok_capabilities,
             "lib_generated_cases": capability_cases.get("lib-generated", 0),
@@ -626,6 +629,7 @@ def native_codec_probes_health(artifacts: list[Path]) -> dict:
         "healthy": False,
         "probe_count": 0,
         "ok_probe_count": 0,
+        "timed_out_probes": 0,
         "capability_count": 0,
         "ok_capability_count": 0,
         "lib_generated_cases": 0,
@@ -1094,6 +1098,7 @@ def main() -> int:
                 "native_codec_probes_healthy": native_codec_health["healthy"],
                 "native_codec_probes_probe_count": native_codec_health["probe_count"],
                 "native_codec_probes_ok_probe_count": native_codec_health["ok_probe_count"],
+                "native_codec_probes_timed_out_probes": native_codec_health["timed_out_probes"],
                 "native_codec_probes_capability_count": native_codec_health["capability_count"],
                 "native_codec_probes_ok_capability_count": native_codec_health["ok_capability_count"],
                 "native_codec_probes_lib_generated_cases": native_codec_health["lib_generated_cases"],

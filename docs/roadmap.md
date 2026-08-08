@@ -1626,9 +1626,10 @@ architecture blindly.
   smoke run. The native codec probe dashboard now also enforces a per-probe
   timeout and records `timed_out`/`timeout_seconds` in retained JSON/Markdown,
   so future probe-runtime regressions fail with a specific artifact instead of
-  hanging CI indefinitely. Dashboard validation now also exposes and requires
-  Zstd frame/dictionary probe case counts, so broad capability totals cannot
-  hide accidental loss of the public Zstd sequence-table/repeat-offset fixtures.
+  hanging CI indefinitely. Dashboard validation now also exposes a top-level
+  timed-out-probe count and requires Zstd frame/dictionary probe case counts, so
+  broad capability totals cannot hide timeout regressions or accidental loss of
+  the public Zstd sequence-table/repeat-offset fixtures.
 
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
