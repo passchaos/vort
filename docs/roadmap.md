@@ -1653,10 +1653,12 @@ architecture blindly.
   undercovered Zstd native stream summary artifacts as aggregate validation
   health failures with dedicated negative fixtures.
 
-- Extended the public Zstd native frame probe with a valid non-single-segment
-  frame that uses a two-byte content-size field and an RLE block. This keeps the
-  `content_size_flag=1` header path covered through public inspect, size, and
-  decode APIs rather than only through single-segment content-size fixtures.
+- Extended the public Zstd native frame probe with valid non-single-segment
+  frames that exercise the two-, four-, and eight-byte content-size field
+  encodings with RLE blocks. This keeps the non-single-segment
+  `Frame_Content_Size` header paths covered through public inspect, size,
+  summary, and decode APIs rather than only through single-segment content-size
+  fixtures.
 
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but

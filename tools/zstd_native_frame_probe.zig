@@ -3468,6 +3468,38 @@ fn checkMultipleSkippableBetweenDataFrames(allocator: std.mem.Allocator) !void {
     if ((try iterator.next()) != null) return error.ZstdNativeFrameProbeMismatch;
 }
 
+fn checkNonSingleSegmentRleContentSizeFrame(
+    frame: []const u8,
+    comptime expected_len: usize,
+    expected_window_size: u64,
+    fill_byte: u8,
+) !void {
+    const header = try vort.zstdInspectNativeFrameHeader(frame);
+    const content_size = header.content_size orelse return error.ZstdNativeFrameProbeMismatch;
+    try expect(content_size == @as(u64, expected_len));
+    try expect(header.window_size == expected_window_size);
+
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(frame);
+    try expect(first_block.last);
+    try expect(first_block.block_type == .rle);
+    try expect(first_block.payload_len == expected_len);
+
+    const summary = try vort.zstdSummarizeNativeFrameBlocks(frame);
+    try expect(summary.block_count == 1);
+    try expect(summary.rle_block_count == 1);
+    try expect(summary.payload_bytes == expected_len);
+
+    try expect((try vort.zstdDecodedNativeFrameSize(frame)) == expected_len);
+    try expect((try vort.zstdDecodedNativeFrameSizeLimited(frame, expected_len)) == expected_len);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(frame, expected_len - 1));
+
+    var into: [expected_len]u8 = undefined;
+    const written = try vort.zstdDecodeNativeFrameInto(frame, &into);
+    try expect(written == into.len);
+    for (&into) |byte| try expect(byte == fill_byte);
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameInto(frame, into[0 .. into.len - 1]));
+}
+
 fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     var checked: usize = 0;
 
@@ -3496,15 +3528,30 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
         0x63, 0x09, 0x00, // Last RLE block, regenerated size 300.
         'x',
     };
-    const non_single_header = try vort.zstdInspectNativeFrameHeader(&non_single_segment_2byte_size);
-    try expect(non_single_header.content_size.? == 300);
-    try expect(non_single_header.window_size == 1024);
-    try expect((try vort.zstdDecodedNativeFrameSize(&non_single_segment_2byte_size)) == 300);
-    var non_single_into: [300]u8 = undefined;
-    const non_single_written = try vort.zstdDecodeNativeFrameInto(&non_single_segment_2byte_size, &non_single_into);
-    try expect(non_single_written == non_single_into.len);
-    for (&non_single_into) |byte| try expect(byte == 'x');
-    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameInto(&non_single_segment_2byte_size, non_single_into[0..299]));
+    try checkNonSingleSegmentRleContentSizeFrame(&non_single_segment_2byte_size, 300, 1024, 'x');
+    checked += 1;
+
+    const non_single_segment_4byte_size = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x80, // Non-single-segment frame with 4-byte content-size field.
+        0x01, // 1152-byte window, large enough for the 1025-byte RLE block.
+        0x01, 0x04, 0x00, 0x00, // Decoded content size 1025.
+        0x0b, 0x20, 0x00, // Last RLE block, regenerated size 1025.
+        'y',
+    };
+    try checkNonSingleSegmentRleContentSizeFrame(&non_single_segment_4byte_size, 1025, 1152, 'y');
+    checked += 1;
+
+    const non_single_segment_8byte_size = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0xc0, // Non-single-segment frame with 8-byte content-size field.
+        0x00, // 1 KiB window descriptor.
+        0x0d, 0x00, 0x00, 0x00, // Decoded content size 13, encoded as u64.
+        0x00, 0x00, 0x00, 0x00,
+        0x6b, 0x00, 0x00, // Last RLE block, regenerated size 13.
+        'z',
+    };
+    try checkNonSingleSegmentRleContentSizeFrame(&non_single_segment_8byte_size, 13, 1024, 'z');
     checked += 1;
 
     const no_size_multi_block = [_]u8{
