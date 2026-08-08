@@ -173,6 +173,7 @@ def main() -> int:
         assert br_static_dictionary_node_probe["candidate_source_limit"] == 0
         assert br_static_dictionary_node_probe["candidate_upstream_raw_word_count"] == 0
         assert br_static_dictionary_node_probe["all_candidates"] is False
+        assert br_static_dictionary_node_probe["start_index"] == 0
         assert br_static_dictionary_node_probe["probed_count"] >= 1
         assert br_static_dictionary_node_probe["node_decode_successes"] == br_static_dictionary_node_probe["probed_count"]
         assert br_static_dictionary_node_probe["kind_rows"]

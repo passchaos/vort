@@ -2091,6 +2091,11 @@ architecture blindly.
   candidates locally, exposing the next official-dictionary prefix distribution
   without immediately requiring the much longer Node/Vort probe.
 
+- Added `--start-index` support to the Brotli Node probe and two opt-in
+  upstream1024 probe windows (`0-1024` and `1024-2048`). This lets large
+  upstream candidate reports be validated in bounded chunks instead of requiring
+  one very long all-candidate probe.
+
 - Ran the full generated-candidate Node probe and resolved its remaining five
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,

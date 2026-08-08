@@ -122,6 +122,7 @@
         "candidate_upstream_raw_word_count": "int",
         "candidate_raw_word_count": "int",
         "all_candidates": "bool",
+        "start_index": "int",
         "limit": "int",
         "quality": "int",
         "lgwin": "int",

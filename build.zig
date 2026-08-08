@@ -1177,6 +1177,50 @@ pub fn build(b: *std.Build) void {
     const br_static_dictionary_candidate_report_upstream1024_step = b.step("run-br-static-dictionary-candidate-report-upstream1024", "Report Brotli candidates from a local upstream source-limit 1024 slice (pass -- --brotli-common-dir <path>)");
     br_static_dictionary_candidate_report_upstream1024_step.dependOn(&br_static_dictionary_candidate_report_upstream1024.step);
 
+    const br_static_dictionary_node_probe_upstream1024_0_1024 = b.addSystemCommand(&.{
+        "python3",
+        "tools/br_static_dictionary_node_probe.py",
+    });
+    br_static_dictionary_node_probe_upstream1024_0_1024.addArtifactArg(cli_exe);
+    br_static_dictionary_node_probe_upstream1024_0_1024.addArgs(&.{
+        "--candidates",
+        "zig-out/vort-br-static-dictionary-candidates-upstream1024.json",
+        "--json",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream1024-0-1024.json",
+        "--markdown",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream1024-0-1024.md",
+        "--start-index",
+        "0",
+        "--limit",
+        "1024",
+        "--require-vort-ok",
+    });
+    br_static_dictionary_node_probe_upstream1024_0_1024.step.dependOn(br_static_dictionary_candidate_report_upstream1024_step);
+    const br_static_dictionary_node_probe_upstream1024_0_1024_step = b.step("run-br-static-dictionary-node-probe-upstream1024-0-1024", "Probe upstream1024 Brotli candidates [0, 1024) against Node and Vort");
+    br_static_dictionary_node_probe_upstream1024_0_1024_step.dependOn(&br_static_dictionary_node_probe_upstream1024_0_1024.step);
+
+    const br_static_dictionary_node_probe_upstream1024_1024_2048 = b.addSystemCommand(&.{
+        "python3",
+        "tools/br_static_dictionary_node_probe.py",
+    });
+    br_static_dictionary_node_probe_upstream1024_1024_2048.addArtifactArg(cli_exe);
+    br_static_dictionary_node_probe_upstream1024_1024_2048.addArgs(&.{
+        "--candidates",
+        "zig-out/vort-br-static-dictionary-candidates-upstream1024.json",
+        "--json",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream1024-1024-2048.json",
+        "--markdown",
+        "zig-out/vort-br-static-dictionary-node-probe-upstream1024-1024-2048.md",
+        "--start-index",
+        "1024",
+        "--limit",
+        "1024",
+        "--require-vort-ok",
+    });
+    br_static_dictionary_node_probe_upstream1024_1024_2048.step.dependOn(br_static_dictionary_candidate_report_upstream1024_step);
+    const br_static_dictionary_node_probe_upstream1024_1024_2048_step = b.step("run-br-static-dictionary-node-probe-upstream1024-1024-2048", "Probe upstream1024 Brotli candidates [1024, 2048) against Node and Vort");
+    br_static_dictionary_node_probe_upstream1024_1024_2048_step.dependOn(&br_static_dictionary_node_probe_upstream1024_1024_2048.step);
+
     const snappy_block_cli_probe = b.addSystemCommand(&.{ "python3", "tools/snappy_block_cli_probe.py" });
     snappy_block_cli_probe.addArtifactArg(cli_exe);
     const snappy_block_cli_probe_step = b.step("run-snappy-block-cli-probe", "Run black-box smoke for dependency-free Snappy raw blocks and framed streams");

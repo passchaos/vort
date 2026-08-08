@@ -85,10 +85,12 @@ def decode_with_vort(cli: Path, compressed: bytes, expected: bytes, root: Path) 
         return True, ""
 
 
-def probe_candidates(cli: Path, report: dict[str, Any], limit: int, quality: int, lgwin: int) -> list[dict[str, Any]]:
+def probe_candidates(cli: Path, report: dict[str, Any], start_index: int, limit: int, quality: int, lgwin: int) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    candidates = report["candidates"][:limit]
-    for index, candidate in enumerate(candidates):
+    end_index = min(start_index + limit, len(report["candidates"]))
+    candidates = report["candidates"][start_index:end_index]
+    for offset, candidate in enumerate(candidates):
+        index = start_index + offset
         expected = candidate["transformed_word"].encode()
         compressed = node_compress(expected, quality, lgwin)
         decoded_by_node = node_decode(compressed)
@@ -156,7 +158,7 @@ def size_winner_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(winners, key=lambda row: (row["size_delta_bytes"], row["index"]))
 
 
-def build_report(candidate_report: dict[str, Any], rows: list[dict[str, Any]], limit: int, quality: int, lgwin: int) -> dict[str, Any]:
+def build_report(candidate_report: dict[str, Any], rows: list[dict[str, Any]], start_index: int, limit: int, quality: int, lgwin: int) -> dict[str, Any]:
     return {
         "schema": "vort.br_static_dictionary_node_probe",
         "schema_version": 1,
@@ -168,7 +170,8 @@ def build_report(candidate_report: dict[str, Any], rows: list[dict[str, Any]], l
         "candidate_anchor_raw_word_count": candidate_report["anchor_raw_word_count"],
         "candidate_upstream_raw_word_count": candidate_report["upstream_raw_word_count"],
         "candidate_raw_word_count": candidate_report["raw_word_count"],
-        "all_candidates": len(rows) == candidate_report["candidate_count"],
+        "all_candidates": start_index == 0 and len(rows) == candidate_report["candidate_count"],
+        "start_index": start_index,
         "limit": limit,
         "quality": quality,
         "lgwin": lgwin,
@@ -198,6 +201,8 @@ def write_markdown(path: Path, report: dict[str, Any]) -> None:
         f"- Candidate source mode: {report['candidate_source_mode']}",
         f"- Candidate source limit: {report['candidate_source_limit']}",
         f"- Candidate raw words: {report['candidate_raw_word_count']}",
+        f"- Probe start index: {report['start_index']}",
+        f"- Probe limit: {report['limit']}",
         f"- Probed entries: {report['probed_count']}",
         f"- Node decode successes: {report['node_decode_successes']}",
         f"- Vort decode successes: {report['vort_decode_successes']}",
@@ -253,6 +258,7 @@ def main() -> int:
     parser.add_argument("--candidates", type=Path, default=DEFAULT_CANDIDATES)
     parser.add_argument("--json", type=Path)
     parser.add_argument("--markdown", type=Path)
+    parser.add_argument("--start-index", type=int, default=0, help="first candidate index to probe")
     parser.add_argument("--limit", type=int, default=48)
     parser.add_argument("--all-candidates", action="store_true", help="probe every candidate in the candidate report")
     parser.add_argument("--quality", type=int, default=5)
@@ -262,9 +268,14 @@ def main() -> int:
     args = parser.parse_args()
 
     candidate_report = load_candidates(args.candidates)
+    if args.start_index < 0:
+        raise SystemExit("--start-index must be non-negative")
+    if args.limit < 0:
+        raise SystemExit("--limit must be non-negative")
+    start_index = 0 if args.all_candidates else args.start_index
     limit = candidate_report["candidate_count"] if args.all_candidates else args.limit
-    rows = probe_candidates(args.cli.resolve(), candidate_report, limit, args.quality, args.lgwin)
-    report = build_report(candidate_report, rows, limit, args.quality, args.lgwin)
+    rows = probe_candidates(args.cli.resolve(), candidate_report, start_index, limit, args.quality, args.lgwin)
+    report = build_report(candidate_report, rows, start_index, limit, args.quality, args.lgwin)
     if args.json is not None:
         write_json(args.json, report)
     if args.markdown is not None:
