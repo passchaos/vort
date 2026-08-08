@@ -663,6 +663,12 @@ pub fn main(init: std.process.Init) !void {
         else
             try vort.lz4DecodedFrameSize(frame);
         try stdout.print("lz4_native_compressed_bytes={d} decoded_bytes={d}\n", .{ frame.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "summary-lz4-native-file")) {
+        const path = args.next() orelse return error.MissingCorpusPath;
+        const frame = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(frame);
+        const summary = try vort.lz4SummarizeNativeStream(frame);
+        try printLz4NativeSummary(stdout, frame.len, summary);
     } else if (std.mem.eql(u8, command, "decode-lz4-native-file-to")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -1604,6 +1610,8 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Encode file bytes as dependency-free native LZ4 frame
         \\  size-lz4-native-file [path] [max_output]
         \\                              Preflight dependency-free native LZ4 frame decoded size
+        \\  summary-lz4-native-file [path]
+        \\                              Summarize dependency-free native LZ4 frame/stream blocks
         \\  decode-lz4-native-file-to <in> <out> [max_output]
         \\                              Decode dependency-free native LZ4 frame to output
         \\  size-lz4-block-hex [hex] [max_output]
@@ -1821,6 +1829,22 @@ fn printSnappyFrameSummary(stdout: *std.Io.Writer, compressed_len: usize, summar
             summary.skippable_payload_bytes,
             summary.compressed_payload_bytes,
             summary.uncompressed_payload_bytes,
+        },
+    );
+}
+
+fn printLz4NativeSummary(stdout: *std.Io.Writer, compressed_len: usize, summary: vort.Lz4NativeStreamSummary) !void {
+    try stdout.print(
+        "lz4_native_compressed_bytes={d} frames={d} skippable_frames={d} blocks={d} compressed_blocks={d} raw_blocks={d} payload_bytes={d} skippable_payload_bytes={d}\n",
+        .{
+            compressed_len,
+            summary.frame_count,
+            summary.skippable_frame_count,
+            summary.block_count,
+            summary.compressed_block_count,
+            summary.raw_block_count,
+            summary.payload_bytes,
+            summary.skippable_payload_bytes,
         },
     );
 }

@@ -224,6 +224,7 @@ zig build run-lz4-native-dictionary-probe
 zig build run-lz4-native-probe -- --path README.md --limit 4096
 zig build run-lz4-native-probe -- --dir docs --max-files 2 --limit 2048
 zig build run -- encode-lz4-native-file README.md /tmp/vort-readme.lz4
+zig build run -- summary-lz4-native-file /tmp/vort-readme.lz4
 zig build run -- decode-lz4-native-file-to /tmp/vort-readme.lz4 /tmp/vort-readme-lz4.out 1048576
 zig build run -- encode-lz4-block-hex 61626361626361626361
 zig build run -- decode-lz4-block-hex 336162630300 10

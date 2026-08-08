@@ -1595,6 +1595,10 @@ architecture blindly.
   with split-input and file/hex CLI probe coverage for encoded and known-copy
   blocks.
 
+- Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
+  stream summary API, and extended the LZ4 native probe to assert block/stream
+  summary consistency for generated native frames.
+
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
   root and CLI encode paths can now select a legal stored-stream window size,

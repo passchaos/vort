@@ -245,6 +245,15 @@ fn checkFrameRoundTrips(allocator: std.mem.Allocator, case: Case) !void {
         .block_checksum = true,
     });
     defer allocator.free(native_frame);
+    const native_stream_summary = try vort.lz4SummarizeNativeStream(native_frame);
+    if (native_stream_summary.frame_count != 1) return error.Lz4ProbeMismatch;
+    if (native_stream_summary.block_count == 0 and case.payload.len != 0) return error.Lz4ProbeMismatch;
+    if (native_stream_summary.skippable_frame_count != 0) return error.Lz4ProbeMismatch;
+    if (native_stream_summary.payload_bytes == 0 and case.payload.len != 0) return error.Lz4ProbeMismatch;
+    const native_block_summary = try vort.lz4SummarizeNativeFrameBlocks(native_frame);
+    if (native_block_summary.block_count != native_stream_summary.block_count) return error.Lz4ProbeMismatch;
+    if (native_block_summary.compressed_block_count != native_stream_summary.compressed_block_count) return error.Lz4ProbeMismatch;
+    if (native_block_summary.raw_block_count != native_stream_summary.raw_block_count) return error.Lz4ProbeMismatch;
     const lib_decoded = try vort.lz4DecodeFrameAlloc(allocator, native_frame);
     defer allocator.free(lib_decoded);
     try expectPayload(case, lib_decoded);
