@@ -2,6 +2,20 @@
   "required_artifacts": [
     {
       "expected_format": "md",
+      "name": "vort-br-static-dictionary-node-probe-upstream1024-3072-4096.md",
+      "producer_step": "zig build run-br-static-dictionary-node-probe-upstream1024-3072-4096 -- --brotli-common-dir <path>",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream1024-3072-4096 -- --brotli-common-dir <path>"
+    },
+    {
+      "expected_format": "json",
+      "name": "vort-br-static-dictionary-node-probe-upstream1024-3072-4096.json",
+      "producer_step": "zig build run-br-static-dictionary-node-probe-upstream1024-3072-4096 -- --brotli-common-dir <path>",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-br-static-dictionary-node-probe-upstream1024-3072-4096 -- --brotli-common-dir <path>"
+    },
+    {
+      "expected_format": "md",
       "name": "vort-br-static-dictionary-node-probe-upstream1024-2048-3072.md",
       "producer_step": "zig build run-br-static-dictionary-node-probe-upstream1024-2048-3072 -- --brotli-common-dir <path>",
       "required_smoke_gate": false,
