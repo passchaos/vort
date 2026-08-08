@@ -2453,6 +2453,10 @@ def main() -> int:
             node_compress(b" called", quality=5, lgwin=10),
             b" called",
         ),
+        "node-static-dictionary-upstream4096-14271-window": (
+            node_compress(b" estate", quality=5, lgwin=10),
+            b" estate",
+        ),
         "node-static-dictionary-leading-space-black-q5-lgwin10": (
             node_compress(b" black", quality=5, lgwin=10),
             b" black",
