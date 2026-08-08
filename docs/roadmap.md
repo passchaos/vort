@@ -2158,6 +2158,11 @@ architecture blindly.
   dictionary words and a few shorter alternate identities selected by Node; the
   observed frames now extend the static dictionary subset and unit coverage.
 
+- Continued upstream4096 with the 16319-17343 candidate window. The probe
+  exposed another 125 actual identity tuples dominated by CJK 6-byte dictionary
+  words; these observed frames now extend the source-anchored subset and unit
+  coverage.
+
 - Ran the full generated-candidate Node probe and resolved its remaining five
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,

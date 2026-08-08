@@ -2461,6 +2461,10 @@ def main() -> int:
             node_compress(b" Polski", quality=5, lgwin=10),
             b" Polski",
         ),
+        "node-static-dictionary-upstream4096-16319-window": (
+            node_compress(" 招聘".encode("utf-8"), quality=5, lgwin=10),
+            " 招聘".encode("utf-8"),
+        ),
         "node-static-dictionary-leading-space-black-q5-lgwin10": (
             node_compress(b" black", quality=5, lgwin=10),
             b" black",
