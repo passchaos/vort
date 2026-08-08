@@ -2110,6 +2110,11 @@ architecture blindly.
   docs. The window now has the same opt-in artifact path as earlier 1024-row
   probe slices instead of requiring a one-off script invocation.
 
+- Probed and promoted the upstream1024 final `6144-tail` Node/Vort window. The
+  tail contains the remaining 275 generated candidates, and the formal gate now
+  requires both Vort decode success and no compressed-size winners so future
+  upstream1024 candidate drift is visible.
+
 - Ran the full generated-candidate Node probe and resolved its remaining five
   failures by adding the shared ` numbers` identity tuple. The full probe now
   has a concrete source row for Node frames that encode ` numbers`, ` numbers `,
