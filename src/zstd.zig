@@ -302,11 +302,7 @@ pub fn encodedNativeFrameBound(input_len: usize) Error!usize {
 pub fn encodedNativeFrameBoundWithOptions(input_len: usize, options: NativeFrameOptions) Error!usize {
     const block_size_max = try nativeBlockSizeMax(options);
     _ = try nativeMatchSearchBudget(options);
-    const dictionary_id_len = nativeDictionaryIdFieldLen(options.dictionary_id);
-    const frame_header_len: usize = if (options.include_content_size)
-        4 + 1 + dictionary_id_len + 8
-    else
-        4 + 1 + 1 + dictionary_id_len;
+    const frame_header_len = try nativeFrameHeaderLen(try checkedUsizeToU64(input_len), options);
     const block_count = if (input_len == 0)
         1
     else
@@ -328,6 +324,28 @@ pub fn encodedNativeFrameBoundWithDictionarySet(input_len: usize, options: Nativ
     if (dictionary_id == 0) return error.NeedDictionary;
     const dictionary = dictionary_set.find(dictionary_id) orelse return error.NeedDictionary;
     return try encodedNativeFrameBoundWithDictionary(input_len, options, dictionary);
+}
+
+fn nativeFrameHeaderLen(content_len: u64, options: NativeFrameOptions) Error!usize {
+    var len: usize = 4 + 1; // magic number plus frame descriptor.
+    if (!options.include_content_size) {
+        // Non-single-segment frames without Frame_Content_Size must carry the
+        // Window_Descriptor byte. When the size is present the writer always
+        // chooses the shorter single-segment form instead.
+        len = std.math.add(usize, len, 1) catch return error.IntegerOverflow;
+    }
+    len = std.math.add(usize, len, nativeDictionaryIdFieldLen(options.dictionary_id)) catch return error.IntegerOverflow;
+    if (options.include_content_size) {
+        len = std.math.add(usize, len, nativeContentSizeFieldLen(content_len)) catch return error.IntegerOverflow;
+    }
+    return len;
+}
+
+fn nativeContentSizeFieldLen(content_len: u64) usize {
+    if (content_len <= 255) return 1;
+    if (content_len <= 256 + std.math.maxInt(u16)) return 2;
+    if (content_len <= std.math.maxInt(u32)) return 4;
+    return 8;
 }
 
 /// Decode a Zstandard frame through Vort's dependency-free native subset.
@@ -3205,23 +3223,28 @@ fn emitFrameHeader(
     // the Zstandard format. The previous bootstrap writer always spent eight
     // bytes here, which was easy to inspect but disproportionately expensive
     // for the tiny raw/RLE frames this dependency-free path is meant to cover.
+    const field_size = nativeContentSizeFieldLen(content_len);
     if (content_len <= 255) {
+        std.debug.assert(field_size == 1);
         try out.append(allocator, 0x20 | checksum_flag | dictionary_flag); // fcs=1 byte, single segment
         try emitDictionaryId(allocator, out, options.dictionary_id);
         try out.append(allocator, @intCast(content_len));
     } else if (content_len <= 256 + std.math.maxInt(u16)) {
+        std.debug.assert(field_size == 2);
         try out.append(allocator, 0x60 | checksum_flag | dictionary_flag); // fcs=2 bytes (+256), single segment
         try emitDictionaryId(allocator, out, options.dictionary_id);
         var size_bytes: [2]u8 = undefined;
         std.mem.writeInt(u16, &size_bytes, @intCast(content_len - 256), .little);
         try out.appendSlice(allocator, &size_bytes);
     } else if (content_len <= std.math.maxInt(u32)) {
+        std.debug.assert(field_size == 4);
         try out.append(allocator, 0xa0 | checksum_flag | dictionary_flag); // fcs=4 bytes, single segment
         try emitDictionaryId(allocator, out, options.dictionary_id);
         var size_bytes: [4]u8 = undefined;
         std.mem.writeInt(u32, &size_bytes, @intCast(content_len), .little);
         try out.appendSlice(allocator, &size_bytes);
     } else {
+        std.debug.assert(field_size == 8);
         try out.append(allocator, 0xe0 | checksum_flag | dictionary_flag); // fcs=8 bytes, single segment
         try emitDictionaryId(allocator, out, options.dictionary_id);
         var size_bytes: [8]u8 = undefined;
@@ -9123,6 +9146,82 @@ test "zstd pure Zig facade decoder enforces allocation limits" {
     try std.testing.expectError(error.OutputTooSmall, decodeFrameInto(no_size, no_size_into_buffer[0 .. payload.len - 1]));
 }
 
+fn fillNonRlePayload(payload: []u8) void {
+    for (payload, 0..) |*byte, i| {
+        // A full-period byte progression avoids the long equal-byte runs that
+        // the raw/RLE writer would intentionally split into RLE blocks. Tests
+        // that assert exact encoded bounds can then reason about one raw block
+        // per configured Zstd block without depending on match heuristics.
+        byte.* = @intCast((i * 73 + 19) & 0xff);
+    }
+}
+
+test "zstd native encoded bound follows emitted frame header widths" {
+    const cases = [_]struct {
+        len: usize,
+        expected_descriptor: u8,
+        expected_payload_offset: usize,
+    }{
+        .{ .len = 0, .expected_descriptor = 0x20, .expected_payload_offset = 6 },
+        .{ .len = 255, .expected_descriptor = 0x20, .expected_payload_offset = 6 },
+        .{ .len = 300, .expected_descriptor = 0x60, .expected_payload_offset = 7 },
+        .{ .len = 70_000, .expected_descriptor = 0xa0, .expected_payload_offset = 9 },
+    };
+
+    for (cases) |case| {
+        const payload = try std.testing.allocator.alloc(u8, case.len);
+        defer std.testing.allocator.free(payload);
+        fillNonRlePayload(payload);
+
+        const options: NativeFrameOptions = .{
+            .selection = .raw_or_rle,
+            .content_checksum = false,
+        };
+        const encoded = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, payload, options);
+        defer std.testing.allocator.free(encoded);
+        const bound = try encodedNativeFrameBoundWithOptions(payload.len, options);
+        try std.testing.expectEqual(encoded.len, bound);
+        try std.testing.expectEqual(case.expected_descriptor, encoded[4]);
+        try std.testing.expectEqual(case.expected_payload_offset, (try inspectNativeFrameHeader(encoded)).payload_offset);
+
+        const into = try std.testing.allocator.alloc(u8, bound);
+        defer std.testing.allocator.free(into);
+        const into_result = try encodeNativeFrameIntoSlice(std.testing.allocator, payload, options, into);
+        try std.testing.expectEqual(NativeFrameMode.raw_or_rle, into_result.mode);
+        try std.testing.expectEqualSlices(u8, encoded, into[0..into_result.written]);
+        try std.testing.expectError(error.OutputTooSmall, encodeNativeFrameIntoSlice(std.testing.allocator, payload, options, into[0 .. into.len - 1]));
+    }
+
+    const payload = try std.testing.allocator.alloc(u8, 300);
+    defer std.testing.allocator.free(payload);
+    fillNonRlePayload(payload);
+
+    const no_size_options: NativeFrameOptions = .{
+        .selection = .raw_or_rle,
+        .content_checksum = false,
+        .include_content_size = false,
+    };
+    const no_size = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, payload, no_size_options);
+    defer std.testing.allocator.free(no_size);
+    try std.testing.expectEqual(no_size.len, try encodedNativeFrameBoundWithOptions(payload.len, no_size_options));
+    try std.testing.expectEqual(@as(u8, 0x00), no_size[4]);
+    try std.testing.expectEqual(@as(usize, 6), (try inspectNativeFrameHeader(no_size)).payload_offset);
+
+    const dictionary_options: NativeFrameOptions = .{
+        .selection = .raw_or_rle,
+        .content_checksum = false,
+        .dictionary_id = 0x1234,
+    };
+    const with_dictionary_id = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, payload, dictionary_options);
+    defer std.testing.allocator.free(with_dictionary_id);
+    try std.testing.expectEqual(with_dictionary_id.len, try encodedNativeFrameBoundWithOptions(payload.len, dictionary_options));
+    const dictionary_header = try inspectNativeFrameHeader(with_dictionary_id);
+    try std.testing.expectEqual(@as(u32, 0x1234), dictionary_header.dictionary_id);
+    try std.testing.expectEqual(@as(usize, 9), dictionary_header.payload_offset);
+
+    try std.testing.expectEqual(@as(usize, 13), try nativeFrameHeaderLen(@as(u64, std.math.maxInt(u32)) + 1, .{}));
+}
+
 test "zstd raw/RLE frame writer round trips through std decompressor" {
     const payload = "zstd raw block payload zstd raw block payload";
     const encoded = try encodeRawOrRleFrameAlloc(std.testing.allocator, payload);
@@ -9233,6 +9332,7 @@ test "zstd raw/RLE frame writer round trips through std decompressor" {
     try std.testing.expectEqualSlices(u8, payload, into_buffer[0..into_written]);
     try std.testing.expectError(error.OutputTooSmall, decodeRawOrRleFrameInto(encoded, into_buffer[0 .. into_buffer.len - 1]));
     const raw_bound = try encodedNativeFrameBoundWithOptions(payload.len, .{ .selection = .raw_or_rle });
+    try std.testing.expectEqual(encoded.len, raw_bound);
     const raw_into = try std.testing.allocator.alloc(u8, raw_bound);
     defer std.testing.allocator.free(raw_into);
     const raw_into_written = try encodeRawOrRleFrameIntoSlice(std.testing.allocator, payload, .{}, raw_into);
@@ -9271,6 +9371,14 @@ test "zstd raw/RLE frame writer round trips through std decompressor" {
     try std.testing.expectEqual(@as(usize, 1), rle_summary.block_count);
     try std.testing.expectEqual(@as(usize, 1), rle_summary.rle_block_count);
     try std.testing.expectEqual(repeated.len, rle_summary.payload_bytes);
+    const rle_bound = try encodedNativeFrameBound(repeated.len);
+    try std.testing.expect(rle_encoded.len <= rle_bound);
+    const rle_into = try std.testing.allocator.alloc(u8, rle_bound);
+    defer std.testing.allocator.free(rle_into);
+    const rle_into_result = try encodeNativeFrameIntoSlice(std.testing.allocator, repeated, .{}, rle_into);
+    try std.testing.expectEqual(NativeFrameMode.raw_or_rle, rle_into_result.mode);
+    try std.testing.expectEqualSlices(u8, rle_encoded, rle_into[0..rle_into_result.written]);
+    try std.testing.expectError(error.OutputTooSmall, encodeNativeFrameIntoSlice(std.testing.allocator, repeated, .{}, rle_into[0 .. rle_into_result.written - 1]));
     var rle_into_buffer: [repeated.len]u8 = undefined;
     const rle_into_written = try decodeNativeFrameInto(rle_encoded, &rle_into_buffer);
     try std.testing.expectEqual(repeated.len, rle_into_written);
@@ -10522,6 +10630,7 @@ test "zstd literal-only frame writer falls back when compressed literals expand"
     try std.testing.expectEqualSlices(u8, payload, no_checksum_decoded);
 
     const literal_bound = try encodedNativeFrameBoundWithOptions(payload.len, .{ .selection = .literal_only });
+    try std.testing.expectEqual(encoded.len, literal_bound);
     const literal_into = try std.testing.allocator.alloc(u8, literal_bound);
     defer std.testing.allocator.free(literal_into);
     const literal_into_written = try encodeLiteralOnlyFrameIntoSlice(std.testing.allocator, payload, .{}, literal_into);

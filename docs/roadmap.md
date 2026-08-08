@@ -1660,6 +1660,13 @@ architecture blindly.
   summary, and decode APIs rather than only through single-segment content-size
   fixtures.
 
+- Tightened Zstd native encoded-frame bound helpers to mirror the writer's
+  shortest single-segment `Frame_Content_Size` width instead of reserving an
+  eight-byte content-size field for every size-bearing frame. Caller-owned
+  encode buffers now get exact bounds for raw/RLE small and medium frames, while
+  dictionary IDs, no-content-size window descriptors, checksums, and large
+  widths remain covered by the same helper.
+
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
   root and CLI encode paths can now select a legal stored-stream window size,

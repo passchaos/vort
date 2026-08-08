@@ -951,6 +951,10 @@ The native LZ4/Zstd APIs are library-first.  CLI commands and probes call the
 same public symbols shown above; applications should use the allocator/append,
 caller-owned slice, reusable scratch, chunked, and incremental decoder APIs
 directly.
+Zstd native encoded-bound helpers now account for the same shortest
+single-segment `Frame_Content_Size` width used by the writer, so callers sizing
+`encode*IntoSlice` buffers do not reserve the old eight-byte content-size worst
+case for small and medium frames.
 
 | Codec | Option / symbol | Default / range | Use when | Tradeoff |
 | --- | --- | --- | --- | --- |
