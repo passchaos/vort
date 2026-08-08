@@ -759,6 +759,10 @@
     "vort-zstd-compare.md": {
       "expected_format": "md",
       "smoke_gate": "zig build run-zstd-compare-gate"
+    },
+    "vort-zstd-native-stream-summary.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-zstd-native-summary-dashboard"
     }
   },
   "contains": [
@@ -964,7 +968,8 @@
     "vort-zstd-compare-standard.csv": "zig build run-zstd-compare-standard-gate",
     "vort-zstd-compare-standard.md": "zig build run-zstd-compare-standard-gate",
     "vort-zstd-compare.csv": "zig build run-zstd-compare-gate",
-    "vort-zstd-compare.md": "zig build run-zstd-compare-gate"
+    "vort-zstd-compare.md": "zig build run-zstd-compare-gate",
+    "vort-zstd-native-stream-summary.json": "zig build run-zstd-native-summary-dashboard"
   },
   "required_smoke_gates": [
     "vort-br-static-dictionary-candidates-upstream.json",
@@ -1031,7 +1036,8 @@
     "vort-zlib-relaxed-report.md",
     "vort-zstd-compare-block-sweep-gate.json",
     "vort-zstd-compare-gate.json",
-    "vort-zstd-compare-standard-gate.json"
+    "vort-zstd-compare-standard-gate.json",
+    "vort-zstd-native-stream-summary.json"
   ],
   "schema": "vort.dashboard_producers",
   "schema_version": 1

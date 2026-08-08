@@ -1812,6 +1812,12 @@ pub fn build(b: *std.Build) void {
     const zstd_native_summary_cli_probe_step = b.step("run-zstd-native-summary-cli-probe", "Run black-box smoke for native-subset zstd stream summary CLI");
     zstd_native_summary_cli_probe_step.dependOn(&zstd_native_summary_cli_probe.step);
 
+    const zstd_native_summary_dashboard = b.addSystemCommand(&.{ "python3", "tools/zstd_native_summary_dashboard.py" });
+    zstd_native_summary_dashboard.addArtifactArg(cli_exe);
+    zstd_native_summary_dashboard.addArgs(&.{ "--json", "zig-out/vort-zstd-native-stream-summary.json" });
+    const zstd_native_summary_dashboard_step = b.step("run-zstd-native-summary-dashboard", "Write native-subset zstd stream summary JSON artifact");
+    zstd_native_summary_dashboard_step.dependOn(&zstd_native_summary_dashboard.step);
+
     const zstd_native_probe = b.addSystemCommand(&.{ "python3", "tools/zstd_native_probe.py" });
     zstd_native_probe.addArtifactArg(cli_exe);
     if (b.args) |args| zstd_native_probe.addArgs(args);
@@ -2896,6 +2902,7 @@ pub fn build(b: *std.Build) void {
     dashboard_index.step.dependOn(dashboard_producers_negative_smoke_step);
     dashboard_index.step.dependOn(dashboard_producers_required_smoke_step);
     dashboard_index.step.dependOn(dashboard_category_negative_smoke_step);
+    dashboard_index.step.dependOn(zstd_native_summary_dashboard_step);
     dashboard_index.step.dependOn(header_inspect_dashboard_step);
     dashboard_index.step.dependOn(dashboard_strict_dashboard_step);
     dashboard_index.step.dependOn(br_static_dictionary_report_dashboard_step);
@@ -3123,6 +3130,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(snappy_block_cli_probe_step);
     ci_smoke_step.dependOn(zstd_native_cli_diff_step);
     ci_smoke_step.dependOn(zstd_native_summary_cli_probe_step);
+    ci_smoke_step.dependOn(zstd_native_summary_dashboard_step);
     ci_smoke_step.dependOn(zstd_native_probe_step);
     ci_smoke_step.dependOn(native_codec_probes_dashboard_step);
     ci_smoke_step.dependOn(native_codec_probes_dashboard_timeout_smoke_step);

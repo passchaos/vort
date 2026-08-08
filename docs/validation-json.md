@@ -2156,6 +2156,7 @@ Example:
 Produced by:
 
 ```sh
+zig build run-zstd-native-summary-dashboard
 zig build run -- summary-zstd-native-file /tmp/vort-readme.zst json
 ```
 

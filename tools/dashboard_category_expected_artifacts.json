@@ -1175,6 +1175,13 @@
       "require_present": false,
       "require_producer_step": false,
       "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-zstd-native-stream-summary.json",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
     }
   ],
   "schema": "vort.dashboard_category_expected_artifacts",
