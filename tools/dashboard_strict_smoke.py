@@ -623,6 +623,7 @@ def write_python_zlib_diff_report(path: Path, *, ok: bool = True) -> None:
 
 
 def write_native_summary_error_dashboard(path: Path, *, healthy: bool = True) -> None:
+    required_phases = ["magic", "frame_header", "skippable_payload", "frame_body", "frame_checksum", "frame"]
     payload = {
         "schema": "vort.native_summary_error_dashboard",
         "schema_version": 1,
@@ -632,6 +633,27 @@ def write_native_summary_error_dashboard(path: Path, *, healthy: bool = True) ->
         "zstd_case_count": 7 if healthy else 0,
         "error_counts": {"ChecksumMismatch": 1 if healthy else 0, "CorruptFrame": 4 if healthy else 1, "InvalidMagic": 1, "TruncatedFrame": 8 if healthy else 0},
         "phase_counts": {"magic": 2 if healthy else 1, "skippable_payload": 2 if healthy else 0, "frame_header": 3 if healthy else 0, "frame_body": 2 if healthy else 0, "frame_checksum": 2 if healthy else 0, "frame": 2 if healthy else 0},
+        "lz4_error_counts": {"ChecksumMismatch": 1 if healthy else 0, "CorruptFrame": 2 if healthy else 1, "TruncatedFrame": 4 if healthy else 0},
+        "zstd_error_counts": {"CorruptFrame": 2 if healthy else 0, "InvalidMagic": 1 if healthy else 0, "TruncatedFrame": 4 if healthy else 0},
+        "lz4_phase_counts": {"magic": 1 if healthy else 1, "skippable_payload": 1 if healthy else 0, "frame_header": 2 if healthy else 0, "frame_body": 1 if healthy else 0, "frame_checksum": 1 if healthy else 0, "frame": 1 if healthy else 0},
+        "zstd_phase_counts": {"magic": 1 if healthy else 0, "skippable_payload": 1 if healthy else 0, "frame_header": 1 if healthy else 0, "frame_body": 1 if healthy else 0, "frame_checksum": 1 if healthy else 0, "frame": 1 if healthy else 0},
+        "required_codec_phases": {"lz4": required_phases, "zstd": required_phases},
+        "offset_min": 0,
+        "offset_max": 20 if healthy else 0,
+        "lz4_offset_min": 0,
+        "lz4_offset_max": 20 if healthy else 0,
+        "zstd_offset_min": 0,
+        "zstd_offset_max": 14 if healthy else 0,
+        "phase_offset_ranges": {
+            "frame": {"min": 6, "max": 7},
+            "frame_body": {"min": 11, "max": 13},
+            "frame_checksum": {"min": 14, "max": 20},
+            "frame_header": {"min": 5, "max": 11},
+            "magic": {"min": 0, "max": 3},
+            "skippable_payload": {"min": 13, "max": 13},
+        }
+        if healthy
+        else {"magic": {"min": 0, "max": 0}},
         "cases": [
             {
                 "name": "lz4_bad_magic",
@@ -1104,7 +1126,32 @@ def main() -> int:
         assert "60.00/16.00/12.00" in dashboard_markdown
         assert "40.00/8.00/4.00" in dashboard_markdown
         assert "30.00/6.50/3.50" in dashboard_markdown
+        native_summary_markdown_needles = [
+            "## Native summary error codec coverage",
+            "| codec | cases | errors | phases | required phases | missing phases |",
+            "| `lz4` | 7 | `ChecksumMismatch`=1<br>`CorruptFrame`=2<br>`TruncatedFrame`=4 |",
+            "| `zstd` | 7 | `CorruptFrame`=2<br>`InvalidMagic`=1<br>`TruncatedFrame`=4 |",
+            "## Native summary error phase offsets",
+            "| phase | cases | offset range |",
+            "| `frame_checksum` | 2 | `14..20` |",
+        ]
+        native_summary_markdown_matched = all(needle in dashboard_markdown for needle in native_summary_markdown_needles)
+        native_summary_markdown_output = ",".join(
+            f"{index}:{'ok' if needle in dashboard_markdown else 'missing'}"
+            for index, needle in enumerate(native_summary_markdown_needles)
+        )
         checks.append(check_row("all_strict_ok", "all", False, True, ok.returncode, "dashboard_index=", ok.stdout))
+        checks.append(
+            check_row(
+                "native_summary_error_markdown_tables",
+                "dashboard-markdown",
+                False,
+                native_summary_markdown_matched,
+                0,
+                "native summary error Markdown tables",
+                native_summary_markdown_output,
+            )
+        )
 
         missing_native_tier_root = root / "missing-native-tier"
         missing_native_tier_root.mkdir()

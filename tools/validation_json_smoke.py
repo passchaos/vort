@@ -535,6 +535,8 @@ def main() -> int:
         assert covered_validation_reasons == expected_validation_reasons
         assert all(row["matched"] is True for row in dashboard_strict["validation_unhealthy_reason_checks"])
         assert any(row["mode"] == "strict-validation-health" and row["checks"] >= len(expected_validation_reasons) for row in dashboard_strict["mode_counts"])
+        assert any(row["mode"] == "dashboard-markdown" and row["checks"] >= 1 and row["matched"] >= 1 for row in dashboard_strict["mode_counts"])
+        assert any(row["name"] == "native_summary_error_markdown_tables" and row["matched"] is True for row in dashboard_strict["checks"])
         assert all(
             "expected_output" in row
             and "actual_output" in row
@@ -547,6 +549,7 @@ def main() -> int:
         assert any(row["actual_output_truncated"] is True for row in dashboard_strict["checks"])
         dashboard_strict_markdown = dashboard_strict_markdown_path.read_text()
         assert "missing_header_workflow" in dashboard_strict_markdown
+        assert "native_summary_error_markdown_tables" in dashboard_strict_markdown
         assert "validation_missing_dashboard_strict_modes" in dashboard_strict_markdown
         validate_value_against_manifest(dashboard_strict, schemas_def)
 

@@ -9,6 +9,12 @@
       "min_matched": 1
     },
     {
+      "mode": "dashboard-markdown",
+      "min_checks": 1,
+      "min_expected_failures": 0,
+      "min_matched": 1
+    },
+    {
       "mode": "strict-producers",
       "min_checks": 1,
       "min_expected_failures": 1,

@@ -1349,6 +1349,7 @@
       "item_enums": {
         "mode": [
           "all",
+          "dashboard-markdown",
           "strict-producers",
           "strict-smoke-gates",
           "strict-header-inspect",
@@ -1376,6 +1377,7 @@
           "enums": {
             "mode": [
               "all",
+              "dashboard-markdown",
               "strict-producers",
               "strict-smoke-gates",
               "strict-header-inspect",
@@ -1396,6 +1398,7 @@
           "enums": {
             "mode": [
               "all",
+              "dashboard-markdown",
               "strict-producers",
               "strict-smoke-gates",
               "strict-header-inspect",
@@ -1415,6 +1418,7 @@
           "enums": {
             "mode": [
               "all",
+              "dashboard-markdown",
               "strict-producers",
               "strict-smoke-gates",
               "strict-header-inspect",
@@ -1434,6 +1438,7 @@
           "enums": {
             "mode": [
               "all",
+              "dashboard-markdown",
               "strict-producers",
               "strict-smoke-gates",
               "strict-header-inspect",
@@ -1606,6 +1611,7 @@
       "item_enums": {
         "mode": [
           "all",
+          "dashboard-markdown",
           "strict-producers",
           "strict-smoke-gates",
           "strict-header-inspect",
@@ -1615,6 +1621,7 @@
         ],
         "name": [
           "all_strict_ok",
+          "native_summary_error_markdown_tables",
           "missing_producer",
           "missing_smoke_gate",
           "missing_header_inspect",

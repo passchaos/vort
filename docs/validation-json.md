@@ -2978,16 +2978,16 @@ Example:
   "schema_version": 1,
   "expected_modes": [
     {
-      "mode": "strict-header-inspect",
-      "min_checks": 3,
-      "min_expected_failures": 3,
-      "min_matched": 3
+      "mode": "dashboard-markdown",
+      "min_checks": 1,
+      "min_expected_failures": 0,
+      "min_matched": 1
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 27,
-      "min_expected_failures": 27,
-      "min_matched": 27
+      "min_checks": 31,
+      "min_expected_failures": 31,
+      "min_matched": 31
     },
     {
       "mode": "native-tier-range-health",
@@ -3053,8 +3053,8 @@ python3 tools/dashboard_strict_smoke.py --summary zig-out/vort-dashboard-strict-
 
 This schema summarizes positive and negative smoke checks for dashboard strict
 modes: producer coverage, smoke-gate coverage, header-inspection health,
-native-tier range health-field coverage, and aggregate validation-health
-failures. Each check records the expected output
+native-tier range health-field coverage, dashboard Markdown review-surface
+coverage, and aggregate validation-health failures. Each check records the expected output
 marker, actual truncated output, original output length, truncation limit/flag,
 and process return code for CI diagnostics. `mode_counts` groups checks by
 strict mode for a compact dashboard overview, while `expected_modes` defines the
@@ -3064,10 +3064,13 @@ actual/minimum/delta values, and `missing_modes` reports unmet requirements.
 each `vort.dashboard_index.validation_unhealthy_reasons` enum value so new
 aggregate health reasons must be backed by real failing dashboard inputs before
 the smoke artifact can pass. The expected reason/check/fixture matrix lives in
-`tools/dashboard_strict_validation_reasons.json`; the retained `strict-validation-health`
-mode minimums must cover every configured reason, currently 27. The abbreviated
-example below shows a three-reason slice. A synthetic long-output check keeps the
-truncation path covered so `actual_output_truncated=true` is exercised in CI.
+`tools/dashboard_strict_validation_reasons.json`; the retained
+`strict-validation-health` mode minimums must cover every configured reason,
+currently 31. The `dashboard-markdown` mode verifies that important human-facing
+sections, including native summary error codec and phase-offset tables, remain
+present in the generated dashboard index. The abbreviated example below shows a
+one-reason slice. A synthetic long-output check keeps the truncation path
+covered so `actual_output_truncated=true` is exercised in CI.
 
 Example:
 
@@ -3076,11 +3079,11 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 7,
-  "mode_count": 3,
-  "expected_mode_count": 3,
+  "check_count": 4,
+  "mode_count": 4,
+  "expected_mode_count": 4,
   "missing_mode_count": 0,
-  "validation_unhealthy_reason_count": 3,
+  "validation_unhealthy_reason_count": 1,
   "expected_modes": [
     {
       "mode": "all",
@@ -3089,10 +3092,16 @@ Example:
       "min_matched": 1
     },
     {
+      "mode": "dashboard-markdown",
+      "min_checks": 1,
+      "min_expected_failures": 0,
+      "min_matched": 1
+    },
+    {
       "mode": "strict-validation-health",
-      "min_checks": 27,
-      "min_expected_failures": 27,
-      "min_matched": 27
+      "min_checks": 31,
+      "min_expected_failures": 31,
+      "min_matched": 31
     },
     {
       "mode": "native-tier-range-health",
@@ -3116,28 +3125,40 @@ Example:
       "missing_matched": 0
     },
     {
-      "mode": "strict-validation-health",
-      "checks": 3,
-      "min_checks": 27,
-      "missing_checks": 24,
-      "expected_failures": 3,
-      "min_expected_failures": 27,
-      "missing_expected_failures": 24,
-      "matched": 3,
-      "min_matched": 27,
-      "missing_matched": 24
-    },
-    {
-      "mode": "native-tier-range-health",
-      "checks": 3,
-      "min_checks": 3,
+      "mode": "dashboard-markdown",
+      "checks": 1,
+      "min_checks": 1,
       "missing_checks": 0,
       "expected_failures": 0,
       "min_expected_failures": 0,
       "missing_expected_failures": 0,
-      "matched": 3,
-      "min_matched": 3,
+      "matched": 1,
+      "min_matched": 1,
       "missing_matched": 0
+    },
+    {
+      "mode": "strict-validation-health",
+      "checks": 1,
+      "min_checks": 31,
+      "missing_checks": 30,
+      "expected_failures": 1,
+      "min_expected_failures": 31,
+      "missing_expected_failures": 30,
+      "matched": 1,
+      "min_matched": 31,
+      "missing_matched": 30
+    },
+    {
+      "mode": "native-tier-range-health",
+      "checks": 1,
+      "min_checks": 3,
+      "missing_checks": 2,
+      "expected_failures": 0,
+      "min_expected_failures": 0,
+      "missing_expected_failures": 0,
+      "matched": 1,
+      "min_matched": 3,
+      "missing_matched": 2
     }
   ],
   "mode_counts": [
@@ -3148,19 +3169,49 @@ Example:
       "matched": 1
     },
     {
+      "mode": "dashboard-markdown",
+      "checks": 1,
+      "expected_failures": 0,
+      "matched": 1
+    },
+    {
       "mode": "strict-validation-health",
-      "checks": 3,
-      "expected_failures": 3,
-      "matched": 3
+      "checks": 1,
+      "expected_failures": 1,
+      "matched": 1
     },
     {
       "mode": "native-tier-range-health",
-      "checks": 3,
+      "checks": 1,
       "expected_failures": 0,
-      "matched": 3
+      "matched": 1
     }
   ],
   "checks": [
+    {
+      "name": "all_strict_ok",
+      "mode": "all",
+      "expected_failure": false,
+      "expected_output": "dashboard_index=",
+      "actual_output": "dashboard_index=zig-out/vort-dashboard-index.md ...",
+      "actual_output_bytes": 45,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_markdown_tables",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "native summary error Markdown tables",
+      "actual_output": "0:ok,1:ok,2:ok,3:ok,4:ok,5:ok,6:ok",
+      "actual_output_bytes": 34,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
     {
       "name": "validation_missing_lz4_native_summary_artifact",
       "mode": "strict-validation-health",
@@ -3168,30 +3219,6 @@ Example:
       "expected_output": "dashboard_index_validation_unhealthy=missing_lz4_native_summary_artifact",
       "actual_output": "dashboard_index_validation_unhealthy=missing_lz4_native_summary_artifact",
       "actual_output_bytes": 74,
-      "actual_output_limit": 240,
-      "actual_output_truncated": false,
-      "returncode": 1,
-      "matched": true
-    },
-    {
-      "name": "validation_lz4_native_summary_undercovered",
-      "mode": "strict-validation-health",
-      "expected_failure": true,
-      "expected_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered",
-      "actual_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered",
-      "actual_output_bytes": 68,
-      "actual_output_limit": 240,
-      "actual_output_truncated": false,
-      "returncode": 1,
-      "matched": true
-    },
-    {
-      "name": "validation_missing_zstd_native_summary_artifact",
-      "mode": "strict-validation-health",
-      "expected_failure": true,
-      "expected_output": "dashboard_index_validation_unhealthy=missing_zstd_native_summary_artifact",
-      "actual_output": "dashboard_index_validation_unhealthy=missing_zstd_native_summary_artifact",
-      "actual_output_bytes": 75,
       "actual_output_limit": 240,
       "actual_output_truncated": false,
       "returncode": 1,
@@ -3208,58 +3235,12 @@ Example:
       "actual_output_truncated": false,
       "returncode": 0,
       "matched": true
-    },
-    {
-      "name": "failed_native_tier_range_summary",
-      "mode": "native-tier-range-health",
-      "expected_failure": false,
-      "expected_output": "dashboard_index=",
-      "actual_output": "dashboard_index=ok",
-      "actual_output_bytes": 18,
-      "actual_output_limit": 240,
-      "actual_output_truncated": false,
-      "returncode": 0,
-      "matched": true
-    },
-    {
-      "name": "missing_native_tier_range_source",
-      "mode": "native-tier-range-health",
-      "expected_failure": false,
-      "expected_output": "dashboard_index=",
-      "actual_output": "dashboard_index=ok",
-      "actual_output_bytes": 18,
-      "actual_output_limit": 240,
-      "actual_output_truncated": false,
-      "returncode": 0,
-      "matched": true
-    },
-    {
-      "name": "all_strict_ok",
-      "mode": "all",
-      "expected_failure": false,
-      "expected_output": "dashboard_index=",
-      "actual_output": "dashboard_index=zig-out/vort-dashboard-index.md ...",
-      "actual_output_bytes": 45,
-      "actual_output_limit": 240,
-      "actual_output_truncated": false,
-      "returncode": 0,
-      "matched": true
     }
   ],
   "validation_unhealthy_reason_checks": [
     {
       "reason": "missing_lz4_native_summary_artifact",
       "check": "validation_missing_lz4_native_summary_artifact",
-      "matched": true
-    },
-    {
-      "reason": "lz4_native_summary_undercovered",
-      "check": "validation_lz4_native_summary_undercovered",
-      "matched": true
-    },
-    {
-      "reason": "missing_zstd_native_summary_artifact",
-      "check": "validation_missing_zstd_native_summary_artifact",
       "matched": true
     }
   ]
