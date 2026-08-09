@@ -138,6 +138,16 @@
       "fixture": "python_zlib_diff_failed"
     },
     {
+      "reason": "missing_native_codec_probes_artifact",
+      "check": "validation_missing_native_codec_probes_artifact",
+      "fixture": "missing_native_codec_probes_artifact"
+    },
+    {
+      "reason": "native_codec_probes_failed",
+      "check": "validation_native_codec_probes_failed",
+      "fixture": "native_codec_probes_failed"
+    },
+    {
       "reason": "missing_native_summary_error_dashboard_artifact",
       "check": "validation_missing_native_summary_error_dashboard_artifact",
       "fixture": "missing_native_summary_error_dashboard_artifact"

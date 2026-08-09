@@ -2457,6 +2457,15 @@ def main() -> int:
             elif fixture == "python_zlib_diff_failed":
                 write_python_zlib_diff_report(fixture_root / PYTHON_ZLIB_DIFF_ARTIFACT, ok=False)
                 write_producer_map(producer_map)
+            elif fixture == "missing_native_codec_probes_artifact":
+                (fixture_root / NATIVE_CODEC_PROBES_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "native_codec_probes_failed":
+                write_native_codec_probes(fixture_root / NATIVE_CODEC_PROBES_ARTIFACT)
+                payload = json.loads((fixture_root / NATIVE_CODEC_PROBES_ARTIFACT).read_text())
+                payload["ok"] = False
+                (fixture_root / NATIVE_CODEC_PROBES_ARTIFACT).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+                write_producer_map(producer_map)
             elif fixture == "missing_native_summary_error_dashboard_artifact":
                 (fixture_root / NATIVE_SUMMARY_ERROR_ARTIFACT).unlink()
                 write_producer_map(producer_map)

@@ -1718,6 +1718,7 @@ def main() -> int:
         and fuzz_healthy
         and decode_stage_healthy
         and python_zlib_healthy
+        and native_codec_health["healthy"]
         and native_summary_error_healthy
         and native_summary_error_negative_healthy
         and lz4_native_summary_healthy
@@ -1796,6 +1797,10 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_python_zlib_diff_artifact")
     elif not python_zlib_healthy:
         validation_unhealthy_reasons.append("python_zlib_diff_failed")
+    if not native_codec_health["present"]:
+        validation_unhealthy_reasons.append("missing_native_codec_probes_artifact")
+    elif not native_codec_health["healthy"]:
+        validation_unhealthy_reasons.append("native_codec_probes_failed")
     if not native_summary_error_health["present"]:
         validation_unhealthy_reasons.append("missing_native_summary_error_dashboard_artifact")
     elif not native_summary_error_healthy:
