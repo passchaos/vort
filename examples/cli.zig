@@ -652,7 +652,7 @@ pub fn main(init: std.process.Init) !void {
         var diagnostics: vort.ZstdNativeStreamSummaryErrorDiagnostics = .{};
         const summary = vort.zstdSummarizeNativeStreamWithDiagnostics(frame, &diagnostics) catch |err| {
             if (output_format == .json) {
-                try printNativeSummaryErrorJson(stdout, "vort.zstd_native_stream_summary_error", frame.len, err, .{ .phase = diagnostics.phase, .offset = diagnostics.offset });
+                try printNativeSummaryErrorJson(stdout, "vort.zstd_native_stream_summary_error", frame.len, err, .{ .phase = @tagName(diagnostics.phase), .offset = diagnostics.offset });
                 try stdout.flush();
                 std.process.exit(1);
             }
@@ -686,7 +686,7 @@ pub fn main(init: std.process.Init) !void {
         var diagnostics: vort.Lz4NativeStreamSummaryErrorDiagnostics = .{};
         const summary = vort.lz4SummarizeNativeStreamWithDiagnostics(frame, &diagnostics) catch |err| {
             if (output_format == .json) {
-                try printNativeSummaryErrorJson(stdout, "vort.lz4_native_stream_summary_error", frame.len, err, .{ .phase = diagnostics.phase, .offset = diagnostics.offset });
+                try printNativeSummaryErrorJson(stdout, "vort.lz4_native_stream_summary_error", frame.len, err, .{ .phase = @tagName(diagnostics.phase), .offset = diagnostics.offset });
                 try stdout.flush();
                 std.process.exit(1);
             }

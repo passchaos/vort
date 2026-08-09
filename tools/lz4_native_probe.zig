@@ -1318,14 +1318,14 @@ fn checkSkippableOnlyStream(allocator: std.mem.Allocator) !void {
     if (vort.lz4SummarizeNativeStreamWithDiagnostics(skip[0 .. skip.len - 2], &summary_diagnostics)) |_| {
         return error.Lz4ProbeExpectedFrameError;
     } else |err| if (@as(anyerror, err) != error.TruncatedFrame) return err;
-    if (!std.mem.eql(u8, summary_diagnostics.phase, "skippable_payload")) return error.Lz4ProbeMismatch;
+    if (summary_diagnostics.phase != .skippable_payload) return error.Lz4ProbeMismatch;
     if (summary_diagnostics.offset != skip.len - 2) return error.Lz4ProbeSizeMismatch;
 
     var bad_magic_diagnostics: vort.Lz4NativeStreamSummaryErrorDiagnostics = .{};
     if (vort.lz4SummarizeNativeStreamWithDiagnostics("bad-lz4", &bad_magic_diagnostics)) |_| {
         return error.Lz4ProbeExpectedFrameError;
     } else |err| if (@as(anyerror, err) != error.CorruptFrame) return err;
-    if (!std.mem.eql(u8, bad_magic_diagnostics.phase, "magic")) return error.Lz4ProbeMismatch;
+    if (bad_magic_diagnostics.phase != .magic) return error.Lz4ProbeMismatch;
     if (bad_magic_diagnostics.offset != 0) return error.Lz4ProbeSizeMismatch;
 
     var iterator = vort.lz4IterateNativeStream(skip);

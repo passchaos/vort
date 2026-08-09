@@ -3343,8 +3343,19 @@ pub const NativeSkippableFrameHeader = struct {
     next_frame_offset: usize,
 };
 
+pub const NativeStreamSummaryErrorPhase = enum {
+    magic,
+    frame_header,
+    frame_body,
+    frame_checksum,
+    skippable_header,
+    skippable_payload,
+    stream,
+    frame,
+};
+
 pub const NativeStreamSummaryErrorDiagnostics = struct {
-    phase: []const u8 = "",
+    phase: NativeStreamSummaryErrorPhase = .stream,
     offset: usize = 0,
 };
 
@@ -5491,7 +5502,7 @@ pub fn summarizeNativeStreamWithDiagnostics(frames: []const u8, diagnostics: *Na
     var summary: NativeStreamSummary = .{};
     while (offset < frames.len) {
         if (frames.len - offset < 4) {
-            diagnostics.* = .{ .phase = "magic", .offset = frames.len };
+            diagnostics.* = .{ .phase = .magic, .offset = frames.len };
             return error.TruncatedFrame;
         }
         const magic_offset = offset;
@@ -5500,7 +5511,7 @@ pub fn summarizeNativeStreamWithDiagnostics(frames: []const u8, diagnostics: *Na
         if (magic == frame_magic_u32) {
             const frame_start = offset - 4;
             const header = parseRawOrRleFrameHeaderWithOptions(frames, &offset, true) catch |err| {
-                diagnostics.* = .{ .phase = "frame_header", .offset = frames.len };
+                diagnostics.* = .{ .phase = .frame_header, .offset = frames.len };
                 return err;
             };
             if (header.has_checksum) summary.checksum_frame_count += 1;
@@ -5526,7 +5537,7 @@ pub fn summarizeNativeStreamWithDiagnostics(frames: []const u8, diagnostics: *Na
             }
             if (header.has_checksum) {
                 if (frames.len - offset < 4) {
-                    diagnostics.* = .{ .phase = "frame_checksum", .offset = frames.len };
+                    diagnostics.* = .{ .phase = .frame_checksum, .offset = frames.len };
                     return error.TruncatedFrame;
                 }
                 offset += 4;
@@ -5534,30 +5545,30 @@ pub fn summarizeNativeStreamWithDiagnostics(frames: []const u8, diagnostics: *Na
             summary.frame_count += 1;
         } else if (magic >= skippable_magic_min and magic <= skippable_magic_max) {
             if (frames.len - offset < 4) {
-                diagnostics.* = .{ .phase = "skippable_header", .offset = frames.len };
+                diagnostics.* = .{ .phase = .skippable_header, .offset = frames.len };
                 return error.TruncatedFrame;
             }
             const skip_len: usize = @intCast(std.mem.readInt(u32, frames[offset..][0..4], .little));
             offset += 4;
             if (frames.len - offset < skip_len) {
-                diagnostics.* = .{ .phase = "skippable_payload", .offset = frames.len };
+                diagnostics.* = .{ .phase = .skippable_payload, .offset = frames.len };
                 return error.TruncatedFrame;
             }
             summary.skippable_frame_count += 1;
             summary.skippable_payload_bytes = std.math.add(usize, summary.skippable_payload_bytes, skip_len) catch return error.IntegerOverflow;
             offset += skip_len;
         } else {
-            diagnostics.* = .{ .phase = "magic", .offset = magic_offset };
+            diagnostics.* = .{ .phase = .magic, .offset = magic_offset };
             return error.InvalidMagic;
         }
     }
     return summary;
 }
 
-fn nativeSummaryFrameErrorPhase(err: anyerror) []const u8 {
+fn nativeSummaryFrameErrorPhase(err: anyerror) NativeStreamSummaryErrorPhase {
     return switch (err) {
-        error.TruncatedFrame => "frame_body",
-        else => "frame",
+        error.TruncatedFrame => .frame_body,
+        else => .frame,
     };
 }
 

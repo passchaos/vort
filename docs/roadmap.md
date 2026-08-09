@@ -1604,7 +1604,8 @@ architecture blindly.
   malformed/truncated failure paths. The LZ4 library now exposes
   `lz4SummarizeNativeStreamWithDiagnostics` so CLI JSON errors use parser
   phase/offset diagnostics reported by the summary API rather than CLI-only
-  inference. The retained `run-lz4-native-summary-dashboard` step writes
+  inference; the phase value is backed by a public enum. The retained
+  `run-lz4-native-summary-dashboard` step writes
   `zig-out/vort-lz4-native-stream-summary.json` for dashboard indexing.
 
 - Added LZ4 raw-block summary helpers and CLI commands, including prefix-history
@@ -1658,7 +1659,8 @@ architecture blindly.
   and concatenated/skippable streams through the CLI, checks both text and JSON
   summary fields, verifies malformed/truncated failure paths, and uses
   `zstdSummarizeNativeStreamWithDiagnostics` for parser phase/offset context in
-  JSON errors. It runs in `ci-smoke`. The retained
+  JSON errors, with phase values backed by a public enum. It runs in
+  `ci-smoke`. The retained
   `run-zstd-native-summary-dashboard` step now writes
   `zig-out/vort-zstd-native-stream-summary.json` and is indexed by the dashboard
   producer/category manifests. Dashboard strict validation now treats missing or
