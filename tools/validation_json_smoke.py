@@ -98,6 +98,7 @@ def main() -> int:
         decode_stage_path = ROOT / "zig-out" / "vort-deflate-decode-stage-report.json"
         python_zlib_diff_path = ROOT / "zig-out" / "vort-python-zlib-diff-smoke.json"
         native_codec_probes_path = ROOT / "zig-out" / "vort-native-codec-probes.json"
+        lz4_native_summary_path = ROOT / "zig-out" / "vort-lz4-native-stream-summary.json"
         zstd_native_summary_path = ROOT / "zig-out" / "vort-zstd-native-stream-summary.json"
         zlib_relaxed_path = ROOT / "zig-out" / "vort-zlib-relaxed-report.json"
         native_allocation_path = ROOT / "zig-out" / "vort-native-allocation-report.json"
@@ -311,6 +312,20 @@ def main() -> int:
             assert capabilities_by_name[capability]["ok_probe_count"] == capabilities_by_name[capability]["probe_count"]
             assert capabilities_by_name[capability]["cases"] >= 1
         validate_value_against_manifest(native_codec_probes, schemas_def)
+        lz4_native_summary = json.loads(lz4_native_summary_path.read_text())
+        assert lz4_native_summary["schema"] == "vort.lz4_native_stream_summary"
+        assert lz4_native_summary["schema_version"] == 1
+        assert lz4_native_summary["frame_count"] >= 2
+        assert lz4_native_summary["skippable_frame_count"] >= 1
+        assert lz4_native_summary["content_size_frame_count"] >= 2
+        assert lz4_native_summary["checksum_frame_count"] >= 2
+        assert lz4_native_summary["declared_content_bytes"] >= lz4_native_summary["payload_bytes"]
+        assert lz4_native_summary["block_count"] >= 2
+        assert lz4_native_summary["raw_block_count"] >= 1
+        assert lz4_native_summary["compressed_bytes"] > 0
+        assert lz4_native_summary["payload_bytes"] > 0
+        assert lz4_native_summary["skippable_payload_bytes"] > 0
+        validate_value_against_manifest(lz4_native_summary, schemas_def)
         zstd_native_summary = json.loads(zstd_native_summary_path.read_text())
         assert zstd_native_summary["schema"] == "vort.zstd_native_stream_summary"
         assert zstd_native_summary["schema_version"] == 1

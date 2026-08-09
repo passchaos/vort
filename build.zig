@@ -2834,6 +2834,7 @@ pub fn build(b: *std.Build) void {
     validation_json_smoke.step.dependOn(native_allocation_smoke_step);
     validation_json_smoke.step.dependOn(native_allocation_negative_smoke_step);
     validation_json_smoke.step.dependOn(native_codec_probes_dashboard_step);
+    validation_json_smoke.step.dependOn(lz4_native_summary_dashboard_step);
     validation_json_smoke.step.dependOn(zstd_native_summary_dashboard_step);
     validation_json_smoke.step.dependOn(png_scratch_report_dashboard_step);
     validation_json_smoke.step.dependOn(br_static_dictionary_source_audit_step);
@@ -2857,6 +2858,7 @@ pub fn build(b: *std.Build) void {
     validation_json_dashboard.step.dependOn(native_allocation_smoke_step);
     validation_json_dashboard.step.dependOn(native_allocation_negative_smoke_step);
     validation_json_dashboard.step.dependOn(native_codec_probes_dashboard_step);
+    validation_json_dashboard.step.dependOn(lz4_native_summary_dashboard_step);
     validation_json_dashboard.step.dependOn(zstd_native_summary_dashboard_step);
     validation_json_dashboard.step.dependOn(png_scratch_report_dashboard_step);
     validation_json_dashboard.step.dependOn(br_static_dictionary_source_audit_step);
@@ -2915,6 +2917,7 @@ pub fn build(b: *std.Build) void {
     dashboard_index.step.dependOn(dashboard_producers_negative_smoke_step);
     dashboard_index.step.dependOn(dashboard_producers_required_smoke_step);
     dashboard_index.step.dependOn(dashboard_category_negative_smoke_step);
+    dashboard_index.step.dependOn(lz4_native_summary_dashboard_step);
     dashboard_index.step.dependOn(zstd_native_summary_dashboard_step);
     dashboard_index.step.dependOn(header_inspect_dashboard_step);
     dashboard_index.step.dependOn(dashboard_strict_dashboard_step);
