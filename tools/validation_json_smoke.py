@@ -924,6 +924,10 @@ def main() -> int:
                 assert f"`{name}`=" in dashboard_markdown
             for name in native_summary_error_dashboard[f"{codec}_phase_counts"]:
                 assert f"`{name}`=" in dashboard_markdown
+        assert "## Native summary error phase offsets" in dashboard_markdown
+        assert "| phase | cases | offset range |" in dashboard_markdown
+        for phase, offset_range in native_summary_error_dashboard["phase_offset_ranges"].items():
+            assert f"| `{phase}` | {native_summary_error_dashboard['phase_counts'][phase]} | `{offset_range['min']}..{offset_range['max']}` |" in dashboard_markdown
         assert dashboard["lz4_native_summary_present"] is True
         assert dashboard["lz4_native_summary_healthy"] is True
         assert dashboard["lz4_native_summary_frame_count"] == lz4_native_summary["frame_count"]

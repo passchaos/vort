@@ -166,6 +166,16 @@ def format_markdown_list(values: list) -> str:
     return ", ".join(parts) if parts else "`none`"
 
 
+def format_markdown_offset_range(value: object) -> str:
+    if not isinstance(value, dict):
+        return "`missing`"
+    minimum = value.get("min")
+    maximum = value.get("max")
+    if not isinstance(minimum, int) or isinstance(minimum, bool) or not isinstance(maximum, int) or isinstance(maximum, bool):
+        return "`invalid`"
+    return f"`{minimum}..{maximum}`"
+
+
 def sidecar_corrupt_health(artifacts: list[Path]) -> dict:
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
@@ -1228,6 +1238,27 @@ def main() -> int:
         lines.append(
             f"| `{codec}` | {case_count} | {format_markdown_counts(error_counts)} | {format_markdown_counts(phase_counts)} | {format_markdown_list(required_phases)} | {format_markdown_list(missing_phases)} |"
         )
+    lines.append("")
+    phase_offset_ranges = native_summary_error_health["phase_offset_ranges"]
+    if not isinstance(phase_offset_ranges, dict):
+        phase_offset_ranges = {}
+    phase_counts = native_summary_error_health["phase_counts"]
+    if not isinstance(phase_counts, dict):
+        phase_counts = {}
+    lines.extend(
+        [
+            "## Native summary error phase offsets",
+            "",
+            "| phase | cases | offset range |",
+            "| --- | ---: | --- |",
+        ]
+    )
+    for phase in sorted(set(str(phase) for phase in phase_counts) | set(str(phase) for phase in phase_offset_ranges)):
+        count_value = phase_counts.get(phase)
+        count = int(count_value) if isinstance(count_value, int) and not isinstance(count_value, bool) else 0
+        lines.append(f"| `{phase}` | {count} | {format_markdown_offset_range(phase_offset_ranges.get(phase))} |")
+    if not phase_counts and not phase_offset_ranges:
+        lines.append("| `none` | 0 | `missing` |")
     lines.append("")
     if native_tier_health["source_details"]:
         lines.extend(
