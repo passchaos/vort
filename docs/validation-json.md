@@ -2414,16 +2414,17 @@ The generated Markdown index also includes `Validation unhealthy reasons`,
 `Producer and smoke-gate coverage`, `Dashboard strict mode coverage`, `Header
 inspect coverage`, `Sidecar corrupt smoke coverage`, `Huffman length oracle
 coverage`, `Python zlib differential coverage`, `Decode-stage smoke coverage`,
-`Fuzz corpus coverage`, `Native stream summary coverage`, `Native codec probe
-coverage`, `Native codec probe capabilities`, `Native codec probe executables`,
-`Native summary error codec coverage`, and `Native summary error phase offsets`
-tables so aggregate validation health, producer/smoke-gate coverage, dashboard
-strict gate coverage, header-format coverage, corrupt-sidecar rejection coverage,
-Huffman optimality, zlib differential coverage, decode-stage error matching, fuzz
-corpus matching, native stream metadata coverage, codec probe status, LZ4/Zstd
-structured-error counts, phase counts, required phases, missing phases, and phase
-offset ranges are visible during dashboard review without opening the retained
-JSON artifacts.
+`Fuzz corpus coverage`, `Native stream summary coverage`, `Native tier corpus
+discovery`, `Native codec probe coverage`, `Native codec probe capabilities`,
+`Native codec probe executables`, `Native summary error codec coverage`, and
+`Native summary error phase offsets` tables so aggregate validation health,
+producer/smoke-gate coverage, dashboard strict gate coverage, header-format
+coverage, corrupt-sidecar rejection coverage, Huffman optimality, zlib
+differential coverage, decode-stage error matching, fuzz corpus matching, native
+stream metadata coverage, native tier corpus discovery, codec probe status,
+LZ4/Zstd structured-error counts, phase counts, required phases, missing phases,
+and phase offset ranges are visible during dashboard review without opening the
+retained JSON artifacts.
 Current unhealthy reason values are:
 
 - `missing_producer_steps`
@@ -2988,9 +2989,9 @@ Example:
   "expected_modes": [
     {
       "mode": "dashboard-markdown",
-      "min_checks": 13,
+      "min_checks": 14,
       "min_expected_failures": 0,
-      "min_matched": 13
+      "min_matched": 14
     },
     {
       "mode": "strict-validation-health",
@@ -3080,9 +3081,9 @@ sections, including aggregate validation health, producer/smoke-gate
 coverage, dashboard strict gate coverage, header inspect coverage, corrupt-sidecar
 rejection coverage, Huffman optimality, Python zlib differential coverage,
 decode-stage error matching, fuzz corpus matching, native stream metadata
-coverage, native summary error codec/phase-offset tables, native codec probe
-coverage/capability tables, and the native-tier range source table, remain
-present in the generated dashboard index. The abbreviated example below shows a
+coverage, native tier corpus discovery, native summary error codec/phase-offset
+tables, native codec probe coverage/capability tables, and the native-tier range
+source table, remain present in the generated dashboard index. The abbreviated example below shows a
 one-reason slice. A synthetic long-output check keeps the truncation path
 covered so `actual_output_truncated=true` is exercised in CI.
 
@@ -3093,7 +3094,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 16,
+  "check_count": 17,
   "mode_count": 4,
   "expected_mode_count": 4,
   "missing_mode_count": 0,
@@ -3107,9 +3108,9 @@ Example:
     },
     {
       "mode": "dashboard-markdown",
-      "min_checks": 13,
+      "min_checks": 14,
       "min_expected_failures": 0,
-      "min_matched": 13
+      "min_matched": 14
     },
     {
       "mode": "strict-validation-health",
@@ -3140,14 +3141,14 @@ Example:
     },
     {
       "mode": "dashboard-markdown",
-      "checks": 13,
-      "min_checks": 13,
+      "checks": 14,
+      "min_checks": 14,
       "missing_checks": 0,
       "expected_failures": 0,
       "min_expected_failures": 0,
       "missing_expected_failures": 0,
-      "matched": 13,
-      "min_matched": 13,
+      "matched": 14,
+      "min_matched": 14,
       "missing_matched": 0
     },
     {
@@ -3184,9 +3185,9 @@ Example:
     },
     {
       "mode": "dashboard-markdown",
-      "checks": 13,
+      "checks": 14,
       "expected_failures": 0,
-      "matched": 13
+      "matched": 14
     },
     {
       "mode": "strict-validation-health",
@@ -3281,6 +3282,18 @@ Example:
       "expected_output": "native tier range Markdown table",
       "actual_output": "0:ok,1:ok,2:ok,3:ok,4:ok,5:ok,6:ok,7:ok",
       "actual_output_bytes": 39,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "native_tier_discovery_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "native tier discovery Markdown table",
+      "actual_output": "0:ok,1:ok,2:ok,3:ok,4:ok,5:ok,6:ok",
+      "actual_output_bytes": 34,
       "actual_output_limit": 240,
       "actual_output_truncated": false,
       "returncode": 0,

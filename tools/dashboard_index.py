@@ -1478,6 +1478,26 @@ def main() -> int:
     if not phase_counts and not phase_offset_ranges:
         lines.append("| `none` | 0 | `missing` |")
     lines.append("")
+    selected_labels = ", ".join(
+        f"`{case.get('label', '')}`"
+        for case in native_tier_discovery_health["selected_cases"]
+        if isinstance(case, dict)
+    ) or "`none`"
+    source_list = ", ".join(f"`{source}`" for source in native_tier_discovery_health["sources"]) or "`none`"
+    lines.extend(
+        [
+            "## Native tier corpus discovery",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| sources | {native_tier_discovery_health['source_count']}/{native_tier_discovery_health['candidate_count']} | mode `{native_tier_discovery_health['source_mode']}`, full `{native_tier_discovery_health['full']}`, limit `{native_tier_discovery_health['limit']}` |",
+            f"| selected cases | {native_tier_discovery_health['selected_case_count']} | {selected_labels} |",
+            f"| corpus paths | {len(native_tier_discovery_health['sources'])} | {source_list} |",
+            f"| output csv | {1 if native_tier_discovery_health['csv'] else 0} | `{native_tier_discovery_health['csv'] or 'none'}` |",
+            f"| missing reason | {1 if native_tier_discovery_health['missing_reason'] else 0} | `{native_tier_discovery_health['missing_reason'] or 'none'}` |",
+            "",
+        ]
+    )
     if native_tier_health["source_details"]:
         lines.extend(
             [

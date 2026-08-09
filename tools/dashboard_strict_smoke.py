@@ -1331,6 +1331,22 @@ def main() -> int:
         )
         checks.append(
             markdown_check_row(
+                "native_tier_discovery_markdown_table",
+                "native tier discovery Markdown table",
+                dashboard_markdown,
+                [
+                    "## Native tier corpus discovery",
+                    "| category | count | detail |",
+                    "| sources | 1/5 | mode `discovered`, full `False`, limit `3` |",
+                    "| selected cases | 3 | `ooffice-128k`, `nci-128k`, `mozilla-128k` |",
+                    "| corpus paths | 1 | `/tmp/silesia-small.tar` |",
+                    "| output csv | 1 | `zig-out/vort-native-tier-range-corpus-bench.csv` |",
+                    "| missing reason | 0 | `none` |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
                 "native_codec_probe_markdown_tables",
                 "native codec probe Markdown tables",
                 dashboard_markdown,
