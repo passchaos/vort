@@ -542,6 +542,70 @@ def native_tier_corpus_discovery_health(artifacts: list[Path]) -> dict:
     }
 
 
+def native_allocation_health(artifacts: list[Path]) -> dict:
+    report = None
+    smoke = None
+    negative = None
+    for artifact in artifacts:
+        data = read_json(artifact) if artifact.suffix == ".json" else {}
+        schema = data.get("schema")
+        if schema == "vort.native_allocation_report":
+            report = data
+        elif schema == "vort.native_allocation_smoke":
+            smoke = data
+        elif schema == "vort.native_allocation_negative_smoke":
+            negative = data
+
+    def int_field(data: dict | None, field: str) -> int:
+        if not isinstance(data, dict):
+            return 0
+        value = data.get(field)
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    cases = smoke.get("cases") if isinstance(smoke, dict) else []
+    cases = cases if isinstance(cases, list) else []
+    budget_cases = smoke.get("budget_cases") if isinstance(smoke, dict) else []
+    budget_cases = budget_cases if isinstance(budget_cases, list) else []
+    negative_cases = negative.get("cases") if isinstance(negative, dict) else []
+    negative_cases = negative_cases if isinstance(negative_cases, list) else []
+    zero_matched = sum(1 for row in cases if isinstance(row, dict) and row.get("matched") is True)
+    budget_matched = sum(1 for row in budget_cases if isinstance(row, dict) and row.get("matched") is True)
+    negative_matched = sum(1 for row in negative_cases if isinstance(row, dict) and row.get("matched") is True)
+    report_present = isinstance(report, dict)
+    smoke_present = isinstance(smoke, dict)
+    negative_present = isinstance(negative, dict)
+    required_zero_cases = int_field(smoke, "required_zero_allocation_cases")
+    required_budget_cases = int_field(smoke, "required_budget_cases")
+    negative_case_count = int_field(negative, "case_count")
+    healthy = (
+        report_present
+        and smoke_present
+        and negative_present
+        and bool(smoke.get("ok"))
+        and bool(negative.get("ok"))
+        and int_field(report, "case_count") > 0
+        and required_zero_cases > 0
+        and zero_matched == required_zero_cases
+        and required_budget_cases > 0
+        and budget_matched == required_budget_cases
+        and negative_case_count > 0
+        and negative_matched == negative_case_count
+    )
+    return {
+        "present": report_present,
+        "smoke_present": smoke_present,
+        "negative_present": negative_present,
+        "healthy": healthy,
+        "report_case_count": int_field(report, "case_count"),
+        "required_zero_allocation_cases": required_zero_cases,
+        "zero_allocation_matched": zero_matched,
+        "required_budget_cases": required_budget_cases,
+        "budget_matched": budget_matched,
+        "negative_case_count": negative_case_count,
+        "negative_matched": negative_matched,
+    }
+
+
 def python_zlib_diff_health(artifacts: list[Path]) -> dict:
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
@@ -1126,6 +1190,7 @@ def main() -> int:
     huffman_health = huffman_length_health(artifacts)
     fuzz_health = fuzz_corpus_health(artifacts)
     decode_stage_health_summary = decode_stage_health(artifacts)
+    native_allocation = native_allocation_health(artifacts)
     python_zlib_health = python_zlib_diff_health(artifacts)
     native_codec_health = native_codec_probes_health(artifacts)
     native_summary_error_health = native_summary_error_dashboard_health(artifacts)
@@ -1311,6 +1376,19 @@ def main() -> int:
             f"| commands | {header_health['command_count']} | successes/failures {header_health['command_successes']}/{header_health['command_failures']} |",
             f"| workflows | {header_health['workflow_count']} | successes {header_health['workflow_successes']}, required/missing {header_health['required_workflow_count']}/{header_health['missing_workflow_count']} |",
             f"| dictionary cases | {header_health['dictionary_cases']} | optional/FHCRC {header_health['optional_header_cases']}/{header_health['fhcrc_cases']} |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
+            "## Native allocation coverage",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| report cases | {native_allocation['report_case_count']} | present `{native_allocation['present']}` |",
+            f"| zero-allocation cases | {native_allocation['zero_allocation_matched']}/{native_allocation['required_zero_allocation_cases']} | smoke present `{native_allocation['smoke_present']}` |",
+            f"| budget cases | {native_allocation['budget_matched']}/{native_allocation['required_budget_cases']} | healthy `{native_allocation['healthy']}` |",
+            f"| negative smoke cases | {native_allocation['negative_matched']}/{native_allocation['negative_case_count']} | present `{native_allocation['negative_present']}` |",
             "",
         ]
     )
@@ -1641,6 +1719,17 @@ def main() -> int:
                 "decode_stage_error_rows": decode_stage_health_summary["error_rows"],
                 "decode_stage_matched_error_rows": decode_stage_health_summary["matched_error_rows"],
                 "decode_stage_unmatched_error_rows": decode_stage_health_summary["unmatched_error_rows"],
+                "native_allocation_present": native_allocation["present"],
+                "native_allocation_smoke_present": native_allocation["smoke_present"],
+                "native_allocation_negative_present": native_allocation["negative_present"],
+                "native_allocation_healthy": native_allocation["healthy"],
+                "native_allocation_report_case_count": native_allocation["report_case_count"],
+                "native_allocation_required_zero_allocation_cases": native_allocation["required_zero_allocation_cases"],
+                "native_allocation_zero_allocation_matched": native_allocation["zero_allocation_matched"],
+                "native_allocation_required_budget_cases": native_allocation["required_budget_cases"],
+                "native_allocation_budget_matched": native_allocation["budget_matched"],
+                "native_allocation_negative_case_count": native_allocation["negative_case_count"],
+                "native_allocation_negative_matched": native_allocation["negative_matched"],
                 "python_zlib_diff_present": python_zlib_health["present"],
                 "python_zlib_diff_ok": python_zlib_health["ok"],
                 "python_zlib_diff_healthy": python_zlib_healthy,

@@ -826,6 +826,22 @@
           "positive": [
             "native_summary_error_negative_case_count"
           ]
+        },
+        "native_allocation_healthy": {
+          "all": [
+            "native_allocation_present",
+            "native_allocation_smoke_present",
+            "native_allocation_negative_present"
+          ],
+          "positive": [
+            "native_allocation_report_case_count",
+            "native_allocation_required_zero_allocation_cases",
+            "native_allocation_zero_allocation_matched",
+            "native_allocation_required_budget_cases",
+            "native_allocation_budget_matched",
+            "native_allocation_negative_case_count",
+            "native_allocation_negative_matched"
+          ]
         }
       },
       "collections": {
@@ -890,6 +906,17 @@
         "decode_stage_present": "bool",
         "decode_stage_rows": "int",
         "decode_stage_unmatched_error_rows": "int",
+        "native_allocation_present": "bool",
+        "native_allocation_smoke_present": "bool",
+        "native_allocation_negative_present": "bool",
+        "native_allocation_healthy": "bool",
+        "native_allocation_report_case_count": "int",
+        "native_allocation_required_zero_allocation_cases": "int",
+        "native_allocation_zero_allocation_matched": "int",
+        "native_allocation_required_budget_cases": "int",
+        "native_allocation_budget_matched": "int",
+        "native_allocation_negative_case_count": "int",
+        "native_allocation_negative_matched": "int",
         "fuzz_corpus_cases": "int",
         "fuzz_corpus_coverage_error_requirements": "int",
         "fuzz_corpus_coverage_mode_requirements": "int",
@@ -1632,6 +1659,7 @@
           "header_inspect_markdown_table",
           "sidecar_corrupt_markdown_table",
           "huffman_length_markdown_table",
+          "native_allocation_markdown_table",
           "python_zlib_diff_markdown_table",
           "decode_stage_markdown_table",
           "fuzz_corpus_markdown_table",

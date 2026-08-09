@@ -22,6 +22,9 @@ FUZZ_CORPUS_ARTIFACT = "vort-deflate-wrapper-fuzz-corpus.json"
 FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
 DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
 PYTHON_ZLIB_DIFF_ARTIFACT = "vort-python-zlib-diff-smoke.json"
+NATIVE_ALLOCATION_REPORT_ARTIFACT = "vort-native-allocation-report.json"
+NATIVE_ALLOCATION_SMOKE_ARTIFACT = "vort-native-allocation-smoke.json"
+NATIVE_ALLOCATION_NEGATIVE_ARTIFACT = "vort-native-allocation-negative-smoke.json"
 NATIVE_SUMMARY_ERROR_ARTIFACT = "vort-native-summary-error-dashboard.json"
 NATIVE_SUMMARY_ERROR_NEGATIVE_ARTIFACT = "vort-native-summary-error-negative-smoke.json"
 NATIVE_CODEC_PROBES_ARTIFACT = "vort-native-codec-probes.json"
@@ -68,6 +71,8 @@ def write_producer_map(
     include_decode_stage_smoke: bool = True,
     include_python_zlib_exact: bool = True,
     include_python_zlib_smoke: bool = True,
+    include_native_allocation_exact: bool = True,
+    include_native_allocation_smoke: bool = True,
     include_native_summary_error_exact: bool = True,
     include_native_summary_error_smoke: bool = True,
     include_native_summary_error_negative_exact: bool = True,
@@ -123,6 +128,16 @@ def write_producer_map(
             "expected_format": "json",
             "smoke_gate": "zig build run-python-zlib-diff-dashboard",
         }
+    if include_native_allocation_smoke:
+        for artifact, smoke_gate in (
+            (NATIVE_ALLOCATION_REPORT_ARTIFACT, "zig build run-native-allocation-report-dashboard"),
+            (NATIVE_ALLOCATION_SMOKE_ARTIFACT, "zig build run-native-allocation-smoke"),
+            (NATIVE_ALLOCATION_NEGATIVE_ARTIFACT, "zig build run-native-allocation-negative-smoke"),
+        ):
+            artifact_metadata[artifact] = {
+                "expected_format": "json",
+                "smoke_gate": smoke_gate,
+            }
     if include_native_summary_error_smoke:
         artifact_metadata[NATIVE_SUMMARY_ERROR_ARTIFACT] = {
             "expected_format": "json",
@@ -171,6 +186,10 @@ def write_producer_map(
         exact[DECODE_STAGE_ARTIFACT] = "zig build run-deflate-decode-stage-report-dashboard"
     if include_python_zlib_exact:
         exact[PYTHON_ZLIB_DIFF_ARTIFACT] = "zig build run-python-zlib-diff-dashboard"
+    if include_native_allocation_exact:
+        exact[NATIVE_ALLOCATION_REPORT_ARTIFACT] = "zig build run-native-allocation-report-dashboard"
+        exact[NATIVE_ALLOCATION_SMOKE_ARTIFACT] = "zig build run-native-allocation-smoke"
+        exact[NATIVE_ALLOCATION_NEGATIVE_ARTIFACT] = "zig build run-native-allocation-negative-smoke"
     if include_native_summary_error_exact:
         exact[NATIVE_SUMMARY_ERROR_ARTIFACT] = "zig build run-native-summary-error-dashboard"
     if include_native_summary_error_negative_exact:
@@ -631,6 +650,46 @@ def write_python_zlib_diff_report(path: Path, *, ok: bool = True) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def write_native_allocation_artifacts(root: Path) -> None:
+    report = {
+        "schema": "vort.native_allocation_report",
+        "schema_version": 1,
+        "case_count": 3,
+        "cases": [
+            {"case": "zero_decode", "input_bytes": 16, "output_bytes": 16, "allocations": 0, "deallocations": 0, "allocated_bytes": 0, "freed_bytes": 0},
+            {"case": "zero_range", "input_bytes": 32, "output_bytes": 8, "allocations": 0, "deallocations": 0, "allocated_bytes": 0, "freed_bytes": 0},
+            {"case": "budgeted_index", "input_bytes": 64, "output_bytes": 16, "allocations": 1, "deallocations": 1, "allocated_bytes": 80, "freed_bytes": 80},
+        ],
+    }
+    smoke = {
+        "schema": "vort.native_allocation_smoke",
+        "schema_version": 1,
+        "ok": True,
+        "report": str(root / NATIVE_ALLOCATION_REPORT_ARTIFACT),
+        "required_zero_allocation_cases": 2,
+        "required_budget_cases": 1,
+        "cases": [
+            {"case": "zero_decode", "present": True, "matched": True, "allocations": 0, "deallocations": 0, "allocated_bytes": 0, "freed_bytes": 0},
+            {"case": "zero_range", "present": True, "matched": True, "allocations": 0, "deallocations": 0, "allocated_bytes": 0, "freed_bytes": 0},
+        ],
+        "budget_cases": [
+            {"case": "budgeted_index", "present": True, "matched": True, "balanced": True, "allocations": 1, "deallocations": 1, "allocated_bytes": 80, "freed_bytes": 80, "max_allocations": 1, "max_deallocations": 1, "max_allocated_bytes": 80, "max_freed_bytes": 80},
+        ],
+    }
+    negative = {
+        "schema": "vort.native_allocation_negative_smoke",
+        "schema_version": 1,
+        "ok": True,
+        "case_count": 1,
+        "cases": [
+            {"name": "zero_case_allocates", "expected_failure": True, "expected_error": "expected zero allocations", "actual_error": "expected zero allocations", "matched": True},
+        ],
+    }
+    (root / NATIVE_ALLOCATION_REPORT_ARTIFACT).write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    (root / NATIVE_ALLOCATION_SMOKE_ARTIFACT).write_text(json.dumps(smoke, indent=2, sort_keys=True) + "\n")
+    (root / NATIVE_ALLOCATION_NEGATIVE_ARTIFACT).write_text(json.dumps(negative, indent=2, sort_keys=True) + "\n")
+
+
 
 def write_native_summary_error_dashboard(path: Path, *, healthy: bool = True) -> None:
     required_phases = ["magic", "frame_header", "skippable_payload", "frame_body", "frame_checksum", "frame"]
@@ -901,6 +960,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_fuzz_coverage_report(root / FUZZ_COVERAGE_ARTIFACT)
     write_decode_stage_report(root / DECODE_STAGE_ARTIFACT)
     write_python_zlib_diff_report(root / PYTHON_ZLIB_DIFF_ARTIFACT)
+    write_native_allocation_artifacts(root)
     write_native_summary_error_dashboard(root / NATIVE_SUMMARY_ERROR_ARTIFACT)
     write_native_summary_error_negative_smoke(root / NATIVE_SUMMARY_ERROR_NEGATIVE_ARTIFACT)
     write_native_codec_probes(root / NATIVE_CODEC_PROBES_ARTIFACT)
@@ -1264,8 +1324,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 17/17 | 0 | allowed missing 0 |",
-                    "| smoke gates | 17/17 | 0 | required missing 0 |",
+                    "| producer steps | 20/20 | 0 | allowed missing 0 |",
+                    "| smoke gates | 20/20 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -1408,6 +1468,21 @@ def main() -> int:
                     "| package-merge | 1/1 | 0 | 0 |",
                     "| validation | count | detail |",
                     "| malformed rows | 0 | healthy `True` |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
+                "native_allocation_markdown_table",
+                "native allocation Markdown table",
+                dashboard_markdown,
+                [
+                    "## Native allocation coverage",
+                    "| category | count | detail |",
+                    "| report cases | 3 | present `True` |",
+                    "| zero-allocation cases | 2/2 | smoke present `True` |",
+                    "| budget cases | 1/1 | healthy `True` |",
+                    "| negative smoke cases | 1/1 | present `True` |",
                 ],
             )
         )

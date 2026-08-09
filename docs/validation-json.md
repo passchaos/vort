@@ -2413,18 +2413,19 @@ fails whenever the aggregate `validation_healthy` field is false and reports the
 The generated Markdown index also includes `Validation unhealthy reasons`,
 `Producer and smoke-gate coverage`, `Dashboard strict mode coverage`, `Header
 inspect coverage`, `Sidecar corrupt smoke coverage`, `Huffman length oracle
-coverage`, `Python zlib differential coverage`, `Decode-stage smoke coverage`,
-`Fuzz corpus coverage`, `Native stream summary coverage`, `Native tier corpus
-discovery`, `Native codec probe coverage`, `Native codec probe capabilities`,
-`Native codec probe executables`, `Native summary error codec coverage`, and
-`Native summary error phase offsets` tables so aggregate validation health,
-producer/smoke-gate coverage, dashboard strict gate coverage, header-format
-coverage, corrupt-sidecar rejection coverage, Huffman optimality, zlib
-differential coverage, decode-stage error matching, fuzz corpus matching, native
-stream metadata coverage, native tier corpus discovery, codec probe status,
-LZ4/Zstd structured-error counts, phase counts, required phases, missing phases,
-and phase offset ranges are visible during dashboard review without opening the
-retained JSON artifacts.
+coverage`, `Native allocation coverage`, `Python zlib differential coverage`,
+`Decode-stage smoke coverage`, `Fuzz corpus coverage`, `Native stream summary
+coverage`, `Native tier corpus discovery`, `Native codec probe coverage`,
+`Native codec probe capabilities`, `Native codec probe executables`, `Native
+summary error codec coverage`, and `Native summary error phase offsets` tables
+so aggregate validation health, producer/smoke-gate coverage, dashboard strict
+gate coverage, header-format coverage, corrupt-sidecar rejection coverage,
+Huffman optimality, native allocation coverage, zlib differential coverage,
+decode-stage error matching, fuzz corpus matching, native stream metadata
+coverage, native tier corpus discovery, codec probe status, LZ4/Zstd
+structured-error counts, phase counts, required phases, missing phases, and phase
+offset ranges are visible during dashboard review without opening the retained
+JSON artifacts.
 Current unhealthy reason values are:
 
 - `missing_producer_steps`
@@ -2519,6 +2520,15 @@ Top-level fields:
 - `decode_stage_present`, `decode_stage_ok`, `decode_stage_healthy`,
   `decode_stage_rows`, `decode_stage_error_rows`,
   `decode_stage_matched_error_rows`, `decode_stage_unmatched_error_rows`
+- `native_allocation_present`, `native_allocation_smoke_present`,
+  `native_allocation_negative_present`, `native_allocation_healthy`,
+  `native_allocation_report_case_count`,
+  `native_allocation_required_zero_allocation_cases`,
+  `native_allocation_zero_allocation_matched`,
+  `native_allocation_required_budget_cases`,
+  `native_allocation_budget_matched`,
+  `native_allocation_negative_case_count`,
+  `native_allocation_negative_matched`
 - `python_zlib_diff_present`, `python_zlib_diff_ok`,
   `python_zlib_diff_healthy`, `python_zlib_diff_payloads`,
   `python_zlib_diff_large_file_payloads`,
@@ -2713,6 +2723,17 @@ Example:
   "decode_stage_error_rows": 0,
   "decode_stage_matched_error_rows": 0,
   "decode_stage_unmatched_error_rows": 0,
+  "native_allocation_present": false,
+  "native_allocation_smoke_present": false,
+  "native_allocation_negative_present": false,
+  "native_allocation_healthy": false,
+  "native_allocation_report_case_count": 0,
+  "native_allocation_required_zero_allocation_cases": 0,
+  "native_allocation_zero_allocation_matched": 0,
+  "native_allocation_required_budget_cases": 0,
+  "native_allocation_budget_matched": 0,
+  "native_allocation_negative_case_count": 0,
+  "native_allocation_negative_matched": 0,
   "python_zlib_diff_present": false,
   "python_zlib_diff_ok": false,
   "python_zlib_diff_healthy": false,
@@ -2989,9 +3010,9 @@ Example:
   "expected_modes": [
     {
       "mode": "dashboard-markdown",
-      "min_checks": 14,
+      "min_checks": 15,
       "min_expected_failures": 0,
-      "min_matched": 14
+      "min_matched": 15
     },
     {
       "mode": "strict-validation-health",
@@ -3079,11 +3100,12 @@ the smoke artifact can pass. The expected reason/check/fixture matrix lives in
 currently 31. The `dashboard-markdown` mode verifies that important human-facing
 sections, including aggregate validation health, producer/smoke-gate
 coverage, dashboard strict gate coverage, header inspect coverage, corrupt-sidecar
-rejection coverage, Huffman optimality, Python zlib differential coverage,
-decode-stage error matching, fuzz corpus matching, native stream metadata
-coverage, native tier corpus discovery, native summary error codec/phase-offset
-tables, native codec probe coverage/capability tables, and the native-tier range
-source table, remain present in the generated dashboard index. The abbreviated example below shows a
+rejection coverage, Huffman optimality, native allocation coverage, Python zlib
+differential coverage, decode-stage error matching, fuzz corpus matching, native
+stream metadata coverage, native tier corpus discovery, native summary error
+codec/phase-offset tables, native codec probe coverage/capability tables, and
+the native-tier range source table, remain present in the generated dashboard
+index. The abbreviated example below shows a
 one-reason slice. A synthetic long-output check keeps the truncation path
 covered so `actual_output_truncated=true` is exercised in CI.
 
@@ -3094,7 +3116,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 17,
+  "check_count": 18,
   "mode_count": 4,
   "expected_mode_count": 4,
   "missing_mode_count": 0,
@@ -3108,9 +3130,9 @@ Example:
     },
     {
       "mode": "dashboard-markdown",
-      "min_checks": 14,
+      "min_checks": 15,
       "min_expected_failures": 0,
-      "min_matched": 14
+      "min_matched": 15
     },
     {
       "mode": "strict-validation-health",
@@ -3141,14 +3163,14 @@ Example:
     },
     {
       "mode": "dashboard-markdown",
-      "checks": 14,
-      "min_checks": 14,
+      "checks": 15,
+      "min_checks": 15,
       "missing_checks": 0,
       "expected_failures": 0,
       "min_expected_failures": 0,
       "missing_expected_failures": 0,
-      "matched": 14,
-      "min_matched": 14,
+      "matched": 15,
+      "min_matched": 15,
       "missing_matched": 0
     },
     {
@@ -3185,9 +3207,9 @@ Example:
     },
     {
       "mode": "dashboard-markdown",
-      "checks": 14,
+      "checks": 15,
       "expected_failures": 0,
-      "matched": 14
+      "matched": 15
     },
     {
       "mode": "strict-validation-health",
@@ -3340,6 +3362,18 @@ Example:
       "mode": "dashboard-markdown",
       "expected_failure": false,
       "expected_output": "huffman length Markdown table",
+      "actual_output": "0:ok,1:ok,2:ok,3:ok,4:ok,5:ok",
+      "actual_output_bytes": 29,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "native_allocation_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "native allocation Markdown table",
       "actual_output": "0:ok,1:ok,2:ok,3:ok,4:ok,5:ok",
       "actual_output_bytes": 29,
       "actual_output_limit": 240,

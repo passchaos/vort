@@ -535,7 +535,7 @@ def main() -> int:
         assert covered_validation_reasons == expected_validation_reasons
         assert all(row["matched"] is True for row in dashboard_strict["validation_unhealthy_reason_checks"])
         assert any(row["mode"] == "strict-validation-health" and row["checks"] >= len(expected_validation_reasons) for row in dashboard_strict["mode_counts"])
-        assert any(row["mode"] == "dashboard-markdown" and row["checks"] >= 14 and row["matched"] >= 14 for row in dashboard_strict["mode_counts"])
+        assert any(row["mode"] == "dashboard-markdown" and row["checks"] >= 15 and row["matched"] >= 15 for row in dashboard_strict["mode_counts"])
         assert any(row["name"] == "validation_unhealthy_reasons_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "producer_smoke_gate_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "dashboard_strict_mode_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
@@ -547,6 +547,7 @@ def main() -> int:
         assert any(row["name"] == "header_inspect_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "sidecar_corrupt_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "huffman_length_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
+        assert any(row["name"] == "native_allocation_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "python_zlib_diff_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "decode_stage_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "fuzz_corpus_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
@@ -573,6 +574,7 @@ def main() -> int:
         assert "header_inspect_markdown_table" in dashboard_strict_markdown
         assert "sidecar_corrupt_markdown_table" in dashboard_strict_markdown
         assert "huffman_length_markdown_table" in dashboard_strict_markdown
+        assert "native_allocation_markdown_table" in dashboard_strict_markdown
         assert "python_zlib_diff_markdown_table" in dashboard_strict_markdown
         assert "decode_stage_markdown_table" in dashboard_strict_markdown
         assert "fuzz_corpus_markdown_table" in dashboard_strict_markdown
@@ -776,6 +778,9 @@ def main() -> int:
         shutil.copyfile(fuzz_report_path, root / "vort-deflate-wrapper-fuzz-corpus.json")
         shutil.copyfile(fuzz_coverage_smoke_path, root / "vort-fuzz-corpus-coverage-smoke.json")
         shutil.copyfile(decode_stage_path, root / "vort-deflate-decode-stage-report.json")
+        shutil.copyfile(native_allocation_path, root / "vort-native-allocation-report.json")
+        shutil.copyfile(native_allocation_smoke_path, root / "vort-native-allocation-smoke.json")
+        shutil.copyfile(native_allocation_negative_smoke_path, root / "vort-native-allocation-negative-smoke.json")
         shutil.copyfile(python_zlib_diff_path, root / "vort-python-zlib-diff-smoke.json")
         shutil.copyfile(native_codec_probes_path, root / "vort-native-codec-probes.json")
         shutil.copyfile(native_summary_error_dashboard_path, root / "vort-native-summary-error-dashboard.json")
@@ -874,6 +879,17 @@ def main() -> int:
         assert dashboard["decode_stage_error_rows"] == decode_stage["error_rows"]
         assert dashboard["decode_stage_matched_error_rows"] == decode_stage["matched_error_rows"]
         assert dashboard["decode_stage_unmatched_error_rows"] == decode_stage["unmatched_error_rows"]
+        assert dashboard["native_allocation_present"] is True
+        assert dashboard["native_allocation_smoke_present"] is True
+        assert dashboard["native_allocation_negative_present"] is True
+        assert dashboard["native_allocation_healthy"] is True
+        assert dashboard["native_allocation_report_case_count"] == native_allocation["case_count"]
+        assert dashboard["native_allocation_required_zero_allocation_cases"] == native_allocation_smoke["required_zero_allocation_cases"]
+        assert dashboard["native_allocation_zero_allocation_matched"] == len(native_allocation_smoke["cases"])
+        assert dashboard["native_allocation_required_budget_cases"] == native_allocation_smoke["required_budget_cases"]
+        assert dashboard["native_allocation_budget_matched"] == len(native_allocation_smoke["budget_cases"])
+        assert dashboard["native_allocation_negative_case_count"] == native_allocation_negative_smoke["case_count"]
+        assert dashboard["native_allocation_negative_matched"] == native_allocation_negative_smoke["case_count"]
         assert dashboard["python_zlib_diff_present"] is True
         assert dashboard["python_zlib_diff_ok"] is True
         assert dashboard["python_zlib_diff_healthy"] is True
@@ -1001,6 +1017,7 @@ def main() -> int:
             and dashboard["huffman_length_healthy"]
             and dashboard["fuzz_corpus_healthy"]
             and dashboard["decode_stage_healthy"]
+            and dashboard["native_allocation_healthy"]
             and dashboard["python_zlib_diff_healthy"]
             and dashboard["native_summary_error_healthy"]
             and dashboard["native_summary_error_negative_healthy"]
