@@ -2412,7 +2412,7 @@ fails whenever the aggregate `validation_healthy` field is false and reports the
 `validation_unhealthy_reasons` list with specific missing/failed artifact or coverage reasons.
 The generated Markdown index also includes `Dashboard artifact inventory`, `Validation unhealthy reasons`,
 `Producer and smoke-gate coverage`, `Dashboard strict mode coverage`, `Dashboard
-configuration coverage`, `Header
+configuration coverage`, `Validation JSON schema coverage`, `Header
 inspect coverage`, `Sidecar corrupt smoke coverage`, `Huffman length oracle
 coverage`, `Native allocation coverage`, `Python zlib differential coverage`,
 `Decode-stage smoke coverage`, `Fuzz corpus coverage`, `Native stream summary
@@ -2420,7 +2420,7 @@ coverage`, `Native tier corpus discovery`, `Native codec probe coverage`,
 `Native codec probe capabilities`, `Native codec probe executables`, `Native
 summary error codec coverage`, and `Native summary error phase offsets` tables
 so artifact inventory, aggregate validation health, producer/smoke-gate coverage, dashboard strict
-gate coverage, dashboard configuration guardrails, header-format coverage, corrupt-sidecar rejection coverage,
+gate coverage, dashboard configuration guardrails, validation schema smoke coverage, header-format coverage, corrupt-sidecar rejection coverage,
 Huffman optimality, zstd comparison gate coverage, native fuzz corpus coverage, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, zlib differential coverage,
 decode-stage error matching, fuzz corpus matching, native stream metadata
 coverage, native tier corpus discovery, codec probe status, LZ4/Zstd
@@ -2520,6 +2520,15 @@ Top-level fields:
   `dashboard_producers_negative_case_count`,
   `dashboard_producers_negative_matched`,
   `dashboard_producers_negative_unmatched`
+- `validation_json_present`, `validation_json_ok`, `validation_json_healthy`,
+  `validation_json_checked_schema_count`, `validation_json_cli_success_ok`,
+  `validation_json_cli_failure_ok`, `validation_json_cli_failure_hint`,
+  `validation_json_report_rows`, `validation_json_corrupt_rows`,
+  `validation_json_docs_negative_present`,
+  `validation_json_docs_negative_ok`,
+  `validation_json_docs_negative_case_count`,
+  `validation_json_docs_negative_matched`,
+  `validation_json_docs_negative_unmatched`
 - `sidecar_corrupt_present`, `sidecar_corrupt_healthy`,
   `sidecar_corrupt_rows`, `sidecar_corrupt_metadata_ok_rows`,
   `sidecar_corrupt_full_rejected_rows`,
@@ -2782,6 +2791,20 @@ Example:
   "dashboard_producers_negative_case_count": 0,
   "dashboard_producers_negative_matched": 0,
   "dashboard_producers_negative_unmatched": 0,
+  "validation_json_present": false,
+  "validation_json_ok": false,
+  "validation_json_healthy": false,
+  "validation_json_checked_schema_count": 0,
+  "validation_json_cli_success_ok": false,
+  "validation_json_cli_failure_ok": false,
+  "validation_json_cli_failure_hint": "",
+  "validation_json_report_rows": 0,
+  "validation_json_corrupt_rows": 0,
+  "validation_json_docs_negative_present": false,
+  "validation_json_docs_negative_ok": false,
+  "validation_json_docs_negative_case_count": 0,
+  "validation_json_docs_negative_matched": 0,
+  "validation_json_docs_negative_unmatched": 0,
   "sidecar_corrupt_present": false,
   "sidecar_corrupt_healthy": false,
   "sidecar_corrupt_rows": 0,
@@ -3267,7 +3290,7 @@ the smoke artifact can pass. The expected reason/check/fixture matrix lives in
 `strict-validation-health` mode minimums must cover every configured reason,
 currently 31. The `dashboard-markdown` mode verifies that important human-facing
 sections, including artifact inventory, aggregate validation health, producer/smoke-gate
-coverage, dashboard strict gate coverage, dashboard configuration coverage, header inspect coverage, corrupt-sidecar
+coverage, dashboard strict gate coverage, dashboard configuration coverage, validation JSON schema coverage, header inspect coverage, corrupt-sidecar
 rejection coverage, Huffman optimality, zstd comparison gate coverage, native fuzz corpus coverage, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, Python zlib
 differential coverage, decode-stage error matching, fuzz corpus matching, native
 stream metadata coverage, native tier corpus discovery, native summary error
@@ -3284,7 +3307,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 25,
+  "check_count": 26,
   "mode_count": 4,
   "expected_mode_count": 4,
   "missing_mode_count": 0,
@@ -3331,13 +3354,13 @@ Example:
     },
     {
       "mode": "dashboard-markdown",
-      "checks": 22,
+      "checks": 23,
       "min_checks": 20,
       "missing_checks": 0,
       "expected_failures": 0,
       "min_expected_failures": 0,
       "missing_expected_failures": 0,
-      "matched": 22,
+      "matched": 23,
       "min_matched": 20,
       "missing_matched": 0
     },
@@ -3375,9 +3398,9 @@ Example:
     },
     {
       "mode": "dashboard-markdown",
-      "checks": 22,
+      "checks": 23,
       "expected_failures": 0,
-      "matched": 22
+      "matched": 23
     },
     {
       "mode": "strict-validation-health",
@@ -3458,6 +3481,18 @@ Example:
       "mode": "dashboard-markdown",
       "expected_failure": false,
       "expected_output": "dashboard configuration markdown table",
+      "actual_output": "0:ok",
+      "actual_output_bytes": 4,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "validation_json_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "validation json schema markdown table",
       "actual_output": "0:ok",
       "actual_output_bytes": 4,
       "actual_output_limit": 240,

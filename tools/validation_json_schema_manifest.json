@@ -618,6 +618,25 @@
             "dashboard_producers_negative_unmatched"
           ]
         },
+        "validation_json_healthy": {
+          "all": [
+            "validation_json_present",
+            "validation_json_ok",
+            "validation_json_cli_success_ok",
+            "validation_json_docs_negative_present",
+            "validation_json_docs_negative_ok"
+          ],
+          "positive": [
+            "validation_json_checked_schema_count",
+            "validation_json_report_rows",
+            "validation_json_corrupt_rows",
+            "validation_json_docs_negative_case_count",
+            "validation_json_docs_negative_matched"
+          ],
+          "zero": [
+            "validation_json_docs_negative_unmatched"
+          ]
+        },
         "decode_stage_healthy": {
           "all": [
             "decode_stage_present",
@@ -1048,6 +1067,20 @@
         "dashboard_producers_negative_case_count": "int",
         "dashboard_producers_negative_matched": "int",
         "dashboard_producers_negative_unmatched": "int",
+        "validation_json_present": "bool",
+        "validation_json_ok": "bool",
+        "validation_json_healthy": "bool",
+        "validation_json_checked_schema_count": "int",
+        "validation_json_cli_success_ok": "bool",
+        "validation_json_cli_failure_ok": "bool",
+        "validation_json_cli_failure_hint": "str",
+        "validation_json_report_rows": "int",
+        "validation_json_corrupt_rows": "int",
+        "validation_json_docs_negative_present": "bool",
+        "validation_json_docs_negative_ok": "bool",
+        "validation_json_docs_negative_case_count": "int",
+        "validation_json_docs_negative_matched": "int",
+        "validation_json_docs_negative_unmatched": "int",
         "decode_stage_error_rows": "int",
         "decode_stage_healthy": "bool",
         "decode_stage_matched_error_rows": "int",
@@ -1874,6 +1907,7 @@
           "producer_smoke_gate_markdown_table",
           "dashboard_strict_mode_markdown_table",
           "dashboard_configuration_markdown_table",
+          "validation_json_markdown_table",
           "native_summary_success_markdown_table",
           "native_summary_error_markdown_tables",
           "native_tier_range_markdown_table",

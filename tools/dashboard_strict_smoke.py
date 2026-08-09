@@ -21,6 +21,8 @@ DASHBOARD_CONFIG_INDEX_NEGATIVE_ARTIFACT = "vort-dashboard-config-index-negative
 DASHBOARD_CATEGORY_NEGATIVE_ARTIFACT = "vort-dashboard-category-negative-smoke.json"
 DASHBOARD_PRODUCERS_REQUIRED_ARTIFACT = "vort-dashboard-producers-required-smoke.json"
 DASHBOARD_PRODUCERS_NEGATIVE_ARTIFACT = "vort-dashboard-producers-negative-smoke.json"
+VALIDATION_JSON_SMOKE_ARTIFACT = "vort-validation-json-smoke.json"
+VALIDATION_JSON_DOCS_NEGATIVE_ARTIFACT = "vort-validation-json-docs-negative-smoke.json"
 SIDECAR_CORRUPT_ARTIFACT = "vort-sidecar-corrupt-smoke.json"
 HUFFMAN_LENGTH_ARTIFACT = "vort-huffman-length-report.csv"
 FUZZ_CORPUS_ARTIFACT = "vort-deflate-wrapper-fuzz-corpus.json"
@@ -78,6 +80,8 @@ def write_producer_map(
     include_strict_smoke: bool = True,
     include_dashboard_configuration_exact: bool = True,
     include_dashboard_configuration_smoke: bool = True,
+    include_validation_json_exact: bool = True,
+    include_validation_json_smoke: bool = True,
     include_sidecar_corrupt_exact: bool = True,
     include_sidecar_corrupt_smoke: bool = True,
     include_huffman_exact: bool = True,
@@ -136,6 +140,15 @@ def write_producer_map(
             (DASHBOARD_PRODUCERS_NEGATIVE_ARTIFACT, "zig build run-dashboard-producers-negative-smoke"),
         ):
             artifact_metadata[artifact] = {"expected_format": "json", "smoke_gate": smoke_gate}
+    if include_validation_json_smoke:
+        artifact_metadata[VALIDATION_JSON_SMOKE_ARTIFACT] = {
+            "expected_format": "json",
+            "smoke_gate": "zig build run-validation-json-dashboard",
+        }
+        artifact_metadata[VALIDATION_JSON_DOCS_NEGATIVE_ARTIFACT] = {
+            "expected_format": "json",
+            "smoke_gate": "zig build run-validation-json-docs-negative-smoke",
+        }
     if include_sidecar_corrupt_smoke:
         artifact_metadata[SIDECAR_CORRUPT_ARTIFACT] = {
             "expected_format": "json",
@@ -250,6 +263,9 @@ def write_producer_map(
         exact[DASHBOARD_CATEGORY_NEGATIVE_ARTIFACT] = "zig build run-dashboard-category-negative-smoke"
         exact[DASHBOARD_PRODUCERS_REQUIRED_ARTIFACT] = "zig build run-dashboard-producers-required-smoke"
         exact[DASHBOARD_PRODUCERS_NEGATIVE_ARTIFACT] = "zig build run-dashboard-producers-negative-smoke"
+    if include_validation_json_exact:
+        exact[VALIDATION_JSON_SMOKE_ARTIFACT] = "zig build run-validation-json-dashboard"
+        exact[VALIDATION_JSON_DOCS_NEGATIVE_ARTIFACT] = "zig build run-validation-json-docs-negative-smoke"
     if include_sidecar_corrupt_exact:
         exact[SIDECAR_CORRUPT_ARTIFACT] = "zig build run-sidecar-corrupt-dashboard"
     if include_huffman_exact:
@@ -599,6 +615,50 @@ def write_dashboard_configuration_artifacts(root: Path) -> None:
         (DASHBOARD_PRODUCERS_NEGATIVE_ARTIFACT, producers_negative),
     ):
         (root / name).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def write_validation_json_artifacts(root: Path) -> None:
+    validation_smoke = {
+        "schema": "vort.validation_json_smoke",
+        "schema_version": 1,
+        "ok": True,
+        "checked_schemas": [
+            "vort.validation_report",
+            "vort.dashboard_index",
+            "vort.dashboard_strict_smoke",
+            "vort.header_inspect_smoke",
+            "vort.gzip_header_info",
+        ],
+        "cli_success_ok": True,
+        "cli_failure_ok": False,
+        "cli_failure_hint": "payload_corrupt",
+        "report_rows": 1,
+        "corrupt_rows": 2,
+    }
+    docs_negative = {
+        "schema": "vort.validation_json_docs_negative_smoke",
+        "schema_version": 1,
+        "ok": True,
+        "case_count": 2,
+        "cases": [
+            {
+                "name": "missing_reason_config",
+                "expected_failure": True,
+                "expected_error": "differs from dashboard index enum",
+                "actual_error": "differs from dashboard index enum",
+                "matched": True,
+            },
+            {
+                "name": "boolean_formula_positive_field",
+                "expected_failure": True,
+                "expected_error": "does not match boolean formula",
+                "actual_error": "does not match boolean formula",
+                "matched": True,
+            },
+        ],
+    }
+    (root / VALIDATION_JSON_SMOKE_ARTIFACT).write_text(json.dumps(validation_smoke, indent=2, sort_keys=True) + "\n")
+    (root / VALIDATION_JSON_DOCS_NEGATIVE_ARTIFACT).write_text(json.dumps(docs_negative, indent=2, sort_keys=True) + "\n")
 
 
 def write_sidecar_corrupt_report(path: Path, *, ok: bool = True) -> None:
@@ -1460,6 +1520,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_header_summary(root / HEADER_INSPECT_ARTIFACT)
     write_dashboard_strict_summary(root / DASHBOARD_STRICT_ARTIFACT)
     write_dashboard_configuration_artifacts(root)
+    write_validation_json_artifacts(root)
     write_sidecar_corrupt_report(root / SIDECAR_CORRUPT_ARTIFACT)
     write_huffman_length_csv(root / HUFFMAN_LENGTH_ARTIFACT)
     write_fuzz_corpus_report(root / FUZZ_CORPUS_ARTIFACT)
@@ -1758,6 +1819,8 @@ def main() -> int:
                 DASHBOARD_CATEGORY_NEGATIVE_ARTIFACT,
                 DASHBOARD_PRODUCERS_REQUIRED_ARTIFACT,
                 DASHBOARD_PRODUCERS_NEGATIVE_ARTIFACT,
+                VALIDATION_JSON_SMOKE_ARTIFACT,
+                VALIDATION_JSON_DOCS_NEGATIVE_ARTIFACT,
             ],
         )
 
@@ -1860,8 +1923,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 37/37 | 0 | allowed missing 0 |",
-                    "| smoke gates | 37/37 | 0 | required missing 0 |",
+                    "| producer steps | 39/39 | 0 | allowed missing 0 |",
+                    "| smoke gates | 39/39 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -1891,6 +1954,21 @@ def main() -> int:
                     "| category guardrails | 3 | matched 3, present `True` |",
                     "| required producers | 4 | matched 4, required smoke gates 2 |",
                     "| producer guardrails | 2 | matched 2, healthy `True` |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
+                "validation_json_markdown_table",
+                "validation JSON schema Markdown table",
+                dashboard_markdown,
+                [
+                    "## Validation JSON schema coverage",
+                    "| category | count | detail |",
+                    "| checked schemas | 5 | smoke present `True`, ok `True` |",
+                    "| CLI validation | 1 | failure-ok `False`, hint `payload_corrupt` |",
+                    "| report rows | 1 | corrupt rows 2 |",
+                    "| docs negative cases | 2/2 | present `True`, healthy `True` |",
                 ],
             )
         )

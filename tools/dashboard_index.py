@@ -1470,6 +1470,57 @@ def dashboard_configuration_health(artifacts: list[Path]) -> dict:
     }
 
 
+def validation_json_health(artifacts: list[Path]) -> dict:
+    smoke = None
+    docs_negative = None
+    for artifact in artifacts:
+        data = read_json(artifact) if artifact.suffix == ".json" else {}
+        if data.get("schema") == "vort.validation_json_smoke" and artifact.name == "vort-validation-json-smoke.json":
+            smoke = data
+        elif data.get("schema") == "vort.validation_json_docs_negative_smoke" and artifact.name == "vort-validation-json-docs-negative-smoke.json":
+            docs_negative = data
+
+    def int_field(data: dict | None, field: str) -> int:
+        if not isinstance(data, dict):
+            return 0
+        value = data.get(field)
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    checked_schemas = smoke.get("checked_schemas") if isinstance(smoke, dict) else []
+    checked_schema_count = len(checked_schemas) if isinstance(checked_schemas, list) else 0
+    docs_case_count = int_field(docs_negative, "case_count")
+    docs_cases = docs_negative.get("cases") if isinstance(docs_negative, dict) else []
+    docs_matched = sum(1 for item in docs_cases if isinstance(item, dict) and item.get("matched") is True) if isinstance(docs_cases, list) else 0
+    healthy = (
+        isinstance(smoke, dict)
+        and bool(smoke.get("ok"))
+        and checked_schema_count > 0
+        and bool(smoke.get("cli_success_ok"))
+        and int_field(smoke, "report_rows") > 0
+        and int_field(smoke, "corrupt_rows") > 0
+        and isinstance(docs_negative, dict)
+        and bool(docs_negative.get("ok"))
+        and docs_case_count > 0
+        and docs_matched == docs_case_count
+    )
+    return {
+        "present": isinstance(smoke, dict),
+        "ok": bool(smoke.get("ok")) if isinstance(smoke, dict) else False,
+        "checked_schema_count": checked_schema_count,
+        "cli_success_ok": bool(smoke.get("cli_success_ok")) if isinstance(smoke, dict) else False,
+        "cli_failure_ok": bool(smoke.get("cli_failure_ok")) if isinstance(smoke, dict) else False,
+        "cli_failure_hint": str(smoke.get("cli_failure_hint") or "") if isinstance(smoke, dict) else "",
+        "report_rows": int_field(smoke, "report_rows"),
+        "corrupt_rows": int_field(smoke, "corrupt_rows"),
+        "docs_negative_present": isinstance(docs_negative, dict),
+        "docs_negative_ok": bool(docs_negative.get("ok")) if isinstance(docs_negative, dict) else False,
+        "docs_negative_case_count": docs_case_count,
+        "docs_negative_matched": docs_matched,
+        "docs_negative_unmatched": docs_case_count - docs_matched,
+        "healthy": healthy,
+    }
+
+
 def header_inspect_health(artifacts: list[Path]) -> dict:
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
@@ -1600,6 +1651,7 @@ def main() -> int:
     header_health = header_inspect_health(artifacts)
     strict_health = dashboard_strict_health(artifacts)
     dashboard_configuration = dashboard_configuration_health(artifacts)
+    validation_json = validation_json_health(artifacts)
     sidecar_corrupt_health_summary = sidecar_corrupt_health(artifacts)
     huffman_health = huffman_length_health(artifacts)
     fuzz_health = fuzz_corpus_health(artifacts)
@@ -1833,6 +1885,19 @@ def main() -> int:
             f"| category guardrails | {dashboard_configuration['category_negative_case_count']} | matched {dashboard_configuration['category_negative_matched']}, present `{dashboard_configuration['category_negative_present']}` |",
             f"| required producers | {dashboard_configuration['producers_required_artifact_count']} | matched {dashboard_configuration['producers_required_matched']}, required smoke gates {dashboard_configuration['producers_required_smoke_gate_count']} |",
             f"| producer guardrails | {dashboard_configuration['producers_negative_case_count']} | matched {dashboard_configuration['producers_negative_matched']}, healthy `{dashboard_configuration['healthy']}` |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
+            "## Validation JSON schema coverage",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| checked schemas | {validation_json['checked_schema_count']} | smoke present `{validation_json['present']}`, ok `{validation_json['ok']}` |",
+            f"| CLI validation | {1 if validation_json['cli_success_ok'] else 0} | failure-ok `{validation_json['cli_failure_ok']}`, hint `{validation_json['cli_failure_hint'] or 'none'}` |",
+            f"| report rows | {validation_json['report_rows']} | corrupt rows {validation_json['corrupt_rows']} |",
+            f"| docs negative cases | {validation_json['docs_negative_matched']}/{validation_json['docs_negative_case_count']} | present `{validation_json['docs_negative_present']}`, healthy `{validation_json['healthy']}` |",
             "",
         ]
     )
@@ -2248,6 +2313,20 @@ def main() -> int:
                 "dashboard_producers_negative_case_count": dashboard_configuration["producers_negative_case_count"],
                 "dashboard_producers_negative_matched": dashboard_configuration["producers_negative_matched"],
                 "dashboard_producers_negative_unmatched": dashboard_configuration["producers_negative_unmatched"],
+                "validation_json_present": validation_json["present"],
+                "validation_json_ok": validation_json["ok"],
+                "validation_json_healthy": validation_json["healthy"],
+                "validation_json_checked_schema_count": validation_json["checked_schema_count"],
+                "validation_json_cli_success_ok": validation_json["cli_success_ok"],
+                "validation_json_cli_failure_ok": validation_json["cli_failure_ok"],
+                "validation_json_cli_failure_hint": validation_json["cli_failure_hint"],
+                "validation_json_report_rows": validation_json["report_rows"],
+                "validation_json_corrupt_rows": validation_json["corrupt_rows"],
+                "validation_json_docs_negative_present": validation_json["docs_negative_present"],
+                "validation_json_docs_negative_ok": validation_json["docs_negative_ok"],
+                "validation_json_docs_negative_case_count": validation_json["docs_negative_case_count"],
+                "validation_json_docs_negative_matched": validation_json["docs_negative_matched"],
+                "validation_json_docs_negative_unmatched": validation_json["docs_negative_unmatched"],
                 "sidecar_corrupt_present": sidecar_corrupt_health_summary["present"],
                 "sidecar_corrupt_healthy": sidecar_corrupt_healthy,
                 "sidecar_corrupt_rows": sidecar_corrupt_health_summary["rows"],

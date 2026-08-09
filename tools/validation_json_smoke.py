@@ -541,6 +541,7 @@ def main() -> int:
         assert any(row["name"] == "producer_smoke_gate_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "dashboard_strict_mode_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "dashboard_configuration_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
+        assert any(row["name"] == "validation_json_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "native_summary_success_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "native_summary_error_markdown_tables" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "native_tier_range_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
@@ -572,6 +573,7 @@ def main() -> int:
         assert "producer_smoke_gate_markdown_table" in dashboard_strict_markdown
         assert "dashboard_strict_mode_markdown_table" in dashboard_strict_markdown
         assert "dashboard_configuration_markdown_table" in dashboard_strict_markdown
+        assert "validation_json_markdown_table" in dashboard_strict_markdown
         assert "native_summary_success_markdown_table" in dashboard_strict_markdown
         assert "native_summary_error_markdown_tables" in dashboard_strict_markdown
         assert "native_tier_range_markdown_table" in dashboard_strict_markdown
@@ -644,6 +646,27 @@ def main() -> int:
         assert docs_negative["case_count"] >= 1
         assert all(row["matched"] is True for row in docs_negative["cases"])
         validate_value_against_manifest(docs_negative, schemas_def)
+        validation_json_dashboard_smoke = {
+            "schema": "vort.validation_json_smoke",
+            "schema_version": 1,
+            "ok": True,
+            "checked_schemas": [
+                ok["schema"],
+                report["schema"],
+                corrupt["schema"],
+                dashboard_strict["schema"],
+                docs_negative["schema"],
+                "vort.dashboard_index",
+                "vort.header_inspect_smoke",
+            ],
+            "cli_success_ok": ok["ok"],
+            "cli_failure_ok": failure["ok"],
+            "cli_failure_hint": failure["recoverability_hint"],
+            "report_rows": report["rows"],
+            "corrupt_rows": corrupt["rows"],
+        }
+        (root / "vort-validation-json-smoke.json").write_text(json.dumps(validation_json_dashboard_smoke, indent=2, sort_keys=True) + "\n")
+        validate_value_against_manifest(validation_json_dashboard_smoke, schemas_def)
 
         header_summary_path = root / "vort-header-inspect-smoke.json"
         required_workflows = json.loads((ROOT / "tools" / "header_inspect_required_workflows.json").read_text())
@@ -892,6 +915,20 @@ def main() -> int:
         assert dashboard["dashboard_producers_negative_case_count"] == dashboard_producers_negative["case_count"]
         assert dashboard["dashboard_producers_negative_matched"] == dashboard_producers_negative["case_count"]
         assert dashboard["dashboard_producers_negative_unmatched"] == 0
+        assert dashboard["validation_json_present"] is True
+        assert dashboard["validation_json_ok"] is True
+        assert dashboard["validation_json_healthy"] is True
+        assert dashboard["validation_json_checked_schema_count"] == len(validation_json_dashboard_smoke["checked_schemas"])
+        assert dashboard["validation_json_cli_success_ok"] == validation_json_dashboard_smoke["cli_success_ok"]
+        assert dashboard["validation_json_cli_failure_ok"] == validation_json_dashboard_smoke["cli_failure_ok"]
+        assert dashboard["validation_json_cli_failure_hint"] == validation_json_dashboard_smoke["cli_failure_hint"]
+        assert dashboard["validation_json_report_rows"] == validation_json_dashboard_smoke["report_rows"]
+        assert dashboard["validation_json_corrupt_rows"] == validation_json_dashboard_smoke["corrupt_rows"]
+        assert dashboard["validation_json_docs_negative_present"] is True
+        assert dashboard["validation_json_docs_negative_ok"] is True
+        assert dashboard["validation_json_docs_negative_case_count"] == docs_negative["case_count"]
+        assert dashboard["validation_json_docs_negative_matched"] == docs_negative["case_count"]
+        assert dashboard["validation_json_docs_negative_unmatched"] == 0
         assert dashboard["sidecar_corrupt_present"] is True
         assert dashboard["sidecar_corrupt_healthy"] is True
         assert dashboard["sidecar_corrupt_rows"] == corrupt["rows"]
