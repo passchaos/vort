@@ -700,6 +700,23 @@
             "native_codec_probes_timed_out_probes"
           ]
         },
+        "lz4_native_summary_healthy": {
+          "all": [
+            "lz4_native_summary_present"
+          ],
+          "positive": [
+            "lz4_native_summary_frame_count",
+            "lz4_native_summary_skippable_frame_count",
+            "lz4_native_summary_checksum_frame_count",
+            "lz4_native_summary_content_size_frame_count",
+            "lz4_native_summary_declared_content_bytes",
+            "lz4_native_summary_block_count",
+            "lz4_native_summary_raw_block_count",
+            "lz4_native_summary_compressed_bytes",
+            "lz4_native_summary_payload_bytes",
+            "lz4_native_summary_skippable_payload_bytes"
+          ]
+        },
         "zstd_native_summary_healthy": {
           "all": [
             "zstd_native_summary_present"
@@ -771,6 +788,8 @@
             "fuzz_corpus_healthy",
             "decode_stage_healthy",
             "python_zlib_diff_healthy",
+            "lz4_native_summary_healthy",
+            "zstd_native_summary_healthy",
             "native_tier_corpus_discovery_healthy"
           ]
         }
@@ -900,6 +919,21 @@
         "native_codec_probes_total_cases": "int",
         "native_codec_probes_zstd_dictionary_cases": "int",
         "native_codec_probes_zstd_frame_cases": "int",
+        "lz4_native_summary_present": "bool",
+        "lz4_native_summary_healthy": "bool",
+        "lz4_native_summary_frame_count": "int",
+        "lz4_native_summary_skippable_frame_count": "int",
+        "lz4_native_summary_checksum_frame_count": "int",
+        "lz4_native_summary_block_checksum_frame_count": "int",
+        "lz4_native_summary_dictionary_id_frame_count": "int",
+        "lz4_native_summary_content_size_frame_count": "int",
+        "lz4_native_summary_declared_content_bytes": "int",
+        "lz4_native_summary_block_count": "int",
+        "lz4_native_summary_raw_block_count": "int",
+        "lz4_native_summary_compressed_block_count": "int",
+        "lz4_native_summary_compressed_bytes": "int",
+        "lz4_native_summary_payload_bytes": "int",
+        "lz4_native_summary_skippable_payload_bytes": "int",
         "zstd_native_summary_present": "bool",
         "zstd_native_summary_healthy": "bool",
         "zstd_native_summary_frame_count": "int",
@@ -1054,6 +1088,8 @@
           "decode_stage_failed",
           "missing_python_zlib_diff_artifact",
           "python_zlib_diff_failed",
+          "missing_lz4_native_summary_artifact",
+          "lz4_native_summary_undercovered",
           "missing_zstd_native_summary_artifact",
           "zstd_native_summary_undercovered",
           "missing_native_tier_corpus_discovery_artifact",
@@ -1301,6 +1337,8 @@
               "validation_decode_stage_failed",
               "validation_missing_python_zlib_diff_artifact",
               "validation_python_zlib_diff_failed",
+              "validation_missing_lz4_native_summary_artifact",
+              "validation_lz4_native_summary_undercovered",
               "validation_missing_zstd_native_summary_artifact",
               "validation_zstd_native_summary_undercovered",
               "validation_missing_native_tier_corpus_discovery_artifact",
@@ -1328,6 +1366,8 @@
               "decode_stage_failed",
               "missing_python_zlib_diff_artifact",
               "python_zlib_diff_failed",
+              "missing_lz4_native_summary_artifact",
+              "lz4_native_summary_undercovered",
               "missing_zstd_native_summary_artifact",
               "zstd_native_summary_undercovered",
               "missing_native_tier_corpus_discovery_artifact",
@@ -1360,6 +1400,8 @@
                 "validation_native_tier_corpus_discovery_failed": "native_tier_corpus_discovery_failed",
                 "validation_python_zlib_diff_failed": "python_zlib_diff_failed",
                 "validation_sidecar_corrupt_failed": "sidecar_corrupt_failed",
+                "validation_missing_lz4_native_summary_artifact": "missing_lz4_native_summary_artifact",
+                "validation_lz4_native_summary_undercovered": "lz4_native_summary_undercovered",
                 "validation_missing_zstd_native_summary_artifact": "missing_zstd_native_summary_artifact",
                 "validation_zstd_native_summary_undercovered": "zstd_native_summary_undercovered"
               },
@@ -1445,6 +1487,8 @@
           "validation_decode_stage_failed",
           "validation_missing_python_zlib_diff_artifact",
           "validation_python_zlib_diff_failed",
+          "validation_missing_lz4_native_summary_artifact",
+          "validation_lz4_native_summary_undercovered",
           "validation_missing_zstd_native_summary_artifact",
           "validation_zstd_native_summary_undercovered",
           "validation_missing_native_tier_corpus_discovery_artifact",
@@ -1498,6 +1542,8 @@
           "validation_decode_stage_failed",
           "validation_missing_python_zlib_diff_artifact",
           "validation_python_zlib_diff_failed",
+          "validation_missing_lz4_native_summary_artifact",
+          "validation_lz4_native_summary_undercovered",
           "validation_missing_zstd_native_summary_artifact",
           "validation_zstd_native_summary_undercovered",
           "validation_missing_native_tier_corpus_discovery_artifact",
@@ -1525,6 +1571,8 @@
           "decode_stage_failed",
           "missing_python_zlib_diff_artifact",
           "python_zlib_diff_failed",
+          "missing_lz4_native_summary_artifact",
+          "lz4_native_summary_undercovered",
           "missing_zstd_native_summary_artifact",
           "zstd_native_summary_undercovered",
           "missing_native_tier_corpus_discovery_artifact",
@@ -1552,6 +1600,8 @@
           "decode_stage_failed",
           "missing_python_zlib_diff_artifact",
           "python_zlib_diff_failed",
+          "missing_lz4_native_summary_artifact",
+          "lz4_native_summary_undercovered",
           "missing_zstd_native_summary_artifact",
           "zstd_native_summary_undercovered",
           "missing_native_tier_corpus_discovery_artifact",
@@ -1584,6 +1634,8 @@
             "validation_native_tier_corpus_discovery_failed": "native_tier_corpus_discovery_failed",
             "validation_python_zlib_diff_failed": "python_zlib_diff_failed",
             "validation_sidecar_corrupt_failed": "sidecar_corrupt_failed",
+            "validation_missing_lz4_native_summary_artifact": "missing_lz4_native_summary_artifact",
+            "validation_lz4_native_summary_undercovered": "lz4_native_summary_undercovered",
             "validation_missing_zstd_native_summary_artifact": "missing_zstd_native_summary_artifact",
             "validation_zstd_native_summary_undercovered": "zstd_native_summary_undercovered"
           },
@@ -1614,6 +1666,8 @@
             "native_tier_corpus_discovery_failed": "native_tier_corpus_discovery_failed",
             "python_zlib_diff_failed": "python_zlib_diff_failed",
             "sidecar_corrupt_failed": "sidecar_corrupt_failed",
+            "missing_lz4_native_summary_artifact": "missing_lz4_native_summary_artifact",
+            "lz4_native_summary_undercovered": "lz4_native_summary_undercovered",
             "missing_zstd_native_summary_artifact": "missing_zstd_native_summary_artifact",
             "zstd_native_summary_undercovered": "zstd_native_summary_undercovered"
           },
@@ -3035,6 +3089,7 @@
           "vort.gzip_header_info",
           "vort.header_inspect_required_workflows",
           "vort.header_inspect_smoke",
+          "vort.lz4_native_stream_summary",
           "vort.native_codec_probes",
           "vort.native_tier_range_corpus_discovery",
           "vort.png_scratch_report",
@@ -3045,6 +3100,7 @@
           "vort.validation_json_docs_negative_smoke",
           "vort.validation_report",
           "vort.wrapped_deflate_header_info",
+          "vort.zstd_native_stream_summary",
           "vort.zlib_header_info",
           "vort.zlib_relaxed_report"
         ]

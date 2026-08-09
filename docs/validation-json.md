@@ -648,8 +648,10 @@ Example:
     "vort.header_inspect_smoke",
     "vort.header_inspect_required_workflows",
     "vort.validation_json_docs_negative_smoke",
+    "vort.lz4_native_stream_summary",
     "vort.raw_deflate_header_info",
     "vort.wrapped_deflate_header_info",
+    "vort.zstd_native_stream_summary",
     "vort.zlib_header_info",
     "vort.gzip_header_info"
   ],
@@ -2261,6 +2263,8 @@ Current unhealthy reason values are:
 - `decode_stage_failed`
 - `missing_python_zlib_diff_artifact`
 - `python_zlib_diff_failed`
+- `missing_lz4_native_summary_artifact`
+- `lz4_native_summary_undercovered`
 - `missing_zstd_native_summary_artifact`
 - `zstd_native_summary_undercovered`
 - `missing_native_tier_corpus_discovery_artifact`
@@ -2353,6 +2357,19 @@ Top-level fields:
   `native_codec_probes_total_cases`,
   `native_codec_probes_zstd_frame_cases`,
   `native_codec_probes_zstd_dictionary_cases`
+- `lz4_native_summary_present`, `lz4_native_summary_healthy`,
+  `lz4_native_summary_frame_count`,
+  `lz4_native_summary_skippable_frame_count`,
+  `lz4_native_summary_checksum_frame_count`,
+  `lz4_native_summary_block_checksum_frame_count`,
+  `lz4_native_summary_dictionary_id_frame_count`,
+  `lz4_native_summary_content_size_frame_count`,
+  `lz4_native_summary_declared_content_bytes`,
+  `lz4_native_summary_block_count`, `lz4_native_summary_raw_block_count`,
+  `lz4_native_summary_compressed_block_count`,
+  `lz4_native_summary_compressed_bytes`,
+  `lz4_native_summary_payload_bytes`,
+  `lz4_native_summary_skippable_payload_bytes`
 - `zstd_native_summary_present`, `zstd_native_summary_healthy`,
   `zstd_native_summary_frame_count`,
   `zstd_native_summary_skippable_frame_count`,
@@ -2405,6 +2422,8 @@ Example:
     "missing_fuzz_coverage_artifact",
     "missing_decode_stage_artifact",
     "missing_python_zlib_diff_artifact",
+    "missing_lz4_native_summary_artifact",
+    "missing_zstd_native_summary_artifact",
     "missing_native_tier_corpus_discovery_artifact"
   ],
   "header_inspect_present": false,
@@ -2512,6 +2531,21 @@ Example:
   "native_codec_probes_total_cases": 0,
   "native_codec_probes_zstd_frame_cases": 0,
   "native_codec_probes_zstd_dictionary_cases": 0,
+  "lz4_native_summary_present": false,
+  "lz4_native_summary_healthy": false,
+  "lz4_native_summary_frame_count": 0,
+  "lz4_native_summary_skippable_frame_count": 0,
+  "lz4_native_summary_checksum_frame_count": 0,
+  "lz4_native_summary_block_checksum_frame_count": 0,
+  "lz4_native_summary_dictionary_id_frame_count": 0,
+  "lz4_native_summary_content_size_frame_count": 0,
+  "lz4_native_summary_declared_content_bytes": 0,
+  "lz4_native_summary_block_count": 0,
+  "lz4_native_summary_raw_block_count": 0,
+  "lz4_native_summary_compressed_block_count": 0,
+  "lz4_native_summary_compressed_bytes": 0,
+  "lz4_native_summary_payload_bytes": 0,
+  "lz4_native_summary_skippable_payload_bytes": 0,
   "zstd_native_summary_present": false,
   "zstd_native_summary_healthy": false,
   "zstd_native_summary_frame_count": 0,
@@ -2713,6 +2747,12 @@ Example:
       "min_matched": 3
     },
     {
+      "mode": "strict-validation-health",
+      "min_checks": 27,
+      "min_expected_failures": 27,
+      "min_matched": 27
+    },
+    {
       "mode": "native-tier-range-health",
       "min_checks": 3,
       "min_expected_failures": 0,
@@ -2747,9 +2787,19 @@ Example:
   "schema_version": 1,
   "expected_reasons": [
     {
-      "reason": "missing_dashboard_strict_modes",
-      "check": "validation_missing_dashboard_strict_modes",
-      "fixture": "missing_dashboard_strict_modes"
+      "reason": "missing_lz4_native_summary_artifact",
+      "check": "validation_missing_lz4_native_summary_artifact",
+      "fixture": "missing_lz4_native_summary_artifact"
+    },
+    {
+      "reason": "lz4_native_summary_undercovered",
+      "check": "validation_lz4_native_summary_undercovered",
+      "fixture": "lz4_native_summary_undercovered"
+    },
+    {
+      "reason": "missing_zstd_native_summary_artifact",
+      "check": "validation_missing_zstd_native_summary_artifact",
+      "fixture": "missing_zstd_native_summary_artifact"
     }
   ]
 }
@@ -2777,10 +2827,10 @@ actual/minimum/delta values, and `missing_modes` reports unmet requirements.
 each `vort.dashboard_index.validation_unhealthy_reasons` enum value so new
 aggregate health reasons must be backed by real failing dashboard inputs before
 the smoke artifact can pass. The expected reason/check/fixture matrix lives in
-`tools/dashboard_strict_validation_reasons.json`; the `strict-validation-health`
-mode minimums must cover every configured reason, currently 25. A synthetic long-output check
-keeps the truncation path covered so `actual_output_truncated=true` is exercised
-in CI.
+`tools/dashboard_strict_validation_reasons.json`; the retained `strict-validation-health`
+mode minimums must cover every configured reason, currently 27. The abbreviated
+example below shows a three-reason slice. A synthetic long-output check keeps the
+truncation path covered so `actual_output_truncated=true` is exercised in CI.
 
 Example:
 
@@ -2789,17 +2839,23 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 4,
-  "mode_count": 2,
-  "expected_mode_count": 2,
+  "check_count": 7,
+  "mode_count": 3,
+  "expected_mode_count": 3,
   "missing_mode_count": 0,
-  "validation_unhealthy_reason_count": 1,
+  "validation_unhealthy_reason_count": 3,
   "expected_modes": [
     {
       "mode": "all",
       "min_checks": 1,
       "min_expected_failures": 0,
       "min_matched": 1
+    },
+    {
+      "mode": "strict-validation-health",
+      "min_checks": 27,
+      "min_expected_failures": 27,
+      "min_matched": 27
     },
     {
       "mode": "native-tier-range-health",
@@ -2823,6 +2879,18 @@ Example:
       "missing_matched": 0
     },
     {
+      "mode": "strict-validation-health",
+      "checks": 3,
+      "min_checks": 27,
+      "missing_checks": 24,
+      "expected_failures": 3,
+      "min_expected_failures": 27,
+      "missing_expected_failures": 24,
+      "matched": 3,
+      "min_matched": 27,
+      "missing_matched": 24
+    },
+    {
       "mode": "native-tier-range-health",
       "checks": 3,
       "min_checks": 3,
@@ -2843,6 +2911,12 @@ Example:
       "matched": 1
     },
     {
+      "mode": "strict-validation-health",
+      "checks": 3,
+      "expected_failures": 3,
+      "matched": 3
+    },
+    {
       "mode": "native-tier-range-health",
       "checks": 3,
       "expected_failures": 0,
@@ -2850,6 +2924,42 @@ Example:
     }
   ],
   "checks": [
+    {
+      "name": "validation_missing_lz4_native_summary_artifact",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=missing_lz4_native_summary_artifact",
+      "actual_output": "dashboard_index_validation_unhealthy=missing_lz4_native_summary_artifact",
+      "actual_output_bytes": 74,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_lz4_native_summary_undercovered",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered",
+      "actual_output_bytes": 68,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_missing_zstd_native_summary_artifact",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=missing_zstd_native_summary_artifact",
+      "actual_output": "dashboard_index_validation_unhealthy=missing_zstd_native_summary_artifact",
+      "actual_output_bytes": 75,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
     {
       "name": "missing_native_tier_range_summary",
       "mode": "native-tier-range-health",
@@ -2901,8 +3011,18 @@ Example:
   ],
   "validation_unhealthy_reason_checks": [
     {
-      "reason": "missing_dashboard_strict_modes",
-      "check": "validation_missing_dashboard_strict_modes",
+      "reason": "missing_lz4_native_summary_artifact",
+      "check": "validation_missing_lz4_native_summary_artifact",
+      "matched": true
+    },
+    {
+      "reason": "lz4_native_summary_undercovered",
+      "check": "validation_lz4_native_summary_undercovered",
+      "matched": true
+    },
+    {
+      "reason": "missing_zstd_native_summary_artifact",
+      "check": "validation_missing_zstd_native_summary_artifact",
       "matched": true
     }
   ]

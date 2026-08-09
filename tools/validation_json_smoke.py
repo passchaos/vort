@@ -702,6 +702,7 @@ def main() -> int:
         shutil.copyfile(decode_stage_path, root / "vort-deflate-decode-stage-report.json")
         shutil.copyfile(python_zlib_diff_path, root / "vort-python-zlib-diff-smoke.json")
         shutil.copyfile(native_codec_probes_path, root / "vort-native-codec-probes.json")
+        shutil.copyfile(lz4_native_summary_path, root / "vort-lz4-native-stream-summary.json")
         shutil.copyfile(zstd_native_summary_path, root / "vort-zstd-native-stream-summary.json")
 
         run(
@@ -832,6 +833,21 @@ def main() -> int:
         }
         assert dashboard["native_codec_probes_zstd_frame_cases"] == probes_by_label["zstd-native-frame-probe"]["cases"]
         assert dashboard["native_codec_probes_zstd_dictionary_cases"] == probes_by_label["zstd-native-dictionary-probe"]["cases"]
+        assert dashboard["lz4_native_summary_present"] is True
+        assert dashboard["lz4_native_summary_healthy"] is True
+        assert dashboard["lz4_native_summary_frame_count"] == lz4_native_summary["frame_count"]
+        assert dashboard["lz4_native_summary_skippable_frame_count"] == lz4_native_summary["skippable_frame_count"]
+        assert dashboard["lz4_native_summary_checksum_frame_count"] == lz4_native_summary["checksum_frame_count"]
+        assert dashboard["lz4_native_summary_block_checksum_frame_count"] == lz4_native_summary["block_checksum_frame_count"]
+        assert dashboard["lz4_native_summary_dictionary_id_frame_count"] == lz4_native_summary["dictionary_id_frame_count"]
+        assert dashboard["lz4_native_summary_content_size_frame_count"] == lz4_native_summary["content_size_frame_count"]
+        assert dashboard["lz4_native_summary_declared_content_bytes"] == lz4_native_summary["declared_content_bytes"]
+        assert dashboard["lz4_native_summary_block_count"] == lz4_native_summary["block_count"]
+        assert dashboard["lz4_native_summary_raw_block_count"] == lz4_native_summary["raw_block_count"]
+        assert dashboard["lz4_native_summary_compressed_block_count"] == lz4_native_summary["compressed_block_count"]
+        assert dashboard["lz4_native_summary_compressed_bytes"] == lz4_native_summary["compressed_bytes"]
+        assert dashboard["lz4_native_summary_payload_bytes"] == lz4_native_summary["payload_bytes"]
+        assert dashboard["lz4_native_summary_skippable_payload_bytes"] == lz4_native_summary["skippable_payload_bytes"]
         assert dashboard["zstd_native_summary_present"] is True
         assert dashboard["zstd_native_summary_healthy"] is True
         assert dashboard["zstd_native_summary_frame_count"] == zstd_native_summary["frame_count"]
@@ -862,6 +878,7 @@ def main() -> int:
             and dashboard["fuzz_corpus_healthy"]
             and dashboard["decode_stage_healthy"]
             and dashboard["python_zlib_diff_healthy"]
+            and dashboard["lz4_native_summary_healthy"]
             and dashboard["zstd_native_summary_healthy"]
             and dashboard["native_tier_corpus_discovery_healthy"]
         )
@@ -912,6 +929,8 @@ def main() -> int:
                 decode_stage["schema"],
                 python_zlib_diff["schema"],
                 native_codec_probes["schema"],
+                lz4_native_summary["schema"],
+                zstd_native_summary["schema"],
                 zlib_relaxed["schema"],
                 png_scratch["schema"],
                 fuzz_report["schema"],

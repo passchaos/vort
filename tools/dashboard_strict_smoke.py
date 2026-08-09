@@ -22,6 +22,7 @@ FUZZ_CORPUS_ARTIFACT = "vort-deflate-wrapper-fuzz-corpus.json"
 FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
 DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
 PYTHON_ZLIB_DIFF_ARTIFACT = "vort-python-zlib-diff-smoke.json"
+LZ4_NATIVE_SUMMARY_ARTIFACT = "vort-lz4-native-stream-summary.json"
 ZSTD_NATIVE_SUMMARY_ARTIFACT = "vort-zstd-native-stream-summary.json"
 NATIVE_TIER_RANGE_ARTIFACT = "vort-native-tier-range-bench-gate.json"
 NATIVE_TIER_RANGE_FILES_ARTIFACT = "vort-native-tier-range-files-bench-gate.json"
@@ -64,6 +65,8 @@ def write_producer_map(
     include_decode_stage_smoke: bool = True,
     include_python_zlib_exact: bool = True,
     include_python_zlib_smoke: bool = True,
+    include_lz4_native_summary_exact: bool = True,
+    include_lz4_native_summary_smoke: bool = True,
     include_zstd_native_summary_exact: bool = True,
     include_zstd_native_summary_smoke: bool = True,
     include_native_tier_exact: bool = True,
@@ -111,6 +114,11 @@ def write_producer_map(
             "expected_format": "json",
             "smoke_gate": "zig build run-python-zlib-diff-dashboard",
         }
+    if include_lz4_native_summary_smoke:
+        artifact_metadata[LZ4_NATIVE_SUMMARY_ARTIFACT] = {
+            "expected_format": "json",
+            "smoke_gate": "zig build run-lz4-native-summary-dashboard",
+        }
     if include_zstd_native_summary_smoke:
         artifact_metadata[ZSTD_NATIVE_SUMMARY_ARTIFACT] = {
             "expected_format": "json",
@@ -139,6 +147,8 @@ def write_producer_map(
         exact[DECODE_STAGE_ARTIFACT] = "zig build run-deflate-decode-stage-report-dashboard"
     if include_python_zlib_exact:
         exact[PYTHON_ZLIB_DIFF_ARTIFACT] = "zig build run-python-zlib-diff-dashboard"
+    if include_lz4_native_summary_exact:
+        exact[LZ4_NATIVE_SUMMARY_ARTIFACT] = "zig build run-lz4-native-summary-dashboard"
     if include_zstd_native_summary_exact:
         exact[ZSTD_NATIVE_SUMMARY_ARTIFACT] = "zig build run-zstd-native-summary-dashboard"
     if include_native_tier_exact:
@@ -612,6 +622,27 @@ def write_zstd_native_summary(path: Path, *, healthy: bool = True) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def write_lz4_native_summary(path: Path, *, healthy: bool = True) -> None:
+    payload = {
+        "schema": "vort.lz4_native_stream_summary",
+        "schema_version": 1,
+        "compressed_bytes": 64 if healthy else 0,
+        "frame_count": 2 if healthy else 1,
+        "skippable_frame_count": 1 if healthy else 0,
+        "content_size_frame_count": 2 if healthy else 0,
+        "checksum_frame_count": 2 if healthy else 0,
+        "block_checksum_frame_count": 0,
+        "dictionary_id_frame_count": 0,
+        "declared_content_bytes": 6 if healthy else 0,
+        "block_count": 2 if healthy else 1,
+        "compressed_block_count": 0,
+        "raw_block_count": 2 if healthy else 1,
+        "payload_bytes": 6 if healthy else 0,
+        "skippable_payload_bytes": 16 if healthy else 0,
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
 def write_native_tier_range_summary(path: Path, *, ok: bool = True, source: str = "built_in", rows: int = 9, fixture_count: int = 3) -> None:
     floors = NATIVE_TIER_RANGE_FLOORS.get(source, NATIVE_TIER_RANGE_FLOORS["custom"])
     payload = {
@@ -676,6 +707,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_fuzz_coverage_report(root / FUZZ_COVERAGE_ARTIFACT)
     write_decode_stage_report(root / DECODE_STAGE_ARTIFACT)
     write_python_zlib_diff_report(root / PYTHON_ZLIB_DIFF_ARTIFACT)
+    write_lz4_native_summary(root / LZ4_NATIVE_SUMMARY_ARTIFACT)
     write_zstd_native_summary(root / ZSTD_NATIVE_SUMMARY_ARTIFACT)
     write_native_tier_range_summaries(root)
 
@@ -951,6 +983,10 @@ def main() -> int:
         assert manifest["header_inspect_present"] is True
         assert manifest["header_inspect_ok"] is True
         assert manifest["header_inspect_missing_workflow_count"] == 0
+        assert manifest["lz4_native_summary_present"] is True
+        assert manifest["lz4_native_summary_healthy"] is True
+        assert manifest["zstd_native_summary_present"] is True
+        assert manifest["zstd_native_summary_healthy"] is True
         assert manifest["native_tier_range_present"] is True
         assert manifest["native_tier_range_healthy"] is True
         assert manifest["native_tier_range_summary_count"] == 3
@@ -1191,6 +1227,12 @@ def main() -> int:
                 write_producer_map(producer_map)
             elif fixture == "python_zlib_diff_failed":
                 write_python_zlib_diff_report(fixture_root / PYTHON_ZLIB_DIFF_ARTIFACT, ok=False)
+                write_producer_map(producer_map)
+            elif fixture == "missing_lz4_native_summary_artifact":
+                (fixture_root / LZ4_NATIVE_SUMMARY_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "lz4_native_summary_undercovered":
+                write_lz4_native_summary(fixture_root / LZ4_NATIVE_SUMMARY_ARTIFACT, healthy=False)
                 write_producer_map(producer_map)
             elif fixture == "missing_zstd_native_summary_artifact":
                 (fixture_root / ZSTD_NATIVE_SUMMARY_ARTIFACT).unlink()

@@ -108,6 +108,16 @@
       "fixture": "python_zlib_diff_failed"
     },
     {
+      "reason": "missing_lz4_native_summary_artifact",
+      "check": "validation_missing_lz4_native_summary_artifact",
+      "fixture": "missing_lz4_native_summary_artifact"
+    },
+    {
+      "reason": "lz4_native_summary_undercovered",
+      "check": "validation_lz4_native_summary_undercovered",
+      "fixture": "lz4_native_summary_undercovered"
+    },
+    {
       "reason": "missing_zstd_native_summary_artifact",
       "check": "validation_missing_zstd_native_summary_artifact",
       "fixture": "missing_zstd_native_summary_artifact"
