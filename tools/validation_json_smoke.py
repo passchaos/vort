@@ -535,7 +535,7 @@ def main() -> int:
         assert covered_validation_reasons == expected_validation_reasons
         assert all(row["matched"] is True for row in dashboard_strict["validation_unhealthy_reason_checks"])
         assert any(row["mode"] == "strict-validation-health" and row["checks"] >= len(expected_validation_reasons) for row in dashboard_strict["mode_counts"])
-        assert any(row["mode"] == "dashboard-markdown" and row["checks"] >= 17 and row["matched"] >= 17 for row in dashboard_strict["mode_counts"])
+        assert any(row["mode"] == "dashboard-markdown" and row["checks"] >= 18 and row["matched"] >= 18 for row in dashboard_strict["mode_counts"])
         assert any(row["name"] == "validation_unhealthy_reasons_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "producer_smoke_gate_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "dashboard_strict_mode_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
@@ -789,6 +789,7 @@ def main() -> int:
         ):
             shutil.copyfile(ROOT / "zig-out" / artifact_name, root / artifact_name)
         shutil.copyfile(zlib_relaxed_path, root / "vort-zlib-relaxed-report.json")
+        shutil.copyfile(png_scratch_path, root / "vort-png-scratch-report.json")
         shutil.copyfile(native_allocation_path, root / "vort-native-allocation-report.json")
         shutil.copyfile(native_allocation_smoke_path, root / "vort-native-allocation-smoke.json")
         shutil.copyfile(native_allocation_negative_smoke_path, root / "vort-native-allocation-negative-smoke.json")
@@ -900,6 +901,16 @@ def main() -> int:
         assert dashboard["zstd_compare_best_block_len"] > 0
         assert dashboard["zstd_compare_best_range_decode_mib_s"] > 0
         assert dashboard["zstd_compare_best_range_decode_full_input_mib_s"] > 0
+        assert dashboard["png_scratch_present"] is True
+        assert dashboard["png_scratch_healthy"] is True
+        assert dashboard["png_scratch_case_count"] == png_scratch["case_count"]
+        assert dashboard["png_scratch_adam7_cases"] >= 1
+        assert dashboard["png_scratch_stored_achieved"] == png_scratch["case_count"]
+        assert dashboard["png_scratch_fixed_achieved"] == png_scratch["case_count"]
+        assert dashboard["png_scratch_total_zlib_scratch"] == dashboard["png_scratch_total_streaming_savings"]
+        assert dashboard["png_scratch_max_working_scratch"] > dashboard["png_scratch_max_streaming_working_scratch"]
+        assert dashboard["png_scratch_max_fixed_dynamic_streaming_working_scratch"] >= 32768
+        assert dashboard["png_scratch_min_streaming_ratio"] > 0
         assert dashboard["zlib_relaxed_present"] is True
         assert dashboard["zlib_relaxed_healthy"] is True
         assert dashboard["zlib_relaxed_strict_rejections"] == zlib_relaxed["strict_rejections"]
@@ -1052,6 +1063,7 @@ def main() -> int:
             and dashboard["fuzz_corpus_healthy"]
             and dashboard["decode_stage_healthy"]
             and dashboard["zstd_compare_healthy"]
+            and dashboard["png_scratch_healthy"]
             and dashboard["zlib_relaxed_healthy"]
             and dashboard["native_allocation_healthy"]
             and dashboard["python_zlib_diff_healthy"]

@@ -873,6 +873,23 @@
             "gzip_relaxed_decoder_successes",
             "gzip_relaxed_limited_rejections"
           ]
+        },
+        "png_scratch_healthy": {
+          "all": [
+            "png_scratch_present"
+          ],
+          "positive": [
+            "png_scratch_case_count",
+            "png_scratch_adam7_cases",
+            "png_scratch_stored_achieved",
+            "png_scratch_fixed_achieved",
+            "png_scratch_total_zlib_scratch",
+            "png_scratch_total_streaming_savings",
+            "png_scratch_max_working_scratch",
+            "png_scratch_max_streaming_working_scratch",
+            "png_scratch_max_fixed_dynamic_streaming_working_scratch",
+            "png_scratch_min_streaming_ratio"
+          ]
         }
       },
       "collections": {
@@ -937,6 +954,18 @@
         "decode_stage_present": "bool",
         "decode_stage_rows": "int",
         "decode_stage_unmatched_error_rows": "int",
+        "png_scratch_present": "bool",
+        "png_scratch_healthy": "bool",
+        "png_scratch_case_count": "int",
+        "png_scratch_adam7_cases": "int",
+        "png_scratch_stored_achieved": "int",
+        "png_scratch_fixed_achieved": "int",
+        "png_scratch_total_zlib_scratch": "int",
+        "png_scratch_total_streaming_savings": "int",
+        "png_scratch_max_working_scratch": "int",
+        "png_scratch_max_streaming_working_scratch": "int",
+        "png_scratch_max_fixed_dynamic_streaming_working_scratch": "int",
+        "png_scratch_min_streaming_ratio": "int",
         "zlib_relaxed_present": "bool",
         "zlib_relaxed_healthy": "bool",
         "zlib_relaxed_strict_rejections": "int",
@@ -1721,6 +1750,7 @@
           "huffman_length_markdown_table",
           "zstd_compare_markdown_table",
           "native_allocation_markdown_table",
+          "png_scratch_markdown_table",
           "zlib_relaxed_markdown_table",
           "python_zlib_diff_markdown_table",
           "decode_stage_markdown_table",

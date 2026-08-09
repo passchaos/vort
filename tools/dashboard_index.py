@@ -542,6 +542,65 @@ def native_tier_corpus_discovery_health(artifacts: list[Path]) -> dict:
     }
 
 
+def png_scratch_health(artifacts: list[Path]) -> dict:
+    for artifact in artifacts:
+        data = read_json(artifact) if artifact.suffix == ".json" else {}
+        if data.get("schema") != "vort.png_scratch_report":
+            continue
+        cases = data.get("cases")
+        cases = cases if isinstance(cases, list) else []
+        def int_case(row: dict, field: str) -> int:
+            value = row.get(field)
+            return value if isinstance(value, int) and not isinstance(value, bool) else 0
+        case_count = int(data.get("case_count") or 0)
+        adam7_cases = sum(1 for row in cases if isinstance(row, dict) and row.get("interlace") == "adam7")
+        stored_achieved = sum(1 for row in cases if isinstance(row, dict) and row.get("stored_streaming_status") == "achieved")
+        fixed_achieved = sum(1 for row in cases if isinstance(row, dict) and row.get("fixed_dynamic_streaming_status") == "achieved")
+        total_zlib_scratch = sum(int_case(row, "zlib_scratch_bytes") for row in cases if isinstance(row, dict))
+        total_streaming_savings = sum(int_case(row, "streaming_scratch_savings_bytes") for row in cases if isinstance(row, dict))
+        max_working_scratch = max((int_case(row, "working_scratch_bytes") for row in cases if isinstance(row, dict)), default=0)
+        max_streaming_working_scratch = max((int_case(row, "streaming_working_scratch_bytes") for row in cases if isinstance(row, dict)), default=0)
+        max_fixed_dynamic_streaming_working_scratch = max((int_case(row, "fixed_dynamic_streaming_working_scratch_bytes") for row in cases if isinstance(row, dict)), default=0)
+        min_streaming_ratio = min((int_case(row, "streaming_scratch_ratio_x10000") for row in cases if isinstance(row, dict)), default=0)
+        healthy = (
+            case_count > 0
+            and adam7_cases > 0
+            and stored_achieved == case_count
+            and fixed_achieved == case_count
+            and total_streaming_savings == total_zlib_scratch
+            and max_working_scratch > max_streaming_working_scratch
+            and max_fixed_dynamic_streaming_working_scratch >= 32768
+        )
+        return {
+            "present": True,
+            "healthy": healthy,
+            "case_count": case_count,
+            "adam7_cases": adam7_cases,
+            "stored_achieved": stored_achieved,
+            "fixed_achieved": fixed_achieved,
+            "total_zlib_scratch": total_zlib_scratch,
+            "total_streaming_savings": total_streaming_savings,
+            "max_working_scratch": max_working_scratch,
+            "max_streaming_working_scratch": max_streaming_working_scratch,
+            "max_fixed_dynamic_streaming_working_scratch": max_fixed_dynamic_streaming_working_scratch,
+            "min_streaming_ratio": min_streaming_ratio,
+        }
+    return {
+        "present": False,
+        "healthy": False,
+        "case_count": 0,
+        "adam7_cases": 0,
+        "stored_achieved": 0,
+        "fixed_achieved": 0,
+        "total_zlib_scratch": 0,
+        "total_streaming_savings": 0,
+        "max_working_scratch": 0,
+        "max_streaming_working_scratch": 0,
+        "max_fixed_dynamic_streaming_working_scratch": 0,
+        "min_streaming_ratio": 0,
+    }
+
+
 def zlib_relaxed_health(artifacts: list[Path]) -> dict:
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
@@ -1309,6 +1368,7 @@ def main() -> int:
     huffman_health = huffman_length_health(artifacts)
     fuzz_health = fuzz_corpus_health(artifacts)
     decode_stage_health_summary = decode_stage_health(artifacts)
+    png_scratch = png_scratch_health(artifacts)
     zlib_relaxed = zlib_relaxed_health(artifacts)
     zstd_compare = zstd_compare_health(artifacts)
     native_allocation = native_allocation_health(artifacts)
@@ -1497,6 +1557,20 @@ def main() -> int:
             f"| commands | {header_health['command_count']} | successes/failures {header_health['command_successes']}/{header_health['command_failures']} |",
             f"| workflows | {header_health['workflow_count']} | successes {header_health['workflow_successes']}, required/missing {header_health['required_workflow_count']}/{header_health['missing_workflow_count']} |",
             f"| dictionary cases | {header_health['dictionary_cases']} | optional/FHCRC {header_health['optional_header_cases']}/{header_health['fhcrc_cases']} |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
+            "## PNG scratch coverage",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| cases | {png_scratch['case_count']} | Adam7 {png_scratch['adam7_cases']}, healthy `{png_scratch['healthy']}` |",
+            f"| streaming achieved | {png_scratch['stored_achieved']}/{png_scratch['case_count']} | fixed/dynamic {png_scratch['fixed_achieved']}/{png_scratch['case_count']} |",
+            f"| zlib scratch savings | {png_scratch['total_streaming_savings']} | zlib scratch {png_scratch['total_zlib_scratch']} |",
+            f"| max working scratch | {png_scratch['max_working_scratch']} | streaming/fixed-dynamic {png_scratch['max_streaming_working_scratch']}/{png_scratch['max_fixed_dynamic_streaming_working_scratch']} |",
+            f"| min streaming ratio x10000 | {png_scratch['min_streaming_ratio']} | lower is better |",
             "",
         ]
     )
@@ -1864,6 +1938,18 @@ def main() -> int:
                 "decode_stage_error_rows": decode_stage_health_summary["error_rows"],
                 "decode_stage_matched_error_rows": decode_stage_health_summary["matched_error_rows"],
                 "decode_stage_unmatched_error_rows": decode_stage_health_summary["unmatched_error_rows"],
+                "png_scratch_present": png_scratch["present"],
+                "png_scratch_healthy": png_scratch["healthy"],
+                "png_scratch_case_count": png_scratch["case_count"],
+                "png_scratch_adam7_cases": png_scratch["adam7_cases"],
+                "png_scratch_stored_achieved": png_scratch["stored_achieved"],
+                "png_scratch_fixed_achieved": png_scratch["fixed_achieved"],
+                "png_scratch_total_zlib_scratch": png_scratch["total_zlib_scratch"],
+                "png_scratch_total_streaming_savings": png_scratch["total_streaming_savings"],
+                "png_scratch_max_working_scratch": png_scratch["max_working_scratch"],
+                "png_scratch_max_streaming_working_scratch": png_scratch["max_streaming_working_scratch"],
+                "png_scratch_max_fixed_dynamic_streaming_working_scratch": png_scratch["max_fixed_dynamic_streaming_working_scratch"],
+                "png_scratch_min_streaming_ratio": png_scratch["min_streaming_ratio"],
                 "zlib_relaxed_present": zlib_relaxed["present"],
                 "zlib_relaxed_healthy": zlib_relaxed["healthy"],
                 "zlib_relaxed_strict_rejections": zlib_relaxed["strict_rejections"],

@@ -23,6 +23,7 @@ FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
 DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
 PYTHON_ZLIB_DIFF_ARTIFACT = "vort-python-zlib-diff-smoke.json"
 ZLIB_RELAXED_ARTIFACT = "vort-zlib-relaxed-report.json"
+PNG_SCRATCH_ARTIFACT = "vort-png-scratch-report.json"
 NATIVE_ALLOCATION_REPORT_ARTIFACT = "vort-native-allocation-report.json"
 NATIVE_ALLOCATION_SMOKE_ARTIFACT = "vort-native-allocation-smoke.json"
 NATIVE_ALLOCATION_NEGATIVE_ARTIFACT = "vort-native-allocation-negative-smoke.json"
@@ -77,6 +78,8 @@ def write_producer_map(
     include_python_zlib_smoke: bool = True,
     include_zlib_relaxed_exact: bool = True,
     include_zlib_relaxed_smoke: bool = True,
+    include_png_scratch_exact: bool = True,
+    include_png_scratch_smoke: bool = True,
     include_native_allocation_exact: bool = True,
     include_native_allocation_smoke: bool = True,
     include_zstd_compare_exact: bool = True,
@@ -140,6 +143,11 @@ def write_producer_map(
         artifact_metadata[ZLIB_RELAXED_ARTIFACT] = {
             "expected_format": "json",
             "smoke_gate": "zig build run-zlib-relaxed-report-gate",
+        }
+    if include_png_scratch_smoke:
+        artifact_metadata[PNG_SCRATCH_ARTIFACT] = {
+            "expected_format": "json",
+            "smoke_gate": "zig build run-png-scratch-report-dashboard",
         }
     if include_native_allocation_smoke:
         for artifact, smoke_gate in (
@@ -211,6 +219,8 @@ def write_producer_map(
         exact[PYTHON_ZLIB_DIFF_ARTIFACT] = "zig build run-python-zlib-diff-dashboard"
     if include_zlib_relaxed_exact:
         exact[ZLIB_RELAXED_ARTIFACT] = "zig build run-zlib-relaxed-report-gate"
+    if include_png_scratch_exact:
+        exact[PNG_SCRATCH_ARTIFACT] = "zig build run-png-scratch-report-dashboard"
     if include_native_allocation_exact:
         exact[NATIVE_ALLOCATION_REPORT_ARTIFACT] = "zig build run-native-allocation-report-dashboard"
         exact[NATIVE_ALLOCATION_SMOKE_ARTIFACT] = "zig build run-native-allocation-smoke"
@@ -698,6 +708,59 @@ def write_zlib_relaxed_report(path: Path) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def write_png_scratch_report(path: Path) -> None:
+    cases = [
+        {
+            "case": "png_rgb8_noninterlaced",
+            "interlace": "none",
+            "width": 5,
+            "height": 5,
+            "bit_depth": 8,
+            "color_type": "truecolor",
+            "stored_streaming_status": "achieved",
+            "fixed_dynamic_streaming_status": "achieved",
+            "zlib_scratch_bytes": 80,
+            "filtered_row_scratch_bytes": 15,
+            "previous_row_scratch_bytes": 15,
+            "fixed_dynamic_history_scratch_bytes": 32768,
+            "image_output_bytes": 75,
+            "working_scratch_bytes": 110,
+            "streaming_working_scratch_bytes": 30,
+            "fixed_dynamic_streaming_working_scratch_bytes": 32798,
+            "streaming_scratch_savings_bytes": 80,
+            "streaming_scratch_ratio_x10000": 2727,
+            "total_caller_owned_bytes": 185,
+            "streaming_total_caller_owned_bytes": 105,
+            "fixed_dynamic_streaming_total_caller_owned_bytes": 32873,
+        },
+        {
+            "case": "png_rgb8_adam7",
+            "interlace": "adam7",
+            "width": 5,
+            "height": 5,
+            "bit_depth": 8,
+            "color_type": "truecolor",
+            "stored_streaming_status": "achieved",
+            "fixed_dynamic_streaming_status": "achieved",
+            "zlib_scratch_bytes": 86,
+            "filtered_row_scratch_bytes": 15,
+            "previous_row_scratch_bytes": 15,
+            "fixed_dynamic_history_scratch_bytes": 32768,
+            "image_output_bytes": 75,
+            "working_scratch_bytes": 116,
+            "streaming_working_scratch_bytes": 30,
+            "fixed_dynamic_streaming_working_scratch_bytes": 32798,
+            "streaming_scratch_savings_bytes": 86,
+            "streaming_scratch_ratio_x10000": 2586,
+            "total_caller_owned_bytes": 191,
+            "streaming_total_caller_owned_bytes": 105,
+            "fixed_dynamic_streaming_total_caller_owned_bytes": 32873,
+        },
+    ]
+    payload = {"schema": "vort.png_scratch_report", "schema_version": 1, "case_count": len(cases), "cases": cases}
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
 def write_native_allocation_artifacts(root: Path) -> None:
     report = {
         "schema": "vort.native_allocation_report",
@@ -1088,6 +1151,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_decode_stage_report(root / DECODE_STAGE_ARTIFACT)
     write_python_zlib_diff_report(root / PYTHON_ZLIB_DIFF_ARTIFACT)
     write_zlib_relaxed_report(root / ZLIB_RELAXED_ARTIFACT)
+    write_png_scratch_report(root / PNG_SCRATCH_ARTIFACT)
     write_native_allocation_artifacts(root)
     write_zstd_compare_artifacts(root)
     write_native_summary_error_dashboard(root / NATIVE_SUMMARY_ERROR_ARTIFACT)
@@ -1453,8 +1517,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 24/24 | 0 | allowed missing 0 |",
-                    "| smoke gates | 24/24 | 0 | required missing 0 |",
+                    "| producer steps | 25/25 | 0 | allowed missing 0 |",
+                    "| smoke gates | 25/25 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -1627,6 +1691,22 @@ def main() -> int:
                     "| zero-allocation cases | 2/2 | smoke present `True` |",
                     "| budget cases | 1/1 | healthy `True` |",
                     "| negative smoke cases | 1/1 | present `True` |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
+                "png_scratch_markdown_table",
+                "PNG scratch Markdown table",
+                dashboard_markdown,
+                [
+                    "## PNG scratch coverage",
+                    "| category | count | detail |",
+                    "| cases | 2 | Adam7 1, healthy `True` |",
+                    "| streaming achieved | 2/2 | fixed/dynamic 2/2 |",
+                    "| zlib scratch savings | 166 | zlib scratch 166 |",
+                    "| max working scratch | 116 | streaming/fixed-dynamic 30/32798 |",
+                    "| min streaming ratio x10000 | 2586 | lower is better |",
                 ],
             )
         )
