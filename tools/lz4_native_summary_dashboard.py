@@ -6,9 +6,10 @@ from __future__ import annotations
 import argparse
 import json
 import pathlib
-import struct
 import subprocess
 import tempfile
+
+from lz4_native_summary_fixtures import dictionary_id_raw_frame, skippable_frame
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DEFAULT_JSON = ROOT / "zig-out" / "vort-lz4-native-stream-summary.json"
@@ -16,47 +17,6 @@ DEFAULT_JSON = ROOT / "zig-out" / "vort-lz4-native-stream-summary.json"
 
 def run_cli(cli: pathlib.Path, *args: str) -> str:
     return subprocess.run([str(cli), *args], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip()
-
-
-def skippable_frame(skippable_id: int, payload: bytes) -> bytes:
-    if not 0 <= skippable_id <= 15:
-        raise ValueError(skippable_id)
-    return struct.pack("<II", 0x184D2A50 + skippable_id, len(payload)) + payload
-
-
-def descriptor_checksum(descriptor: bytes) -> int:
-    # LZ4 frame header checksums use the second byte of XXH32(seed=0).  Python's
-    # stdlib has no XXH32, so this fixture keeps the checksum literal local and
-    # verifies below that Vort accepts it.  For descriptor bytes:
-    #   FLG=0x69 (independent, content-size, Dictionary_ID)
-    #   BD=0x40  (64 KiB max block)
-    #   content size=3
-    #   dictionary ID=0x1234abcd
-    # the checksum is 0x19.
-    expected_descriptor = b"\x69\x40\x03\x00\x00\x00\x00\x00\x00\x00\xcd\xab\x34\x12"
-    if descriptor != expected_descriptor:
-        raise ValueError(f"unexpected LZ4 dictionary fixture descriptor: {descriptor.hex()}")
-    return 0x19
-
-
-def dictionary_id_raw_frame(dictionary_id: int, payload: bytes) -> bytes:
-    if not 0 < dictionary_id <= 0xFFFF_FFFF:
-        raise ValueError(dictionary_id)
-    if len(payload) > 0xFFFF_FFFF:
-        raise ValueError("fixture payload too large")
-    descriptor = (
-        b"\x69\x40"
-        + struct.pack("<Q", len(payload))
-        + struct.pack("<I", dictionary_id)
-    )
-    return (
-        struct.pack("<I", 0x184D2204)
-        + descriptor
-        + bytes([descriptor_checksum(descriptor)])
-        + struct.pack("<I", 0x8000_0000 | len(payload))
-        + payload
-        + b"\x00\x00\x00\x00"
-    )
 
 
 def main() -> int:

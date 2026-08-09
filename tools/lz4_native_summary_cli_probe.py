@@ -5,10 +5,11 @@ from __future__ import annotations
 
 import json
 import pathlib
-import struct
 import subprocess
 import sys
 import tempfile
+
+from lz4_native_summary_fixtures import dictionary_id_raw_frame, skippable_frame
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -25,12 +26,6 @@ def parse_fields(output: str) -> dict[str, int]:
         key, value = token.split("=", 1)
         fields[key] = int(value)
     return fields
-
-
-def skippable_frame(skippable_id: int, payload: bytes) -> bytes:
-    if not 0 <= skippable_id <= 15:
-        raise ValueError(skippable_id)
-    return struct.pack("<II", 0x184D2A50 + skippable_id, len(payload)) + payload
 
 
 def require_fields(actual: dict[str, int], expected: dict[str, int], context: str) -> None:
@@ -93,27 +88,29 @@ def main() -> int:
         run_cli(cli, "encode-lz4-native-file", str(second_plain), str(second_frame))
         skip_a = b"lz4 summary metadata a"
         skip_b = b"lz4 summary metadata bb"
+        dict_payload = b"abc"
         stream_path.write_bytes(
             first_frame.read_bytes()
             + skippable_frame(4, skip_a)
             + skippable_frame(13, skip_b)
             + second_frame.read_bytes()
+            + dictionary_id_raw_frame(0x1234_ABCD, dict_payload)
         )
         stream_summary = parse_fields(run_cli(cli, "summary-lz4-native-file", str(stream_path)))
         require_fields(
             stream_summary,
             {
-                "frames": 2,
+                "frames": 3,
                 "skippable_frames": 2,
-                "content_size_frames": 2,
+                "content_size_frames": 3,
                 "checksum_frames": 2,
                 "block_checksum_frames": 0,
-                "dictionary_id_frames": 0,
-                "declared_content_bytes": len(first_payload) + len(second_payload),
-                "blocks": 2,
-                "raw_blocks": 2,
+                "dictionary_id_frames": 1,
+                "declared_content_bytes": len(first_payload) + len(second_payload) + len(dict_payload),
+                "blocks": 3,
+                "raw_blocks": 3,
                 "compressed_blocks": 0,
-                "payload_bytes": len(first_payload) + len(second_payload),
+                "payload_bytes": len(first_payload) + len(second_payload) + len(dict_payload),
                 "skippable_payload_bytes": len(skip_a) + len(skip_b),
             },
             "concatenated/skippable summary",
