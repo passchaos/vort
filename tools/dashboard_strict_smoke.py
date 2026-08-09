@@ -1315,6 +1315,20 @@ def main() -> int:
         )
         checks.append(
             markdown_check_row(
+                "sidecar_corrupt_markdown_table",
+                "sidecar corrupt Markdown table",
+                dashboard_markdown,
+                [
+                    "## Sidecar corrupt smoke coverage",
+                    "| category | count | detail |",
+                    "| corrupt rows | 2 | healthy `True` |",
+                    "| metadata checks | 2 | failed 0 |",
+                    "| full decode rejection | 2 | not rejected 0 |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
                 "python_zlib_diff_markdown_table",
                 "Python zlib differential Markdown table",
                 dashboard_markdown,

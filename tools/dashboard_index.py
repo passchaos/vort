@@ -1281,6 +1281,18 @@ def main() -> int:
     )
     lines.extend(
         [
+            "## Sidecar corrupt smoke coverage",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| corrupt rows | {sidecar_corrupt_health_summary['rows']} | healthy `{sidecar_corrupt_healthy}` |",
+            f"| metadata checks | {sidecar_corrupt_health_summary['metadata_ok_rows']} | failed {sidecar_corrupt_health_summary['metadata_failed_rows']} |",
+            f"| full decode rejection | {sidecar_corrupt_health_summary['full_rejected_rows']} | not rejected {sidecar_corrupt_health_summary['full_not_rejected_rows']} |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
             "## Python zlib differential coverage",
             "",
             "| category | count | detail |",
