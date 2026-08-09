@@ -1609,7 +1609,9 @@ architecture blindly.
   `run-lz4-native-summary-dashboard` step writes
   `zig-out/vort-lz4-native-stream-summary.json` for dashboard indexing. A shared
   `run-native-summary-error-dashboard` artifact now retains representative
-  structured LZ4/Zstd summary error JSON plus error/phase counts.
+  structured LZ4/Zstd summary error JSON plus error/phase counts, and
+  `run-native-summary-error-negative-smoke` verifies those aggregate counts fail
+  on drift.
 
 - Added LZ4 raw-block summary helpers and CLI commands, including prefix-history
   variants. The summary validates block token structure while reporting decoded

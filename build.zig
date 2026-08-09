@@ -1835,6 +1835,10 @@ pub fn build(b: *std.Build) void {
     const native_summary_error_dashboard_step = b.step("run-native-summary-error-dashboard", "Write native summary structured error JSON artifact");
     native_summary_error_dashboard_step.dependOn(&native_summary_error_dashboard.step);
 
+    const native_summary_error_negative_smoke = b.addSystemCommand(&.{ "python3", "tools/native_summary_error_negative_smoke.py" });
+    const native_summary_error_negative_smoke_step = b.step("run-native-summary-error-negative-smoke", "Validate native summary error dashboard negative drift cases");
+    native_summary_error_negative_smoke_step.dependOn(&native_summary_error_negative_smoke.step);
+
     const zstd_native_probe = b.addSystemCommand(&.{ "python3", "tools/zstd_native_probe.py" });
     zstd_native_probe.addArtifactArg(cli_exe);
     if (b.args) |args| zstd_native_probe.addArgs(args);
@@ -3156,6 +3160,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(lz4_native_summary_dashboard_step);
     ci_smoke_step.dependOn(zstd_native_summary_cli_probe_step);
     ci_smoke_step.dependOn(native_summary_error_dashboard_step);
+    ci_smoke_step.dependOn(native_summary_error_negative_smoke_step);
     ci_smoke_step.dependOn(zstd_native_summary_dashboard_step);
     ci_smoke_step.dependOn(zstd_native_probe_step);
     ci_smoke_step.dependOn(native_codec_probes_dashboard_step);

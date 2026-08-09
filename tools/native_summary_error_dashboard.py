@@ -26,6 +26,34 @@ def run_error(cli: pathlib.Path, command: str, path: pathlib.Path) -> dict[str, 
     return payload
 
 
+
+def build_summary(cases: list[dict[str, object]]) -> dict[str, object]:
+    error_counts = Counter(str(case["error"]) for case in cases)
+    phase_counts = Counter(str(case["phase"]) for case in cases)
+    return {
+        "schema": "vort.native_summary_error_dashboard",
+        "schema_version": 1,
+        "ok": True,
+        "case_count": len(cases),
+        "lz4_case_count": sum(1 for case in cases if case["codec"] == "lz4"),
+        "zstd_case_count": sum(1 for case in cases if case["codec"] == "zstd"),
+        "error_counts": dict(sorted(error_counts.items())),
+        "phase_counts": dict(sorted(phase_counts.items())),
+        "cases": cases,
+    }
+
+
+def validate_summary(summary: dict[str, object]) -> None:
+    cases = summary.get("cases")
+    if not isinstance(cases, list):
+        raise AssertionError("cases must be a list")
+    expected = build_summary([case for case in cases if isinstance(case, dict)])
+    for key in ("case_count", "lz4_case_count", "zstd_case_count", "error_counts", "phase_counts"):
+        if summary.get(key) != expected[key]:
+            raise AssertionError(f"{key} mismatch: expected {expected[key]!r}, got {summary.get(key)!r}")
+    if summary.get("ok") is not True:
+        raise AssertionError("summary ok must be true")
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("cli", type=pathlib.Path)
@@ -54,19 +82,8 @@ def main() -> int:
                 raise AssertionError(f"{name}: expected {expected_error}/{expected_phase}, got {payload!r}")
             cases.append({"name": name, "codec": codec, **payload})
 
-    error_counts = Counter(str(case["error"]) for case in cases)
-    phase_counts = Counter(str(case["phase"]) for case in cases)
-    summary = {
-        "schema": "vort.native_summary_error_dashboard",
-        "schema_version": 1,
-        "ok": True,
-        "case_count": len(cases),
-        "lz4_case_count": sum(1 for case in cases if case["codec"] == "lz4"),
-        "zstd_case_count": sum(1 for case in cases if case["codec"] == "zstd"),
-        "error_counts": dict(sorted(error_counts.items())),
-        "phase_counts": dict(sorted(phase_counts.items())),
-        "cases": cases,
-    }
+    summary = build_summary(cases)
+    validate_summary(summary)
     args.json.parent.mkdir(parents=True, exist_ok=True)
     args.json.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print("native_summary_error_dashboard=ok", f"cases={summary['case_count']}", f"path={args.json}")

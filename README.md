@@ -229,6 +229,7 @@ zig build run-lz4-native-dictionary-probe
 zig build run-lz4-native-summary-cli-probe
 zig build run-lz4-native-summary-dashboard
 zig build run-native-summary-error-dashboard
+zig build run-native-summary-error-negative-smoke
 zig build run-lz4-native-probe -- --path README.md --limit 4096
 zig build run-lz4-native-probe -- --dir docs --max-files 2 --limit 2048
 zig build run -- encode-lz4-native-file README.md /tmp/vort-readme.lz4
