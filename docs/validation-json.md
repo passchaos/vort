@@ -2410,7 +2410,7 @@ generation fails when the header inspect artifact is absent, reports `ok=false`,
 or has missing required workflows. With `--strict-validation-health`, generation
 fails whenever the aggregate `validation_healthy` field is false and reports the
 `validation_unhealthy_reasons` list with specific missing/failed artifact or coverage reasons.
-The generated Markdown index also includes `Validation unhealthy reasons`,
+The generated Markdown index also includes `Dashboard artifact inventory`, `Validation unhealthy reasons`,
 `Producer and smoke-gate coverage`, `Dashboard strict mode coverage`, `Header
 inspect coverage`, `Sidecar corrupt smoke coverage`, `Huffman length oracle
 coverage`, `Native allocation coverage`, `Python zlib differential coverage`,
@@ -2418,7 +2418,7 @@ coverage`, `Native allocation coverage`, `Python zlib differential coverage`,
 coverage`, `Native tier corpus discovery`, `Native codec probe coverage`,
 `Native codec probe capabilities`, `Native codec probe executables`, `Native
 summary error codec coverage`, and `Native summary error phase offsets` tables
-so aggregate validation health, producer/smoke-gate coverage, dashboard strict
+so artifact inventory, aggregate validation health, producer/smoke-gate coverage, dashboard strict
 gate coverage, header-format coverage, corrupt-sidecar rejection coverage,
 Huffman optimality, zstd comparison gate coverage, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, zlib differential coverage,
 decode-stage error matching, fuzz corpus matching, native stream metadata
@@ -3107,9 +3107,9 @@ Example:
   "expected_modes": [
     {
       "mode": "dashboard-markdown",
-      "min_checks": 19,
+      "min_checks": 20,
       "min_expected_failures": 0,
-      "min_matched": 19
+      "min_matched": 20
     },
     {
       "mode": "strict-validation-health",
@@ -3195,7 +3195,7 @@ the smoke artifact can pass. The expected reason/check/fixture matrix lives in
 `tools/dashboard_strict_validation_reasons.json`; the retained
 `strict-validation-health` mode minimums must cover every configured reason,
 currently 31. The `dashboard-markdown` mode verifies that important human-facing
-sections, including aggregate validation health, producer/smoke-gate
+sections, including artifact inventory, aggregate validation health, producer/smoke-gate
 coverage, dashboard strict gate coverage, header inspect coverage, corrupt-sidecar
 rejection coverage, Huffman optimality, zstd comparison gate coverage, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, Python zlib
 differential coverage, decode-stage error matching, fuzz corpus matching, native
@@ -3213,7 +3213,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 22,
+  "check_count": 23,
   "mode_count": 4,
   "expected_mode_count": 4,
   "missing_mode_count": 0,
@@ -3227,9 +3227,9 @@ Example:
     },
     {
       "mode": "dashboard-markdown",
-      "min_checks": 19,
+      "min_checks": 20,
       "min_expected_failures": 0,
-      "min_matched": 19
+      "min_matched": 20
     },
     {
       "mode": "strict-validation-health",
@@ -3260,14 +3260,14 @@ Example:
     },
     {
       "mode": "dashboard-markdown",
-      "checks": 19,
-      "min_checks": 19,
+      "checks": 20,
+      "min_checks": 20,
       "missing_checks": 0,
       "expected_failures": 0,
       "min_expected_failures": 0,
       "missing_expected_failures": 0,
-      "matched": 19,
-      "min_matched": 19,
+      "matched": 20,
+      "min_matched": 20,
       "missing_matched": 0
     },
     {
@@ -3304,9 +3304,9 @@ Example:
     },
     {
       "mode": "dashboard-markdown",
-      "checks": 19,
+      "checks": 20,
       "expected_failures": 0,
-      "matched": 19
+      "matched": 20
     },
     {
       "mode": "strict-validation-health",
@@ -3329,6 +3329,18 @@ Example:
       "expected_output": "dashboard_index=",
       "actual_output": "dashboard_index=zig-out/vort-dashboard-index.md ...",
       "actual_output_bytes": 45,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "dashboard_artifact_inventory_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "dashboard artifact inventory Markdown table",
+      "actual_output": "0:ok,1:ok,2:ok,3:ok,4:ok",
+      "actual_output_bytes": 24,
       "actual_output_limit": 240,
       "actual_output_truncated": false,
       "returncode": 0,

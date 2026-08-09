@@ -1597,6 +1597,20 @@ def main() -> int:
         checks.append(check_row("all_strict_ok", "all", False, True, ok.returncode, "dashboard_index=", ok.stdout))
         checks.append(
             markdown_check_row(
+                "dashboard_artifact_inventory_markdown_table",
+                "dashboard artifact inventory Markdown table",
+                dashboard_markdown,
+                [
+                    "## Dashboard artifact inventory",
+                    "| category | artifacts | json | markdown | csv | producer steps | smoke gates |",
+                    "| `validation` |",
+                    "| `corpus and ratio` |",
+                    "| `benchmark` |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
                 "validation_unhealthy_reasons_markdown_table",
                 "validation unhealthy reasons Markdown table",
                 dashboard_markdown,

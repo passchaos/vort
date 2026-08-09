@@ -535,7 +535,8 @@ def main() -> int:
         assert covered_validation_reasons == expected_validation_reasons
         assert all(row["matched"] is True for row in dashboard_strict["validation_unhealthy_reason_checks"])
         assert any(row["mode"] == "strict-validation-health" and row["checks"] >= len(expected_validation_reasons) for row in dashboard_strict["mode_counts"])
-        assert any(row["mode"] == "dashboard-markdown" and row["checks"] >= 19 and row["matched"] >= 19 for row in dashboard_strict["mode_counts"])
+        assert any(row["mode"] == "dashboard-markdown" and row["checks"] >= 20 and row["matched"] >= 20 for row in dashboard_strict["mode_counts"])
+        assert any(row["name"] == "dashboard_artifact_inventory_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "validation_unhealthy_reasons_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "producer_smoke_gate_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "dashboard_strict_mode_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
@@ -565,6 +566,7 @@ def main() -> int:
         assert any(row["actual_output_truncated"] is True for row in dashboard_strict["checks"])
         dashboard_strict_markdown = dashboard_strict_markdown_path.read_text()
         assert "missing_header_workflow" in dashboard_strict_markdown
+        assert "dashboard_artifact_inventory_markdown_table" in dashboard_strict_markdown
         assert "validation_unhealthy_reasons_markdown_table" in dashboard_strict_markdown
         assert "producer_smoke_gate_markdown_table" in dashboard_strict_markdown
         assert "dashboard_strict_mode_markdown_table" in dashboard_strict_markdown

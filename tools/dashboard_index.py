@@ -1580,6 +1580,33 @@ def main() -> int:
         f"- native tier corpus discovery: source mode `{native_tier_discovery_health['source_mode']}`, sources {native_tier_discovery_health['source_count']}/{native_tier_discovery_health['candidate_count']}, selected cases {native_tier_discovery_health['selected_case_count']}, missing reason `{native_tier_discovery_health['missing_reason'] or 'none'}`, healthy `{native_tier_discovery_health['healthy']}`",
         "",
     ]
+    category_rows = []
+    for category in sorted(grouped):
+        category_records = [record for record in records if record["category"] == category]
+        category_rows.append(
+            {
+                "category": category,
+                "artifacts": len(category_records),
+                "json": sum(1 for record in category_records if record["format"] == "json"),
+                "markdown": sum(1 for record in category_records if record["format"] == "md"),
+                "csv": sum(1 for record in category_records if record["format"] == "csv"),
+                "producer_steps": sum(1 for record in category_records if record["producer_step"]),
+                "smoke_gates": sum(1 for record in category_records if record["smoke_gate"]),
+            }
+        )
+    lines.extend(
+        [
+            "## Dashboard artifact inventory",
+            "",
+            "| category | artifacts | json | markdown | csv | producer steps | smoke gates |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for row in category_rows:
+        lines.append(
+            f"| `{row['category']}` | {row['artifacts']} | {row['json']} | {row['markdown']} | {row['csv']} | {row['producer_steps']} | {row['smoke_gates']} |"
+        )
+    lines.append("")
     validation_reason_status = "none" if not validation_unhealthy_reasons else ", ".join(f"`{reason}`" for reason in validation_unhealthy_reasons)
     lines.extend(
         [
