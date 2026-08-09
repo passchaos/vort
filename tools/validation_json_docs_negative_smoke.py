@@ -311,6 +311,8 @@ def main() -> int:
                 "native_summary_error_truncated_frame_count": 4,
                 "native_summary_error_magic_phase_count": 2,
                 "native_summary_error_skippable_payload_phase_count": 2,
+                "native_summary_error_error_counts": {"CorruptFrame": 1, "InvalidMagic": 1, "TruncatedFrame": 4},
+                "native_summary_error_phase_counts": {"frame_header": 2, "magic": 2, "skippable_payload": 2},
                 "lz4_native_summary_present": True,
                 "lz4_native_summary_healthy": True,
                 "lz4_native_summary_frame_count": 2,

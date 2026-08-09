@@ -2475,7 +2475,8 @@ Top-level fields:
   `native_summary_error_zstd_case_count`,
   `native_summary_error_truncated_frame_count`,
   `native_summary_error_magic_phase_count`,
-  `native_summary_error_skippable_payload_phase_count`
+  `native_summary_error_skippable_payload_phase_count`,
+  `native_summary_error_error_counts`, `native_summary_error_phase_counts`
 - `lz4_native_summary_present`, `lz4_native_summary_healthy`,
   `lz4_native_summary_frame_count`,
   `lz4_native_summary_skippable_frame_count`,
@@ -2659,6 +2660,8 @@ Example:
   "native_summary_error_truncated_frame_count": 0,
   "native_summary_error_magic_phase_count": 0,
   "native_summary_error_skippable_payload_phase_count": 0,
+  "native_summary_error_error_counts": {},
+  "native_summary_error_phase_counts": {},
   "lz4_native_summary_present": false,
   "lz4_native_summary_healthy": false,
   "lz4_native_summary_frame_count": 0,

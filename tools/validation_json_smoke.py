@@ -877,6 +877,8 @@ def main() -> int:
         assert dashboard["native_summary_error_truncated_frame_count"] == native_summary_error_dashboard["error_counts"]["TruncatedFrame"]
         assert dashboard["native_summary_error_magic_phase_count"] == native_summary_error_dashboard["phase_counts"]["magic"]
         assert dashboard["native_summary_error_skippable_payload_phase_count"] == native_summary_error_dashboard["phase_counts"]["skippable_payload"]
+        assert dashboard["native_summary_error_error_counts"] == native_summary_error_dashboard["error_counts"]
+        assert dashboard["native_summary_error_phase_counts"] == native_summary_error_dashboard["phase_counts"]
         assert dashboard["lz4_native_summary_present"] is True
         assert dashboard["lz4_native_summary_healthy"] is True
         assert dashboard["lz4_native_summary_frame_count"] == lz4_native_summary["frame_count"]

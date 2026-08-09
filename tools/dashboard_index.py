@@ -759,6 +759,8 @@ def native_summary_error_dashboard_health(artifacts: list[Path]) -> dict:
             "truncated_frame_count": truncated_frame_count,
             "magic_phase_count": magic_phase_count,
             "skippable_payload_phase_count": skippable_payload_phase_count,
+            "error_counts": error_counts,
+            "phase_counts": phase_counts,
         }
     return {
         "present": False,
@@ -769,6 +771,8 @@ def native_summary_error_dashboard_health(artifacts: list[Path]) -> dict:
         "truncated_frame_count": 0,
         "magic_phase_count": 0,
         "skippable_payload_phase_count": 0,
+        "error_counts": {},
+        "phase_counts": {},
     }
 
 def artifact_metadata(path: Path) -> str:
@@ -1266,6 +1270,8 @@ def main() -> int:
                 "native_summary_error_truncated_frame_count": native_summary_error_health["truncated_frame_count"],
                 "native_summary_error_magic_phase_count": native_summary_error_health["magic_phase_count"],
                 "native_summary_error_skippable_payload_phase_count": native_summary_error_health["skippable_payload_phase_count"],
+                "native_summary_error_error_counts": native_summary_error_health["error_counts"],
+                "native_summary_error_phase_counts": native_summary_error_health["phase_counts"],
                 "lz4_native_summary_present": lz4_native_summary["present"],
                 "lz4_native_summary_healthy": lz4_native_summary_healthy,
                 "lz4_native_summary_frame_count": lz4_native_summary["frame_count"],

@@ -943,6 +943,8 @@
         "native_summary_error_truncated_frame_count": "int",
         "native_summary_error_magic_phase_count": "int",
         "native_summary_error_skippable_payload_phase_count": "int",
+        "native_summary_error_error_counts": "dict",
+        "native_summary_error_phase_counts": "dict",
         "lz4_native_summary_present": "bool",
         "lz4_native_summary_healthy": "bool",
         "lz4_native_summary_frame_count": "int",
@@ -1120,6 +1122,18 @@
           "zstd_native_summary_undercovered",
           "missing_native_tier_corpus_discovery_artifact",
           "native_tier_corpus_discovery_failed"
+        ]
+      },
+      "dict_key_enums": {
+        "native_summary_error_error_counts": [
+          "CorruptFrame",
+          "InvalidMagic",
+          "TruncatedFrame"
+        ],
+        "native_summary_error_phase_counts": [
+          "frame_header",
+          "magic",
+          "skippable_payload"
         ]
       }
     },
