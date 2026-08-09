@@ -81,6 +81,14 @@ def main() -> int:
     bad_offset_ranges["phase_offset_ranges"] = {"magic": {"min": 99, "max": 99}}
     smoke_cases.append(check_failure("bad_offset_ranges", bad_offset_ranges, "phase_offset_ranges mismatch"))
 
+    bad_lz4_offset_range = copy.deepcopy(base_summary)
+    bad_lz4_offset_range["lz4_offset_max"] = 99
+    smoke_cases.append(check_failure("bad_lz4_offset_range", bad_lz4_offset_range, "lz4_offset_max mismatch"))
+
+    bad_zstd_offset_range = copy.deepcopy(base_summary)
+    bad_zstd_offset_range["zstd_offset_min"] = 99
+    smoke_cases.append(check_failure("bad_zstd_offset_range", bad_zstd_offset_range, "zstd_offset_min mismatch"))
+
     summary = {
         "schema": "vort.native_summary_error_negative_smoke",
         "schema_version": 1,

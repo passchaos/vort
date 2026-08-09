@@ -331,7 +331,7 @@ def main() -> int:
         native_summary_error_negative = json.loads(native_summary_error_negative_path.read_text())
         assert native_summary_error_negative["schema"] == "vort.native_summary_error_negative_smoke"
         assert native_summary_error_negative["ok"] is True
-        assert native_summary_error_negative["case_count"] >= 4
+        assert native_summary_error_negative["case_count"] >= 6
         assert all(row["matched"] is True for row in native_summary_error_negative["cases"])
         validate_value_against_manifest(native_summary_error_negative, schemas_def)
         lz4_native_summary = json.loads(lz4_native_summary_path.read_text())

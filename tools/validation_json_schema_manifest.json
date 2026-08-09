@@ -2974,7 +2974,9 @@
           "bad_error_counts",
           "bad_phase_counts",
           "bad_case_count",
-          "bad_offset_ranges"
+          "bad_offset_ranges",
+          "bad_lz4_offset_range",
+          "bad_zstd_offset_range"
         ]
       },
       "count_rules": {
