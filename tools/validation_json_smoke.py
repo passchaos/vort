@@ -318,9 +318,11 @@ def main() -> int:
         assert native_summary_error_dashboard["schema"] == "vort.native_summary_error_dashboard"
         assert native_summary_error_dashboard["schema_version"] == 1
         assert native_summary_error_dashboard["ok"] is True
-        assert native_summary_error_dashboard["case_count"] >= 12
-        assert native_summary_error_dashboard["lz4_case_count"] >= 6
-        assert native_summary_error_dashboard["zstd_case_count"] >= 6
+        assert native_summary_error_dashboard["case_count"] >= 14
+        assert native_summary_error_dashboard["lz4_case_count"] >= 7
+        assert native_summary_error_dashboard["zstd_case_count"] >= 7
+        assert native_summary_error_dashboard["error_counts"]["ChecksumMismatch"] >= 1
+        assert native_summary_error_dashboard["error_counts"]["CorruptFrame"] >= 4
         assert native_summary_error_dashboard["error_counts"]["TruncatedFrame"] >= 8
         assert native_summary_error_dashboard["phase_counts"]["magic"] >= 2
         assert native_summary_error_dashboard["phase_counts"]["skippable_payload"] >= 2
@@ -885,6 +887,8 @@ def main() -> int:
         assert dashboard["native_summary_error_case_count"] == native_summary_error_dashboard["case_count"]
         assert dashboard["native_summary_error_lz4_case_count"] == native_summary_error_dashboard["lz4_case_count"]
         assert dashboard["native_summary_error_zstd_case_count"] == native_summary_error_dashboard["zstd_case_count"]
+        assert dashboard["native_summary_error_checksum_mismatch_count"] == native_summary_error_dashboard["error_counts"]["ChecksumMismatch"]
+        assert dashboard["native_summary_error_corrupt_frame_count"] == native_summary_error_dashboard["error_counts"]["CorruptFrame"]
         assert dashboard["native_summary_error_truncated_frame_count"] == native_summary_error_dashboard["error_counts"]["TruncatedFrame"]
         assert dashboard["native_summary_error_magic_phase_count"] == native_summary_error_dashboard["phase_counts"]["magic"]
         assert dashboard["native_summary_error_skippable_payload_phase_count"] == native_summary_error_dashboard["phase_counts"]["skippable_payload"]

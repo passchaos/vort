@@ -2179,6 +2179,7 @@ Example:
   "lz4_case_count": 1,
   "zstd_case_count": 0,
   "error_counts": {
+    "ChecksumMismatch": 1,
     "CorruptFrame": 1
   },
   "phase_counts": {
@@ -2528,6 +2529,8 @@ Top-level fields:
 - `native_summary_error_present`, `native_summary_error_healthy`,
   `native_summary_error_case_count`, `native_summary_error_lz4_case_count`,
   `native_summary_error_zstd_case_count`,
+  `native_summary_error_checksum_mismatch_count`,
+  `native_summary_error_corrupt_frame_count`,
   `native_summary_error_truncated_frame_count`,
   `native_summary_error_magic_phase_count`,
   `native_summary_error_skippable_payload_phase_count`,
@@ -2725,6 +2728,8 @@ Example:
   "native_summary_error_case_count": 0,
   "native_summary_error_lz4_case_count": 0,
   "native_summary_error_zstd_case_count": 0,
+  "native_summary_error_checksum_mismatch_count": 0,
+  "native_summary_error_corrupt_frame_count": 0,
   "native_summary_error_truncated_frame_count": 0,
   "native_summary_error_magic_phase_count": 0,
   "native_summary_error_skippable_payload_phase_count": 0,

@@ -810,7 +810,9 @@
             "native_summary_error_skippable_payload_phase_count",
             "native_summary_error_frame_body_phase_count",
             "native_summary_error_frame_checksum_phase_count",
-            "native_summary_error_frame_phase_count"
+            "native_summary_error_frame_phase_count",
+            "native_summary_error_checksum_mismatch_count",
+            "native_summary_error_corrupt_frame_count"
           ]
         },
         "native_summary_error_negative_healthy": {
@@ -952,6 +954,8 @@
         "native_summary_error_case_count": "int",
         "native_summary_error_lz4_case_count": "int",
         "native_summary_error_zstd_case_count": "int",
+        "native_summary_error_checksum_mismatch_count": "int",
+        "native_summary_error_corrupt_frame_count": "int",
         "native_summary_error_truncated_frame_count": "int",
         "native_summary_error_magic_phase_count": "int",
         "native_summary_error_skippable_payload_phase_count": "int",
@@ -1157,6 +1161,7 @@
       },
       "dict_key_enums": {
         "native_summary_error_error_counts": [
+          "ChecksumMismatch",
           "CorruptFrame",
           "InvalidMagic",
           "TruncatedFrame"
@@ -1178,11 +1183,13 @@
           "skippable_payload"
         ],
         "native_summary_error_lz4_error_counts": [
+          "ChecksumMismatch",
           "CorruptFrame",
           "InvalidMagic",
           "TruncatedFrame"
         ],
         "native_summary_error_zstd_error_counts": [
+          "ChecksumMismatch",
           "CorruptFrame",
           "InvalidMagic",
           "TruncatedFrame"
@@ -2964,6 +2971,7 @@
           "zstd"
         ],
         "error": [
+          "ChecksumMismatch",
           "CorruptFrame",
           "InvalidMagic",
           "TruncatedFrame"
