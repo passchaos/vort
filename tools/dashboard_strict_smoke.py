@@ -16,6 +16,11 @@ EXPECTED_MODES = ROOT / "tools" / "dashboard_strict_expected_modes.json"
 VALIDATION_REASONS = ROOT / "tools" / "dashboard_strict_validation_reasons.json"
 HEADER_INSPECT_ARTIFACT = "vort-header-inspect-smoke.json"
 DASHBOARD_STRICT_ARTIFACT = "vort-dashboard-strict-smoke.json"
+DASHBOARD_CONFIG_INDEX_SMOKE_ARTIFACT = "vort-dashboard-config-index-smoke.json"
+DASHBOARD_CONFIG_INDEX_NEGATIVE_ARTIFACT = "vort-dashboard-config-index-negative-smoke.json"
+DASHBOARD_CATEGORY_NEGATIVE_ARTIFACT = "vort-dashboard-category-negative-smoke.json"
+DASHBOARD_PRODUCERS_REQUIRED_ARTIFACT = "vort-dashboard-producers-required-smoke.json"
+DASHBOARD_PRODUCERS_NEGATIVE_ARTIFACT = "vort-dashboard-producers-negative-smoke.json"
 SIDECAR_CORRUPT_ARTIFACT = "vort-sidecar-corrupt-smoke.json"
 HUFFMAN_LENGTH_ARTIFACT = "vort-huffman-length-report.csv"
 FUZZ_CORPUS_ARTIFACT = "vort-deflate-wrapper-fuzz-corpus.json"
@@ -71,6 +76,8 @@ def write_producer_map(
     include_header_smoke: bool = True,
     include_strict_exact: bool = True,
     include_strict_smoke: bool = True,
+    include_dashboard_configuration_exact: bool = True,
+    include_dashboard_configuration_smoke: bool = True,
     include_sidecar_corrupt_exact: bool = True,
     include_sidecar_corrupt_smoke: bool = True,
     include_huffman_exact: bool = True,
@@ -120,6 +127,15 @@ def write_producer_map(
             "expected_format": "json",
             "smoke_gate": "zig build run-dashboard-strict-smoke",
         }
+    if include_dashboard_configuration_smoke:
+        for artifact, smoke_gate in (
+            (DASHBOARD_CONFIG_INDEX_SMOKE_ARTIFACT, "zig build run-dashboard-config-index-smoke"),
+            (DASHBOARD_CONFIG_INDEX_NEGATIVE_ARTIFACT, "zig build run-dashboard-config-index-negative-smoke"),
+            (DASHBOARD_CATEGORY_NEGATIVE_ARTIFACT, "zig build run-dashboard-category-negative-smoke"),
+            (DASHBOARD_PRODUCERS_REQUIRED_ARTIFACT, "zig build run-dashboard-producers-required-smoke"),
+            (DASHBOARD_PRODUCERS_NEGATIVE_ARTIFACT, "zig build run-dashboard-producers-negative-smoke"),
+        ):
+            artifact_metadata[artifact] = {"expected_format": "json", "smoke_gate": smoke_gate}
     if include_sidecar_corrupt_smoke:
         artifact_metadata[SIDECAR_CORRUPT_ARTIFACT] = {
             "expected_format": "json",
@@ -228,6 +244,12 @@ def write_producer_map(
         exact[HEADER_INSPECT_ARTIFACT] = "zig build run-header-inspect-dashboard"
     if include_strict_exact:
         exact[DASHBOARD_STRICT_ARTIFACT] = "zig build run-dashboard-strict-smoke"
+    if include_dashboard_configuration_exact:
+        exact[DASHBOARD_CONFIG_INDEX_SMOKE_ARTIFACT] = "zig build run-dashboard-config-index-smoke"
+        exact[DASHBOARD_CONFIG_INDEX_NEGATIVE_ARTIFACT] = "zig build run-dashboard-config-index-negative-smoke"
+        exact[DASHBOARD_CATEGORY_NEGATIVE_ARTIFACT] = "zig build run-dashboard-category-negative-smoke"
+        exact[DASHBOARD_PRODUCERS_REQUIRED_ARTIFACT] = "zig build run-dashboard-producers-required-smoke"
+        exact[DASHBOARD_PRODUCERS_NEGATIVE_ARTIFACT] = "zig build run-dashboard-producers-negative-smoke"
     if include_sidecar_corrupt_exact:
         exact[SIDECAR_CORRUPT_ARTIFACT] = "zig build run-sidecar-corrupt-dashboard"
     if include_huffman_exact:
@@ -424,6 +446,159 @@ def write_dashboard_strict_summary(path: Path, *, ok: bool = True, missing_modes
         "validation_unhealthy_reason_checks": validation_reason_checks,
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def write_dashboard_configuration_artifacts(root: Path) -> None:
+    config_index_smoke = {
+        "schema": "vort.dashboard_config_index_smoke",
+        "schema_version": 1,
+        "ok": True,
+        "config_count": 3,
+        "configs": [
+            {
+                "path": "tools/dashboard_category_expected_artifacts.json",
+                "schema_name": "vort.dashboard_category_expected_artifacts",
+                "docs_section": "## `vort.dashboard_category_expected_artifacts`",
+                "validation_step": "zig build run-dashboard-category-smoke",
+                "consumer": "tools/dashboard_category_smoke.py",
+                "path_exists": True,
+                "schema_matches": True,
+                "docs_section_present": True,
+                "validation_step_present": True,
+                "consumer_exists": True,
+                "manifest_schema_present": True,
+                "validation_json_smoke_checked": True,
+                "matched": True,
+            },
+            {
+                "path": "tools/dashboard_producers_required_artifacts.json",
+                "schema_name": "vort.dashboard_producers_required_artifacts",
+                "docs_section": "## `vort.dashboard_producers_required_artifacts`",
+                "validation_step": "zig build run-dashboard-producers-required-smoke",
+                "consumer": "tools/dashboard_producers_required_smoke.py",
+                "path_exists": True,
+                "schema_matches": True,
+                "docs_section_present": True,
+                "validation_step_present": True,
+                "consumer_exists": True,
+                "manifest_schema_present": True,
+                "validation_json_smoke_checked": True,
+                "matched": True,
+            },
+            {
+                "path": "tools/dashboard_strict_expected_modes.json",
+                "schema_name": "vort.dashboard_strict_expected_modes",
+                "docs_section": "## `vort.dashboard_strict_expected_modes`",
+                "validation_step": "zig build run-dashboard-strict-smoke",
+                "consumer": "tools/dashboard_strict_smoke.py",
+                "path_exists": True,
+                "schema_matches": True,
+                "docs_section_present": True,
+                "validation_step_present": True,
+                "consumer_exists": True,
+                "manifest_schema_present": True,
+                "validation_json_smoke_checked": True,
+                "matched": True,
+            },
+        ],
+    }
+    config_negative = {
+        "schema": "vort.dashboard_config_index_negative_smoke",
+        "schema_version": 1,
+        "ok": True,
+        "case_count": 2,
+        "cases": [
+            check_row("missing_config_path", "synthetic", True, True, 1, '"path_exists": false', '"path_exists": false'),
+            check_row("schema_mismatch", "synthetic", True, True, 1, '"schema_matches": false', '"schema_matches": false'),
+        ],
+    }
+    category_negative = {
+        "schema": "vort.dashboard_category_negative_smoke",
+        "schema_version": 1,
+        "ok": True,
+        "case_count": 3,
+        "cases": [
+            check_row("classifier_category_mismatch", "synthetic", True, True, 1, "classifier category='benchmark', expected 'validation'", "classifier category='benchmark', expected 'validation'"),
+            check_row("missing_required_artifact", "synthetic", True, True, 1, "missing dashboard artifact 'vort-header-inspect-smoke.json'", "missing dashboard artifact 'vort-header-inspect-smoke.json'"),
+            check_row("missing_required_smoke_gate", "synthetic", True, True, 1, "missing smoke_gate for 'vort-header-inspect-smoke.json'", "missing smoke_gate for 'vort-header-inspect-smoke.json'"),
+        ],
+    }
+    required_cases = [
+        {
+            "name": HEADER_INSPECT_ARTIFACT,
+            "expected_format": "json",
+            "configured_expected_format": "json",
+            "producer_step": "zig build run-header-inspect-dashboard",
+            "configured_producer_step": "zig build run-header-inspect-dashboard",
+            "smoke_gate": "zig build run-header-inspect-dashboard",
+            "configured_smoke_gate": "zig build run-header-inspect-dashboard",
+            "required_smoke_gate": True,
+            "configured_required_smoke_gate": True,
+            "matched": True,
+        },
+        {
+            "name": DASHBOARD_STRICT_ARTIFACT,
+            "expected_format": "json",
+            "configured_expected_format": "json",
+            "producer_step": "zig build run-dashboard-strict-smoke",
+            "configured_producer_step": "zig build run-dashboard-strict-smoke",
+            "smoke_gate": "zig build run-dashboard-strict-smoke",
+            "configured_smoke_gate": "zig build run-dashboard-strict-smoke",
+            "required_smoke_gate": True,
+            "configured_required_smoke_gate": True,
+            "matched": True,
+        },
+        {
+            "name": DASHBOARD_CONFIG_INDEX_SMOKE_ARTIFACT,
+            "expected_format": "json",
+            "configured_expected_format": "json",
+            "producer_step": "zig build run-dashboard-config-index-smoke",
+            "configured_producer_step": "zig build run-dashboard-config-index-smoke",
+            "smoke_gate": "zig build run-dashboard-config-index-smoke",
+            "configured_smoke_gate": "zig build run-dashboard-config-index-smoke",
+            "required_smoke_gate": False,
+            "configured_required_smoke_gate": False,
+            "matched": True,
+        },
+        {
+            "name": DASHBOARD_PRODUCERS_REQUIRED_ARTIFACT,
+            "expected_format": "json",
+            "configured_expected_format": "json",
+            "producer_step": "zig build run-dashboard-producers-required-smoke",
+            "configured_producer_step": "zig build run-dashboard-producers-required-smoke",
+            "smoke_gate": "zig build run-dashboard-producers-required-smoke",
+            "configured_smoke_gate": "zig build run-dashboard-producers-required-smoke",
+            "required_smoke_gate": False,
+            "configured_required_smoke_gate": False,
+            "matched": True,
+        },
+    ]
+    producers_required = {
+        "schema": "vort.dashboard_producers_required_smoke",
+        "schema_version": 1,
+        "ok": True,
+        "artifact_count": len(required_cases),
+        "required_smoke_gate_count": sum(1 for case in required_cases if case["required_smoke_gate"]),
+        "cases": required_cases,
+    }
+    producers_negative = {
+        "schema": "vort.dashboard_producers_negative_smoke",
+        "schema_version": 1,
+        "ok": True,
+        "case_count": 2,
+        "cases": [
+            check_row("expected_format_mismatch", "synthetic", True, True, 1, "expected format 'md' but found '.json'", "expected format 'md' but found '.json'"),
+            check_row("missing_producer_step", "synthetic", True, True, 1, "dashboard_index_missing_producers=vort-validation-producer-unmapped.json", "dashboard_index_missing_producers=vort-validation-producer-unmapped.json"),
+        ],
+    }
+    for name, payload in (
+        (DASHBOARD_CONFIG_INDEX_SMOKE_ARTIFACT, config_index_smoke),
+        (DASHBOARD_CONFIG_INDEX_NEGATIVE_ARTIFACT, config_negative),
+        (DASHBOARD_CATEGORY_NEGATIVE_ARTIFACT, category_negative),
+        (DASHBOARD_PRODUCERS_REQUIRED_ARTIFACT, producers_required),
+        (DASHBOARD_PRODUCERS_NEGATIVE_ARTIFACT, producers_negative),
+    ):
+        (root / name).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
 def write_sidecar_corrupt_report(path: Path, *, ok: bool = True) -> None:
@@ -1284,6 +1459,7 @@ def write_native_tier_range_summaries(root: Path) -> None:
 def write_healthy_artifacts(root: Path) -> None:
     write_header_summary(root / HEADER_INSPECT_ARTIFACT)
     write_dashboard_strict_summary(root / DASHBOARD_STRICT_ARTIFACT)
+    write_dashboard_configuration_artifacts(root)
     write_sidecar_corrupt_report(root / SIDECAR_CORRUPT_ARTIFACT)
     write_huffman_length_csv(root / HUFFMAN_LENGTH_ARTIFACT)
     write_fuzz_corpus_report(root / FUZZ_CORPUS_ARTIFACT)
@@ -1572,7 +1748,18 @@ def main() -> int:
         root = Path(tmp)
         producer_map = root / "producers.json"
         write_healthy_artifacts(root)
-        write_producer_map(producer_map, required_names=[HEADER_INSPECT_ARTIFACT, DASHBOARD_STRICT_ARTIFACT])
+        write_producer_map(
+            producer_map,
+            required_names=[
+                HEADER_INSPECT_ARTIFACT,
+                DASHBOARD_STRICT_ARTIFACT,
+                DASHBOARD_CONFIG_INDEX_SMOKE_ARTIFACT,
+                DASHBOARD_CONFIG_INDEX_NEGATIVE_ARTIFACT,
+                DASHBOARD_CATEGORY_NEGATIVE_ARTIFACT,
+                DASHBOARD_PRODUCERS_REQUIRED_ARTIFACT,
+                DASHBOARD_PRODUCERS_NEGATIVE_ARTIFACT,
+            ],
+        )
 
         ok = run(
             dashboard_args(
@@ -1673,8 +1860,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 32/32 | 0 | allowed missing 0 |",
-                    "| smoke gates | 32/32 | 0 | required missing 0 |",
+                    "| producer steps | 37/37 | 0 | allowed missing 0 |",
+                    "| smoke gates | 37/37 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -1689,6 +1876,21 @@ def main() -> int:
                     "| strict checks | 1 | expected failures/matched 0/1 |",
                     "| modes | 1 | expected/missing 1/0 |",
                     "| requirement deltas | 0 | checks/expected/matched 0/0/0 |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
+                "dashboard_configuration_markdown_table",
+                "dashboard configuration Markdown table",
+                dashboard_markdown,
+                [
+                    "## Dashboard configuration coverage",
+                    "| category | count | detail |",
+                    "| config index | 3 | matched 3, negative 2/2 |",
+                    "| category guardrails | 3 | matched 3, present `True` |",
+                    "| required producers | 4 | matched 4, required smoke gates 2 |",
+                    "| producer guardrails | 2 | matched 2, healthy `True` |",
                 ],
             )
         )

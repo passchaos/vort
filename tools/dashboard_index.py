@@ -1364,6 +1364,112 @@ def dashboard_strict_health(artifacts: list[Path]) -> dict:
     }
 
 
+def dashboard_configuration_health(artifacts: list[Path]) -> dict:
+    """Summarize meta-dashboard smoke artifacts.
+
+    These artifacts validate the dashboard's own configuration surfaces rather
+    than compression behavior. Keeping them together gives reviewers one place
+    to check that config indexing, required producer metadata, and negative
+    guardrails are all still being retained by the validation run.
+    """
+    config_smoke = None
+    config_negative = None
+    category_negative = None
+    producers_required = None
+    producers_negative = None
+    for artifact in artifacts:
+        data = read_json(artifact) if artifact.suffix == ".json" else {}
+        schema = data.get("schema")
+        if schema == "vort.dashboard_config_index_smoke" and artifact.name == "vort-dashboard-config-index-smoke.json":
+            config_smoke = data
+        elif schema == "vort.dashboard_config_index_negative_smoke" and artifact.name == "vort-dashboard-config-index-negative-smoke.json":
+            config_negative = data
+        elif schema == "vort.dashboard_category_negative_smoke" and artifact.name == "vort-dashboard-category-negative-smoke.json":
+            category_negative = data
+        elif schema == "vort.dashboard_producers_required_smoke" and artifact.name == "vort-dashboard-producers-required-smoke.json":
+            producers_required = data
+        elif schema == "vort.dashboard_producers_negative_smoke" and artifact.name == "vort-dashboard-producers-negative-smoke.json":
+            producers_negative = data
+
+    def int_field(data: dict | None, field: str) -> int:
+        if not isinstance(data, dict):
+            return 0
+        value = data.get(field)
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    def matched_items(data: dict | None, field: str) -> int:
+        if not isinstance(data, dict):
+            return 0
+        items = data.get(field)
+        if not isinstance(items, list):
+            return 0
+        return sum(1 for item in items if isinstance(item, dict) and item.get("matched") is True)
+
+    config_count = int_field(config_smoke, "config_count")
+    config_matched = matched_items(config_smoke, "configs")
+    config_negative_count = int_field(config_negative, "case_count")
+    config_negative_matched = matched_items(config_negative, "cases")
+    category_negative_count = int_field(category_negative, "case_count")
+    category_negative_matched = matched_items(category_negative, "cases")
+    producers_required_count = int_field(producers_required, "artifact_count")
+    producers_required_matched = matched_items(producers_required, "cases")
+    producers_required_smoke_gate_count = int_field(producers_required, "required_smoke_gate_count")
+    producers_negative_count = int_field(producers_negative, "case_count")
+    producers_negative_matched = matched_items(producers_negative, "cases")
+    healthy = (
+        isinstance(config_smoke, dict)
+        and bool(config_smoke.get("ok"))
+        and config_count > 0
+        and config_matched == config_count
+        and isinstance(config_negative, dict)
+        and bool(config_negative.get("ok"))
+        and config_negative_count > 0
+        and config_negative_matched == config_negative_count
+        and isinstance(category_negative, dict)
+        and bool(category_negative.get("ok"))
+        and category_negative_count > 0
+        and category_negative_matched == category_negative_count
+        and isinstance(producers_required, dict)
+        and bool(producers_required.get("ok"))
+        and producers_required_count > 0
+        and producers_required_matched == producers_required_count
+        and producers_required_smoke_gate_count > 0
+        and isinstance(producers_negative, dict)
+        and bool(producers_negative.get("ok"))
+        and producers_negative_count > 0
+        and producers_negative_matched == producers_negative_count
+    )
+    return {
+        "config_index_present": isinstance(config_smoke, dict),
+        "config_index_ok": bool(config_smoke.get("ok")) if isinstance(config_smoke, dict) else False,
+        "config_index_config_count": config_count,
+        "config_index_matched": config_matched,
+        "config_index_unmatched": config_count - config_matched,
+        "config_index_negative_present": isinstance(config_negative, dict),
+        "config_index_negative_ok": bool(config_negative.get("ok")) if isinstance(config_negative, dict) else False,
+        "config_index_negative_case_count": config_negative_count,
+        "config_index_negative_matched": config_negative_matched,
+        "config_index_negative_unmatched": config_negative_count - config_negative_matched,
+        "category_negative_present": isinstance(category_negative, dict),
+        "category_negative_ok": bool(category_negative.get("ok")) if isinstance(category_negative, dict) else False,
+        "category_negative_case_count": category_negative_count,
+        "category_negative_matched": category_negative_matched,
+        "category_negative_unmatched": category_negative_count - category_negative_matched,
+        "producers_required_present": isinstance(producers_required, dict),
+        "producers_required_ok": bool(producers_required.get("ok")) if isinstance(producers_required, dict) else False,
+        "producers_required_artifact_count": producers_required_count,
+        "producers_required_matched": producers_required_matched,
+        "producers_required_unmatched": producers_required_count - producers_required_matched,
+        "producers_required_smoke_gate_count": producers_required_smoke_gate_count,
+        "producers_negative_present": isinstance(producers_negative, dict),
+        "producers_negative_ok": bool(producers_negative.get("ok")) if isinstance(producers_negative, dict) else False,
+        "producers_negative_case_count": producers_negative_count,
+        "producers_negative_matched": producers_negative_matched,
+        "producers_negative_unmatched": producers_negative_count - producers_negative_matched,
+        "healthy": healthy,
+    }
+
+
 def header_inspect_health(artifacts: list[Path]) -> dict:
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
@@ -1493,6 +1599,7 @@ def main() -> int:
     ]
     header_health = header_inspect_health(artifacts)
     strict_health = dashboard_strict_health(artifacts)
+    dashboard_configuration = dashboard_configuration_health(artifacts)
     sidecar_corrupt_health_summary = sidecar_corrupt_health(artifacts)
     huffman_health = huffman_length_health(artifacts)
     fuzz_health = fuzz_corpus_health(artifacts)
@@ -1545,7 +1652,22 @@ def main() -> int:
     lz4_native_summary_healthy = lz4_native_summary["healthy"]
     zstd_native_summary_healthy = zstd_native_summary["healthy"]
     native_tier_discovery_healthy = native_tier_discovery_health["healthy"]
-    validation_healthy = producer_healthy and smoke_gate_healthy and header_healthy and strict_healthy and sidecar_corrupt_healthy and huffman_healthy and fuzz_healthy and decode_stage_healthy and python_zlib_healthy and native_summary_error_healthy and native_summary_error_negative_healthy and lz4_native_summary_healthy and zstd_native_summary_healthy and native_tier_discovery_healthy
+    validation_healthy = (
+        producer_healthy
+        and smoke_gate_healthy
+        and header_healthy
+        and strict_healthy
+        and sidecar_corrupt_healthy
+        and huffman_healthy
+        and fuzz_healthy
+        and decode_stage_healthy
+        and python_zlib_healthy
+        and native_summary_error_healthy
+        and native_summary_error_negative_healthy
+        and lz4_native_summary_healthy
+        and zstd_native_summary_healthy
+        and native_tier_discovery_healthy
+    )
     validation_unhealthy_reasons = []
     if not producer_healthy:
         validation_unhealthy_reasons.append("missing_producer_steps")
@@ -1698,6 +1820,19 @@ def main() -> int:
             f"| strict checks | {strict_health['check_count']} | expected failures/matched {strict_health['expected_failure_count']}/{strict_health['matched_count']} |",
             f"| modes | {strict_health['mode_count']} | expected/missing {strict_health['expected_mode_count']}/{strict_health['missing_mode_count']} |",
             f"| requirement deltas | {strict_health['missing_checks'] + strict_health['missing_expected_failures'] + strict_health['missing_matched']} | checks/expected/matched {strict_health['missing_checks']}/{strict_health['missing_expected_failures']}/{strict_health['missing_matched']} |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
+            "## Dashboard configuration coverage",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| config index | {dashboard_configuration['config_index_config_count']} | matched {dashboard_configuration['config_index_matched']}, negative {dashboard_configuration['config_index_negative_matched']}/{dashboard_configuration['config_index_negative_case_count']} |",
+            f"| category guardrails | {dashboard_configuration['category_negative_case_count']} | matched {dashboard_configuration['category_negative_matched']}, present `{dashboard_configuration['category_negative_present']}` |",
+            f"| required producers | {dashboard_configuration['producers_required_artifact_count']} | matched {dashboard_configuration['producers_required_matched']}, required smoke gates {dashboard_configuration['producers_required_smoke_gate_count']} |",
+            f"| producer guardrails | {dashboard_configuration['producers_negative_case_count']} | matched {dashboard_configuration['producers_negative_matched']}, healthy `{dashboard_configuration['healthy']}` |",
             "",
         ]
     )
@@ -2086,6 +2221,33 @@ def main() -> int:
                 "dashboard_strict_missing_expected_failures": strict_health["missing_expected_failures"],
                 "dashboard_strict_missing_matched": strict_health["missing_matched"],
                 "dashboard_strict_missing_modes": strict_health["missing_modes"],
+                "dashboard_configuration_healthy": dashboard_configuration["healthy"],
+                "dashboard_config_index_present": dashboard_configuration["config_index_present"],
+                "dashboard_config_index_ok": dashboard_configuration["config_index_ok"],
+                "dashboard_config_index_config_count": dashboard_configuration["config_index_config_count"],
+                "dashboard_config_index_matched": dashboard_configuration["config_index_matched"],
+                "dashboard_config_index_unmatched": dashboard_configuration["config_index_unmatched"],
+                "dashboard_config_index_negative_present": dashboard_configuration["config_index_negative_present"],
+                "dashboard_config_index_negative_ok": dashboard_configuration["config_index_negative_ok"],
+                "dashboard_config_index_negative_case_count": dashboard_configuration["config_index_negative_case_count"],
+                "dashboard_config_index_negative_matched": dashboard_configuration["config_index_negative_matched"],
+                "dashboard_config_index_negative_unmatched": dashboard_configuration["config_index_negative_unmatched"],
+                "dashboard_category_negative_present": dashboard_configuration["category_negative_present"],
+                "dashboard_category_negative_ok": dashboard_configuration["category_negative_ok"],
+                "dashboard_category_negative_case_count": dashboard_configuration["category_negative_case_count"],
+                "dashboard_category_negative_matched": dashboard_configuration["category_negative_matched"],
+                "dashboard_category_negative_unmatched": dashboard_configuration["category_negative_unmatched"],
+                "dashboard_producers_required_present": dashboard_configuration["producers_required_present"],
+                "dashboard_producers_required_ok": dashboard_configuration["producers_required_ok"],
+                "dashboard_producers_required_artifact_count": dashboard_configuration["producers_required_artifact_count"],
+                "dashboard_producers_required_matched": dashboard_configuration["producers_required_matched"],
+                "dashboard_producers_required_unmatched": dashboard_configuration["producers_required_unmatched"],
+                "dashboard_producers_required_smoke_gate_count": dashboard_configuration["producers_required_smoke_gate_count"],
+                "dashboard_producers_negative_present": dashboard_configuration["producers_negative_present"],
+                "dashboard_producers_negative_ok": dashboard_configuration["producers_negative_ok"],
+                "dashboard_producers_negative_case_count": dashboard_configuration["producers_negative_case_count"],
+                "dashboard_producers_negative_matched": dashboard_configuration["producers_negative_matched"],
+                "dashboard_producers_negative_unmatched": dashboard_configuration["producers_negative_unmatched"],
                 "sidecar_corrupt_present": sidecar_corrupt_health_summary["present"],
                 "sidecar_corrupt_healthy": sidecar_corrupt_healthy,
                 "sidecar_corrupt_rows": sidecar_corrupt_health_summary["rows"],

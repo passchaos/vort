@@ -540,6 +540,7 @@ def main() -> int:
         assert any(row["name"] == "validation_unhealthy_reasons_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "producer_smoke_gate_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "dashboard_strict_mode_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
+        assert any(row["name"] == "dashboard_configuration_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "native_summary_success_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "native_summary_error_markdown_tables" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "native_tier_range_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
@@ -570,6 +571,7 @@ def main() -> int:
         assert "validation_unhealthy_reasons_markdown_table" in dashboard_strict_markdown
         assert "producer_smoke_gate_markdown_table" in dashboard_strict_markdown
         assert "dashboard_strict_mode_markdown_table" in dashboard_strict_markdown
+        assert "dashboard_configuration_markdown_table" in dashboard_strict_markdown
         assert "native_summary_success_markdown_table" in dashboard_strict_markdown
         assert "native_summary_error_markdown_tables" in dashboard_strict_markdown
         assert "native_tier_range_markdown_table" in dashboard_strict_markdown
@@ -863,6 +865,33 @@ def main() -> int:
         assert dashboard["dashboard_strict_missing_expected_failures"] == sum(row["missing_expected_failures"] for row in dashboard_strict["mode_requirements"])
         assert dashboard["dashboard_strict_missing_matched"] == sum(row["missing_matched"] for row in dashboard_strict["mode_requirements"])
         assert dashboard["dashboard_strict_missing_modes"] == dashboard_strict["missing_modes"]
+        assert dashboard["dashboard_configuration_healthy"] is True
+        assert dashboard["dashboard_config_index_present"] is True
+        assert dashboard["dashboard_config_index_ok"] is True
+        assert dashboard["dashboard_config_index_config_count"] == dashboard_config_index_smoke["config_count"]
+        assert dashboard["dashboard_config_index_matched"] == dashboard_config_index_smoke["config_count"]
+        assert dashboard["dashboard_config_index_unmatched"] == 0
+        assert dashboard["dashboard_config_index_negative_present"] is True
+        assert dashboard["dashboard_config_index_negative_ok"] is True
+        assert dashboard["dashboard_config_index_negative_case_count"] == dashboard_config_index_negative["case_count"]
+        assert dashboard["dashboard_config_index_negative_matched"] == dashboard_config_index_negative["case_count"]
+        assert dashboard["dashboard_config_index_negative_unmatched"] == 0
+        assert dashboard["dashboard_category_negative_present"] is True
+        assert dashboard["dashboard_category_negative_ok"] is True
+        assert dashboard["dashboard_category_negative_case_count"] == dashboard_category_negative["case_count"]
+        assert dashboard["dashboard_category_negative_matched"] == dashboard_category_negative["case_count"]
+        assert dashboard["dashboard_category_negative_unmatched"] == 0
+        assert dashboard["dashboard_producers_required_present"] is True
+        assert dashboard["dashboard_producers_required_ok"] is True
+        assert dashboard["dashboard_producers_required_artifact_count"] == dashboard_producers_required_smoke["artifact_count"]
+        assert dashboard["dashboard_producers_required_matched"] == dashboard_producers_required_smoke["artifact_count"]
+        assert dashboard["dashboard_producers_required_unmatched"] == 0
+        assert dashboard["dashboard_producers_required_smoke_gate_count"] == dashboard_producers_required_smoke["required_smoke_gate_count"]
+        assert dashboard["dashboard_producers_negative_present"] is True
+        assert dashboard["dashboard_producers_negative_ok"] is True
+        assert dashboard["dashboard_producers_negative_case_count"] == dashboard_producers_negative["case_count"]
+        assert dashboard["dashboard_producers_negative_matched"] == dashboard_producers_negative["case_count"]
+        assert dashboard["dashboard_producers_negative_unmatched"] == 0
         assert dashboard["sidecar_corrupt_present"] is True
         assert dashboard["sidecar_corrupt_healthy"] is True
         assert dashboard["sidecar_corrupt_rows"] == corrupt["rows"]
