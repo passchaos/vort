@@ -319,6 +319,7 @@ def main() -> int:
         assert lz4_native_summary["skippable_frame_count"] >= 1
         assert lz4_native_summary["content_size_frame_count"] >= 2
         assert lz4_native_summary["checksum_frame_count"] >= 2
+        assert lz4_native_summary["dictionary_id_frame_count"] >= 1
         assert lz4_native_summary["declared_content_bytes"] >= lz4_native_summary["payload_bytes"]
         assert lz4_native_summary["block_count"] >= 2
         assert lz4_native_summary["raw_block_count"] >= 1

@@ -647,7 +647,7 @@ def native_codec_probes_health(artifacts: list[Path]) -> dict:
     }
 
 
-def native_stream_summary_health(artifacts: list[Path], schema: str, *, require_dictionary_id: bool = False) -> dict:
+def native_stream_summary_health(artifacts: list[Path], schema: str) -> dict:
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
         if data.get("schema") != schema:
@@ -666,16 +666,16 @@ def native_stream_summary_health(artifacts: list[Path], schema: str, *, require_
         compressed_bytes = int(data.get("compressed_bytes") or 0)
         payload_bytes = int(data.get("payload_bytes") or 0)
         skippable_payload_bytes = int(data.get("skippable_payload_bytes") or 0)
-        # The LZ4 and Zstd dashboard summaries intentionally share the same
-        # minimum stream-shape checks, while codec-specific optional metadata
-        # stays opt-in. Zstd's retained fixture includes a dictionary-id frame;
-        # the current LZ4 fixture does not because the dependency-free LZ4
-        # encoder still emits ordinary frames without dictionary IDs.
+        # Dashboard summaries intentionally require the retained fixtures to
+        # cover ordinary data frames plus optional frame-level metadata.  The
+        # LZ4 fixture builds its Dictionary_ID frame by hand so this aggregate
+        # gate catches regressions in header parsing even before the public CLI
+        # grows a dictionary-aware LZ4 encoder command.
         healthy = (
             frame_count >= 2
             and skippable_frame_count >= 1
             and checksum_frame_count >= 1
-            and (not require_dictionary_id or dictionary_id_frame_count >= 1)
+            and dictionary_id_frame_count >= 1
             and content_size_frame_count >= 1
             and declared_content_bytes > 0
             and block_count >= 2
@@ -723,7 +723,7 @@ def native_stream_summary_health(artifacts: list[Path], schema: str, *, require_
 
 
 def zstd_native_summary_health(artifacts: list[Path]) -> dict:
-    return native_stream_summary_health(artifacts, "vort.zstd_native_stream_summary", require_dictionary_id=True)
+    return native_stream_summary_health(artifacts, "vort.zstd_native_stream_summary")
 
 
 def lz4_native_summary_health(artifacts: list[Path]) -> dict:

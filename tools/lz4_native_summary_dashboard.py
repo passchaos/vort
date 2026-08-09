@@ -24,6 +24,41 @@ def skippable_frame(skippable_id: int, payload: bytes) -> bytes:
     return struct.pack("<II", 0x184D2A50 + skippable_id, len(payload)) + payload
 
 
+def descriptor_checksum(descriptor: bytes) -> int:
+    # LZ4 frame header checksums use the second byte of XXH32(seed=0).  Python's
+    # stdlib has no XXH32, so this fixture keeps the checksum literal local and
+    # verifies below that Vort accepts it.  For descriptor bytes:
+    #   FLG=0x69 (independent, content-size, Dictionary_ID)
+    #   BD=0x40  (64 KiB max block)
+    #   content size=3
+    #   dictionary ID=0x1234abcd
+    # the checksum is 0x19.
+    expected_descriptor = b"\x69\x40\x03\x00\x00\x00\x00\x00\x00\x00\xcd\xab\x34\x12"
+    if descriptor != expected_descriptor:
+        raise ValueError(f"unexpected LZ4 dictionary fixture descriptor: {descriptor.hex()}")
+    return 0x19
+
+
+def dictionary_id_raw_frame(dictionary_id: int, payload: bytes) -> bytes:
+    if not 0 < dictionary_id <= 0xFFFF_FFFF:
+        raise ValueError(dictionary_id)
+    if len(payload) > 0xFFFF_FFFF:
+        raise ValueError("fixture payload too large")
+    descriptor = (
+        b"\x69\x40"
+        + struct.pack("<Q", len(payload))
+        + struct.pack("<I", dictionary_id)
+    )
+    return (
+        struct.pack("<I", 0x184D2204)
+        + descriptor
+        + bytes([descriptor_checksum(descriptor)])
+        + struct.pack("<I", 0x8000_0000 | len(payload))
+        + payload
+        + b"\x00\x00\x00\x00"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("cli", type=pathlib.Path)
@@ -47,23 +82,29 @@ def main() -> int:
         run_cli(cli, "encode-lz4-native-file", str(first_plain), str(first_frame))
         run_cli(cli, "encode-lz4-native-file", str(second_plain), str(second_frame))
         skip_payload = b"dashboard-lz4-summary"
-        stream_path.write_bytes(first_frame.read_bytes() + skippable_frame(6, skip_payload) + second_frame.read_bytes())
+        dict_payload = b"abc"
+        stream_path.write_bytes(
+            first_frame.read_bytes()
+            + skippable_frame(6, skip_payload)
+            + second_frame.read_bytes()
+            + dictionary_id_raw_frame(0x1234_ABCD, dict_payload)
+        )
 
         summary = json.loads(run_cli(cli, "summary-lz4-native-file", str(stream_path), "json"))
         if summary.get("schema") != "vort.lz4_native_stream_summary":
             raise AssertionError(f"unexpected summary schema: {summary!r}")
         expected = {
-            "frame_count": 2,
+            "frame_count": 3,
             "skippable_frame_count": 1,
-            "content_size_frame_count": 2,
+            "content_size_frame_count": 3,
             "checksum_frame_count": 2,
             "block_checksum_frame_count": 0,
-            "dictionary_id_frame_count": 0,
-            "declared_content_bytes": len(first_payload) + len(second_payload),
-            "block_count": 2,
-            "raw_block_count": 2,
+            "dictionary_id_frame_count": 1,
+            "declared_content_bytes": len(first_payload) + len(second_payload) + len(dict_payload),
+            "block_count": 3,
+            "raw_block_count": 3,
             "compressed_block_count": 0,
-            "payload_bytes": len(first_payload) + len(second_payload),
+            "payload_bytes": len(first_payload) + len(second_payload) + len(dict_payload),
             "skippable_payload_bytes": len(skip_payload),
             "compressed_bytes": stream_path.stat().st_size,
         }
