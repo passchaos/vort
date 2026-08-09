@@ -2164,9 +2164,9 @@ zig build run-native-summary-error-dashboard
 ```
 
 This retained artifact records representative structured error JSON emitted by
-the LZ4 and Zstd native summary CLIs. It aggregates error and phase counts so
-dashboards can track whether malformed-stream failures are covered without
-scraping process error traces.
+the LZ4 and Zstd native summary CLIs. It aggregates error and phase counts plus
+offset ranges so dashboards can track whether malformed-stream failures are
+covered without scraping process error traces.
 
 Example:
 
@@ -2183,6 +2183,14 @@ Example:
   },
   "phase_counts": {
     "magic": 1
+  },
+  "offset_min": 0,
+  "offset_max": 0,
+  "phase_offset_ranges": {
+    "magic": {
+      "min": 0,
+      "max": 0
+    }
   },
   "cases": [
     {
@@ -2209,8 +2217,8 @@ zig build run-native-summary-error-negative-smoke
 ```
 
 This retained smoke proves that native summary error dashboard aggregates are
-not accepted when `case_count`, `error_counts`, or `phase_counts` drift away from
-the `cases` payload.
+not accepted when `case_count`, `error_counts`, `phase_counts`, or
+`phase_offset_ranges` drift away from the `cases` payload.
 
 Example:
 
@@ -2513,7 +2521,9 @@ Top-level fields:
   `native_summary_error_frame_body_phase_count`,
   `native_summary_error_frame_checksum_phase_count`,
   `native_summary_error_frame_phase_count`,
-  `native_summary_error_error_counts`, `native_summary_error_phase_counts`
+  `native_summary_error_error_counts`, `native_summary_error_phase_counts`,
+  `native_summary_error_offset_min`, `native_summary_error_offset_max`,
+  `native_summary_error_phase_offset_ranges`
 - `native_summary_error_negative_present`,
   `native_summary_error_negative_healthy`,
   `native_summary_error_negative_case_count`
@@ -2706,6 +2716,9 @@ Example:
   "native_summary_error_frame_phase_count": 0,
   "native_summary_error_error_counts": {},
   "native_summary_error_phase_counts": {},
+  "native_summary_error_offset_min": 0,
+  "native_summary_error_offset_max": 0,
+  "native_summary_error_phase_offset_ranges": {},
   "native_summary_error_negative_present": false,
   "native_summary_error_negative_healthy": false,
   "native_summary_error_negative_case_count": 0,

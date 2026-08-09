@@ -47,6 +47,11 @@ def zstd_frame(descriptor: int, content_size: int, block_header: int, payload: b
 def build_summary(cases: list[dict[str, object]]) -> dict[str, object]:
     error_counts = Counter(str(case["error"]) for case in cases)
     phase_counts = Counter(str(case["phase"]) for case in cases)
+    offsets = [int(case["offset"]) for case in cases]
+    phase_offset_ranges: dict[str, dict[str, int]] = {}
+    for phase in sorted(phase_counts):
+        phase_offsets = [int(case["offset"]) for case in cases if str(case["phase"]) == phase]
+        phase_offset_ranges[phase] = {"min": min(phase_offsets), "max": max(phase_offsets)}
     return {
         "schema": "vort.native_summary_error_dashboard",
         "schema_version": 1,
@@ -56,6 +61,9 @@ def build_summary(cases: list[dict[str, object]]) -> dict[str, object]:
         "zstd_case_count": sum(1 for case in cases if case["codec"] == "zstd"),
         "error_counts": dict(sorted(error_counts.items())),
         "phase_counts": dict(sorted(phase_counts.items())),
+        "offset_min": min(offsets) if offsets else 0,
+        "offset_max": max(offsets) if offsets else 0,
+        "phase_offset_ranges": phase_offset_ranges,
         "cases": cases,
     }
 
@@ -65,7 +73,7 @@ def validate_summary(summary: dict[str, object]) -> None:
     if not isinstance(cases, list):
         raise AssertionError("cases must be a list")
     expected = build_summary([case for case in cases if isinstance(case, dict)])
-    for key in ("case_count", "lz4_case_count", "zstd_case_count", "error_counts", "phase_counts"):
+    for key in ("case_count", "lz4_case_count", "zstd_case_count", "error_counts", "phase_counts", "offset_min", "offset_max", "phase_offset_ranges"):
         if summary.get(key) != expected[key]:
             raise AssertionError(f"{key} mismatch: expected {expected[key]!r}, got {summary.get(key)!r}")
     if summary.get("ok") is not True:

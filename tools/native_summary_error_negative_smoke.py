@@ -77,6 +77,10 @@ def main() -> int:
     bad_case_count["case_count"] = 99
     smoke_cases.append(check_failure("bad_case_count", bad_case_count, "case_count mismatch"))
 
+    bad_offset_ranges = copy.deepcopy(base_summary)
+    bad_offset_ranges["phase_offset_ranges"] = {"magic": {"min": 99, "max": 99}}
+    smoke_cases.append(check_failure("bad_offset_ranges", bad_offset_ranges, "phase_offset_ranges mismatch"))
+
     summary = {
         "schema": "vort.native_summary_error_negative_smoke",
         "schema_version": 1,

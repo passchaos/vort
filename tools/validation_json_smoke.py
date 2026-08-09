@@ -331,7 +331,7 @@ def main() -> int:
         native_summary_error_negative = json.loads(native_summary_error_negative_path.read_text())
         assert native_summary_error_negative["schema"] == "vort.native_summary_error_negative_smoke"
         assert native_summary_error_negative["ok"] is True
-        assert native_summary_error_negative["case_count"] >= 3
+        assert native_summary_error_negative["case_count"] >= 4
         assert all(row["matched"] is True for row in native_summary_error_negative["cases"])
         validate_value_against_manifest(native_summary_error_negative, schemas_def)
         lz4_native_summary = json.loads(lz4_native_summary_path.read_text())
@@ -893,6 +893,9 @@ def main() -> int:
         assert dashboard["native_summary_error_frame_phase_count"] == native_summary_error_dashboard["phase_counts"]["frame"]
         assert dashboard["native_summary_error_error_counts"] == native_summary_error_dashboard["error_counts"]
         assert dashboard["native_summary_error_phase_counts"] == native_summary_error_dashboard["phase_counts"]
+        assert dashboard["native_summary_error_offset_min"] == native_summary_error_dashboard["offset_min"]
+        assert dashboard["native_summary_error_offset_max"] == native_summary_error_dashboard["offset_max"]
+        assert dashboard["native_summary_error_phase_offset_ranges"] == native_summary_error_dashboard["phase_offset_ranges"]
         assert dashboard["native_summary_error_negative_present"] is True
         assert dashboard["native_summary_error_negative_healthy"] is True
         assert dashboard["native_summary_error_negative_case_count"] == native_summary_error_negative["case_count"]
