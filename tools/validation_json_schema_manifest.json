@@ -813,6 +813,10 @@
             "native_summary_error_frame_phase_count",
             "native_summary_error_checksum_mismatch_count",
             "native_summary_error_corrupt_frame_count"
+          ],
+          "zero": [
+            "native_summary_error_lz4_missing_phases",
+            "native_summary_error_zstd_missing_phases"
           ]
         },
         "native_summary_error_negative_healthy": {
@@ -976,6 +980,8 @@
         "native_summary_error_zstd_offset_max": "int",
         "native_summary_error_phase_offset_ranges": "dict",
         "native_summary_error_required_codec_phases": "dict",
+        "native_summary_error_lz4_missing_phases": "list",
+        "native_summary_error_zstd_missing_phases": "list",
         "native_summary_error_negative_present": "bool",
         "native_summary_error_negative_healthy": "bool",
         "native_summary_error_negative_case_count": "int",
@@ -1158,6 +1164,22 @@
           "zstd_native_summary_undercovered",
           "missing_native_tier_corpus_discovery_artifact",
           "native_tier_corpus_discovery_failed"
+        ],
+        "native_summary_error_lz4_missing_phases": [
+          "frame",
+          "frame_body",
+          "frame_checksum",
+          "frame_header",
+          "magic",
+          "skippable_payload"
+        ],
+        "native_summary_error_zstd_missing_phases": [
+          "frame",
+          "frame_body",
+          "frame_checksum",
+          "frame_header",
+          "magic",
+          "skippable_payload"
         ]
       },
       "dict_key_enums": {

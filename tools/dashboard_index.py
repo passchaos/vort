@@ -174,6 +174,10 @@ def sidecar_corrupt_health(artifacts: list[Path]) -> dict:
         zstd_offset_max = int(data.get("zstd_offset_max") or 0)
         phase_offset_ranges = data.get("phase_offset_ranges") if isinstance(data.get("phase_offset_ranges"), dict) else {}
         required_codec_phases = data.get("required_codec_phases") if isinstance(data.get("required_codec_phases"), dict) else {}
+        lz4_required_phases = required_codec_phases.get("lz4") if isinstance(required_codec_phases.get("lz4"), list) else []
+        zstd_required_phases = required_codec_phases.get("zstd") if isinstance(required_codec_phases.get("zstd"), list) else []
+        lz4_missing_phases = sorted(str(phase) for phase in lz4_required_phases if int(lz4_phase_counts.get(str(phase)) or 0) == 0)
+        zstd_missing_phases = sorted(str(phase) for phase in zstd_required_phases if int(zstd_phase_counts.get(str(phase)) or 0) == 0)
         return {
             "present": True,
             "rows": rows,
@@ -773,6 +777,10 @@ def native_summary_error_dashboard_health(artifacts: list[Path]) -> dict:
         zstd_offset_max = int(data.get("zstd_offset_max") or 0)
         phase_offset_ranges = data.get("phase_offset_ranges") if isinstance(data.get("phase_offset_ranges"), dict) else {}
         required_codec_phases = data.get("required_codec_phases") if isinstance(data.get("required_codec_phases"), dict) else {}
+        lz4_required_phases = required_codec_phases.get("lz4") if isinstance(required_codec_phases.get("lz4"), list) else []
+        zstd_required_phases = required_codec_phases.get("zstd") if isinstance(required_codec_phases.get("zstd"), list) else []
+        lz4_missing_phases = sorted(str(phase) for phase in lz4_required_phases if int(lz4_phase_counts.get(str(phase)) or 0) == 0)
+        zstd_missing_phases = sorted(str(phase) for phase in zstd_required_phases if int(zstd_phase_counts.get(str(phase)) or 0) == 0)
         return {
             "present": True,
             "healthy": data.get("ok") is True
@@ -786,7 +794,9 @@ def native_summary_error_dashboard_health(artifacts: list[Path]) -> dict:
             and skippable_payload_phase_count >= 2
             and frame_body_phase_count >= 2
             and frame_checksum_phase_count >= 2
-            and frame_phase_count >= 2,
+            and frame_phase_count >= 2
+            and len(lz4_missing_phases) == 0
+            and len(zstd_missing_phases) == 0,
             "case_count": case_count,
             "lz4_case_count": lz4_case_count,
             "zstd_case_count": zstd_case_count,
@@ -812,6 +822,8 @@ def native_summary_error_dashboard_health(artifacts: list[Path]) -> dict:
             "zstd_offset_max": zstd_offset_max,
             "phase_offset_ranges": phase_offset_ranges,
             "required_codec_phases": required_codec_phases,
+            "lz4_missing_phases": lz4_missing_phases,
+            "zstd_missing_phases": zstd_missing_phases,
         }
     return {
         "present": False,
@@ -841,6 +853,8 @@ def native_summary_error_dashboard_health(artifacts: list[Path]) -> dict:
         "zstd_offset_max": 0,
         "phase_offset_ranges": {},
         "required_codec_phases": {},
+        "lz4_missing_phases": [],
+        "zstd_missing_phases": [],
     }
 
 
@@ -1378,6 +1392,8 @@ def main() -> int:
                 "native_summary_error_zstd_offset_max": native_summary_error_health["zstd_offset_max"],
                 "native_summary_error_phase_offset_ranges": native_summary_error_health["phase_offset_ranges"],
                 "native_summary_error_required_codec_phases": native_summary_error_health["required_codec_phases"],
+                "native_summary_error_lz4_missing_phases": native_summary_error_health["lz4_missing_phases"],
+                "native_summary_error_zstd_missing_phases": native_summary_error_health["zstd_missing_phases"],
                 "native_summary_error_negative_present": native_summary_error_negative["present"],
                 "native_summary_error_negative_healthy": native_summary_error_negative_healthy,
                 "native_summary_error_negative_case_count": native_summary_error_negative["case_count"],
