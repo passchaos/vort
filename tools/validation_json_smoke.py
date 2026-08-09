@@ -99,6 +99,7 @@ def main() -> int:
         python_zlib_diff_path = ROOT / "zig-out" / "vort-python-zlib-diff-smoke.json"
         native_codec_probes_path = ROOT / "zig-out" / "vort-native-codec-probes.json"
         native_summary_error_dashboard_path = ROOT / "zig-out" / "vort-native-summary-error-dashboard.json"
+        native_summary_error_negative_path = ROOT / "zig-out" / "vort-native-summary-error-negative-smoke.json"
         lz4_native_summary_path = ROOT / "zig-out" / "vort-lz4-native-stream-summary.json"
         zstd_native_summary_path = ROOT / "zig-out" / "vort-zstd-native-stream-summary.json"
         zlib_relaxed_path = ROOT / "zig-out" / "vort-zlib-relaxed-report.json"
@@ -324,6 +325,12 @@ def main() -> int:
         assert native_summary_error_dashboard["phase_counts"]["magic"] >= 2
         assert native_summary_error_dashboard["phase_counts"]["skippable_payload"] >= 2
         validate_value_against_manifest(native_summary_error_dashboard, schemas_def)
+        native_summary_error_negative = json.loads(native_summary_error_negative_path.read_text())
+        assert native_summary_error_negative["schema"] == "vort.native_summary_error_negative_smoke"
+        assert native_summary_error_negative["ok"] is True
+        assert native_summary_error_negative["case_count"] >= 3
+        assert all(row["matched"] is True for row in native_summary_error_negative["cases"])
+        validate_value_against_manifest(native_summary_error_negative, schemas_def)
         lz4_native_summary = json.loads(lz4_native_summary_path.read_text())
         assert lz4_native_summary["schema"] == "vort.lz4_native_stream_summary"
         assert lz4_native_summary["schema_version"] == 1
@@ -738,6 +745,7 @@ def main() -> int:
         shutil.copyfile(python_zlib_diff_path, root / "vort-python-zlib-diff-smoke.json")
         shutil.copyfile(native_codec_probes_path, root / "vort-native-codec-probes.json")
         shutil.copyfile(native_summary_error_dashboard_path, root / "vort-native-summary-error-dashboard.json")
+        shutil.copyfile(native_summary_error_negative_path, root / "vort-native-summary-error-negative-smoke.json")
         shutil.copyfile(lz4_native_summary_path, root / "vort-lz4-native-stream-summary.json")
         shutil.copyfile(zstd_native_summary_path, root / "vort-zstd-native-stream-summary.json")
 
@@ -977,6 +985,7 @@ def main() -> int:
                 python_zlib_diff["schema"],
                 native_codec_probes["schema"],
                 native_summary_error_dashboard["schema"],
+                native_summary_error_negative["schema"],
                 lz4_native_summary["schema"],
                 native_summary_error_payloads[0]["schema"],
                 zstd_native_summary["schema"],

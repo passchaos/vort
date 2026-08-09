@@ -3,22 +3,40 @@
 
 from __future__ import annotations
 
+import argparse
 import copy
+import json
+from pathlib import Path
 
 from native_summary_error_dashboard import build_summary, validate_summary
 
 
-def expect_failure(name: str, payload: dict[str, object], needle: str) -> None:
+def check_failure(name: str, payload: dict[str, object], needle: str) -> dict[str, object]:
     try:
         validate_summary(payload)
     except AssertionError as exc:
-        if needle not in str(exc):
-            raise AssertionError(f"{name}: expected {needle!r}, got {exc!r}") from exc
-        return
-    raise AssertionError(f"{name}: expected validation failure")
+        actual_error = str(exc)
+        return {
+            "name": name,
+            "expected_failure": True,
+            "expected_error": needle,
+            "actual_error": actual_error,
+            "matched": needle in actual_error,
+        }
+    return {
+        "name": name,
+        "expected_failure": True,
+        "expected_error": needle,
+        "actual_error": "<success>",
+        "matched": False,
+    }
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--summary", help="optional JSON summary output path")
+    args = parser.parse_args()
+
     cases = [
         {
             "name": "lz4_bad_magic",
@@ -43,22 +61,37 @@ def main() -> int:
             "offset": 13,
         },
     ]
-    summary = build_summary(cases)
-    validate_summary(summary)
+    base_summary = build_summary(cases)
+    validate_summary(base_summary)
 
-    bad_error_counts = copy.deepcopy(summary)
+    smoke_cases: list[dict[str, object]] = []
+    bad_error_counts = copy.deepcopy(base_summary)
     bad_error_counts["error_counts"] = {"CorruptFrame": 2}
-    expect_failure("bad_error_counts", bad_error_counts, "error_counts mismatch")
+    smoke_cases.append(check_failure("bad_error_counts", bad_error_counts, "error_counts mismatch"))
 
-    bad_phase_counts = copy.deepcopy(summary)
+    bad_phase_counts = copy.deepcopy(base_summary)
     bad_phase_counts["phase_counts"] = {"magic": 2}
-    expect_failure("bad_phase_counts", bad_phase_counts, "phase_counts mismatch")
+    smoke_cases.append(check_failure("bad_phase_counts", bad_phase_counts, "phase_counts mismatch"))
 
-    bad_case_count = copy.deepcopy(summary)
+    bad_case_count = copy.deepcopy(base_summary)
     bad_case_count["case_count"] = 99
-    expect_failure("bad_case_count", bad_case_count, "case_count mismatch")
+    smoke_cases.append(check_failure("bad_case_count", bad_case_count, "case_count mismatch"))
 
-    print("native_summary_error_negative_smoke=ok cases=3")
+    summary = {
+        "schema": "vort.native_summary_error_negative_smoke",
+        "schema_version": 1,
+        "ok": all(bool(row["matched"]) for row in smoke_cases),
+        "case_count": len(smoke_cases),
+        "cases": smoke_cases,
+    }
+    if args.summary:
+        path = Path(args.summary)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if not summary["ok"]:
+        print(json.dumps(summary, indent=2, sort_keys=True))
+        return 1
+    print(f"native_summary_error_negative_smoke=ok cases={summary['case_count']}")
     return 0
 
 

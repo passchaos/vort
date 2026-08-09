@@ -1835,7 +1835,7 @@ pub fn build(b: *std.Build) void {
     const native_summary_error_dashboard_step = b.step("run-native-summary-error-dashboard", "Write native summary structured error JSON artifact");
     native_summary_error_dashboard_step.dependOn(&native_summary_error_dashboard.step);
 
-    const native_summary_error_negative_smoke = b.addSystemCommand(&.{ "python3", "tools/native_summary_error_negative_smoke.py" });
+    const native_summary_error_negative_smoke = b.addSystemCommand(&.{ "python3", "tools/native_summary_error_negative_smoke.py", "--summary", "zig-out/vort-native-summary-error-negative-smoke.json" });
     const native_summary_error_negative_smoke_step = b.step("run-native-summary-error-negative-smoke", "Validate native summary error dashboard negative drift cases");
     native_summary_error_negative_smoke_step.dependOn(&native_summary_error_negative_smoke.step);
 
@@ -2847,6 +2847,7 @@ pub fn build(b: *std.Build) void {
     validation_json_smoke.step.dependOn(lz4_native_summary_dashboard_step);
     validation_json_smoke.step.dependOn(zstd_native_summary_dashboard_step);
     validation_json_smoke.step.dependOn(native_summary_error_dashboard_step);
+    validation_json_smoke.step.dependOn(native_summary_error_negative_smoke_step);
     validation_json_smoke.step.dependOn(png_scratch_report_dashboard_step);
     validation_json_smoke.step.dependOn(br_static_dictionary_source_audit_step);
     validation_json_smoke.step.dependOn(br_static_dictionary_source_audit_negative_smoke_step);

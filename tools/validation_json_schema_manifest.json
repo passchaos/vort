@@ -2887,6 +2887,35 @@
         }
       }
     },
+    "vort.native_summary_error_negative_smoke": {
+      "fields": {
+        "case_count": "int",
+        "cases": "list",
+        "ok": "bool",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "item_collection": "cases",
+      "item_fields": {
+        "actual_error": "str",
+        "expected_error": "str",
+        "expected_failure": "bool",
+        "matched": "bool",
+        "name": "str"
+      },
+      "item_enums": {
+        "name": [
+          "bad_error_counts",
+          "bad_phase_counts",
+          "bad_case_count"
+        ]
+      },
+      "count_rules": {
+        "case_count": {
+          "collection": "cases"
+        }
+      }
+    },
     "vort.png_scratch_report": {
       "count_rules": {
         "case_count": {
@@ -3202,6 +3231,7 @@
           "vort.lz4_native_stream_summary_error",
           "vort.native_codec_probes",
           "vort.native_summary_error_dashboard",
+          "vort.native_summary_error_negative_smoke",
           "vort.native_tier_range_corpus_discovery",
           "vort.png_scratch_report",
           "vort.python_zlib_diff_smoke",

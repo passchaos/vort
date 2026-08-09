@@ -2200,6 +2200,38 @@ Example:
 }
 ```
 
+## `vort.native_summary_error_negative_smoke`
+
+Produced by:
+
+```sh
+zig build run-native-summary-error-negative-smoke
+```
+
+This retained smoke proves that native summary error dashboard aggregates are
+not accepted when `case_count`, `error_counts`, or `phase_counts` drift away from
+the `cases` payload.
+
+Example:
+
+```json
+{
+  "schema": "vort.native_summary_error_negative_smoke",
+  "schema_version": 1,
+  "ok": true,
+  "case_count": 1,
+  "cases": [
+    {
+      "name": "bad_error_counts",
+      "expected_failure": true,
+      "expected_error": "error_counts mismatch",
+      "actual_error": "error_counts mismatch: expected {'CorruptFrame': 1}, got {'CorruptFrame': 2}",
+      "matched": true
+    }
+  ]
+}
+```
+
 ## `vort.lz4_native_stream_summary`
 
 Produced by:
