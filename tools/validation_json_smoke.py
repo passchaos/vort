@@ -895,6 +895,10 @@ def main() -> int:
         assert dashboard["native_summary_error_phase_counts"] == native_summary_error_dashboard["phase_counts"]
         assert dashboard["native_summary_error_offset_min"] == native_summary_error_dashboard["offset_min"]
         assert dashboard["native_summary_error_offset_max"] == native_summary_error_dashboard["offset_max"]
+        assert dashboard["native_summary_error_lz4_offset_min"] == native_summary_error_dashboard["lz4_offset_min"]
+        assert dashboard["native_summary_error_lz4_offset_max"] == native_summary_error_dashboard["lz4_offset_max"]
+        assert dashboard["native_summary_error_zstd_offset_min"] == native_summary_error_dashboard["zstd_offset_min"]
+        assert dashboard["native_summary_error_zstd_offset_max"] == native_summary_error_dashboard["zstd_offset_max"]
         assert dashboard["native_summary_error_phase_offset_ranges"] == native_summary_error_dashboard["phase_offset_ranges"]
         assert dashboard["native_summary_error_negative_present"] is True
         assert dashboard["native_summary_error_negative_healthy"] is True

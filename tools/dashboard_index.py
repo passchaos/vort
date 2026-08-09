@@ -164,6 +164,10 @@ def sidecar_corrupt_health(artifacts: list[Path]) -> dict:
         full_not_rejected_rows = rows - full_rejected_rows
         offset_min = int(data.get("offset_min") or 0)
         offset_max = int(data.get("offset_max") or 0)
+        lz4_offset_min = int(data.get("lz4_offset_min") or 0)
+        lz4_offset_max = int(data.get("lz4_offset_max") or 0)
+        zstd_offset_min = int(data.get("zstd_offset_min") or 0)
+        zstd_offset_max = int(data.get("zstd_offset_max") or 0)
         phase_offset_ranges = data.get("phase_offset_ranges") if isinstance(data.get("phase_offset_ranges"), dict) else {}
         return {
             "present": True,
@@ -752,6 +756,10 @@ def native_summary_error_dashboard_health(artifacts: list[Path]) -> dict:
         frame_phase_count = int(phase_counts.get("frame") or 0)
         offset_min = int(data.get("offset_min") or 0)
         offset_max = int(data.get("offset_max") or 0)
+        lz4_offset_min = int(data.get("lz4_offset_min") or 0)
+        lz4_offset_max = int(data.get("lz4_offset_max") or 0)
+        zstd_offset_min = int(data.get("zstd_offset_min") or 0)
+        zstd_offset_max = int(data.get("zstd_offset_max") or 0)
         phase_offset_ranges = data.get("phase_offset_ranges") if isinstance(data.get("phase_offset_ranges"), dict) else {}
         return {
             "present": True,
@@ -778,6 +786,10 @@ def native_summary_error_dashboard_health(artifacts: list[Path]) -> dict:
             "phase_counts": phase_counts,
             "offset_min": offset_min,
             "offset_max": offset_max,
+            "lz4_offset_min": lz4_offset_min,
+            "lz4_offset_max": lz4_offset_max,
+            "zstd_offset_min": zstd_offset_min,
+            "zstd_offset_max": zstd_offset_max,
             "phase_offset_ranges": phase_offset_ranges,
         }
     return {
@@ -796,6 +808,10 @@ def native_summary_error_dashboard_health(artifacts: list[Path]) -> dict:
         "phase_counts": {},
         "offset_min": 0,
         "offset_max": 0,
+        "lz4_offset_min": 0,
+        "lz4_offset_max": 0,
+        "zstd_offset_min": 0,
+        "zstd_offset_max": 0,
         "phase_offset_ranges": {},
     }
 
@@ -1322,6 +1338,10 @@ def main() -> int:
                 "native_summary_error_phase_counts": native_summary_error_health["phase_counts"],
                 "native_summary_error_offset_min": native_summary_error_health["offset_min"],
                 "native_summary_error_offset_max": native_summary_error_health["offset_max"],
+                "native_summary_error_lz4_offset_min": native_summary_error_health["lz4_offset_min"],
+                "native_summary_error_lz4_offset_max": native_summary_error_health["lz4_offset_max"],
+                "native_summary_error_zstd_offset_min": native_summary_error_health["zstd_offset_min"],
+                "native_summary_error_zstd_offset_max": native_summary_error_health["zstd_offset_max"],
                 "native_summary_error_phase_offset_ranges": native_summary_error_health["phase_offset_ranges"],
                 "native_summary_error_negative_present": native_summary_error_negative["present"],
                 "native_summary_error_negative_healthy": native_summary_error_negative_healthy,

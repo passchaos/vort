@@ -2186,6 +2186,10 @@ Example:
   },
   "offset_min": 0,
   "offset_max": 0,
+  "lz4_offset_min": 0,
+  "lz4_offset_max": 0,
+  "zstd_offset_min": 0,
+  "zstd_offset_max": 0,
   "phase_offset_ranges": {
     "magic": {
       "min": 0,
@@ -2523,6 +2527,8 @@ Top-level fields:
   `native_summary_error_frame_phase_count`,
   `native_summary_error_error_counts`, `native_summary_error_phase_counts`,
   `native_summary_error_offset_min`, `native_summary_error_offset_max`,
+  `native_summary_error_lz4_offset_min`, `native_summary_error_lz4_offset_max`,
+  `native_summary_error_zstd_offset_min`, `native_summary_error_zstd_offset_max`,
   `native_summary_error_phase_offset_ranges`
 - `native_summary_error_negative_present`,
   `native_summary_error_negative_healthy`,
@@ -2718,6 +2724,10 @@ Example:
   "native_summary_error_phase_counts": {},
   "native_summary_error_offset_min": 0,
   "native_summary_error_offset_max": 0,
+  "native_summary_error_lz4_offset_min": 0,
+  "native_summary_error_lz4_offset_max": 0,
+  "native_summary_error_zstd_offset_min": 0,
+  "native_summary_error_zstd_offset_max": 0,
   "native_summary_error_phase_offset_ranges": {},
   "native_summary_error_negative_present": false,
   "native_summary_error_negative_healthy": false,

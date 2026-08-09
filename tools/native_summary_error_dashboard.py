@@ -48,6 +48,8 @@ def build_summary(cases: list[dict[str, object]]) -> dict[str, object]:
     error_counts = Counter(str(case["error"]) for case in cases)
     phase_counts = Counter(str(case["phase"]) for case in cases)
     offsets = [int(case["offset"]) for case in cases]
+    lz4_offsets = [int(case["offset"]) for case in cases if case.get("codec") == "lz4"]
+    zstd_offsets = [int(case["offset"]) for case in cases if case.get("codec") == "zstd"]
     phase_offset_ranges: dict[str, dict[str, int]] = {}
     for phase in sorted(phase_counts):
         phase_offsets = [int(case["offset"]) for case in cases if str(case["phase"]) == phase]
@@ -63,6 +65,10 @@ def build_summary(cases: list[dict[str, object]]) -> dict[str, object]:
         "phase_counts": dict(sorted(phase_counts.items())),
         "offset_min": min(offsets) if offsets else 0,
         "offset_max": max(offsets) if offsets else 0,
+        "lz4_offset_min": min(lz4_offsets) if lz4_offsets else 0,
+        "lz4_offset_max": max(lz4_offsets) if lz4_offsets else 0,
+        "zstd_offset_min": min(zstd_offsets) if zstd_offsets else 0,
+        "zstd_offset_max": max(zstd_offsets) if zstd_offsets else 0,
         "phase_offset_ranges": phase_offset_ranges,
         "cases": cases,
     }
@@ -73,7 +79,7 @@ def validate_summary(summary: dict[str, object]) -> None:
     if not isinstance(cases, list):
         raise AssertionError("cases must be a list")
     expected = build_summary([case for case in cases if isinstance(case, dict)])
-    for key in ("case_count", "lz4_case_count", "zstd_case_count", "error_counts", "phase_counts", "offset_min", "offset_max", "phase_offset_ranges"):
+    for key in ("case_count", "lz4_case_count", "zstd_case_count", "error_counts", "phase_counts", "offset_min", "offset_max", "lz4_offset_min", "lz4_offset_max", "zstd_offset_min", "zstd_offset_max", "phase_offset_ranges"):
         if summary.get(key) != expected[key]:
             raise AssertionError(f"{key} mismatch: expected {expected[key]!r}, got {summary.get(key)!r}")
     if summary.get("ok") is not True:
