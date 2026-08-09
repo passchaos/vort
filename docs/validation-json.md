@@ -2420,7 +2420,7 @@ coverage`, `Native tier corpus discovery`, `Native codec probe coverage`,
 summary error codec coverage`, and `Native summary error phase offsets` tables
 so aggregate validation health, producer/smoke-gate coverage, dashboard strict
 gate coverage, header-format coverage, corrupt-sidecar rejection coverage,
-Huffman optimality, zstd comparison gate coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, zlib differential coverage,
+Huffman optimality, zstd comparison gate coverage, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, zlib differential coverage,
 decode-stage error matching, fuzz corpus matching, native stream metadata
 coverage, native tier corpus discovery, codec probe status, LZ4/Zstd
 structured-error counts, phase counts, required phases, missing phases, and phase
@@ -2520,6 +2520,20 @@ Top-level fields:
 - `decode_stage_present`, `decode_stage_ok`, `decode_stage_healthy`,
   `decode_stage_rows`, `decode_stage_error_rows`,
   `decode_stage_matched_error_rows`, `decode_stage_unmatched_error_rows`
+- `br_static_dictionary_present`, `br_static_dictionary_upstream_present`,
+  `br_static_dictionary_node_present`, `br_static_dictionary_audit_present`,
+  `br_static_dictionary_negative_present`, `br_static_dictionary_healthy`,
+  `br_static_dictionary_candidate_count`, `br_static_dictionary_raw_word_count`,
+  `br_static_dictionary_upstream_candidate_count`,
+  `br_static_dictionary_upstream_raw_word_count`,
+  `br_static_dictionary_node_probed_count`,
+  `br_static_dictionary_node_decode_successes`,
+  `br_static_dictionary_node_size_winner_count`,
+  `br_static_dictionary_audit_entry_count`,
+  `br_static_dictionary_audit_anchor_count`,
+  `br_static_dictionary_audit_generated_zig_bytes`,
+  `br_static_dictionary_negative_case_count`,
+  `br_static_dictionary_negative_matched`
 - `png_scratch_present`, `png_scratch_healthy`, `png_scratch_case_count`,
   `png_scratch_adam7_cases`, `png_scratch_stored_achieved`,
   `png_scratch_fixed_achieved`, `png_scratch_total_zlib_scratch`,
@@ -2747,6 +2761,24 @@ Example:
   "decode_stage_error_rows": 0,
   "decode_stage_matched_error_rows": 0,
   "decode_stage_unmatched_error_rows": 0,
+  "br_static_dictionary_present": false,
+  "br_static_dictionary_upstream_present": false,
+  "br_static_dictionary_node_present": false,
+  "br_static_dictionary_audit_present": false,
+  "br_static_dictionary_negative_present": false,
+  "br_static_dictionary_healthy": false,
+  "br_static_dictionary_candidate_count": 0,
+  "br_static_dictionary_raw_word_count": 0,
+  "br_static_dictionary_upstream_candidate_count": 0,
+  "br_static_dictionary_upstream_raw_word_count": 0,
+  "br_static_dictionary_node_probed_count": 0,
+  "br_static_dictionary_node_decode_successes": 0,
+  "br_static_dictionary_node_size_winner_count": 0,
+  "br_static_dictionary_audit_entry_count": 0,
+  "br_static_dictionary_audit_anchor_count": 0,
+  "br_static_dictionary_audit_generated_zig_bytes": 0,
+  "br_static_dictionary_negative_case_count": 0,
+  "br_static_dictionary_negative_matched": 0,
   "png_scratch_present": false,
   "png_scratch_healthy": false,
   "png_scratch_case_count": 0,
@@ -3075,9 +3107,9 @@ Example:
   "expected_modes": [
     {
       "mode": "dashboard-markdown",
-      "min_checks": 18,
+      "min_checks": 19,
       "min_expected_failures": 0,
-      "min_matched": 18
+      "min_matched": 19
     },
     {
       "mode": "strict-validation-health",
@@ -3165,7 +3197,7 @@ the smoke artifact can pass. The expected reason/check/fixture matrix lives in
 currently 31. The `dashboard-markdown` mode verifies that important human-facing
 sections, including aggregate validation health, producer/smoke-gate
 coverage, dashboard strict gate coverage, header inspect coverage, corrupt-sidecar
-rejection coverage, Huffman optimality, zstd comparison gate coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, Python zlib
+rejection coverage, Huffman optimality, zstd comparison gate coverage, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, Python zlib
 differential coverage, decode-stage error matching, fuzz corpus matching, native
 stream metadata coverage, native tier corpus discovery, native summary error
 codec/phase-offset tables, native codec probe coverage/capability tables, and
@@ -3181,7 +3213,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 21,
+  "check_count": 22,
   "mode_count": 4,
   "expected_mode_count": 4,
   "missing_mode_count": 0,
@@ -3195,9 +3227,9 @@ Example:
     },
     {
       "mode": "dashboard-markdown",
-      "min_checks": 18,
+      "min_checks": 19,
       "min_expected_failures": 0,
-      "min_matched": 18
+      "min_matched": 19
     },
     {
       "mode": "strict-validation-health",
@@ -3228,14 +3260,14 @@ Example:
     },
     {
       "mode": "dashboard-markdown",
-      "checks": 18,
-      "min_checks": 18,
+      "checks": 19,
+      "min_checks": 19,
       "missing_checks": 0,
       "expected_failures": 0,
       "min_expected_failures": 0,
       "missing_expected_failures": 0,
-      "matched": 18,
-      "min_matched": 18,
+      "matched": 19,
+      "min_matched": 19,
       "missing_matched": 0
     },
     {
@@ -3272,9 +3304,9 @@ Example:
     },
     {
       "mode": "dashboard-markdown",
-      "checks": 18,
+      "checks": 19,
       "expected_failures": 0,
-      "matched": 18
+      "matched": 19
     },
     {
       "mode": "strict-validation-health",
@@ -3441,6 +3473,18 @@ Example:
       "expected_output": "zstd compare Markdown table",
       "actual_output": "0:ok,1:ok,2:ok,3:ok,4:ok,5:ok",
       "actual_output_bytes": 29,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "static_dictionary_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "static dictionary Markdown table",
+      "actual_output": "0:ok,1:ok,2:ok,3:ok,4:ok,5:ok,6:ok",
+      "actual_output_bytes": 34,
       "actual_output_limit": 240,
       "actual_output_truncated": false,
       "returncode": 0,

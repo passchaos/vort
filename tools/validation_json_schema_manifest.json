@@ -890,6 +890,29 @@
             "png_scratch_max_fixed_dynamic_streaming_working_scratch",
             "png_scratch_min_streaming_ratio"
           ]
+        },
+        "br_static_dictionary_healthy": {
+          "all": [
+            "br_static_dictionary_present",
+            "br_static_dictionary_upstream_present",
+            "br_static_dictionary_node_present",
+            "br_static_dictionary_audit_present",
+            "br_static_dictionary_negative_present"
+          ],
+          "positive": [
+            "br_static_dictionary_candidate_count",
+            "br_static_dictionary_raw_word_count",
+            "br_static_dictionary_upstream_candidate_count",
+            "br_static_dictionary_upstream_raw_word_count",
+            "br_static_dictionary_node_probed_count",
+            "br_static_dictionary_node_decode_successes",
+            "br_static_dictionary_node_size_winner_count",
+            "br_static_dictionary_audit_entry_count",
+            "br_static_dictionary_audit_anchor_count",
+            "br_static_dictionary_audit_generated_zig_bytes",
+            "br_static_dictionary_negative_case_count",
+            "br_static_dictionary_negative_matched"
+          ]
         }
       },
       "collections": {
@@ -954,6 +977,24 @@
         "decode_stage_present": "bool",
         "decode_stage_rows": "int",
         "decode_stage_unmatched_error_rows": "int",
+        "br_static_dictionary_present": "bool",
+        "br_static_dictionary_upstream_present": "bool",
+        "br_static_dictionary_node_present": "bool",
+        "br_static_dictionary_audit_present": "bool",
+        "br_static_dictionary_negative_present": "bool",
+        "br_static_dictionary_healthy": "bool",
+        "br_static_dictionary_candidate_count": "int",
+        "br_static_dictionary_raw_word_count": "int",
+        "br_static_dictionary_upstream_candidate_count": "int",
+        "br_static_dictionary_upstream_raw_word_count": "int",
+        "br_static_dictionary_node_probed_count": "int",
+        "br_static_dictionary_node_decode_successes": "int",
+        "br_static_dictionary_node_size_winner_count": "int",
+        "br_static_dictionary_audit_entry_count": "int",
+        "br_static_dictionary_audit_anchor_count": "int",
+        "br_static_dictionary_audit_generated_zig_bytes": "int",
+        "br_static_dictionary_negative_case_count": "int",
+        "br_static_dictionary_negative_matched": "int",
         "png_scratch_present": "bool",
         "png_scratch_healthy": "bool",
         "png_scratch_case_count": "int",
@@ -1750,6 +1791,7 @@
           "huffman_length_markdown_table",
           "zstd_compare_markdown_table",
           "native_allocation_markdown_table",
+          "static_dictionary_markdown_table",
           "png_scratch_markdown_table",
           "zlib_relaxed_markdown_table",
           "python_zlib_diff_markdown_table",

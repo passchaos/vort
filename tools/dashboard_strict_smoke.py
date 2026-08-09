@@ -24,6 +24,11 @@ DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
 PYTHON_ZLIB_DIFF_ARTIFACT = "vort-python-zlib-diff-smoke.json"
 ZLIB_RELAXED_ARTIFACT = "vort-zlib-relaxed-report.json"
 PNG_SCRATCH_ARTIFACT = "vort-png-scratch-report.json"
+BR_STATIC_CANDIDATES_ARTIFACT = "vort-br-static-dictionary-candidates.json"
+BR_STATIC_UPSTREAM_ARTIFACT = "vort-br-static-dictionary-candidate-upstream-smoke.json"
+BR_STATIC_NODE_ARTIFACT = "vort-br-static-dictionary-node-probe.json"
+BR_STATIC_AUDIT_ARTIFACT = "vort-br-static-dictionary-source-audit.json"
+BR_STATIC_AUDIT_NEGATIVE_ARTIFACT = "vort-br-static-dictionary-source-audit-negative-smoke.json"
 NATIVE_ALLOCATION_REPORT_ARTIFACT = "vort-native-allocation-report.json"
 NATIVE_ALLOCATION_SMOKE_ARTIFACT = "vort-native-allocation-smoke.json"
 NATIVE_ALLOCATION_NEGATIVE_ARTIFACT = "vort-native-allocation-negative-smoke.json"
@@ -80,6 +85,8 @@ def write_producer_map(
     include_zlib_relaxed_smoke: bool = True,
     include_png_scratch_exact: bool = True,
     include_png_scratch_smoke: bool = True,
+    include_br_static_exact: bool = True,
+    include_br_static_smoke: bool = True,
     include_native_allocation_exact: bool = True,
     include_native_allocation_smoke: bool = True,
     include_zstd_compare_exact: bool = True,
@@ -149,6 +156,15 @@ def write_producer_map(
             "expected_format": "json",
             "smoke_gate": "zig build run-png-scratch-report-dashboard",
         }
+    if include_br_static_smoke:
+        for artifact, smoke_gate in (
+            (BR_STATIC_CANDIDATES_ARTIFACT, "zig build run-br-static-dictionary-candidate-report-smoke"),
+            (BR_STATIC_UPSTREAM_ARTIFACT, "zig build run-br-static-dictionary-candidate-upstream-smoke"),
+            (BR_STATIC_NODE_ARTIFACT, "zig build run-br-static-dictionary-node-probe"),
+            (BR_STATIC_AUDIT_ARTIFACT, "zig build run-br-static-dictionary-source-audit"),
+            (BR_STATIC_AUDIT_NEGATIVE_ARTIFACT, "zig build run-br-static-dictionary-source-audit-negative-smoke"),
+        ):
+            artifact_metadata[artifact] = {"expected_format": "json", "smoke_gate": smoke_gate}
     if include_native_allocation_smoke:
         for artifact, smoke_gate in (
             (NATIVE_ALLOCATION_REPORT_ARTIFACT, "zig build run-native-allocation-report-dashboard"),
@@ -221,6 +237,12 @@ def write_producer_map(
         exact[ZLIB_RELAXED_ARTIFACT] = "zig build run-zlib-relaxed-report-gate"
     if include_png_scratch_exact:
         exact[PNG_SCRATCH_ARTIFACT] = "zig build run-png-scratch-report-dashboard"
+    if include_br_static_exact:
+        exact[BR_STATIC_CANDIDATES_ARTIFACT] = "zig build run-br-static-dictionary-candidate-report-smoke"
+        exact[BR_STATIC_UPSTREAM_ARTIFACT] = "zig build run-br-static-dictionary-candidate-upstream-smoke"
+        exact[BR_STATIC_NODE_ARTIFACT] = "zig build run-br-static-dictionary-node-probe"
+        exact[BR_STATIC_AUDIT_ARTIFACT] = "zig build run-br-static-dictionary-source-audit"
+        exact[BR_STATIC_AUDIT_NEGATIVE_ARTIFACT] = "zig build run-br-static-dictionary-source-audit-negative-smoke"
     if include_native_allocation_exact:
         exact[NATIVE_ALLOCATION_REPORT_ARTIFACT] = "zig build run-native-allocation-report-dashboard"
         exact[NATIVE_ALLOCATION_SMOKE_ARTIFACT] = "zig build run-native-allocation-smoke"
@@ -761,6 +783,82 @@ def write_png_scratch_report(path: Path) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def write_br_static_dictionary_artifacts(root: Path) -> None:
+    candidates = {
+        "schema": "vort.br_static_dictionary_candidate_report",
+        "schema_version": 1,
+        "source_mode": "anchors",
+        "source_limit": 0,
+        "source_entry_count": 83,
+        "raw_word_count": 143,
+        "upstream_raw_word_count": 0,
+        "transform_count": 6,
+        "candidate_count": 775,
+        "kind_rows": [{"transform_kind": "identity", "candidate_count": 81}, {"transform_kind": "affix_identity", "candidate_count": 417}, {"transform_kind": "omit_last_1", "candidate_count": 139}, {"transform_kind": "uppercase_first", "candidate_count": 138}],
+        "length_rows": [{"copy_len": 4, "candidate_count": 480}, {"copy_len": 5, "candidate_count": 295}],
+        "candidates": [{"word": "test", "copy_len": 4, "transform_kind": "identity"}],
+    }
+    upstream = {
+        "schema": "vort.br_static_dictionary_candidate_upstream_smoke",
+        "schema_version": 1,
+        "ok": True,
+        "source_mode": "upstream",
+        "source_limit": 8,
+        "source_entry_count": 83,
+        "raw_word_count": 143,
+        "anchor_raw_word_count": 143,
+        "upstream_raw_word_count": 8,
+        "candidate_count": 775,
+        "stdout": "br_static_dictionary_candidate_report=ok source_entries=83 raw_words=143 candidates=775",
+    }
+    node = {
+        "schema": "vort.br_static_dictionary_node_probe",
+        "schema_version": 1,
+        "ok": True,
+        "candidate_source_mode": "anchors",
+        "candidate_source_limit": 0,
+        "candidate_upstream_raw_word_count": 0,
+        "all_candidates": False,
+        "start_index": 0,
+        "probed_count": 48,
+        "node_decode_successes": 48,
+        "size_winner_count": 1,
+        "kind_rows": [{"transform_kind": "identity", "probed_count": 48}],
+        "size_rows": [{"size_class": "smaller", "probed_count": 48}],
+        "size_winner_rows": [{"size_class": "smaller", "probed_count": 48}],
+    }
+    audit = {
+        "schema": "vort.br_static_dictionary_source_audit",
+        "schema_version": 1,
+        "ok": True,
+        "entry_count": 83,
+        "anchor_count": 83,
+        "generated_table_matches_source": True,
+        "generated_zig_bytes": 4096,
+        "generated_zig_path": "zig-out/vort-br-static-dictionary-generated.zig",
+        "length_count": 2,
+        "transform_count": 4,
+        "operation_counts": {"identity": 80, "uppercase_first": 3},
+        "source_checked": False,
+        "source_dir": "",
+    }
+    negative = {
+        "schema": "vort.br_static_dictionary_source_audit_negative_smoke",
+        "schema_version": 1,
+        "ok": True,
+        "case_count": 1,
+        "cases": [{"name": "bad_anchor_count", "expected_failure": True, "expected_error": "anchor_count mismatch", "actual_error": "anchor_count mismatch", "matched": True}],
+    }
+    for artifact, payload in (
+        (BR_STATIC_CANDIDATES_ARTIFACT, candidates),
+        (BR_STATIC_UPSTREAM_ARTIFACT, upstream),
+        (BR_STATIC_NODE_ARTIFACT, node),
+        (BR_STATIC_AUDIT_ARTIFACT, audit),
+        (BR_STATIC_AUDIT_NEGATIVE_ARTIFACT, negative),
+    ):
+        (root / artifact).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
 def write_native_allocation_artifacts(root: Path) -> None:
     report = {
         "schema": "vort.native_allocation_report",
@@ -1152,6 +1250,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_python_zlib_diff_report(root / PYTHON_ZLIB_DIFF_ARTIFACT)
     write_zlib_relaxed_report(root / ZLIB_RELAXED_ARTIFACT)
     write_png_scratch_report(root / PNG_SCRATCH_ARTIFACT)
+    write_br_static_dictionary_artifacts(root)
     write_native_allocation_artifacts(root)
     write_zstd_compare_artifacts(root)
     write_native_summary_error_dashboard(root / NATIVE_SUMMARY_ERROR_ARTIFACT)
@@ -1517,8 +1616,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 25/25 | 0 | allowed missing 0 |",
-                    "| smoke gates | 25/25 | 0 | required missing 0 |",
+                    "| producer steps | 30/30 | 0 | allowed missing 0 |",
+                    "| smoke gates | 30/30 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -1691,6 +1790,22 @@ def main() -> int:
                     "| zero-allocation cases | 2/2 | smoke present `True` |",
                     "| budget cases | 1/1 | healthy `True` |",
                     "| negative smoke cases | 1/1 | present `True` |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
+                "static_dictionary_markdown_table",
+                "static dictionary Markdown table",
+                dashboard_markdown,
+                [
+                    "## Static dictionary coverage",
+                    "| category | count | detail |",
+                    "| candidates | 775 | raw words 143 |",
+                    "| upstream smoke | 775 | raw words 143, present `True` |",
+                    "| node probe | 48/48 | size winners 1 |",
+                    "| source audit | 83 | anchors 83, generated bytes 4096 |",
+                    "| negative smoke | 1/1 | healthy `True` |",
                 ],
             )
         )

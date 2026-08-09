@@ -542,6 +542,77 @@ def native_tier_corpus_discovery_health(artifacts: list[Path]) -> dict:
     }
 
 
+def br_static_dictionary_health(artifacts: list[Path]) -> dict:
+    candidate = None
+    upstream = None
+    node = None
+    audit = None
+    negative = None
+    for artifact in artifacts:
+        data = read_json(artifact) if artifact.suffix == ".json" else {}
+        schema = data.get("schema")
+        if schema == "vort.br_static_dictionary_candidate_report" and artifact.name == "vort-br-static-dictionary-candidates.json":
+            candidate = data
+        elif schema == "vort.br_static_dictionary_candidate_upstream_smoke":
+            upstream = data
+        elif schema == "vort.br_static_dictionary_node_probe" and artifact.name == "vort-br-static-dictionary-node-probe.json":
+            node = data
+        elif schema == "vort.br_static_dictionary_source_audit":
+            audit = data
+        elif schema == "vort.br_static_dictionary_source_audit_negative_smoke":
+            negative = data
+
+    def int_field(data: dict | None, field: str) -> int:
+        if not isinstance(data, dict):
+            return 0
+        value = data.get(field)
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    negative_cases = negative.get("cases") if isinstance(negative, dict) else []
+    negative_cases = negative_cases if isinstance(negative_cases, list) else []
+    negative_matched = sum(1 for row in negative_cases if isinstance(row, dict) and row.get("matched") is True)
+    candidate_present = isinstance(candidate, dict)
+    upstream_present = isinstance(upstream, dict)
+    node_present = isinstance(node, dict)
+    audit_present = isinstance(audit, dict)
+    negative_present = isinstance(negative, dict)
+    healthy = (
+        candidate_present
+        and upstream_present
+        and node_present
+        and audit_present
+        and negative_present
+        and int_field(candidate, "candidate_count") > 0
+        and bool(upstream.get("ok"))
+        and bool(node.get("ok"))
+        and int_field(node, "node_decode_successes") == int_field(node, "probed_count")
+        and bool(audit.get("ok"))
+        and bool(audit.get("generated_table_matches_source"))
+        and bool(negative.get("ok"))
+        and negative_matched == int_field(negative, "case_count")
+    )
+    return {
+        "present": candidate_present,
+        "upstream_present": upstream_present,
+        "node_present": node_present,
+        "audit_present": audit_present,
+        "negative_present": negative_present,
+        "healthy": healthy,
+        "candidate_count": int_field(candidate, "candidate_count"),
+        "raw_word_count": int_field(candidate, "raw_word_count"),
+        "upstream_candidate_count": int_field(upstream, "candidate_count"),
+        "upstream_raw_word_count": int_field(upstream, "raw_word_count"),
+        "node_probed_count": int_field(node, "probed_count"),
+        "node_decode_successes": int_field(node, "node_decode_successes"),
+        "node_size_winner_count": int_field(node, "size_winner_count"),
+        "audit_entry_count": int_field(audit, "entry_count"),
+        "audit_anchor_count": int_field(audit, "anchor_count"),
+        "audit_generated_zig_bytes": int_field(audit, "generated_zig_bytes"),
+        "negative_case_count": int_field(negative, "case_count"),
+        "negative_matched": negative_matched,
+    }
+
+
 def png_scratch_health(artifacts: list[Path]) -> dict:
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
@@ -1368,6 +1439,7 @@ def main() -> int:
     huffman_health = huffman_length_health(artifacts)
     fuzz_health = fuzz_corpus_health(artifacts)
     decode_stage_health_summary = decode_stage_health(artifacts)
+    br_static_dictionary = br_static_dictionary_health(artifacts)
     png_scratch = png_scratch_health(artifacts)
     zlib_relaxed = zlib_relaxed_health(artifacts)
     zstd_compare = zstd_compare_health(artifacts)
@@ -1557,6 +1629,20 @@ def main() -> int:
             f"| commands | {header_health['command_count']} | successes/failures {header_health['command_successes']}/{header_health['command_failures']} |",
             f"| workflows | {header_health['workflow_count']} | successes {header_health['workflow_successes']}, required/missing {header_health['required_workflow_count']}/{header_health['missing_workflow_count']} |",
             f"| dictionary cases | {header_health['dictionary_cases']} | optional/FHCRC {header_health['optional_header_cases']}/{header_health['fhcrc_cases']} |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
+            "## Static dictionary coverage",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| candidates | {br_static_dictionary['candidate_count']} | raw words {br_static_dictionary['raw_word_count']} |",
+            f"| upstream smoke | {br_static_dictionary['upstream_candidate_count']} | raw words {br_static_dictionary['upstream_raw_word_count']}, present `{br_static_dictionary['upstream_present']}` |",
+            f"| node probe | {br_static_dictionary['node_decode_successes']}/{br_static_dictionary['node_probed_count']} | size winners {br_static_dictionary['node_size_winner_count']} |",
+            f"| source audit | {br_static_dictionary['audit_entry_count']} | anchors {br_static_dictionary['audit_anchor_count']}, generated bytes {br_static_dictionary['audit_generated_zig_bytes']} |",
+            f"| negative smoke | {br_static_dictionary['negative_matched']}/{br_static_dictionary['negative_case_count']} | healthy `{br_static_dictionary['healthy']}` |",
             "",
         ]
     )
@@ -1938,6 +2024,24 @@ def main() -> int:
                 "decode_stage_error_rows": decode_stage_health_summary["error_rows"],
                 "decode_stage_matched_error_rows": decode_stage_health_summary["matched_error_rows"],
                 "decode_stage_unmatched_error_rows": decode_stage_health_summary["unmatched_error_rows"],
+                "br_static_dictionary_present": br_static_dictionary["present"],
+                "br_static_dictionary_upstream_present": br_static_dictionary["upstream_present"],
+                "br_static_dictionary_node_present": br_static_dictionary["node_present"],
+                "br_static_dictionary_audit_present": br_static_dictionary["audit_present"],
+                "br_static_dictionary_negative_present": br_static_dictionary["negative_present"],
+                "br_static_dictionary_healthy": br_static_dictionary["healthy"],
+                "br_static_dictionary_candidate_count": br_static_dictionary["candidate_count"],
+                "br_static_dictionary_raw_word_count": br_static_dictionary["raw_word_count"],
+                "br_static_dictionary_upstream_candidate_count": br_static_dictionary["upstream_candidate_count"],
+                "br_static_dictionary_upstream_raw_word_count": br_static_dictionary["upstream_raw_word_count"],
+                "br_static_dictionary_node_probed_count": br_static_dictionary["node_probed_count"],
+                "br_static_dictionary_node_decode_successes": br_static_dictionary["node_decode_successes"],
+                "br_static_dictionary_node_size_winner_count": br_static_dictionary["node_size_winner_count"],
+                "br_static_dictionary_audit_entry_count": br_static_dictionary["audit_entry_count"],
+                "br_static_dictionary_audit_anchor_count": br_static_dictionary["audit_anchor_count"],
+                "br_static_dictionary_audit_generated_zig_bytes": br_static_dictionary["audit_generated_zig_bytes"],
+                "br_static_dictionary_negative_case_count": br_static_dictionary["negative_case_count"],
+                "br_static_dictionary_negative_matched": br_static_dictionary["negative_matched"],
                 "png_scratch_present": png_scratch["present"],
                 "png_scratch_healthy": png_scratch["healthy"],
                 "png_scratch_case_count": png_scratch["case_count"],
