@@ -1342,6 +1342,20 @@ def main() -> int:
                 ],
             )
         )
+        checks.append(
+            markdown_check_row(
+                "fuzz_corpus_markdown_table",
+                "fuzz corpus Markdown table",
+                dashboard_markdown,
+                [
+                    "## Fuzz corpus coverage",
+                    "| category | count | detail |",
+                    "| corpus cases | 3 | matched/unmatched 3/0 |",
+                    "| exact error expectations | 2 | mode/error rows 3/2 |",
+                    "| coverage requirements | 5 | modes/errors 3/2 |",
+                ],
+            )
+        )
 
         missing_native_tier_root = root / "missing-native-tier"
         missing_native_tier_root.mkdir()

@@ -1304,6 +1304,18 @@ def main() -> int:
             "",
         ]
     )
+    lines.extend(
+        [
+            "## Fuzz corpus coverage",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| corpus cases | {fuzz_health['cases']} | matched/unmatched {fuzz_health['matched_rows']}/{fuzz_health['unmatched_rows']} |",
+            f"| exact error expectations | {fuzz_health['exact_error_expectations']} | mode/error rows {fuzz_health['mode_count_rows']}/{fuzz_health['error_count_rows']} |",
+            f"| coverage requirements | {fuzz_health['coverage_mode_requirements'] + fuzz_health['coverage_error_requirements']} | modes/errors {fuzz_health['coverage_mode_requirements']}/{fuzz_health['coverage_error_requirements']} |",
+            "",
+        ]
+    )
     if native_codec_health["coverage_details"]:
         lines.extend(
             [
