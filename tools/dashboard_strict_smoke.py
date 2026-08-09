@@ -1272,6 +1272,19 @@ def main() -> int:
         )
         checks.append(
             markdown_check_row(
+                "native_summary_success_markdown_table",
+                "native summary success Markdown table",
+                dashboard_markdown,
+                [
+                    "## Native stream summary coverage",
+                    "| codec | frames | skippable | checksum | block checksum | dictionary | content size | blocks raw/rle/compressed | payload/skippable bytes |",
+                    "| `lz4` | 2 | 1 | 2 | 1 | 1 | 2 | 2/0/0 | 6/16 |",
+                    "| `zstd` | 2 | 1 | 1 | 0 | 1 | 2 | 2/0/0 | 6/16 |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
                 "native_summary_error_markdown_tables",
                 "native summary error Markdown tables",
                 dashboard_markdown,

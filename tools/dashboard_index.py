@@ -1413,6 +1413,17 @@ def main() -> int:
         required_native_summary_error_phases = {}
     lines.extend(
         [
+            "## Native stream summary coverage",
+            "",
+            "| codec | frames | skippable | checksum | block checksum | dictionary | content size | blocks raw/rle/compressed | payload/skippable bytes |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
+            f"| `lz4` | {lz4_native_summary['frame_count']} | {lz4_native_summary['skippable_frame_count']} | {lz4_native_summary['checksum_frame_count']} | {lz4_native_summary['block_checksum_frame_count']} | {lz4_native_summary['dictionary_id_frame_count']} | {lz4_native_summary['content_size_frame_count']} | {lz4_native_summary['raw_block_count']}/{lz4_native_summary['rle_block_count']}/{lz4_native_summary['compressed_block_count']} | {lz4_native_summary['payload_bytes']}/{lz4_native_summary['skippable_payload_bytes']} |",
+            f"| `zstd` | {zstd_native_summary['frame_count']} | {zstd_native_summary['skippable_frame_count']} | {zstd_native_summary['checksum_frame_count']} | 0 | {zstd_native_summary['dictionary_id_frame_count']} | {zstd_native_summary['content_size_frame_count']} | {zstd_native_summary['raw_block_count']}/{zstd_native_summary['rle_block_count']}/{zstd_native_summary['compressed_block_count']} | {zstd_native_summary['payload_bytes']}/{zstd_native_summary['skippable_payload_bytes']} |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
             "## Native summary error codec coverage",
             "",
             "| codec | cases | errors | phases | required phases | missing phases |",
