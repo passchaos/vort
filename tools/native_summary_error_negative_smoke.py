@@ -105,6 +105,14 @@ def main() -> int:
     bad_zstd_phase_counts["zstd_phase_counts"] = {"skippable_payload": 99}
     smoke_cases.append(check_failure("bad_zstd_phase_counts", bad_zstd_phase_counts, "zstd_phase_counts mismatch"))
 
+    bad_case_schema = copy.deepcopy(base_summary)
+    bad_case_schema["cases"][0]["schema"] = "vort.zstd_native_stream_summary_error"
+    smoke_cases.append(check_failure("bad_case_schema", bad_case_schema, "schema mismatch"))
+
+    bad_case_ok = copy.deepcopy(base_summary)
+    bad_case_ok["cases"][0]["ok"] = True
+    smoke_cases.append(check_failure("bad_case_ok", bad_case_ok, "ok must be false"))
+
     summary = {
         "schema": "vort.native_summary_error_negative_smoke",
         "schema_version": 1,

@@ -86,7 +86,22 @@ def validate_summary(summary: dict[str, object]) -> None:
     cases = summary.get("cases")
     if not isinstance(cases, list):
         raise AssertionError("cases must be a list")
-    expected = build_summary([case for case in cases if isinstance(case, dict)])
+    normalized_cases = [case for case in cases if isinstance(case, dict)]
+    if len(normalized_cases) != len(cases):
+        raise AssertionError("all cases must be objects")
+    for index, case in enumerate(normalized_cases):
+        codec = case.get("codec")
+        schema = case.get("schema")
+        if codec not in {"lz4", "zstd"}:
+            raise AssertionError(f"cases[{index}].codec invalid: {codec!r}")
+        expected_schema = f"vort.{codec}_native_stream_summary_error"
+        if schema != expected_schema:
+            raise AssertionError(f"cases[{index}].schema mismatch: expected {expected_schema!r}, got {schema!r}")
+        if case.get("schema_version") != 1:
+            raise AssertionError(f"cases[{index}].schema_version mismatch")
+        if case.get("ok") is not False:
+            raise AssertionError(f"cases[{index}].ok must be false")
+    expected = build_summary(normalized_cases)
     for key in ("case_count", "lz4_case_count", "zstd_case_count", "error_counts", "phase_counts", "lz4_error_counts", "zstd_error_counts", "lz4_phase_counts", "zstd_phase_counts", "offset_min", "offset_max", "lz4_offset_min", "lz4_offset_max", "zstd_offset_min", "zstd_offset_max", "phase_offset_ranges"):
         if summary.get(key) != expected[key]:
             raise AssertionError(f"{key} mismatch: expected {expected[key]!r}, got {summary.get(key)!r}")
