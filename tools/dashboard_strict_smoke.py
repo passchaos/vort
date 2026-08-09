@@ -24,6 +24,7 @@ DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
 PYTHON_ZLIB_DIFF_ARTIFACT = "vort-python-zlib-diff-smoke.json"
 NATIVE_SUMMARY_ERROR_ARTIFACT = "vort-native-summary-error-dashboard.json"
 NATIVE_SUMMARY_ERROR_NEGATIVE_ARTIFACT = "vort-native-summary-error-negative-smoke.json"
+NATIVE_CODEC_PROBES_ARTIFACT = "vort-native-codec-probes.json"
 LZ4_NATIVE_SUMMARY_ARTIFACT = "vort-lz4-native-stream-summary.json"
 ZSTD_NATIVE_SUMMARY_ARTIFACT = "vort-zstd-native-stream-summary.json"
 NATIVE_TIER_RANGE_ARTIFACT = "vort-native-tier-range-bench-gate.json"
@@ -71,6 +72,8 @@ def write_producer_map(
     include_native_summary_error_smoke: bool = True,
     include_native_summary_error_negative_exact: bool = True,
     include_native_summary_error_negative_smoke: bool = True,
+    include_native_codec_probes_exact: bool = True,
+    include_native_codec_probes_smoke: bool = True,
     include_lz4_native_summary_exact: bool = True,
     include_lz4_native_summary_smoke: bool = True,
     include_zstd_native_summary_exact: bool = True,
@@ -130,6 +133,11 @@ def write_producer_map(
             "expected_format": "json",
             "smoke_gate": "zig build run-native-summary-error-negative-smoke",
         }
+    if include_native_codec_probes_smoke:
+        artifact_metadata[NATIVE_CODEC_PROBES_ARTIFACT] = {
+            "expected_format": "json",
+            "smoke_gate": "zig build run-native-codec-probes-dashboard",
+        }
     if include_lz4_native_summary_smoke:
         artifact_metadata[LZ4_NATIVE_SUMMARY_ARTIFACT] = {
             "expected_format": "json",
@@ -167,6 +175,8 @@ def write_producer_map(
         exact[NATIVE_SUMMARY_ERROR_ARTIFACT] = "zig build run-native-summary-error-dashboard"
     if include_native_summary_error_negative_exact:
         exact[NATIVE_SUMMARY_ERROR_NEGATIVE_ARTIFACT] = "zig build run-native-summary-error-negative-smoke"
+    if include_native_codec_probes_exact:
+        exact[NATIVE_CODEC_PROBES_ARTIFACT] = "zig build run-native-codec-probes-dashboard"
     if include_lz4_native_summary_exact:
         exact[LZ4_NATIVE_SUMMARY_ARTIFACT] = "zig build run-lz4-native-summary-dashboard"
     if include_zstd_native_summary_exact:
@@ -689,6 +699,102 @@ def write_native_summary_error_negative_smoke(path: Path, *, healthy: bool = Tru
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
+
+def write_native_codec_probes(path: Path) -> None:
+    probes = [
+        {
+            "label": "lz4-native-probe",
+            "executable": "zig-out/bin/lz4-native-probe",
+            "ok": True,
+            "returncode": 0,
+            "timed_out": False,
+            "timeout_seconds": 120.0,
+            "cases": 113,
+            "marker": "lz4_native_probe",
+            "output": "lz4_native_probe_ok cases=113",
+            "reported_capabilities": ["chunked", "dictionary", "incremental", "lib-generated", "malformed", "reusable-chunked"],
+            "reported_capability_cases": {"chunked": 63, "dictionary": 113, "incremental": 63, "lib-generated": 63, "malformed": 113, "reusable-chunked": 63},
+            "reported_capability_count": 6,
+        },
+        {
+            "label": "lz4-native-dictionary-probe",
+            "executable": "zig-out/bin/lz4-native-dictionary-probe",
+            "ok": True,
+            "returncode": 0,
+            "timed_out": False,
+            "timeout_seconds": 120.0,
+            "cases": 11,
+            "marker": "lz4_native_dictionary_probe",
+            "output": "lz4_native_dictionary_probe_ok cases=11",
+            "reported_capabilities": ["dictionary", "dictionary-training"],
+            "reported_capability_cases": {"dictionary": 11, "dictionary-training": 1},
+            "reported_capability_count": 2,
+        },
+        {
+            "label": "zstd-native-frame-probe",
+            "executable": "zig-out/bin/zstd-native-frame-probe",
+            "ok": True,
+            "returncode": 0,
+            "timed_out": False,
+            "timeout_seconds": 120.0,
+            "cases": 213,
+            "marker": "zstd_native_frame_probe",
+            "output": "zstd_native_frame_probe_ok cases=213",
+            "reported_capabilities": ["chunked", "fse-repeat", "huffman", "incremental", "lib-generated", "malformed", "reusable-chunked", "sequence-tables"],
+            "reported_capability_cases": {"chunked": 132, "fse-repeat": 8, "huffman": 12, "incremental": 138, "lib-generated": 124, "malformed": 213, "reusable-chunked": 134, "sequence-tables": 7},
+            "reported_capability_count": 8,
+        },
+        {
+            "label": "zstd-native-dictionary-probe",
+            "executable": "zig-out/bin/zstd-native-dictionary-probe",
+            "ok": True,
+            "returncode": 0,
+            "timed_out": False,
+            "timeout_seconds": 120.0,
+            "cases": 25,
+            "marker": "zstd_native_dictionary_probe",
+            "output": "zstd_native_dictionary_probe_ok cases=25",
+            "reported_capabilities": ["dictionary", "lib-generated"],
+            "reported_capability_cases": {"dictionary": 25, "lib-generated": 25},
+            "reported_capability_count": 2,
+        },
+    ]
+    payload = {
+        "schema": "vort.native_codec_probes",
+        "schema_version": 1,
+        "ok": True,
+        "probe_count": 4,
+        "total_cases": 362,
+        "coverage_count": 4,
+        "coverage": [
+            {"codec": "lz4", "surface": "frame", "present": True, "ok": True, "probe_count": 1, "ok_probe_count": 1, "cases": 113},
+            {"codec": "lz4", "surface": "dictionary", "present": True, "ok": True, "probe_count": 1, "ok_probe_count": 1, "cases": 11},
+            {"codec": "zstd", "surface": "frame", "present": True, "ok": True, "probe_count": 1, "ok_probe_count": 1, "cases": 213},
+            {"codec": "zstd", "surface": "dictionary", "present": True, "ok": True, "probe_count": 1, "ok_probe_count": 1, "cases": 25},
+        ],
+        "capability_count": 16,
+        "capabilities": [
+            {"capability": "lib-generated", "present": True, "ok": True, "probe_count": 3, "ok_probe_count": 3, "cases": 212},
+            {"capability": "native-generated", "present": True, "ok": True, "probe_count": 1, "ok_probe_count": 1, "cases": 113},
+            {"capability": "incremental", "present": True, "ok": True, "probe_count": 2, "ok_probe_count": 2, "cases": 201},
+            {"capability": "chunked", "present": True, "ok": True, "probe_count": 2, "ok_probe_count": 2, "cases": 195},
+            {"capability": "reusable-chunked", "present": True, "ok": True, "probe_count": 2, "ok_probe_count": 2, "cases": 197},
+            {"capability": "fse-repeat", "present": True, "ok": True, "probe_count": 1, "ok_probe_count": 1, "cases": 8},
+            {"capability": "dictionary", "present": True, "ok": True, "probe_count": 3, "ok_probe_count": 3, "cases": 149},
+            {"capability": "dictionary-training", "present": True, "ok": True, "probe_count": 1, "ok_probe_count": 1, "cases": 1},
+            {"capability": "dictionary-set", "present": True, "ok": True, "probe_count": 1, "ok_probe_count": 1, "cases": 113},
+            {"capability": "skippable", "present": True, "ok": True, "probe_count": 1, "ok_probe_count": 1, "cases": 113},
+            {"capability": "malformed", "present": True, "ok": True, "probe_count": 2, "ok_probe_count": 2, "cases": 326},
+            {"capability": "checksum", "present": True, "ok": True, "probe_count": 1, "ok_probe_count": 1, "cases": 113},
+            {"capability": "bounded-limits", "present": True, "ok": True, "probe_count": 1, "ok_probe_count": 1, "cases": 113},
+            {"capability": "huffman", "present": True, "ok": True, "probe_count": 1, "ok_probe_count": 1, "cases": 12},
+            {"capability": "sequence-tables", "present": True, "ok": True, "probe_count": 1, "ok_probe_count": 1, "cases": 7},
+            {"capability": "block", "present": True, "ok": True, "probe_count": 1, "ok_probe_count": 1, "cases": 113},
+        ],
+        "probes": probes,
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
 def write_zstd_native_summary(path: Path, *, healthy: bool = True) -> None:
     payload = {
         "schema": "vort.zstd_native_stream_summary",
@@ -797,6 +903,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_python_zlib_diff_report(root / PYTHON_ZLIB_DIFF_ARTIFACT)
     write_native_summary_error_dashboard(root / NATIVE_SUMMARY_ERROR_ARTIFACT)
     write_native_summary_error_negative_smoke(root / NATIVE_SUMMARY_ERROR_NEGATIVE_ARTIFACT)
+    write_native_codec_probes(root / NATIVE_CODEC_PROBES_ARTIFACT)
     write_lz4_native_summary(root / LZ4_NATIVE_SUMMARY_ARTIFACT)
     write_zstd_native_summary(root / ZSTD_NATIVE_SUMMARY_ARTIFACT)
     write_native_tier_range_summaries(root)
@@ -1166,6 +1273,26 @@ def main() -> int:
                     "60.00/16.00/12.00",
                     "40.00/8.00/4.00",
                     "30.00/6.50/3.50",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
+                "native_codec_probe_markdown_tables",
+                "native codec probe Markdown tables",
+                dashboard_markdown,
+                [
+                    "## Native codec probe coverage",
+                    "| codec | surface | present | ok | probes | cases |",
+                    "| `lz4` | `frame` | `True` | `True` | 1/1 | 113 |",
+                    "| `zstd` | `frame` | `True` | `True` | 1/1 | 213 |",
+                    "## Native codec probe capabilities",
+                    "| capability | present | ok | probes | cases |",
+                    "| `lib-generated` | `True` | `True` | 3/3 | 212 |",
+                    "| `fse-repeat` | `True` | `True` | 1/1 | 8 |",
+                    "## Native codec probe executables",
+                    "| probe | ok | cases | returncode | timed out |",
+                    "| `zstd-native-frame-probe` | `True` | 213 | 0 | `False` |",
                 ],
             )
         )

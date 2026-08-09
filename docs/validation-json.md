@@ -2410,11 +2410,12 @@ generation fails when the header inspect artifact is absent, reports `ok=false`,
 or has missing required workflows. With `--strict-validation-health`, generation
 fails whenever the aggregate `validation_healthy` field is false and reports the
 `validation_unhealthy_reasons` list with specific missing/failed artifact or coverage reasons.
-The generated Markdown index also includes `Native summary error codec coverage`
-and `Native summary error phase offsets` tables so LZ4 and Zstd
-structured-error counts, phase counts, required phases, missing phases, and
-phase offset ranges are visible during dashboard review without opening the
-retained JSON artifact.
+The generated Markdown index also includes `Native codec probe coverage`,
+`Native codec probe capabilities`, `Native codec probe executables`,
+`Native summary error codec coverage`, and `Native summary error phase offsets`
+tables so codec probe status, LZ4/Zstd structured-error counts, phase counts,
+required phases, missing phases, and phase offset ranges are visible during
+dashboard review without opening the retained JSON artifacts.
 Current unhealthy reason values are:
 
 - `missing_producer_steps`
@@ -2979,9 +2980,9 @@ Example:
   "expected_modes": [
     {
       "mode": "dashboard-markdown",
-      "min_checks": 2,
+      "min_checks": 3,
       "min_expected_failures": 0,
-      "min_matched": 2
+      "min_matched": 3
     },
     {
       "mode": "strict-validation-health",
@@ -3067,8 +3068,9 @@ the smoke artifact can pass. The expected reason/check/fixture matrix lives in
 `tools/dashboard_strict_validation_reasons.json`; the retained
 `strict-validation-health` mode minimums must cover every configured reason,
 currently 31. The `dashboard-markdown` mode verifies that important human-facing
-sections, including native summary error codec/phase-offset tables and the
-native-tier range source table, remain present in the generated dashboard index. The abbreviated example below shows a
+sections, including native summary error codec/phase-offset tables, native
+codec probe coverage/capability tables, and the native-tier range source table,
+remain present in the generated dashboard index. The abbreviated example below shows a
 one-reason slice. A synthetic long-output check keeps the truncation path
 covered so `actual_output_truncated=true` is exercised in CI.
 
@@ -3079,7 +3081,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 5,
+  "check_count": 6,
   "mode_count": 4,
   "expected_mode_count": 4,
   "missing_mode_count": 0,
@@ -3093,9 +3095,9 @@ Example:
     },
     {
       "mode": "dashboard-markdown",
-      "min_checks": 2,
+      "min_checks": 3,
       "min_expected_failures": 0,
-      "min_matched": 2
+      "min_matched": 3
     },
     {
       "mode": "strict-validation-health",
@@ -3126,14 +3128,14 @@ Example:
     },
     {
       "mode": "dashboard-markdown",
-      "checks": 2,
-      "min_checks": 2,
+      "checks": 3,
+      "min_checks": 3,
       "missing_checks": 0,
       "expected_failures": 0,
       "min_expected_failures": 0,
       "missing_expected_failures": 0,
-      "matched": 2,
-      "min_matched": 2,
+      "matched": 3,
+      "min_matched": 3,
       "missing_matched": 0
     },
     {
@@ -3170,9 +3172,9 @@ Example:
     },
     {
       "mode": "dashboard-markdown",
-      "checks": 2,
+      "checks": 3,
       "expected_failures": 0,
-      "matched": 2
+      "matched": 3
     },
     {
       "mode": "strict-validation-health",
@@ -3219,6 +3221,18 @@ Example:
       "expected_output": "native tier range Markdown table",
       "actual_output": "0:ok,1:ok,2:ok,3:ok,4:ok,5:ok,6:ok,7:ok",
       "actual_output_bytes": 39,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probe_markdown_tables",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "native codec probe Markdown tables",
+      "actual_output": "0:ok,1:ok,2:ok,3:ok,4:ok,5:ok,6:ok,7:ok,8:ok,9:ok,10:ok",
+      "actual_output_bytes": 56,
       "actual_output_limit": 240,
       "actual_output_truncated": false,
       "returncode": 0,

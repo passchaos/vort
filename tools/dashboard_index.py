@@ -608,6 +608,10 @@ def python_zlib_diff_health(artifacts: list[Path]) -> dict:
 
 
 def native_codec_probes_health(artifacts: list[Path]) -> dict:
+    def int_field(row: dict, field: str) -> int:
+        value = row.get(field)
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
         if data.get("schema") != "vort.native_codec_probes":
@@ -622,6 +626,17 @@ def native_codec_probes_health(artifacts: list[Path]) -> dict:
             for probe in probes
             if isinstance(probe, dict)
         }
+        probe_details = [
+            {
+                "label": str(probe.get("label") or ""),
+                "ok": probe.get("ok") is True,
+                "cases": int_field(probe, "cases"),
+                "returncode": int_field(probe, "returncode"),
+                "timed_out": probe.get("timed_out") is True,
+            }
+            for probe in probes
+            if isinstance(probe, dict)
+        ]
         capabilities = data.get("capabilities")
         if not isinstance(capabilities, list):
             capabilities = []
@@ -631,6 +646,34 @@ def native_codec_probes_health(artifacts: list[Path]) -> dict:
             for row in capabilities
             if isinstance(row, dict)
         }
+        capability_details = [
+            {
+                "capability": str(row.get("capability") or ""),
+                "present": row.get("present") is True,
+                "ok": row.get("ok") is True,
+                "ok_probe_count": int_field(row, "ok_probe_count"),
+                "probe_count": int_field(row, "probe_count"),
+                "cases": int_field(row, "cases"),
+            }
+            for row in capabilities
+            if isinstance(row, dict)
+        ]
+        coverage = data.get("coverage")
+        if not isinstance(coverage, list):
+            coverage = []
+        coverage_details = [
+            {
+                "codec": str(row.get("codec") or ""),
+                "surface": str(row.get("surface") or ""),
+                "present": row.get("present") is True,
+                "ok": row.get("ok") is True,
+                "ok_probe_count": int_field(row, "ok_probe_count"),
+                "probe_count": int_field(row, "probe_count"),
+                "cases": int_field(row, "cases"),
+            }
+            for row in coverage
+            if isinstance(row, dict)
+        ]
         total_cases = int(data.get("total_cases") or 0)
         capability_count = int(data.get("capability_count") or len(capabilities))
         return {
@@ -665,6 +708,9 @@ def native_codec_probes_health(artifacts: list[Path]) -> dict:
             "total_cases": total_cases,
             "zstd_frame_cases": probe_cases.get("zstd-native-frame-probe", 0),
             "zstd_dictionary_cases": probe_cases.get("zstd-native-dictionary-probe", 0),
+            "coverage_details": coverage_details,
+            "capability_details": capability_details,
+            "probe_details": probe_details,
         }
     return {
         "present": False,
@@ -685,6 +731,9 @@ def native_codec_probes_health(artifacts: list[Path]) -> dict:
         "total_cases": 0,
         "zstd_frame_cases": 0,
         "zstd_dictionary_cases": 0,
+        "coverage_details": [],
+        "capability_details": [],
+        "probe_details": [],
     }
 
 
@@ -1213,6 +1262,48 @@ def main() -> int:
         f"- native tier corpus discovery: source mode `{native_tier_discovery_health['source_mode']}`, sources {native_tier_discovery_health['source_count']}/{native_tier_discovery_health['candidate_count']}, selected cases {native_tier_discovery_health['selected_case_count']}, missing reason `{native_tier_discovery_health['missing_reason'] or 'none'}`, healthy `{native_tier_discovery_health['healthy']}`",
         "",
     ]
+    if native_codec_health["coverage_details"]:
+        lines.extend(
+            [
+                "## Native codec probe coverage",
+                "",
+                "| codec | surface | present | ok | probes | cases |",
+                "| --- | --- | --- | --- | ---: | ---: |",
+            ]
+        )
+        for row in native_codec_health["coverage_details"]:
+            lines.append(
+                f"| `{row['codec']}` | `{row['surface']}` | `{row['present']}` | `{row['ok']}` | {row['ok_probe_count']}/{row['probe_count']} | {row['cases']} |"
+            )
+        lines.append("")
+    if native_codec_health["capability_details"]:
+        lines.extend(
+            [
+                "## Native codec probe capabilities",
+                "",
+                "| capability | present | ok | probes | cases |",
+                "| --- | --- | --- | ---: | ---: |",
+            ]
+        )
+        for row in native_codec_health["capability_details"]:
+            lines.append(
+                f"| `{row['capability']}` | `{row['present']}` | `{row['ok']}` | {row['ok_probe_count']}/{row['probe_count']} | {row['cases']} |"
+            )
+        lines.append("")
+    if native_codec_health["probe_details"]:
+        lines.extend(
+            [
+                "## Native codec probe executables",
+                "",
+                "| probe | ok | cases | returncode | timed out |",
+                "| --- | --- | ---: | ---: | --- |",
+            ]
+        )
+        for row in native_codec_health["probe_details"]:
+            lines.append(
+                f"| `{row['label']}` | `{row['ok']}` | {row['cases']} | {row['returncode']} | `{row['timed_out']}` |"
+            )
+        lines.append("")
     required_native_summary_error_phases = native_summary_error_health["required_codec_phases"]
     if not isinstance(required_native_summary_error_phases, dict):
         required_native_summary_error_phases = {}
