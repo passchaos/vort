@@ -18,6 +18,24 @@ def run_cli(cli: pathlib.Path, *args: str) -> str:
     return subprocess.run([str(cli), *args], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip()
 
 
+def require_cli_failure(cli: pathlib.Path, path: pathlib.Path, expected_error: str, context: str) -> None:
+    result = subprocess.run(
+        [str(cli), "summary-lz4-native-file", str(path), "json"],
+        cwd=ROOT,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    if result.returncode == 0:
+        raise AssertionError(f"{context}: expected failure {expected_error}, got success: {result.stdout!r}")
+    marker = f"error: {expected_error}"
+    if marker not in result.stdout:
+        raise AssertionError(
+            f"{context}: expected {marker!r} in failure output, got returncode={result.returncode} output={result.stdout!r}"
+        )
+
+
 def parse_fields(output: str) -> dict[str, int]:
     fields: dict[str, int] = {}
     for token in output.split():
@@ -139,6 +157,16 @@ def main() -> int:
             raise AssertionError(f"summary compressed size mismatch: {stream_summary}")
         stream_json = json.loads(run_cli(cli, "summary-lz4-native-file", str(stream_path), "json"))
         require_json_matches_text(stream_json, stream_summary, "concatenated/skippable JSON summary")
+
+        malformed_path = tmp / "bad-magic.lz4"
+        truncated_path = tmp / "truncated-header.lz4"
+        truncated_skip_path = tmp / "truncated-skippable.lz4"
+        malformed_path.write_bytes(b"not-lz4")
+        truncated_path.write_bytes(bytes([0x04, 0x22, 0x4D, 0x18, 0x60]))
+        truncated_skip_path.write_bytes(skippable_frame(2, b"metadata")[:-3])
+        require_cli_failure(cli, malformed_path, "CorruptFrame", "bad magic summary")
+        require_cli_failure(cli, truncated_path, "TruncatedFrame", "truncated header summary")
+        require_cli_failure(cli, truncated_skip_path, "TruncatedFrame", "truncated skippable summary")
 
     print("lz4_native_summary_cli_probe=ok")
     return 0
