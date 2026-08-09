@@ -118,6 +118,16 @@
       "fixture": "native_summary_error_dashboard_undercovered"
     },
     {
+      "reason": "missing_native_summary_error_negative_artifact",
+      "check": "validation_missing_native_summary_error_negative_artifact",
+      "fixture": "missing_native_summary_error_negative_artifact"
+    },
+    {
+      "reason": "native_summary_error_negative_failed",
+      "check": "validation_native_summary_error_negative_failed",
+      "fixture": "native_summary_error_negative_failed"
+    },
+    {
       "reason": "missing_lz4_native_summary_artifact",
       "check": "validation_missing_lz4_native_summary_artifact",
       "fixture": "missing_lz4_native_summary_artifact"

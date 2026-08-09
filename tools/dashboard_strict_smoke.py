@@ -23,6 +23,7 @@ FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
 DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
 PYTHON_ZLIB_DIFF_ARTIFACT = "vort-python-zlib-diff-smoke.json"
 NATIVE_SUMMARY_ERROR_ARTIFACT = "vort-native-summary-error-dashboard.json"
+NATIVE_SUMMARY_ERROR_NEGATIVE_ARTIFACT = "vort-native-summary-error-negative-smoke.json"
 LZ4_NATIVE_SUMMARY_ARTIFACT = "vort-lz4-native-stream-summary.json"
 ZSTD_NATIVE_SUMMARY_ARTIFACT = "vort-zstd-native-stream-summary.json"
 NATIVE_TIER_RANGE_ARTIFACT = "vort-native-tier-range-bench-gate.json"
@@ -68,6 +69,8 @@ def write_producer_map(
     include_python_zlib_smoke: bool = True,
     include_native_summary_error_exact: bool = True,
     include_native_summary_error_smoke: bool = True,
+    include_native_summary_error_negative_exact: bool = True,
+    include_native_summary_error_negative_smoke: bool = True,
     include_lz4_native_summary_exact: bool = True,
     include_lz4_native_summary_smoke: bool = True,
     include_zstd_native_summary_exact: bool = True,
@@ -122,6 +125,11 @@ def write_producer_map(
             "expected_format": "json",
             "smoke_gate": "zig build run-native-summary-error-dashboard",
         }
+    if include_native_summary_error_negative_smoke:
+        artifact_metadata[NATIVE_SUMMARY_ERROR_NEGATIVE_ARTIFACT] = {
+            "expected_format": "json",
+            "smoke_gate": "zig build run-native-summary-error-negative-smoke",
+        }
     if include_lz4_native_summary_smoke:
         artifact_metadata[LZ4_NATIVE_SUMMARY_ARTIFACT] = {
             "expected_format": "json",
@@ -157,6 +165,8 @@ def write_producer_map(
         exact[PYTHON_ZLIB_DIFF_ARTIFACT] = "zig build run-python-zlib-diff-dashboard"
     if include_native_summary_error_exact:
         exact[NATIVE_SUMMARY_ERROR_ARTIFACT] = "zig build run-native-summary-error-dashboard"
+    if include_native_summary_error_negative_exact:
+        exact[NATIVE_SUMMARY_ERROR_NEGATIVE_ARTIFACT] = "zig build run-native-summary-error-negative-smoke"
     if include_lz4_native_summary_exact:
         exact[LZ4_NATIVE_SUMMARY_ARTIFACT] = "zig build run-lz4-native-summary-dashboard"
     if include_zstd_native_summary_exact:
@@ -638,6 +648,25 @@ def write_native_summary_error_dashboard(path: Path, *, healthy: bool = True) ->
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
+
+def write_native_summary_error_negative_smoke(path: Path, *, healthy: bool = True) -> None:
+    payload = {
+        "schema": "vort.native_summary_error_negative_smoke",
+        "schema_version": 1,
+        "ok": healthy,
+        "case_count": 3 if healthy else 0,
+        "cases": [
+            {
+                "name": "bad_error_counts",
+                "expected_failure": True,
+                "expected_error": "error_counts mismatch",
+                "actual_error": "error_counts mismatch" if healthy else "<success>",
+                "matched": healthy,
+            }
+        ],
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
 def write_zstd_native_summary(path: Path, *, healthy: bool = True) -> None:
     payload = {
         "schema": "vort.zstd_native_stream_summary",
@@ -745,6 +774,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_decode_stage_report(root / DECODE_STAGE_ARTIFACT)
     write_python_zlib_diff_report(root / PYTHON_ZLIB_DIFF_ARTIFACT)
     write_native_summary_error_dashboard(root / NATIVE_SUMMARY_ERROR_ARTIFACT)
+    write_native_summary_error_negative_smoke(root / NATIVE_SUMMARY_ERROR_NEGATIVE_ARTIFACT)
     write_lz4_native_summary(root / LZ4_NATIVE_SUMMARY_ARTIFACT)
     write_zstd_native_summary(root / ZSTD_NATIVE_SUMMARY_ARTIFACT)
     write_native_tier_range_summaries(root)
@@ -1024,6 +1054,9 @@ def main() -> int:
         assert manifest["native_summary_error_present"] is True
         assert manifest["native_summary_error_healthy"] is True
         assert manifest["native_summary_error_case_count"] == 6
+        assert manifest["native_summary_error_negative_present"] is True
+        assert manifest["native_summary_error_negative_healthy"] is True
+        assert manifest["native_summary_error_negative_case_count"] == 3
         assert manifest["lz4_native_summary_present"] is True
         assert manifest["lz4_native_summary_healthy"] is True
         assert manifest["zstd_native_summary_present"] is True
@@ -1274,6 +1307,12 @@ def main() -> int:
                 write_producer_map(producer_map)
             elif fixture == "native_summary_error_dashboard_undercovered":
                 write_native_summary_error_dashboard(fixture_root / NATIVE_SUMMARY_ERROR_ARTIFACT, healthy=False)
+                write_producer_map(producer_map)
+            elif fixture == "missing_native_summary_error_negative_artifact":
+                (fixture_root / NATIVE_SUMMARY_ERROR_NEGATIVE_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "native_summary_error_negative_failed":
+                write_native_summary_error_negative_smoke(fixture_root / NATIVE_SUMMARY_ERROR_NEGATIVE_ARTIFACT, healthy=False)
                 write_producer_map(producer_map)
             elif fixture == "missing_lz4_native_summary_artifact":
                 (fixture_root / LZ4_NATIVE_SUMMARY_ARTIFACT).unlink()

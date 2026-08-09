@@ -887,6 +887,9 @@ def main() -> int:
         assert dashboard["native_summary_error_skippable_payload_phase_count"] == native_summary_error_dashboard["phase_counts"]["skippable_payload"]
         assert dashboard["native_summary_error_error_counts"] == native_summary_error_dashboard["error_counts"]
         assert dashboard["native_summary_error_phase_counts"] == native_summary_error_dashboard["phase_counts"]
+        assert dashboard["native_summary_error_negative_present"] is True
+        assert dashboard["native_summary_error_negative_healthy"] is True
+        assert dashboard["native_summary_error_negative_case_count"] == native_summary_error_negative["case_count"]
         assert dashboard["lz4_native_summary_present"] is True
         assert dashboard["lz4_native_summary_healthy"] is True
         assert dashboard["lz4_native_summary_frame_count"] == lz4_native_summary["frame_count"]
@@ -933,6 +936,7 @@ def main() -> int:
             and dashboard["decode_stage_healthy"]
             and dashboard["python_zlib_diff_healthy"]
             and dashboard["native_summary_error_healthy"]
+            and dashboard["native_summary_error_negative_healthy"]
             and dashboard["lz4_native_summary_healthy"]
             and dashboard["zstd_native_summary_healthy"]
             and dashboard["native_tier_corpus_discovery_healthy"]

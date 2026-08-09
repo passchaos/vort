@@ -775,6 +775,20 @@ def native_summary_error_dashboard_health(artifacts: list[Path]) -> dict:
         "phase_counts": {},
     }
 
+
+def native_summary_error_negative_health(artifacts: list[Path]) -> dict:
+    for artifact in artifacts:
+        data = read_json(artifact) if artifact.suffix == ".json" else {}
+        if data.get("schema") != "vort.native_summary_error_negative_smoke":
+            continue
+        case_count = int(data.get("case_count") or 0)
+        return {
+            "present": True,
+            "healthy": data.get("ok") is True and case_count >= 3,
+            "case_count": case_count,
+        }
+    return {"present": False, "healthy": False, "case_count": 0}
+
 def artifact_metadata(path: Path) -> str:
     stat = path.stat()
     mtime = dt.datetime.fromtimestamp(stat.st_mtime, tz=dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
@@ -960,6 +974,7 @@ def main() -> int:
     python_zlib_health = python_zlib_diff_health(artifacts)
     native_codec_health = native_codec_probes_health(artifacts)
     native_summary_error_health = native_summary_error_dashboard_health(artifacts)
+    native_summary_error_negative = native_summary_error_negative_health(artifacts)
     lz4_native_summary = lz4_native_summary_health(artifacts)
     zstd_native_summary = zstd_native_summary_health(artifacts)
     native_tier_health = native_tier_range_health(artifacts)
@@ -994,10 +1009,11 @@ def main() -> int:
     decode_stage_healthy = decode_stage_health_summary["healthy"]
     python_zlib_healthy = python_zlib_health["healthy"]
     native_summary_error_healthy = native_summary_error_health["healthy"]
+    native_summary_error_negative_healthy = native_summary_error_negative["healthy"]
     lz4_native_summary_healthy = lz4_native_summary["healthy"]
     zstd_native_summary_healthy = zstd_native_summary["healthy"]
     native_tier_discovery_healthy = native_tier_discovery_health["healthy"]
-    validation_healthy = producer_healthy and smoke_gate_healthy and header_healthy and strict_healthy and sidecar_corrupt_healthy and huffman_healthy and fuzz_healthy and decode_stage_healthy and python_zlib_healthy and native_summary_error_healthy and lz4_native_summary_healthy and zstd_native_summary_healthy and native_tier_discovery_healthy
+    validation_healthy = producer_healthy and smoke_gate_healthy and header_healthy and strict_healthy and sidecar_corrupt_healthy and huffman_healthy and fuzz_healthy and decode_stage_healthy and python_zlib_healthy and native_summary_error_healthy and native_summary_error_negative_healthy and lz4_native_summary_healthy and zstd_native_summary_healthy and native_tier_discovery_healthy
     validation_unhealthy_reasons = []
     if not producer_healthy:
         validation_unhealthy_reasons.append("missing_producer_steps")
@@ -1045,6 +1061,10 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_native_summary_error_dashboard_artifact")
     elif not native_summary_error_healthy:
         validation_unhealthy_reasons.append("native_summary_error_dashboard_undercovered")
+    if not native_summary_error_negative["present"]:
+        validation_unhealthy_reasons.append("missing_native_summary_error_negative_artifact")
+    elif not native_summary_error_negative_healthy:
+        validation_unhealthy_reasons.append("native_summary_error_negative_failed")
     if not lz4_native_summary["present"]:
         validation_unhealthy_reasons.append("missing_lz4_native_summary_artifact")
     elif not lz4_native_summary_healthy:
@@ -1080,6 +1100,7 @@ def main() -> int:
         f"- Python zlib differential: payloads {python_zlib_health['payloads']} (large-file {python_zlib_health['large_file_payloads']}, file-hex encodes {python_zlib_health['file_hex_encode_cases']}), dynamic {python_zlib_health['dynamic_payloads']}, dictionary encode raw/zlib {python_zlib_health['raw_dict_encode_cases']}/{python_zlib_health['zlib_dict_encode_cases']}, CLI successes/failures {python_zlib_health['cli_successes']}/{python_zlib_health['expected_failures']}, healthy `{python_zlib_healthy}`",
         f"- native codec probes: {native_codec_health['ok_probe_count']}/{native_codec_health['probe_count']} probes ok, capabilities {native_codec_health['ok_capability_count']}/{native_codec_health['capability_count']} ok, cases total/lib/incremental/chunked/reusable-chunked/fse-repeat {native_codec_health['total_cases']}/{native_codec_health['lib_generated_cases']}/{native_codec_health['incremental_cases']}/{native_codec_health['chunked_cases']}/{native_codec_health['reusable_chunked_cases']}/{native_codec_health['fse_repeat_cases']}, healthy `{native_codec_health['healthy']}`",
         f"- native summary errors: cases total/lz4/zstd/truncated/magic/skippable {native_summary_error_health['case_count']}/{native_summary_error_health['lz4_case_count']}/{native_summary_error_health['zstd_case_count']}/{native_summary_error_health['truncated_frame_count']}/{native_summary_error_health['magic_phase_count']}/{native_summary_error_health['skippable_payload_phase_count']}, healthy `{native_summary_error_healthy}`",
+        f"- native summary error negative smoke: cases {native_summary_error_negative['case_count']}, healthy `{native_summary_error_negative_healthy}`",
         f"- lz4 native summary: frames/skippable/checksum/block-checksum/dictionary/content-size/blocks raw/compressed {lz4_native_summary['frame_count']}/{lz4_native_summary['skippable_frame_count']}/{lz4_native_summary['checksum_frame_count']}/{lz4_native_summary['block_checksum_frame_count']}/{lz4_native_summary['dictionary_id_frame_count']}/{lz4_native_summary['content_size_frame_count']}/{lz4_native_summary['block_count']} {lz4_native_summary['raw_block_count']}/{lz4_native_summary['compressed_block_count']}, declared/payload/skippable bytes {lz4_native_summary['declared_content_bytes']}/{lz4_native_summary['payload_bytes']}/{lz4_native_summary['skippable_payload_bytes']}, healthy `{lz4_native_summary_healthy}`",
         f"- zstd native summary: frames/skippable/checksum/dictionary/content-size/blocks raw/rle/compressed {zstd_native_summary['frame_count']}/{zstd_native_summary['skippable_frame_count']}/{zstd_native_summary['checksum_frame_count']}/{zstd_native_summary['dictionary_id_frame_count']}/{zstd_native_summary['content_size_frame_count']}/{zstd_native_summary['block_count']} {zstd_native_summary['raw_block_count']}/{zstd_native_summary['rle_block_count']}/{zstd_native_summary['compressed_block_count']}, declared/payload/skippable bytes {zstd_native_summary['declared_content_bytes']}/{zstd_native_summary['payload_bytes']}/{zstd_native_summary['skippable_payload_bytes']}, healthy `{zstd_native_summary_healthy}`",
         f"- native tier range bench: {native_tier_health['ok_count']}/{native_tier_health['summary_count']} summaries ok across {native_tier_health['rows']} rows ({native_tier_health['enforced_count']} throughput-enforced), sources built-in/project/standard/custom/legacy {native_tier_health['built_in_summary_count']}/{native_tier_health['project_files_summary_count']}/{native_tier_health['standard_corpus_summary_count']}/{native_tier_health['custom_summary_count']}/{native_tier_health['legacy_summary_count']} missing {','.join(native_tier_health['missing_sources']) or 'none'}, min range MiB/s seek_fast/balanced/ratio {native_tier_health['seek_fast_min_range_mib_s']:.2f}/{native_tier_health['balanced_min_range_mib_s']:.2f}/{native_tier_health['ratio_min_range_mib_s']:.2f}, healthy `{native_tier_health['healthy']}`",
@@ -1272,6 +1293,9 @@ def main() -> int:
                 "native_summary_error_skippable_payload_phase_count": native_summary_error_health["skippable_payload_phase_count"],
                 "native_summary_error_error_counts": native_summary_error_health["error_counts"],
                 "native_summary_error_phase_counts": native_summary_error_health["phase_counts"],
+                "native_summary_error_negative_present": native_summary_error_negative["present"],
+                "native_summary_error_negative_healthy": native_summary_error_negative_healthy,
+                "native_summary_error_negative_case_count": native_summary_error_negative["case_count"],
                 "lz4_native_summary_present": lz4_native_summary["present"],
                 "lz4_native_summary_healthy": lz4_native_summary_healthy,
                 "lz4_native_summary_frame_count": lz4_native_summary["frame_count"],

@@ -2408,6 +2408,8 @@ Current unhealthy reason values are:
 - `python_zlib_diff_failed`
 - `missing_native_summary_error_dashboard_artifact`
 - `native_summary_error_dashboard_undercovered`
+- `missing_native_summary_error_negative_artifact`
+- `native_summary_error_negative_failed`
 - `missing_lz4_native_summary_artifact`
 - `lz4_native_summary_undercovered`
 - `missing_zstd_native_summary_artifact`
@@ -2509,6 +2511,9 @@ Top-level fields:
   `native_summary_error_magic_phase_count`,
   `native_summary_error_skippable_payload_phase_count`,
   `native_summary_error_error_counts`, `native_summary_error_phase_counts`
+- `native_summary_error_negative_present`,
+  `native_summary_error_negative_healthy`,
+  `native_summary_error_negative_case_count`
 - `lz4_native_summary_present`, `lz4_native_summary_healthy`,
   `lz4_native_summary_frame_count`,
   `lz4_native_summary_skippable_frame_count`,
@@ -2575,6 +2580,7 @@ Example:
     "missing_decode_stage_artifact",
     "missing_python_zlib_diff_artifact",
     "missing_native_summary_error_dashboard_artifact",
+    "missing_native_summary_error_negative_artifact",
     "missing_lz4_native_summary_artifact",
     "missing_zstd_native_summary_artifact",
     "missing_native_tier_corpus_discovery_artifact"
@@ -2694,6 +2700,9 @@ Example:
   "native_summary_error_skippable_payload_phase_count": 0,
   "native_summary_error_error_counts": {},
   "native_summary_error_phase_counts": {},
+  "native_summary_error_negative_present": false,
+  "native_summary_error_negative_healthy": false,
+  "native_summary_error_negative_case_count": 0,
   "lz4_native_summary_present": false,
   "lz4_native_summary_healthy": false,
   "lz4_native_summary_frame_count": 0,
