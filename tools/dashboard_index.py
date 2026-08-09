@@ -1279,6 +1279,20 @@ def main() -> int:
             "",
         ]
     )
+    lines.extend(
+        [
+            "## Python zlib differential coverage",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| payloads | {python_zlib_health['payloads']} | large-file/match-heavy/dynamic {python_zlib_health['large_file_payloads']}/{python_zlib_health['match_heavy_payloads']}/{python_zlib_health['dynamic_payloads']} |",
+            f"| file hex encodes | {python_zlib_health['file_hex_encode_cases']} | dictionary cases {python_zlib_health['dictionary_cases']} |",
+            f"| dictionary encodes | {python_zlib_health['zlib_dict_encode_cases'] + python_zlib_health['raw_dict_encode_cases']} | zlib/raw {python_zlib_health['zlib_dict_encode_cases']}/{python_zlib_health['raw_dict_encode_cases']} |",
+            f"| malformed cases | {python_zlib_health['malformed_wrapper_cases'] + python_zlib_health['malformed_deflate_cases']} | wrapper/deflate {python_zlib_health['malformed_wrapper_cases']}/{python_zlib_health['malformed_deflate_cases']} |",
+            f"| CLI outcomes | {python_zlib_health['cli_successes'] + python_zlib_health['expected_failures']} | successes/expected-failures {python_zlib_health['cli_successes']}/{python_zlib_health['expected_failures']} |",
+            "",
+        ]
+    )
     if native_codec_health["coverage_details"]:
         lines.extend(
             [

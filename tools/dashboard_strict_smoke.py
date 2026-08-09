@@ -1313,6 +1313,22 @@ def main() -> int:
                 ],
             )
         )
+        checks.append(
+            markdown_check_row(
+                "python_zlib_diff_markdown_table",
+                "Python zlib differential Markdown table",
+                dashboard_markdown,
+                [
+                    "## Python zlib differential coverage",
+                    "| category | count | detail |",
+                    "| payloads | 3 | large-file/match-heavy/dynamic 1/1/1 |",
+                    "| file hex encodes | 3 | dictionary cases 1 |",
+                    "| dictionary encodes | 2 | zlib/raw 1/1 |",
+                    "| malformed cases | 2 | wrapper/deflate 1/1 |",
+                    "| CLI outcomes | 10 | successes/expected-failures 8/2 |",
+                ],
+            )
+        )
 
         missing_native_tier_root = root / "missing-native-tier"
         missing_native_tier_root.mkdir()
