@@ -33,6 +33,35 @@ def require_fields(actual: dict[str, int], expected: dict[str, int], context: st
         if actual.get(key) != value:
             raise AssertionError(f"{context}: expected {key}={value}, got {actual.get(key)} in {actual}")
 
+JSON_TO_TEXT_FIELDS = {
+    "compressed_bytes": "lz4_native_compressed_bytes",
+    "frame_count": "frames",
+    "skippable_frame_count": "skippable_frames",
+    "content_size_frame_count": "content_size_frames",
+    "checksum_frame_count": "checksum_frames",
+    "block_checksum_frame_count": "block_checksum_frames",
+    "dictionary_id_frame_count": "dictionary_id_frames",
+    "declared_content_bytes": "declared_content_bytes",
+    "block_count": "blocks",
+    "compressed_block_count": "compressed_blocks",
+    "raw_block_count": "raw_blocks",
+    "payload_bytes": "payload_bytes",
+    "skippable_payload_bytes": "skippable_payload_bytes",
+}
+
+
+def require_json_matches_text(payload: dict[str, object], summary: dict[str, int], context: str) -> None:
+    if payload.get("schema") != "vort.lz4_native_stream_summary":
+        raise AssertionError(f"{context}: unexpected schema {payload!r}")
+    if payload.get("schema_version") != 1:
+        raise AssertionError(f"{context}: unexpected schema_version {payload!r}")
+    for json_key, text_key in JSON_TO_TEXT_FIELDS.items():
+        if payload.get(json_key) != summary.get(text_key):
+            raise AssertionError(
+                f"{context}: JSON {json_key}={payload.get(json_key)!r} "
+                f"does not match text {text_key}={summary.get(text_key)!r}; payload={payload!r} summary={summary!r}"
+            )
+
 
 def main() -> int:
     if len(sys.argv) != 2:
@@ -74,16 +103,7 @@ def main() -> int:
             "single-frame summary",
         )
         single_json = json.loads(run_cli(cli, "summary-lz4-native-file", str(first_frame), "json"))
-        assert single_json["schema"] == "vort.lz4_native_stream_summary"
-        assert single_json["schema_version"] == 1
-        assert single_json["compressed_bytes"] == single_summary["lz4_native_compressed_bytes"]
-        assert single_json["frame_count"] == single_summary["frames"]
-        assert single_json["content_size_frame_count"] == 1
-        assert single_json["checksum_frame_count"] == 1
-        assert single_json["block_checksum_frame_count"] == 0
-        assert single_json["dictionary_id_frame_count"] == 0
-        assert single_json["declared_content_bytes"] == len(first_payload)
-        assert single_json["raw_block_count"] == 1
+        require_json_matches_text(single_json, single_summary, "single-frame JSON summary")
 
         run_cli(cli, "encode-lz4-native-file", str(second_plain), str(second_frame))
         skip_a = b"lz4 summary metadata a"
@@ -118,16 +138,7 @@ def main() -> int:
         if stream_summary["lz4_native_compressed_bytes"] != stream_path.stat().st_size:
             raise AssertionError(f"summary compressed size mismatch: {stream_summary}")
         stream_json = json.loads(run_cli(cli, "summary-lz4-native-file", str(stream_path), "json"))
-        assert stream_json["schema"] == "vort.lz4_native_stream_summary"
-        assert stream_json["compressed_bytes"] == stream_summary["lz4_native_compressed_bytes"]
-        assert stream_json["frame_count"] == stream_summary["frames"]
-        assert stream_json["skippable_frame_count"] == stream_summary["skippable_frames"]
-        assert stream_json["content_size_frame_count"] == stream_summary["content_size_frames"]
-        assert stream_json["checksum_frame_count"] == stream_summary["checksum_frames"]
-        assert stream_json["block_checksum_frame_count"] == stream_summary["block_checksum_frames"]
-        assert stream_json["dictionary_id_frame_count"] == stream_summary["dictionary_id_frames"]
-        assert stream_json["declared_content_bytes"] == stream_summary["declared_content_bytes"]
-        assert stream_json["skippable_payload_bytes"] == stream_summary["skippable_payload_bytes"]
+        require_json_matches_text(stream_json, stream_summary, "concatenated/skippable JSON summary")
 
     print("lz4_native_summary_cli_probe=ok")
     return 0
