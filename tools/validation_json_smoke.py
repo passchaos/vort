@@ -318,12 +318,15 @@ def main() -> int:
         assert native_summary_error_dashboard["schema"] == "vort.native_summary_error_dashboard"
         assert native_summary_error_dashboard["schema_version"] == 1
         assert native_summary_error_dashboard["ok"] is True
-        assert native_summary_error_dashboard["case_count"] >= 6
-        assert native_summary_error_dashboard["lz4_case_count"] >= 3
-        assert native_summary_error_dashboard["zstd_case_count"] >= 3
-        assert native_summary_error_dashboard["error_counts"]["TruncatedFrame"] >= 4
+        assert native_summary_error_dashboard["case_count"] >= 12
+        assert native_summary_error_dashboard["lz4_case_count"] >= 6
+        assert native_summary_error_dashboard["zstd_case_count"] >= 6
+        assert native_summary_error_dashboard["error_counts"]["TruncatedFrame"] >= 8
         assert native_summary_error_dashboard["phase_counts"]["magic"] >= 2
         assert native_summary_error_dashboard["phase_counts"]["skippable_payload"] >= 2
+        assert native_summary_error_dashboard["phase_counts"]["frame_body"] >= 2
+        assert native_summary_error_dashboard["phase_counts"]["frame_checksum"] >= 2
+        assert native_summary_error_dashboard["phase_counts"]["frame"] >= 2
         validate_value_against_manifest(native_summary_error_dashboard, schemas_def)
         native_summary_error_negative = json.loads(native_summary_error_negative_path.read_text())
         assert native_summary_error_negative["schema"] == "vort.native_summary_error_negative_smoke"
@@ -885,6 +888,9 @@ def main() -> int:
         assert dashboard["native_summary_error_truncated_frame_count"] == native_summary_error_dashboard["error_counts"]["TruncatedFrame"]
         assert dashboard["native_summary_error_magic_phase_count"] == native_summary_error_dashboard["phase_counts"]["magic"]
         assert dashboard["native_summary_error_skippable_payload_phase_count"] == native_summary_error_dashboard["phase_counts"]["skippable_payload"]
+        assert dashboard["native_summary_error_frame_body_phase_count"] == native_summary_error_dashboard["phase_counts"]["frame_body"]
+        assert dashboard["native_summary_error_frame_checksum_phase_count"] == native_summary_error_dashboard["phase_counts"]["frame_checksum"]
+        assert dashboard["native_summary_error_frame_phase_count"] == native_summary_error_dashboard["phase_counts"]["frame"]
         assert dashboard["native_summary_error_error_counts"] == native_summary_error_dashboard["error_counts"]
         assert dashboard["native_summary_error_phase_counts"] == native_summary_error_dashboard["phase_counts"]
         assert dashboard["native_summary_error_negative_present"] is True

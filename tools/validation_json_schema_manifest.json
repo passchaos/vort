@@ -807,7 +807,10 @@
             "native_summary_error_zstd_case_count",
             "native_summary_error_truncated_frame_count",
             "native_summary_error_magic_phase_count",
-            "native_summary_error_skippable_payload_phase_count"
+            "native_summary_error_skippable_payload_phase_count",
+            "native_summary_error_frame_body_phase_count",
+            "native_summary_error_frame_checksum_phase_count",
+            "native_summary_error_frame_phase_count"
           ]
         },
         "native_summary_error_negative_healthy": {
@@ -952,6 +955,9 @@
         "native_summary_error_truncated_frame_count": "int",
         "native_summary_error_magic_phase_count": "int",
         "native_summary_error_skippable_payload_phase_count": "int",
+        "native_summary_error_frame_body_phase_count": "int",
+        "native_summary_error_frame_checksum_phase_count": "int",
+        "native_summary_error_frame_phase_count": "int",
         "native_summary_error_error_counts": "dict",
         "native_summary_error_phase_counts": "dict",
         "native_summary_error_negative_present": "bool",
@@ -1145,6 +1151,9 @@
           "TruncatedFrame"
         ],
         "native_summary_error_phase_counts": [
+          "frame",
+          "frame_body",
+          "frame_checksum",
           "frame_header",
           "magic",
           "skippable_payload"
@@ -2904,6 +2913,9 @@
           "TruncatedFrame"
         ],
         "phase": [
+          "frame",
+          "frame_body",
+          "frame_checksum",
           "frame_header",
           "magic",
           "skippable_payload"

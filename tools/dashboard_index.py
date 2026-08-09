@@ -744,21 +744,30 @@ def native_summary_error_dashboard_health(artifacts: list[Path]) -> dict:
         truncated_frame_count = int(error_counts.get("TruncatedFrame") or 0)
         magic_phase_count = int(phase_counts.get("magic") or 0)
         skippable_payload_phase_count = int(phase_counts.get("skippable_payload") or 0)
+        frame_body_phase_count = int(phase_counts.get("frame_body") or 0)
+        frame_checksum_phase_count = int(phase_counts.get("frame_checksum") or 0)
+        frame_phase_count = int(phase_counts.get("frame") or 0)
         return {
             "present": True,
             "healthy": data.get("ok") is True
-            and case_count >= 6
-            and lz4_case_count >= 3
-            and zstd_case_count >= 3
-            and truncated_frame_count >= 4
+            and case_count >= 12
+            and lz4_case_count >= 6
+            and zstd_case_count >= 6
+            and truncated_frame_count >= 8
             and magic_phase_count >= 2
-            and skippable_payload_phase_count >= 2,
+            and skippable_payload_phase_count >= 2
+            and frame_body_phase_count >= 2
+            and frame_checksum_phase_count >= 2
+            and frame_phase_count >= 2,
             "case_count": case_count,
             "lz4_case_count": lz4_case_count,
             "zstd_case_count": zstd_case_count,
             "truncated_frame_count": truncated_frame_count,
             "magic_phase_count": magic_phase_count,
             "skippable_payload_phase_count": skippable_payload_phase_count,
+            "frame_body_phase_count": frame_body_phase_count,
+            "frame_checksum_phase_count": frame_checksum_phase_count,
+            "frame_phase_count": frame_phase_count,
             "error_counts": error_counts,
             "phase_counts": phase_counts,
         }
@@ -771,6 +780,9 @@ def native_summary_error_dashboard_health(artifacts: list[Path]) -> dict:
         "truncated_frame_count": 0,
         "magic_phase_count": 0,
         "skippable_payload_phase_count": 0,
+        "frame_body_phase_count": 0,
+        "frame_checksum_phase_count": 0,
+        "frame_phase_count": 0,
         "error_counts": {},
         "phase_counts": {},
     }
@@ -1099,7 +1111,7 @@ def main() -> int:
         f"- decode-stage smoke: {decode_stage_health_summary['matched_error_rows']}/{decode_stage_health_summary['error_rows']} error rows matched across {decode_stage_health_summary['rows']} timing rows, healthy `{decode_stage_healthy}`",
         f"- Python zlib differential: payloads {python_zlib_health['payloads']} (large-file {python_zlib_health['large_file_payloads']}, file-hex encodes {python_zlib_health['file_hex_encode_cases']}), dynamic {python_zlib_health['dynamic_payloads']}, dictionary encode raw/zlib {python_zlib_health['raw_dict_encode_cases']}/{python_zlib_health['zlib_dict_encode_cases']}, CLI successes/failures {python_zlib_health['cli_successes']}/{python_zlib_health['expected_failures']}, healthy `{python_zlib_healthy}`",
         f"- native codec probes: {native_codec_health['ok_probe_count']}/{native_codec_health['probe_count']} probes ok, capabilities {native_codec_health['ok_capability_count']}/{native_codec_health['capability_count']} ok, cases total/lib/incremental/chunked/reusable-chunked/fse-repeat {native_codec_health['total_cases']}/{native_codec_health['lib_generated_cases']}/{native_codec_health['incremental_cases']}/{native_codec_health['chunked_cases']}/{native_codec_health['reusable_chunked_cases']}/{native_codec_health['fse_repeat_cases']}, healthy `{native_codec_health['healthy']}`",
-        f"- native summary errors: cases total/lz4/zstd/truncated/magic/skippable {native_summary_error_health['case_count']}/{native_summary_error_health['lz4_case_count']}/{native_summary_error_health['zstd_case_count']}/{native_summary_error_health['truncated_frame_count']}/{native_summary_error_health['magic_phase_count']}/{native_summary_error_health['skippable_payload_phase_count']}, healthy `{native_summary_error_healthy}`",
+        f"- native summary errors: cases total/lz4/zstd/truncated/magic/skippable/body/checksum/frame {native_summary_error_health['case_count']}/{native_summary_error_health['lz4_case_count']}/{native_summary_error_health['zstd_case_count']}/{native_summary_error_health['truncated_frame_count']}/{native_summary_error_health['magic_phase_count']}/{native_summary_error_health['skippable_payload_phase_count']}/{native_summary_error_health['frame_body_phase_count']}/{native_summary_error_health['frame_checksum_phase_count']}/{native_summary_error_health['frame_phase_count']}, healthy `{native_summary_error_healthy}`",
         f"- native summary error negative smoke: cases {native_summary_error_negative['case_count']}, healthy `{native_summary_error_negative_healthy}`",
         f"- lz4 native summary: frames/skippable/checksum/block-checksum/dictionary/content-size/blocks raw/compressed {lz4_native_summary['frame_count']}/{lz4_native_summary['skippable_frame_count']}/{lz4_native_summary['checksum_frame_count']}/{lz4_native_summary['block_checksum_frame_count']}/{lz4_native_summary['dictionary_id_frame_count']}/{lz4_native_summary['content_size_frame_count']}/{lz4_native_summary['block_count']} {lz4_native_summary['raw_block_count']}/{lz4_native_summary['compressed_block_count']}, declared/payload/skippable bytes {lz4_native_summary['declared_content_bytes']}/{lz4_native_summary['payload_bytes']}/{lz4_native_summary['skippable_payload_bytes']}, healthy `{lz4_native_summary_healthy}`",
         f"- zstd native summary: frames/skippable/checksum/dictionary/content-size/blocks raw/rle/compressed {zstd_native_summary['frame_count']}/{zstd_native_summary['skippable_frame_count']}/{zstd_native_summary['checksum_frame_count']}/{zstd_native_summary['dictionary_id_frame_count']}/{zstd_native_summary['content_size_frame_count']}/{zstd_native_summary['block_count']} {zstd_native_summary['raw_block_count']}/{zstd_native_summary['rle_block_count']}/{zstd_native_summary['compressed_block_count']}, declared/payload/skippable bytes {zstd_native_summary['declared_content_bytes']}/{zstd_native_summary['payload_bytes']}/{zstd_native_summary['skippable_payload_bytes']}, healthy `{zstd_native_summary_healthy}`",
@@ -1291,6 +1303,9 @@ def main() -> int:
                 "native_summary_error_truncated_frame_count": native_summary_error_health["truncated_frame_count"],
                 "native_summary_error_magic_phase_count": native_summary_error_health["magic_phase_count"],
                 "native_summary_error_skippable_payload_phase_count": native_summary_error_health["skippable_payload_phase_count"],
+                "native_summary_error_frame_body_phase_count": native_summary_error_health["frame_body_phase_count"],
+                "native_summary_error_frame_checksum_phase_count": native_summary_error_health["frame_checksum_phase_count"],
+                "native_summary_error_frame_phase_count": native_summary_error_health["frame_phase_count"],
                 "native_summary_error_error_counts": native_summary_error_health["error_counts"],
                 "native_summary_error_phase_counts": native_summary_error_health["phase_counts"],
                 "native_summary_error_negative_present": native_summary_error_negative["present"],

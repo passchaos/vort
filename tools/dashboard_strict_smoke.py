@@ -627,11 +627,11 @@ def write_native_summary_error_dashboard(path: Path, *, healthy: bool = True) ->
         "schema": "vort.native_summary_error_dashboard",
         "schema_version": 1,
         "ok": healthy,
-        "case_count": 6 if healthy else 1,
-        "lz4_case_count": 3 if healthy else 1,
-        "zstd_case_count": 3 if healthy else 0,
-        "error_counts": {"CorruptFrame": 1, "InvalidMagic": 1, "TruncatedFrame": 4 if healthy else 0},
-        "phase_counts": {"magic": 2 if healthy else 1, "skippable_payload": 2 if healthy else 0, "frame_header": 2 if healthy else 0},
+        "case_count": 12 if healthy else 1,
+        "lz4_case_count": 6 if healthy else 1,
+        "zstd_case_count": 6 if healthy else 0,
+        "error_counts": {"CorruptFrame": 3 if healthy else 1, "InvalidMagic": 1, "TruncatedFrame": 8 if healthy else 0},
+        "phase_counts": {"magic": 2 if healthy else 1, "skippable_payload": 2 if healthy else 0, "frame_header": 1 if healthy else 0, "frame_body": 2 if healthy else 0, "frame_checksum": 2 if healthy else 0, "frame": 2 if healthy else 0},
         "cases": [
             {
                 "name": "lz4_bad_magic",
@@ -1053,7 +1053,7 @@ def main() -> int:
         assert manifest["header_inspect_missing_workflow_count"] == 0
         assert manifest["native_summary_error_present"] is True
         assert manifest["native_summary_error_healthy"] is True
-        assert manifest["native_summary_error_case_count"] == 6
+        assert manifest["native_summary_error_case_count"] == 12
         assert manifest["native_summary_error_negative_present"] is True
         assert manifest["native_summary_error_negative_healthy"] is True
         assert manifest["native_summary_error_negative_case_count"] == 3

@@ -7,10 +7,11 @@ import argparse
 import json
 import pathlib
 import subprocess
+import struct
 import tempfile
 from collections import Counter
 
-from lz4_native_summary_fixtures import skippable_frame
+from lz4_native_summary_fixtures import frame_descriptor_checksum, skippable_frame
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DEFAULT_JSON = ROOT / "zig-out" / "vort-native-summary-error-dashboard.json"
@@ -25,6 +26,22 @@ def run_error(cli: pathlib.Path, command: str, path: pathlib.Path) -> dict[str, 
         raise AssertionError(f"{command} did not emit a failing summary payload: {payload!r}")
     return payload
 
+
+
+def lz4_frame(flg: int, block_header: int, payload: bytes, tail: bytes = b"") -> bytes:
+    descriptor = bytes([flg, 0x40])
+    return (
+        struct.pack("<I", 0x184D2204)
+        + descriptor
+        + bytes([frame_descriptor_checksum(descriptor)])
+        + struct.pack("<I", block_header)
+        + payload
+        + tail
+    )
+
+
+def zstd_frame(descriptor: int, content_size: int, block_header: int, payload: bytes, tail: bytes = b"") -> bytes:
+    return b"\x28\xb5\x2f\xfd" + bytes([descriptor, content_size]) + struct.pack("<I", block_header)[:3] + payload + tail
 
 
 def build_summary(cases: list[dict[str, object]]) -> dict[str, object]:
@@ -70,9 +87,15 @@ def main() -> int:
             ("lz4_bad_magic", "lz4", "summary-lz4-native-file", b"not-lz4", "CorruptFrame", "magic"),
             ("lz4_truncated_header", "lz4", "summary-lz4-native-file", bytes([0x04, 0x22, 0x4D, 0x18, 0x60]), "TruncatedFrame", "frame_header"),
             ("lz4_truncated_skippable", "lz4", "summary-lz4-native-file", skippable_frame(2, b"metadata")[:-3], "TruncatedFrame", "skippable_payload"),
+            ("lz4_truncated_body", "lz4", "summary-lz4-native-file", lz4_frame(0x60, 0x8000_0000 | 4, b"ab"), "TruncatedFrame", "frame_body"),
+            ("lz4_truncated_checksum", "lz4", "summary-lz4-native-file", lz4_frame(0x64, 0x8000_0000 | 3, b"abc", b"\x00\x00\x00\x00\x00\x00"), "TruncatedFrame", "frame_checksum"),
+            ("lz4_invalid_block_header", "lz4", "summary-lz4-native-file", lz4_frame(0x60, 0x8000_0000 | (64 * 1024 + 1), b""), "CorruptFrame", "frame"),
             ("zstd_bad_magic", "zstd", "summary-zstd-native-file", b"not-zstd", "InvalidMagic", "magic"),
             ("zstd_truncated_header", "zstd", "summary-zstd-native-file", b"\x28\xb5\x2f", "TruncatedFrame", "magic"),
             ("zstd_truncated_skippable", "zstd", "summary-zstd-native-file", skippable_frame(2, b"metadata")[:-3], "TruncatedFrame", "skippable_payload"),
+            ("zstd_truncated_body", "zstd", "summary-zstd-native-file", zstd_frame(0x20, 4, (4 << 3) | 1, b"ab"), "TruncatedFrame", "frame_body"),
+            ("zstd_truncated_checksum", "zstd", "summary-zstd-native-file", zstd_frame(0x24, 3, (3 << 3) | 1, b"abc", b"\x00\x00"), "TruncatedFrame", "frame_checksum"),
+            ("zstd_invalid_block_header", "zstd", "summary-zstd-native-file", zstd_frame(0x20, 0, (0 << 3) | (3 << 1) | 1, b""), "CorruptFrame", "frame"),
         ]
         for name, codec, command, data, expected_error, expected_phase in fixtures:
             path = tmp / f"{name}.bin"
