@@ -1660,8 +1660,8 @@ architecture blindly.
   and concatenated/skippable streams through the CLI, checks both text and JSON
   summary fields, verifies malformed/truncated failure paths, and uses
   `zstdSummarizeNativeStreamWithDiagnostics` for parser phase/offset context in
-  JSON errors, with phase values backed by a public enum. It runs in
-  `ci-smoke`. The retained
+  JSON errors, with phase values backed by a public enum and checksum-truncation
+  offsets reported at the exact failing byte. It runs in `ci-smoke`. The retained
   `run-zstd-native-summary-dashboard` step now writes
   `zig-out/vort-zstd-native-stream-summary.json` and is indexed by the dashboard
   producer/category manifests. Dashboard strict validation now treats missing or

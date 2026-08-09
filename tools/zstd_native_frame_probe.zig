@@ -3941,6 +3941,12 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameInto(truncated_checksum, &checksum_out));
     try expectAllocError(allocator, error.TruncatedFrame, vort.zstdDecodeNativeFrameAlloc(allocator, truncated_checksum));
     try expectError(error.TruncatedFrame, vort.zstdSummarizeNativeStream(truncated_checksum));
+    var checksum_summary_diagnostics: vort.ZstdNativeStreamSummaryErrorDiagnostics = .{};
+    if (vort.zstdSummarizeNativeStreamWithDiagnostics(truncated_checksum, &checksum_summary_diagnostics)) |_| {
+        return error.ZstdNativeFrameProbeExpectedError;
+    } else |err| if (@as(anyerror, err) != error.TruncatedFrame) return err;
+    try expect(checksum_summary_diagnostics.phase == .frame_checksum);
+    try expect(checksum_summary_diagnostics.offset == truncated_checksum.len);
     try expectStreamIteratorError(truncated_checksum, error.TruncatedFrame);
     checked += 1;
 

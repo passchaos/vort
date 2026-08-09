@@ -5521,8 +5521,7 @@ pub fn summarizeNativeStreamWithDiagnostics(frames: []const u8, diagnostics: *Na
                 summary.declared_content_bytes = std.math.add(u64, summary.declared_content_bytes, content_size) catch return error.IntegerOverflow;
             }
             while (true) {
-                const block = inspectNativeFrameBlockAt(frames[frame_start..], offset - frame_start) catch |err| {
-                    diagnostics.* = .{ .phase = nativeSummaryFrameErrorPhase(err), .offset = frames.len };
+                const block = inspectNativeFrameBlockAtWithDiagnostics(frames[frame_start..], frame_start, offset - frame_start, diagnostics) catch |err| {
                     return err;
                 };
                 summary.block_count += 1;
@@ -5563,6 +5562,51 @@ pub fn summarizeNativeStreamWithDiagnostics(frames: []const u8, diagnostics: *Na
         }
     }
     return summary;
+}
+
+fn inspectNativeFrameBlockAtWithDiagnostics(frame: []const u8, frame_start: usize, header_offset: usize, diagnostics: *NativeStreamSummaryErrorDiagnostics) Error!NativeFrameBlockHeader {
+    const header = inspectNativeFrameHeader(frame) catch |err| {
+        diagnostics.* = .{ .phase = .frame_header, .offset = frame_start + frame.len };
+        return err;
+    };
+    if (header_offset < header.payload_offset) {
+        diagnostics.* = .{ .phase = .frame, .offset = frame_start + header_offset };
+        return error.CorruptFrame;
+    }
+    if (frame.len - header_offset < 3) {
+        diagnostics.* = .{ .phase = .frame_body, .offset = frame_start + frame.len };
+        return error.TruncatedFrame;
+    }
+    const block_header = std.mem.readInt(u24, frame[header_offset..][0..3], .little);
+    const block_type_raw = (block_header >> 1) & 0x03;
+    const payload_len: usize = @intCast(block_header >> 3);
+    const block_type: NativeBlockType = switch (block_type_raw) {
+        0 => .raw,
+        1 => .rle,
+        2 => .compressed,
+        else => {
+            diagnostics.* = .{ .phase = .frame, .offset = frame_start + header_offset };
+            return error.CorruptFrame;
+        },
+    };
+    validateBlockSize(header, block_type_raw, payload_len) catch |err| {
+        diagnostics.* = .{ .phase = .frame, .offset = frame_start + header_offset };
+        return err;
+    };
+    const payload_offset = header_offset + 3;
+    const required_payload_len: usize = if (block_type == .rle) 1 else payload_len;
+    if (frame.len - payload_offset < required_payload_len) {
+        diagnostics.* = .{ .phase = .frame_body, .offset = frame_start + frame.len };
+        return error.TruncatedFrame;
+    }
+    return .{
+        .header_offset = header_offset,
+        .payload_offset = payload_offset,
+        .payload_len = payload_len,
+        .block_type = block_type,
+        .last = (block_header & 1) != 0,
+        .next_header_offset = payload_offset + required_payload_len,
+    };
 }
 
 fn nativeSummaryFrameErrorPhase(err: anyerror) NativeStreamSummaryErrorPhase {
