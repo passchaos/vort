@@ -1262,6 +1262,18 @@ def main() -> int:
         f"- native tier corpus discovery: source mode `{native_tier_discovery_health['source_mode']}`, sources {native_tier_discovery_health['source_count']}/{native_tier_discovery_health['candidate_count']}, selected cases {native_tier_discovery_health['selected_case_count']}, missing reason `{native_tier_discovery_health['missing_reason'] or 'none'}`, healthy `{native_tier_discovery_health['healthy']}`",
         "",
     ]
+    validation_reason_status = "none" if not validation_unhealthy_reasons else ", ".join(f"`{reason}`" for reason in validation_unhealthy_reasons)
+    lines.extend(
+        [
+            "## Validation unhealthy reasons",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| active reasons | {len(validation_unhealthy_reasons)} | {validation_reason_status} |",
+            f"| aggregate health | {1 if validation_healthy else 0} | validation healthy `{validation_healthy}` |",
+            "",
+        ]
+    )
     lines.extend(
         [
             "## Producer and smoke-gate coverage",

@@ -1245,6 +1245,19 @@ def main() -> int:
         checks.append(check_row("all_strict_ok", "all", False, True, ok.returncode, "dashboard_index=", ok.stdout))
         checks.append(
             markdown_check_row(
+                "validation_unhealthy_reasons_markdown_table",
+                "validation unhealthy reasons Markdown table",
+                dashboard_markdown,
+                [
+                    "## Validation unhealthy reasons",
+                    "| category | count | detail |",
+                    "| active reasons | 0 | none |",
+                    "| aggregate health | 1 | validation healthy `True` |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
                 "producer_smoke_gate_markdown_table",
                 "producer and smoke-gate Markdown table",
                 dashboard_markdown,

@@ -1621,6 +1621,7 @@
         ],
         "name": [
           "all_strict_ok",
+          "validation_unhealthy_reasons_markdown_table",
           "producer_smoke_gate_markdown_table",
           "dashboard_strict_mode_markdown_table",
           "native_summary_success_markdown_table",
