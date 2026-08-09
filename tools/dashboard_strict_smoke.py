@@ -1245,6 +1245,19 @@ def main() -> int:
         checks.append(check_row("all_strict_ok", "all", False, True, ok.returncode, "dashboard_index=", ok.stdout))
         checks.append(
             markdown_check_row(
+                "producer_smoke_gate_markdown_table",
+                "producer and smoke-gate Markdown table",
+                dashboard_markdown,
+                [
+                    "## Producer and smoke-gate coverage",
+                    "| category | covered | missing | detail |",
+                    "| producer steps | 17/17 | 0 | allowed missing 0 |",
+                    "| smoke gates | 17/17 | 0 | required missing 0 |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
                 "dashboard_strict_mode_markdown_table",
                 "dashboard strict mode Markdown table",
                 dashboard_markdown,

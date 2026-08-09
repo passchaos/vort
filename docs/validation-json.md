@@ -2410,17 +2410,18 @@ generation fails when the header inspect artifact is absent, reports `ok=false`,
 or has missing required workflows. With `--strict-validation-health`, generation
 fails whenever the aggregate `validation_healthy` field is false and reports the
 `validation_unhealthy_reasons` list with specific missing/failed artifact or coverage reasons.
-The generated Markdown index also includes `Dashboard strict mode coverage`,
-`Header inspect coverage`, `Sidecar corrupt smoke coverage`, `Huffman length
-oracle coverage`, `Python zlib differential coverage`, `Decode-stage smoke
-coverage`, `Fuzz corpus coverage`, `Native codec probe coverage`, `Native codec
-probe capabilities`, `Native codec probe executables`, `Native summary error
-codec coverage`, and `Native summary error phase offsets` tables so dashboard
-strict gate coverage, header-format coverage, corrupt-sidecar rejection coverage,
-Huffman optimality, zlib differential coverage, decode-stage error matching, fuzz
-corpus matching, codec probe status, LZ4/Zstd structured-error counts, phase
-counts, required phases, missing phases, and phase offset ranges are visible
-during dashboard review without opening the retained JSON artifacts.
+The generated Markdown index also includes `Producer and smoke-gate coverage`,
+`Dashboard strict mode coverage`, `Header inspect coverage`, `Sidecar corrupt
+smoke coverage`, `Huffman length oracle coverage`, `Python zlib differential
+coverage`, `Decode-stage smoke coverage`, `Fuzz corpus coverage`, `Native codec
+probe coverage`, `Native codec probe capabilities`, `Native codec probe
+executables`, `Native summary error codec coverage`, and `Native summary error
+phase offsets` tables so producer/smoke-gate coverage, dashboard strict gate
+coverage, header-format coverage, corrupt-sidecar rejection coverage, Huffman
+optimality, zlib differential coverage, decode-stage error matching, fuzz corpus
+matching, codec probe status, LZ4/Zstd structured-error counts, phase counts,
+required phases, missing phases, and phase offset ranges are visible during
+dashboard review without opening the retained JSON artifacts.
 Current unhealthy reason values are:
 
 - `missing_producer_steps`
@@ -2985,9 +2986,9 @@ Example:
   "expected_modes": [
     {
       "mode": "dashboard-markdown",
-      "min_checks": 10,
+      "min_checks": 11,
       "min_expected_failures": 0,
-      "min_matched": 10
+      "min_matched": 11
     },
     {
       "mode": "strict-validation-health",
@@ -3073,12 +3074,12 @@ the smoke artifact can pass. The expected reason/check/fixture matrix lives in
 `tools/dashboard_strict_validation_reasons.json`; the retained
 `strict-validation-health` mode minimums must cover every configured reason,
 currently 31. The `dashboard-markdown` mode verifies that important human-facing
-sections, including dashboard strict gate coverage, header inspect coverage,
-corrupt-sidecar rejection coverage, Huffman optimality, Python zlib differential
-coverage, decode-stage error matching, fuzz corpus matching, native summary
-error codec/phase-offset tables, native codec probe coverage/capability tables,
-and the native-tier range source table, remain present in the generated
-dashboard index. The abbreviated example below shows a
+sections, including producer/smoke-gate coverage, dashboard strict gate
+coverage, header inspect coverage, corrupt-sidecar rejection coverage, Huffman
+optimality, Python zlib differential coverage, decode-stage error matching, fuzz
+corpus matching, native summary error codec/phase-offset tables, native codec
+probe coverage/capability tables, and the native-tier range source table, remain
+present in the generated dashboard index. The abbreviated example below shows a
 one-reason slice. A synthetic long-output check keeps the truncation path
 covered so `actual_output_truncated=true` is exercised in CI.
 
@@ -3089,7 +3090,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 13,
+  "check_count": 14,
   "mode_count": 4,
   "expected_mode_count": 4,
   "missing_mode_count": 0,
@@ -3103,9 +3104,9 @@ Example:
     },
     {
       "mode": "dashboard-markdown",
-      "min_checks": 10,
+      "min_checks": 11,
       "min_expected_failures": 0,
-      "min_matched": 10
+      "min_matched": 11
     },
     {
       "mode": "strict-validation-health",
@@ -3136,14 +3137,14 @@ Example:
     },
     {
       "mode": "dashboard-markdown",
-      "checks": 10,
-      "min_checks": 10,
+      "checks": 11,
+      "min_checks": 11,
       "missing_checks": 0,
       "expected_failures": 0,
       "min_expected_failures": 0,
       "missing_expected_failures": 0,
-      "matched": 10,
-      "min_matched": 10,
+      "matched": 11,
+      "min_matched": 11,
       "missing_matched": 0
     },
     {
@@ -3180,9 +3181,9 @@ Example:
     },
     {
       "mode": "dashboard-markdown",
-      "checks": 10,
+      "checks": 11,
       "expected_failures": 0,
-      "matched": 10
+      "matched": 11
     },
     {
       "mode": "strict-validation-health",
@@ -3205,6 +3206,18 @@ Example:
       "expected_output": "dashboard_index=",
       "actual_output": "dashboard_index=zig-out/vort-dashboard-index.md ...",
       "actual_output_bytes": 45,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "producer_smoke_gate_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "producer and smoke-gate Markdown table",
+      "actual_output": "0:ok,1:ok,2:ok,3:ok",
+      "actual_output_bytes": 19,
       "actual_output_limit": 240,
       "actual_output_truncated": false,
       "returncode": 0,

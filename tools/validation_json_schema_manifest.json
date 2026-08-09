@@ -1621,6 +1621,7 @@
         ],
         "name": [
           "all_strict_ok",
+          "producer_smoke_gate_markdown_table",
           "dashboard_strict_mode_markdown_table",
           "native_summary_error_markdown_tables",
           "native_tier_range_markdown_table",

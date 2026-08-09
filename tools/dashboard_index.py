@@ -1264,6 +1264,17 @@ def main() -> int:
     ]
     lines.extend(
         [
+            "## Producer and smoke-gate coverage",
+            "",
+            "| category | covered | missing | detail |",
+            "| --- | ---: | ---: | --- |",
+            f"| producer steps | {producer_step_covered}/{len(records)} | {len(producer_step_missing)} | allowed missing {len(producer_step_allowed_missing)} |",
+            f"| smoke gates | {smoke_gate_covered}/{len(records)} | {len(smoke_gate_missing)} | required missing {len(smoke_gate_required_missing)} |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
             "## Dashboard strict mode coverage",
             "",
             "| category | count | detail |",
