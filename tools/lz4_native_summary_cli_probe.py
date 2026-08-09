@@ -124,7 +124,7 @@ def main() -> int:
                 "skippable_frames": 2,
                 "content_size_frames": 3,
                 "checksum_frames": 2,
-                "block_checksum_frames": 0,
+                "block_checksum_frames": 1,
                 "dictionary_id_frames": 1,
                 "declared_content_bytes": len(first_payload) + len(second_payload) + len(dict_payload),
                 "blocks": 3,

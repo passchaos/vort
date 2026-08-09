@@ -288,7 +288,7 @@ def main() -> int:
                 "lz4_native_summary_frame_count": 2,
                 "lz4_native_summary_skippable_frame_count": 1,
                 "lz4_native_summary_checksum_frame_count": 2,
-                "lz4_native_summary_block_checksum_frame_count": 0,
+                "lz4_native_summary_block_checksum_frame_count": 1,
                 "lz4_native_summary_dictionary_id_frame_count": 1,
                 "lz4_native_summary_content_size_frame_count": 2,
                 "lz4_native_summary_declared_content_bytes": 6,

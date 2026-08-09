@@ -647,7 +647,7 @@ def native_codec_probes_health(artifacts: list[Path]) -> dict:
     }
 
 
-def native_stream_summary_health(artifacts: list[Path], schema: str) -> dict:
+def native_stream_summary_health(artifacts: list[Path], schema: str, *, require_block_checksum: bool = False) -> dict:
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
         if data.get("schema") != schema:
@@ -666,15 +666,14 @@ def native_stream_summary_health(artifacts: list[Path], schema: str) -> dict:
         compressed_bytes = int(data.get("compressed_bytes") or 0)
         payload_bytes = int(data.get("payload_bytes") or 0)
         skippable_payload_bytes = int(data.get("skippable_payload_bytes") or 0)
-        # Dashboard summaries intentionally require the retained fixtures to
-        # cover ordinary data frames plus optional frame-level metadata.  The
-        # LZ4 fixture builds its Dictionary_ID frame by hand so this aggregate
-        # gate catches regressions in header parsing even before the public CLI
-        # grows a dictionary-aware LZ4 encoder command.
+        # Dashboard summaries intentionally require retained fixtures to cover
+        # ordinary data frames plus optional frame-level metadata. LZ4 opts into
+        # block-checksum coverage because that flag has no Zstd analogue.
         healthy = (
             frame_count >= 2
             and skippable_frame_count >= 1
             and checksum_frame_count >= 1
+            and (not require_block_checksum or block_checksum_frame_count >= 1)
             and dictionary_id_frame_count >= 1
             and content_size_frame_count >= 1
             and declared_content_bytes > 0
@@ -727,7 +726,7 @@ def zstd_native_summary_health(artifacts: list[Path]) -> dict:
 
 
 def lz4_native_summary_health(artifacts: list[Path]) -> dict:
-    return native_stream_summary_health(artifacts, "vort.lz4_native_stream_summary")
+    return native_stream_summary_health(artifacts, "vort.lz4_native_stream_summary", require_block_checksum=True)
 
 
 def artifact_metadata(path: Path) -> str:

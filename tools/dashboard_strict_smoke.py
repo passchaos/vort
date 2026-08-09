@@ -631,7 +631,7 @@ def write_lz4_native_summary(path: Path, *, healthy: bool = True) -> None:
         "skippable_frame_count": 1 if healthy else 0,
         "content_size_frame_count": 2 if healthy else 0,
         "checksum_frame_count": 2 if healthy else 0,
-        "block_checksum_frame_count": 0,
+        "block_checksum_frame_count": 1 if healthy else 0,
         "dictionary_id_frame_count": 1 if healthy else 0,
         "declared_content_bytes": 6 if healthy else 0,
         "block_count": 2 if healthy else 1,

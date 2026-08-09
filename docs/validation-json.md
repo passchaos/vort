@@ -2166,9 +2166,9 @@ It reports data-frame, skippable-frame, checksum-frame, block-checksum-frame,
 Dictionary_ID-frame, content-size-frame, declared content-byte, block-type,
 compressed-payload, and skippable-payload counts without decoding the stream
 payload. The retained dashboard fixture includes a hand-built Dictionary_ID
-raw-block frame so dashboard health checks keep optional LZ4 frame metadata
-covered even before the public CLI exposes a dictionary-aware LZ4 encoder
-command.
+raw-block frame with a block checksum so dashboard health checks keep optional
+LZ4 frame metadata covered even before the public CLI exposes a dictionary-aware
+LZ4 encoder command.
 
 Example:
 

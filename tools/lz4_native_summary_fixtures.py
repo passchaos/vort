@@ -78,24 +78,28 @@ def skippable_frame(skippable_id: int, payload: bytes) -> bytes:
     return struct.pack("<II", 0x184D2A50 + skippable_id, len(payload)) + payload
 
 
-def dictionary_id_raw_frame(dictionary_id: int, payload: bytes) -> bytes:
+def dictionary_id_raw_frame(dictionary_id: int, payload: bytes, *, block_checksum: bool = True) -> bytes:
     """Build a valid LZ4 raw-block frame carrying a Dictionary_ID.
 
     The frame is intentionally self-contained for summary probes: the block is
-    stored raw, so summary parsing can validate Dictionary_ID/header accounting
-    without needing to decode with a preset dictionary.
+    stored raw, so summary parsing can validate Dictionary_ID and optional
+    block-checksum header accounting without needing to decode with a preset
+    dictionary.
     """
 
     if not 0 < dictionary_id <= MASK32:
         raise ValueError(dictionary_id)
     if len(payload) > 64 * 1024:
         raise ValueError("fixture keeps the 64 KiB block-size descriptor")
-    descriptor = b"\x69\x40" + struct.pack("<Q", len(payload)) + struct.pack("<I", dictionary_id)
+    flg = 0x69 | (0x10 if block_checksum else 0)
+    descriptor = bytes([flg, 0x40]) + struct.pack("<Q", len(payload)) + struct.pack("<I", dictionary_id)
+    block = struct.pack("<I", 0x8000_0000 | len(payload)) + payload
+    if block_checksum:
+        block += struct.pack("<I", xxh32(payload, 0))
     return (
         struct.pack("<I", 0x184D2204)
         + descriptor
         + bytes([frame_descriptor_checksum(descriptor)])
-        + struct.pack("<I", 0x8000_0000 | len(payload))
-        + payload
+        + block
         + b"\x00\x00\x00\x00"
     )
