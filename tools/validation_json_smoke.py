@@ -328,6 +328,25 @@ def main() -> int:
         assert lz4_native_summary["payload_bytes"] > 0
         assert lz4_native_summary["skippable_payload_bytes"] > 0
         validate_value_against_manifest(lz4_native_summary, schemas_def)
+
+        native_summary_error_cases = [
+            ("summary-lz4-native-file", root / "bad-lz4-summary.lz4", b"not-lz4", "vort.lz4_native_stream_summary_error", "CorruptFrame"),
+            ("summary-zstd-native-file", root / "bad-zstd-summary.zst", b"not-zstd", "vort.zstd_native_stream_summary_error", "InvalidMagic"),
+        ]
+        native_summary_error_payloads: list[dict[str, object]] = []
+        for command, path, payload, schema_name, error_name in native_summary_error_cases:
+            path.write_bytes(payload)
+            result = run([cli, command, str(path), "json"], check=False)
+            assert result.returncode != 0
+            error_payload = json.loads(result.stdout)
+            assert error_payload["schema"] == schema_name
+            assert error_payload["schema_version"] == 1
+            assert error_payload["ok"] is False
+            assert error_payload["compressed_bytes"] == len(payload)
+            assert error_payload["error"] == error_name
+            validate_value_against_manifest(error_payload, schemas_def)
+            native_summary_error_payloads.append(error_payload)
+
         zstd_native_summary = json.loads(zstd_native_summary_path.read_text())
         assert zstd_native_summary["schema"] == "vort.zstd_native_stream_summary"
         assert zstd_native_summary["schema_version"] == 1
@@ -932,7 +951,9 @@ def main() -> int:
                 python_zlib_diff["schema"],
                 native_codec_probes["schema"],
                 lz4_native_summary["schema"],
+                native_summary_error_payloads[0]["schema"],
                 zstd_native_summary["schema"],
+                native_summary_error_payloads[1]["schema"],
                 zlib_relaxed["schema"],
                 png_scratch["schema"],
                 fuzz_report["schema"],

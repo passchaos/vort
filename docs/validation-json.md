@@ -649,9 +649,11 @@ Example:
     "vort.header_inspect_required_workflows",
     "vort.validation_json_docs_negative_smoke",
     "vort.lz4_native_stream_summary",
+    "vort.lz4_native_stream_summary_error",
     "vort.raw_deflate_header_info",
     "vort.wrapped_deflate_header_info",
     "vort.zstd_native_stream_summary",
+    "vort.zstd_native_stream_summary_error",
     "vort.zlib_header_info",
     "vort.gzip_header_info"
   ],
@@ -2192,6 +2194,31 @@ Example:
 }
 ```
 
+## `vort.lz4_native_stream_summary_error`
+
+Produced by:
+
+```sh
+zig build run -- summary-lz4-native-file /tmp/bad.lz4 json
+```
+
+This schema is emitted to stdout with a non-zero exit status when the LZ4 native
+stream summary CLI is asked for JSON output and encounters malformed or
+truncated input. It lets black-box probes and future dashboards consume the
+summary failure as structured data rather than scraping Zig error traces.
+
+Example:
+
+```json
+{
+  "schema": "vort.lz4_native_stream_summary_error",
+  "schema_version": 1,
+  "ok": false,
+  "compressed_bytes": 7,
+  "error": "CorruptFrame"
+}
+```
+
 ## `vort.zstd_native_stream_summary`
 
 Produced by:
@@ -2225,6 +2252,32 @@ Example:
   "raw_block_count": 3,
   "payload_bytes": 9,
   "skippable_payload_bytes": 16
+}
+```
+
+## `vort.zstd_native_stream_summary_error`
+
+Produced by:
+
+```sh
+zig build run -- summary-zstd-native-file /tmp/bad.zst json
+```
+
+This schema is emitted to stdout with a non-zero exit status when the Zstd native
+stream summary CLI is asked for JSON output and encounters malformed or
+truncated input. It mirrors the LZ4 summary error schema so native-summary
+probes can validate both success and failure paths without relying on stderr
+formatting.
+
+Example:
+
+```json
+{
+  "schema": "vort.zstd_native_stream_summary_error",
+  "schema_version": 1,
+  "ok": false,
+  "compressed_bytes": 7,
+  "error": "InvalidMagic"
 }
 ```
 

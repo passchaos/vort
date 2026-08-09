@@ -649,7 +649,14 @@ pub fn main(init: std.process.Init) !void {
         const output_format = try parseHeaderInspectOutputFormat(args.next());
         const frame = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(frame);
-        const summary = try vort.zstdSummarizeNativeStream(frame);
+        const summary = vort.zstdSummarizeNativeStream(frame) catch |err| {
+            if (output_format == .json) {
+                try printNativeSummaryErrorJson(stdout, "vort.zstd_native_stream_summary_error", frame.len, err);
+                try stdout.flush();
+                std.process.exit(1);
+            }
+            return err;
+        };
         try printZstdNativeSummary(stdout, frame.len, summary, output_format);
     } else if (std.mem.eql(u8, command, "encode-lz4-native-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
@@ -675,7 +682,14 @@ pub fn main(init: std.process.Init) !void {
         const output_format = try parseHeaderInspectOutputFormat(args.next());
         const frame = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(frame);
-        const summary = try vort.lz4SummarizeNativeStream(frame);
+        const summary = vort.lz4SummarizeNativeStream(frame) catch |err| {
+            if (output_format == .json) {
+                try printNativeSummaryErrorJson(stdout, "vort.lz4_native_stream_summary_error", frame.len, err);
+                try stdout.flush();
+                std.process.exit(1);
+            }
+            return err;
+        };
         try printLz4NativeSummary(stdout, frame.len, summary, output_format);
     } else if (std.mem.eql(u8, command, "decode-lz4-native-file-to")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
@@ -1882,6 +1896,12 @@ fn printSnappyFrameSummary(stdout: *std.Io.Writer, compressed_len: usize, summar
             summary.uncompressed_payload_bytes,
         },
     );
+}
+
+fn printNativeSummaryErrorJson(stdout: *std.Io.Writer, schema: []const u8, compressed_len: usize, err: anyerror) !void {
+    try stdout.print("{{\"schema\":\"{s}\",\"schema_version\":1,\"ok\":false,\"compressed_bytes\":{d},\"error\":", .{ schema, compressed_len });
+    try std.json.Stringify.value(@errorName(err), .{}, stdout);
+    try stdout.print("}}\n", .{});
 }
 
 fn printLz4NativeSummary(stdout: *std.Io.Writer, compressed_len: usize, summary: vort.Lz4NativeStreamSummary, output_format: HeaderInspectOutputFormat) !void {

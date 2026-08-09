@@ -28,11 +28,20 @@ def require_cli_failure(cli: pathlib.Path, path: pathlib.Path, expected_error: s
     )
     if result.returncode == 0:
         raise AssertionError(f"{context}: expected failure {expected_error}, got success: {result.stdout!r}")
-    marker = f"error: {expected_error}"
-    if marker not in result.stdout:
-        raise AssertionError(
-            f"{context}: expected {marker!r} in failure output, got returncode={result.returncode} output={result.stdout!r}"
-        )
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise AssertionError(f"{context}: expected structured error JSON, got {result.stdout!r}") from exc
+    expected = {
+        "schema": "vort.zstd_native_stream_summary_error",
+        "schema_version": 1,
+        "ok": False,
+        "compressed_bytes": path.stat().st_size,
+        "error": expected_error,
+    }
+    for key, value in expected.items():
+        if payload.get(key) != value:
+            raise AssertionError(f"{context}: expected {key}={value!r}, got {payload.get(key)!r} in {payload!r}")
 
 
 def parse_fields(output: str) -> dict[str, int]:

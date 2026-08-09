@@ -3092,6 +3092,7 @@
           "vort.header_inspect_required_workflows",
           "vort.header_inspect_smoke",
           "vort.lz4_native_stream_summary",
+          "vort.lz4_native_stream_summary_error",
           "vort.native_codec_probes",
           "vort.native_tier_range_corpus_discovery",
           "vort.png_scratch_report",
@@ -3103,6 +3104,7 @@
           "vort.validation_report",
           "vort.wrapped_deflate_header_info",
           "vort.zstd_native_stream_summary",
+          "vort.zstd_native_stream_summary_error",
           "vort.zlib_header_info",
           "vort.zlib_relaxed_report"
         ]
@@ -3465,6 +3467,15 @@
         "skippable_payload_bytes": "int"
       }
     },
+    "vort.lz4_native_stream_summary_error": {
+      "fields": {
+        "compressed_bytes": "int",
+        "error": "str",
+        "ok": "bool",
+        "schema": "str",
+        "schema_version": "int"
+      }
+    },
     "vort.zstd_native_stream_summary": {
       "fields": {
         "block_count": "int",
@@ -3482,6 +3493,15 @@
         "schema_version": "int",
         "skippable_frame_count": "int",
         "skippable_payload_bytes": "int"
+      }
+    },
+    "vort.zstd_native_stream_summary_error": {
+      "fields": {
+        "compressed_bytes": "int",
+        "error": "str",
+        "ok": "bool",
+        "schema": "str",
+        "schema_version": "int"
       }
     },
     "vort.zstd_compare_block_sweep_gate": {
