@@ -25,6 +25,9 @@ PYTHON_ZLIB_DIFF_ARTIFACT = "vort-python-zlib-diff-smoke.json"
 NATIVE_ALLOCATION_REPORT_ARTIFACT = "vort-native-allocation-report.json"
 NATIVE_ALLOCATION_SMOKE_ARTIFACT = "vort-native-allocation-smoke.json"
 NATIVE_ALLOCATION_NEGATIVE_ARTIFACT = "vort-native-allocation-negative-smoke.json"
+ZSTD_COMPARE_ARTIFACT = "vort-zstd-compare-gate.json"
+ZSTD_COMPARE_STANDARD_ARTIFACT = "vort-zstd-compare-standard-gate.json"
+ZSTD_COMPARE_BLOCK_SWEEP_ARTIFACT = "vort-zstd-compare-block-sweep-gate.json"
 NATIVE_SUMMARY_ERROR_ARTIFACT = "vort-native-summary-error-dashboard.json"
 NATIVE_SUMMARY_ERROR_NEGATIVE_ARTIFACT = "vort-native-summary-error-negative-smoke.json"
 NATIVE_CODEC_PROBES_ARTIFACT = "vort-native-codec-probes.json"
@@ -73,6 +76,8 @@ def write_producer_map(
     include_python_zlib_smoke: bool = True,
     include_native_allocation_exact: bool = True,
     include_native_allocation_smoke: bool = True,
+    include_zstd_compare_exact: bool = True,
+    include_zstd_compare_smoke: bool = True,
     include_native_summary_error_exact: bool = True,
     include_native_summary_error_smoke: bool = True,
     include_native_summary_error_negative_exact: bool = True,
@@ -138,6 +143,16 @@ def write_producer_map(
                 "expected_format": "json",
                 "smoke_gate": smoke_gate,
             }
+    if include_zstd_compare_smoke:
+        for artifact, smoke_gate in (
+            (ZSTD_COMPARE_ARTIFACT, "zig build run-zstd-compare-gate"),
+            (ZSTD_COMPARE_STANDARD_ARTIFACT, "zig build run-zstd-compare-standard-gate"),
+            (ZSTD_COMPARE_BLOCK_SWEEP_ARTIFACT, "zig build run-zstd-compare-block-sweep-gate"),
+        ):
+            artifact_metadata[artifact] = {
+                "expected_format": "json",
+                "smoke_gate": smoke_gate,
+            }
     if include_native_summary_error_smoke:
         artifact_metadata[NATIVE_SUMMARY_ERROR_ARTIFACT] = {
             "expected_format": "json",
@@ -190,6 +205,10 @@ def write_producer_map(
         exact[NATIVE_ALLOCATION_REPORT_ARTIFACT] = "zig build run-native-allocation-report-dashboard"
         exact[NATIVE_ALLOCATION_SMOKE_ARTIFACT] = "zig build run-native-allocation-smoke"
         exact[NATIVE_ALLOCATION_NEGATIVE_ARTIFACT] = "zig build run-native-allocation-negative-smoke"
+    if include_zstd_compare_exact:
+        exact[ZSTD_COMPARE_ARTIFACT] = "zig build run-zstd-compare-gate"
+        exact[ZSTD_COMPARE_STANDARD_ARTIFACT] = "zig build run-zstd-compare-standard-gate"
+        exact[ZSTD_COMPARE_BLOCK_SWEEP_ARTIFACT] = "zig build run-zstd-compare-block-sweep-gate"
     if include_native_summary_error_exact:
         exact[NATIVE_SUMMARY_ERROR_ARTIFACT] = "zig build run-native-summary-error-dashboard"
     if include_native_summary_error_negative_exact:
@@ -691,6 +710,85 @@ def write_native_allocation_artifacts(root: Path) -> None:
 
 
 
+def write_zstd_compare_artifacts(root: Path) -> None:
+    compare = {
+        "schema": "vort.zstd_compare_gate",
+        "schema_version": 1,
+        "ok": True,
+        "data_rows": 2,
+        "case_limit": "none",
+        "csv": "zig-out/vort-zstd-compare.csv",
+        "markdown": "zig-out/vort-zstd-compare.md",
+        "native_block_len": 8192,
+        "optimize": "Debug",
+        "size_mode": "full",
+        "source_mode": "default-samples",
+        "decode_repeats": 3,
+        "total_ratio": 1.04,
+        "total_native_ratio": 1.18,
+        "total_native_stream_ratio": 1.16,
+        "total_embedded_over_native_best": 1.15,
+        "total_embedded_over_native_best_bytes": 11279,
+        "total_embedded_over_native_best_pct": 15.0,
+        "total_embedded_over_native_stream": 1.02,
+        "total_embedded_over_native_stream_bytes": 1312,
+        "total_embedded_over_native_stream_pct": 1.5,
+        "total_stream_over_native_best": 1.13,
+        "total_stream_over_native_best_bytes": 9967,
+        "total_stream_over_native_best_pct": 13.3,
+        "total_zstd_decode_mib_s": 90.0,
+        "total_vort_decode_vs_zstd": 0.71,
+        "total_vort_raw_fixed_decode_mib_s": 64.0,
+        "total_vort_native_decode_mib_s": 73.0,
+        "total_vort_native_decode_vs_zstd": 0.81,
+        "total_vort_native_best_decode_mib_s": 96.0,
+        "total_vort_native_best_decode_vs_zstd": 1.07,
+        "rows": [],
+    }
+    standard = dict(compare)
+    standard.update({
+        "case_limit": "3",
+        "csv": "zig-out/vort-zstd-compare-standard.csv",
+        "markdown": "zig-out/vort-zstd-compare-standard.md",
+        "source_mode": "standard-suite",
+        "size_mode": "bounded-128KiB",
+        "data_rows": 3,
+        "total_native_ratio": 1.13,
+        "total_native_stream_ratio": 1.12,
+        "total_vort_decode_vs_zstd": 0.74,
+    })
+    sweep = {
+        "schema": "vort.zstd_compare_block_sweep_gate",
+        "schema_version": 1,
+        "ok": True,
+        "data_rows": 15,
+        "total_rows": 5,
+        "case_limit": "3",
+        "csv": "zig-out/vort-zstd-compare-block-sweep.csv",
+        "markdown": "zig-out/vort-zstd-compare-block-sweep.md",
+        "optimize": "Debug",
+        "source_mode": "standard-suite",
+        "size_mode": "bounded-128KiB",
+        "path_count": 3,
+        "block_len_count": 5,
+        "block_lens": [4096, 8192, 16384, 32768, 65536],
+        "best_block_len": 65536,
+        "best_seekability_tier": "ratio",
+        "best_native_stream_bytes": 110784,
+        "best_native_stream_ratio": 1.01,
+        "best_stream_over_native_best": 1.02,
+        "best_stream_over_native_best_bytes": 2621,
+        "best_embedded_over_native_stream": 1.003,
+        "best_embedded_over_native_stream_bytes": 288,
+        "best_range_decode_mib_s": 3.47,
+        "best_range_decode_full_input_mib_s": 111.0,
+        "rows": [],
+    }
+    (root / ZSTD_COMPARE_ARTIFACT).write_text(json.dumps(compare, indent=2, sort_keys=True) + "\n")
+    (root / ZSTD_COMPARE_STANDARD_ARTIFACT).write_text(json.dumps(standard, indent=2, sort_keys=True) + "\n")
+    (root / ZSTD_COMPARE_BLOCK_SWEEP_ARTIFACT).write_text(json.dumps(sweep, indent=2, sort_keys=True) + "\n")
+
+
 def write_native_summary_error_dashboard(path: Path, *, healthy: bool = True) -> None:
     required_phases = ["magic", "frame_header", "skippable_payload", "frame_body", "frame_checksum", "frame"]
     payload = {
@@ -961,6 +1059,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_decode_stage_report(root / DECODE_STAGE_ARTIFACT)
     write_python_zlib_diff_report(root / PYTHON_ZLIB_DIFF_ARTIFACT)
     write_native_allocation_artifacts(root)
+    write_zstd_compare_artifacts(root)
     write_native_summary_error_dashboard(root / NATIVE_SUMMARY_ERROR_ARTIFACT)
     write_native_summary_error_negative_smoke(root / NATIVE_SUMMARY_ERROR_NEGATIVE_ARTIFACT)
     write_native_codec_probes(root / NATIVE_CODEC_PROBES_ARTIFACT)
@@ -1324,8 +1423,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 20/20 | 0 | allowed missing 0 |",
-                    "| smoke gates | 20/20 | 0 | required missing 0 |",
+                    "| producer steps | 23/23 | 0 | allowed missing 0 |",
+                    "| smoke gates | 23/23 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -1468,6 +1567,21 @@ def main() -> int:
                     "| package-merge | 1/1 | 0 | 0 |",
                     "| validation | count | detail |",
                     "| malformed rows | 0 | healthy `True` |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
+                "zstd_compare_markdown_table",
+                "zstd compare Markdown table",
+                dashboard_markdown,
+                [
+                    "## Zstd compare gate coverage",
+                    "| category | count | detail |",
+                    "| compare rows | 2 | native/native-stream ratios 1.180/1.160, decode-vs-zstd 0.710 |",
+                    "| standard rows | 3 | native/native-stream ratios 1.130/1.120, decode-vs-zstd 0.740 |",
+                    "| block sweep rows | 15 | best block 65536 bytes, range/full MiB/s 3.47/111.00 |",
+                    "| gate health | 1 | compare/standard/sweep present True/True/True |",
                 ],
             )
         )

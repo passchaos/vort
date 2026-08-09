@@ -2420,7 +2420,7 @@ coverage`, `Native tier corpus discovery`, `Native codec probe coverage`,
 summary error codec coverage`, and `Native summary error phase offsets` tables
 so aggregate validation health, producer/smoke-gate coverage, dashboard strict
 gate coverage, header-format coverage, corrupt-sidecar rejection coverage,
-Huffman optimality, native allocation coverage, zlib differential coverage,
+Huffman optimality, zstd comparison gate coverage, native allocation coverage, zlib differential coverage,
 decode-stage error matching, fuzz corpus matching, native stream metadata
 coverage, native tier corpus discovery, codec probe status, LZ4/Zstd
 structured-error counts, phase counts, required phases, missing phases, and phase
@@ -2520,6 +2520,15 @@ Top-level fields:
 - `decode_stage_present`, `decode_stage_ok`, `decode_stage_healthy`,
   `decode_stage_rows`, `decode_stage_error_rows`,
   `decode_stage_matched_error_rows`, `decode_stage_unmatched_error_rows`
+- `zstd_compare_present`, `zstd_compare_standard_present`,
+  `zstd_compare_block_sweep_present`, `zstd_compare_healthy`,
+  `zstd_compare_rows`, `zstd_compare_standard_rows`,
+  `zstd_compare_block_sweep_rows`, `zstd_compare_native_ratio`,
+  `zstd_compare_native_stream_ratio`, `zstd_compare_standard_native_ratio`,
+  `zstd_compare_standard_native_stream_ratio`, `zstd_compare_decode_vs_zstd`,
+  `zstd_compare_standard_decode_vs_zstd`, `zstd_compare_best_block_len`,
+  `zstd_compare_best_range_decode_mib_s`,
+  `zstd_compare_best_range_decode_full_input_mib_s`
 - `native_allocation_present`, `native_allocation_smoke_present`,
   `native_allocation_negative_present`, `native_allocation_healthy`,
   `native_allocation_report_case_count`,
@@ -2723,6 +2732,22 @@ Example:
   "decode_stage_error_rows": 0,
   "decode_stage_matched_error_rows": 0,
   "decode_stage_unmatched_error_rows": 0,
+  "zstd_compare_present": false,
+  "zstd_compare_standard_present": false,
+  "zstd_compare_block_sweep_present": false,
+  "zstd_compare_healthy": false,
+  "zstd_compare_rows": 0,
+  "zstd_compare_standard_rows": 0,
+  "zstd_compare_block_sweep_rows": 0,
+  "zstd_compare_native_ratio": 0.0,
+  "zstd_compare_native_stream_ratio": 0.0,
+  "zstd_compare_standard_native_ratio": 0.0,
+  "zstd_compare_standard_native_stream_ratio": 0.0,
+  "zstd_compare_decode_vs_zstd": 0.0,
+  "zstd_compare_standard_decode_vs_zstd": 0.0,
+  "zstd_compare_best_block_len": 0,
+  "zstd_compare_best_range_decode_mib_s": 0.0,
+  "zstd_compare_best_range_decode_full_input_mib_s": 0.0,
   "native_allocation_present": false,
   "native_allocation_smoke_present": false,
   "native_allocation_negative_present": false,
@@ -3010,9 +3035,9 @@ Example:
   "expected_modes": [
     {
       "mode": "dashboard-markdown",
-      "min_checks": 15,
+      "min_checks": 16,
       "min_expected_failures": 0,
-      "min_matched": 15
+      "min_matched": 16
     },
     {
       "mode": "strict-validation-health",
@@ -3100,7 +3125,7 @@ the smoke artifact can pass. The expected reason/check/fixture matrix lives in
 currently 31. The `dashboard-markdown` mode verifies that important human-facing
 sections, including aggregate validation health, producer/smoke-gate
 coverage, dashboard strict gate coverage, header inspect coverage, corrupt-sidecar
-rejection coverage, Huffman optimality, native allocation coverage, Python zlib
+rejection coverage, Huffman optimality, zstd comparison gate coverage, native allocation coverage, Python zlib
 differential coverage, decode-stage error matching, fuzz corpus matching, native
 stream metadata coverage, native tier corpus discovery, native summary error
 codec/phase-offset tables, native codec probe coverage/capability tables, and
@@ -3116,7 +3141,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 18,
+  "check_count": 19,
   "mode_count": 4,
   "expected_mode_count": 4,
   "missing_mode_count": 0,
@@ -3130,9 +3155,9 @@ Example:
     },
     {
       "mode": "dashboard-markdown",
-      "min_checks": 15,
+      "min_checks": 16,
       "min_expected_failures": 0,
-      "min_matched": 15
+      "min_matched": 16
     },
     {
       "mode": "strict-validation-health",
@@ -3163,14 +3188,14 @@ Example:
     },
     {
       "mode": "dashboard-markdown",
-      "checks": 15,
-      "min_checks": 15,
+      "checks": 16,
+      "min_checks": 16,
       "missing_checks": 0,
       "expected_failures": 0,
       "min_expected_failures": 0,
       "missing_expected_failures": 0,
-      "matched": 15,
-      "min_matched": 15,
+      "matched": 16,
+      "min_matched": 16,
       "missing_matched": 0
     },
     {
@@ -3207,9 +3232,9 @@ Example:
     },
     {
       "mode": "dashboard-markdown",
-      "checks": 15,
+      "checks": 16,
       "expected_failures": 0,
-      "matched": 15
+      "matched": 16
     },
     {
       "mode": "strict-validation-health",
@@ -3362,6 +3387,18 @@ Example:
       "mode": "dashboard-markdown",
       "expected_failure": false,
       "expected_output": "huffman length Markdown table",
+      "actual_output": "0:ok,1:ok,2:ok,3:ok,4:ok,5:ok",
+      "actual_output_bytes": 29,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "zstd_compare_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "zstd compare Markdown table",
       "actual_output": "0:ok,1:ok,2:ok,3:ok,4:ok,5:ok",
       "actual_output_bytes": 29,
       "actual_output_limit": 240,

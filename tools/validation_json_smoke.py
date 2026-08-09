@@ -535,7 +535,7 @@ def main() -> int:
         assert covered_validation_reasons == expected_validation_reasons
         assert all(row["matched"] is True for row in dashboard_strict["validation_unhealthy_reason_checks"])
         assert any(row["mode"] == "strict-validation-health" and row["checks"] >= len(expected_validation_reasons) for row in dashboard_strict["mode_counts"])
-        assert any(row["mode"] == "dashboard-markdown" and row["checks"] >= 15 and row["matched"] >= 15 for row in dashboard_strict["mode_counts"])
+        assert any(row["mode"] == "dashboard-markdown" and row["checks"] >= 16 and row["matched"] >= 16 for row in dashboard_strict["mode_counts"])
         assert any(row["name"] == "validation_unhealthy_reasons_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "producer_smoke_gate_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "dashboard_strict_mode_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
@@ -547,6 +547,7 @@ def main() -> int:
         assert any(row["name"] == "header_inspect_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "sidecar_corrupt_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "huffman_length_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
+        assert any(row["name"] == "zstd_compare_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "native_allocation_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "python_zlib_diff_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "decode_stage_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
@@ -574,6 +575,7 @@ def main() -> int:
         assert "header_inspect_markdown_table" in dashboard_strict_markdown
         assert "sidecar_corrupt_markdown_table" in dashboard_strict_markdown
         assert "huffman_length_markdown_table" in dashboard_strict_markdown
+        assert "zstd_compare_markdown_table" in dashboard_strict_markdown
         assert "native_allocation_markdown_table" in dashboard_strict_markdown
         assert "python_zlib_diff_markdown_table" in dashboard_strict_markdown
         assert "decode_stage_markdown_table" in dashboard_strict_markdown
@@ -778,6 +780,12 @@ def main() -> int:
         shutil.copyfile(fuzz_report_path, root / "vort-deflate-wrapper-fuzz-corpus.json")
         shutil.copyfile(fuzz_coverage_smoke_path, root / "vort-fuzz-corpus-coverage-smoke.json")
         shutil.copyfile(decode_stage_path, root / "vort-deflate-decode-stage-report.json")
+        for artifact_name in (
+            "vort-zstd-compare-gate.json",
+            "vort-zstd-compare-standard-gate.json",
+            "vort-zstd-compare-block-sweep-gate.json",
+        ):
+            shutil.copyfile(ROOT / "zig-out" / artifact_name, root / artifact_name)
         shutil.copyfile(native_allocation_path, root / "vort-native-allocation-report.json")
         shutil.copyfile(native_allocation_smoke_path, root / "vort-native-allocation-smoke.json")
         shutil.copyfile(native_allocation_negative_smoke_path, root / "vort-native-allocation-negative-smoke.json")
@@ -879,6 +887,16 @@ def main() -> int:
         assert dashboard["decode_stage_error_rows"] == decode_stage["error_rows"]
         assert dashboard["decode_stage_matched_error_rows"] == decode_stage["matched_error_rows"]
         assert dashboard["decode_stage_unmatched_error_rows"] == decode_stage["unmatched_error_rows"]
+        assert dashboard["zstd_compare_present"] is True
+        assert dashboard["zstd_compare_standard_present"] is True
+        assert dashboard["zstd_compare_block_sweep_present"] is True
+        assert dashboard["zstd_compare_healthy"] is True
+        assert dashboard["zstd_compare_rows"] > 0
+        assert dashboard["zstd_compare_standard_rows"] > 0
+        assert dashboard["zstd_compare_block_sweep_rows"] > 0
+        assert dashboard["zstd_compare_best_block_len"] > 0
+        assert dashboard["zstd_compare_best_range_decode_mib_s"] > 0
+        assert dashboard["zstd_compare_best_range_decode_full_input_mib_s"] > 0
         assert dashboard["native_allocation_present"] is True
         assert dashboard["native_allocation_smoke_present"] is True
         assert dashboard["native_allocation_negative_present"] is True
@@ -1017,6 +1035,7 @@ def main() -> int:
             and dashboard["huffman_length_healthy"]
             and dashboard["fuzz_corpus_healthy"]
             and dashboard["decode_stage_healthy"]
+            and dashboard["zstd_compare_healthy"]
             and dashboard["native_allocation_healthy"]
             and dashboard["python_zlib_diff_healthy"]
             and dashboard["native_summary_error_healthy"]

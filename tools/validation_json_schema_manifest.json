@@ -842,6 +842,19 @@
             "native_allocation_negative_case_count",
             "native_allocation_negative_matched"
           ]
+        },
+        "zstd_compare_healthy": {
+          "all": [
+            "zstd_compare_present",
+            "zstd_compare_standard_present",
+            "zstd_compare_block_sweep_present"
+          ],
+          "positive": [
+            "zstd_compare_rows",
+            "zstd_compare_standard_rows",
+            "zstd_compare_block_sweep_rows",
+            "zstd_compare_best_block_len"
+          ]
         }
       },
       "collections": {
@@ -906,6 +919,22 @@
         "decode_stage_present": "bool",
         "decode_stage_rows": "int",
         "decode_stage_unmatched_error_rows": "int",
+        "zstd_compare_present": "bool",
+        "zstd_compare_standard_present": "bool",
+        "zstd_compare_block_sweep_present": "bool",
+        "zstd_compare_healthy": "bool",
+        "zstd_compare_rows": "int",
+        "zstd_compare_standard_rows": "int",
+        "zstd_compare_block_sweep_rows": "int",
+        "zstd_compare_native_ratio": "float",
+        "zstd_compare_native_stream_ratio": "float",
+        "zstd_compare_standard_native_ratio": "float",
+        "zstd_compare_standard_native_stream_ratio": "float",
+        "zstd_compare_decode_vs_zstd": "float",
+        "zstd_compare_standard_decode_vs_zstd": "float",
+        "zstd_compare_best_block_len": "int",
+        "zstd_compare_best_range_decode_mib_s": "float",
+        "zstd_compare_best_range_decode_full_input_mib_s": "float",
         "native_allocation_present": "bool",
         "native_allocation_smoke_present": "bool",
         "native_allocation_negative_present": "bool",
@@ -1659,6 +1688,7 @@
           "header_inspect_markdown_table",
           "sidecar_corrupt_markdown_table",
           "huffman_length_markdown_table",
+          "zstd_compare_markdown_table",
           "native_allocation_markdown_table",
           "python_zlib_diff_markdown_table",
           "decode_stage_markdown_table",

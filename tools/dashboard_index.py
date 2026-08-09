@@ -542,6 +542,66 @@ def native_tier_corpus_discovery_health(artifacts: list[Path]) -> dict:
     }
 
 
+def zstd_compare_health(artifacts: list[Path]) -> dict:
+    compare = None
+    standard = None
+    sweep = None
+    for artifact in artifacts:
+        data = read_json(artifact) if artifact.suffix == ".json" else {}
+        if data.get("schema") == "vort.zstd_compare_gate":
+            if artifact.name == "vort-zstd-compare-gate.json":
+                compare = data
+            elif artifact.name == "vort-zstd-compare-standard-gate.json":
+                standard = data
+        elif data.get("schema") == "vort.zstd_compare_block_sweep_gate" and artifact.name == "vort-zstd-compare-block-sweep-gate.json":
+            sweep = data
+
+    def int_field(data: dict | None, field: str) -> int:
+        if not isinstance(data, dict):
+            return 0
+        value = data.get(field)
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    def float_field(data: dict | None, field: str) -> float:
+        if not isinstance(data, dict):
+            return 0.0
+        value = data.get(field)
+        return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0.0
+
+    compare_present = isinstance(compare, dict)
+    standard_present = isinstance(standard, dict)
+    sweep_present = isinstance(sweep, dict)
+    healthy = (
+        compare_present
+        and standard_present
+        and sweep_present
+        and bool(compare.get("ok"))
+        and bool(standard.get("ok"))
+        and bool(sweep.get("ok"))
+        and int_field(compare, "data_rows") > 0
+        and int_field(standard, "data_rows") > 0
+        and int_field(sweep, "data_rows") > 0
+    )
+    return {
+        "present": compare_present,
+        "standard_present": standard_present,
+        "block_sweep_present": sweep_present,
+        "healthy": healthy,
+        "compare_rows": int_field(compare, "data_rows"),
+        "standard_rows": int_field(standard, "data_rows"),
+        "block_sweep_rows": int_field(sweep, "data_rows"),
+        "native_ratio": float_field(compare, "total_native_ratio"),
+        "native_stream_ratio": float_field(compare, "total_native_stream_ratio"),
+        "standard_native_ratio": float_field(standard, "total_native_ratio"),
+        "standard_native_stream_ratio": float_field(standard, "total_native_stream_ratio"),
+        "decode_vs_zstd": float_field(compare, "total_vort_decode_vs_zstd"),
+        "standard_decode_vs_zstd": float_field(standard, "total_vort_decode_vs_zstd"),
+        "best_block_len": int_field(sweep, "best_block_len"),
+        "best_range_decode_mib_s": float_field(sweep, "best_range_decode_mib_s"),
+        "best_range_decode_full_input_mib_s": float_field(sweep, "best_range_decode_full_input_mib_s"),
+    }
+
+
 def native_allocation_health(artifacts: list[Path]) -> dict:
     report = None
     smoke = None
@@ -1190,6 +1250,7 @@ def main() -> int:
     huffman_health = huffman_length_health(artifacts)
     fuzz_health = fuzz_corpus_health(artifacts)
     decode_stage_health_summary = decode_stage_health(artifacts)
+    zstd_compare = zstd_compare_health(artifacts)
     native_allocation = native_allocation_health(artifacts)
     python_zlib_health = python_zlib_diff_health(artifacts)
     native_codec_health = native_codec_probes_health(artifacts)
@@ -1376,6 +1437,19 @@ def main() -> int:
             f"| commands | {header_health['command_count']} | successes/failures {header_health['command_successes']}/{header_health['command_failures']} |",
             f"| workflows | {header_health['workflow_count']} | successes {header_health['workflow_successes']}, required/missing {header_health['required_workflow_count']}/{header_health['missing_workflow_count']} |",
             f"| dictionary cases | {header_health['dictionary_cases']} | optional/FHCRC {header_health['optional_header_cases']}/{header_health['fhcrc_cases']} |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
+            "## Zstd compare gate coverage",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| compare rows | {zstd_compare['compare_rows']} | native/native-stream ratios {zstd_compare['native_ratio']:.3f}/{zstd_compare['native_stream_ratio']:.3f}, decode-vs-zstd {zstd_compare['decode_vs_zstd']:.3f} |",
+            f"| standard rows | {zstd_compare['standard_rows']} | native/native-stream ratios {zstd_compare['standard_native_ratio']:.3f}/{zstd_compare['standard_native_stream_ratio']:.3f}, decode-vs-zstd {zstd_compare['standard_decode_vs_zstd']:.3f} |",
+            f"| block sweep rows | {zstd_compare['block_sweep_rows']} | best block {zstd_compare['best_block_len']} bytes, range/full MiB/s {zstd_compare['best_range_decode_mib_s']:.2f}/{zstd_compare['best_range_decode_full_input_mib_s']:.2f} |",
+            f"| gate health | {1 if zstd_compare['healthy'] else 0} | compare/standard/sweep present {zstd_compare['present']}/{zstd_compare['standard_present']}/{zstd_compare['block_sweep_present']} |",
             "",
         ]
     )
@@ -1719,6 +1793,22 @@ def main() -> int:
                 "decode_stage_error_rows": decode_stage_health_summary["error_rows"],
                 "decode_stage_matched_error_rows": decode_stage_health_summary["matched_error_rows"],
                 "decode_stage_unmatched_error_rows": decode_stage_health_summary["unmatched_error_rows"],
+                "zstd_compare_present": zstd_compare["present"],
+                "zstd_compare_standard_present": zstd_compare["standard_present"],
+                "zstd_compare_block_sweep_present": zstd_compare["block_sweep_present"],
+                "zstd_compare_healthy": zstd_compare["healthy"],
+                "zstd_compare_rows": zstd_compare["compare_rows"],
+                "zstd_compare_standard_rows": zstd_compare["standard_rows"],
+                "zstd_compare_block_sweep_rows": zstd_compare["block_sweep_rows"],
+                "zstd_compare_native_ratio": zstd_compare["native_ratio"],
+                "zstd_compare_native_stream_ratio": zstd_compare["native_stream_ratio"],
+                "zstd_compare_standard_native_ratio": zstd_compare["standard_native_ratio"],
+                "zstd_compare_standard_native_stream_ratio": zstd_compare["standard_native_stream_ratio"],
+                "zstd_compare_decode_vs_zstd": zstd_compare["decode_vs_zstd"],
+                "zstd_compare_standard_decode_vs_zstd": zstd_compare["standard_decode_vs_zstd"],
+                "zstd_compare_best_block_len": zstd_compare["best_block_len"],
+                "zstd_compare_best_range_decode_mib_s": zstd_compare["best_range_decode_mib_s"],
+                "zstd_compare_best_range_decode_full_input_mib_s": zstd_compare["best_range_decode_full_input_mib_s"],
                 "native_allocation_present": native_allocation["present"],
                 "native_allocation_smoke_present": native_allocation["smoke_present"],
                 "native_allocation_negative_present": native_allocation["negative_present"],
