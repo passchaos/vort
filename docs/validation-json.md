@@ -2410,6 +2410,10 @@ generation fails when the header inspect artifact is absent, reports `ok=false`,
 or has missing required workflows. With `--strict-validation-health`, generation
 fails whenever the aggregate `validation_healthy` field is false and reports the
 `validation_unhealthy_reasons` list with specific missing/failed artifact or coverage reasons.
+The generated Markdown index also includes a `Native summary error codec
+coverage` table so LZ4 and Zstd structured-error counts, phase counts, required
+phases, and missing phases are visible during dashboard review without opening
+the retained JSON artifact.
 Current unhealthy reason values are:
 
 - `missing_producer_steps`

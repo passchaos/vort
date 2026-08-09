@@ -914,6 +914,16 @@ def main() -> int:
         assert dashboard["native_summary_error_negative_present"] is True
         assert dashboard["native_summary_error_negative_healthy"] is True
         assert dashboard["native_summary_error_negative_case_count"] == native_summary_error_negative["case_count"]
+        dashboard_markdown = dashboard_path.read_text()
+        assert "## Native summary error codec coverage" in dashboard_markdown
+        assert "| codec | cases | errors | phases | required phases | missing phases |" in dashboard_markdown
+        for codec in ("lz4", "zstd"):
+            assert f"| `{codec}` | {native_summary_error_dashboard[f'{codec}_case_count']} |" in dashboard_markdown
+            assert f"native_summary_error_{codec}_missing_phases" not in dashboard_markdown
+            for name in native_summary_error_dashboard[f"{codec}_error_counts"]:
+                assert f"`{name}`=" in dashboard_markdown
+            for name in native_summary_error_dashboard[f"{codec}_phase_counts"]:
+                assert f"`{name}`=" in dashboard_markdown
         assert dashboard["lz4_native_summary_present"] is True
         assert dashboard["lz4_native_summary_healthy"] is True
         assert dashboard["lz4_native_summary_frame_count"] == lz4_native_summary["frame_count"]

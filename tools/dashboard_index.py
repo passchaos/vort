@@ -152,6 +152,20 @@ def csv_row_count(path: Path) -> int | None:
         return None
 
 
+def format_markdown_counts(counts: dict) -> str:
+    """Render small count maps in a stable order for dashboard table cells."""
+    parts: list[str] = []
+    for key, value in sorted((str(key), value) for key, value in counts.items()):
+        count = int(value) if isinstance(value, int) and not isinstance(value, bool) else 0
+        parts.append(f"`{key}`={count}")
+    return "<br>".join(parts) if parts else "`none`"
+
+
+def format_markdown_list(values: list) -> str:
+    parts = [f"`{value}`" for value in (str(value) for value in values)]
+    return ", ".join(parts) if parts else "`none`"
+
+
 def sidecar_corrupt_health(artifacts: list[Path]) -> dict:
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
@@ -1189,6 +1203,32 @@ def main() -> int:
         f"- native tier corpus discovery: source mode `{native_tier_discovery_health['source_mode']}`, sources {native_tier_discovery_health['source_count']}/{native_tier_discovery_health['candidate_count']}, selected cases {native_tier_discovery_health['selected_case_count']}, missing reason `{native_tier_discovery_health['missing_reason'] or 'none'}`, healthy `{native_tier_discovery_health['healthy']}`",
         "",
     ]
+    required_native_summary_error_phases = native_summary_error_health["required_codec_phases"]
+    if not isinstance(required_native_summary_error_phases, dict):
+        required_native_summary_error_phases = {}
+    lines.extend(
+        [
+            "## Native summary error codec coverage",
+            "",
+            "| codec | cases | errors | phases | required phases | missing phases |",
+            "| --- | ---: | --- | --- | --- | --- |",
+        ]
+    )
+    for codec in ("lz4", "zstd"):
+        required_phases = required_native_summary_error_phases.get(codec)
+        if not isinstance(required_phases, list):
+            required_phases = []
+        case_count = native_summary_error_health[f"{codec}_case_count"]
+        error_counts = native_summary_error_health[f"{codec}_error_counts"]
+        phase_counts = native_summary_error_health[f"{codec}_phase_counts"]
+        missing_phases = native_summary_error_health[f"{codec}_missing_phases"]
+        # Keep the per-codec matrix in the Markdown output as well as JSON so
+        # dashboard reviewers can spot asymmetric malformed-stream coverage
+        # without opening the retained artifact by hand.
+        lines.append(
+            f"| `{codec}` | {case_count} | {format_markdown_counts(error_counts)} | {format_markdown_counts(phase_counts)} | {format_markdown_list(required_phases)} | {format_markdown_list(missing_phases)} |"
+        )
+    lines.append("")
     if native_tier_health["source_details"]:
         lines.extend(
             [
