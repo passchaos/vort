@@ -2298,6 +2298,12 @@ fn checkInvalidFrameChecksumsAndTrailing(allocator: std.mem.Allocator) !usize {
     defer allocator.free(truncated_content_checksum);
     try expectNativeFrameDecodeAndSizeError(allocator, truncated_content_checksum, error.TruncatedFrame);
     try expectNativeStreamErrorAfterFirstFrame(allocator, truncated_content_checksum, null, error.TruncatedFrame);
+    var checksum_summary_diagnostics: vort.Lz4NativeStreamSummaryErrorDiagnostics = .{};
+    if (vort.lz4SummarizeNativeStreamWithDiagnostics(truncated_content_checksum, &checksum_summary_diagnostics)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != error.TruncatedFrame) return err;
+    if (checksum_summary_diagnostics.phase != .frame_checksum) return error.Lz4ProbeMismatch;
+    if (checksum_summary_diagnostics.offset != truncated_content_checksum.len) return error.Lz4ProbeSizeMismatch;
     checked += 1;
 
     var wrong_content_tail: [8]u8 = undefined;

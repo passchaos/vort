@@ -1604,7 +1604,8 @@ architecture blindly.
   malformed/truncated failure paths. The LZ4 library now exposes
   `lz4SummarizeNativeStreamWithDiagnostics` so CLI JSON errors use parser
   phase/offset diagnostics reported by the summary API rather than CLI-only
-  inference; the phase value is backed by a public enum. The retained
+  inference; the phase value is backed by a public enum, and checksum-truncation
+  offsets are reported at the exact failing byte. The retained
   `run-lz4-native-summary-dashboard` step writes
   `zig-out/vort-lz4-native-stream-summary.json` for dashboard indexing.
 

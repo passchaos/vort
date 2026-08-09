@@ -4003,8 +4003,7 @@ pub fn summarizeNativeStreamWithDiagnostics(frames: []const u8, diagnostics: *Na
         const magic = std.mem.readInt(u32, frames[offset..][0..4], .little);
         if (magic == frame_magic_u32) {
             const start = offset;
-            const end = findFrameEnd(frames, &offset) catch |err| {
-                diagnostics.* = .{ .phase = nativeSummaryFrameErrorPhase(err, frames[start..]), .offset = frames.len };
+            const end = findFrameEndWithDiagnostics(frames, &offset, diagnostics) catch |err| {
                 return err;
             };
             const header = inspectNativeFrameHeader(frames[start..end]) catch |err| {
@@ -4055,6 +4054,51 @@ fn nativeSummaryFrameErrorPhase(err: anyerror, frame: []const u8) NativeStreamSu
         error.TruncatedFrame => .frame_body,
         else => .frame,
     };
+}
+
+fn findFrameEndWithDiagnostics(frames: []const u8, offset: *usize, diagnostics: *NativeStreamSummaryErrorDiagnostics) Error!usize {
+    const frame_start = offset.*;
+    const header = parseFrameHeader(frames[offset.*..]) catch |err| {
+        diagnostics.* = .{ .phase = .frame_header, .offset = frames.len };
+        return err;
+    };
+    var local = header.payload_offset;
+    while (true) {
+        if (frames.len - offset.* - local < 4) {
+            diagnostics.* = .{ .phase = .frame_body, .offset = frames.len };
+            return error.TruncatedFrame;
+        }
+        const block_header_offset = offset.* + local;
+        const block_header = std.mem.readInt(u32, frames[block_header_offset..][0..4], .little);
+        local += 4;
+        if (block_header == 0) break;
+        const block_len: usize = @intCast(block_header & 0x7fff_ffff);
+        if (block_len > header.block_size_max) {
+            diagnostics.* = .{ .phase = .frame, .offset = block_header_offset };
+            return error.CorruptFrame;
+        }
+        if (frames.len - offset.* - local < block_len) {
+            diagnostics.* = .{ .phase = .frame_body, .offset = frames.len };
+            return error.TruncatedFrame;
+        }
+        local += block_len;
+        if (header.block_checksum) {
+            if (frames.len - offset.* - local < 4) {
+                diagnostics.* = .{ .phase = .frame_body, .offset = frames.len };
+                return error.TruncatedFrame;
+            }
+            local += 4;
+        }
+    }
+    if (header.content_checksum) {
+        if (frames.len - offset.* - local < 4) {
+            diagnostics.* = .{ .phase = .frame_checksum, .offset = frames.len };
+            return error.TruncatedFrame;
+        }
+        local += 4;
+    }
+    offset.* = frame_start + local;
+    return offset.*;
 }
 
 fn findFrameEnd(frames: []const u8, offset: *usize) Error!usize {
