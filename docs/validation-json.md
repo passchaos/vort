@@ -2374,6 +2374,8 @@ Current unhealthy reason values are:
 - `decode_stage_failed`
 - `missing_python_zlib_diff_artifact`
 - `python_zlib_diff_failed`
+- `missing_native_summary_error_dashboard_artifact`
+- `native_summary_error_dashboard_undercovered`
 - `missing_lz4_native_summary_artifact`
 - `lz4_native_summary_undercovered`
 - `missing_zstd_native_summary_artifact`
@@ -2468,6 +2470,12 @@ Top-level fields:
   `native_codec_probes_total_cases`,
   `native_codec_probes_zstd_frame_cases`,
   `native_codec_probes_zstd_dictionary_cases`
+- `native_summary_error_present`, `native_summary_error_healthy`,
+  `native_summary_error_case_count`, `native_summary_error_lz4_case_count`,
+  `native_summary_error_zstd_case_count`,
+  `native_summary_error_truncated_frame_count`,
+  `native_summary_error_magic_phase_count`,
+  `native_summary_error_skippable_payload_phase_count`
 - `lz4_native_summary_present`, `lz4_native_summary_healthy`,
   `lz4_native_summary_frame_count`,
   `lz4_native_summary_skippable_frame_count`,
@@ -2533,6 +2541,7 @@ Example:
     "missing_fuzz_coverage_artifact",
     "missing_decode_stage_artifact",
     "missing_python_zlib_diff_artifact",
+    "missing_native_summary_error_dashboard_artifact",
     "missing_lz4_native_summary_artifact",
     "missing_zstd_native_summary_artifact",
     "missing_native_tier_corpus_discovery_artifact"
@@ -2642,6 +2651,14 @@ Example:
   "native_codec_probes_total_cases": 0,
   "native_codec_probes_zstd_frame_cases": 0,
   "native_codec_probes_zstd_dictionary_cases": 0,
+  "native_summary_error_present": false,
+  "native_summary_error_healthy": false,
+  "native_summary_error_case_count": 0,
+  "native_summary_error_lz4_case_count": 0,
+  "native_summary_error_zstd_case_count": 0,
+  "native_summary_error_truncated_frame_count": 0,
+  "native_summary_error_magic_phase_count": 0,
+  "native_summary_error_skippable_payload_phase_count": 0,
   "lz4_native_summary_present": false,
   "lz4_native_summary_healthy": false,
   "lz4_native_summary_frame_count": 0,

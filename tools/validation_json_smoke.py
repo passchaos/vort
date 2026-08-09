@@ -869,6 +869,14 @@ def main() -> int:
         }
         assert dashboard["native_codec_probes_zstd_frame_cases"] == probes_by_label["zstd-native-frame-probe"]["cases"]
         assert dashboard["native_codec_probes_zstd_dictionary_cases"] == probes_by_label["zstd-native-dictionary-probe"]["cases"]
+        assert dashboard["native_summary_error_present"] is True
+        assert dashboard["native_summary_error_healthy"] is True
+        assert dashboard["native_summary_error_case_count"] == native_summary_error_dashboard["case_count"]
+        assert dashboard["native_summary_error_lz4_case_count"] == native_summary_error_dashboard["lz4_case_count"]
+        assert dashboard["native_summary_error_zstd_case_count"] == native_summary_error_dashboard["zstd_case_count"]
+        assert dashboard["native_summary_error_truncated_frame_count"] == native_summary_error_dashboard["error_counts"]["TruncatedFrame"]
+        assert dashboard["native_summary_error_magic_phase_count"] == native_summary_error_dashboard["phase_counts"]["magic"]
+        assert dashboard["native_summary_error_skippable_payload_phase_count"] == native_summary_error_dashboard["phase_counts"]["skippable_payload"]
         assert dashboard["lz4_native_summary_present"] is True
         assert dashboard["lz4_native_summary_healthy"] is True
         assert dashboard["lz4_native_summary_frame_count"] == lz4_native_summary["frame_count"]
@@ -914,6 +922,7 @@ def main() -> int:
             and dashboard["fuzz_corpus_healthy"]
             and dashboard["decode_stage_healthy"]
             and dashboard["python_zlib_diff_healthy"]
+            and dashboard["native_summary_error_healthy"]
             and dashboard["lz4_native_summary_healthy"]
             and dashboard["zstd_native_summary_healthy"]
             and dashboard["native_tier_corpus_discovery_healthy"]

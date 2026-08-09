@@ -108,6 +108,16 @@
       "fixture": "python_zlib_diff_failed"
     },
     {
+      "reason": "missing_native_summary_error_dashboard_artifact",
+      "check": "validation_missing_native_summary_error_dashboard_artifact",
+      "fixture": "missing_native_summary_error_dashboard_artifact"
+    },
+    {
+      "reason": "native_summary_error_dashboard_undercovered",
+      "check": "validation_native_summary_error_dashboard_undercovered",
+      "fixture": "native_summary_error_dashboard_undercovered"
+    },
+    {
       "reason": "missing_lz4_native_summary_artifact",
       "check": "validation_missing_lz4_native_summary_artifact",
       "fixture": "missing_lz4_native_summary_artifact"
