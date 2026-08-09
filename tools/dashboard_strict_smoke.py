@@ -29,6 +29,8 @@ BR_STATIC_UPSTREAM_ARTIFACT = "vort-br-static-dictionary-candidate-upstream-smok
 BR_STATIC_NODE_ARTIFACT = "vort-br-static-dictionary-node-probe.json"
 BR_STATIC_AUDIT_ARTIFACT = "vort-br-static-dictionary-source-audit.json"
 BR_STATIC_AUDIT_NEGATIVE_ARTIFACT = "vort-br-static-dictionary-source-audit-negative-smoke.json"
+NATIVE_FUZZ_ARTIFACT = "vort-native-fuzz-corpus.json"
+NATIVE_FUZZ_COVERAGE_ARTIFACT = "vort-native-fuzz-corpus-coverage-smoke.json"
 NATIVE_ALLOCATION_REPORT_ARTIFACT = "vort-native-allocation-report.json"
 NATIVE_ALLOCATION_SMOKE_ARTIFACT = "vort-native-allocation-smoke.json"
 NATIVE_ALLOCATION_NEGATIVE_ARTIFACT = "vort-native-allocation-negative-smoke.json"
@@ -87,6 +89,8 @@ def write_producer_map(
     include_png_scratch_smoke: bool = True,
     include_br_static_exact: bool = True,
     include_br_static_smoke: bool = True,
+    include_native_fuzz_exact: bool = True,
+    include_native_fuzz_smoke: bool = True,
     include_native_allocation_exact: bool = True,
     include_native_allocation_smoke: bool = True,
     include_zstd_compare_exact: bool = True,
@@ -165,6 +169,9 @@ def write_producer_map(
             (BR_STATIC_AUDIT_NEGATIVE_ARTIFACT, "zig build run-br-static-dictionary-source-audit-negative-smoke"),
         ):
             artifact_metadata[artifact] = {"expected_format": "json", "smoke_gate": smoke_gate}
+    if include_native_fuzz_smoke:
+        artifact_metadata[NATIVE_FUZZ_ARTIFACT] = {"expected_format": "json", "smoke_gate": "zig build run-native-fuzz-corpus-dashboard"}
+        artifact_metadata[NATIVE_FUZZ_COVERAGE_ARTIFACT] = {"expected_format": "json", "smoke_gate": "zig build run-native-fuzz-corpus-coverage-smoke"}
     if include_native_allocation_smoke:
         for artifact, smoke_gate in (
             (NATIVE_ALLOCATION_REPORT_ARTIFACT, "zig build run-native-allocation-report-dashboard"),
@@ -243,6 +250,9 @@ def write_producer_map(
         exact[BR_STATIC_NODE_ARTIFACT] = "zig build run-br-static-dictionary-node-probe"
         exact[BR_STATIC_AUDIT_ARTIFACT] = "zig build run-br-static-dictionary-source-audit"
         exact[BR_STATIC_AUDIT_NEGATIVE_ARTIFACT] = "zig build run-br-static-dictionary-source-audit-negative-smoke"
+    if include_native_fuzz_exact:
+        exact[NATIVE_FUZZ_ARTIFACT] = "zig build run-native-fuzz-corpus-dashboard"
+        exact[NATIVE_FUZZ_COVERAGE_ARTIFACT] = "zig build run-native-fuzz-corpus-coverage-smoke"
     if include_native_allocation_exact:
         exact[NATIVE_ALLOCATION_REPORT_ARTIFACT] = "zig build run-native-allocation-report-dashboard"
         exact[NATIVE_ALLOCATION_SMOKE_ARTIFACT] = "zig build run-native-allocation-smoke"
@@ -783,6 +793,38 @@ def write_png_scratch_report(path: Path) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def write_native_fuzz_corpus_artifacts(root: Path) -> None:
+    report = {
+        "schema": "vort.fuzz_corpus_report",
+        "schema_version": 1,
+        "ok": True,
+        "mode": "native",
+        "cases": 3,
+        "accepted": 1,
+        "rejected": 2,
+        "exact_error_expectations": 2,
+        "matched_rows": 3,
+        "mode_count_rows": 1,
+        "error_count_rows": 2,
+        "items": [],
+        "mode_counts": [{"mode": "native", "cases": 3, "accepted": 1, "rejected": 2, "exact_error_expectations": 2, "matched_rows": 3}],
+        "error_counts": [{"mode": "native", "error": "InvalidMagic", "count": 1}, {"mode": "native", "error": "TruncatedFrame", "count": 1}],
+    }
+    coverage = {
+        "schema": "vort.fuzz_corpus_coverage_smoke",
+        "schema_version": 1,
+        "ok": True,
+        "report": str(root / NATIVE_FUZZ_ARTIFACT),
+        "coverage": "tools/native_fuzz_corpus_expected_coverage.json",
+        "mode_requirement_count": 1,
+        "error_requirement_count": 2,
+        "mode_requirements": [{"mode": "native", "min_cases": 1, "actual_cases": 3, "min_accepted": 1, "actual_accepted": 1, "min_rejected": 1, "actual_rejected": 2, "min_exact_error_expectations": 1, "actual_exact_error_expectations": 2, "min_matched_rows": 1, "actual_matched_rows": 3, "matched": True}],
+        "error_requirements": [{"mode": "native", "error": "InvalidMagic", "min_count": 1, "actual_count": 1, "matched": True}, {"mode": "native", "error": "TruncatedFrame", "min_count": 1, "actual_count": 1, "matched": True}],
+    }
+    (root / NATIVE_FUZZ_ARTIFACT).write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    (root / NATIVE_FUZZ_COVERAGE_ARTIFACT).write_text(json.dumps(coverage, indent=2, sort_keys=True) + "\n")
+
+
 def write_br_static_dictionary_artifacts(root: Path) -> None:
     candidates = {
         "schema": "vort.br_static_dictionary_candidate_report",
@@ -1250,6 +1292,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_python_zlib_diff_report(root / PYTHON_ZLIB_DIFF_ARTIFACT)
     write_zlib_relaxed_report(root / ZLIB_RELAXED_ARTIFACT)
     write_png_scratch_report(root / PNG_SCRATCH_ARTIFACT)
+    write_native_fuzz_corpus_artifacts(root)
     write_br_static_dictionary_artifacts(root)
     write_native_allocation_artifacts(root)
     write_zstd_compare_artifacts(root)
@@ -1630,8 +1673,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 30/30 | 0 | allowed missing 0 |",
-                    "| smoke gates | 30/30 | 0 | required missing 0 |",
+                    "| producer steps | 32/32 | 0 | allowed missing 0 |",
+                    "| smoke gates | 32/32 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -1804,6 +1847,21 @@ def main() -> int:
                     "| zero-allocation cases | 2/2 | smoke present `True` |",
                     "| budget cases | 1/1 | healthy `True` |",
                     "| negative smoke cases | 1/1 | present `True` |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
+                "native_fuzz_corpus_markdown_table",
+                "native fuzz corpus Markdown table",
+                dashboard_markdown,
+                [
+                    "## Native fuzz corpus coverage",
+                    "| category | count | detail |",
+                    "| native cases | 3 | accepted/rejected 1/2 |",
+                    "| matched rows | 3 | unmatched 0 |",
+                    "| exact error expectations | 2 | mode/error rows 1/2 |",
+                    "| coverage requirements | 3 | modes/errors 1/2 |",
                 ],
             )
         )

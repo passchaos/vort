@@ -788,6 +788,8 @@ def main() -> int:
             "vort-zstd-compare-gate.json",
             "vort-zstd-compare-standard-gate.json",
             "vort-zstd-compare-block-sweep-gate.json",
+            "vort-native-fuzz-corpus.json",
+            "vort-native-fuzz-corpus-coverage-smoke.json",
             "vort-br-static-dictionary-candidates.json",
             "vort-br-static-dictionary-candidate-upstream-smoke.json",
             "vort-br-static-dictionary-node-probe.json",
@@ -908,6 +910,17 @@ def main() -> int:
         assert dashboard["zstd_compare_best_block_len"] > 0
         assert dashboard["zstd_compare_best_range_decode_mib_s"] > 0
         assert dashboard["zstd_compare_best_range_decode_full_input_mib_s"] > 0
+        assert dashboard["native_fuzz_corpus_present"] is True
+        assert dashboard["native_fuzz_corpus_coverage_present"] is True
+        assert dashboard["native_fuzz_corpus_healthy"] is True
+        assert dashboard["native_fuzz_corpus_cases"] >= 1
+        assert dashboard["native_fuzz_corpus_accepted"] >= 1
+        assert dashboard["native_fuzz_corpus_rejected"] >= 1
+        assert dashboard["native_fuzz_corpus_matched_rows"] == dashboard["native_fuzz_corpus_cases"]
+        assert dashboard["native_fuzz_corpus_unmatched_rows"] == 0
+        assert dashboard["native_fuzz_corpus_exact_error_expectations"] >= 1
+        assert dashboard["native_fuzz_corpus_coverage_mode_requirements"] >= 1
+        assert dashboard["native_fuzz_corpus_coverage_error_requirements"] >= 1
         assert dashboard["br_static_dictionary_present"] is True
         assert dashboard["br_static_dictionary_upstream_present"] is True
         assert dashboard["br_static_dictionary_node_present"] is True
@@ -1088,6 +1101,7 @@ def main() -> int:
             and dashboard["fuzz_corpus_healthy"]
             and dashboard["decode_stage_healthy"]
             and dashboard["zstd_compare_healthy"]
+            and dashboard["native_fuzz_corpus_healthy"]
             and dashboard["br_static_dictionary_healthy"]
             and dashboard["png_scratch_healthy"]
             and dashboard["zlib_relaxed_healthy"]

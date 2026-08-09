@@ -284,9 +284,9 @@ def fuzz_corpus_health(artifacts: list[Path]) -> dict:
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
         schema = data.get("schema")
-        if schema == "vort.fuzz_corpus_report":
+        if schema == "vort.fuzz_corpus_report" and artifact.name == "vort-deflate-wrapper-fuzz-corpus.json":
             report = data
-        elif schema == "vort.fuzz_corpus_coverage_smoke":
+        elif schema == "vort.fuzz_corpus_coverage_smoke" and artifact.name == "vort-fuzz-corpus-coverage-smoke.json":
             coverage = data
 
     def as_int(data: dict | None, field: str) -> int:
@@ -539,6 +539,64 @@ def native_tier_corpus_discovery_health(artifacts: list[Path]) -> dict:
         "csv": "",
         "missing_reason": "missing_discovery_artifact",
         "healthy": False,
+    }
+
+
+def native_fuzz_corpus_health(artifacts: list[Path]) -> dict:
+    report = None
+    coverage = None
+    for artifact in artifacts:
+        data = read_json(artifact) if artifact.suffix == ".json" else {}
+        if data.get("schema") == "vort.fuzz_corpus_report" and artifact.name == "vort-native-fuzz-corpus.json":
+            report = data
+        elif data.get("schema") == "vort.fuzz_corpus_coverage_smoke" and artifact.name == "vort-native-fuzz-corpus-coverage-smoke.json":
+            coverage = data
+
+    def int_field(data: dict | None, field: str) -> int:
+        if not isinstance(data, dict):
+            return 0
+        value = data.get(field)
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    report_present = isinstance(report, dict)
+    coverage_present = isinstance(coverage, dict)
+    cases = int_field(report, "cases")
+    matched_rows = int_field(report, "matched_rows")
+    unmatched_rows = cases - matched_rows
+    exact_error_expectations = int_field(report, "exact_error_expectations")
+    mode_count_rows = int_field(report, "mode_count_rows")
+    error_count_rows = int_field(report, "error_count_rows")
+    coverage_mode_requirements = int_field(coverage, "mode_requirement_count")
+    coverage_error_requirements = int_field(coverage, "error_requirement_count")
+    healthy = (
+        report_present
+        and coverage_present
+        and bool(report.get("ok"))
+        and bool(coverage.get("ok"))
+        and str(report.get("mode") or "") == "native"
+        and cases > 0
+        and matched_rows == cases
+        and unmatched_rows == 0
+        and exact_error_expectations > 0
+        and mode_count_rows > 0
+        and error_count_rows > 0
+        and coverage_mode_requirements > 0
+        and coverage_error_requirements > 0
+    )
+    return {
+        "present": report_present,
+        "coverage_present": coverage_present,
+        "healthy": healthy,
+        "cases": cases,
+        "accepted": int_field(report, "accepted"),
+        "rejected": int_field(report, "rejected"),
+        "matched_rows": matched_rows,
+        "unmatched_rows": unmatched_rows,
+        "exact_error_expectations": exact_error_expectations,
+        "mode_count_rows": mode_count_rows,
+        "error_count_rows": error_count_rows,
+        "coverage_mode_requirements": coverage_mode_requirements,
+        "coverage_error_requirements": coverage_error_requirements,
     }
 
 
@@ -1439,6 +1497,7 @@ def main() -> int:
     huffman_health = huffman_length_health(artifacts)
     fuzz_health = fuzz_corpus_health(artifacts)
     decode_stage_health_summary = decode_stage_health(artifacts)
+    native_fuzz = native_fuzz_corpus_health(artifacts)
     br_static_dictionary = br_static_dictionary_health(artifacts)
     png_scratch = png_scratch_health(artifacts)
     zlib_relaxed = zlib_relaxed_health(artifacts)
@@ -1656,6 +1715,19 @@ def main() -> int:
             f"| commands | {header_health['command_count']} | successes/failures {header_health['command_successes']}/{header_health['command_failures']} |",
             f"| workflows | {header_health['workflow_count']} | successes {header_health['workflow_successes']}, required/missing {header_health['required_workflow_count']}/{header_health['missing_workflow_count']} |",
             f"| dictionary cases | {header_health['dictionary_cases']} | optional/FHCRC {header_health['optional_header_cases']}/{header_health['fhcrc_cases']} |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
+            "## Native fuzz corpus coverage",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| native cases | {native_fuzz['cases']} | accepted/rejected {native_fuzz['accepted']}/{native_fuzz['rejected']} |",
+            f"| matched rows | {native_fuzz['matched_rows']} | unmatched {native_fuzz['unmatched_rows']} |",
+            f"| exact error expectations | {native_fuzz['exact_error_expectations']} | mode/error rows {native_fuzz['mode_count_rows']}/{native_fuzz['error_count_rows']} |",
+            f"| coverage requirements | {native_fuzz['coverage_mode_requirements'] + native_fuzz['coverage_error_requirements']} | modes/errors {native_fuzz['coverage_mode_requirements']}/{native_fuzz['coverage_error_requirements']} |",
             "",
         ]
     )
@@ -2051,6 +2123,19 @@ def main() -> int:
                 "decode_stage_error_rows": decode_stage_health_summary["error_rows"],
                 "decode_stage_matched_error_rows": decode_stage_health_summary["matched_error_rows"],
                 "decode_stage_unmatched_error_rows": decode_stage_health_summary["unmatched_error_rows"],
+                "native_fuzz_corpus_present": native_fuzz["present"],
+                "native_fuzz_corpus_coverage_present": native_fuzz["coverage_present"],
+                "native_fuzz_corpus_healthy": native_fuzz["healthy"],
+                "native_fuzz_corpus_cases": native_fuzz["cases"],
+                "native_fuzz_corpus_accepted": native_fuzz["accepted"],
+                "native_fuzz_corpus_rejected": native_fuzz["rejected"],
+                "native_fuzz_corpus_matched_rows": native_fuzz["matched_rows"],
+                "native_fuzz_corpus_unmatched_rows": native_fuzz["unmatched_rows"],
+                "native_fuzz_corpus_exact_error_expectations": native_fuzz["exact_error_expectations"],
+                "native_fuzz_corpus_mode_count_rows": native_fuzz["mode_count_rows"],
+                "native_fuzz_corpus_error_count_rows": native_fuzz["error_count_rows"],
+                "native_fuzz_corpus_coverage_mode_requirements": native_fuzz["coverage_mode_requirements"],
+                "native_fuzz_corpus_coverage_error_requirements": native_fuzz["coverage_error_requirements"],
                 "br_static_dictionary_present": br_static_dictionary["present"],
                 "br_static_dictionary_upstream_present": br_static_dictionary["upstream_present"],
                 "br_static_dictionary_node_present": br_static_dictionary["node_present"],

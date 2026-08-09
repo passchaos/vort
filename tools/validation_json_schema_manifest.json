@@ -912,6 +912,24 @@
             "br_static_dictionary_negative_case_count",
             "br_static_dictionary_negative_matched"
           ]
+        },
+        "native_fuzz_corpus_healthy": {
+          "all": [
+            "native_fuzz_corpus_present",
+            "native_fuzz_corpus_coverage_present"
+          ],
+          "positive": [
+            "native_fuzz_corpus_cases",
+            "native_fuzz_corpus_matched_rows",
+            "native_fuzz_corpus_exact_error_expectations",
+            "native_fuzz_corpus_mode_count_rows",
+            "native_fuzz_corpus_error_count_rows",
+            "native_fuzz_corpus_coverage_mode_requirements",
+            "native_fuzz_corpus_coverage_error_requirements"
+          ],
+          "zero": [
+            "native_fuzz_corpus_unmatched_rows"
+          ]
         }
       },
       "collections": {
@@ -976,6 +994,19 @@
         "decode_stage_present": "bool",
         "decode_stage_rows": "int",
         "decode_stage_unmatched_error_rows": "int",
+        "native_fuzz_corpus_present": "bool",
+        "native_fuzz_corpus_coverage_present": "bool",
+        "native_fuzz_corpus_healthy": "bool",
+        "native_fuzz_corpus_cases": "int",
+        "native_fuzz_corpus_accepted": "int",
+        "native_fuzz_corpus_rejected": "int",
+        "native_fuzz_corpus_matched_rows": "int",
+        "native_fuzz_corpus_unmatched_rows": "int",
+        "native_fuzz_corpus_exact_error_expectations": "int",
+        "native_fuzz_corpus_mode_count_rows": "int",
+        "native_fuzz_corpus_error_count_rows": "int",
+        "native_fuzz_corpus_coverage_mode_requirements": "int",
+        "native_fuzz_corpus_coverage_error_requirements": "int",
         "br_static_dictionary_present": "bool",
         "br_static_dictionary_upstream_present": "bool",
         "br_static_dictionary_node_present": "bool",
@@ -1791,6 +1822,7 @@
           "huffman_length_markdown_table",
           "zstd_compare_markdown_table",
           "native_allocation_markdown_table",
+          "native_fuzz_corpus_markdown_table",
           "static_dictionary_markdown_table",
           "png_scratch_markdown_table",
           "zlib_relaxed_markdown_table",
