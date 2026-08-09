@@ -863,6 +863,22 @@ def check_row(
     }
 
 
+def markdown_check_row(name: str, expected_output: str, markdown: str, needles: list[str]) -> dict[str, object]:
+    """Create a strict-smoke row for human-facing Markdown dashboard sections.
+
+    These checks intentionally record each required snippet by index rather than
+    embedding full Markdown table text in the JSON artifact. That keeps the
+    summary compact while still making a missing section/header/row obvious in
+    CI output.
+    """
+    matched = all(needle in markdown for needle in needles)
+    actual_output = ",".join(
+        f"{index}:{'ok' if needle in markdown else 'missing'}"
+        for index, needle in enumerate(needles)
+    )
+    return check_row(name, "dashboard-markdown", False, matched, 0, expected_output, actual_output)
+
+
 def build_mode_counts(checks: list[dict[str, object]]) -> list[dict[str, object]]:
     modes = sorted({str(row["mode"]) for row in checks})
     return [
@@ -1119,37 +1135,38 @@ def main() -> int:
         assert source_details["custom"]["summary_count"] == 0
         assert source_details["legacy"]["summary_count"] == 0
         dashboard_markdown = (root / "vort-dashboard-index.md").read_text()
-        assert "## Native tier range source health" in dashboard_markdown
-        assert "`built_in`" in dashboard_markdown
-        assert "`project_files`" in dashboard_markdown
-        assert "`standard_corpus`" in dashboard_markdown
-        assert "60.00/16.00/12.00" in dashboard_markdown
-        assert "40.00/8.00/4.00" in dashboard_markdown
-        assert "30.00/6.50/3.50" in dashboard_markdown
-        native_summary_markdown_needles = [
-            "## Native summary error codec coverage",
-            "| codec | cases | errors | phases | required phases | missing phases |",
-            "| `lz4` | 7 | `ChecksumMismatch`=1<br>`CorruptFrame`=2<br>`TruncatedFrame`=4 |",
-            "| `zstd` | 7 | `CorruptFrame`=2<br>`InvalidMagic`=1<br>`TruncatedFrame`=4 |",
-            "## Native summary error phase offsets",
-            "| phase | cases | offset range |",
-            "| `frame_checksum` | 2 | `14..20` |",
-        ]
-        native_summary_markdown_matched = all(needle in dashboard_markdown for needle in native_summary_markdown_needles)
-        native_summary_markdown_output = ",".join(
-            f"{index}:{'ok' if needle in dashboard_markdown else 'missing'}"
-            for index, needle in enumerate(native_summary_markdown_needles)
-        )
         checks.append(check_row("all_strict_ok", "all", False, True, ok.returncode, "dashboard_index=", ok.stdout))
         checks.append(
-            check_row(
+            markdown_check_row(
                 "native_summary_error_markdown_tables",
-                "dashboard-markdown",
-                False,
-                native_summary_markdown_matched,
-                0,
                 "native summary error Markdown tables",
-                native_summary_markdown_output,
+                dashboard_markdown,
+                [
+                    "## Native summary error codec coverage",
+                    "| codec | cases | errors | phases | required phases | missing phases |",
+                    "| `lz4` | 7 | `ChecksumMismatch`=1<br>`CorruptFrame`=2<br>`TruncatedFrame`=4 |",
+                    "| `zstd` | 7 | `CorruptFrame`=2<br>`InvalidMagic`=1<br>`TruncatedFrame`=4 |",
+                    "## Native summary error phase offsets",
+                    "| phase | cases | offset range |",
+                    "| `frame_checksum` | 2 | `14..20` |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
+                "native_tier_range_markdown_table",
+                "native tier range Markdown table",
+                dashboard_markdown,
+                [
+                    "## Native tier range source health",
+                    "| source | summaries | ok | rows | fixtures | enforced | missing | min range MiB/s seek_fast/balanced/ratio | floor MiB/s seek_fast/balanced/ratio |",
+                    "| `built_in` | 1 | 1 | 9 | 3 | 0 | `False` |",
+                    "| `project_files` | 1 | 1 | 6 | 2 | 0 | `False` |",
+                    "| `standard_corpus` | 1 | 1 | 9 | 3 | 0 | `False` |",
+                    "60.00/16.00/12.00",
+                    "40.00/8.00/4.00",
+                    "30.00/6.50/3.50",
+                ],
             )
         )
 
