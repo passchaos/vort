@@ -960,6 +960,10 @@
         "native_summary_error_frame_phase_count": "int",
         "native_summary_error_error_counts": "dict",
         "native_summary_error_phase_counts": "dict",
+        "native_summary_error_lz4_error_counts": "dict",
+        "native_summary_error_zstd_error_counts": "dict",
+        "native_summary_error_lz4_phase_counts": "dict",
+        "native_summary_error_zstd_phase_counts": "dict",
         "native_summary_error_offset_min": "int",
         "native_summary_error_offset_max": "int",
         "native_summary_error_lz4_offset_min": "int",
@@ -1166,6 +1170,32 @@
           "skippable_payload"
         ],
         "native_summary_error_phase_offset_ranges": [
+          "frame",
+          "frame_body",
+          "frame_checksum",
+          "frame_header",
+          "magic",
+          "skippable_payload"
+        ],
+        "native_summary_error_lz4_error_counts": [
+          "CorruptFrame",
+          "InvalidMagic",
+          "TruncatedFrame"
+        ],
+        "native_summary_error_zstd_error_counts": [
+          "CorruptFrame",
+          "InvalidMagic",
+          "TruncatedFrame"
+        ],
+        "native_summary_error_lz4_phase_counts": [
+          "frame",
+          "frame_body",
+          "frame_checksum",
+          "frame_header",
+          "magic",
+          "skippable_payload"
+        ],
+        "native_summary_error_zstd_phase_counts": [
           "frame",
           "frame_body",
           "frame_checksum",
@@ -2908,6 +2938,10 @@
         "zstd_offset_max": "int",
         "phase_offset_ranges": "dict",
         "phase_counts": "dict",
+        "lz4_error_counts": "dict",
+        "zstd_error_counts": "dict",
+        "lz4_phase_counts": "dict",
+        "zstd_phase_counts": "dict",
         "schema": "str",
         "schema_version": "int",
         "zstd_case_count": "int"

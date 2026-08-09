@@ -162,6 +162,10 @@ def sidecar_corrupt_health(artifacts: list[Path]) -> dict:
         full_rejected_rows = int(data.get("full_rejected_rows") or 0)
         metadata_failed_rows = rows - metadata_ok_rows
         full_not_rejected_rows = rows - full_rejected_rows
+        lz4_error_counts = data.get("lz4_error_counts") if isinstance(data.get("lz4_error_counts"), dict) else {}
+        zstd_error_counts = data.get("zstd_error_counts") if isinstance(data.get("zstd_error_counts"), dict) else {}
+        lz4_phase_counts = data.get("lz4_phase_counts") if isinstance(data.get("lz4_phase_counts"), dict) else {}
+        zstd_phase_counts = data.get("zstd_phase_counts") if isinstance(data.get("zstd_phase_counts"), dict) else {}
         offset_min = int(data.get("offset_min") or 0)
         offset_max = int(data.get("offset_max") or 0)
         lz4_offset_min = int(data.get("lz4_offset_min") or 0)
@@ -754,6 +758,10 @@ def native_summary_error_dashboard_health(artifacts: list[Path]) -> dict:
         frame_body_phase_count = int(phase_counts.get("frame_body") or 0)
         frame_checksum_phase_count = int(phase_counts.get("frame_checksum") or 0)
         frame_phase_count = int(phase_counts.get("frame") or 0)
+        lz4_error_counts = data.get("lz4_error_counts") if isinstance(data.get("lz4_error_counts"), dict) else {}
+        zstd_error_counts = data.get("zstd_error_counts") if isinstance(data.get("zstd_error_counts"), dict) else {}
+        lz4_phase_counts = data.get("lz4_phase_counts") if isinstance(data.get("lz4_phase_counts"), dict) else {}
+        zstd_phase_counts = data.get("zstd_phase_counts") if isinstance(data.get("zstd_phase_counts"), dict) else {}
         offset_min = int(data.get("offset_min") or 0)
         offset_max = int(data.get("offset_max") or 0)
         lz4_offset_min = int(data.get("lz4_offset_min") or 0)
@@ -784,6 +792,10 @@ def native_summary_error_dashboard_health(artifacts: list[Path]) -> dict:
             "frame_phase_count": frame_phase_count,
             "error_counts": error_counts,
             "phase_counts": phase_counts,
+            "lz4_error_counts": lz4_error_counts,
+            "zstd_error_counts": zstd_error_counts,
+            "lz4_phase_counts": lz4_phase_counts,
+            "zstd_phase_counts": zstd_phase_counts,
             "offset_min": offset_min,
             "offset_max": offset_max,
             "lz4_offset_min": lz4_offset_min,
@@ -806,6 +818,10 @@ def native_summary_error_dashboard_health(artifacts: list[Path]) -> dict:
         "frame_phase_count": 0,
         "error_counts": {},
         "phase_counts": {},
+        "lz4_error_counts": {},
+        "zstd_error_counts": {},
+        "lz4_phase_counts": {},
+        "zstd_phase_counts": {},
         "offset_min": 0,
         "offset_max": 0,
         "lz4_offset_min": 0,
@@ -1336,6 +1352,10 @@ def main() -> int:
                 "native_summary_error_frame_phase_count": native_summary_error_health["frame_phase_count"],
                 "native_summary_error_error_counts": native_summary_error_health["error_counts"],
                 "native_summary_error_phase_counts": native_summary_error_health["phase_counts"],
+                "native_summary_error_lz4_error_counts": native_summary_error_health["lz4_error_counts"],
+                "native_summary_error_zstd_error_counts": native_summary_error_health["zstd_error_counts"],
+                "native_summary_error_lz4_phase_counts": native_summary_error_health["lz4_phase_counts"],
+                "native_summary_error_zstd_phase_counts": native_summary_error_health["zstd_phase_counts"],
                 "native_summary_error_offset_min": native_summary_error_health["offset_min"],
                 "native_summary_error_offset_max": native_summary_error_health["offset_max"],
                 "native_summary_error_lz4_offset_min": native_summary_error_health["lz4_offset_min"],

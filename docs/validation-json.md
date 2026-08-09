@@ -2184,6 +2184,14 @@ Example:
   "phase_counts": {
     "magic": 1
   },
+  "lz4_error_counts": {
+    "CorruptFrame": 1
+  },
+  "zstd_error_counts": {},
+  "lz4_phase_counts": {
+    "magic": 1
+  },
+  "zstd_phase_counts": {},
   "offset_min": 0,
   "offset_max": 0,
   "lz4_offset_min": 0,
@@ -2527,6 +2535,8 @@ Top-level fields:
   `native_summary_error_frame_checksum_phase_count`,
   `native_summary_error_frame_phase_count`,
   `native_summary_error_error_counts`, `native_summary_error_phase_counts`,
+  `native_summary_error_lz4_error_counts`, `native_summary_error_zstd_error_counts`,
+  `native_summary_error_lz4_phase_counts`, `native_summary_error_zstd_phase_counts`,
   `native_summary_error_offset_min`, `native_summary_error_offset_max`,
   `native_summary_error_lz4_offset_min`, `native_summary_error_lz4_offset_max`,
   `native_summary_error_zstd_offset_min`, `native_summary_error_zstd_offset_max`,
@@ -2723,6 +2733,10 @@ Example:
   "native_summary_error_frame_phase_count": 0,
   "native_summary_error_error_counts": {},
   "native_summary_error_phase_counts": {},
+  "native_summary_error_lz4_error_counts": {},
+  "native_summary_error_zstd_error_counts": {},
+  "native_summary_error_lz4_phase_counts": {},
+  "native_summary_error_zstd_phase_counts": {},
   "native_summary_error_offset_min": 0,
   "native_summary_error_offset_max": 0,
   "native_summary_error_lz4_offset_min": 0,
