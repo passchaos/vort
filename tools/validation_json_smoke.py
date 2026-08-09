@@ -98,6 +98,7 @@ def main() -> int:
         decode_stage_path = ROOT / "zig-out" / "vort-deflate-decode-stage-report.json"
         python_zlib_diff_path = ROOT / "zig-out" / "vort-python-zlib-diff-smoke.json"
         native_codec_probes_path = ROOT / "zig-out" / "vort-native-codec-probes.json"
+        native_summary_error_dashboard_path = ROOT / "zig-out" / "vort-native-summary-error-dashboard.json"
         lz4_native_summary_path = ROOT / "zig-out" / "vort-lz4-native-stream-summary.json"
         zstd_native_summary_path = ROOT / "zig-out" / "vort-zstd-native-stream-summary.json"
         zlib_relaxed_path = ROOT / "zig-out" / "vort-zlib-relaxed-report.json"
@@ -312,6 +313,17 @@ def main() -> int:
             assert capabilities_by_name[capability]["ok_probe_count"] == capabilities_by_name[capability]["probe_count"]
             assert capabilities_by_name[capability]["cases"] >= 1
         validate_value_against_manifest(native_codec_probes, schemas_def)
+        native_summary_error_dashboard = json.loads(native_summary_error_dashboard_path.read_text())
+        assert native_summary_error_dashboard["schema"] == "vort.native_summary_error_dashboard"
+        assert native_summary_error_dashboard["schema_version"] == 1
+        assert native_summary_error_dashboard["ok"] is True
+        assert native_summary_error_dashboard["case_count"] >= 6
+        assert native_summary_error_dashboard["lz4_case_count"] >= 3
+        assert native_summary_error_dashboard["zstd_case_count"] >= 3
+        assert native_summary_error_dashboard["error_counts"]["TruncatedFrame"] >= 4
+        assert native_summary_error_dashboard["phase_counts"]["magic"] >= 2
+        assert native_summary_error_dashboard["phase_counts"]["skippable_payload"] >= 2
+        validate_value_against_manifest(native_summary_error_dashboard, schemas_def)
         lz4_native_summary = json.loads(lz4_native_summary_path.read_text())
         assert lz4_native_summary["schema"] == "vort.lz4_native_stream_summary"
         assert lz4_native_summary["schema_version"] == 1
@@ -725,6 +737,7 @@ def main() -> int:
         shutil.copyfile(decode_stage_path, root / "vort-deflate-decode-stage-report.json")
         shutil.copyfile(python_zlib_diff_path, root / "vort-python-zlib-diff-smoke.json")
         shutil.copyfile(native_codec_probes_path, root / "vort-native-codec-probes.json")
+        shutil.copyfile(native_summary_error_dashboard_path, root / "vort-native-summary-error-dashboard.json")
         shutil.copyfile(lz4_native_summary_path, root / "vort-lz4-native-stream-summary.json")
         shutil.copyfile(zstd_native_summary_path, root / "vort-zstd-native-stream-summary.json")
 
@@ -952,6 +965,7 @@ def main() -> int:
                 decode_stage["schema"],
                 python_zlib_diff["schema"],
                 native_codec_probes["schema"],
+                native_summary_error_dashboard["schema"],
                 lz4_native_summary["schema"],
                 native_summary_error_payloads[0]["schema"],
                 zstd_native_summary["schema"],

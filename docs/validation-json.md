@@ -2155,6 +2155,51 @@ Example:
 }
 ```
 
+## `vort.native_summary_error_dashboard`
+
+Produced by:
+
+```sh
+zig build run-native-summary-error-dashboard
+```
+
+This retained artifact records representative structured error JSON emitted by
+the LZ4 and Zstd native summary CLIs. It aggregates error and phase counts so
+dashboards can track whether malformed-stream failures are covered without
+scraping process error traces.
+
+Example:
+
+```json
+{
+  "schema": "vort.native_summary_error_dashboard",
+  "schema_version": 1,
+  "ok": true,
+  "case_count": 1,
+  "lz4_case_count": 1,
+  "zstd_case_count": 0,
+  "error_counts": {
+    "CorruptFrame": 1
+  },
+  "phase_counts": {
+    "magic": 1
+  },
+  "cases": [
+    {
+      "name": "lz4_bad_magic",
+      "codec": "lz4",
+      "schema": "vort.lz4_native_stream_summary_error",
+      "schema_version": 1,
+      "ok": false,
+      "compressed_bytes": 7,
+      "error": "CorruptFrame",
+      "phase": "magic",
+      "offset": 0
+    }
+  ]
+}
+```
+
 ## `vort.lz4_native_stream_summary`
 
 Produced by:

@@ -767,6 +767,10 @@
     "vort-zstd-native-stream-summary.json": {
       "expected_format": "json",
       "smoke_gate": "zig build run-zstd-native-summary-dashboard"
+    },
+    "vort-native-summary-error-dashboard.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-native-summary-error-dashboard"
     }
   },
   "contains": [
@@ -974,7 +978,8 @@
     "vort-zstd-compare.csv": "zig build run-zstd-compare-gate",
     "vort-zstd-compare.md": "zig build run-zstd-compare-gate",
     "vort-lz4-native-stream-summary.json": "zig build run-lz4-native-summary-dashboard",
-    "vort-zstd-native-stream-summary.json": "zig build run-zstd-native-summary-dashboard"
+    "vort-zstd-native-stream-summary.json": "zig build run-zstd-native-summary-dashboard",
+    "vort-native-summary-error-dashboard.json": "zig build run-native-summary-error-dashboard"
   },
   "required_smoke_gates": [
     "vort-br-static-dictionary-candidates-upstream.json",
@@ -1042,6 +1047,7 @@
     "vort-zstd-compare-block-sweep-gate.json",
     "vort-zstd-compare-gate.json",
     "vort-zstd-compare-standard-gate.json",
+    "vort-native-summary-error-dashboard.json",
     "vort-lz4-native-stream-summary.json",
     "vort-zstd-native-stream-summary.json"
   ],

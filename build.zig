@@ -1829,6 +1829,12 @@ pub fn build(b: *std.Build) void {
     const zstd_native_summary_dashboard_step = b.step("run-zstd-native-summary-dashboard", "Write native-subset zstd stream summary JSON artifact");
     zstd_native_summary_dashboard_step.dependOn(&zstd_native_summary_dashboard.step);
 
+    const native_summary_error_dashboard = b.addSystemCommand(&.{ "python3", "tools/native_summary_error_dashboard.py" });
+    native_summary_error_dashboard.addArtifactArg(cli_exe);
+    native_summary_error_dashboard.addArgs(&.{ "--json", "zig-out/vort-native-summary-error-dashboard.json" });
+    const native_summary_error_dashboard_step = b.step("run-native-summary-error-dashboard", "Write native summary structured error JSON artifact");
+    native_summary_error_dashboard_step.dependOn(&native_summary_error_dashboard.step);
+
     const zstd_native_probe = b.addSystemCommand(&.{ "python3", "tools/zstd_native_probe.py" });
     zstd_native_probe.addArtifactArg(cli_exe);
     if (b.args) |args| zstd_native_probe.addArgs(args);
@@ -2836,6 +2842,7 @@ pub fn build(b: *std.Build) void {
     validation_json_smoke.step.dependOn(native_codec_probes_dashboard_step);
     validation_json_smoke.step.dependOn(lz4_native_summary_dashboard_step);
     validation_json_smoke.step.dependOn(zstd_native_summary_dashboard_step);
+    validation_json_smoke.step.dependOn(native_summary_error_dashboard_step);
     validation_json_smoke.step.dependOn(png_scratch_report_dashboard_step);
     validation_json_smoke.step.dependOn(br_static_dictionary_source_audit_step);
     validation_json_smoke.step.dependOn(br_static_dictionary_source_audit_negative_smoke_step);
@@ -3148,6 +3155,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(lz4_native_summary_cli_probe_step);
     ci_smoke_step.dependOn(lz4_native_summary_dashboard_step);
     ci_smoke_step.dependOn(zstd_native_summary_cli_probe_step);
+    ci_smoke_step.dependOn(native_summary_error_dashboard_step);
     ci_smoke_step.dependOn(zstd_native_summary_dashboard_step);
     ci_smoke_step.dependOn(zstd_native_probe_step);
     ci_smoke_step.dependOn(native_codec_probes_dashboard_step);

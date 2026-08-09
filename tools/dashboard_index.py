@@ -26,6 +26,7 @@ def category_for(path: Path) -> str:
         or "native-allocation" in name
         or "deflate-decode-stage" in name
         or "python-zlib-diff" in name
+        or "native-summary-error" in name
         or "lz4-native-stream-summary" in name
         or "zstd-native-stream-summary" in name
         or ("zstd-compare" in name and "gate" in name)

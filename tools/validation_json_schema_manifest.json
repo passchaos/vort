@@ -2781,6 +2781,56 @@
         "timeout_seconds": "float"
       }
     },
+    "vort.native_summary_error_dashboard": {
+      "fields": {
+        "case_count": "int",
+        "cases": "list",
+        "error_counts": "dict",
+        "lz4_case_count": "int",
+        "ok": "bool",
+        "phase_counts": "dict",
+        "schema": "str",
+        "schema_version": "int",
+        "zstd_case_count": "int"
+      },
+      "item_collection": "cases",
+      "item_fields": {
+        "codec": "str",
+        "compressed_bytes": "int",
+        "error": "str",
+        "name": "str",
+        "offset": "int",
+        "ok": "bool",
+        "phase": "str",
+        "schema": "str",
+        "schema_version": "int"
+      },
+      "item_enums": {
+        "codec": [
+          "lz4",
+          "zstd"
+        ],
+        "error": [
+          "CorruptFrame",
+          "InvalidMagic",
+          "TruncatedFrame"
+        ],
+        "phase": [
+          "frame_header",
+          "magic",
+          "skippable_payload"
+        ],
+        "schema": [
+          "vort.lz4_native_stream_summary_error",
+          "vort.zstd_native_stream_summary_error"
+        ]
+      },
+      "count_rules": {
+        "case_count": {
+          "collection": "cases"
+        }
+      }
+    },
     "vort.png_scratch_report": {
       "count_rules": {
         "case_count": {
@@ -3095,6 +3145,7 @@
           "vort.lz4_native_stream_summary",
           "vort.lz4_native_stream_summary_error",
           "vort.native_codec_probes",
+          "vort.native_summary_error_dashboard",
           "vort.native_tier_range_corpus_discovery",
           "vort.png_scratch_report",
           "vort.python_zlib_diff_smoke",

@@ -1607,7 +1607,9 @@ architecture blindly.
   inference; the phase value is backed by a public enum, and checksum-truncation
   offsets are reported at the exact failing byte. The retained
   `run-lz4-native-summary-dashboard` step writes
-  `zig-out/vort-lz4-native-stream-summary.json` for dashboard indexing.
+  `zig-out/vort-lz4-native-stream-summary.json` for dashboard indexing. A shared
+  `run-native-summary-error-dashboard` artifact now retains representative
+  structured LZ4/Zstd summary error JSON plus error/phase counts.
 
 - Added LZ4 raw-block summary helpers and CLI commands, including prefix-history
   variants. The summary validates block token structure while reporting decoded
