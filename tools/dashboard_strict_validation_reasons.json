@@ -48,6 +48,36 @@
       "fixture": "missing_dashboard_strict_modes"
     },
     {
+      "reason": "missing_dashboard_configuration_artifact",
+      "check": "validation_missing_dashboard_configuration_artifact",
+      "fixture": "missing_dashboard_configuration_artifact"
+    },
+    {
+      "reason": "dashboard_configuration_failed",
+      "check": "validation_dashboard_configuration_failed",
+      "fixture": "dashboard_configuration_failed"
+    },
+    {
+      "reason": "missing_validation_json_smoke_artifact",
+      "check": "validation_missing_validation_json_smoke_artifact",
+      "fixture": "missing_validation_json_smoke_artifact"
+    },
+    {
+      "reason": "validation_json_failed",
+      "check": "validation_validation_json_failed",
+      "fixture": "validation_json_failed"
+    },
+    {
+      "reason": "missing_validation_json_docs_negative_artifact",
+      "check": "validation_missing_validation_json_docs_negative_artifact",
+      "fixture": "missing_validation_json_docs_negative_artifact"
+    },
+    {
+      "reason": "validation_json_docs_negative_failed",
+      "check": "validation_validation_json_docs_negative_failed",
+      "fixture": "validation_json_docs_negative_failed"
+    },
+    {
       "reason": "missing_sidecar_corrupt_artifact",
       "check": "validation_missing_sidecar_corrupt_artifact",
       "fixture": "missing_sidecar_corrupt_artifact"

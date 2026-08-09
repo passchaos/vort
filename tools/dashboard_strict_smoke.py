@@ -2394,6 +2394,33 @@ def main() -> int:
                     ],
                 )
                 write_producer_map(producer_map)
+            elif fixture == "missing_dashboard_configuration_artifact":
+                (fixture_root / DASHBOARD_CONFIG_INDEX_SMOKE_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "dashboard_configuration_failed":
+                write_dashboard_configuration_artifacts(fixture_root)
+                payload = json.loads((fixture_root / DASHBOARD_CONFIG_INDEX_SMOKE_ARTIFACT).read_text())
+                payload["ok"] = False
+                (fixture_root / DASHBOARD_CONFIG_INDEX_SMOKE_ARTIFACT).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+                write_producer_map(producer_map)
+            elif fixture == "missing_validation_json_smoke_artifact":
+                (fixture_root / VALIDATION_JSON_SMOKE_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "validation_json_failed":
+                write_validation_json_artifacts(fixture_root)
+                payload = json.loads((fixture_root / VALIDATION_JSON_SMOKE_ARTIFACT).read_text())
+                payload["ok"] = False
+                (fixture_root / VALIDATION_JSON_SMOKE_ARTIFACT).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+                write_producer_map(producer_map)
+            elif fixture == "missing_validation_json_docs_negative_artifact":
+                (fixture_root / VALIDATION_JSON_DOCS_NEGATIVE_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "validation_json_docs_negative_failed":
+                write_validation_json_artifacts(fixture_root)
+                payload = json.loads((fixture_root / VALIDATION_JSON_DOCS_NEGATIVE_ARTIFACT).read_text())
+                payload["ok"] = False
+                (fixture_root / VALIDATION_JSON_DOCS_NEGATIVE_ARTIFACT).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+                write_producer_map(producer_map)
             elif fixture == "missing_sidecar_corrupt_artifact":
                 (fixture_root / SIDECAR_CORRUPT_ARTIFACT).unlink()
                 write_producer_map(producer_map)

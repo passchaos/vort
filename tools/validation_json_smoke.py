@@ -1162,6 +1162,8 @@ def main() -> int:
             and dashboard["smoke_gate_healthy"]
             and dashboard["header_inspect_healthy"]
             and dashboard["dashboard_strict_healthy"]
+            and dashboard["dashboard_configuration_healthy"]
+            and dashboard["validation_json_healthy"]
             and dashboard["sidecar_corrupt_healthy"]
             and dashboard["huffman_length_healthy"]
             and dashboard["fuzz_corpus_healthy"]

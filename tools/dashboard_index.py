@@ -1694,6 +1694,8 @@ def main() -> int:
         and header_health["fhcrc_cases"] > 0
     )
     strict_healthy = strict_health["present"] and strict_health["ok"] and strict_health["missing_mode_count"] == 0
+    dashboard_configuration_healthy = dashboard_configuration["healthy"]
+    validation_json_healthy = validation_json["healthy"]
     sidecar_corrupt_healthy = sidecar_corrupt_health_summary["healthy"]
     huffman_healthy = huffman_health["healthy"]
     fuzz_healthy = fuzz_health["healthy"]
@@ -1709,6 +1711,8 @@ def main() -> int:
         and smoke_gate_healthy
         and header_healthy
         and strict_healthy
+        and dashboard_configuration_healthy
+        and validation_json_healthy
         and sidecar_corrupt_healthy
         and huffman_healthy
         and fuzz_healthy
@@ -1739,6 +1743,35 @@ def main() -> int:
         validation_unhealthy_reasons.append("dashboard_strict_failed")
     elif strict_health["missing_mode_count"]:
         validation_unhealthy_reasons.append("missing_dashboard_strict_modes")
+    dashboard_configuration_present = (
+        dashboard_configuration["config_index_present"]
+        and dashboard_configuration["config_index_negative_present"]
+        and dashboard_configuration["category_negative_present"]
+        and dashboard_configuration["producers_required_present"]
+        and dashboard_configuration["producers_negative_present"]
+    )
+    if not dashboard_configuration_present:
+        validation_unhealthy_reasons.append("missing_dashboard_configuration_artifact")
+    elif not dashboard_configuration_healthy:
+        validation_unhealthy_reasons.append("dashboard_configuration_failed")
+    if not validation_json["present"]:
+        validation_unhealthy_reasons.append("missing_validation_json_smoke_artifact")
+    elif not (
+        validation_json["ok"]
+        and validation_json["cli_success_ok"]
+        and validation_json["checked_schema_count"] > 0
+        and validation_json["report_rows"] > 0
+        and validation_json["corrupt_rows"] > 0
+    ):
+        validation_unhealthy_reasons.append("validation_json_failed")
+    if not validation_json["docs_negative_present"]:
+        validation_unhealthy_reasons.append("missing_validation_json_docs_negative_artifact")
+    elif not (
+        validation_json["docs_negative_ok"]
+        and validation_json["docs_negative_case_count"] > 0
+        and validation_json["docs_negative_matched"] == validation_json["docs_negative_case_count"]
+    ):
+        validation_unhealthy_reasons.append("validation_json_docs_negative_failed")
     if not sidecar_corrupt_health_summary["present"]:
         validation_unhealthy_reasons.append("missing_sidecar_corrupt_artifact")
     elif not sidecar_corrupt_healthy:
