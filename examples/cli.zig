@@ -649,9 +649,10 @@ pub fn main(init: std.process.Init) !void {
         const output_format = try parseHeaderInspectOutputFormat(args.next());
         const frame = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(frame);
-        const summary = vort.zstdSummarizeNativeStream(frame) catch |err| {
+        var diagnostics: vort.ZstdNativeStreamSummaryErrorDiagnostics = .{};
+        const summary = vort.zstdSummarizeNativeStreamWithDiagnostics(frame, &diagnostics) catch |err| {
             if (output_format == .json) {
-                try printNativeSummaryErrorJson(stdout, "vort.zstd_native_stream_summary_error", frame.len, err, nativeSummaryErrorContext(.zstd, frame, err));
+                try printNativeSummaryErrorJson(stdout, "vort.zstd_native_stream_summary_error", frame.len, err, .{ .phase = diagnostics.phase, .offset = diagnostics.offset });
                 try stdout.flush();
                 std.process.exit(1);
             }

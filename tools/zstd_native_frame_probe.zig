@@ -3471,6 +3471,20 @@ fn checkSkippableOnlyStream(allocator: std.mem.Allocator) !void {
     try expect(summary.skippable_frame_count == 1);
     try expect(summary.skippable_payload_bytes == "metadata-only-zstd".len);
 
+    var summary_diagnostics: vort.ZstdNativeStreamSummaryErrorDiagnostics = .{};
+    if (vort.zstdSummarizeNativeStreamWithDiagnostics(skip[0 .. skip.len - 2], &summary_diagnostics)) |_| {
+        return error.ZstdNativeFrameProbeExpectedError;
+    } else |err| if (@as(anyerror, err) != error.TruncatedFrame) return err;
+    try expectEqualSlices("skippable_payload", summary_diagnostics.phase);
+    try expect(summary_diagnostics.offset == skip.len - 2);
+
+    var bad_magic_diagnostics: vort.ZstdNativeStreamSummaryErrorDiagnostics = .{};
+    if (vort.zstdSummarizeNativeStreamWithDiagnostics("bad-zstd", &bad_magic_diagnostics)) |_| {
+        return error.ZstdNativeFrameProbeExpectedError;
+    } else |err| if (@as(anyerror, err) != error.InvalidMagic) return err;
+    try expectEqualSlices("magic", bad_magic_diagnostics.phase);
+    try expect(bad_magic_diagnostics.offset == 0);
+
     var iterator = vort.zstdIterateNativeStream(skip);
     const element = (try iterator.next()) orelse return error.ZstdNativeFrameProbeMismatch;
     switch (element) {

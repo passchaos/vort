@@ -1656,8 +1656,9 @@ architecture blindly.
   command supports text and `vort.zstd_native_stream_summary` JSON output. The
   new `run-zstd-native-summary-cli-probe` black-box smoke encodes single-frame
   and concatenated/skippable streams through the CLI, checks both text and JSON
-  summary fields, verifies malformed/truncated failure paths, and runs in
-  `ci-smoke`. The retained
+  summary fields, verifies malformed/truncated failure paths, and uses
+  `zstdSummarizeNativeStreamWithDiagnostics` for parser phase/offset context in
+  JSON errors. It runs in `ci-smoke`. The retained
   `run-zstd-native-summary-dashboard` step now writes
   `zig-out/vort-zstd-native-stream-summary.json` and is indexed by the dashboard
   producer/category manifests. Dashboard strict validation now treats missing or
