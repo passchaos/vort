@@ -3010,7 +3010,11 @@
           "bad_case_count",
           "bad_offset_ranges",
           "bad_lz4_offset_range",
-          "bad_zstd_offset_range"
+          "bad_zstd_offset_range",
+          "bad_lz4_error_counts",
+          "bad_zstd_error_counts",
+          "bad_lz4_phase_counts",
+          "bad_zstd_phase_counts"
         ]
       },
       "count_rules": {

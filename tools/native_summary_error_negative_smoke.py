@@ -89,6 +89,22 @@ def main() -> int:
     bad_zstd_offset_range["zstd_offset_min"] = 99
     smoke_cases.append(check_failure("bad_zstd_offset_range", bad_zstd_offset_range, "zstd_offset_min mismatch"))
 
+    bad_lz4_error_counts = copy.deepcopy(base_summary)
+    bad_lz4_error_counts["lz4_error_counts"] = {"CorruptFrame": 99}
+    smoke_cases.append(check_failure("bad_lz4_error_counts", bad_lz4_error_counts, "lz4_error_counts mismatch"))
+
+    bad_zstd_error_counts = copy.deepcopy(base_summary)
+    bad_zstd_error_counts["zstd_error_counts"] = {"TruncatedFrame": 99}
+    smoke_cases.append(check_failure("bad_zstd_error_counts", bad_zstd_error_counts, "zstd_error_counts mismatch"))
+
+    bad_lz4_phase_counts = copy.deepcopy(base_summary)
+    bad_lz4_phase_counts["lz4_phase_counts"] = {"magic": 99}
+    smoke_cases.append(check_failure("bad_lz4_phase_counts", bad_lz4_phase_counts, "lz4_phase_counts mismatch"))
+
+    bad_zstd_phase_counts = copy.deepcopy(base_summary)
+    bad_zstd_phase_counts["zstd_phase_counts"] = {"skippable_payload": 99}
+    smoke_cases.append(check_failure("bad_zstd_phase_counts", bad_zstd_phase_counts, "zstd_phase_counts mismatch"))
+
     summary = {
         "schema": "vort.native_summary_error_negative_smoke",
         "schema_version": 1,
