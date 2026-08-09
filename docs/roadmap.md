@@ -1599,8 +1599,10 @@ architecture blindly.
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box
   `run-lz4-native-summary-cli-probe` smoke now checks the user-facing summary
-  text fields for single-frame and concatenated/skippable streams, including
-  the frame-level checksum/content-size/Dictionary_ID metadata counters.
+  text/JSON fields for single-frame and concatenated/skippable streams, including
+  the frame-level checksum/content-size/Dictionary_ID metadata counters. The
+  retained `run-lz4-native-summary-dashboard` step writes
+  `zig-out/vort-lz4-native-stream-summary.json` for dashboard indexing.
 
 - Added LZ4 raw-block summary helpers and CLI commands, including prefix-history
   variants. The summary validates block token structure while reporting decoded

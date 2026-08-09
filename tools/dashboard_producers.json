@@ -760,6 +760,10 @@
       "expected_format": "md",
       "smoke_gate": "zig build run-zstd-compare-gate"
     },
+    "vort-lz4-native-stream-summary.json": {
+      "expected_format": "json",
+      "smoke_gate": "zig build run-lz4-native-summary-dashboard"
+    },
     "vort-zstd-native-stream-summary.json": {
       "expected_format": "json",
       "smoke_gate": "zig build run-zstd-native-summary-dashboard"
@@ -969,6 +973,7 @@
     "vort-zstd-compare-standard.md": "zig build run-zstd-compare-standard-gate",
     "vort-zstd-compare.csv": "zig build run-zstd-compare-gate",
     "vort-zstd-compare.md": "zig build run-zstd-compare-gate",
+    "vort-lz4-native-stream-summary.json": "zig build run-lz4-native-summary-dashboard",
     "vort-zstd-native-stream-summary.json": "zig build run-zstd-native-summary-dashboard"
   },
   "required_smoke_gates": [
@@ -1037,6 +1042,7 @@
     "vort-zstd-compare-block-sweep-gate.json",
     "vort-zstd-compare-gate.json",
     "vort-zstd-compare-standard-gate.json",
+    "vort-lz4-native-stream-summary.json",
     "vort-zstd-native-stream-summary.json"
   ],
   "schema": "vort.dashboard_producers",

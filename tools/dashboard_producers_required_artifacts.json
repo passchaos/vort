@@ -1325,6 +1325,13 @@
     },
     {
       "expected_format": "json",
+      "name": "vort-lz4-native-stream-summary.json",
+      "producer_step": "zig build run-lz4-native-summary-dashboard",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-lz4-native-summary-dashboard"
+    },
+    {
+      "expected_format": "json",
       "name": "vort-zstd-native-stream-summary.json",
       "producer_step": "zig build run-zstd-native-summary-dashboard",
       "required_smoke_gate": true,

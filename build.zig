@@ -1817,6 +1817,12 @@ pub fn build(b: *std.Build) void {
     const lz4_native_summary_cli_probe_step = b.step("run-lz4-native-summary-cli-probe", "Run black-box smoke for native LZ4 stream summary CLI");
     lz4_native_summary_cli_probe_step.dependOn(&lz4_native_summary_cli_probe.step);
 
+    const lz4_native_summary_dashboard = b.addSystemCommand(&.{ "python3", "tools/lz4_native_summary_dashboard.py" });
+    lz4_native_summary_dashboard.addArtifactArg(cli_exe);
+    lz4_native_summary_dashboard.addArgs(&.{ "--json", "zig-out/vort-lz4-native-stream-summary.json" });
+    const lz4_native_summary_dashboard_step = b.step("run-lz4-native-summary-dashboard", "Write native LZ4 stream summary JSON artifact");
+    lz4_native_summary_dashboard_step.dependOn(&lz4_native_summary_dashboard.step);
+
     const zstd_native_summary_dashboard = b.addSystemCommand(&.{ "python3", "tools/zstd_native_summary_dashboard.py" });
     zstd_native_summary_dashboard.addArtifactArg(cli_exe);
     zstd_native_summary_dashboard.addArgs(&.{ "--json", "zig-out/vort-zstd-native-stream-summary.json" });
@@ -3137,6 +3143,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(snappy_block_cli_probe_step);
     ci_smoke_step.dependOn(zstd_native_cli_diff_step);
     ci_smoke_step.dependOn(lz4_native_summary_cli_probe_step);
+    ci_smoke_step.dependOn(lz4_native_summary_dashboard_step);
     ci_smoke_step.dependOn(zstd_native_summary_cli_probe_step);
     ci_smoke_step.dependOn(zstd_native_summary_dashboard_step);
     ci_smoke_step.dependOn(zstd_native_probe_step);
