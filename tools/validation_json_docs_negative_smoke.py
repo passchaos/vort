@@ -163,6 +163,26 @@ def main() -> int:
             )
         )
 
+        def native_summary_error_phase_enum() -> None:
+            payload = {
+                "schema": "vort.lz4_native_stream_summary_error",
+                "schema_version": 1,
+                "ok": False,
+                "compressed_bytes": 7,
+                "error": "CorruptFrame",
+                "phase": "unknown",
+                "offset": 0,
+            }
+            docs_check.validate_value_against_manifest(payload, schemas_def)
+
+        cases.append(
+            negative_case(
+                "native_summary_error_phase_enum",
+                "phase has unexpected value",
+                native_summary_error_phase_enum,
+            )
+        )
+
         def boolean_formula_positive_field() -> None:
             payload = {
                 "schema": "vort.dashboard_index",

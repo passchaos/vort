@@ -2206,7 +2206,9 @@ This schema is emitted to stdout with a non-zero exit status when the LZ4 native
 stream summary CLI is asked for JSON output and encounters malformed or
 truncated input. It lets black-box probes and future dashboards consume the
 summary failure as structured data rather than scraping Zig error traces. The
-`phase` and `offset` fields provide a coarse parser location for triage.
+`phase` and `offset` fields provide a coarse parser location for triage; `phase`
+is one of `magic`, `frame_header`, `frame_body`, `frame_checksum`,
+`skippable_header`, `skippable_payload`, `stream`, or `frame`.
 
 Example:
 
@@ -2271,7 +2273,9 @@ stream summary CLI is asked for JSON output and encounters malformed or
 truncated input. It mirrors the LZ4 summary error schema so native-summary
 probes can validate both success and failure paths without relying on stderr
 formatting. The `phase` and `offset` fields provide a coarse parser location
-for triage.
+for triage; `phase` is one of `magic`, `frame_header`, `frame_body`,
+`frame_checksum`, `skippable_header`, `skippable_payload`, `stream`, or
+`frame`.
 
 Example:
 

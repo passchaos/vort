@@ -1900,49 +1900,10 @@ fn printSnappyFrameSummary(stdout: *std.Io.Writer, compressed_len: usize, summar
     );
 }
 
-const NativeSummaryKind = enum { lz4, zstd };
-
 const NativeSummaryErrorContext = struct {
     phase: []const u8,
     offset: usize,
 };
-
-fn nativeSummaryErrorContext(kind: NativeSummaryKind, frame: []const u8, err: anyerror) NativeSummaryErrorContext {
-    if (frame.len < 4) return .{ .phase = "magic", .offset = frame.len };
-
-    const magic = std.mem.readInt(u32, frame[0..4], .little);
-    if (magic >= 0x184d2a50 and magic <= 0x184d2a5f) {
-        if (frame.len < 8) return .{ .phase = "skippable_header", .offset = frame.len };
-        const payload_len: usize = @intCast(std.mem.readInt(u32, frame[4..8], .little));
-        if (frame.len - 8 < payload_len) return .{ .phase = "skippable_payload", .offset = frame.len };
-        return .{ .phase = "stream", .offset = frame.len };
-    }
-
-    const expected_magic: u32 = switch (kind) {
-        .lz4 => 0x184d2204,
-        .zstd => 0xfd2fb528,
-    };
-    if (magic != expected_magic) return .{ .phase = "magic", .offset = 0 };
-
-    switch (kind) {
-        .lz4 => {
-            if (frame.len < 7) return .{ .phase = "frame_header", .offset = frame.len };
-            const flg = frame[4];
-            var header_len: usize = 6 + 1; // FLG/BD plus descriptor checksum.
-            if ((flg & 0x08) != 0) header_len += 8;
-            if ((flg & 0x01) != 0) header_len += 4;
-            if (frame.len < header_len) return .{ .phase = "frame_header", .offset = frame.len };
-        },
-        .zstd => {
-            if (frame.len < 5) return .{ .phase = "frame_header", .offset = frame.len };
-        },
-    }
-
-    return .{
-        .phase = if (err == error.TruncatedFrame) "frame_body" else "frame",
-        .offset = frame.len,
-    };
-}
 
 fn printNativeSummaryErrorJson(stdout: *std.Io.Writer, schema: []const u8, compressed_len: usize, err: anyerror, context: NativeSummaryErrorContext) !void {
     try stdout.print("{{\"schema\":\"{s}\",\"schema_version\":1,\"ok\":false,\"compressed_bytes\":{d},\"error\":", .{ schema, compressed_len });

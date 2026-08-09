@@ -3029,6 +3029,7 @@
           "reason_check_pair_mismatch",
           "reason_fixture_pair_mismatch",
           "validation_smoke_checked_schema_enum",
+          "native_summary_error_phase_enum",
           "boolean_formula_positive_field",
           "boolean_formula_empty_string_field"
         ]
@@ -3476,6 +3477,25 @@
         "phase": "str",
         "schema": "str",
         "schema_version": "int"
+      },
+      "enums": {
+        "error": [
+          "ChecksumMismatch",
+          "CorruptFrame",
+          "IntegerOverflow",
+          "InvalidMagic",
+          "TruncatedFrame"
+        ],
+        "phase": [
+          "frame",
+          "frame_body",
+          "frame_checksum",
+          "frame_header",
+          "magic",
+          "skippable_header",
+          "skippable_payload",
+          "stream"
+        ]
       }
     },
     "vort.zstd_native_stream_summary": {
@@ -3506,6 +3526,25 @@
         "phase": "str",
         "schema": "str",
         "schema_version": "int"
+      },
+      "enums": {
+        "error": [
+          "ChecksumMismatch",
+          "CorruptFrame",
+          "IntegerOverflow",
+          "InvalidMagic",
+          "TruncatedFrame"
+        ],
+        "phase": [
+          "frame",
+          "frame_body",
+          "frame_checksum",
+          "frame_header",
+          "magic",
+          "skippable_header",
+          "skippable_payload",
+          "stream"
+        ]
       }
     },
     "vort.zstd_compare_block_sweep_gate": {
