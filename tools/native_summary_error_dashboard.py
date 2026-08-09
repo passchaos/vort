@@ -15,6 +15,10 @@ from lz4_native_summary_fixtures import frame_descriptor_checksum, skippable_fra
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DEFAULT_JSON = ROOT / "zig-out" / "vort-native-summary-error-dashboard.json"
+REQUIRED_CODEC_PHASES = {
+    "lz4": ["magic", "frame_header", "skippable_payload", "frame_body", "frame_checksum", "frame"],
+    "zstd": ["magic", "frame_header", "skippable_payload", "frame_body", "frame_checksum", "frame"],
+}
 
 
 def run_error(cli: pathlib.Path, command: str, path: pathlib.Path) -> dict[str, object]:
@@ -71,6 +75,7 @@ def build_summary(cases: list[dict[str, object]]) -> dict[str, object]:
         "zstd_error_counts": dict(sorted(zstd_error_counts.items())),
         "lz4_phase_counts": dict(sorted(lz4_phase_counts.items())),
         "zstd_phase_counts": dict(sorted(zstd_phase_counts.items())),
+        "required_codec_phases": REQUIRED_CODEC_PHASES,
         "offset_min": min(offsets) if offsets else 0,
         "offset_max": max(offsets) if offsets else 0,
         "lz4_offset_min": min(lz4_offsets) if lz4_offsets else 0,
@@ -108,6 +113,11 @@ def validate_summary(summary: dict[str, object]) -> None:
             raise AssertionError(f"cases[{index}].schema_version mismatch")
         if case.get("ok") is not False:
             raise AssertionError(f"cases[{index}].ok must be false")
+    for codec, phases in REQUIRED_CODEC_PHASES.items():
+        codec_phases = {str(case["phase"]) for case in normalized_cases if case.get("codec") == codec}
+        missing = sorted(set(phases) - codec_phases)
+        if missing:
+            raise AssertionError(f"{codec} missing required phases: {missing!r}")
     expected = build_summary(normalized_cases)
     for key in ("case_count", "lz4_case_count", "zstd_case_count", "error_counts", "phase_counts", "lz4_error_counts", "zstd_error_counts", "lz4_phase_counts", "zstd_phase_counts", "offset_min", "offset_max", "lz4_offset_min", "lz4_offset_max", "zstd_offset_min", "zstd_offset_max", "phase_offset_ranges"):
         if summary.get(key) != expected[key]:

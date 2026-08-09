@@ -2193,6 +2193,10 @@ Example:
     "magic": 1
   },
   "zstd_phase_counts": {},
+  "required_codec_phases": {
+    "lz4": ["magic", "frame_header", "skippable_payload", "frame_body", "frame_checksum", "frame"],
+    "zstd": ["magic", "frame_header", "skippable_payload", "frame_body", "frame_checksum", "frame"]
+  },
   "offset_min": 0,
   "offset_max": 0,
   "lz4_offset_min": 0,
@@ -2232,8 +2236,8 @@ zig build run-native-summary-error-negative-smoke
 This retained smoke proves that native summary error dashboard aggregates are
 not accepted when `case_count`, `error_counts`, `phase_counts`,
 `phase_offset_ranges`, per-codec offset ranges, per-codec error/phase counts,
-per-case schema/ok invariants drift away from the `cases` payload, or case
-names are duplicated.
+per-case schema/ok invariants drift away from the `cases` payload, case names
+are duplicated, or a required codec/phase combination is missing.
 
 Example:
 

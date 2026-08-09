@@ -37,30 +37,21 @@ def main() -> int:
     parser.add_argument("--summary", help="optional JSON summary output path")
     args = parser.parse_args()
 
-    cases = [
-        {
-            "name": "lz4_bad_magic",
-            "codec": "lz4",
-            "schema": "vort.lz4_native_stream_summary_error",
+    def make_case(codec: str, phase: str, index: int) -> dict[str, object]:
+        return {
+            "name": f"{codec}_{phase}",
+            "codec": codec,
+            "schema": f"vort.{codec}_native_stream_summary_error",
             "schema_version": 1,
             "ok": False,
-            "compressed_bytes": 7,
-            "error": "CorruptFrame",
-            "phase": "magic",
-            "offset": 0,
-        },
-        {
-            "name": "zstd_truncated_skippable",
-            "codec": "zstd",
-            "schema": "vort.zstd_native_stream_summary_error",
-            "schema_version": 1,
-            "ok": False,
-            "compressed_bytes": 13,
-            "error": "TruncatedFrame",
-            "phase": "skippable_payload",
-            "offset": 13,
-        },
-    ]
+            "compressed_bytes": 7 + index,
+            "error": "TruncatedFrame" if phase != "magic" else ("CorruptFrame" if codec == "lz4" else "InvalidMagic"),
+            "phase": phase,
+            "offset": index,
+        }
+
+    required_phases = ["magic", "frame_header", "skippable_payload", "frame_body", "frame_checksum", "frame"]
+    cases = [make_case(codec, phase, index) for index, (codec, phase) in enumerate((codec, phase) for codec in ("lz4", "zstd") for phase in required_phases)]
     base_summary = build_summary(cases)
     validate_summary(base_summary)
 
@@ -116,6 +107,10 @@ def main() -> int:
     bad_duplicate_case = copy.deepcopy(base_summary)
     bad_duplicate_case["cases"][1]["name"] = bad_duplicate_case["cases"][0]["name"]
     smoke_cases.append(check_failure("bad_duplicate_case", bad_duplicate_case, "duplicate case name"))
+
+    bad_missing_codec_phase = copy.deepcopy(base_summary)
+    bad_missing_codec_phase["cases"] = [case for case in bad_missing_codec_phase["cases"] if not (case["codec"] == "zstd" and case["phase"] == "skippable_payload")]
+    smoke_cases.append(check_failure("bad_missing_codec_phase", bad_missing_codec_phase, "zstd missing required phases"))
 
     summary = {
         "schema": "vort.native_summary_error_negative_smoke",
