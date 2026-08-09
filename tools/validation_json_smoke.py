@@ -330,11 +330,11 @@ def main() -> int:
         validate_value_against_manifest(lz4_native_summary, schemas_def)
 
         native_summary_error_cases = [
-            ("summary-lz4-native-file", root / "bad-lz4-summary.lz4", b"not-lz4", "vort.lz4_native_stream_summary_error", "CorruptFrame"),
-            ("summary-zstd-native-file", root / "bad-zstd-summary.zst", b"not-zstd", "vort.zstd_native_stream_summary_error", "InvalidMagic"),
+            ("summary-lz4-native-file", root / "bad-lz4-summary.lz4", b"not-lz4", "vort.lz4_native_stream_summary_error", "CorruptFrame", "magic", 0),
+            ("summary-zstd-native-file", root / "bad-zstd-summary.zst", b"not-zstd", "vort.zstd_native_stream_summary_error", "InvalidMagic", "magic", 0),
         ]
         native_summary_error_payloads: list[dict[str, object]] = []
-        for command, path, payload, schema_name, error_name in native_summary_error_cases:
+        for command, path, payload, schema_name, error_name, phase, offset in native_summary_error_cases:
             path.write_bytes(payload)
             result = run([cli, command, str(path), "json"], check=False)
             assert result.returncode != 0
@@ -344,6 +344,8 @@ def main() -> int:
             assert error_payload["ok"] is False
             assert error_payload["compressed_bytes"] == len(payload)
             assert error_payload["error"] == error_name
+            assert error_payload["phase"] == phase
+            assert error_payload["offset"] == offset
             validate_value_against_manifest(error_payload, schemas_def)
             native_summary_error_payloads.append(error_payload)
 

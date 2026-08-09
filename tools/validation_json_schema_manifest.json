@@ -3471,7 +3471,9 @@
       "fields": {
         "compressed_bytes": "int",
         "error": "str",
+        "offset": "int",
         "ok": "bool",
+        "phase": "str",
         "schema": "str",
         "schema_version": "int"
       }
@@ -3499,7 +3501,9 @@
       "fields": {
         "compressed_bytes": "int",
         "error": "str",
+        "offset": "int",
         "ok": "bool",
+        "phase": "str",
         "schema": "str",
         "schema_version": "int"
       }

@@ -2205,7 +2205,8 @@ zig build run -- summary-lz4-native-file /tmp/bad.lz4 json
 This schema is emitted to stdout with a non-zero exit status when the LZ4 native
 stream summary CLI is asked for JSON output and encounters malformed or
 truncated input. It lets black-box probes and future dashboards consume the
-summary failure as structured data rather than scraping Zig error traces.
+summary failure as structured data rather than scraping Zig error traces. The
+`phase` and `offset` fields provide a coarse parser location for triage.
 
 Example:
 
@@ -2215,7 +2216,9 @@ Example:
   "schema_version": 1,
   "ok": false,
   "compressed_bytes": 7,
-  "error": "CorruptFrame"
+  "error": "CorruptFrame",
+  "phase": "magic",
+  "offset": 0
 }
 ```
 
@@ -2267,7 +2270,8 @@ This schema is emitted to stdout with a non-zero exit status when the Zstd nativ
 stream summary CLI is asked for JSON output and encounters malformed or
 truncated input. It mirrors the LZ4 summary error schema so native-summary
 probes can validate both success and failure paths without relying on stderr
-formatting.
+formatting. The `phase` and `offset` fields provide a coarse parser location
+for triage.
 
 Example:
 
@@ -2277,7 +2281,9 @@ Example:
   "schema_version": 1,
   "ok": false,
   "compressed_bytes": 7,
-  "error": "InvalidMagic"
+  "error": "InvalidMagic",
+  "phase": "magic",
+  "offset": 0
 }
 ```
 

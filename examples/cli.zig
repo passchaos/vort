@@ -651,7 +651,7 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(frame);
         const summary = vort.zstdSummarizeNativeStream(frame) catch |err| {
             if (output_format == .json) {
-                try printNativeSummaryErrorJson(stdout, "vort.zstd_native_stream_summary_error", frame.len, err);
+                try printNativeSummaryErrorJson(stdout, "vort.zstd_native_stream_summary_error", frame.len, err, nativeSummaryErrorContext(.zstd, frame, err));
                 try stdout.flush();
                 std.process.exit(1);
             }
@@ -684,7 +684,7 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(frame);
         const summary = vort.lz4SummarizeNativeStream(frame) catch |err| {
             if (output_format == .json) {
-                try printNativeSummaryErrorJson(stdout, "vort.lz4_native_stream_summary_error", frame.len, err);
+                try printNativeSummaryErrorJson(stdout, "vort.lz4_native_stream_summary_error", frame.len, err, nativeSummaryErrorContext(.lz4, frame, err));
                 try stdout.flush();
                 std.process.exit(1);
             }
@@ -1898,10 +1898,56 @@ fn printSnappyFrameSummary(stdout: *std.Io.Writer, compressed_len: usize, summar
     );
 }
 
-fn printNativeSummaryErrorJson(stdout: *std.Io.Writer, schema: []const u8, compressed_len: usize, err: anyerror) !void {
+const NativeSummaryKind = enum { lz4, zstd };
+
+const NativeSummaryErrorContext = struct {
+    phase: []const u8,
+    offset: usize,
+};
+
+fn nativeSummaryErrorContext(kind: NativeSummaryKind, frame: []const u8, err: anyerror) NativeSummaryErrorContext {
+    if (frame.len < 4) return .{ .phase = "magic", .offset = frame.len };
+
+    const magic = std.mem.readInt(u32, frame[0..4], .little);
+    if (magic >= 0x184d2a50 and magic <= 0x184d2a5f) {
+        if (frame.len < 8) return .{ .phase = "skippable_header", .offset = frame.len };
+        const payload_len: usize = @intCast(std.mem.readInt(u32, frame[4..8], .little));
+        if (frame.len - 8 < payload_len) return .{ .phase = "skippable_payload", .offset = frame.len };
+        return .{ .phase = "stream", .offset = frame.len };
+    }
+
+    const expected_magic: u32 = switch (kind) {
+        .lz4 => 0x184d2204,
+        .zstd => 0xfd2fb528,
+    };
+    if (magic != expected_magic) return .{ .phase = "magic", .offset = 0 };
+
+    switch (kind) {
+        .lz4 => {
+            if (frame.len < 7) return .{ .phase = "frame_header", .offset = frame.len };
+            const flg = frame[4];
+            var header_len: usize = 6 + 1; // FLG/BD plus descriptor checksum.
+            if ((flg & 0x08) != 0) header_len += 8;
+            if ((flg & 0x01) != 0) header_len += 4;
+            if (frame.len < header_len) return .{ .phase = "frame_header", .offset = frame.len };
+        },
+        .zstd => {
+            if (frame.len < 5) return .{ .phase = "frame_header", .offset = frame.len };
+        },
+    }
+
+    return .{
+        .phase = if (err == error.TruncatedFrame) "frame_body" else "frame",
+        .offset = frame.len,
+    };
+}
+
+fn printNativeSummaryErrorJson(stdout: *std.Io.Writer, schema: []const u8, compressed_len: usize, err: anyerror, context: NativeSummaryErrorContext) !void {
     try stdout.print("{{\"schema\":\"{s}\",\"schema_version\":1,\"ok\":false,\"compressed_bytes\":{d},\"error\":", .{ schema, compressed_len });
     try std.json.Stringify.value(@errorName(err), .{}, stdout);
-    try stdout.print("}}\n", .{});
+    try stdout.print(",\"phase\":", .{});
+    try std.json.Stringify.value(context.phase, .{}, stdout);
+    try stdout.print(",\"offset\":{d}}}\n", .{context.offset});
 }
 
 fn printLz4NativeSummary(stdout: *std.Io.Writer, compressed_len: usize, summary: vort.Lz4NativeStreamSummary, output_format: HeaderInspectOutputFormat) !void {

@@ -17,7 +17,7 @@ def run_cli(cli: pathlib.Path, *args: str) -> str:
     return subprocess.run([str(cli), *args], cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE).stdout.strip()
 
 
-def require_cli_failure(cli: pathlib.Path, path: pathlib.Path, expected_error: str, context: str) -> None:
+def require_cli_failure(cli: pathlib.Path, path: pathlib.Path, expected_error: str, expected_phase: str, expected_offset: int, context: str) -> None:
     result = subprocess.run(
         [str(cli), "summary-zstd-native-file", str(path), "json"],
         cwd=ROOT,
@@ -38,6 +38,8 @@ def require_cli_failure(cli: pathlib.Path, path: pathlib.Path, expected_error: s
         "ok": False,
         "compressed_bytes": path.stat().st_size,
         "error": expected_error,
+        "phase": expected_phase,
+        "offset": expected_offset,
     }
     for key, value in expected.items():
         if payload.get(key) != value:
@@ -194,9 +196,9 @@ def main() -> int:
         malformed_path.write_bytes(b"not-zstd")
         truncated_path.write_bytes(b"\x28\xb5\x2f")
         truncated_skip_path.write_bytes(skippable_frame(2, b"metadata")[:-3])
-        require_cli_failure(cli, malformed_path, "InvalidMagic", "bad magic summary")
-        require_cli_failure(cli, truncated_path, "TruncatedFrame", "truncated header summary")
-        require_cli_failure(cli, truncated_skip_path, "TruncatedFrame", "truncated skippable summary")
+        require_cli_failure(cli, malformed_path, "InvalidMagic", "magic", 0, "bad magic summary")
+        require_cli_failure(cli, truncated_path, "TruncatedFrame", "magic", truncated_path.stat().st_size, "truncated header summary")
+        require_cli_failure(cli, truncated_skip_path, "TruncatedFrame", "skippable_payload", truncated_skip_path.stat().st_size, "truncated skippable summary")
 
     print("zstd_native_summary_cli_probe=ok")
     return 0
