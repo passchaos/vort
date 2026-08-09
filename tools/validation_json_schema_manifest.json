@@ -1624,6 +1624,7 @@
           "native_summary_error_markdown_tables",
           "native_tier_range_markdown_table",
           "native_codec_probe_markdown_tables",
+          "header_inspect_markdown_table",
           "missing_producer",
           "missing_smoke_gate",
           "missing_header_inspect",

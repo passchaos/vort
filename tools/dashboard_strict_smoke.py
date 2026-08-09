@@ -1296,6 +1296,23 @@ def main() -> int:
                 ],
             )
         )
+        checks.append(
+            markdown_check_row(
+                "header_inspect_markdown_table",
+                "header inspect Markdown table",
+                dashboard_markdown,
+                [
+                    "## Header inspect coverage",
+                    "| category | total | raw | zlib | gzip |",
+                    "| positive cases | 3 | 1 | 1 | 1 |",
+                    "| negative cases | 3 | 1 | 1 | 1 |",
+                    "| workflow/feature | count | detail |",
+                    "| commands | 3 | successes/failures 3/3 |",
+                    "| workflows | 3 | successes 3, required/missing 1/0 |",
+                    "| dictionary cases | 1 | optional/FHCRC 1/1 |",
+                ],
+            )
+        )
 
         missing_native_tier_root = root / "missing-native-tier"
         missing_native_tier_root.mkdir()

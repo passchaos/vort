@@ -1262,6 +1262,23 @@ def main() -> int:
         f"- native tier corpus discovery: source mode `{native_tier_discovery_health['source_mode']}`, sources {native_tier_discovery_health['source_count']}/{native_tier_discovery_health['candidate_count']}, selected cases {native_tier_discovery_health['selected_case_count']}, missing reason `{native_tier_discovery_health['missing_reason'] or 'none'}`, healthy `{native_tier_discovery_health['healthy']}`",
         "",
     ]
+    lines.extend(
+        [
+            "## Header inspect coverage",
+            "",
+            "| category | total | raw | zlib | gzip |",
+            "| --- | ---: | ---: | ---: | ---: |",
+            f"| positive cases | {header_health['case_count']} | {header_health['raw_cases']} | {header_health['zlib_cases']} | {header_health['gzip_cases']} |",
+            f"| negative cases | {header_health['negative_cases']} | {header_health['raw_negative_cases']} | {header_health['zlib_negative_cases']} | {header_health['gzip_negative_cases']} |",
+            "",
+            "| workflow/feature | count | detail |",
+            "| --- | ---: | --- |",
+            f"| commands | {header_health['command_count']} | successes/failures {header_health['command_successes']}/{header_health['command_failures']} |",
+            f"| workflows | {header_health['workflow_count']} | successes {header_health['workflow_successes']}, required/missing {header_health['required_workflow_count']}/{header_health['missing_workflow_count']} |",
+            f"| dictionary cases | {header_health['dictionary_cases']} | optional/FHCRC {header_health['optional_header_cases']}/{header_health['fhcrc_cases']} |",
+            "",
+        ]
+    )
     if native_codec_health["coverage_details"]:
         lines.extend(
             [
