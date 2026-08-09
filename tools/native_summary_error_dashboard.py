@@ -89,7 +89,14 @@ def validate_summary(summary: dict[str, object]) -> None:
     normalized_cases = [case for case in cases if isinstance(case, dict)]
     if len(normalized_cases) != len(cases):
         raise AssertionError("all cases must be objects")
+    seen_names: set[str] = set()
     for index, case in enumerate(normalized_cases):
+        name = case.get("name")
+        if not isinstance(name, str) or not name:
+            raise AssertionError(f"cases[{index}].name must be a non-empty string")
+        if name in seen_names:
+            raise AssertionError(f"duplicate case name {name!r}")
+        seen_names.add(name)
         codec = case.get("codec")
         schema = case.get("schema")
         if codec not in {"lz4", "zstd"}:

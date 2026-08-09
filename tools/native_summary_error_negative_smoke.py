@@ -113,6 +113,10 @@ def main() -> int:
     bad_case_ok["cases"][0]["ok"] = True
     smoke_cases.append(check_failure("bad_case_ok", bad_case_ok, "ok must be false"))
 
+    bad_duplicate_case = copy.deepcopy(base_summary)
+    bad_duplicate_case["cases"][1]["name"] = bad_duplicate_case["cases"][0]["name"]
+    smoke_cases.append(check_failure("bad_duplicate_case", bad_duplicate_case, "duplicate case name"))
+
     summary = {
         "schema": "vort.native_summary_error_negative_smoke",
         "schema_version": 1,

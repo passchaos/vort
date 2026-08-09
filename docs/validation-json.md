@@ -2232,7 +2232,8 @@ zig build run-native-summary-error-negative-smoke
 This retained smoke proves that native summary error dashboard aggregates are
 not accepted when `case_count`, `error_counts`, `phase_counts`,
 `phase_offset_ranges`, per-codec offset ranges, per-codec error/phase counts,
-or per-case schema/ok invariants drift away from the `cases` payload.
+per-case schema/ok invariants drift away from the `cases` payload, or case
+names are duplicated.
 
 Example:
 
