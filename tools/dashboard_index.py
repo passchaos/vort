@@ -1293,6 +1293,21 @@ def main() -> int:
     )
     lines.extend(
         [
+            "## Huffman length oracle coverage",
+            "",
+            "| implementation | optimal rows | non-optimal rows | worst gap bits |",
+            "| --- | ---: | ---: | ---: |",
+            f"| production | {huffman_health['optimal_rows']}/{huffman_health['row_count']} | {huffman_health['non_optimal_rows']} | {huffman_health['worst_gap_bits']} |",
+            f"| package-merge | {huffman_health['package_merge_optimal_rows']}/{huffman_health['row_count']} | {huffman_health['package_merge_non_optimal_rows']} | {huffman_health['package_merge_worst_gap_bits']} |",
+            "",
+            "| validation | count | detail |",
+            "| --- | ---: | --- |",
+            f"| malformed rows | {huffman_health['malformed_rows']} | healthy `{huffman_healthy}` |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
             "## Python zlib differential coverage",
             "",
             "| category | count | detail |",

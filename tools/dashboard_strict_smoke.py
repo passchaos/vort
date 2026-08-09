@@ -1329,6 +1329,21 @@ def main() -> int:
         )
         checks.append(
             markdown_check_row(
+                "huffman_length_markdown_table",
+                "huffman length Markdown table",
+                dashboard_markdown,
+                [
+                    "## Huffman length oracle coverage",
+                    "| implementation | optimal rows | non-optimal rows | worst gap bits |",
+                    "| production | 1/1 | 0 | 0 |",
+                    "| package-merge | 1/1 | 0 | 0 |",
+                    "| validation | count | detail |",
+                    "| malformed rows | 0 | healthy `True` |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
                 "python_zlib_diff_markdown_table",
                 "Python zlib differential Markdown table",
                 dashboard_markdown,
