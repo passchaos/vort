@@ -2548,7 +2548,8 @@ Top-level fields:
   `native_summary_error_offset_min`, `native_summary_error_offset_max`,
   `native_summary_error_lz4_offset_min`, `native_summary_error_lz4_offset_max`,
   `native_summary_error_zstd_offset_min`, `native_summary_error_zstd_offset_max`,
-  `native_summary_error_phase_offset_ranges`
+  `native_summary_error_phase_offset_ranges`,
+  `native_summary_error_required_codec_phases`
 - `native_summary_error_negative_present`,
   `native_summary_error_negative_healthy`,
   `native_summary_error_negative_case_count`
@@ -2754,6 +2755,7 @@ Example:
   "native_summary_error_zstd_offset_min": 0,
   "native_summary_error_zstd_offset_max": 0,
   "native_summary_error_phase_offset_ranges": {},
+  "native_summary_error_required_codec_phases": {},
   "native_summary_error_negative_present": false,
   "native_summary_error_negative_healthy": false,
   "native_summary_error_negative_case_count": 0,

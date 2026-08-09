@@ -975,6 +975,7 @@
         "native_summary_error_zstd_offset_min": "int",
         "native_summary_error_zstd_offset_max": "int",
         "native_summary_error_phase_offset_ranges": "dict",
+        "native_summary_error_required_codec_phases": "dict",
         "native_summary_error_negative_present": "bool",
         "native_summary_error_negative_healthy": "bool",
         "native_summary_error_negative_case_count": "int",
@@ -1209,6 +1210,10 @@
           "frame_header",
           "magic",
           "skippable_payload"
+        ],
+        "native_summary_error_required_codec_phases": [
+          "lz4",
+          "zstd"
         ]
       }
     },

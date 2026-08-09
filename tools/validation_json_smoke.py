@@ -908,6 +908,7 @@ def main() -> int:
         assert dashboard["native_summary_error_zstd_offset_min"] == native_summary_error_dashboard["zstd_offset_min"]
         assert dashboard["native_summary_error_zstd_offset_max"] == native_summary_error_dashboard["zstd_offset_max"]
         assert dashboard["native_summary_error_phase_offset_ranges"] == native_summary_error_dashboard["phase_offset_ranges"]
+        assert dashboard["native_summary_error_required_codec_phases"] == native_summary_error_dashboard["required_codec_phases"]
         assert dashboard["native_summary_error_negative_present"] is True
         assert dashboard["native_summary_error_negative_healthy"] is True
         assert dashboard["native_summary_error_negative_case_count"] == native_summary_error_negative["case_count"]

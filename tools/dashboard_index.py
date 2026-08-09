@@ -173,6 +173,7 @@ def sidecar_corrupt_health(artifacts: list[Path]) -> dict:
         zstd_offset_min = int(data.get("zstd_offset_min") or 0)
         zstd_offset_max = int(data.get("zstd_offset_max") or 0)
         phase_offset_ranges = data.get("phase_offset_ranges") if isinstance(data.get("phase_offset_ranges"), dict) else {}
+        required_codec_phases = data.get("required_codec_phases") if isinstance(data.get("required_codec_phases"), dict) else {}
         return {
             "present": True,
             "rows": rows,
@@ -771,6 +772,7 @@ def native_summary_error_dashboard_health(artifacts: list[Path]) -> dict:
         zstd_offset_min = int(data.get("zstd_offset_min") or 0)
         zstd_offset_max = int(data.get("zstd_offset_max") or 0)
         phase_offset_ranges = data.get("phase_offset_ranges") if isinstance(data.get("phase_offset_ranges"), dict) else {}
+        required_codec_phases = data.get("required_codec_phases") if isinstance(data.get("required_codec_phases"), dict) else {}
         return {
             "present": True,
             "healthy": data.get("ok") is True
@@ -809,6 +811,7 @@ def native_summary_error_dashboard_health(artifacts: list[Path]) -> dict:
             "zstd_offset_min": zstd_offset_min,
             "zstd_offset_max": zstd_offset_max,
             "phase_offset_ranges": phase_offset_ranges,
+            "required_codec_phases": required_codec_phases,
         }
     return {
         "present": False,
@@ -837,6 +840,7 @@ def native_summary_error_dashboard_health(artifacts: list[Path]) -> dict:
         "zstd_offset_min": 0,
         "zstd_offset_max": 0,
         "phase_offset_ranges": {},
+        "required_codec_phases": {},
     }
 
 
@@ -1373,6 +1377,7 @@ def main() -> int:
                 "native_summary_error_zstd_offset_min": native_summary_error_health["zstd_offset_min"],
                 "native_summary_error_zstd_offset_max": native_summary_error_health["zstd_offset_max"],
                 "native_summary_error_phase_offset_ranges": native_summary_error_health["phase_offset_ranges"],
+                "native_summary_error_required_codec_phases": native_summary_error_health["required_codec_phases"],
                 "native_summary_error_negative_present": native_summary_error_negative["present"],
                 "native_summary_error_negative_healthy": native_summary_error_negative_healthy,
                 "native_summary_error_negative_case_count": native_summary_error_negative["case_count"],

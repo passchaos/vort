@@ -329,6 +329,7 @@ def main() -> int:
                 "native_summary_error_zstd_offset_min": 0,
                 "native_summary_error_zstd_offset_max": 13,
                 "native_summary_error_phase_offset_ranges": {"frame": {"min": 7, "max": 7}, "frame_body": {"min": 9, "max": 9}, "frame_checksum": {"min": 15, "max": 15}, "frame_header": {"min": 5, "max": 5}, "magic": {"min": 0, "max": 7}, "skippable_payload": {"min": 13, "max": 13}},
+                "native_summary_error_required_codec_phases": {"lz4": ["magic", "frame_header", "skippable_payload", "frame_body", "frame_checksum", "frame"], "zstd": ["magic", "frame_header", "skippable_payload", "frame_body", "frame_checksum", "frame"]},
                 "native_summary_error_negative_present": True,
                 "native_summary_error_negative_healthy": True,
                 "native_summary_error_negative_case_count": 3,
