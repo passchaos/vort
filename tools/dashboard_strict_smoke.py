@@ -22,6 +22,7 @@ FUZZ_CORPUS_ARTIFACT = "vort-deflate-wrapper-fuzz-corpus.json"
 FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
 DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
 PYTHON_ZLIB_DIFF_ARTIFACT = "vort-python-zlib-diff-smoke.json"
+ZLIB_RELAXED_ARTIFACT = "vort-zlib-relaxed-report.json"
 NATIVE_ALLOCATION_REPORT_ARTIFACT = "vort-native-allocation-report.json"
 NATIVE_ALLOCATION_SMOKE_ARTIFACT = "vort-native-allocation-smoke.json"
 NATIVE_ALLOCATION_NEGATIVE_ARTIFACT = "vort-native-allocation-negative-smoke.json"
@@ -74,6 +75,8 @@ def write_producer_map(
     include_decode_stage_smoke: bool = True,
     include_python_zlib_exact: bool = True,
     include_python_zlib_smoke: bool = True,
+    include_zlib_relaxed_exact: bool = True,
+    include_zlib_relaxed_smoke: bool = True,
     include_native_allocation_exact: bool = True,
     include_native_allocation_smoke: bool = True,
     include_zstd_compare_exact: bool = True,
@@ -132,6 +135,11 @@ def write_producer_map(
         artifact_metadata[PYTHON_ZLIB_DIFF_ARTIFACT] = {
             "expected_format": "json",
             "smoke_gate": "zig build run-python-zlib-diff-dashboard",
+        }
+    if include_zlib_relaxed_smoke:
+        artifact_metadata[ZLIB_RELAXED_ARTIFACT] = {
+            "expected_format": "json",
+            "smoke_gate": "zig build run-zlib-relaxed-report-gate",
         }
     if include_native_allocation_smoke:
         for artifact, smoke_gate in (
@@ -201,6 +209,8 @@ def write_producer_map(
         exact[DECODE_STAGE_ARTIFACT] = "zig build run-deflate-decode-stage-report-dashboard"
     if include_python_zlib_exact:
         exact[PYTHON_ZLIB_DIFF_ARTIFACT] = "zig build run-python-zlib-diff-dashboard"
+    if include_zlib_relaxed_exact:
+        exact[ZLIB_RELAXED_ARTIFACT] = "zig build run-zlib-relaxed-report-gate"
     if include_native_allocation_exact:
         exact[NATIVE_ALLOCATION_REPORT_ARTIFACT] = "zig build run-native-allocation-report-dashboard"
         exact[NATIVE_ALLOCATION_SMOKE_ARTIFACT] = "zig build run-native-allocation-smoke"
@@ -669,6 +679,25 @@ def write_python_zlib_diff_report(path: Path, *, ok: bool = True) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def write_zlib_relaxed_report(path: Path) -> None:
+    payload = {
+        "schema": "vort.zlib_relaxed_report",
+        "schema_version": 4,
+        "strict_rejections": 2,
+        "relaxed_successes": 5,
+        "dictionary_successes": 2,
+        "zlib_concatenated_successes": 3,
+        "zlib_decoder_successes": 8,
+        "limited_rejections": 1,
+        "gzip_strict_rejections": 3,
+        "gzip_relaxed_successes": 9,
+        "gzip_concatenated_successes": 4,
+        "gzip_decoder_successes": 4,
+        "gzip_limited_rejections": 1,
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
 def write_native_allocation_artifacts(root: Path) -> None:
     report = {
         "schema": "vort.native_allocation_report",
@@ -1058,6 +1087,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_fuzz_coverage_report(root / FUZZ_COVERAGE_ARTIFACT)
     write_decode_stage_report(root / DECODE_STAGE_ARTIFACT)
     write_python_zlib_diff_report(root / PYTHON_ZLIB_DIFF_ARTIFACT)
+    write_zlib_relaxed_report(root / ZLIB_RELAXED_ARTIFACT)
     write_native_allocation_artifacts(root)
     write_zstd_compare_artifacts(root)
     write_native_summary_error_dashboard(root / NATIVE_SUMMARY_ERROR_ARTIFACT)
@@ -1423,8 +1453,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 23/23 | 0 | allowed missing 0 |",
-                    "| smoke gates | 23/23 | 0 | required missing 0 |",
+                    "| producer steps | 24/24 | 0 | allowed missing 0 |",
+                    "| smoke gates | 24/24 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -1597,6 +1627,19 @@ def main() -> int:
                     "| zero-allocation cases | 2/2 | smoke present `True` |",
                     "| budget cases | 1/1 | healthy `True` |",
                     "| negative smoke cases | 1/1 | present `True` |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
+                "zlib_relaxed_markdown_table",
+                "zlib relaxed Markdown table",
+                dashboard_markdown,
+                [
+                    "## Zlib relaxed compatibility coverage",
+                    "| wrapper | strict rejections | relaxed successes | concatenated successes | decoder successes | limited rejections | extra |",
+                    "| zlib | 2 | 5 | 3 | 8 | 1 | dictionary 2 |",
+                    "| gzip | 3 | 9 | 4 | 4 | 1 | total 21 |",
                 ],
             )
         )

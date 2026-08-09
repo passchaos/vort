@@ -542,6 +542,65 @@ def native_tier_corpus_discovery_health(artifacts: list[Path]) -> dict:
     }
 
 
+def zlib_relaxed_health(artifacts: list[Path]) -> dict:
+    for artifact in artifacts:
+        data = read_json(artifact) if artifact.suffix == ".json" else {}
+        if data.get("schema") != "vort.zlib_relaxed_report":
+            continue
+        def int_field(field: str) -> int:
+            value = data.get(field)
+            return value if isinstance(value, int) and not isinstance(value, bool) else 0
+        zlib_total = int_field("strict_rejections") + int_field("relaxed_successes") + int_field("dictionary_successes") + int_field("zlib_concatenated_successes") + int_field("zlib_decoder_successes") + int_field("limited_rejections")
+        gzip_total = int_field("gzip_strict_rejections") + int_field("gzip_relaxed_successes") + int_field("gzip_concatenated_successes") + int_field("gzip_decoder_successes") + int_field("gzip_limited_rejections")
+        healthy = (
+            int_field("strict_rejections") >= 2
+            and int_field("relaxed_successes") >= 5
+            and int_field("dictionary_successes") >= 2
+            and int_field("zlib_concatenated_successes") >= 3
+            and int_field("zlib_decoder_successes") >= 8
+            and int_field("limited_rejections") >= 1
+            and int_field("gzip_strict_rejections") >= 3
+            and int_field("gzip_relaxed_successes") >= 9
+            and int_field("gzip_concatenated_successes") >= 4
+            and int_field("gzip_decoder_successes") >= 4
+            and int_field("gzip_limited_rejections") >= 1
+        )
+        return {
+            "present": True,
+            "healthy": healthy,
+            "strict_rejections": int_field("strict_rejections"),
+            "relaxed_successes": int_field("relaxed_successes"),
+            "dictionary_successes": int_field("dictionary_successes"),
+            "zlib_concatenated_successes": int_field("zlib_concatenated_successes"),
+            "zlib_decoder_successes": int_field("zlib_decoder_successes"),
+            "limited_rejections": int_field("limited_rejections"),
+            "gzip_strict_rejections": int_field("gzip_strict_rejections"),
+            "gzip_relaxed_successes": int_field("gzip_relaxed_successes"),
+            "gzip_concatenated_successes": int_field("gzip_concatenated_successes"),
+            "gzip_decoder_successes": int_field("gzip_decoder_successes"),
+            "gzip_limited_rejections": int_field("gzip_limited_rejections"),
+            "zlib_total": zlib_total,
+            "gzip_total": gzip_total,
+        }
+    return {
+        "present": False,
+        "healthy": False,
+        "strict_rejections": 0,
+        "relaxed_successes": 0,
+        "dictionary_successes": 0,
+        "zlib_concatenated_successes": 0,
+        "zlib_decoder_successes": 0,
+        "limited_rejections": 0,
+        "gzip_strict_rejections": 0,
+        "gzip_relaxed_successes": 0,
+        "gzip_concatenated_successes": 0,
+        "gzip_decoder_successes": 0,
+        "gzip_limited_rejections": 0,
+        "zlib_total": 0,
+        "gzip_total": 0,
+    }
+
+
 def zstd_compare_health(artifacts: list[Path]) -> dict:
     compare = None
     standard = None
@@ -1250,6 +1309,7 @@ def main() -> int:
     huffman_health = huffman_length_health(artifacts)
     fuzz_health = fuzz_corpus_health(artifacts)
     decode_stage_health_summary = decode_stage_health(artifacts)
+    zlib_relaxed = zlib_relaxed_health(artifacts)
     zstd_compare = zstd_compare_health(artifacts)
     native_allocation = native_allocation_health(artifacts)
     python_zlib_health = python_zlib_diff_health(artifacts)
@@ -1437,6 +1497,17 @@ def main() -> int:
             f"| commands | {header_health['command_count']} | successes/failures {header_health['command_successes']}/{header_health['command_failures']} |",
             f"| workflows | {header_health['workflow_count']} | successes {header_health['workflow_successes']}, required/missing {header_health['required_workflow_count']}/{header_health['missing_workflow_count']} |",
             f"| dictionary cases | {header_health['dictionary_cases']} | optional/FHCRC {header_health['optional_header_cases']}/{header_health['fhcrc_cases']} |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
+            "## Zlib relaxed compatibility coverage",
+            "",
+            "| wrapper | strict rejections | relaxed successes | concatenated successes | decoder successes | limited rejections | extra |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | --- |",
+            f"| zlib | {zlib_relaxed['strict_rejections']} | {zlib_relaxed['relaxed_successes']} | {zlib_relaxed['zlib_concatenated_successes']} | {zlib_relaxed['zlib_decoder_successes']} | {zlib_relaxed['limited_rejections']} | dictionary {zlib_relaxed['dictionary_successes']} |",
+            f"| gzip | {zlib_relaxed['gzip_strict_rejections']} | {zlib_relaxed['gzip_relaxed_successes']} | {zlib_relaxed['gzip_concatenated_successes']} | {zlib_relaxed['gzip_decoder_successes']} | {zlib_relaxed['gzip_limited_rejections']} | total {zlib_relaxed['gzip_total']} |",
             "",
         ]
     )
@@ -1793,6 +1864,19 @@ def main() -> int:
                 "decode_stage_error_rows": decode_stage_health_summary["error_rows"],
                 "decode_stage_matched_error_rows": decode_stage_health_summary["matched_error_rows"],
                 "decode_stage_unmatched_error_rows": decode_stage_health_summary["unmatched_error_rows"],
+                "zlib_relaxed_present": zlib_relaxed["present"],
+                "zlib_relaxed_healthy": zlib_relaxed["healthy"],
+                "zlib_relaxed_strict_rejections": zlib_relaxed["strict_rejections"],
+                "zlib_relaxed_successes": zlib_relaxed["relaxed_successes"],
+                "zlib_relaxed_dictionary_successes": zlib_relaxed["dictionary_successes"],
+                "zlib_relaxed_concatenated_successes": zlib_relaxed["zlib_concatenated_successes"],
+                "zlib_relaxed_decoder_successes": zlib_relaxed["zlib_decoder_successes"],
+                "zlib_relaxed_limited_rejections": zlib_relaxed["limited_rejections"],
+                "gzip_relaxed_strict_rejections": zlib_relaxed["gzip_strict_rejections"],
+                "gzip_relaxed_successes": zlib_relaxed["gzip_relaxed_successes"],
+                "gzip_relaxed_concatenated_successes": zlib_relaxed["gzip_concatenated_successes"],
+                "gzip_relaxed_decoder_successes": zlib_relaxed["gzip_decoder_successes"],
+                "gzip_relaxed_limited_rejections": zlib_relaxed["gzip_limited_rejections"],
                 "zstd_compare_present": zstd_compare["present"],
                 "zstd_compare_standard_present": zstd_compare["standard_present"],
                 "zstd_compare_block_sweep_present": zstd_compare["block_sweep_present"],

@@ -855,6 +855,24 @@
             "zstd_compare_block_sweep_rows",
             "zstd_compare_best_block_len"
           ]
+        },
+        "zlib_relaxed_healthy": {
+          "all": [
+            "zlib_relaxed_present"
+          ],
+          "positive": [
+            "zlib_relaxed_strict_rejections",
+            "zlib_relaxed_successes",
+            "zlib_relaxed_dictionary_successes",
+            "zlib_relaxed_concatenated_successes",
+            "zlib_relaxed_decoder_successes",
+            "zlib_relaxed_limited_rejections",
+            "gzip_relaxed_strict_rejections",
+            "gzip_relaxed_successes",
+            "gzip_relaxed_concatenated_successes",
+            "gzip_relaxed_decoder_successes",
+            "gzip_relaxed_limited_rejections"
+          ]
         }
       },
       "collections": {
@@ -919,6 +937,19 @@
         "decode_stage_present": "bool",
         "decode_stage_rows": "int",
         "decode_stage_unmatched_error_rows": "int",
+        "zlib_relaxed_present": "bool",
+        "zlib_relaxed_healthy": "bool",
+        "zlib_relaxed_strict_rejections": "int",
+        "zlib_relaxed_successes": "int",
+        "zlib_relaxed_dictionary_successes": "int",
+        "zlib_relaxed_concatenated_successes": "int",
+        "zlib_relaxed_decoder_successes": "int",
+        "zlib_relaxed_limited_rejections": "int",
+        "gzip_relaxed_strict_rejections": "int",
+        "gzip_relaxed_successes": "int",
+        "gzip_relaxed_concatenated_successes": "int",
+        "gzip_relaxed_decoder_successes": "int",
+        "gzip_relaxed_limited_rejections": "int",
         "zstd_compare_present": "bool",
         "zstd_compare_standard_present": "bool",
         "zstd_compare_block_sweep_present": "bool",
@@ -1690,6 +1721,7 @@
           "huffman_length_markdown_table",
           "zstd_compare_markdown_table",
           "native_allocation_markdown_table",
+          "zlib_relaxed_markdown_table",
           "python_zlib_diff_markdown_table",
           "decode_stage_markdown_table",
           "fuzz_corpus_markdown_table",
