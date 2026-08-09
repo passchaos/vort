@@ -1293,6 +1293,17 @@ def main() -> int:
             "",
         ]
     )
+    lines.extend(
+        [
+            "## Decode-stage smoke coverage",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| timing rows | {decode_stage_health_summary['rows']} | ok `{decode_stage_health_summary['ok']}` |",
+            f"| error rows | {decode_stage_health_summary['error_rows']} | matched/unmatched {decode_stage_health_summary['matched_error_rows']}/{decode_stage_health_summary['unmatched_error_rows']} |",
+            "",
+        ]
+    )
     if native_codec_health["coverage_details"]:
         lines.extend(
             [

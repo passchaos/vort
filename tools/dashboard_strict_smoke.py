@@ -1329,6 +1329,19 @@ def main() -> int:
                 ],
             )
         )
+        checks.append(
+            markdown_check_row(
+                "decode_stage_markdown_table",
+                "decode-stage Markdown table",
+                dashboard_markdown,
+                [
+                    "## Decode-stage smoke coverage",
+                    "| category | count | detail |",
+                    "| timing rows | 1 | ok `True` |",
+                    "| error rows | 3 | matched/unmatched 3/0 |",
+                ],
+            )
+        )
 
         missing_native_tier_root = root / "missing-native-tier"
         missing_native_tier_root.mkdir()

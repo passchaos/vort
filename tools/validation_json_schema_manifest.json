@@ -1626,6 +1626,7 @@
           "native_codec_probe_markdown_tables",
           "header_inspect_markdown_table",
           "python_zlib_diff_markdown_table",
+          "decode_stage_markdown_table",
           "missing_producer",
           "missing_smoke_gate",
           "missing_header_inspect",
