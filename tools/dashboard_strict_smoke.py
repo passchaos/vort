@@ -2466,6 +2466,15 @@ def main() -> int:
                 payload["ok"] = False
                 (fixture_root / NATIVE_CODEC_PROBES_ARTIFACT).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
                 write_producer_map(producer_map)
+            elif fixture == "missing_zstd_compare_artifact":
+                (fixture_root / ZSTD_COMPARE_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "zstd_compare_failed":
+                write_zstd_compare_artifacts(fixture_root)
+                payload = json.loads((fixture_root / ZSTD_COMPARE_ARTIFACT).read_text())
+                payload["ok"] = False
+                (fixture_root / ZSTD_COMPARE_ARTIFACT).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+                write_producer_map(producer_map)
             elif fixture == "missing_native_summary_error_dashboard_artifact":
                 (fixture_root / NATIVE_SUMMARY_ERROR_ARTIFACT).unlink()
                 write_producer_map(producer_map)

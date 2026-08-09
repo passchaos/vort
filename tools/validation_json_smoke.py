@@ -1176,6 +1176,7 @@ def main() -> int:
             and dashboard["native_allocation_healthy"]
             and dashboard["python_zlib_diff_healthy"]
             and dashboard["native_codec_probes_healthy"]
+            and dashboard["zstd_compare_healthy"]
             and dashboard["native_summary_error_healthy"]
             and dashboard["native_summary_error_negative_healthy"]
             and dashboard["lz4_native_summary_healthy"]

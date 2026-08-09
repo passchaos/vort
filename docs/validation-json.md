@@ -2458,6 +2458,8 @@ Current unhealthy reason values are:
 - `python_zlib_diff_failed`
 - `missing_native_codec_probes_artifact`
 - `native_codec_probes_failed`
+- `missing_zstd_compare_artifact`
+- `zstd_compare_failed`
 - `missing_native_summary_error_dashboard_artifact`
 - `native_summary_error_dashboard_undercovered`
 - `missing_native_summary_error_negative_artifact`
@@ -2735,6 +2737,7 @@ Example:
     "missing_decode_stage_artifact",
     "missing_python_zlib_diff_artifact",
     "missing_native_codec_probes_artifact",
+    "missing_zstd_compare_artifact",
     "missing_native_summary_error_dashboard_artifact",
     "missing_native_summary_error_negative_artifact",
     "missing_lz4_native_summary_artifact",
@@ -3219,9 +3222,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 39,
-      "min_expected_failures": 39,
-      "min_matched": 39
+      "min_checks": 41,
+      "min_expected_failures": 41,
+      "min_matched": 41
     },
     {
       "mode": "native-tier-range-health",
@@ -3315,7 +3318,7 @@ aggregate health reasons must be backed by real failing dashboard inputs before
 the smoke artifact can pass. The expected reason/check/fixture matrix lives in
 `tools/dashboard_strict_validation_reasons.json`; the retained
 `strict-validation-health` mode minimums must cover every configured reason,
-currently 39. The `dashboard-markdown` mode verifies that important human-facing
+currently 41. The `dashboard-markdown` mode verifies that important human-facing
 sections, including artifact inventory, aggregate validation health, producer/smoke-gate
 coverage, dashboard strict gate coverage, dashboard configuration coverage, validation JSON schema coverage, header inspect coverage, corrupt-sidecar
 rejection coverage, Huffman optimality, zstd comparison gate coverage, native fuzz corpus coverage, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, Python zlib
@@ -3354,9 +3357,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 39,
-      "min_expected_failures": 39,
-      "min_matched": 39
+      "min_checks": 41,
+      "min_expected_failures": 41,
+      "min_matched": 41
     },
     {
       "mode": "native-tier-range-health",
@@ -3394,14 +3397,14 @@ Example:
     {
       "mode": "strict-validation-health",
       "checks": 1,
-      "min_checks": 39,
-      "missing_checks": 38,
+      "min_checks": 41,
+      "missing_checks": 40,
       "expected_failures": 1,
-      "min_expected_failures": 39,
-      "missing_expected_failures": 38,
+      "min_expected_failures": 41,
+      "missing_expected_failures": 40,
       "matched": 1,
-      "min_matched": 39,
-      "missing_matched": 38
+      "min_matched": 41,
+      "missing_matched": 40
     },
     {
       "mode": "native-tier-range-health",

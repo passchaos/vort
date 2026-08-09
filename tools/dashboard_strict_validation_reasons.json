@@ -148,6 +148,16 @@
       "fixture": "native_codec_probes_failed"
     },
     {
+      "reason": "missing_zstd_compare_artifact",
+      "check": "validation_missing_zstd_compare_artifact",
+      "fixture": "missing_zstd_compare_artifact"
+    },
+    {
+      "reason": "zstd_compare_failed",
+      "check": "validation_zstd_compare_failed",
+      "fixture": "zstd_compare_failed"
+    },
+    {
       "reason": "missing_native_summary_error_dashboard_artifact",
       "check": "validation_missing_native_summary_error_dashboard_artifact",
       "fixture": "missing_native_summary_error_dashboard_artifact"
