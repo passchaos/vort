@@ -1245,6 +1245,20 @@ def main() -> int:
         checks.append(check_row("all_strict_ok", "all", False, True, ok.returncode, "dashboard_index=", ok.stdout))
         checks.append(
             markdown_check_row(
+                "dashboard_strict_mode_markdown_table",
+                "dashboard strict mode Markdown table",
+                dashboard_markdown,
+                [
+                    "## Dashboard strict mode coverage",
+                    "| category | count | detail |",
+                    "| strict checks | 1 | expected failures/matched 0/1 |",
+                    "| modes | 1 | expected/missing 1/0 |",
+                    "| requirement deltas | 0 | checks/expected/matched 0/0/0 |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
                 "native_summary_error_markdown_tables",
                 "native summary error Markdown tables",
                 dashboard_markdown,

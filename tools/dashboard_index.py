@@ -1264,6 +1264,18 @@ def main() -> int:
     ]
     lines.extend(
         [
+            "## Dashboard strict mode coverage",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| strict checks | {strict_health['check_count']} | expected failures/matched {strict_health['expected_failure_count']}/{strict_health['matched_count']} |",
+            f"| modes | {strict_health['mode_count']} | expected/missing {strict_health['expected_mode_count']}/{strict_health['missing_mode_count']} |",
+            f"| requirement deltas | {strict_health['missing_checks'] + strict_health['missing_expected_failures'] + strict_health['missing_matched']} | checks/expected/matched {strict_health['missing_checks']}/{strict_health['missing_expected_failures']}/{strict_health['missing_matched']} |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
             "## Header inspect coverage",
             "",
             "| category | total | raw | zlib | gzip |",
