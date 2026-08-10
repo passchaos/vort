@@ -1537,7 +1537,9 @@ zig build run-deflate-wrapper-fuzz-corpus-dashboard
 This schema summarizes the hex-sample fuzz corpus harness when it is run in
 artifact mode. The fixed dashboard step currently retains the raw/zlib/gzip
 wrapper corpus so exact malformed-input error expectations are visible in the
-main dashboard index.
+main dashboard index. Dashboard aggregate health also cross-checks retained
+Markdown summary/sample rows against the JSON report, and the native corpus
+health additionally verifies its coverage-smoke matched rows.
 
 Important fields:
 
@@ -2723,13 +2725,21 @@ Top-level fields:
   `decode_stage_csv_dynamic_rows`, `decode_stage_csv_fixed_rows`,
   `decode_stage_csv_stored_rows`, `decode_stage_csv_missing_cases`
 - `native_fuzz_corpus_present`, `native_fuzz_corpus_coverage_present`,
-  `native_fuzz_corpus_healthy`, `native_fuzz_corpus_cases`,
-  `native_fuzz_corpus_accepted`, `native_fuzz_corpus_rejected`,
+  `native_fuzz_corpus_markdown_present`, `native_fuzz_corpus_healthy`,
+  `native_fuzz_corpus_cases`, `native_fuzz_corpus_accepted`,
+  `native_fuzz_corpus_rejected`, `native_fuzz_corpus_report_rows`,
+  `native_fuzz_corpus_report_count_mismatch`,
   `native_fuzz_corpus_matched_rows`, `native_fuzz_corpus_unmatched_rows`,
   `native_fuzz_corpus_exact_error_expectations`,
   `native_fuzz_corpus_mode_count_rows`, `native_fuzz_corpus_error_count_rows`,
   `native_fuzz_corpus_coverage_mode_requirements`,
-  `native_fuzz_corpus_coverage_error_requirements`
+  `native_fuzz_corpus_coverage_error_requirements`,
+  `native_fuzz_corpus_coverage_mode_matched`,
+  `native_fuzz_corpus_coverage_error_matched`,
+  `native_fuzz_corpus_coverage_unmatched`,
+  `native_fuzz_corpus_markdown_rows`,
+  `native_fuzz_corpus_markdown_matched`,
+  `native_fuzz_corpus_markdown_unmatched`
 - `br_static_dictionary_present`, `br_static_dictionary_upstream_present`,
   `br_static_dictionary_node_present`, `br_static_dictionary_audit_present`,
   `br_static_dictionary_negative_present`, `br_static_dictionary_healthy`,
@@ -3248,10 +3258,13 @@ Example:
   "decode_stage_csv_missing_cases": [],
   "native_fuzz_corpus_present": false,
   "native_fuzz_corpus_coverage_present": false,
+  "native_fuzz_corpus_markdown_present": false,
   "native_fuzz_corpus_healthy": false,
   "native_fuzz_corpus_cases": 0,
   "native_fuzz_corpus_accepted": 0,
   "native_fuzz_corpus_rejected": 0,
+  "native_fuzz_corpus_report_rows": 0,
+  "native_fuzz_corpus_report_count_mismatch": 0,
   "native_fuzz_corpus_matched_rows": 0,
   "native_fuzz_corpus_unmatched_rows": 0,
   "native_fuzz_corpus_exact_error_expectations": 0,
@@ -3259,6 +3272,12 @@ Example:
   "native_fuzz_corpus_error_count_rows": 0,
   "native_fuzz_corpus_coverage_mode_requirements": 0,
   "native_fuzz_corpus_coverage_error_requirements": 0,
+  "native_fuzz_corpus_coverage_mode_matched": 0,
+  "native_fuzz_corpus_coverage_error_matched": 0,
+  "native_fuzz_corpus_coverage_unmatched": 0,
+  "native_fuzz_corpus_markdown_rows": 0,
+  "native_fuzz_corpus_markdown_matched": 0,
+  "native_fuzz_corpus_markdown_unmatched": 0,
   "br_static_dictionary_present": false,
   "br_static_dictionary_upstream_present": false,
   "br_static_dictionary_node_present": false,

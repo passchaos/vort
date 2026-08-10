@@ -1176,18 +1176,92 @@ def native_tier_corpus_discovery_health(artifacts: list[Path]) -> dict:
 def native_fuzz_corpus_health(artifacts: list[Path]) -> dict:
     report = None
     coverage = None
+    markdown = None
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
         if data.get("schema") == "vort.fuzz_corpus_report" and artifact.name == "vort-native-fuzz-corpus.json":
             report = data
         elif data.get("schema") == "vort.fuzz_corpus_coverage_smoke" and artifact.name == "vort-native-fuzz-corpus-coverage-smoke.json":
             coverage = data
+        elif artifact.name == "vort-native-fuzz-corpus.md":
+            markdown = artifact
 
     def int_field(data: dict | None, field: str) -> int:
         if not isinstance(data, dict):
             return 0
         value = data.get(field)
         return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    def row_int(row: dict, field: str) -> int:
+        value = row.get(field)
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    def expected_label(value: object) -> str:
+        return str(value or "any")
+
+    def markdown_cell(value: object) -> str:
+        return str(value or "")
+
+    def markdown_checks(report_data: dict | None) -> tuple[bool, int, int, int]:
+        if markdown is None:
+            return (False, 0, 0, 1)
+        if not isinstance(report_data, dict):
+            return (True, 0, 0, 1)
+        try:
+            text = markdown.read_text(errors="replace")
+        except Exception:
+            return (True, 0, 0, 1)
+        expected = [
+            f"- mode: `{report_data.get('mode')}`",
+            f"- cases: {int_field(report_data, 'cases')}",
+            f"- accepted: {int_field(report_data, 'accepted')}",
+            f"- rejected: {int_field(report_data, 'rejected')}",
+            f"- exact error expectations: {int_field(report_data, 'exact_error_expectations')}",
+            f"- matched rows: {int_field(report_data, 'matched_rows')}",
+            "## Mode summary",
+            "## Error summary",
+            "## Samples",
+        ]
+        for row in mode_counts:
+            if not isinstance(row, dict):
+                continue
+            expected.append(
+                "| {mode} | {cases} | {accepted} | {rejected} | {exact} | {matched} |".format(
+                    mode=markdown_cell(row.get("mode")),
+                    cases=row_int(row, "cases"),
+                    accepted=row_int(row, "accepted"),
+                    rejected=row_int(row, "rejected"),
+                    exact=row_int(row, "exact_error_expectations"),
+                    matched=row_int(row, "matched_rows"),
+                )
+            )
+        for row in error_counts:
+            if not isinstance(row, dict):
+                continue
+            expected.append(
+                "| {mode} | `{error}` | {count} |".format(
+                    mode=markdown_cell(row.get("mode")),
+                    error=markdown_cell(row.get("error")),
+                    count=row_int(row, "count"),
+                )
+            )
+        for row in items:
+            if not isinstance(row, dict):
+                continue
+            expected.append(
+                "| {index} | {mode} | {input_bytes} | {expected} | `{expected_error}` | {outcome} | `{actual_error}` | {matched} |".format(
+                    index=row_int(row, "index"),
+                    mode=markdown_cell(row.get("mode")),
+                    input_bytes=row_int(row, "input_bytes"),
+                    expected=expected_label(row.get("expected")),
+                    expected_error=markdown_cell(row.get("expected_error")),
+                    outcome=markdown_cell(row.get("outcome")),
+                    actual_error=markdown_cell(row.get("actual_error")),
+                    matched="true" if row.get("matched") is True else "false",
+                )
+            )
+        matched = sum(1 for needle in expected if needle in text)
+        return (True, len(expected), matched, len(expected) - matched)
 
     report_present = isinstance(report, dict)
     coverage_present = isinstance(coverage, dict)
@@ -1199,11 +1273,45 @@ def native_fuzz_corpus_health(artifacts: list[Path]) -> dict:
     error_count_rows = int_field(report, "error_count_rows")
     coverage_mode_requirements = int_field(coverage, "mode_requirement_count")
     coverage_error_requirements = int_field(coverage, "error_requirement_count")
+    items = report.get("items") if isinstance(report, dict) else []
+    items = items if isinstance(items, list) else []
+    mode_counts = report.get("mode_counts") if isinstance(report, dict) else []
+    mode_counts = mode_counts if isinstance(mode_counts, list) else []
+    error_counts = report.get("error_counts") if isinstance(report, dict) else []
+    error_counts = error_counts if isinstance(error_counts, list) else []
+    report_rows = len(items)
+    accepted_from_items = sum(1 for row in items if isinstance(row, dict) and row.get("outcome") == "accepted")
+    rejected_from_items = sum(1 for row in items if isinstance(row, dict) and row.get("outcome") == "rejected")
+    matched_from_items = sum(1 for row in items if isinstance(row, dict) and row.get("matched") is True)
+    exact_from_items = sum(1 for row in items if isinstance(row, dict) and str(row.get("expected_error") or "") != "")
+    report_count_mismatch = (
+        abs(cases - report_rows)
+        + abs(int_field(report, "accepted") - accepted_from_items)
+        + abs(int_field(report, "rejected") - rejected_from_items)
+        + abs(matched_rows - matched_from_items)
+        + abs(exact_error_expectations - exact_from_items)
+        + abs(mode_count_rows - len(mode_counts))
+        + abs(error_count_rows - len(error_counts))
+    )
+    mode_requirements = coverage.get("mode_requirements") if isinstance(coverage, dict) else []
+    mode_requirements = mode_requirements if isinstance(mode_requirements, list) else []
+    error_requirements = coverage.get("error_requirements") if isinstance(coverage, dict) else []
+    error_requirements = error_requirements if isinstance(error_requirements, list) else []
+    coverage_mode_matched = sum(1 for row in mode_requirements if isinstance(row, dict) and row.get("matched") is True)
+    coverage_error_matched = sum(1 for row in error_requirements if isinstance(row, dict) and row.get("matched") is True)
+    coverage_unmatched = (
+        abs(coverage_mode_requirements - len(mode_requirements))
+        + abs(coverage_error_requirements - len(error_requirements))
+        + (len(mode_requirements) - coverage_mode_matched)
+        + (len(error_requirements) - coverage_error_matched)
+    )
+    markdown_present, markdown_rows, markdown_matched, markdown_unmatched = markdown_checks(report if report_present else None)
     report_healthy = (
         report_present
         and bool(report.get("ok"))
         and str(report.get("mode") or "") == "native"
         and cases > 0
+        and report_count_mismatch == 0
         and matched_rows == cases
         and unmatched_rows == 0
         and exact_error_expectations > 0
@@ -1215,17 +1323,23 @@ def native_fuzz_corpus_health(artifacts: list[Path]) -> dict:
         and bool(coverage.get("ok"))
         and coverage_mode_requirements > 0
         and coverage_error_requirements > 0
+        and coverage_unmatched == 0
     )
-    healthy = report_healthy and coverage_healthy
+    markdown_healthy = markdown_present and markdown_rows > 0 and markdown_unmatched == 0
+    healthy = report_healthy and coverage_healthy and markdown_healthy
     return {
         "present": report_present,
         "coverage_present": coverage_present,
+        "markdown_present": markdown_present,
         "report_healthy": report_healthy,
         "coverage_healthy": coverage_healthy,
+        "markdown_healthy": markdown_healthy,
         "healthy": healthy,
         "cases": cases,
         "accepted": int_field(report, "accepted"),
         "rejected": int_field(report, "rejected"),
+        "report_rows": report_rows,
+        "report_count_mismatch": report_count_mismatch,
         "matched_rows": matched_rows,
         "unmatched_rows": unmatched_rows,
         "exact_error_expectations": exact_error_expectations,
@@ -1233,6 +1347,12 @@ def native_fuzz_corpus_health(artifacts: list[Path]) -> dict:
         "error_count_rows": error_count_rows,
         "coverage_mode_requirements": coverage_mode_requirements,
         "coverage_error_requirements": coverage_error_requirements,
+        "coverage_mode_matched": coverage_mode_matched,
+        "coverage_error_matched": coverage_error_matched,
+        "coverage_unmatched": coverage_unmatched,
+        "markdown_rows": markdown_rows,
+        "markdown_matched": markdown_matched,
+        "markdown_unmatched": markdown_unmatched,
     }
 
 
@@ -4723,9 +4843,9 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_fuzz_coverage_artifact")
     elif not fuzz_health["coverage_healthy"]:
         validation_unhealthy_reasons.append("fuzz_coverage_failed")
-    if not native_fuzz["present"]:
+    if not (native_fuzz["present"] and native_fuzz["markdown_present"]):
         validation_unhealthy_reasons.append("missing_native_fuzz_corpus_artifact")
-    elif not native_fuzz["report_healthy"]:
+    elif not (native_fuzz["report_healthy"] and native_fuzz["markdown_healthy"]):
         validation_unhealthy_reasons.append("native_fuzz_corpus_failed")
     if not native_fuzz["coverage_present"]:
         validation_unhealthy_reasons.append("missing_native_fuzz_coverage_artifact")
@@ -4883,6 +5003,7 @@ def main() -> int:
         f"- level report: {level_report['rows']}/{level_report['expected_rows']} rows, shape {level_report['shape_rows']}, token/ratio/roundtrip {level_report['token_accounting_rows']}/{level_report['ratio_rows']}/{level_report['roundtrip_rows']}, Markdown {level_report['markdown_matched']}/{level_report['markdown_summary_rows']}, healthy `{level_report_healthy}`",
         f"- dynamic plan: {dynamic_plan['rows']}/{dynamic_plan['expected_rows']} rows across {dynamic_plan['source_count']}/{dynamic_plan['expected_source_count']} sources, token/histogram/ratio/slack/wrapper {dynamic_plan['token_accounting_rows']}/{dynamic_plan['histogram_rows']}/{dynamic_plan['ratio_rows']}/{dynamic_plan['slack_rows']}/{dynamic_plan['wrapper_rows']}, healthy `{dynamic_plan_healthy}`",
         f"- fuzz corpus coverage: {fuzz_health['matched_rows']}/{fuzz_health['cases']} rows matched, exact-error rows {fuzz_health['exact_error_expectations']}, coverage requirements {fuzz_health['coverage_mode_requirements']}/{fuzz_health['coverage_error_requirements']}, healthy `{fuzz_healthy}`",
+        f"- native fuzz corpus: {native_fuzz['matched_rows']}/{native_fuzz['cases']} rows matched, Markdown {native_fuzz['markdown_matched']}/{native_fuzz['markdown_rows']}, coverage matched modes/errors {native_fuzz['coverage_mode_matched']}/{native_fuzz['coverage_error_matched']}, healthy `{native_fuzz['healthy']}`",
         f"- decode-stage smoke: {decode_stage_health_summary['matched_error_rows']}/{decode_stage_health_summary['error_rows']} error rows matched across {decode_stage_health_summary['rows']} timing rows, healthy `{decode_stage_healthy}`",
         f"- Python zlib differential: payloads {python_zlib_health['payloads']} (large-file {python_zlib_health['large_file_payloads']}, file-hex encodes {python_zlib_health['file_hex_encode_cases']}), dynamic {python_zlib_health['dynamic_payloads']}, dictionary encode raw/zlib {python_zlib_health['raw_dict_encode_cases']}/{python_zlib_health['zlib_dict_encode_cases']}, CLI successes/failures {python_zlib_health['cli_successes']}/{python_zlib_health['expected_failures']}, healthy `{python_zlib_healthy}`",
         f"- native codec probes: {native_codec_health['ok_probe_count']}/{native_codec_health['probe_count']} probes ok, capabilities {native_codec_health['ok_capability_count']}/{native_codec_health['capability_count']} ok, cases total/lib/incremental/chunked/reusable-chunked/fse-repeat {native_codec_health['total_cases']}/{native_codec_health['lib_generated_cases']}/{native_codec_health['incremental_cases']}/{native_codec_health['chunked_cases']}/{native_codec_health['reusable_chunked_cases']}/{native_codec_health['fse_repeat_cases']}, healthy `{native_codec_health['healthy']}`",
@@ -5014,9 +5135,10 @@ def main() -> int:
             "| category | count | detail |",
             "| --- | ---: | --- |",
             f"| native cases | {native_fuzz['cases']} | accepted/rejected {native_fuzz['accepted']}/{native_fuzz['rejected']} |",
-            f"| matched rows | {native_fuzz['matched_rows']} | unmatched {native_fuzz['unmatched_rows']} |",
+            f"| report rows | {native_fuzz['report_rows']}/{native_fuzz['cases']} | matched {native_fuzz['matched_rows']}, count mismatch {native_fuzz['report_count_mismatch']}, unmatched {native_fuzz['unmatched_rows']} |",
             f"| exact error expectations | {native_fuzz['exact_error_expectations']} | mode/error rows {native_fuzz['mode_count_rows']}/{native_fuzz['error_count_rows']} |",
-            f"| coverage requirements | {native_fuzz['coverage_mode_requirements'] + native_fuzz['coverage_error_requirements']} | modes/errors {native_fuzz['coverage_mode_requirements']}/{native_fuzz['coverage_error_requirements']} |",
+            f"| coverage requirements | {native_fuzz['coverage_mode_requirements'] + native_fuzz['coverage_error_requirements']} | matched modes/errors {native_fuzz['coverage_mode_matched']}/{native_fuzz['coverage_error_matched']}, unmatched {native_fuzz['coverage_unmatched']} |",
+            f"| Markdown rows | {native_fuzz['markdown_matched']}/{native_fuzz['markdown_rows']} | present `{native_fuzz['markdown_present']}`, unmatched {native_fuzz['markdown_unmatched']} |",
             "",
         ]
     )
@@ -5722,10 +5844,13 @@ def main() -> int:
                 "decode_stage_csv_missing_cases": decode_stage_health_summary["csv_missing_cases"],
                 "native_fuzz_corpus_present": native_fuzz["present"],
                 "native_fuzz_corpus_coverage_present": native_fuzz["coverage_present"],
+                "native_fuzz_corpus_markdown_present": native_fuzz["markdown_present"],
                 "native_fuzz_corpus_healthy": native_fuzz["healthy"],
                 "native_fuzz_corpus_cases": native_fuzz["cases"],
                 "native_fuzz_corpus_accepted": native_fuzz["accepted"],
                 "native_fuzz_corpus_rejected": native_fuzz["rejected"],
+                "native_fuzz_corpus_report_rows": native_fuzz["report_rows"],
+                "native_fuzz_corpus_report_count_mismatch": native_fuzz["report_count_mismatch"],
                 "native_fuzz_corpus_matched_rows": native_fuzz["matched_rows"],
                 "native_fuzz_corpus_unmatched_rows": native_fuzz["unmatched_rows"],
                 "native_fuzz_corpus_exact_error_expectations": native_fuzz["exact_error_expectations"],
@@ -5733,6 +5858,12 @@ def main() -> int:
                 "native_fuzz_corpus_error_count_rows": native_fuzz["error_count_rows"],
                 "native_fuzz_corpus_coverage_mode_requirements": native_fuzz["coverage_mode_requirements"],
                 "native_fuzz_corpus_coverage_error_requirements": native_fuzz["coverage_error_requirements"],
+                "native_fuzz_corpus_coverage_mode_matched": native_fuzz["coverage_mode_matched"],
+                "native_fuzz_corpus_coverage_error_matched": native_fuzz["coverage_error_matched"],
+                "native_fuzz_corpus_coverage_unmatched": native_fuzz["coverage_unmatched"],
+                "native_fuzz_corpus_markdown_rows": native_fuzz["markdown_rows"],
+                "native_fuzz_corpus_markdown_matched": native_fuzz["markdown_matched"],
+                "native_fuzz_corpus_markdown_unmatched": native_fuzz["markdown_unmatched"],
                 "br_static_dictionary_present": br_static_dictionary["present"],
                 "br_static_dictionary_upstream_present": br_static_dictionary["upstream_present"],
                 "br_static_dictionary_node_present": br_static_dictionary["node_present"],

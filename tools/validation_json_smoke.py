@@ -123,6 +123,9 @@ def main() -> int:
         fuzz_report_path = ROOT / "zig-out" / "vort-deflate-wrapper-fuzz-corpus.json"
         fuzz_coverage_path = ROOT / "tools" / "fuzz_corpus_expected_coverage.json"
         fuzz_coverage_smoke_path = ROOT / "zig-out" / "vort-fuzz-corpus-coverage-smoke.json"
+        native_fuzz_report_path = ROOT / "zig-out" / "vort-native-fuzz-corpus.json"
+        native_fuzz_markdown_path = ROOT / "zig-out" / "vort-native-fuzz-corpus.md"
+        native_fuzz_coverage_smoke_path = ROOT / "zig-out" / "vort-native-fuzz-corpus-coverage-smoke.json"
         decode_stage_path = ROOT / "zig-out" / "vort-deflate-decode-stage-report.json"
         decode_stage_csv_path = ROOT / "zig-out" / "vort-deflate-decode-stage-report.csv"
         checksum_bench_path = ROOT / "zig-out" / "vort-checksum-bench.csv"
@@ -297,6 +300,22 @@ def main() -> int:
         assert fuzz_coverage_smoke["mode_requirement_count"] == len(fuzz_coverage["mode_requirements"])
         assert fuzz_coverage_smoke["error_requirement_count"] == len(fuzz_coverage["error_requirements"])
         validate_value_against_manifest(fuzz_coverage_smoke, schemas_def)
+        native_fuzz_report = json.loads(native_fuzz_report_path.read_text())
+        native_fuzz_markdown = native_fuzz_markdown_path.read_text()
+        native_fuzz_coverage_smoke = json.loads(native_fuzz_coverage_smoke_path.read_text())
+        assert native_fuzz_report["schema"] == "vort.fuzz_corpus_report"
+        assert native_fuzz_report["schema_version"] == 1
+        assert native_fuzz_report["ok"] is True
+        assert native_fuzz_report["mode"] == "native"
+        assert native_fuzz_report["cases"] == len(native_fuzz_report["items"])
+        assert native_fuzz_report["matched_rows"] == native_fuzz_report["cases"]
+        assert f"- cases: {native_fuzz_report['cases']}" in native_fuzz_markdown
+        assert native_fuzz_coverage_smoke["schema"] == "vort.fuzz_corpus_coverage_smoke"
+        assert native_fuzz_coverage_smoke["ok"] is True
+        assert all(row["matched"] is True for row in native_fuzz_coverage_smoke["mode_requirements"])
+        assert all(row["matched"] is True for row in native_fuzz_coverage_smoke["error_requirements"])
+        validate_value_against_manifest(native_fuzz_report, schemas_def)
+        validate_value_against_manifest(native_fuzz_coverage_smoke, schemas_def)
         with decode_stage_csv_path.open(newline="") as f:
             decode_stage_csv_rows = list(csv.DictReader(f))
         assert len(decode_stage_csv_rows) == 10
@@ -955,6 +974,7 @@ def main() -> int:
             "vort-zstd-compare-block-sweep.csv",
             "vort-zstd-compare-block-sweep.md",
             "vort-native-fuzz-corpus.json",
+            "vort-native-fuzz-corpus.md",
             "vort-native-fuzz-corpus-coverage-smoke.json",
             "vort-br-static-dictionary-candidates.json",
             "vort-br-static-dictionary-candidate-upstream-smoke.json",
@@ -1174,15 +1194,26 @@ def main() -> int:
         assert dashboard["zstd_compare_markdown_unmatched"] == 0
         assert dashboard["native_fuzz_corpus_present"] is True
         assert dashboard["native_fuzz_corpus_coverage_present"] is True
+        assert dashboard["native_fuzz_corpus_markdown_present"] is True
         assert dashboard["native_fuzz_corpus_healthy"] is True
-        assert dashboard["native_fuzz_corpus_cases"] >= 1
-        assert dashboard["native_fuzz_corpus_accepted"] >= 1
-        assert dashboard["native_fuzz_corpus_rejected"] >= 1
+        assert dashboard["native_fuzz_corpus_cases"] == native_fuzz_report["cases"]
+        assert dashboard["native_fuzz_corpus_accepted"] == native_fuzz_report["accepted"]
+        assert dashboard["native_fuzz_corpus_rejected"] == native_fuzz_report["rejected"]
+        assert dashboard["native_fuzz_corpus_report_rows"] == len(native_fuzz_report["items"])
+        assert dashboard["native_fuzz_corpus_report_count_mismatch"] == 0
         assert dashboard["native_fuzz_corpus_matched_rows"] == dashboard["native_fuzz_corpus_cases"]
         assert dashboard["native_fuzz_corpus_unmatched_rows"] == 0
-        assert dashboard["native_fuzz_corpus_exact_error_expectations"] >= 1
-        assert dashboard["native_fuzz_corpus_coverage_mode_requirements"] >= 1
-        assert dashboard["native_fuzz_corpus_coverage_error_requirements"] >= 1
+        assert dashboard["native_fuzz_corpus_exact_error_expectations"] == native_fuzz_report["exact_error_expectations"]
+        assert dashboard["native_fuzz_corpus_mode_count_rows"] == len(native_fuzz_report["mode_counts"])
+        assert dashboard["native_fuzz_corpus_error_count_rows"] == len(native_fuzz_report["error_counts"])
+        assert dashboard["native_fuzz_corpus_coverage_mode_requirements"] == native_fuzz_coverage_smoke["mode_requirement_count"]
+        assert dashboard["native_fuzz_corpus_coverage_error_requirements"] == native_fuzz_coverage_smoke["error_requirement_count"]
+        assert dashboard["native_fuzz_corpus_coverage_mode_matched"] == native_fuzz_coverage_smoke["mode_requirement_count"]
+        assert dashboard["native_fuzz_corpus_coverage_error_matched"] == native_fuzz_coverage_smoke["error_requirement_count"]
+        assert dashboard["native_fuzz_corpus_coverage_unmatched"] == 0
+        assert dashboard["native_fuzz_corpus_markdown_rows"] > 0
+        assert dashboard["native_fuzz_corpus_markdown_matched"] == dashboard["native_fuzz_corpus_markdown_rows"]
+        assert dashboard["native_fuzz_corpus_markdown_unmatched"] == 0
         assert dashboard["br_static_dictionary_present"] is True
         assert dashboard["br_static_dictionary_upstream_present"] is True
         assert dashboard["br_static_dictionary_node_present"] is True

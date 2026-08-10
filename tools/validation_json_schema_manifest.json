@@ -1034,19 +1034,28 @@
         "native_fuzz_corpus_healthy": {
           "all": [
             "native_fuzz_corpus_present",
-            "native_fuzz_corpus_coverage_present"
+            "native_fuzz_corpus_coverage_present",
+            "native_fuzz_corpus_markdown_present"
           ],
           "positive": [
             "native_fuzz_corpus_cases",
+            "native_fuzz_corpus_report_rows",
             "native_fuzz_corpus_matched_rows",
             "native_fuzz_corpus_exact_error_expectations",
             "native_fuzz_corpus_mode_count_rows",
             "native_fuzz_corpus_error_count_rows",
             "native_fuzz_corpus_coverage_mode_requirements",
-            "native_fuzz_corpus_coverage_error_requirements"
+            "native_fuzz_corpus_coverage_error_requirements",
+            "native_fuzz_corpus_coverage_mode_matched",
+            "native_fuzz_corpus_coverage_error_matched",
+            "native_fuzz_corpus_markdown_rows",
+            "native_fuzz_corpus_markdown_matched"
           ],
           "zero": [
-            "native_fuzz_corpus_unmatched_rows"
+            "native_fuzz_corpus_report_count_mismatch",
+            "native_fuzz_corpus_unmatched_rows",
+            "native_fuzz_corpus_coverage_unmatched",
+            "native_fuzz_corpus_markdown_unmatched"
           ]
         },
         "native_tier_range_healthy": {
@@ -1503,10 +1512,13 @@
         "decode_stage_csv_missing_cases": "list",
         "native_fuzz_corpus_present": "bool",
         "native_fuzz_corpus_coverage_present": "bool",
+        "native_fuzz_corpus_markdown_present": "bool",
         "native_fuzz_corpus_healthy": "bool",
         "native_fuzz_corpus_cases": "int",
         "native_fuzz_corpus_accepted": "int",
         "native_fuzz_corpus_rejected": "int",
+        "native_fuzz_corpus_report_rows": "int",
+        "native_fuzz_corpus_report_count_mismatch": "int",
         "native_fuzz_corpus_matched_rows": "int",
         "native_fuzz_corpus_unmatched_rows": "int",
         "native_fuzz_corpus_exact_error_expectations": "int",
@@ -1514,6 +1526,12 @@
         "native_fuzz_corpus_error_count_rows": "int",
         "native_fuzz_corpus_coverage_mode_requirements": "int",
         "native_fuzz_corpus_coverage_error_requirements": "int",
+        "native_fuzz_corpus_coverage_mode_matched": "int",
+        "native_fuzz_corpus_coverage_error_matched": "int",
+        "native_fuzz_corpus_coverage_unmatched": "int",
+        "native_fuzz_corpus_markdown_rows": "int",
+        "native_fuzz_corpus_markdown_matched": "int",
+        "native_fuzz_corpus_markdown_unmatched": "int",
         "br_static_dictionary_present": "bool",
         "br_static_dictionary_upstream_present": "bool",
         "br_static_dictionary_node_present": "bool",
@@ -2284,6 +2302,31 @@
           "left": "native_codec_probes_markdown_matched",
           "op": "eq",
           "right": "native_codec_probes_markdown_rows"
+        },
+        {
+          "left": "native_fuzz_corpus_report_rows",
+          "op": "eq",
+          "right": "native_fuzz_corpus_cases"
+        },
+        {
+          "left": "native_fuzz_corpus_matched_rows",
+          "op": "eq",
+          "right": "native_fuzz_corpus_cases"
+        },
+        {
+          "left": "native_fuzz_corpus_coverage_mode_matched",
+          "op": "eq",
+          "right": "native_fuzz_corpus_coverage_mode_requirements"
+        },
+        {
+          "left": "native_fuzz_corpus_coverage_error_matched",
+          "op": "eq",
+          "right": "native_fuzz_corpus_coverage_error_requirements"
+        },
+        {
+          "left": "native_fuzz_corpus_markdown_matched",
+          "op": "eq",
+          "right": "native_fuzz_corpus_markdown_rows"
         }
       ]
     },

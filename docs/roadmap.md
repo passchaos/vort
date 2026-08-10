@@ -2560,3 +2560,8 @@ architecture blindly.
   health now cross-checks Markdown coverage, capability, and executable rows
   against the JSON probe data, verifies coverage case totals against total
   cases, and exposes Markdown drift counters in the validation dashboard.
+- Tightened native fuzz corpus dashboard health by requiring the retained
+  `vort-native-fuzz-corpus.md` companion beside the JSON report and coverage
+  smoke. Aggregate health now cross-checks Markdown mode/error/sample rows,
+  report item counts, accepted/rejected/matched totals, and coverage-smoke
+  matched mode/error requirements before native fuzz coverage can pass.

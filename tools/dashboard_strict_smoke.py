@@ -61,6 +61,7 @@ BR_STATIC_REPORT_JSON_ARTIFACT = "vort-br-static-dictionary-report.json"
 BR_STATIC_REPORT_MARKDOWN_ARTIFACT = "vort-br-static-dictionary-report.md"
 BR_STATIC_REPORT_NEGATIVE_ARTIFACT = "vort-br-static-dictionary-report-negative-smoke.json"
 NATIVE_FUZZ_ARTIFACT = "vort-native-fuzz-corpus.json"
+NATIVE_FUZZ_MARKDOWN_ARTIFACT = "vort-native-fuzz-corpus.md"
 NATIVE_FUZZ_COVERAGE_ARTIFACT = "vort-native-fuzz-corpus-coverage-smoke.json"
 NATIVE_ALLOCATION_REPORT_ARTIFACT = "vort-native-allocation-report.json"
 NATIVE_ALLOCATION_REPORT_MARKDOWN_ARTIFACT = "vort-native-allocation-report.md"
@@ -367,6 +368,7 @@ def write_producer_map(
             artifact_metadata[artifact] = {"expected_format": expected_format, "smoke_gate": smoke_gate}
     if include_native_fuzz_smoke:
         artifact_metadata[NATIVE_FUZZ_ARTIFACT] = {"expected_format": "json", "smoke_gate": "zig build run-native-fuzz-corpus-dashboard"}
+        artifact_metadata[NATIVE_FUZZ_MARKDOWN_ARTIFACT] = {"expected_format": "md", "smoke_gate": "zig build run-native-fuzz-corpus-dashboard"}
         artifact_metadata[NATIVE_FUZZ_COVERAGE_ARTIFACT] = {"expected_format": "json", "smoke_gate": "zig build run-native-fuzz-corpus-coverage-smoke"}
     if include_native_allocation_smoke:
         for artifact, expected_format, smoke_gate in (
@@ -512,6 +514,7 @@ def write_producer_map(
         exact[BR_STATIC_REPORT_NEGATIVE_ARTIFACT] = "zig build run-br-static-dictionary-report-negative-smoke"
     if include_native_fuzz_exact:
         exact[NATIVE_FUZZ_ARTIFACT] = "zig build run-native-fuzz-corpus-dashboard"
+        exact[NATIVE_FUZZ_MARKDOWN_ARTIFACT] = "zig build run-native-fuzz-corpus-dashboard"
         exact[NATIVE_FUZZ_COVERAGE_ARTIFACT] = "zig build run-native-fuzz-corpus-coverage-smoke"
     if include_native_allocation_exact:
         exact[NATIVE_ALLOCATION_REPORT_ARTIFACT] = "zig build run-native-allocation-report-dashboard"
@@ -2353,7 +2356,11 @@ def write_native_fuzz_corpus_artifacts(root: Path) -> None:
         "matched_rows": 3,
         "mode_count_rows": 1,
         "error_count_rows": 2,
-        "items": [],
+        "items": [
+            {"index": 0, "mode": "native", "input_bytes": 16, "expected": "accept", "expected_error": "", "outcome": "accepted", "actual_error": "", "matched": True},
+            {"index": 1, "mode": "native", "input_bytes": 17, "expected": "reject", "expected_error": "InvalidMagic", "outcome": "rejected", "actual_error": "InvalidMagic", "matched": True},
+            {"index": 2, "mode": "native", "input_bytes": 18, "expected": "reject", "expected_error": "TruncatedFrame", "outcome": "rejected", "actual_error": "TruncatedFrame", "matched": True},
+        ],
         "mode_counts": [{"mode": "native", "cases": 3, "accepted": 1, "rejected": 2, "exact_error_expectations": 2, "matched_rows": 3}],
         "error_counts": [{"mode": "native", "error": "InvalidMagic", "count": 1}, {"mode": "native", "error": "TruncatedFrame", "count": 1}],
     }
@@ -2369,6 +2376,39 @@ def write_native_fuzz_corpus_artifacts(root: Path) -> None:
         "error_requirements": [{"mode": "native", "error": "InvalidMagic", "min_count": 1, "actual_count": 1, "matched": True}, {"mode": "native", "error": "TruncatedFrame", "min_count": 1, "actual_count": 1, "matched": True}],
     }
     (root / NATIVE_FUZZ_ARTIFACT).write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    markdown_lines = [
+        "# Deflate wrapper fuzz corpus report",
+        "",
+        "- mode: `native`",
+        "- cases: 3",
+        "- accepted: 1",
+        "- rejected: 2",
+        "- exact error expectations: 2",
+        "- matched rows: 3",
+        "",
+        "## Mode summary",
+        "",
+        "| mode | cases | accepted | rejected | exact error expectations | matched rows |",
+        "| --- | ---: | ---: | ---: | ---: | ---: |",
+        "| native | 3 | 1 | 2 | 2 | 3 |",
+        "",
+        "## Error summary",
+        "",
+        "| mode | error | count |",
+        "| --- | --- | ---: |",
+        "| native | `InvalidMagic` | 1 |",
+        "| native | `TruncatedFrame` | 1 |",
+        "",
+        "## Samples",
+        "",
+        "| index | mode | input bytes | expected | expected error | outcome | actual error | matched |",
+        "| ---: | --- | ---: | --- | --- | --- | --- | --- |",
+    ]
+    for row in report["items"]:
+        markdown_lines.append(
+            f"| {row['index']} | {row['mode']} | {row['input_bytes']} | {row['expected']} | `{row['expected_error']}` | {row['outcome']} | `{row['actual_error']}` | true |"
+        )
+    (root / NATIVE_FUZZ_MARKDOWN_ARTIFACT).write_text("\n".join(markdown_lines) + "\n")
     (root / NATIVE_FUZZ_COVERAGE_ARTIFACT).write_text(json.dumps(coverage, indent=2, sort_keys=True) + "\n")
 
 
@@ -3739,8 +3779,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 75/75 | 0 | allowed missing 0 |",
-                    "| smoke gates | 75/75 | 0 | required missing 0 |",
+                    "| producer steps | 76/76 | 0 | allowed missing 0 |",
+                    "| smoke gates | 76/76 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -4165,9 +4205,10 @@ def main() -> int:
                     "## Native fuzz corpus coverage",
                     "| category | count | detail |",
                     "| native cases | 3 | accepted/rejected 1/2 |",
-                    "| matched rows | 3 | unmatched 0 |",
+                    "| report rows | 3/3 | matched 3, count mismatch 0, unmatched 0 |",
                     "| exact error expectations | 2 | mode/error rows 1/2 |",
-                    "| coverage requirements | 3 | modes/errors 1/2 |",
+                    "| coverage requirements | 3 | matched modes/errors 1/2, unmatched 0 |",
+                    "| Markdown rows | 15/15 | present `True`, unmatched 0 |",
                 ],
             )
         )
