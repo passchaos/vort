@@ -568,11 +568,9 @@ def native_fuzz_corpus_health(artifacts: list[Path]) -> dict:
     error_count_rows = int_field(report, "error_count_rows")
     coverage_mode_requirements = int_field(coverage, "mode_requirement_count")
     coverage_error_requirements = int_field(coverage, "error_requirement_count")
-    healthy = (
+    report_healthy = (
         report_present
-        and coverage_present
         and bool(report.get("ok"))
-        and bool(coverage.get("ok"))
         and str(report.get("mode") or "") == "native"
         and cases > 0
         and matched_rows == cases
@@ -580,12 +578,19 @@ def native_fuzz_corpus_health(artifacts: list[Path]) -> dict:
         and exact_error_expectations > 0
         and mode_count_rows > 0
         and error_count_rows > 0
+    )
+    coverage_healthy = (
+        coverage_present
+        and bool(coverage.get("ok"))
         and coverage_mode_requirements > 0
         and coverage_error_requirements > 0
     )
+    healthy = report_healthy and coverage_healthy
     return {
         "present": report_present,
         "coverage_present": coverage_present,
+        "report_healthy": report_healthy,
+        "coverage_healthy": coverage_healthy,
         "healthy": healthy,
         "cases": cases,
         "accepted": int_field(report, "accepted"),
@@ -1724,6 +1729,10 @@ def main() -> int:
     fuzz_healthy = fuzz_health["healthy"]
     decode_stage_healthy = decode_stage_health_summary["healthy"]
     python_zlib_healthy = python_zlib_health["healthy"]
+    native_fuzz_healthy = native_fuzz["healthy"]
+    png_scratch_healthy = png_scratch["healthy"]
+    zlib_relaxed_healthy = zlib_relaxed["healthy"]
+    native_allocation_healthy = native_allocation["healthy"]
     native_summary_error_healthy = native_summary_error_health["healthy"]
     native_summary_error_negative_healthy = native_summary_error_negative["healthy"]
     lz4_native_summary_healthy = lz4_native_summary["healthy"]
@@ -1740,6 +1749,10 @@ def main() -> int:
         and huffman_healthy
         and fuzz_healthy
         and decode_stage_healthy
+        and native_fuzz_healthy
+        and png_scratch_healthy
+        and zlib_relaxed_healthy
+        and native_allocation_healthy
         and python_zlib_healthy
         and native_codec_health["healthy"]
         and zstd_compare["healthy"]
@@ -1814,6 +1827,31 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_fuzz_coverage_artifact")
     elif not fuzz_health["coverage_healthy"]:
         validation_unhealthy_reasons.append("fuzz_coverage_failed")
+    if not native_fuzz["present"]:
+        validation_unhealthy_reasons.append("missing_native_fuzz_corpus_artifact")
+    elif not native_fuzz["report_healthy"]:
+        validation_unhealthy_reasons.append("native_fuzz_corpus_failed")
+    if not native_fuzz["coverage_present"]:
+        validation_unhealthy_reasons.append("missing_native_fuzz_coverage_artifact")
+    elif not native_fuzz["coverage_healthy"]:
+        validation_unhealthy_reasons.append("native_fuzz_coverage_failed")
+    if not png_scratch["present"]:
+        validation_unhealthy_reasons.append("missing_png_scratch_artifact")
+    elif not png_scratch_healthy:
+        validation_unhealthy_reasons.append("png_scratch_failed")
+    if not zlib_relaxed["present"]:
+        validation_unhealthy_reasons.append("missing_zlib_relaxed_artifact")
+    elif not zlib_relaxed_healthy:
+        validation_unhealthy_reasons.append("zlib_relaxed_failed")
+    native_allocation_present = (
+        native_allocation["present"]
+        and native_allocation["smoke_present"]
+        and native_allocation["negative_present"]
+    )
+    if not native_allocation_present:
+        validation_unhealthy_reasons.append("missing_native_allocation_artifact")
+    elif not native_allocation_healthy:
+        validation_unhealthy_reasons.append("native_allocation_failed")
     if not decode_stage_health_summary["present"]:
         validation_unhealthy_reasons.append("missing_decode_stage_artifact")
     elif not decode_stage_healthy:

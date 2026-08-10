@@ -118,6 +118,56 @@
       "fixture": "fuzz_coverage_failed"
     },
     {
+      "reason": "missing_native_fuzz_corpus_artifact",
+      "check": "validation_missing_native_fuzz_corpus_artifact",
+      "fixture": "missing_native_fuzz_corpus_artifact"
+    },
+    {
+      "reason": "native_fuzz_corpus_failed",
+      "check": "validation_native_fuzz_corpus_failed",
+      "fixture": "native_fuzz_corpus_failed"
+    },
+    {
+      "reason": "missing_native_fuzz_coverage_artifact",
+      "check": "validation_missing_native_fuzz_coverage_artifact",
+      "fixture": "missing_native_fuzz_coverage_artifact"
+    },
+    {
+      "reason": "native_fuzz_coverage_failed",
+      "check": "validation_native_fuzz_coverage_failed",
+      "fixture": "native_fuzz_coverage_failed"
+    },
+    {
+      "reason": "missing_png_scratch_artifact",
+      "check": "validation_missing_png_scratch_artifact",
+      "fixture": "missing_png_scratch_artifact"
+    },
+    {
+      "reason": "png_scratch_failed",
+      "check": "validation_png_scratch_failed",
+      "fixture": "png_scratch_failed"
+    },
+    {
+      "reason": "missing_zlib_relaxed_artifact",
+      "check": "validation_missing_zlib_relaxed_artifact",
+      "fixture": "missing_zlib_relaxed_artifact"
+    },
+    {
+      "reason": "zlib_relaxed_failed",
+      "check": "validation_zlib_relaxed_failed",
+      "fixture": "zlib_relaxed_failed"
+    },
+    {
+      "reason": "missing_native_allocation_artifact",
+      "check": "validation_missing_native_allocation_artifact",
+      "fixture": "missing_native_allocation_artifact"
+    },
+    {
+      "reason": "native_allocation_failed",
+      "check": "validation_native_allocation_failed",
+      "fixture": "native_allocation_failed"
+    },
+    {
       "reason": "missing_decode_stage_artifact",
       "check": "validation_missing_decode_stage_artifact",
       "fixture": "missing_decode_stage_artifact"

@@ -2456,3 +2456,10 @@ architecture blindly.
   `zig-out` dashboard strict run now reports zero missing producer steps and an
   aggregate healthy validation state while keeping Snappy classified as benchmark
   evidence.
+
+- Tightened aggregate dashboard validation health for existing validation
+  artifacts without adding new compression-format scope. Native fuzz corpus,
+  PNG scratch, zlib relaxed compatibility, and native allocation dashboards now
+  participate directly in `validation_healthy`, each has fine-grained missing
+  and failed unhealthy reasons, and `dashboard_strict_smoke.py` exercises all 53
+  strict-validation-health reasons with isolated fixtures.

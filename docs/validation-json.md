@@ -2452,6 +2452,16 @@ Current unhealthy reason values are:
 - `fuzz_corpus_failed`
 - `missing_fuzz_coverage_artifact`
 - `fuzz_coverage_failed`
+- `missing_native_fuzz_corpus_artifact`
+- `native_fuzz_corpus_failed`
+- `missing_native_fuzz_coverage_artifact`
+- `native_fuzz_coverage_failed`
+- `missing_png_scratch_artifact`
+- `png_scratch_failed`
+- `missing_zlib_relaxed_artifact`
+- `zlib_relaxed_failed`
+- `missing_native_allocation_artifact`
+- `native_allocation_failed`
 - `missing_decode_stage_artifact`
 - `decode_stage_failed`
 - `missing_python_zlib_diff_artifact`
@@ -2736,6 +2746,11 @@ Example:
     "missing_huffman_length_artifact",
     "missing_fuzz_corpus_artifact",
     "missing_fuzz_coverage_artifact",
+    "missing_native_fuzz_corpus_artifact",
+    "missing_native_fuzz_coverage_artifact",
+    "missing_png_scratch_artifact",
+    "missing_zlib_relaxed_artifact",
+    "missing_native_allocation_artifact",
     "missing_decode_stage_artifact",
     "missing_python_zlib_diff_artifact",
     "missing_native_codec_probes_artifact",
@@ -3225,9 +3240,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 43,
-      "min_expected_failures": 43,
-      "min_matched": 43
+      "min_checks": 53,
+      "min_expected_failures": 53,
+      "min_matched": 53
     },
     {
       "mode": "native-tier-range-health",
@@ -3321,7 +3336,7 @@ aggregate health reasons must be backed by real failing dashboard inputs before
 the smoke artifact can pass. The expected reason/check/fixture matrix lives in
 `tools/dashboard_strict_validation_reasons.json`; the retained
 `strict-validation-health` mode minimums must cover every configured reason,
-currently 43. The `dashboard-markdown` mode verifies that important human-facing
+currently 53. The `dashboard-markdown` mode verifies that important human-facing
 sections, including artifact inventory, aggregate validation health, producer/smoke-gate
 coverage, dashboard strict gate coverage, dashboard configuration coverage, validation JSON schema coverage, header inspect coverage, corrupt-sidecar
 rejection coverage, Huffman optimality, zstd comparison gate coverage, native fuzz corpus coverage, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, Python zlib
@@ -3360,9 +3375,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 43,
-      "min_expected_failures": 43,
-      "min_matched": 43
+      "min_checks": 53,
+      "min_expected_failures": 53,
+      "min_matched": 53
     },
     {
       "mode": "native-tier-range-health",
@@ -3400,14 +3415,14 @@ Example:
     {
       "mode": "strict-validation-health",
       "checks": 1,
-      "min_checks": 43,
-      "missing_checks": 42,
+      "min_checks": 53,
+      "missing_checks": 52,
       "expected_failures": 1,
-      "min_expected_failures": 43,
-      "missing_expected_failures": 42,
+      "min_expected_failures": 53,
+      "missing_expected_failures": 52,
       "matched": 1,
-      "min_matched": 43,
-      "missing_matched": 42
+      "min_matched": 53,
+      "missing_matched": 52
     },
     {
       "mode": "native-tier-range-health",

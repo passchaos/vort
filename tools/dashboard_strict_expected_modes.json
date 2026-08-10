@@ -46,9 +46,9 @@
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 43,
-      "min_expected_failures": 43,
-      "min_matched": 43
+      "min_checks": 53,
+      "min_expected_failures": 53,
+      "min_matched": 53
     }
   ]
 }

@@ -2445,6 +2445,51 @@ def main() -> int:
             elif fixture == "fuzz_coverage_failed":
                 write_fuzz_coverage_report(fixture_root / FUZZ_COVERAGE_ARTIFACT, ok=False)
                 write_producer_map(producer_map)
+            elif fixture == "missing_native_fuzz_corpus_artifact":
+                (fixture_root / NATIVE_FUZZ_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "native_fuzz_corpus_failed":
+                write_native_fuzz_corpus_artifacts(fixture_root)
+                payload = json.loads((fixture_root / NATIVE_FUZZ_ARTIFACT).read_text())
+                payload["ok"] = False
+                (fixture_root / NATIVE_FUZZ_ARTIFACT).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+                write_producer_map(producer_map)
+            elif fixture == "missing_native_fuzz_coverage_artifact":
+                (fixture_root / NATIVE_FUZZ_COVERAGE_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "native_fuzz_coverage_failed":
+                write_native_fuzz_corpus_artifacts(fixture_root)
+                payload = json.loads((fixture_root / NATIVE_FUZZ_COVERAGE_ARTIFACT).read_text())
+                payload["ok"] = False
+                (fixture_root / NATIVE_FUZZ_COVERAGE_ARTIFACT).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+                write_producer_map(producer_map)
+            elif fixture == "missing_png_scratch_artifact":
+                (fixture_root / PNG_SCRATCH_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "png_scratch_failed":
+                write_png_scratch_report(fixture_root / PNG_SCRATCH_ARTIFACT)
+                payload = json.loads((fixture_root / PNG_SCRATCH_ARTIFACT).read_text())
+                payload["cases"][0]["stored_streaming_status"] = "scratch-required"
+                (fixture_root / PNG_SCRATCH_ARTIFACT).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+                write_producer_map(producer_map)
+            elif fixture == "missing_zlib_relaxed_artifact":
+                (fixture_root / ZLIB_RELAXED_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "zlib_relaxed_failed":
+                write_zlib_relaxed_report(fixture_root / ZLIB_RELAXED_ARTIFACT)
+                payload = json.loads((fixture_root / ZLIB_RELAXED_ARTIFACT).read_text())
+                payload["relaxed_successes"] = 0
+                (fixture_root / ZLIB_RELAXED_ARTIFACT).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+                write_producer_map(producer_map)
+            elif fixture == "missing_native_allocation_artifact":
+                (fixture_root / NATIVE_ALLOCATION_REPORT_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "native_allocation_failed":
+                write_native_allocation_artifacts(fixture_root)
+                payload = json.loads((fixture_root / NATIVE_ALLOCATION_SMOKE_ARTIFACT).read_text())
+                payload["ok"] = False
+                (fixture_root / NATIVE_ALLOCATION_SMOKE_ARTIFACT).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+                write_producer_map(producer_map)
             elif fixture == "missing_decode_stage_artifact":
                 (fixture_root / DECODE_STAGE_ARTIFACT).unlink()
                 write_producer_map(producer_map)
