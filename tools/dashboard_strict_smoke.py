@@ -67,10 +67,16 @@ NATIVE_TIER_RANGE_ARTIFACT = "vort-native-tier-range-bench-gate.json"
 NATIVE_TIER_RANGE_FILES_ARTIFACT = "vort-native-tier-range-files-bench-gate.json"
 NATIVE_TIER_RANGE_CORPUS_ARTIFACT = "vort-native-tier-range-corpus-bench-gate.json"
 NATIVE_TIER_RANGE_CORPUS_DISCOVERY_ARTIFACT = "vort-native-tier-range-corpus-discovery.json"
+NATIVE_TIER_RANGE_CSV_ARTIFACT = "vort-native-tier-range-bench.csv"
+NATIVE_TIER_RANGE_FILES_CSV_ARTIFACT = "vort-native-tier-range-files-bench.csv"
+NATIVE_TIER_RANGE_CORPUS_CSV_ARTIFACT = "vort-native-tier-range-corpus-bench.csv"
 NATIVE_TIER_RANGE_ARTIFACTS = (
     (NATIVE_TIER_RANGE_ARTIFACT, "zig build run-native-tier-range-bench-gate"),
+    (NATIVE_TIER_RANGE_CSV_ARTIFACT, "zig build run-native-tier-range-bench-gate"),
     (NATIVE_TIER_RANGE_FILES_ARTIFACT, "zig build run-native-tier-range-files-bench-gate"),
+    (NATIVE_TIER_RANGE_FILES_CSV_ARTIFACT, "zig build run-native-tier-range-files-bench-gate"),
     (NATIVE_TIER_RANGE_CORPUS_ARTIFACT, "zig build run-native-tier-range-corpus-bench-gate"),
+    (NATIVE_TIER_RANGE_CORPUS_CSV_ARTIFACT, "zig build run-native-tier-range-corpus-bench-gate"),
     (NATIVE_TIER_RANGE_CORPUS_DISCOVERY_ARTIFACT, "zig build run-native-tier-range-corpus-bench-gate"),
 )
 NATIVE_TIER_RANGE_FLOORS = {
@@ -361,7 +367,7 @@ def write_producer_map(
     if include_native_tier_smoke:
         for artifact, smoke_gate in NATIVE_TIER_RANGE_ARTIFACTS:
             artifact_metadata[artifact] = {
-                "expected_format": "json",
+                "expected_format": "csv" if artifact.endswith(".csv") else "json",
                 "smoke_gate": smoke_gate,
             }
     exact = {}
@@ -2346,6 +2352,41 @@ def write_native_library_bench_csv(path: Path, *, healthy: bool = True) -> None:
     path.write_text("\n".join(lines) + "\n")
 
 
+def write_native_tier_range_csv(path: Path, fixtures: list[str]) -> None:
+    columns = ["fixture", "tier", "block_len", "input_bytes", "stream_bytes", "index_entries", "range_offset", "range_len", "iterations", "repeat", "elapsed_ns", "range_mib_s", "full_input_mib_s", "checksum"]
+    tiers = {"seek_fast": 8192, "balanced": 32768, "ratio": 65536}
+    input_bytes = 131072
+    range_len = 4096
+    iterations = 400
+    elapsed_ns = 20_000_000
+    range_mib_s = ((range_len * iterations) / (1024.0 * 1024.0)) / (elapsed_ns / 1_000_000_000.0)
+    full_mib_s = ((input_bytes * iterations) / (1024.0 * 1024.0)) / (elapsed_ns / 1_000_000_000.0)
+    lines = [",".join(columns)]
+    for fixture in fixtures:
+        for tier, block_len in tiers.items():
+            lines.append(
+                ",".join(
+                    [
+                        fixture,
+                        tier,
+                        str(block_len),
+                        str(input_bytes),
+                        "4096",
+                        str((input_bytes + block_len - 1) // block_len),
+                        "1024",
+                        str(range_len),
+                        str(iterations),
+                        "3",
+                        str(elapsed_ns),
+                        f"{range_mib_s:.6f}",
+                        f"{full_mib_s:.6f}",
+                        "12345",
+                    ]
+                )
+            )
+    path.write_text("\n".join(lines) + "\n")
+
+
 def write_native_tier_range_summary(path: Path, *, ok: bool = True, source: str = "built_in", rows: int = 9, fixture_count: int = 3) -> None:
     floors = NATIVE_TIER_RANGE_FLOORS.get(source, NATIVE_TIER_RANGE_FLOORS["custom"])
     payload = {
@@ -2398,6 +2439,9 @@ def write_native_tier_range_summaries(root: Path) -> None:
     write_native_tier_range_summary(root / NATIVE_TIER_RANGE_ARTIFACT, source="built_in", rows=9, fixture_count=3)
     write_native_tier_range_summary(root / NATIVE_TIER_RANGE_FILES_ARTIFACT, source="project_files", rows=6, fixture_count=2)
     write_native_tier_range_summary(root / NATIVE_TIER_RANGE_CORPUS_ARTIFACT, source="standard_corpus", rows=9, fixture_count=3)
+    write_native_tier_range_csv(root / NATIVE_TIER_RANGE_CSV_ARTIFACT, ["text", "structured", "repetitive"])
+    write_native_tier_range_csv(root / NATIVE_TIER_RANGE_FILES_CSV_ARTIFACT, ["README.md", "roadmap.md"])
+    write_native_tier_range_csv(root / NATIVE_TIER_RANGE_CORPUS_CSV_ARTIFACT, ["ooffice-128k", "nci-128k", "mozilla-128k"])
     write_native_tier_corpus_discovery_summary(root / NATIVE_TIER_RANGE_CORPUS_DISCOVERY_ARTIFACT)
 
 
@@ -2754,6 +2798,14 @@ def main() -> int:
         assert manifest["native_tier_range_healthy"] is True
         assert manifest["native_tier_range_summary_count"] == 3
         assert manifest["native_tier_range_rows"] == 24
+        assert manifest["native_tier_range_csv_present_count"] == 3
+        assert manifest["native_tier_range_csv_healthy_count"] == 3
+        assert manifest["native_tier_range_csv_rows"] == 24
+        assert manifest["native_tier_range_csv_positive_rows"] == 24
+        assert manifest["native_tier_range_csv_shape_rows"] == 24
+        assert manifest["native_tier_range_csv_throughput_rows"] == 24
+        assert manifest["native_tier_range_csv_missing_sources"] == []
+        assert manifest["native_tier_range_csv_missing_pairs"] == []
         assert manifest["native_tier_range_built_in_summary_count"] == 1
         assert manifest["native_tier_range_project_files_summary_count"] == 1
         assert manifest["native_tier_range_standard_corpus_summary_count"] == 1
@@ -2822,8 +2874,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 53/53 | 0 | allowed missing 0 |",
-                    "| smoke gates | 53/53 | 0 | required missing 0 |",
+                    "| producer steps | 56/56 | 0 | allowed missing 0 |",
+                    "| smoke gates | 56/56 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -2911,6 +2963,10 @@ def main() -> int:
                     "| `built_in` | 1 | 1 | 9 | 3 | 0 | `False` |",
                     "| `project_files` | 1 | 1 | 6 | 2 | 0 | `False` |",
                     "| `standard_corpus` | 1 | 1 | 9 | 3 | 0 | `False` |",
+                    "## Native tier range CSV coverage",
+                    "| csv artifacts | 3 | healthy 3, missing sources 0 |",
+                    "| csv rows | 24 | positive/shape 24/24 |",
+                    "| throughput rows | 24 | missing pairs 0 |",
                     "60.00/16.00/12.00",
                     "40.00/8.00/4.00",
                     "30.00/6.50/3.50",

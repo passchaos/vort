@@ -1022,10 +1022,18 @@
             "native_tier_range_standard_corpus_summary_count",
             "native_tier_range_built_in_rows",
             "native_tier_range_project_files_rows",
-            "native_tier_range_standard_corpus_rows"
+            "native_tier_range_standard_corpus_rows",
+            "native_tier_range_csv_present_count",
+            "native_tier_range_csv_healthy_count",
+            "native_tier_range_csv_rows",
+            "native_tier_range_csv_positive_rows",
+            "native_tier_range_csv_shape_rows",
+            "native_tier_range_csv_throughput_rows"
           ],
           "zero": [
-            "native_tier_range_missing_sources"
+            "native_tier_range_missing_sources",
+            "native_tier_range_csv_missing_sources",
+            "native_tier_range_csv_missing_pairs"
           ]
         },
         "snappy_report_healthy": {
@@ -1595,6 +1603,14 @@
         "native_tier_range_rows": "int",
         "native_tier_range_fixture_count": "int",
         "native_tier_range_enforced_count": "int",
+        "native_tier_range_csv_present_count": "int",
+        "native_tier_range_csv_healthy_count": "int",
+        "native_tier_range_csv_rows": "int",
+        "native_tier_range_csv_positive_rows": "int",
+        "native_tier_range_csv_shape_rows": "int",
+        "native_tier_range_csv_throughput_rows": "int",
+        "native_tier_range_csv_missing_sources": "list",
+        "native_tier_range_csv_missing_pairs": "list",
         "native_tier_range_built_in_summary_count": "int",
         "native_tier_range_project_files_summary_count": "int",
         "native_tier_range_standard_corpus_summary_count": "int",
@@ -1887,6 +1903,11 @@
           "frame_header",
           "magic",
           "skippable_payload"
+        ],
+        "native_tier_range_csv_missing_sources": [
+          "built_in",
+          "project_files",
+          "standard_corpus"
         ]
       },
       "dict_key_enums": {

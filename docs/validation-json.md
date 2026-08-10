@@ -2531,7 +2531,9 @@ Top-level fields:
 - `smoke_gate_required_missing`
 - `validation_healthy`
 - `validation_unhealthy_reasons`
-- `native_tier_range_*` fields summarize direct-API seekability tier range benchmark summaries.
+- `native_tier_range_*` fields summarize direct-API seekability tier range benchmark summaries,
+  including the gate JSON summaries and the required CSV row/shape/throughput
+  coverage fields (`native_tier_range_csv_*`).
 - `native_tier_corpus_discovery_*` fields summarize standard-corpus discovery
   inputs for the native tier range benchmark and now participate in aggregate
   `validation_healthy`.
@@ -3314,6 +3316,14 @@ Example:
   "native_tier_range_rows": 24,
   "native_tier_range_fixture_count": 8,
   "native_tier_range_enforced_count": 1,
+  "native_tier_range_csv_present_count": 3,
+  "native_tier_range_csv_healthy_count": 3,
+  "native_tier_range_csv_rows": 24,
+  "native_tier_range_csv_positive_rows": 24,
+  "native_tier_range_csv_shape_rows": 24,
+  "native_tier_range_csv_throughput_rows": 24,
+  "native_tier_range_csv_missing_sources": [],
+  "native_tier_range_csv_missing_pairs": [],
   "native_tier_range_built_in_summary_count": 1,
   "native_tier_range_project_files_summary_count": 1,
   "native_tier_range_standard_corpus_summary_count": 1,

@@ -892,6 +892,9 @@ def main() -> int:
             "vort-br-static-dictionary-node-probe.json",
             "vort-br-static-dictionary-source-audit.json",
             "vort-br-static-dictionary-source-audit-negative-smoke.json",
+            "vort-native-tier-range-bench.csv",
+            "vort-native-tier-range-files-bench.csv",
+            "vort-native-tier-range-corpus-bench.csv",
         ):
             shutil.copyfile(ROOT / "zig-out" / artifact_name, root / artifact_name)
         shutil.copyfile(zlib_relaxed_path, root / "vort-zlib-relaxed-report.json")
@@ -1332,6 +1335,14 @@ def main() -> int:
         assert dashboard["zstd_native_summary_compressed_bytes"] == zstd_native_summary["compressed_bytes"]
         assert dashboard["zstd_native_summary_payload_bytes"] == zstd_native_summary["payload_bytes"]
         assert dashboard["zstd_native_summary_skippable_payload_bytes"] == zstd_native_summary["skippable_payload_bytes"]
+        assert dashboard["native_tier_range_csv_present_count"] == 3
+        assert dashboard["native_tier_range_csv_healthy_count"] == 3
+        assert dashboard["native_tier_range_csv_rows"] == 24
+        assert dashboard["native_tier_range_csv_positive_rows"] == 24
+        assert dashboard["native_tier_range_csv_shape_rows"] == 24
+        assert dashboard["native_tier_range_csv_throughput_rows"] == 24
+        assert dashboard["native_tier_range_csv_missing_sources"] == []
+        assert dashboard["native_tier_range_csv_missing_pairs"] == []
         assert dashboard["native_tier_corpus_discovery_present"] is True
         assert dashboard["native_tier_corpus_discovery_ok"] is True
         assert dashboard["native_tier_corpus_discovery_healthy"] is True

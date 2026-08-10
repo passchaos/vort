@@ -372,11 +372,75 @@ def native_tier_range_health(artifacts: list[Path]) -> dict:
     expected_sources = ("built_in", "project_files", "standard_corpus")
     source_order = (*expected_sources, "custom", "legacy")
     tiers = ("seek_fast", "balanced", "ratio")
+    tier_block_len = {"seek_fast": 8 * 1024, "balanced": 32 * 1024, "ratio": 64 * 1024}
+    csv_artifacts = {
+        "built_in": "vort-native-tier-range-bench.csv",
+        "project_files": "vort-native-tier-range-files-bench.csv",
+        "standard_corpus": "vort-native-tier-range-corpus-bench.csv",
+    }
     summaries = []
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
         if data.get("schema") == "vort.native_tier_range_bench_gate":
             summaries.append(data)
+
+    def csv_health(source: str, artifact_name: str) -> dict:
+        for artifact in artifacts:
+            if artifact.name != artifact_name:
+                continue
+            try:
+                with artifact.open(newline="") as f:
+                    rows = list(csv.DictReader(f))
+            except Exception:
+                rows = []
+            positive_rows = 0
+            shape_rows = 0
+            throughput_rows = 0
+            fixtures = {str(row.get("fixture") or "") for row in rows}
+            expected_pairs = {(fixture, tier) for fixture in fixtures if fixture for tier in tiers}
+            seen: set[tuple[str, str]] = set()
+            for row in rows:
+                fixture = str(row.get("fixture") or "")
+                tier = str(row.get("tier") or "")
+                if fixture and tier in tiers:
+                    seen.add((fixture, tier))
+                try:
+                    block_len = int(row.get("block_len") or "0")
+                    input_bytes = int(row.get("input_bytes") or "0")
+                    stream_bytes = int(row.get("stream_bytes") or "0")
+                    index_entries = int(row.get("index_entries") or "0")
+                    range_offset = int(row.get("range_offset") or "-1")
+                    range_len = int(row.get("range_len") or "0")
+                    iterations = int(row.get("iterations") or "0")
+                    repeat = int(row.get("repeat") or "0")
+                    elapsed_ns = int(row.get("elapsed_ns") or "0")
+                    checksum = int(row.get("checksum") or "0")
+                    range_mib_s = float(row.get("range_mib_s") or "0")
+                    full_input_mib_s = float(row.get("full_input_mib_s") or "0")
+                except ValueError:
+                    continue
+                if all(value > 0 for value in (block_len, input_bytes, stream_bytes, index_entries, range_len, iterations, repeat, elapsed_ns, checksum)) and range_offset >= 0 and range_mib_s > 0.0 and full_input_mib_s > 0.0:
+                    positive_rows += 1
+                if tier in tier_block_len and block_len == tier_block_len[tier] and index_entries >= (input_bytes + block_len - 1) // block_len and range_offset + range_len <= input_bytes:
+                    shape_rows += 1
+                expected_range = ((range_len * iterations) / (1024.0 * 1024.0)) / (elapsed_ns / 1_000_000_000.0) if elapsed_ns > 0 else 0.0
+                expected_full = ((input_bytes * iterations) / (1024.0 * 1024.0)) / (elapsed_ns / 1_000_000_000.0) if elapsed_ns > 0 else 0.0
+                if abs(range_mib_s - expected_range) <= 0.0001 and abs(full_input_mib_s - expected_full) <= 0.0001:
+                    throughput_rows += 1
+            missing_pairs = sorted(f"{fixture}:{tier}" for fixture, tier in expected_pairs - seen)
+            healthy = bool(rows) and len(seen) == len(expected_pairs) and not missing_pairs and positive_rows == len(rows) and shape_rows == len(rows) and throughput_rows == len(rows)
+            return {"present": True, "healthy": healthy, "rows": len(rows), "fixtures": len(fixtures - {""}), "positive_rows": positive_rows, "shape_rows": shape_rows, "throughput_rows": throughput_rows, "missing_pairs": missing_pairs}
+        return {"present": False, "healthy": False, "rows": 0, "fixtures": 0, "positive_rows": 0, "shape_rows": 0, "throughput_rows": 0, "missing_pairs": []}
+
+    csv_summaries = {source: csv_health(source, artifact_name) for source, artifact_name in csv_artifacts.items()}
+    csv_present_count = sum(1 for item in csv_summaries.values() if item["present"])
+    csv_healthy_count = sum(1 for item in csv_summaries.values() if item["healthy"])
+    csv_rows = sum(int(item["rows"]) for item in csv_summaries.values())
+    csv_positive_rows = sum(int(item["positive_rows"]) for item in csv_summaries.values())
+    csv_shape_rows = sum(int(item["shape_rows"]) for item in csv_summaries.values())
+    csv_throughput_rows = sum(int(item["throughput_rows"]) for item in csv_summaries.values())
+    csv_missing_sources = [source for source, item in csv_summaries.items() if not item["present"]]
+    csv_missing_pairs = [pair for item in csv_summaries.values() for pair in item["missing_pairs"]]
     present = len(summaries) > 0
     ok_count = sum(1 for data in summaries if bool(data.get("ok")))
     row_count = sum(int(data.get("rows") or 0) for data in summaries)
@@ -447,7 +511,8 @@ def native_tier_range_health(artifacts: list[Path]) -> dict:
                     values.append(float(value))
         return min(values) if values else 0.0
 
-    healthy = present and ok_count == len(summaries) and row_count > 0 and fixture_count > 0 and not missing_sources and legacy_count == 0
+    csv_healthy = csv_present_count == len(csv_artifacts) and csv_healthy_count == len(csv_artifacts) and csv_rows > 0 and not csv_missing_sources and not csv_missing_pairs
+    healthy = present and ok_count == len(summaries) and row_count > 0 and fixture_count > 0 and not missing_sources and legacy_count == 0 and csv_healthy
     return {
         "present": present,
         "healthy": healthy,
@@ -456,6 +521,14 @@ def native_tier_range_health(artifacts: list[Path]) -> dict:
         "rows": row_count,
         "fixture_count": fixture_count,
         "enforced_count": enforced_count,
+        "csv_present_count": csv_present_count,
+        "csv_healthy_count": csv_healthy_count,
+        "csv_rows": csv_rows,
+        "csv_positive_rows": csv_positive_rows,
+        "csv_shape_rows": csv_shape_rows,
+        "csv_throughput_rows": csv_throughput_rows,
+        "csv_missing_sources": csv_missing_sources,
+        "csv_missing_pairs": csv_missing_pairs,
         "built_in_summary_count": source_counts["built_in"],
         "project_files_summary_count": source_counts["project_files"],
         "standard_corpus_summary_count": source_counts["standard_corpus"],
@@ -4143,7 +4216,18 @@ def main() -> int:
             lines.append(
                 f"| `{detail['source']}` | {detail['summary_count']} | {detail['ok_count']} | {detail['rows']} | {detail['fixture_count']} | {detail['enforced_count']} | `{detail['missing']}` | {min_text} | {floor_text} |"
             )
-        lines.append("")
+        lines.extend(
+            [
+                "## Native tier range CSV coverage",
+                "",
+                "| category | count | detail |",
+                "| --- | ---: | --- |",
+                f"| csv artifacts | {native_tier_health['csv_present_count']} | healthy {native_tier_health['csv_healthy_count']}, missing sources {len(native_tier_health['csv_missing_sources'])} |",
+                f"| csv rows | {native_tier_health['csv_rows']} | positive/shape {native_tier_health['csv_positive_rows']}/{native_tier_health['csv_shape_rows']} |",
+                f"| throughput rows | {native_tier_health['csv_throughput_rows']} | missing pairs {len(native_tier_health['csv_missing_pairs'])} |",
+                "",
+            ]
+        )
     if strict_health["missing_modes"]:
         lines.extend(["## Missing dashboard strict modes", "", "| mode | min checks | min expected failures | min matched |", "| --- | ---: | ---: | ---: |"])
         for row in strict_health["missing_modes"]:
@@ -4611,6 +4695,14 @@ def main() -> int:
                 "native_tier_range_rows": native_tier_health["rows"],
                 "native_tier_range_fixture_count": native_tier_health["fixture_count"],
                 "native_tier_range_enforced_count": native_tier_health["enforced_count"],
+                "native_tier_range_csv_present_count": native_tier_health["csv_present_count"],
+                "native_tier_range_csv_healthy_count": native_tier_health["csv_healthy_count"],
+                "native_tier_range_csv_rows": native_tier_health["csv_rows"],
+                "native_tier_range_csv_positive_rows": native_tier_health["csv_positive_rows"],
+                "native_tier_range_csv_shape_rows": native_tier_health["csv_shape_rows"],
+                "native_tier_range_csv_throughput_rows": native_tier_health["csv_throughput_rows"],
+                "native_tier_range_csv_missing_sources": native_tier_health["csv_missing_sources"],
+                "native_tier_range_csv_missing_pairs": native_tier_health["csv_missing_pairs"],
                 "native_tier_range_built_in_summary_count": native_tier_health["built_in_summary_count"],
                 "native_tier_range_project_files_summary_count": native_tier_health["project_files_summary_count"],
                 "native_tier_range_standard_corpus_summary_count": native_tier_health["standard_corpus_summary_count"],
