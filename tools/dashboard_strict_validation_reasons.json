@@ -288,6 +288,16 @@
       "fixture": "dictionary_decode_bench_failed"
     },
     {
+      "reason": "missing_png_scanline_bench_artifact",
+      "check": "validation_missing_png_scanline_bench_artifact",
+      "fixture": "missing_png_scanline_bench_artifact"
+    },
+    {
+      "reason": "png_scanline_bench_failed",
+      "check": "validation_png_scanline_bench_failed",
+      "fixture": "png_scanline_bench_failed"
+    },
+    {
       "reason": "missing_zstd_compare_artifact",
       "check": "validation_missing_zstd_compare_artifact",
       "fixture": "missing_zstd_compare_artifact"

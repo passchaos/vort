@@ -1576,6 +1576,74 @@ def dictionary_decode_bench_health(artifacts: list[Path]) -> dict:
     }
 
 
+def png_scanline_bench_health(artifacts: list[Path]) -> dict:
+    expected_stages = {"none", "sub", "up", "average", "paeth"}
+    expected_bpp = {"1", "2", "3", "4", "6", "8"}
+    expected_pairs = {(stage, bpp) for stage in expected_stages for bpp in expected_bpp}
+    for artifact in artifacts:
+        if artifact.name != "vort-png-scanline-bench.csv":
+            continue
+        try:
+            with artifact.open(newline="") as f:
+                rows = list(csv.DictReader(f))
+        except Exception:
+            rows = []
+        seen: set[tuple[str, str]] = set()
+        positive_rows = 0
+        shape_rows = 0
+        io_match_rows = 0
+        for row in rows:
+            stage = str(row.get("stage") or "")
+            bpp = str(row.get("bpp") or "")
+            pair = (stage, bpp)
+            if pair in expected_pairs:
+                seen.add(pair)
+                shape_rows += 1
+            try:
+                iterations = int(row.get("iterations") or "0")
+                repeat = int(row.get("repeat") or "0")
+                input_bytes = int(row.get("input_bytes") or "0")
+                output_bytes = int(row.get("output_bytes") or "0")
+                elapsed_ns = int(row.get("elapsed_ns") or "0")
+                checksum = int(row.get("checksum") or "0")
+                output_mib_per_s = float(row.get("output_mib_per_s") or "0")
+            except ValueError:
+                continue
+            if all(value > 0 for value in (iterations, repeat, input_bytes, output_bytes, elapsed_ns, checksum)) and output_mib_per_s > 0.0:
+                positive_rows += 1
+            if input_bytes > 0 and input_bytes == output_bytes:
+                io_match_rows += 1
+        missing_pairs = sorted(f"{stage}:{bpp}" for stage, bpp in expected_pairs - seen)
+        row_count = len(rows)
+        healthy = (
+            row_count == len(expected_pairs)
+            and not missing_pairs
+            and positive_rows == row_count
+            and shape_rows == row_count
+            and io_match_rows == row_count
+        )
+        return {
+            "present": True,
+            "healthy": healthy,
+            "row_count": row_count,
+            "expected_rows": len(expected_pairs),
+            "positive_rows": positive_rows,
+            "shape_rows": shape_rows,
+            "io_match_rows": io_match_rows,
+            "missing_pairs": missing_pairs,
+        }
+    return {
+        "present": False,
+        "healthy": False,
+        "row_count": 0,
+        "expected_rows": len(expected_pairs),
+        "positive_rows": 0,
+        "shape_rows": 0,
+        "io_match_rows": 0,
+        "missing_pairs": [],
+    }
+
+
 def zstd_compare_health(artifacts: list[Path]) -> dict:
     compare = None
     standard = None
@@ -2456,6 +2524,7 @@ def main() -> int:
     deflate_chunked_huffman_bench = deflate_chunked_huffman_bench_health(artifacts)
     deflate_extra_bits_bench = deflate_extra_bits_bench_health(artifacts)
     dictionary_decode_bench = dictionary_decode_bench_health(artifacts)
+    png_scanline_bench = png_scanline_bench_health(artifacts)
     zstd_compare = zstd_compare_health(artifacts)
     native_allocation = native_allocation_health(artifacts)
     python_zlib_health = python_zlib_diff_health(artifacts)
@@ -2509,6 +2578,7 @@ def main() -> int:
     deflate_chunked_huffman_bench_healthy = deflate_chunked_huffman_bench["healthy"]
     deflate_extra_bits_bench_healthy = deflate_extra_bits_bench["healthy"]
     dictionary_decode_bench_healthy = dictionary_decode_bench["healthy"]
+    png_scanline_bench_healthy = png_scanline_bench["healthy"]
     native_allocation_healthy = native_allocation["healthy"]
     native_summary_error_healthy = native_summary_error_health["healthy"]
     native_summary_error_negative_healthy = native_summary_error_negative["healthy"]
@@ -2543,6 +2613,7 @@ def main() -> int:
         and deflate_chunked_huffman_bench_healthy
         and deflate_extra_bits_bench_healthy
         and dictionary_decode_bench_healthy
+        and png_scanline_bench_healthy
         and br_static_dictionary["healthy"]
         and native_summary_error_healthy
         and native_summary_error_negative_healthy
@@ -2667,6 +2738,10 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_dictionary_decode_bench_artifact")
     elif not dictionary_decode_bench_healthy:
         validation_unhealthy_reasons.append("dictionary_decode_bench_failed")
+    if not png_scanline_bench["present"]:
+        validation_unhealthy_reasons.append("missing_png_scanline_bench_artifact")
+    elif not png_scanline_bench_healthy:
+        validation_unhealthy_reasons.append("png_scanline_bench_failed")
     native_allocation_present = (
         native_allocation["present"]
         and native_allocation["smoke_present"]
@@ -3026,6 +3101,18 @@ def main() -> int:
             f"| rows | {dictionary_decode_bench['row_count']} | expected {dictionary_decode_bench['expected_rows']}, present `{dictionary_decode_bench['present']}` |",
             f"| shape rows | {dictionary_decode_bench['shape_rows']} | positive rows {dictionary_decode_bench['positive_rows']} |",
             f"| output-size rows | {dictionary_decode_bench['output_size_rows']} | missing pairs {len(dictionary_decode_bench['missing_pairs'])}, healthy `{dictionary_decode_bench['healthy']}` |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
+            "## PNG scanline benchmark coverage",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| rows | {png_scanline_bench['row_count']} | expected {png_scanline_bench['expected_rows']}, present `{png_scanline_bench['present']}` |",
+            f"| shape rows | {png_scanline_bench['shape_rows']} | positive rows {png_scanline_bench['positive_rows']} |",
+            f"| input/output rows | {png_scanline_bench['io_match_rows']} | missing pairs {len(png_scanline_bench['missing_pairs'])}, healthy `{png_scanline_bench['healthy']}` |",
             "",
         ]
     )
@@ -3549,6 +3636,14 @@ def main() -> int:
                 "dictionary_decode_bench_shape_rows": dictionary_decode_bench["shape_rows"],
                 "dictionary_decode_bench_output_size_rows": dictionary_decode_bench["output_size_rows"],
                 "dictionary_decode_bench_missing_pairs": dictionary_decode_bench["missing_pairs"],
+                "png_scanline_bench_present": png_scanline_bench["present"],
+                "png_scanline_bench_healthy": png_scanline_bench["healthy"],
+                "png_scanline_bench_rows": png_scanline_bench["row_count"],
+                "png_scanline_bench_expected_rows": png_scanline_bench["expected_rows"],
+                "png_scanline_bench_positive_rows": png_scanline_bench["positive_rows"],
+                "png_scanline_bench_shape_rows": png_scanline_bench["shape_rows"],
+                "png_scanline_bench_io_match_rows": png_scanline_bench["io_match_rows"],
+                "png_scanline_bench_missing_pairs": png_scanline_bench["missing_pairs"],
                 "zstd_compare_present": zstd_compare["present"],
                 "zstd_compare_standard_present": zstd_compare["standard_present"],
                 "zstd_compare_block_sweep_present": zstd_compare["block_sweep_present"],

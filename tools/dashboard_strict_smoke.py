@@ -33,6 +33,7 @@ DEFLATE_HUFFMAN_LOOKUP_BENCH_ARTIFACT = "vort-deflate-huffman-lookup-bench.csv"
 DEFLATE_CHUNKED_HUFFMAN_BENCH_ARTIFACT = "vort-deflate-chunked-huffman-bench.csv"
 DEFLATE_EXTRA_BITS_BENCH_ARTIFACT = "vort-deflate-extra-bits-bench.csv"
 DICTIONARY_DECODE_BENCH_ARTIFACT = "vort-dictionary-decode-bench.csv"
+PNG_SCANLINE_BENCH_ARTIFACT = "vort-png-scanline-bench.csv"
 FUZZ_CORPUS_ARTIFACT = "vort-deflate-wrapper-fuzz-corpus.json"
 FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
 DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
@@ -111,6 +112,8 @@ def write_producer_map(
     include_deflate_extra_bits_bench_smoke: bool = True,
     include_dictionary_decode_bench_exact: bool = True,
     include_dictionary_decode_bench_smoke: bool = True,
+    include_png_scanline_bench_exact: bool = True,
+    include_png_scanline_bench_smoke: bool = True,
     include_fuzz_corpus_exact: bool = True,
     include_fuzz_corpus_smoke: bool = True,
     include_fuzz_coverage_exact: bool = True,
@@ -225,6 +228,11 @@ def write_producer_map(
         artifact_metadata[DICTIONARY_DECODE_BENCH_ARTIFACT] = {
             "expected_format": "csv",
             "smoke_gate": "zig build run-dictionary-decode-bench-gate",
+        }
+    if include_png_scanline_bench_smoke:
+        artifact_metadata[PNG_SCANLINE_BENCH_ARTIFACT] = {
+            "expected_format": "csv",
+            "smoke_gate": "zig build run-png-scanline-bench-gate",
         }
     if include_fuzz_corpus_smoke:
         artifact_metadata[FUZZ_CORPUS_ARTIFACT] = {
@@ -358,6 +366,8 @@ def write_producer_map(
         exact[DEFLATE_EXTRA_BITS_BENCH_ARTIFACT] = "zig build run-deflate-extra-bits-bench-gate"
     if include_dictionary_decode_bench_exact:
         exact[DICTIONARY_DECODE_BENCH_ARTIFACT] = "zig build run-dictionary-decode-bench-gate"
+    if include_png_scanline_bench_exact:
+        exact[PNG_SCANLINE_BENCH_ARTIFACT] = "zig build run-png-scanline-bench-gate"
     if include_fuzz_corpus_exact:
         exact[FUZZ_CORPUS_ARTIFACT] = "zig build run-deflate-wrapper-fuzz-corpus-dashboard"
     if include_fuzz_coverage_exact:
@@ -1098,6 +1108,19 @@ def write_dictionary_decode_bench_csv(path: Path, *, healthy: bool = True) -> No
                 ]
             )
         )
+    path.write_text("\n".join(lines) + "\n")
+
+
+def write_png_scanline_bench_csv(path: Path, *, healthy: bool = True) -> None:
+    columns = ["stage", "bpp", "iterations", "repeat", "input_bytes", "output_bytes", "elapsed_ns", "output_mib_per_s", "checksum"]
+    stages = ("none", "sub", "up", "average", "paeth")
+    bpps = ("1", "2", "3", "4", "6", "8")
+    lines = [",".join(columns)]
+    for stage in stages:
+        for bpp in bpps:
+            if not healthy and stage == "paeth" and bpp == "8":
+                continue
+            lines.append(",".join([stage, bpp, "64", "1", "8192", "8192", "1000", "1000.0", "12345"]))
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -1969,6 +1992,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_deflate_chunked_huffman_bench_csv(root / DEFLATE_CHUNKED_HUFFMAN_BENCH_ARTIFACT)
     write_deflate_extra_bits_bench_csv(root / DEFLATE_EXTRA_BITS_BENCH_ARTIFACT)
     write_dictionary_decode_bench_csv(root / DICTIONARY_DECODE_BENCH_ARTIFACT)
+    write_png_scanline_bench_csv(root / PNG_SCANLINE_BENCH_ARTIFACT)
     write_fuzz_corpus_report(root / FUZZ_CORPUS_ARTIFACT)
     write_fuzz_coverage_report(root / FUZZ_COVERAGE_ARTIFACT)
     write_decode_stage_report(root / DECODE_STAGE_ARTIFACT)
@@ -2370,8 +2394,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 48/48 | 0 | allowed missing 0 |",
-                    "| smoke gates | 48/48 | 0 | required missing 0 |",
+                    "| producer steps | 49/49 | 0 | allowed missing 0 |",
+                    "| smoke gates | 49/49 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -2656,6 +2680,20 @@ def main() -> int:
                     "| rows | 18 | expected 18, present `True` |",
                     "| shape rows | 18 | positive rows 18 |",
                     "| output-size rows | 18 | missing pairs 0, healthy `True` |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
+                "png_scanline_bench_markdown_table",
+                "PNG scanline benchmark Markdown table",
+                dashboard_markdown,
+                [
+                    "## PNG scanline benchmark coverage",
+                    "| category | count | detail |",
+                    "| rows | 30 | expected 30, present `True` |",
+                    "| shape rows | 30 | positive rows 30 |",
+                    "| input/output rows | 30 | missing pairs 0, healthy `True` |",
                 ],
             )
         )
@@ -3056,6 +3094,12 @@ def main() -> int:
                 write_producer_map(producer_map)
             elif fixture == "dictionary_decode_bench_failed":
                 write_dictionary_decode_bench_csv(fixture_root / DICTIONARY_DECODE_BENCH_ARTIFACT, healthy=False)
+                write_producer_map(producer_map)
+            elif fixture == "missing_png_scanline_bench_artifact":
+                (fixture_root / PNG_SCANLINE_BENCH_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "png_scanline_bench_failed":
+                write_png_scanline_bench_csv(fixture_root / PNG_SCANLINE_BENCH_ARTIFACT, healthy=False)
                 write_producer_map(producer_map)
             elif fixture == "missing_fuzz_corpus_artifact":
                 (fixture_root / FUZZ_CORPUS_ARTIFACT).unlink()

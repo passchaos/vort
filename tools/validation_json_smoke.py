@@ -105,6 +105,7 @@ def main() -> int:
         deflate_chunked_huffman_bench_path = ROOT / "zig-out" / "vort-deflate-chunked-huffman-bench.csv"
         deflate_extra_bits_bench_path = ROOT / "zig-out" / "vort-deflate-extra-bits-bench.csv"
         dictionary_decode_bench_path = ROOT / "zig-out" / "vort-dictionary-decode-bench.csv"
+        png_scanline_bench_path = ROOT / "zig-out" / "vort-png-scanline-bench.csv"
         python_zlib_diff_path = ROOT / "zig-out" / "vort-python-zlib-diff-smoke.json"
         native_codec_probes_path = ROOT / "zig-out" / "vort-native-codec-probes.json"
         native_summary_error_dashboard_path = ROOT / "zig-out" / "vort-native-summary-error-dashboard.json"
@@ -437,6 +438,9 @@ def main() -> int:
         with dictionary_decode_bench_path.open(newline="") as f:
             dictionary_decode_bench_rows = list(csv.DictReader(f))
         assert len(dictionary_decode_bench_rows) == 18
+        with png_scanline_bench_path.open(newline="") as f:
+            png_scanline_bench_rows = list(csv.DictReader(f))
+        assert len(png_scanline_bench_rows) == 30
         with snappy_report_path.open(newline="") as f:
             snappy_report_rows = list(csv.DictReader(f))
         assert len(snappy_report_rows) == 20
@@ -853,6 +857,7 @@ def main() -> int:
         shutil.copyfile(deflate_chunked_huffman_bench_path, root / "vort-deflate-chunked-huffman-bench.csv")
         shutil.copyfile(deflate_extra_bits_bench_path, root / "vort-deflate-extra-bits-bench.csv")
         shutil.copyfile(dictionary_decode_bench_path, root / "vort-dictionary-decode-bench.csv")
+        shutil.copyfile(png_scanline_bench_path, root / "vort-png-scanline-bench.csv")
         shutil.copyfile(fuzz_report_path, root / "vort-deflate-wrapper-fuzz-corpus.json")
         shutil.copyfile(fuzz_coverage_smoke_path, root / "vort-fuzz-corpus-coverage-smoke.json")
         shutil.copyfile(decode_stage_path, root / "vort-deflate-decode-stage-report.json")
@@ -1146,6 +1151,14 @@ def main() -> int:
         assert dashboard["dictionary_decode_bench_shape_rows"] == len(dictionary_decode_bench_rows)
         assert dashboard["dictionary_decode_bench_output_size_rows"] == len(dictionary_decode_bench_rows)
         assert dashboard["dictionary_decode_bench_missing_pairs"] == []
+        assert dashboard["png_scanline_bench_present"] is True
+        assert dashboard["png_scanline_bench_healthy"] is True
+        assert dashboard["png_scanline_bench_rows"] == len(png_scanline_bench_rows)
+        assert dashboard["png_scanline_bench_expected_rows"] == 30
+        assert dashboard["png_scanline_bench_positive_rows"] == len(png_scanline_bench_rows)
+        assert dashboard["png_scanline_bench_shape_rows"] == len(png_scanline_bench_rows)
+        assert dashboard["png_scanline_bench_io_match_rows"] == len(png_scanline_bench_rows)
+        assert dashboard["png_scanline_bench_missing_pairs"] == []
         assert dashboard["native_allocation_present"] is True
         assert dashboard["native_allocation_smoke_present"] is True
         assert dashboard["native_allocation_negative_present"] is True
@@ -1299,6 +1312,7 @@ def main() -> int:
             and dashboard["deflate_chunked_huffman_bench_healthy"]
             and dashboard["deflate_extra_bits_bench_healthy"]
             and dashboard["dictionary_decode_bench_healthy"]
+            and dashboard["png_scanline_bench_healthy"]
             and dashboard["snappy_report_healthy"]
             and dashboard["zstd_compare_healthy"]
             and dashboard["native_fuzz_corpus_healthy"]
