@@ -1406,7 +1406,8 @@
             "br_static_dictionary_upstream_present",
             "br_static_dictionary_node_present",
             "br_static_dictionary_audit_present",
-            "br_static_dictionary_negative_present"
+            "br_static_dictionary_negative_present",
+            "br_static_dictionary_candidate_markdown_present"
           ],
           "positive": [
             "br_static_dictionary_candidate_count",
@@ -1419,7 +1420,15 @@
             "br_static_dictionary_audit_anchor_count",
             "br_static_dictionary_audit_generated_zig_bytes",
             "br_static_dictionary_negative_case_count",
-            "br_static_dictionary_negative_matched"
+            "br_static_dictionary_negative_matched",
+            "br_static_dictionary_candidate_markdown_summary_rows",
+            "br_static_dictionary_candidate_markdown_matched",
+            "br_static_dictionary_candidate_markdown_sample_rows",
+            "br_static_dictionary_candidate_markdown_sample_matched"
+          ],
+          "zero": [
+            "br_static_dictionary_candidate_markdown_unmatched",
+            "br_static_dictionary_candidate_markdown_sample_unmatched"
           ]
         },
         "br_static_dictionary_report_healthy": {
@@ -1629,6 +1638,13 @@
         "native_fuzz_corpus_markdown_matched": "int",
         "native_fuzz_corpus_markdown_unmatched": "int",
         "br_static_dictionary_present": "bool",
+        "br_static_dictionary_candidate_markdown_present": "bool",
+        "br_static_dictionary_candidate_markdown_summary_rows": "int",
+        "br_static_dictionary_candidate_markdown_matched": "int",
+        "br_static_dictionary_candidate_markdown_unmatched": "int",
+        "br_static_dictionary_candidate_markdown_sample_rows": "int",
+        "br_static_dictionary_candidate_markdown_sample_matched": "int",
+        "br_static_dictionary_candidate_markdown_sample_unmatched": "int",
         "br_static_dictionary_upstream_present": "bool",
         "br_static_dictionary_node_present": "bool",
         "br_static_dictionary_audit_present": "bool",
@@ -2694,6 +2710,16 @@
           "left": "chunked_zlib_bench_markdown_matched",
           "op": "eq",
           "right": "chunked_zlib_bench_markdown_rows"
+        },
+        {
+          "left": "br_static_dictionary_candidate_markdown_matched",
+          "op": "eq",
+          "right": "br_static_dictionary_candidate_markdown_summary_rows"
+        },
+        {
+          "left": "br_static_dictionary_candidate_markdown_sample_matched",
+          "op": "eq",
+          "right": "br_static_dictionary_candidate_markdown_sample_rows"
         }
       ]
     },

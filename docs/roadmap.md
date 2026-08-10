@@ -2622,3 +2622,8 @@ architecture blindly.
   row, not just metadata and TOTAL snippets. Aggregate health now exposes
   Markdown detail-row matched/unmatched counters before zstd compare coverage
   can pass.
+- Tightened Brotli static-dictionary candidate dashboard health by requiring
+  the retained `vort-br-static-dictionary-candidates.md` summary and sampled
+  candidate rows to match the canonical JSON report. Aggregate health now
+  exposes candidate Markdown summary/sample matched-unmatched counters before
+  static-dictionary core coverage can pass.

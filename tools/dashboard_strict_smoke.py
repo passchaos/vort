@@ -60,6 +60,7 @@ SNAPPY_REPORT_ARTIFACT = "vort-snappy-report.csv"
 PNG_SCRATCH_ARTIFACT = "vort-png-scratch-report.json"
 PNG_SCRATCH_MARKDOWN_ARTIFACT = "vort-png-scratch-report.md"
 BR_STATIC_CANDIDATES_ARTIFACT = "vort-br-static-dictionary-candidates.json"
+BR_STATIC_CANDIDATES_MARKDOWN_ARTIFACT = "vort-br-static-dictionary-candidates.md"
 BR_STATIC_UPSTREAM_ARTIFACT = "vort-br-static-dictionary-candidate-upstream-smoke.json"
 BR_STATIC_NODE_ARTIFACT = "vort-br-static-dictionary-node-probe.json"
 BR_STATIC_AUDIT_ARTIFACT = "vort-br-static-dictionary-source-audit.json"
@@ -392,6 +393,7 @@ def write_producer_map(
     if include_br_static_smoke:
         for artifact, expected_format, smoke_gate in (
             (BR_STATIC_CANDIDATES_ARTIFACT, "json", "zig build run-br-static-dictionary-candidate-report-smoke"),
+            (BR_STATIC_CANDIDATES_MARKDOWN_ARTIFACT, "md", "zig build run-br-static-dictionary-candidate-report-smoke"),
             (BR_STATIC_UPSTREAM_ARTIFACT, "json", "zig build run-br-static-dictionary-candidate-upstream-smoke"),
             (BR_STATIC_NODE_ARTIFACT, "json", "zig build run-br-static-dictionary-node-probe"),
             (BR_STATIC_AUDIT_ARTIFACT, "json", "zig build run-br-static-dictionary-source-audit"),
@@ -548,6 +550,7 @@ def write_producer_map(
         exact[PNG_SCRATCH_MARKDOWN_ARTIFACT] = "zig build run-png-scratch-report-dashboard"
     if include_br_static_exact:
         exact[BR_STATIC_CANDIDATES_ARTIFACT] = "zig build run-br-static-dictionary-candidate-report-smoke"
+        exact[BR_STATIC_CANDIDATES_MARKDOWN_ARTIFACT] = "zig build run-br-static-dictionary-candidate-report-smoke"
         exact[BR_STATIC_UPSTREAM_ARTIFACT] = "zig build run-br-static-dictionary-candidate-upstream-smoke"
         exact[BR_STATIC_NODE_ARTIFACT] = "zig build run-br-static-dictionary-node-probe"
         exact[BR_STATIC_AUDIT_ARTIFACT] = "zig build run-br-static-dictionary-source-audit"
@@ -2857,6 +2860,50 @@ def write_native_fuzz_corpus_artifacts(root: Path) -> None:
     (root / NATIVE_FUZZ_COVERAGE_ARTIFACT).write_text(json.dumps(coverage, indent=2, sort_keys=True) + "\n")
 
 
+def write_br_static_candidates_markdown(path: Path, payload: dict[str, object]) -> None:
+    lines = [
+        "# Brotli static dictionary candidate report",
+        "",
+        f"- Source mode: {payload['source_mode']}",
+        f"- Source limit: {payload['source_limit']}",
+        f"- Source entries: {payload['source_entry_count']}",
+        f"- Anchor raw words: {payload['anchor_raw_word_count']}",
+        f"- Upstream raw words: {payload['upstream_raw_word_count']}",
+        f"- Unique raw words: {payload['raw_word_count']}",
+        f"- Supported transforms considered: {payload['transform_count']}",
+        f"- Candidate entries: {payload['candidate_count']}",
+        f"- Rows shown: {min(80, len(payload['candidates']))}",
+        "",
+        "## Transform-kind summary",
+        "",
+        "| Transform kind | Candidates |",
+        "| --- | ---: |",
+    ]
+    for row in payload["kind_rows"]:
+        lines.append(f"| `{row['transform_kind']}` | {row['candidate_count']} |")
+    lines.extend([
+        "",
+        "## Copy-length summary",
+        "",
+        "| Copy length | Candidates |",
+        "| ---: | ---: |",
+    ])
+    for row in payload["length_rows"]:
+        lines.append(f"| {row['copy_len']} | {row['candidate_count']} |")
+    lines.extend([
+        "",
+        "## Candidate rows",
+        "",
+        "| Transform | Copy length | Word index | Kind | Raw word | Candidate word |",
+        "| ---: | ---: | ---: | --- | --- | --- |",
+    ])
+    for row in payload["candidates"][:80]:
+        lines.append(
+            f"| {row['transform']} | {row['copy_len']} | {row['word_index']} | `{row['transform_kind']}` | `{row['raw_word']}` | `{row['transformed_word']}` |"
+        )
+    path.write_text("\n".join(lines) + "\n")
+
+
 def write_br_static_dictionary_artifacts(root: Path) -> None:
     candidates = {
         "schema": "vort.br_static_dictionary_candidate_report",
@@ -2865,12 +2912,13 @@ def write_br_static_dictionary_artifacts(root: Path) -> None:
         "source_limit": 0,
         "source_entry_count": 83,
         "raw_word_count": 143,
+        "anchor_raw_word_count": 143,
         "upstream_raw_word_count": 0,
         "transform_count": 6,
         "candidate_count": 775,
         "kind_rows": [{"transform_kind": "identity", "candidate_count": 81}, {"transform_kind": "affix_identity", "candidate_count": 417}, {"transform_kind": "omit_last_1", "candidate_count": 139}, {"transform_kind": "uppercase_first", "candidate_count": 138}],
         "length_rows": [{"copy_len": 4, "candidate_count": 480}, {"copy_len": 5, "candidate_count": 295}],
-        "candidates": [{"word": "test", "copy_len": 4, "transform_kind": "identity"}],
+        "candidates": [{"raw_word": "test", "transformed_word": "test", "word_index": 0, "transform": 0, "copy_len": 4, "transform_kind": "identity"}],
     }
     upstream = {
         "schema": "vort.br_static_dictionary_candidate_upstream_smoke",
@@ -2955,6 +3003,7 @@ def write_br_static_dictionary_artifacts(root: Path) -> None:
         "case_count": 1,
         "cases": [{"name": "missing_required_tuple", "expected_output": "missing required coverage rows", "returncode": 1, "matched": True}],
     }
+    write_br_static_candidates_markdown(root / BR_STATIC_CANDIDATES_MARKDOWN_ARTIFACT, candidates)
     for artifact, payload in (
         (BR_STATIC_CANDIDATES_ARTIFACT, candidates),
         (BR_STATIC_UPSTREAM_ARTIFACT, upstream),
@@ -4274,8 +4323,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 84/84 | 0 | allowed missing 0 |",
-                    "| smoke gates | 84/84 | 0 | required missing 0 |",
+                    "| producer steps | 85/85 | 0 | allowed missing 0 |",
+                    "| smoke gates | 85/85 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -4723,7 +4772,8 @@ def main() -> int:
                 [
                     "## Static dictionary coverage",
                     "| category | count | detail |",
-                    "| candidates | 775 | raw words 143 |",
+                    "| candidates | 775 | raw words 143, Markdown 14/14 |",
+                    "| candidate sample rows | 1/1 | unmatched 0, present `True` |",
                     "| upstream smoke | 775 | raw words 143, present `True` |",
                     "| node probe | 48/48 | size winners 1 |",
                     "| source audit | 83 | anchors 83, generated bytes 4096 |",
@@ -5231,6 +5281,7 @@ def main() -> int:
                 write_producer_map(producer_map)
             elif fixture == "missing_br_static_dictionary_artifact":
                 (fixture_root / BR_STATIC_REPORT_JSON_ARTIFACT).unlink()
+                (fixture_root / BR_STATIC_CANDIDATES_MARKDOWN_ARTIFACT).unlink()
                 write_producer_map(producer_map)
             elif fixture == "br_static_dictionary_failed":
                 write_br_static_dictionary_artifacts(fixture_root)
