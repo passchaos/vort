@@ -918,6 +918,13 @@
       "require_smoke_gate": true
     },
     {
+      "category": "benchmark",
+      "name": "vort-native-library-bench.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
       "category": "native parallel",
       "name": "vort-native-parallel-dashboard.md",
       "require_present": false,

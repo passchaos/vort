@@ -1002,6 +1002,13 @@
       "smoke_gate": "zig build run-native-fuzz-corpus-dashboard"
     },
     {
+      "expected_format": "csv",
+      "name": "vort-native-library-bench.csv",
+      "producer_step": "zig build run-native-library-bench-gate",
+      "required_smoke_gate": true,
+      "smoke_gate": "zig build run-native-library-bench-gate"
+    },
+    {
       "expected_format": "md",
       "name": "vort-native-parallel-dashboard.md",
       "producer_step": "zig build -Doptimize=ReleaseFast run-native-parallel-dashboard",

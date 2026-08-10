@@ -118,6 +118,7 @@ def main() -> int:
         zlib_relaxed_path = ROOT / "zig-out" / "vort-zlib-relaxed-report.json"
         snappy_report_path = ROOT / "zig-out" / "vort-snappy-report.csv"
         native_allocation_path = ROOT / "zig-out" / "vort-native-allocation-report.json"
+        native_library_bench_path = ROOT / "zig-out" / "vort-native-library-bench.csv"
         native_allocation_smoke_path = ROOT / "zig-out" / "vort-native-allocation-smoke.json"
         native_allocation_negative_smoke_path = ROOT / "zig-out" / "vort-native-allocation-negative-smoke.json"
         png_scratch_path = ROOT / "zig-out" / "vort-png-scratch-report.json"
@@ -457,6 +458,9 @@ def main() -> int:
         with snappy_report_path.open(newline="") as f:
             snappy_report_rows = list(csv.DictReader(f))
         assert len(snappy_report_rows) == 20
+        with native_library_bench_path.open(newline="") as f:
+            native_library_bench_rows = list(csv.DictReader(f))
+        assert len(native_library_bench_rows) == 93
         native_allocation = json.loads(native_allocation_path.read_text())
         assert native_allocation["schema"] == "vort.native_allocation_report"
         assert native_allocation["schema_version"] == 1
@@ -893,6 +897,7 @@ def main() -> int:
         shutil.copyfile(zlib_relaxed_path, root / "vort-zlib-relaxed-report.json")
         shutil.copyfile(snappy_report_path, root / "vort-snappy-report.csv")
         shutil.copyfile(png_scratch_path, root / "vort-png-scratch-report.json")
+        shutil.copyfile(native_library_bench_path, root / "vort-native-library-bench.csv")
         shutil.copyfile(native_allocation_path, root / "vort-native-allocation-report.json")
         shutil.copyfile(native_allocation_smoke_path, root / "vort-native-allocation-smoke.json")
         shutil.copyfile(native_allocation_negative_smoke_path, root / "vort-native-allocation-negative-smoke.json")
@@ -1360,6 +1365,7 @@ def main() -> int:
             and dashboard["chunked_zlib_bench_healthy"]
             and dashboard["png_streaming_zlib_bench_healthy"]
             and dashboard["deflate_dynamic_decode_profile_healthy"]
+            and dashboard["native_library_bench_healthy"]
             and dashboard["snappy_report_healthy"]
             and dashboard["zstd_compare_healthy"]
             and dashboard["native_fuzz_corpus_healthy"]

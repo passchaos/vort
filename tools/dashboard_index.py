@@ -2169,6 +2169,205 @@ def deflate_dynamic_decode_profile_health(artifacts: list[Path]) -> dict:
     }
 
 
+def native_library_bench_health(artifacts: list[Path]) -> dict:
+    expected_codecs = {"lz4", "zstd"}
+    expected_cases = {"text", "structured", "repetitive"}
+    base_modes = {"one_shot", "incremental", "incremental_direct", "incremental_fallback"}
+    decode_modes = {"lib_decode", "native_lib_decode"}
+    expected_extra_rows = {
+        ("lz4", "chain_depth_0", "chain_depth"),
+        ("lz4", "chain_depth_default", "chain_depth"),
+        ("zstd", "match_budget_0", "mixed_budget"),
+        ("zstd", "match_budget_full", "mixed_budget"),
+        ("zstd", "high_byte_binary", "high_byte_binary"),
+        ("lz4", "lib_generated", "lib_generated"),
+        ("zstd", "lib_generated", "lib_generated"),
+        ("lz4", "lib_generated_no_size", "lib_generated_no_size"),
+        ("zstd", "lib_generated_no_size", "lib_generated_no_size"),
+        ("lz4", "lib_generated_checksum", "lib_generated_checksum"),
+        ("zstd", "lib_generated_checksum", "lib_generated_checksum"),
+        ("lz4", "lib_generated_no_size_checksum", "lib_generated_no_size_checksum"),
+        ("zstd", "lib_generated_no_size_checksum", "lib_generated_no_size_checksum"),
+        ("lz4", "lib_generated_independent", "lib_generated_independent"),
+        ("lz4", "lib_generated_independent_no_size_checksum", "lib_generated_independent_no_size_checksum"),
+        ("zstd", "sequence_huffman_literals_plain", "sequence_huffman_literals"),
+        ("zstd", "sequence_huffman_literals", "sequence_huffman_literals"),
+        ("lz4", "dictionary_plain", "dictionary"),
+        ("lz4", "dictionary", "dictionary"),
+        ("zstd", "dictionary_plain", "dictionary"),
+        ("zstd", "dictionary", "dictionary"),
+        ("lz4", "trained_dictionary_plain", "trained_dictionary"),
+        ("lz4", "trained_dictionary", "trained_dictionary"),
+        ("zstd", "trained_dictionary_plain", "trained_dictionary"),
+        ("zstd", "trained_dictionary", "trained_dictionary"),
+        ("lz4", "dictionary_set_plain", "dictionary_set"),
+        ("lz4", "dictionary_set", "dictionary_set"),
+        ("zstd", "dictionary_set_plain", "dictionary_set"),
+        ("zstd", "dictionary_set", "dictionary_set"),
+        ("lz4", "dictionary_set_chunked_plain", "dictionary_set_chunked"),
+        ("lz4", "dictionary_set_chunked", "dictionary_set_chunked"),
+        ("zstd", "dictionary_set_chunked_plain", "dictionary_set_chunked"),
+        ("zstd", "dictionary_set_chunked", "dictionary_set_chunked"),
+        ("lz4", "dictionary_set_chunked_append_plain", "dictionary_set_chunked_append"),
+        ("lz4", "dictionary_set_chunked_append", "dictionary_set_chunked_append"),
+        ("zstd", "dictionary_set_chunked_append_plain", "dictionary_set_chunked_append"),
+        ("zstd", "dictionary_set_chunked_append", "dictionary_set_chunked_append"),
+        ("lz4", "dictionary_set_chunked_append_exact_plain", "dictionary_set_chunked_append_exact"),
+        ("lz4", "dictionary_set_chunked_append_exact", "dictionary_set_chunked_append_exact"),
+        ("zstd", "dictionary_set_chunked_append_exact_plain", "dictionary_set_chunked_append_exact"),
+        ("zstd", "dictionary_set_chunked_append_exact", "dictionary_set_chunked_append_exact"),
+        ("lz4", "dictionary_set_reusable_plain", "dictionary_set_reusable"),
+        ("lz4", "dictionary_set_reusable", "dictionary_set_reusable"),
+        ("zstd", "dictionary_set_reusable_plain", "dictionary_set_reusable"),
+        ("zstd", "dictionary_set_reusable", "dictionary_set_reusable"),
+        ("lz4", "dictionary_set_reusable_append_exact_plain", "dictionary_set_reusable_append_exact"),
+        ("lz4", "dictionary_set_reusable_append_exact", "dictionary_set_reusable_append_exact"),
+        ("zstd", "dictionary_set_reusable_append_exact_plain", "dictionary_set_reusable_append_exact"),
+        ("zstd", "dictionary_set_reusable_append_exact", "dictionary_set_reusable_append_exact"),
+        ("lz4", "dictionary_set_direct_plain", "dictionary_set_direct"),
+        ("lz4", "dictionary_set_direct", "dictionary_set_direct"),
+        ("zstd", "dictionary_set_direct_plain", "dictionary_set_direct"),
+        ("zstd", "dictionary_set_direct", "dictionary_set_direct"),
+        ("lz4", "dictionary_set_fallback_plain", "dictionary_set_fallback"),
+        ("lz4", "dictionary_set_fallback", "dictionary_set_fallback"),
+        ("zstd", "dictionary_set_fallback_plain", "dictionary_set_fallback"),
+        ("zstd", "dictionary_set_fallback", "dictionary_set_fallback"),
+    }
+    expected_rows = {
+        (codec, mode, case)
+        for codec in expected_codecs
+        for mode in base_modes
+        for case in expected_cases
+    } | {
+        (codec, mode, case)
+        for codec in expected_codecs
+        for mode in decode_modes
+        for case in expected_cases
+    } | expected_extra_rows
+
+    def row_int(row: dict[str, str], key: str) -> int:
+        return int(row.get(key) or "0")
+
+    def row_float(row: dict[str, str], key: str) -> float:
+        return float(row.get(key) or "0")
+
+    def throughput_ok(row: dict[str, str], key: str, ns_key: str) -> bool:
+        input_bytes = row_int(row, "input_bytes")
+        iterations = row_int(row, "iterations")
+        elapsed_ns = row_int(row, ns_key)
+        reported = row_float(row, key)
+        expected = (input_bytes * iterations / (1024.0 * 1024.0)) / (elapsed_ns / 1_000_000_000.0)
+        return abs(reported - expected) <= max(0.02, expected * 0.0005)
+
+    def encoded_less(rows_by_id: dict[tuple[str, str, str], dict[str, str]], lhs: tuple[str, str, str], rhs: tuple[str, str, str]) -> bool:
+        left = rows_by_id.get(lhs)
+        right = rows_by_id.get(rhs)
+        if left is None or right is None:
+            return False
+        return row_int(left, "encoded_bytes") < row_int(right, "encoded_bytes")
+
+    improvement_pairs = [
+        (("lz4", "chain_depth_default", "chain_depth"), ("lz4", "chain_depth_0", "chain_depth")),
+        (("zstd", "match_budget_full", "mixed_budget"), ("zstd", "match_budget_0", "mixed_budget")),
+        (("zstd", "sequence_huffman_literals", "sequence_huffman_literals"), ("zstd", "sequence_huffman_literals_plain", "sequence_huffman_literals")),
+    ]
+    for codec in ("lz4", "zstd"):
+        for dictionary_case in ("dictionary", "trained_dictionary", "dictionary_set", "dictionary_set_chunked", "dictionary_set_chunked_append", "dictionary_set_chunked_append_exact", "dictionary_set_reusable", "dictionary_set_reusable_append_exact", "dictionary_set_direct", "dictionary_set_fallback"):
+            improvement_pairs.append(((codec, dictionary_case, dictionary_case), (codec, f"{dictionary_case}_plain", dictionary_case)))
+
+    compression_rows = [
+        ("zstd", "high_byte_binary", "high_byte_binary"),
+        *[(codec, case, case) for codec in ("lz4", "zstd") for case in ("lib_generated", "lib_generated_no_size", "lib_generated_checksum", "lib_generated_no_size_checksum")],
+        ("lz4", "lib_generated_independent", "lib_generated_independent"),
+        ("lz4", "lib_generated_independent_no_size_checksum", "lib_generated_independent_no_size_checksum"),
+        *[(codec, mode, case) for codec in expected_codecs for mode in decode_modes for case in expected_cases],
+    ]
+    expected_improvement_checks = len(improvement_pairs) + len(compression_rows)
+
+    for artifact in artifacts:
+        if artifact.name != "vort-native-library-bench.csv":
+            continue
+        try:
+            with artifact.open(newline="") as f:
+                rows = list(csv.DictReader(f))
+        except Exception:
+            rows = []
+        seen: set[tuple[str, str, str]] = set()
+        rows_by_id: dict[tuple[str, str, str], dict[str, str]] = {}
+        positive_rows = 0
+        throughput_rows = 0
+        iteration_rows = 0
+        first_iterations: int | None = None
+        for row in rows:
+            identity = (str(row.get("codec") or ""), str(row.get("mode") or ""), str(row.get("case") or ""))
+            if identity in expected_rows and identity not in seen:
+                seen.add(identity)
+                rows_by_id[identity] = row
+            try:
+                input_bytes = row_int(row, "input_bytes")
+                encoded_bytes = row_int(row, "encoded_bytes")
+                iterations = row_int(row, "iterations")
+                encode_ns = row_int(row, "encode_ns")
+                decode_ns = row_int(row, "decode_ns")
+                checksum = row_int(row, "checksum")
+                encode_mib_s = row_float(row, "encode_mib_s")
+                decode_mib_s = row_float(row, "decode_mib_s")
+            except ValueError:
+                continue
+            if all(value > 0 for value in (input_bytes, encoded_bytes, iterations, encode_ns, decode_ns, checksum)) and encode_mib_s > 0.0 and decode_mib_s > 0.0 and encoded_bytes > 8:
+                positive_rows += 1
+            if throughput_ok(row, "encode_mib_s", "encode_ns") and throughput_ok(row, "decode_mib_s", "decode_ns"):
+                throughput_rows += 1
+            if first_iterations is None:
+                first_iterations = iterations
+            if iterations == first_iterations:
+                iteration_rows += 1
+        missing_pairs = sorted(":".join(identity) for identity in expected_rows - seen)
+        shape_rows = len(seen)
+        improvement_checks = 0
+        for lhs, rhs in improvement_pairs:
+            if encoded_less(rows_by_id, lhs, rhs):
+                improvement_checks += 1
+        for identity in compression_rows:
+            row = rows_by_id.get(identity)
+            if row is not None and row_int(row, "encoded_bytes") < row_int(row, "input_bytes"):
+                improvement_checks += 1
+        row_count = len(rows)
+        healthy = (
+            row_count == len(expected_rows)
+            and shape_rows == len(expected_rows)
+            and not missing_pairs
+            and positive_rows == row_count
+            and throughput_rows == row_count
+            and iteration_rows == row_count
+            and improvement_checks == expected_improvement_checks
+        )
+        return {
+            "present": True,
+            "healthy": healthy,
+            "row_count": row_count,
+            "expected_rows": len(expected_rows),
+            "positive_rows": positive_rows,
+            "throughput_rows": throughput_rows,
+            "iteration_rows": iteration_rows,
+            "improvement_checks": improvement_checks,
+            "expected_improvement_checks": expected_improvement_checks,
+            "missing_pairs": missing_pairs,
+        }
+    return {
+        "present": False,
+        "healthy": False,
+        "row_count": 0,
+        "expected_rows": len(expected_rows),
+        "positive_rows": 0,
+        "throughput_rows": 0,
+        "iteration_rows": 0,
+        "improvement_checks": 0,
+        "expected_improvement_checks": expected_improvement_checks,
+        "missing_pairs": [],
+    }
+
+
 def zstd_compare_health(artifacts: list[Path]) -> dict:
     compare = None
     standard = None
@@ -3053,6 +3252,7 @@ def main() -> int:
     chunked_zlib_bench = chunked_zlib_bench_health(artifacts)
     png_streaming_zlib_bench = png_streaming_zlib_bench_health(artifacts)
     deflate_dynamic_decode_profile = deflate_dynamic_decode_profile_health(artifacts)
+    native_library_bench = native_library_bench_health(artifacts)
     zstd_compare = zstd_compare_health(artifacts)
     native_allocation = native_allocation_health(artifacts)
     python_zlib_health = python_zlib_diff_health(artifacts)
@@ -3110,6 +3310,7 @@ def main() -> int:
     chunked_zlib_bench_healthy = chunked_zlib_bench["healthy"]
     png_streaming_zlib_bench_healthy = png_streaming_zlib_bench["healthy"]
     deflate_dynamic_decode_profile_healthy = deflate_dynamic_decode_profile["healthy"]
+    native_library_bench_healthy = native_library_bench["healthy"]
     native_allocation_healthy = native_allocation["healthy"]
     native_summary_error_healthy = native_summary_error_health["healthy"]
     native_summary_error_negative_healthy = native_summary_error_negative["healthy"]
@@ -3148,6 +3349,7 @@ def main() -> int:
         and chunked_zlib_bench_healthy
         and png_streaming_zlib_bench_healthy
         and deflate_dynamic_decode_profile_healthy
+        and native_library_bench_healthy
         and br_static_dictionary["healthy"]
         and native_summary_error_healthy
         and native_summary_error_negative_healthy
@@ -3288,6 +3490,10 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_deflate_dynamic_decode_profile_artifact")
     elif not deflate_dynamic_decode_profile_healthy:
         validation_unhealthy_reasons.append("deflate_dynamic_decode_profile_failed")
+    if not native_library_bench["present"]:
+        validation_unhealthy_reasons.append("missing_native_library_bench_artifact")
+    elif not native_library_bench_healthy:
+        validation_unhealthy_reasons.append("native_library_bench_failed")
     native_allocation_present = (
         native_allocation["present"]
         and native_allocation["smoke_present"]
@@ -3695,6 +3901,18 @@ def main() -> int:
             f"| rows | {deflate_dynamic_decode_profile['row_count']} | required {deflate_dynamic_decode_profile['required_rows']}, present `{deflate_dynamic_decode_profile['present']}` |",
             f"| required row checks | {deflate_dynamic_decode_profile['positive_rows']} | histograms/lookups {deflate_dynamic_decode_profile['histogram_rows']}/{deflate_dynamic_decode_profile['lookup_rows']} |",
             f"| match class rows | {deflate_dynamic_decode_profile['match_class_rows']} | chunked-window {deflate_dynamic_decode_profile['chunked_window_rows']}, missing cases {len(deflate_dynamic_decode_profile['missing_cases'])}, healthy `{deflate_dynamic_decode_profile['healthy']}` |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
+            "## Native library benchmark coverage",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| rows | {native_library_bench['row_count']} | expected {native_library_bench['expected_rows']}, present `{native_library_bench['present']}` |",
+            f"| positive rows | {native_library_bench['positive_rows']} | throughput/iteration {native_library_bench['throughput_rows']}/{native_library_bench['iteration_rows']} |",
+            f"| improvement checks | {native_library_bench['improvement_checks']}/{native_library_bench['expected_improvement_checks']} | missing pairs {len(native_library_bench['missing_pairs'])}, healthy `{native_library_bench['healthy']}` |",
             "",
         ]
     )
@@ -4254,6 +4472,16 @@ def main() -> int:
                 "deflate_dynamic_decode_profile_match_class_rows": deflate_dynamic_decode_profile["match_class_rows"],
                 "deflate_dynamic_decode_profile_chunked_window_rows": deflate_dynamic_decode_profile["chunked_window_rows"],
                 "deflate_dynamic_decode_profile_missing_cases": deflate_dynamic_decode_profile["missing_cases"],
+                "native_library_bench_present": native_library_bench["present"],
+                "native_library_bench_healthy": native_library_bench["healthy"],
+                "native_library_bench_rows": native_library_bench["row_count"],
+                "native_library_bench_expected_rows": native_library_bench["expected_rows"],
+                "native_library_bench_positive_rows": native_library_bench["positive_rows"],
+                "native_library_bench_throughput_rows": native_library_bench["throughput_rows"],
+                "native_library_bench_iteration_rows": native_library_bench["iteration_rows"],
+                "native_library_bench_improvement_checks": native_library_bench["improvement_checks"],
+                "native_library_bench_expected_improvement_checks": native_library_bench["expected_improvement_checks"],
+                "native_library_bench_missing_pairs": native_library_bench["missing_pairs"],
                 "zstd_compare_present": zstd_compare["present"],
                 "zstd_compare_standard_present": zstd_compare["standard_present"],
                 "zstd_compare_block_sweep_present": zstd_compare["block_sweep_present"],

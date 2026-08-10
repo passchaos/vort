@@ -576,6 +576,10 @@
       "expected_format": "md",
       "smoke_gate": "zig build run-native-fuzz-corpus-dashboard"
     },
+    "vort-native-library-bench.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build run-native-library-bench-gate"
+    },
     "vort-native-parallel-dashboard.md": {
       "expected_format": "md",
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-native-parallel-dashboard"
@@ -959,6 +963,7 @@
     "vort-native-fuzz-corpus-coverage-smoke.json": "zig build run-native-fuzz-corpus-coverage-smoke",
     "vort-native-fuzz-corpus.json": "zig build run-native-fuzz-corpus-dashboard",
     "vort-native-fuzz-corpus.md": "zig build run-native-fuzz-corpus-dashboard",
+    "vort-native-library-bench.csv": "zig build run-native-library-bench-gate",
     "vort-native-parallel-dashboard.md": "zig build -Doptimize=ReleaseFast run-native-parallel-dashboard",
     "vort-native-thread-pool-full-dashboard.md": "zig build -Doptimize=ReleaseFast run-native-thread-pool-full-dashboard",
     "vort-native-tier-range-bench-gate.json": "zig build run-native-tier-range-bench-gate",
@@ -1055,6 +1060,7 @@
     "vort-native-fuzz-corpus-coverage-smoke.json",
     "vort-native-fuzz-corpus.json",
     "vort-native-fuzz-corpus.md",
+    "vort-native-library-bench.csv",
     "vort-native-tier-range-bench-gate.json",
     "vort-native-tier-range-bench.csv",
     "vort-native-tier-range-corpus-bench-gate.json",

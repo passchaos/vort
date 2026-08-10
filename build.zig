@@ -2850,6 +2850,7 @@ pub fn build(b: *std.Build) void {
     validation_json_smoke.step.dependOn(chunked_zlib_bench_report_gate_step);
     validation_json_smoke.step.dependOn(png_streaming_zlib_bench_report_gate_step);
     validation_json_smoke.step.dependOn(deflate_dynamic_decode_profile_gate_step);
+    validation_json_smoke.step.dependOn(native_library_bench_gate_step);
     validation_json_smoke.step.dependOn(python_zlib_diff_dashboard_step);
     validation_json_smoke.step.dependOn(zlib_relaxed_report_step);
     validation_json_smoke.step.dependOn(snappy_report_gate_step);
@@ -2889,6 +2890,7 @@ pub fn build(b: *std.Build) void {
     validation_json_dashboard.step.dependOn(chunked_zlib_bench_report_gate_step);
     validation_json_dashboard.step.dependOn(png_streaming_zlib_bench_report_gate_step);
     validation_json_dashboard.step.dependOn(deflate_dynamic_decode_profile_gate_step);
+    validation_json_dashboard.step.dependOn(native_library_bench_gate_step);
     validation_json_dashboard.step.dependOn(python_zlib_diff_dashboard_step);
     validation_json_dashboard.step.dependOn(zlib_relaxed_report_step);
     validation_json_dashboard.step.dependOn(snappy_report_gate_step);
@@ -2978,6 +2980,7 @@ pub fn build(b: *std.Build) void {
     dashboard_index.step.dependOn(chunked_zlib_bench_report_gate_step);
     dashboard_index.step.dependOn(png_streaming_zlib_bench_report_gate_step);
     dashboard_index.step.dependOn(deflate_dynamic_decode_profile_gate_step);
+    dashboard_index.step.dependOn(native_library_bench_gate_step);
     dashboard_index.step.dependOn(png_scanline_bench_gate_step);
     dashboard_index.step.dependOn(level_report_dashboard_step);
     dashboard_index.step.dependOn(huffman_length_report_dashboard_step);

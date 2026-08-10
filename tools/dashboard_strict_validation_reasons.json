@@ -168,6 +168,16 @@
       "fixture": "native_allocation_failed"
     },
     {
+      "reason": "missing_native_library_bench_artifact",
+      "check": "validation_missing_native_library_bench_artifact",
+      "fixture": "missing_native_library_bench_artifact"
+    },
+    {
+      "reason": "native_library_bench_failed",
+      "check": "validation_native_library_bench_failed",
+      "fixture": "native_library_bench_failed"
+    },
+    {
       "reason": "missing_decode_stage_artifact",
       "check": "validation_missing_decode_stage_artifact",
       "fixture": "missing_decode_stage_artifact"

@@ -54,6 +54,7 @@ NATIVE_FUZZ_COVERAGE_ARTIFACT = "vort-native-fuzz-corpus-coverage-smoke.json"
 NATIVE_ALLOCATION_REPORT_ARTIFACT = "vort-native-allocation-report.json"
 NATIVE_ALLOCATION_SMOKE_ARTIFACT = "vort-native-allocation-smoke.json"
 NATIVE_ALLOCATION_NEGATIVE_ARTIFACT = "vort-native-allocation-negative-smoke.json"
+NATIVE_LIBRARY_BENCH_ARTIFACT = "vort-native-library-bench.csv"
 ZSTD_COMPARE_ARTIFACT = "vort-zstd-compare-gate.json"
 ZSTD_COMPARE_STANDARD_ARTIFACT = "vort-zstd-compare-standard-gate.json"
 ZSTD_COMPARE_BLOCK_SWEEP_ARTIFACT = "vort-zstd-compare-block-sweep-gate.json"
@@ -143,6 +144,8 @@ def write_producer_map(
     include_native_fuzz_smoke: bool = True,
     include_native_allocation_exact: bool = True,
     include_native_allocation_smoke: bool = True,
+    include_native_library_bench_exact: bool = True,
+    include_native_library_bench_smoke: bool = True,
     include_zstd_compare_exact: bool = True,
     include_zstd_compare_smoke: bool = True,
     include_native_summary_error_exact: bool = True,
@@ -315,6 +318,11 @@ def write_producer_map(
                 "expected_format": "json",
                 "smoke_gate": smoke_gate,
             }
+    if include_native_library_bench_smoke:
+        artifact_metadata[NATIVE_LIBRARY_BENCH_ARTIFACT] = {
+            "expected_format": "csv",
+            "smoke_gate": "zig build run-native-library-bench-gate",
+        }
     if include_zstd_compare_smoke:
         for artifact, smoke_gate in (
             (ZSTD_COMPARE_ARTIFACT, "zig build run-zstd-compare-gate"),
@@ -425,6 +433,8 @@ def write_producer_map(
         exact[NATIVE_ALLOCATION_REPORT_ARTIFACT] = "zig build run-native-allocation-report-dashboard"
         exact[NATIVE_ALLOCATION_SMOKE_ARTIFACT] = "zig build run-native-allocation-smoke"
         exact[NATIVE_ALLOCATION_NEGATIVE_ARTIFACT] = "zig build run-native-allocation-negative-smoke"
+    if include_native_library_bench_exact:
+        exact[NATIVE_LIBRARY_BENCH_ARTIFACT] = "zig build run-native-library-bench-gate"
     if include_zstd_compare_exact:
         exact[ZSTD_COMPARE_ARTIFACT] = "zig build run-zstd-compare-gate"
         exact[ZSTD_COMPARE_STANDARD_ARTIFACT] = "zig build run-zstd-compare-standard-gate"
@@ -2275,6 +2285,67 @@ def write_lz4_native_summary(path: Path, *, healthy: bool = True) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def write_native_library_bench_csv(path: Path, *, healthy: bool = True) -> None:
+    columns = ["codec", "mode", "case", "input_bytes", "encoded_bytes", "iterations", "encode_ns", "decode_ns", "encode_mib_s", "decode_mib_s", "checksum"]
+    expected_cases = ("text", "structured", "repetitive")
+    rows: list[tuple[str, str, str, int, int]] = []
+    for codec in ("lz4", "zstd"):
+        for mode in ("one_shot", "incremental", "incremental_direct", "incremental_fallback", "lib_decode", "native_lib_decode"):
+            for case in expected_cases:
+                rows.append((codec, mode, case, 4096, 1024))
+    rows.extend(
+        [
+            ("lz4", "chain_depth_0", "chain_depth", 4096, 1800),
+            ("lz4", "chain_depth_default", "chain_depth", 4096, 900),
+            ("zstd", "match_budget_0", "mixed_budget", 4096, 1800),
+            ("zstd", "match_budget_full", "mixed_budget", 4096, 900),
+            ("zstd", "high_byte_binary", "high_byte_binary", 4096, 1000),
+        ]
+    )
+    for codec in ("lz4", "zstd"):
+        for case in ("lib_generated", "lib_generated_no_size", "lib_generated_checksum", "lib_generated_no_size_checksum"):
+            rows.append((codec, case, case, 4096, 1000))
+    rows.extend(
+        [
+            ("lz4", "lib_generated_independent", "lib_generated_independent", 4096, 1000),
+            ("lz4", "lib_generated_independent_no_size_checksum", "lib_generated_independent_no_size_checksum", 4096, 1000),
+            ("zstd", "sequence_huffman_literals_plain", "sequence_huffman_literals", 4096, 1800),
+            ("zstd", "sequence_huffman_literals", "sequence_huffman_literals", 4096, 900),
+        ]
+    )
+    for codec in ("lz4", "zstd"):
+        for case in ("dictionary", "trained_dictionary", "dictionary_set", "dictionary_set_chunked", "dictionary_set_chunked_append", "dictionary_set_chunked_append_exact", "dictionary_set_reusable", "dictionary_set_reusable_append_exact", "dictionary_set_direct", "dictionary_set_fallback"):
+            rows.append((codec, f"{case}_plain", case, 4096, 1800))
+            rows.append((codec, case, case, 4096, 900))
+    if not healthy:
+        rows.pop()
+    iterations = 25
+    encode_ns = 1000
+    decode_ns = 2000
+    def mib_s(input_bytes: int, elapsed_ns: int) -> str:
+        return f"{(input_bytes * iterations / (1024.0 * 1024.0)) / (elapsed_ns / 1_000_000_000.0):.4f}"
+    lines = [",".join(columns)]
+    for codec, mode, case, input_bytes, encoded_bytes in rows:
+        lines.append(
+            ",".join(
+                [
+                    codec,
+                    mode,
+                    case,
+                    str(input_bytes),
+                    str(encoded_bytes),
+                    str(iterations),
+                    str(encode_ns),
+                    str(decode_ns),
+                    mib_s(input_bytes, encode_ns),
+                    mib_s(input_bytes, decode_ns),
+                    "12345",
+                ]
+            )
+        )
+    path.write_text("\n".join(lines) + "\n")
+
+
 def write_native_tier_range_summary(path: Path, *, ok: bool = True, source: str = "built_in", rows: int = 9, fixture_count: int = 3) -> None:
     floors = NATIVE_TIER_RANGE_FLOORS.get(source, NATIVE_TIER_RANGE_FLOORS["custom"])
     payload = {
@@ -2359,6 +2430,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_native_fuzz_corpus_artifacts(root)
     write_br_static_dictionary_artifacts(root)
     write_native_allocation_artifacts(root)
+    write_native_library_bench_csv(root / NATIVE_LIBRARY_BENCH_ARTIFACT)
     write_zstd_compare_artifacts(root)
     write_native_summary_error_dashboard(root / NATIVE_SUMMARY_ERROR_ARTIFACT)
     write_native_summary_error_negative_smoke(root / NATIVE_SUMMARY_ERROR_NEGATIVE_ARTIFACT)
@@ -2750,8 +2822,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 52/52 | 0 | allowed missing 0 |",
-                    "| smoke gates | 52/52 | 0 | required missing 0 |",
+                    "| producer steps | 53/53 | 0 | allowed missing 0 |",
+                    "| smoke gates | 53/53 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -3579,6 +3651,12 @@ def main() -> int:
                 payload = json.loads((fixture_root / NATIVE_ALLOCATION_SMOKE_ARTIFACT).read_text())
                 payload["ok"] = False
                 (fixture_root / NATIVE_ALLOCATION_SMOKE_ARTIFACT).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+                write_producer_map(producer_map)
+            elif fixture == "missing_native_library_bench_artifact":
+                (fixture_root / NATIVE_LIBRARY_BENCH_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "native_library_bench_failed":
+                write_native_library_bench_csv(fixture_root / NATIVE_LIBRARY_BENCH_ARTIFACT, healthy=False)
                 write_producer_map(producer_map)
             elif fixture == "missing_decode_stage_artifact":
                 (fixture_root / DECODE_STAGE_ARTIFACT).unlink()

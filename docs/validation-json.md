@@ -2419,11 +2419,12 @@ coverage`, `Native allocation coverage`, `Python zlib differential coverage`,
 coverage`, `Deflate extra-bit benchmark coverage`, `Dictionary decode benchmark coverage`,
 `PNG scanline benchmark coverage`, `Chunked zlib benchmark coverage`,
 `PNG streaming zlib benchmark coverage`, `Deflate dynamic decode profile coverage`,
-`Native tier corpus discovery`, `Native codec probe coverage`, `Native codec
+`Native library benchmark coverage`, `Native tier corpus discovery`,
+`Native codec probe coverage`, `Native codec
 probe executables`, `Native summary error codec coverage`, and `Native summary error phase offsets` tables
 so artifact inventory, aggregate validation health, producer/smoke-gate coverage, dashboard strict
 gate coverage, dashboard configuration guardrails, validation schema smoke coverage, header-format coverage, corrupt-sidecar rejection coverage,
-Huffman optimality, zstd comparison gate coverage, deflate extra-bit benchmark coverage, dictionary decode benchmark coverage, PNG scanline benchmark coverage, chunked zlib benchmark coverage, PNG streaming zlib benchmark coverage, deflate dynamic decode profile coverage, native fuzz corpus coverage, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, zlib differential coverage,
+Huffman optimality, zstd comparison gate coverage, deflate extra-bit benchmark coverage, dictionary decode benchmark coverage, PNG scanline benchmark coverage, chunked zlib benchmark coverage, PNG streaming zlib benchmark coverage, deflate dynamic decode profile coverage, native library benchmark coverage, native fuzz corpus coverage, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, zlib differential coverage,
 decode-stage error matching, fuzz corpus matching, native stream metadata
 coverage, native tier corpus discovery, codec probe status, LZ4/Zstd
 structured-error counts, phase counts, required phases, missing phases, and phase
@@ -2490,6 +2491,8 @@ Current unhealthy reason values are:
 - `snappy_report_failed`
 - `missing_native_allocation_artifact`
 - `native_allocation_failed`
+- `missing_native_library_bench_artifact`
+- `native_library_bench_failed`
 - `missing_decode_stage_artifact`
 - `decode_stage_failed`
 - `missing_python_zlib_diff_artifact`
@@ -2671,6 +2674,14 @@ Top-level fields:
   `deflate_dynamic_decode_profile_match_class_rows`,
   `deflate_dynamic_decode_profile_chunked_window_rows`,
   `deflate_dynamic_decode_profile_missing_cases`
+- `native_library_bench_present`, `native_library_bench_healthy`,
+  `native_library_bench_rows`, `native_library_bench_expected_rows`,
+  `native_library_bench_positive_rows`,
+  `native_library_bench_throughput_rows`,
+  `native_library_bench_iteration_rows`,
+  `native_library_bench_improvement_checks`,
+  `native_library_bench_expected_improvement_checks`,
+  `native_library_bench_missing_pairs`
 - `fuzz_corpus_present`, `fuzz_corpus_ok`,
   `fuzz_corpus_coverage_present`, `fuzz_corpus_coverage_ok`,
   `fuzz_corpus_healthy`, `fuzz_corpus_cases`,
@@ -2876,6 +2887,7 @@ Example:
     "missing_zlib_relaxed_artifact",
     "missing_snappy_report_artifact",
     "missing_native_allocation_artifact",
+    "missing_native_library_bench_artifact",
     "missing_decode_stage_artifact",
     "missing_python_zlib_diff_artifact",
     "missing_native_codec_probes_artifact",
@@ -3079,6 +3091,16 @@ Example:
   "deflate_dynamic_decode_profile_match_class_rows": 0,
   "deflate_dynamic_decode_profile_chunked_window_rows": 0,
   "deflate_dynamic_decode_profile_missing_cases": [],
+  "native_library_bench_present": false,
+  "native_library_bench_healthy": false,
+  "native_library_bench_rows": 0,
+  "native_library_bench_expected_rows": 0,
+  "native_library_bench_positive_rows": 0,
+  "native_library_bench_throughput_rows": 0,
+  "native_library_bench_iteration_rows": 0,
+  "native_library_bench_improvement_checks": 0,
+  "native_library_bench_expected_improvement_checks": 0,
+  "native_library_bench_missing_pairs": [],
   "fuzz_corpus_present": false,
   "fuzz_corpus_ok": false,
   "fuzz_corpus_coverage_present": false,
@@ -3472,9 +3494,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 81,
-      "min_expected_failures": 81,
-      "min_matched": 81
+      "min_checks": 83,
+      "min_expected_failures": 83,
+      "min_matched": 83
     },
     {
       "mode": "native-tier-range-health",
@@ -3568,10 +3590,10 @@ aggregate health reasons must be backed by real failing dashboard inputs before
 the smoke artifact can pass. The expected reason/check/fixture matrix lives in
 `tools/dashboard_strict_validation_reasons.json`; the retained
 `strict-validation-health` mode minimums must cover every configured reason,
-currently 81. The `dashboard-markdown` mode verifies that important human-facing
+currently 83. The `dashboard-markdown` mode verifies that important human-facing
 sections, including artifact inventory, aggregate validation health, producer/smoke-gate
 coverage, dashboard strict gate coverage, dashboard configuration coverage, validation JSON schema coverage, header inspect coverage, corrupt-sidecar
-rejection coverage, Huffman optimality, deflate extra-bit benchmark coverage, dictionary decode benchmark coverage, PNG scanline benchmark coverage, chunked zlib benchmark coverage, PNG streaming zlib benchmark coverage, deflate dynamic decode profile coverage, zstd comparison gate coverage, native fuzz corpus coverage, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, Python zlib
+rejection coverage, Huffman optimality, deflate extra-bit benchmark coverage, dictionary decode benchmark coverage, PNG scanline benchmark coverage, chunked zlib benchmark coverage, PNG streaming zlib benchmark coverage, deflate dynamic decode profile coverage, native library benchmark coverage, zstd comparison gate coverage, native fuzz corpus coverage, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, Python zlib
 differential coverage, decode-stage error matching, fuzz corpus matching, native
 stream metadata coverage, native tier corpus discovery, native summary error
 codec/phase-offset tables, native codec probe coverage/capability tables, and
@@ -3607,9 +3629,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 81,
-      "min_expected_failures": 81,
-      "min_matched": 81
+      "min_checks": 83,
+      "min_expected_failures": 83,
+      "min_matched": 83
     },
     {
       "mode": "native-tier-range-health",
@@ -3647,14 +3669,14 @@ Example:
     {
       "mode": "strict-validation-health",
       "checks": 1,
-      "min_checks": 81,
-      "missing_checks": 80,
+      "min_checks": 83,
+      "missing_checks": 82,
       "expected_failures": 1,
-      "min_expected_failures": 81,
-      "missing_expected_failures": 80,
+      "min_expected_failures": 83,
+      "missing_expected_failures": 82,
       "matched": 1,
-      "min_matched": 81,
-      "missing_matched": 80
+      "min_matched": 83,
+      "missing_matched": 82
     },
     {
       "mode": "native-tier-range-health",
