@@ -2470,3 +2470,12 @@ architecture blindly.
   schema manifest now leaves no top-level `*_healthy` dashboard field outside the
   validation formula or its own boolean formula. The strict smoke covers 55
   validation-health reasons with isolated fixtures.
+
+- Promoted the existing Snappy report CSV from dashboard inventory metadata to
+  aggregate validation health without adding new compression-format scope. The
+  dashboard now parses `vort-snappy-report.csv`, validates the 20-row
+  raw/framed/reusable matrix, positive timing, repetitive compression, and
+  reusable-size stability, and exposes missing/failed Snappy report reasons in
+  strict-validation-health. `run-validation-json-dashboard` and
+  `run-dashboard-index` now depend on `run-snappy-report-gate` so clean
+  dashboards retain the CSV before enforcing aggregate health.

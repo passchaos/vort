@@ -849,6 +849,7 @@
             "native_codec_probes_healthy",
             "png_scratch_healthy",
             "zlib_relaxed_healthy",
+            "snappy_report_healthy",
             "zstd_compare_healthy",
             "native_fuzz_corpus_healthy",
             "br_static_dictionary_healthy",
@@ -1012,6 +1013,21 @@
           ],
           "zero": [
             "native_tier_range_missing_sources"
+          ]
+        },
+        "snappy_report_healthy": {
+          "all": [
+            "snappy_report_present"
+          ],
+          "positive": [
+            "snappy_report_rows",
+            "snappy_report_expected_rows",
+            "snappy_report_positive_timing_rows",
+            "snappy_report_repetitive_shrunk_rows",
+            "snappy_report_reusable_size_matched_cases"
+          ],
+          "zero": [
+            "snappy_report_missing_pairs"
           ]
         }
       },
@@ -1397,7 +1413,15 @@
         "native_tier_range_ratio_min_range_mib_s": "float",
         "native_tier_range_seek_fast_min_full_input_mib_s": "float",
         "native_tier_range_balanced_min_full_input_mib_s": "float",
-        "native_tier_range_ratio_min_full_input_mib_s": "float"
+        "native_tier_range_ratio_min_full_input_mib_s": "float",
+        "snappy_report_present": "bool",
+        "snappy_report_healthy": "bool",
+        "snappy_report_rows": "int",
+        "snappy_report_expected_rows": "int",
+        "snappy_report_positive_timing_rows": "int",
+        "snappy_report_repetitive_shrunk_rows": "int",
+        "snappy_report_reusable_size_matched_cases": "int",
+        "snappy_report_missing_pairs": "list"
       },
       "item_collection": "artifacts",
       "item_enums": {
@@ -1483,6 +1507,8 @@
           "python_zlib_diff_failed",
           "missing_native_codec_probes_artifact",
           "native_codec_probes_failed",
+          "snappy_report_failed",
+          "missing_snappy_report_artifact",
           "missing_zstd_compare_artifact",
           "zstd_compare_failed",
           "missing_br_static_dictionary_artifact",
@@ -1837,6 +1863,8 @@
               "validation_python_zlib_diff_failed",
               "validation_missing_native_codec_probes_artifact",
               "validation_native_codec_probes_failed",
+              "validation_missing_snappy_report_artifact",
+              "validation_snappy_report_failed",
               "validation_missing_zstd_compare_artifact",
               "validation_zstd_compare_failed",
               "validation_missing_br_static_dictionary_artifact",
@@ -1894,6 +1922,8 @@
               "python_zlib_diff_failed",
               "missing_native_codec_probes_artifact",
               "native_codec_probes_failed",
+              "missing_snappy_report_artifact",
+              "snappy_report_failed",
               "missing_zstd_compare_artifact",
               "zstd_compare_failed",
               "missing_br_static_dictionary_artifact",
@@ -1969,7 +1999,9 @@
                 "validation_missing_native_allocation_artifact": "missing_native_allocation_artifact",
                 "validation_native_allocation_failed": "native_allocation_failed",
                 "validation_missing_native_tier_range_artifact": "missing_native_tier_range_artifact",
-                "validation_native_tier_range_failed": "native_tier_range_failed"
+                "validation_native_tier_range_failed": "native_tier_range_failed",
+                "validation_missing_snappy_report_artifact": "missing_snappy_report_artifact",
+                "validation_snappy_report_failed": "snappy_report_failed"
               },
               "target": "reason"
             }
@@ -2048,6 +2080,7 @@
           "static_dictionary_markdown_table",
           "png_scratch_markdown_table",
           "zlib_relaxed_markdown_table",
+          "snappy_report_markdown_table",
           "python_zlib_diff_markdown_table",
           "decode_stage_markdown_table",
           "fuzz_corpus_markdown_table",
@@ -2095,6 +2128,8 @@
           "validation_python_zlib_diff_failed",
           "validation_missing_native_codec_probes_artifact",
           "validation_native_codec_probes_failed",
+          "validation_missing_snappy_report_artifact",
+          "validation_snappy_report_failed",
           "validation_missing_zstd_compare_artifact",
           "validation_zstd_compare_failed",
           "validation_missing_br_static_dictionary_artifact",
@@ -2178,6 +2213,8 @@
           "validation_python_zlib_diff_failed",
           "validation_missing_native_codec_probes_artifact",
           "validation_native_codec_probes_failed",
+          "validation_missing_snappy_report_artifact",
+          "validation_snappy_report_failed",
           "validation_missing_zstd_compare_artifact",
           "validation_zstd_compare_failed",
           "validation_missing_br_static_dictionary_artifact",
@@ -2235,6 +2272,8 @@
           "python_zlib_diff_failed",
           "missing_native_codec_probes_artifact",
           "native_codec_probes_failed",
+          "missing_snappy_report_artifact",
+          "snappy_report_failed",
           "missing_zstd_compare_artifact",
           "zstd_compare_failed",
           "missing_br_static_dictionary_artifact",
@@ -2292,6 +2331,8 @@
           "python_zlib_diff_failed",
           "missing_native_codec_probes_artifact",
           "native_codec_probes_failed",
+          "missing_snappy_report_artifact",
+          "snappy_report_failed",
           "missing_zstd_compare_artifact",
           "zstd_compare_failed",
           "missing_br_static_dictionary_artifact",
@@ -2367,7 +2408,9 @@
             "validation_missing_native_allocation_artifact": "missing_native_allocation_artifact",
             "validation_native_allocation_failed": "native_allocation_failed",
             "validation_missing_native_tier_range_artifact": "missing_native_tier_range_artifact",
-            "validation_native_tier_range_failed": "native_tier_range_failed"
+            "validation_native_tier_range_failed": "native_tier_range_failed",
+            "validation_missing_snappy_report_artifact": "missing_snappy_report_artifact",
+            "validation_snappy_report_failed": "snappy_report_failed"
           },
           "target": "reason"
         },
@@ -2427,7 +2470,9 @@
             "missing_native_allocation_artifact": "missing_native_allocation_artifact",
             "native_allocation_failed": "native_allocation_failed",
             "missing_native_tier_range_artifact": "missing_native_tier_range_artifact",
-            "native_tier_range_failed": "native_tier_range_failed"
+            "native_tier_range_failed": "native_tier_range_failed",
+            "missing_snappy_report_artifact": "missing_snappy_report_artifact",
+            "snappy_report_failed": "snappy_report_failed"
           },
           "target": "reason"
         }

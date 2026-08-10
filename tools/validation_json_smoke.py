@@ -9,6 +9,7 @@ successful and failing validation JSON records.
 from __future__ import annotations
 
 import json
+import csv
 import shutil
 import subprocess
 import sys
@@ -103,6 +104,7 @@ def main() -> int:
         lz4_native_summary_path = ROOT / "zig-out" / "vort-lz4-native-stream-summary.json"
         zstd_native_summary_path = ROOT / "zig-out" / "vort-zstd-native-stream-summary.json"
         zlib_relaxed_path = ROOT / "zig-out" / "vort-zlib-relaxed-report.json"
+        snappy_report_path = ROOT / "zig-out" / "vort-snappy-report.csv"
         native_allocation_path = ROOT / "zig-out" / "vort-native-allocation-report.json"
         native_allocation_smoke_path = ROOT / "zig-out" / "vort-native-allocation-smoke.json"
         native_allocation_negative_smoke_path = ROOT / "zig-out" / "vort-native-allocation-negative-smoke.json"
@@ -403,6 +405,9 @@ def main() -> int:
         assert zlib_relaxed["gzip_decoder_successes"] >= 4
         assert zlib_relaxed["gzip_limited_rejections"] >= 1
         validate_value_against_manifest(zlib_relaxed, schemas_def)
+        with snappy_report_path.open(newline="") as f:
+            snappy_report_rows = list(csv.DictReader(f))
+        assert len(snappy_report_rows) == 20
         native_allocation = json.loads(native_allocation_path.read_text())
         assert native_allocation["schema"] == "vort.native_allocation_report"
         assert native_allocation["schema_version"] == 1
@@ -553,6 +558,7 @@ def main() -> int:
         assert any(row["name"] == "zstd_compare_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "native_allocation_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "zlib_relaxed_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
+        assert any(row["name"] == "snappy_report_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "python_zlib_diff_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "decode_stage_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
         assert any(row["name"] == "fuzz_corpus_markdown_table" and row["matched"] is True for row in dashboard_strict["checks"])
@@ -585,6 +591,7 @@ def main() -> int:
         assert "zstd_compare_markdown_table" in dashboard_strict_markdown
         assert "native_allocation_markdown_table" in dashboard_strict_markdown
         assert "zlib_relaxed_markdown_table" in dashboard_strict_markdown
+        assert "snappy_report_markdown_table" in dashboard_strict_markdown
         assert "python_zlib_diff_markdown_table" in dashboard_strict_markdown
         assert "decode_stage_markdown_table" in dashboard_strict_markdown
         assert "fuzz_corpus_markdown_table" in dashboard_strict_markdown
@@ -823,6 +830,7 @@ def main() -> int:
         ):
             shutil.copyfile(ROOT / "zig-out" / artifact_name, root / artifact_name)
         shutil.copyfile(zlib_relaxed_path, root / "vort-zlib-relaxed-report.json")
+        shutil.copyfile(snappy_report_path, root / "vort-snappy-report.csv")
         shutil.copyfile(png_scratch_path, root / "vort-png-scratch-report.json")
         shutil.copyfile(native_allocation_path, root / "vort-native-allocation-report.json")
         shutil.copyfile(native_allocation_smoke_path, root / "vort-native-allocation-smoke.json")
@@ -1028,6 +1036,14 @@ def main() -> int:
         assert dashboard["gzip_relaxed_concatenated_successes"] == zlib_relaxed["gzip_concatenated_successes"]
         assert dashboard["gzip_relaxed_decoder_successes"] == zlib_relaxed["gzip_decoder_successes"]
         assert dashboard["gzip_relaxed_limited_rejections"] == zlib_relaxed["gzip_limited_rejections"]
+        assert dashboard["snappy_report_present"] is True
+        assert dashboard["snappy_report_healthy"] is True
+        assert dashboard["snappy_report_rows"] == len(snappy_report_rows)
+        assert dashboard["snappy_report_expected_rows"] == 20
+        assert dashboard["snappy_report_positive_timing_rows"] == len(snappy_report_rows)
+        assert dashboard["snappy_report_repetitive_shrunk_rows"] == 4
+        assert dashboard["snappy_report_reusable_size_matched_cases"] == 5
+        assert dashboard["snappy_report_missing_pairs"] == []
         assert dashboard["native_allocation_present"] is True
         assert dashboard["native_allocation_smoke_present"] is True
         assert dashboard["native_allocation_negative_present"] is True
@@ -1173,6 +1189,7 @@ def main() -> int:
             and dashboard["native_codec_probes_healthy"]
             and dashboard["png_scratch_healthy"]
             and dashboard["zlib_relaxed_healthy"]
+            and dashboard["snappy_report_healthy"]
             and dashboard["zstd_compare_healthy"]
             and dashboard["native_fuzz_corpus_healthy"]
             and dashboard["br_static_dictionary_healthy"]

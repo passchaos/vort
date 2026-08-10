@@ -30,6 +30,7 @@ FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
 DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
 PYTHON_ZLIB_DIFF_ARTIFACT = "vort-python-zlib-diff-smoke.json"
 ZLIB_RELAXED_ARTIFACT = "vort-zlib-relaxed-report.json"
+SNAPPY_REPORT_ARTIFACT = "vort-snappy-report.csv"
 PNG_SCRATCH_ARTIFACT = "vort-png-scratch-report.json"
 BR_STATIC_CANDIDATES_ARTIFACT = "vort-br-static-dictionary-candidates.json"
 BR_STATIC_UPSTREAM_ARTIFACT = "vort-br-static-dictionary-candidate-upstream-smoke.json"
@@ -96,6 +97,8 @@ def write_producer_map(
     include_python_zlib_smoke: bool = True,
     include_zlib_relaxed_exact: bool = True,
     include_zlib_relaxed_smoke: bool = True,
+    include_snappy_report_exact: bool = True,
+    include_snappy_report_smoke: bool = True,
     include_png_scratch_exact: bool = True,
     include_png_scratch_smoke: bool = True,
     include_br_static_exact: bool = True,
@@ -183,6 +186,11 @@ def write_producer_map(
         artifact_metadata[ZLIB_RELAXED_ARTIFACT] = {
             "expected_format": "json",
             "smoke_gate": "zig build run-zlib-relaxed-report-gate",
+        }
+    if include_snappy_report_smoke:
+        artifact_metadata[SNAPPY_REPORT_ARTIFACT] = {
+            "expected_format": "csv",
+            "smoke_gate": "zig build run-snappy-report-gate",
         }
     if include_png_scratch_smoke:
         artifact_metadata[PNG_SCRATCH_ARTIFACT] = {
@@ -280,6 +288,8 @@ def write_producer_map(
         exact[PYTHON_ZLIB_DIFF_ARTIFACT] = "zig build run-python-zlib-diff-dashboard"
     if include_zlib_relaxed_exact:
         exact[ZLIB_RELAXED_ARTIFACT] = "zig build run-zlib-relaxed-report-gate"
+    if include_snappy_report_exact:
+        exact[SNAPPY_REPORT_ARTIFACT] = "zig build run-snappy-report-gate"
     if include_png_scratch_exact:
         exact[PNG_SCRATCH_ARTIFACT] = "zig build run-png-scratch-report-dashboard"
     if include_br_static_exact:
@@ -975,6 +985,55 @@ def write_zlib_relaxed_report(path: Path) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def write_snappy_report_csv(path: Path, *, healthy: bool = True) -> None:
+    columns = [
+        "mode",
+        "case",
+        "input_bytes",
+        "encoded_bytes",
+        "ratio",
+        "iterations",
+        "encode_ns",
+        "decode_ns",
+        "encode_mib_s",
+        "decode_mib_s",
+        "checksum",
+    ]
+    cases = {
+        "tiny": (12, 14, 30),
+        "text": (31744, 1622, 1640),
+        "structured": (38400, 1974, 1992),
+        "repetitive": (32768, 512, 530),
+        "incompressible": (4096, 4100, 4118),
+    }
+    modes = ("raw_block", "framed", "raw_block_reusable", "framed_reusable")
+    lines = [",".join(columns)]
+    for mode in modes:
+        for case, (input_bytes, raw_bytes, framed_bytes) in cases.items():
+            encoded_bytes = raw_bytes if "raw_block" in mode else framed_bytes
+            if not healthy and mode == "framed_reusable" and case == "repetitive":
+                encoded_bytes = input_bytes
+            ratio = encoded_bytes / input_bytes
+            lines.append(
+                ",".join(
+                    [
+                        mode,
+                        case,
+                        str(input_bytes),
+                        str(encoded_bytes),
+                        f"{ratio:.6f}",
+                        "25",
+                        "1000",
+                        "1000",
+                        "1.0",
+                        "1.0",
+                        "12345",
+                    ]
+                )
+            )
+    path.write_text("\n".join(lines) + "\n")
+
+
 def write_png_scratch_report(path: Path) -> None:
     cases = [
         {
@@ -1528,6 +1587,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_decode_stage_report(root / DECODE_STAGE_ARTIFACT)
     write_python_zlib_diff_report(root / PYTHON_ZLIB_DIFF_ARTIFACT)
     write_zlib_relaxed_report(root / ZLIB_RELAXED_ARTIFACT)
+    write_snappy_report_csv(root / SNAPPY_REPORT_ARTIFACT)
     write_png_scratch_report(root / PNG_SCRATCH_ARTIFACT)
     write_native_fuzz_corpus_artifacts(root)
     write_br_static_dictionary_artifacts(root)
@@ -1923,8 +1983,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 39/39 | 0 | allowed missing 0 |",
-                    "| smoke gates | 39/39 | 0 | required missing 0 |",
+                    "| producer steps | 40/40 | 0 | allowed missing 0 |",
+                    "| smoke gates | 40/40 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -2187,6 +2247,20 @@ def main() -> int:
                     "| wrapper | strict rejections | relaxed successes | concatenated successes | decoder successes | limited rejections | extra |",
                     "| zlib | 2 | 5 | 3 | 8 | 1 | dictionary 2 |",
                     "| gzip | 3 | 9 | 4 | 4 | 1 | total 21 |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
+                "snappy_report_markdown_table",
+                "Snappy report Markdown table",
+                dashboard_markdown,
+                [
+                    "## Snappy report coverage",
+                    "| category | count | detail |",
+                    "| rows | 20 | expected 20, present `True` |",
+                    "| positive timing rows | 20 | repetitive shrunk 4 |",
+                    "| reusable size matches | 5 | missing pairs 0, healthy `True` |",
                 ],
             )
         )
@@ -2484,6 +2558,12 @@ def main() -> int:
                 payload["relaxed_successes"] = 0
                 (fixture_root / ZLIB_RELAXED_ARTIFACT).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
                 write_producer_map(producer_map)
+            elif fixture == "missing_snappy_report_artifact":
+                (fixture_root / SNAPPY_REPORT_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "snappy_report_failed":
+                write_snappy_report_csv(fixture_root / SNAPPY_REPORT_ARTIFACT, healthy=False)
+                write_producer_map(producer_map)
             elif fixture == "missing_native_allocation_artifact":
                 (fixture_root / NATIVE_ALLOCATION_REPORT_ARTIFACT).unlink()
                 write_producer_map(producer_map)
@@ -2603,7 +2683,7 @@ def main() -> int:
     summary = {
         "schema": "vort.dashboard_strict_smoke",
         "schema_version": 1,
-        "ok": True,
+        "ok": all(bool(row["matched"]) for row in checks),
         "check_count": len(checks),
         "checks": checks,
         "mode_count": len(mode_counts),
@@ -2622,6 +2702,9 @@ def main() -> int:
         path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
     if args.markdown:
         write_markdown(Path(args.markdown), summary)
+    if not summary["ok"]:
+        print(json.dumps(summary, indent=2, sort_keys=True))
+        return 1
     print("dashboard_strict_smoke=ok")
     return 0
 

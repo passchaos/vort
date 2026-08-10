@@ -2460,6 +2460,8 @@ Current unhealthy reason values are:
 - `png_scratch_failed`
 - `missing_zlib_relaxed_artifact`
 - `zlib_relaxed_failed`
+- `missing_snappy_report_artifact`
+- `snappy_report_failed`
 - `missing_native_allocation_artifact`
 - `native_allocation_failed`
 - `missing_decode_stage_artifact`
@@ -2613,6 +2615,10 @@ Top-level fields:
   `gzip_relaxed_strict_rejections`, `gzip_relaxed_successes`,
   `gzip_relaxed_concatenated_successes`, `gzip_relaxed_decoder_successes`,
   `gzip_relaxed_limited_rejections`
+- `snappy_report_present`, `snappy_report_healthy`, `snappy_report_rows`,
+  `snappy_report_expected_rows`, `snappy_report_positive_timing_rows`,
+  `snappy_report_repetitive_shrunk_rows`,
+  `snappy_report_reusable_size_matched_cases`, `snappy_report_missing_pairs`
 - `zstd_compare_present`, `zstd_compare_standard_present`,
   `zstd_compare_block_sweep_present`, `zstd_compare_healthy`,
   `zstd_compare_rows`, `zstd_compare_standard_rows`,
@@ -2752,6 +2758,7 @@ Example:
     "missing_native_fuzz_coverage_artifact",
     "missing_png_scratch_artifact",
     "missing_zlib_relaxed_artifact",
+    "missing_snappy_report_artifact",
     "missing_native_allocation_artifact",
     "missing_decode_stage_artifact",
     "missing_python_zlib_diff_artifact",
@@ -2934,6 +2941,14 @@ Example:
   "gzip_relaxed_concatenated_successes": 0,
   "gzip_relaxed_decoder_successes": 0,
   "gzip_relaxed_limited_rejections": 0,
+  "snappy_report_present": false,
+  "snappy_report_healthy": false,
+  "snappy_report_rows": 0,
+  "snappy_report_expected_rows": 0,
+  "snappy_report_positive_timing_rows": 0,
+  "snappy_report_repetitive_shrunk_rows": 0,
+  "snappy_report_reusable_size_matched_cases": 0,
+  "snappy_report_missing_pairs": [],
   "zstd_compare_present": false,
   "zstd_compare_standard_present": false,
   "zstd_compare_block_sweep_present": false,
@@ -3243,9 +3258,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 55,
-      "min_expected_failures": 55,
-      "min_matched": 55
+      "min_checks": 57,
+      "min_expected_failures": 57,
+      "min_matched": 57
     },
     {
       "mode": "native-tier-range-health",
@@ -3339,7 +3354,7 @@ aggregate health reasons must be backed by real failing dashboard inputs before
 the smoke artifact can pass. The expected reason/check/fixture matrix lives in
 `tools/dashboard_strict_validation_reasons.json`; the retained
 `strict-validation-health` mode minimums must cover every configured reason,
-currently 55. The `dashboard-markdown` mode verifies that important human-facing
+currently 57. The `dashboard-markdown` mode verifies that important human-facing
 sections, including artifact inventory, aggregate validation health, producer/smoke-gate
 coverage, dashboard strict gate coverage, dashboard configuration coverage, validation JSON schema coverage, header inspect coverage, corrupt-sidecar
 rejection coverage, Huffman optimality, zstd comparison gate coverage, native fuzz corpus coverage, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, Python zlib
@@ -3378,9 +3393,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 55,
-      "min_expected_failures": 55,
-      "min_matched": 55
+      "min_checks": 57,
+      "min_expected_failures": 57,
+      "min_matched": 57
     },
     {
       "mode": "native-tier-range-health",
@@ -3418,14 +3433,14 @@ Example:
     {
       "mode": "strict-validation-health",
       "checks": 1,
-      "min_checks": 55,
-      "missing_checks": 54,
+      "min_checks": 57,
+      "missing_checks": 56,
       "expected_failures": 1,
-      "min_expected_failures": 55,
-      "missing_expected_failures": 54,
+      "min_expected_failures": 57,
+      "missing_expected_failures": 56,
       "matched": 1,
-      "min_matched": 55,
-      "missing_matched": 54
+      "min_matched": 57,
+      "missing_matched": 56
     },
     {
       "mode": "native-tier-range-health",

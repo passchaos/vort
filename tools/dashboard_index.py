@@ -817,6 +817,92 @@ def zlib_relaxed_health(artifacts: list[Path]) -> dict:
     }
 
 
+def snappy_report_health(artifacts: list[Path]) -> dict:
+    expected_modes = {"raw_block", "framed", "raw_block_reusable", "framed_reusable"}
+    expected_cases = {"tiny", "text", "structured", "repetitive", "incompressible"}
+    expected_pairs = {(mode, case) for mode in expected_modes for case in expected_cases}
+    for artifact in artifacts:
+        if artifact.name != "vort-snappy-report.csv":
+            continue
+        try:
+            with artifact.open(newline="") as f:
+                rows = list(csv.DictReader(f))
+        except Exception:
+            rows = []
+
+        seen: set[tuple[str, str]] = set()
+        positive_timing_rows = 0
+        repetitive_shrunk_rows = 0
+        reusable_size_matched_cases = 0
+        rows_by_pair: dict[tuple[str, str], dict[str, str]] = {}
+        for row in rows:
+            mode = str(row.get("mode") or "")
+            case = str(row.get("case") or "")
+            pair = (mode, case)
+            if pair in expected_pairs:
+                seen.add(pair)
+                rows_by_pair[pair] = row
+            try:
+                input_bytes = int(row.get("input_bytes") or "0")
+                encoded_bytes = int(row.get("encoded_bytes") or "0")
+                ratio = float(row.get("ratio") or "0")
+                encode_mib_s = float(row.get("encode_mib_s") or "0")
+                decode_mib_s = float(row.get("decode_mib_s") or "0")
+            except ValueError:
+                continue
+            if input_bytes > 0 and encoded_bytes > 0 and ratio > 0.0 and encode_mib_s > 0.0 and decode_mib_s > 0.0:
+                positive_timing_rows += 1
+            if case == "repetitive" and pair in expected_pairs and ratio < 0.35:
+                repetitive_shrunk_rows += 1
+
+        for case in expected_cases:
+            raw = rows_by_pair.get(("raw_block", case))
+            framed = rows_by_pair.get(("framed", case))
+            raw_reusable = rows_by_pair.get(("raw_block_reusable", case))
+            framed_reusable = rows_by_pair.get(("framed_reusable", case))
+            if not (raw and framed and raw_reusable and framed_reusable):
+                continue
+            try:
+                raw_size = int(raw.get("encoded_bytes") or "0")
+                framed_size = int(framed.get("encoded_bytes") or "0")
+                raw_reusable_size = int(raw_reusable.get("encoded_bytes") or "0")
+                framed_reusable_size = int(framed_reusable.get("encoded_bytes") or "0")
+            except ValueError:
+                continue
+            if raw_size == raw_reusable_size and framed_size == framed_reusable_size and framed_size >= raw_size:
+                reusable_size_matched_cases += 1
+
+        missing_pairs = sorted(f"{mode}:{case}" for mode, case in expected_pairs - seen)
+        row_count = len(rows)
+        healthy = (
+            row_count == len(expected_pairs)
+            and not missing_pairs
+            and positive_timing_rows == row_count
+            and repetitive_shrunk_rows == len(expected_modes)
+            and reusable_size_matched_cases == len(expected_cases)
+        )
+        return {
+            "present": True,
+            "healthy": healthy,
+            "row_count": row_count,
+            "expected_rows": len(expected_pairs),
+            "positive_timing_rows": positive_timing_rows,
+            "repetitive_shrunk_rows": repetitive_shrunk_rows,
+            "reusable_size_matched_cases": reusable_size_matched_cases,
+            "missing_pairs": missing_pairs,
+        }
+    return {
+        "present": False,
+        "healthy": False,
+        "row_count": 0,
+        "expected_rows": len(expected_pairs),
+        "positive_timing_rows": 0,
+        "repetitive_shrunk_rows": 0,
+        "reusable_size_matched_cases": 0,
+        "missing_pairs": [],
+    }
+
+
 def zstd_compare_health(artifacts: list[Path]) -> dict:
     compare = None
     standard = None
@@ -1688,6 +1774,7 @@ def main() -> int:
     br_static_dictionary = br_static_dictionary_health(artifacts)
     png_scratch = png_scratch_health(artifacts)
     zlib_relaxed = zlib_relaxed_health(artifacts)
+    snappy_report = snappy_report_health(artifacts)
     zstd_compare = zstd_compare_health(artifacts)
     native_allocation = native_allocation_health(artifacts)
     python_zlib_health = python_zlib_diff_health(artifacts)
@@ -1732,6 +1819,7 @@ def main() -> int:
     native_fuzz_healthy = native_fuzz["healthy"]
     png_scratch_healthy = png_scratch["healthy"]
     zlib_relaxed_healthy = zlib_relaxed["healthy"]
+    snappy_report_healthy = snappy_report["healthy"]
     native_allocation_healthy = native_allocation["healthy"]
     native_summary_error_healthy = native_summary_error_health["healthy"]
     native_summary_error_negative_healthy = native_summary_error_negative["healthy"]
@@ -1757,6 +1845,7 @@ def main() -> int:
         and python_zlib_healthy
         and native_codec_health["healthy"]
         and zstd_compare["healthy"]
+        and snappy_report_healthy
         and br_static_dictionary["healthy"]
         and native_summary_error_healthy
         and native_summary_error_negative_healthy
@@ -1845,6 +1934,10 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_zlib_relaxed_artifact")
     elif not zlib_relaxed_healthy:
         validation_unhealthy_reasons.append("zlib_relaxed_failed")
+    if not snappy_report["present"]:
+        validation_unhealthy_reasons.append("missing_snappy_report_artifact")
+    elif not snappy_report_healthy:
+        validation_unhealthy_reasons.append("snappy_report_failed")
     native_allocation_present = (
         native_allocation["present"]
         and native_allocation["smoke_present"]
@@ -1931,6 +2024,7 @@ def main() -> int:
         f"- native summary error negative smoke: cases {native_summary_error_negative['case_count']}, healthy `{native_summary_error_negative_healthy}`",
         f"- lz4 native summary: frames/skippable/checksum/block-checksum/dictionary/content-size/blocks raw/compressed {lz4_native_summary['frame_count']}/{lz4_native_summary['skippable_frame_count']}/{lz4_native_summary['checksum_frame_count']}/{lz4_native_summary['block_checksum_frame_count']}/{lz4_native_summary['dictionary_id_frame_count']}/{lz4_native_summary['content_size_frame_count']}/{lz4_native_summary['block_count']} {lz4_native_summary['raw_block_count']}/{lz4_native_summary['compressed_block_count']}, declared/payload/skippable bytes {lz4_native_summary['declared_content_bytes']}/{lz4_native_summary['payload_bytes']}/{lz4_native_summary['skippable_payload_bytes']}, healthy `{lz4_native_summary_healthy}`",
         f"- zstd native summary: frames/skippable/checksum/dictionary/content-size/blocks raw/rle/compressed {zstd_native_summary['frame_count']}/{zstd_native_summary['skippable_frame_count']}/{zstd_native_summary['checksum_frame_count']}/{zstd_native_summary['dictionary_id_frame_count']}/{zstd_native_summary['content_size_frame_count']}/{zstd_native_summary['block_count']} {zstd_native_summary['raw_block_count']}/{zstd_native_summary['rle_block_count']}/{zstd_native_summary['compressed_block_count']}, declared/payload/skippable bytes {zstd_native_summary['declared_content_bytes']}/{zstd_native_summary['payload_bytes']}/{zstd_native_summary['skippable_payload_bytes']}, healthy `{zstd_native_summary_healthy}`",
+        f"- Snappy report: {snappy_report['row_count']}/{snappy_report['expected_rows']} rows, positive timing {snappy_report['positive_timing_rows']}, repetitive shrunk {snappy_report['repetitive_shrunk_rows']}, reusable size matches {snappy_report['reusable_size_matched_cases']}, healthy `{snappy_report_healthy}`",
         f"- native tier range bench: {native_tier_health['ok_count']}/{native_tier_health['summary_count']} summaries ok across {native_tier_health['rows']} rows ({native_tier_health['enforced_count']} throughput-enforced), sources built-in/project/standard/custom/legacy {native_tier_health['built_in_summary_count']}/{native_tier_health['project_files_summary_count']}/{native_tier_health['standard_corpus_summary_count']}/{native_tier_health['custom_summary_count']}/{native_tier_health['legacy_summary_count']} missing {','.join(native_tier_health['missing_sources']) or 'none'}, min range MiB/s seek_fast/balanced/ratio {native_tier_health['seek_fast_min_range_mib_s']:.2f}/{native_tier_health['balanced_min_range_mib_s']:.2f}/{native_tier_health['ratio_min_range_mib_s']:.2f}, healthy `{native_tier_health['healthy']}`",
         f"- native tier corpus discovery: source mode `{native_tier_discovery_health['source_mode']}`, sources {native_tier_discovery_health['source_count']}/{native_tier_discovery_health['candidate_count']}, selected cases {native_tier_discovery_health['selected_case_count']}, missing reason `{native_tier_discovery_health['missing_reason'] or 'none'}`, healthy `{native_tier_discovery_health['healthy']}`",
         "",
@@ -2089,6 +2183,18 @@ def main() -> int:
             "| --- | ---: | ---: | ---: | ---: | ---: | --- |",
             f"| zlib | {zlib_relaxed['strict_rejections']} | {zlib_relaxed['relaxed_successes']} | {zlib_relaxed['zlib_concatenated_successes']} | {zlib_relaxed['zlib_decoder_successes']} | {zlib_relaxed['limited_rejections']} | dictionary {zlib_relaxed['dictionary_successes']} |",
             f"| gzip | {zlib_relaxed['gzip_strict_rejections']} | {zlib_relaxed['gzip_relaxed_successes']} | {zlib_relaxed['gzip_concatenated_successes']} | {zlib_relaxed['gzip_decoder_successes']} | {zlib_relaxed['gzip_limited_rejections']} | total {zlib_relaxed['gzip_total']} |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
+            "## Snappy report coverage",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| rows | {snappy_report['row_count']} | expected {snappy_report['expected_rows']}, present `{snappy_report['present']}` |",
+            f"| positive timing rows | {snappy_report['positive_timing_rows']} | repetitive shrunk {snappy_report['repetitive_shrunk_rows']} |",
+            f"| reusable size matches | {snappy_report['reusable_size_matched_cases']} | missing pairs {len(snappy_report['missing_pairs'])}, healthy `{snappy_report['healthy']}` |",
             "",
         ]
     )
@@ -2542,6 +2648,14 @@ def main() -> int:
                 "gzip_relaxed_concatenated_successes": zlib_relaxed["gzip_concatenated_successes"],
                 "gzip_relaxed_decoder_successes": zlib_relaxed["gzip_decoder_successes"],
                 "gzip_relaxed_limited_rejections": zlib_relaxed["gzip_limited_rejections"],
+                "snappy_report_present": snappy_report["present"],
+                "snappy_report_healthy": snappy_report["healthy"],
+                "snappy_report_rows": snappy_report["row_count"],
+                "snappy_report_expected_rows": snappy_report["expected_rows"],
+                "snappy_report_positive_timing_rows": snappy_report["positive_timing_rows"],
+                "snappy_report_repetitive_shrunk_rows": snappy_report["repetitive_shrunk_rows"],
+                "snappy_report_reusable_size_matched_cases": snappy_report["reusable_size_matched_cases"],
+                "snappy_report_missing_pairs": snappy_report["missing_pairs"],
                 "zstd_compare_present": zstd_compare["present"],
                 "zstd_compare_standard_present": zstd_compare["standard_present"],
                 "zstd_compare_block_sweep_present": zstd_compare["block_sweep_present"],

@@ -198,6 +198,16 @@
       "fixture": "native_codec_probes_failed"
     },
     {
+      "reason": "missing_snappy_report_artifact",
+      "check": "validation_missing_snappy_report_artifact",
+      "fixture": "missing_snappy_report_artifact"
+    },
+    {
+      "reason": "snappy_report_failed",
+      "check": "validation_snappy_report_failed",
+      "fixture": "snappy_report_failed"
+    },
+    {
       "reason": "missing_zstd_compare_artifact",
       "check": "validation_missing_zstd_compare_artifact",
       "fixture": "missing_zstd_compare_artifact"
