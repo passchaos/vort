@@ -40,6 +40,7 @@ DEFLATE_DYNAMIC_DECODE_PROFILE_ARTIFACT = "vort-deflate-dynamic-decode-profile.c
 FUZZ_CORPUS_ARTIFACT = "vort-deflate-wrapper-fuzz-corpus.json"
 FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
 DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
+DECODE_STAGE_CSV_ARTIFACT = "vort-deflate-decode-stage-report.csv"
 PYTHON_ZLIB_DIFF_ARTIFACT = "vort-python-zlib-diff-smoke.json"
 ZLIB_RELAXED_ARTIFACT = "vort-zlib-relaxed-report.json"
 ZLIB_RELAXED_GATE_ARTIFACT = "vort-zlib-relaxed-report-gate.json"
@@ -283,6 +284,10 @@ def write_producer_map(
             "expected_format": "json",
             "smoke_gate": "zig build run-deflate-decode-stage-report-dashboard",
         }
+        artifact_metadata[DECODE_STAGE_CSV_ARTIFACT] = {
+            "expected_format": "csv",
+            "smoke_gate": "zig build run-deflate-decode-stage-report-dashboard",
+        }
     if include_python_zlib_smoke:
         artifact_metadata[PYTHON_ZLIB_DIFF_ARTIFACT] = {
             "expected_format": "json",
@@ -420,6 +425,7 @@ def write_producer_map(
         exact[FUZZ_COVERAGE_ARTIFACT] = "zig build run-fuzz-corpus-coverage-smoke"
     if include_decode_stage_exact:
         exact[DECODE_STAGE_ARTIFACT] = "zig build run-deflate-decode-stage-report-dashboard"
+        exact[DECODE_STAGE_CSV_ARTIFACT] = "zig build run-deflate-decode-stage-report-dashboard"
     if include_python_zlib_exact:
         exact[PYTHON_ZLIB_DIFF_ARTIFACT] = "zig build run-python-zlib-diff-dashboard"
     if include_zlib_relaxed_exact:
@@ -1719,6 +1725,43 @@ def write_decode_stage_report(path: Path, *, ok: bool = True) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def write_decode_stage_csv(path: Path, *, healthy: bool = True) -> None:
+    columns = [
+        "case", "input_bytes", "zlib_bytes", "gzip_bytes", "raw_bytes", "raw_block_type", "raw_header_bits", "raw_header_bytes",
+        "dynamic_hlit", "dynamic_hdist", "dynamic_hclen", "dynamic_literal_nonzero", "dynamic_literal_zero", "dynamic_literal_max_bits",
+        "dynamic_distance_nonzero", "dynamic_distance_zero", "dynamic_distance_max_bits", "iterations", "repeat",
+        "raw_mib_s", "raw_exact_mib_s", "raw_into_mib_s", "zlib_mib_s", "zlib_exact_mib_s", "zlib_into_mib_s",
+        "zlib_into_no_adler_mib_s", "zlib_into_no_adler_over_strict", "gzip_mib_s", "gzip_no_crc_mib_s", "gzip_no_crc_over_strict",
+        "gzip_exact_mib_s", "gzip_exact_no_crc_mib_s", "gzip_exact_no_crc_over_strict", "gzip_into_mib_s", "gzip_into_no_crc_mib_s",
+        "gzip_into_no_crc_over_strict", "gzip_into_no_isize_mib_s", "gzip_into_no_isize_over_strict", "gzip_into_relaxed_mib_s",
+        "gzip_into_relaxed_over_strict", "adler32_mib_s", "zlib_adler_time_ratio", "crc32_mib_s", "gzip_crc_time_ratio",
+        "raw_stored_mib_s", "raw_stored_exact_mib_s", "raw_stored_into_mib_s", "zlib_stored_mib_s", "zlib_stored_exact_mib_s",
+        "zlib_stored_into_mib_s", "gzip_stored_mib_s", "gzip_stored_exact_mib_s", "gzip_stored_into_mib_s", "zlib_wrapper_time_ratio",
+        "zlib_wrapper_exact_time_ratio", "zlib_wrapper_into_time_ratio", "gzip_wrapper_time_ratio", "gzip_wrapper_into_time_ratio",
+        "raw_alloc_exact_time_ratio", "raw_alloc_into_time_ratio", "zlib_alloc_exact_time_ratio", "zlib_alloc_into_time_ratio",
+        "gzip_alloc_exact_time_ratio", "gzip_alloc_into_time_ratio", "raw_stored_alloc_time_ratio", "zlib_stored_alloc_time_ratio",
+        "gzip_stored_alloc_time_ratio", "raw_stored_alloc_exact_time_ratio", "zlib_stored_alloc_exact_time_ratio", "gzip_stored_alloc_exact_time_ratio", "mix",
+    ]
+    cases = ["tiny", "repetitive", "overlap-rle", "distance-heavy", "text", "dynamic-literal-only", "dynamic-match", "binary", "stored-binary", "structured"]
+    lines = [",".join(columns)]
+    for case in cases:
+        if not healthy and case == "structured":
+            continue
+        block_type = "stored" if case == "stored-binary" else "fixed" if case == "tiny" else "dynamic"
+        dynamic = block_type == "dynamic"
+        values = {
+            "case": case, "input_bytes": "1024", "zlib_bytes": "64", "gzip_bytes": "76", "raw_bytes": "58", "raw_block_type": block_type,
+            "raw_header_bits": "3", "raw_header_bytes": "1", "dynamic_hlit": "286" if dynamic else "0", "dynamic_hdist": "3" if dynamic else "0",
+            "dynamic_hclen": "18" if dynamic else "0", "dynamic_literal_nonzero": "6" if dynamic else "0", "dynamic_literal_zero": "280" if dynamic else "0",
+            "dynamic_literal_max_bits": "4" if dynamic else "0", "dynamic_distance_nonzero": "2" if dynamic else "0", "dynamic_distance_zero": "1" if dynamic else "0",
+            "dynamic_distance_max_bits": "1" if dynamic else "0", "iterations": "64", "repeat": "1", "mix": "12345",
+        }
+        for col in columns:
+            values.setdefault(col, "1.0")
+        lines.append(",".join(values[col] for col in columns))
+    path.write_text("\n".join(lines) + "\n")
+
+
 def write_python_zlib_diff_report(path: Path, *, ok: bool = True) -> None:
     payload = {
         "schema": "vort.python_zlib_diff_smoke",
@@ -2488,6 +2531,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_fuzz_corpus_report(root / FUZZ_CORPUS_ARTIFACT)
     write_fuzz_coverage_report(root / FUZZ_COVERAGE_ARTIFACT)
     write_decode_stage_report(root / DECODE_STAGE_ARTIFACT)
+    write_decode_stage_csv(root / DECODE_STAGE_CSV_ARTIFACT)
     write_python_zlib_diff_report(root / PYTHON_ZLIB_DIFF_ARTIFACT)
     write_zlib_relaxed_report(root / ZLIB_RELAXED_ARTIFACT)
     write_zlib_relaxed_gate(root / ZLIB_RELAXED_GATE_ARTIFACT)
@@ -2896,8 +2940,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 57/57 | 0 | allowed missing 0 |",
-                    "| smoke gates | 57/57 | 0 | required missing 0 |",
+                    "| producer steps | 58/58 | 0 | allowed missing 0 |",
+                    "| smoke gates | 58/58 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -3740,6 +3784,7 @@ def main() -> int:
                 write_producer_map(producer_map)
             elif fixture == "decode_stage_failed":
                 write_decode_stage_report(fixture_root / DECODE_STAGE_ARTIFACT, ok=False)
+                write_decode_stage_csv(fixture_root / DECODE_STAGE_CSV_ARTIFACT, healthy=False)
                 write_producer_map(producer_map)
             elif fixture == "missing_python_zlib_diff_artifact":
                 (fixture_root / PYTHON_ZLIB_DIFF_ARTIFACT).unlink()

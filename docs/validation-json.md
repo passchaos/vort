@@ -2694,7 +2694,11 @@ Top-level fields:
   `fuzz_corpus_coverage_error_requirements`
 - `decode_stage_present`, `decode_stage_ok`, `decode_stage_healthy`,
   `decode_stage_rows`, `decode_stage_error_rows`,
-  `decode_stage_matched_error_rows`, `decode_stage_unmatched_error_rows`
+  `decode_stage_matched_error_rows`, `decode_stage_unmatched_error_rows`,
+  `decode_stage_csv_present`, `decode_stage_csv_rows`,
+  `decode_stage_csv_positive_rows`, `decode_stage_csv_header_rows`,
+  `decode_stage_csv_dynamic_rows`, `decode_stage_csv_fixed_rows`,
+  `decode_stage_csv_stored_rows`, `decode_stage_csv_missing_cases`
 - `native_fuzz_corpus_present`, `native_fuzz_corpus_coverage_present`,
   `native_fuzz_corpus_healthy`, `native_fuzz_corpus_cases`,
   `native_fuzz_corpus_accepted`, `native_fuzz_corpus_rejected`,
@@ -3126,6 +3130,14 @@ Example:
   "decode_stage_error_rows": 0,
   "decode_stage_matched_error_rows": 0,
   "decode_stage_unmatched_error_rows": 0,
+  "decode_stage_csv_present": false,
+  "decode_stage_csv_rows": 0,
+  "decode_stage_csv_positive_rows": 0,
+  "decode_stage_csv_header_rows": 0,
+  "decode_stage_csv_dynamic_rows": 0,
+  "decode_stage_csv_fixed_rows": 0,
+  "decode_stage_csv_stored_rows": 0,
+  "decode_stage_csv_missing_cases": [],
   "native_fuzz_corpus_present": false,
   "native_fuzz_corpus_coverage_present": false,
   "native_fuzz_corpus_healthy": false,

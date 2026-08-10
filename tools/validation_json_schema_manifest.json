@@ -640,15 +640,23 @@
         "decode_stage_healthy": {
           "all": [
             "decode_stage_present",
-            "decode_stage_ok"
+            "decode_stage_ok",
+            "decode_stage_csv_present"
           ],
           "positive": [
             "decode_stage_rows",
             "decode_stage_error_rows",
-            "decode_stage_matched_error_rows"
+            "decode_stage_matched_error_rows",
+            "decode_stage_csv_rows",
+            "decode_stage_csv_positive_rows",
+            "decode_stage_csv_header_rows",
+            "decode_stage_csv_dynamic_rows",
+            "decode_stage_csv_fixed_rows",
+            "decode_stage_csv_stored_rows"
           ],
           "zero": [
-            "decode_stage_unmatched_error_rows"
+            "decode_stage_unmatched_error_rows",
+            "decode_stage_csv_missing_cases"
           ]
         },
         "fuzz_corpus_healthy": {
@@ -1361,6 +1369,14 @@
         "decode_stage_present": "bool",
         "decode_stage_rows": "int",
         "decode_stage_unmatched_error_rows": "int",
+        "decode_stage_csv_present": "bool",
+        "decode_stage_csv_rows": "int",
+        "decode_stage_csv_positive_rows": "int",
+        "decode_stage_csv_header_rows": "int",
+        "decode_stage_csv_dynamic_rows": "int",
+        "decode_stage_csv_fixed_rows": "int",
+        "decode_stage_csv_stored_rows": "int",
+        "decode_stage_csv_missing_cases": "list",
         "native_fuzz_corpus_present": "bool",
         "native_fuzz_corpus_coverage_present": "bool",
         "native_fuzz_corpus_healthy": "bool",

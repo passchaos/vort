@@ -340,22 +340,107 @@ def fuzz_corpus_health(artifacts: list[Path]) -> dict:
 
 
 def decode_stage_health(artifacts: list[Path]) -> dict:
+    expected_cases = {"tiny", "repetitive", "overlap-rle", "distance-heavy", "text", "dynamic-literal-only", "dynamic-match", "binary", "stored-binary", "structured"}
+    report = None
+    csv_rows: list[dict[str, str]] = []
+    csv_present = False
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
-        if data.get("schema") != "vort.deflate_decode_stage_report":
+        if data.get("schema") == "vort.deflate_decode_stage_report":
+            report = data
+        if artifact.name == "vort-deflate-decode-stage-report.csv":
+            csv_present = True
+            try:
+                with artifact.open(newline="") as f:
+                    csv_rows = list(csv.DictReader(f))
+            except Exception:
+                csv_rows = []
+
+    def int_value(row: dict[str, str], key: str) -> int:
+        return int(row.get(key) or "0")
+
+    def float_value(row: dict[str, str], key: str) -> float:
+        return float(row.get(key) or "0")
+
+    csv_seen: set[str] = set()
+    csv_positive_rows = 0
+    csv_header_rows = 0
+    csv_dynamic_rows = 0
+    csv_stored_rows = 0
+    csv_fixed_rows = 0
+    csv_positive_float_fields = [
+        "raw_mib_s",
+        "raw_exact_mib_s",
+        "raw_into_mib_s",
+        "zlib_mib_s",
+        "zlib_exact_mib_s",
+        "zlib_into_mib_s",
+        "gzip_mib_s",
+        "gzip_exact_mib_s",
+        "gzip_into_mib_s",
+        "adler32_mib_s",
+        "crc32_mib_s",
+    ]
+    for row in csv_rows:
+        case = str(row.get("case") or "")
+        if case in expected_cases:
+            csv_seen.add(case)
+        try:
+            input_bytes = int_value(row, "input_bytes")
+            zlib_bytes = int_value(row, "zlib_bytes")
+            gzip_bytes = int_value(row, "gzip_bytes")
+            raw_bytes = int_value(row, "raw_bytes")
+            raw_header_bits = int_value(row, "raw_header_bits")
+            raw_header_bytes = int_value(row, "raw_header_bytes")
+            iterations = int_value(row, "iterations")
+            repeat = int_value(row, "repeat")
+            mix = int_value(row, "mix")
+            floats_positive = all(float_value(row, field) > 0.0 for field in csv_positive_float_fields)
+        except ValueError:
             continue
-        rows = int(data.get("rows") or 0)
-        error_rows = int(data.get("error_rows") or 0)
-        matched_error_rows = int(data.get("matched_error_rows") or 0)
-        unmatched_error_rows = int(data.get("unmatched_error_rows") or 0)
+        if all(value > 0 for value in (input_bytes, zlib_bytes, gzip_bytes, raw_bytes, raw_header_bits, raw_header_bytes, iterations, repeat, mix)) and floats_positive:
+            csv_positive_rows += 1
+        block_type = str(row.get("raw_block_type") or "")
+        if block_type in {"fixed", "dynamic", "stored"}:
+            if block_type == "dynamic":
+                try:
+                    if all(int_value(row, field) > 0 for field in ("dynamic_hlit", "dynamic_hdist", "dynamic_hclen", "dynamic_literal_nonzero", "dynamic_literal_max_bits")):
+                        csv_header_rows += 1
+                        csv_dynamic_rows += 1
+                except ValueError:
+                    pass
+            else:
+                if all((row.get(field) or "0") == "0" for field in ("dynamic_hlit", "dynamic_hdist", "dynamic_hclen", "dynamic_literal_nonzero", "dynamic_literal_max_bits")):
+                    csv_header_rows += 1
+                    if block_type == "fixed":
+                        csv_fixed_rows += 1
+                    if block_type == "stored":
+                        csv_stored_rows += 1
+    csv_missing_cases = sorted(expected_cases - csv_seen)
+    csv_healthy = csv_present and len(csv_rows) == len(expected_cases) and not csv_missing_cases and csv_positive_rows == len(csv_rows) and csv_header_rows == len(csv_rows) and csv_dynamic_rows > 0 and csv_fixed_rows > 0 and csv_stored_rows > 0
+
+    if isinstance(report, dict):
+        rows = int(report.get("rows") or 0)
+        error_rows = int(report.get("error_rows") or 0)
+        matched_error_rows = int(report.get("matched_error_rows") or 0)
+        unmatched_error_rows = int(report.get("unmatched_error_rows") or 0)
+        report_healthy = bool(report.get("ok")) and rows > 0 and error_rows > 0 and matched_error_rows == error_rows and unmatched_error_rows == 0
         return {
             "present": True,
-            "ok": bool(data.get("ok")),
+            "ok": bool(report.get("ok")),
             "rows": rows,
             "error_rows": error_rows,
             "matched_error_rows": matched_error_rows,
             "unmatched_error_rows": unmatched_error_rows,
-            "healthy": bool(data.get("ok")) and rows > 0 and error_rows > 0 and matched_error_rows == error_rows and unmatched_error_rows == 0,
+            "csv_present": csv_present,
+            "csv_rows": len(csv_rows),
+            "csv_positive_rows": csv_positive_rows,
+            "csv_header_rows": csv_header_rows,
+            "csv_dynamic_rows": csv_dynamic_rows,
+            "csv_fixed_rows": csv_fixed_rows,
+            "csv_stored_rows": csv_stored_rows,
+            "csv_missing_cases": csv_missing_cases,
+            "healthy": report_healthy and csv_healthy,
         }
     return {
         "present": False,
@@ -364,6 +449,14 @@ def decode_stage_health(artifacts: list[Path]) -> dict:
         "error_rows": 0,
         "matched_error_rows": 0,
         "unmatched_error_rows": 0,
+        "csv_present": csv_present,
+        "csv_rows": len(csv_rows),
+        "csv_positive_rows": csv_positive_rows,
+        "csv_header_rows": csv_header_rows,
+        "csv_dynamic_rows": csv_dynamic_rows,
+        "csv_fixed_rows": csv_fixed_rows,
+        "csv_stored_rows": csv_stored_rows,
+        "csv_missing_cases": csv_missing_cases,
         "healthy": False,
     }
 
@@ -4069,6 +4162,8 @@ def main() -> int:
             "| --- | ---: | --- |",
             f"| timing rows | {decode_stage_health_summary['rows']} | ok `{decode_stage_health_summary['ok']}` |",
             f"| error rows | {decode_stage_health_summary['error_rows']} | matched/unmatched {decode_stage_health_summary['matched_error_rows']}/{decode_stage_health_summary['unmatched_error_rows']} |",
+            f"| csv rows | {decode_stage_health_summary['csv_rows']} | positive/header {decode_stage_health_summary['csv_positive_rows']}/{decode_stage_health_summary['csv_header_rows']} |",
+            f"| csv block types | {decode_stage_health_summary['csv_dynamic_rows']} | fixed/stored {decode_stage_health_summary['csv_fixed_rows']}/{decode_stage_health_summary['csv_stored_rows']}, missing cases {len(decode_stage_health_summary['csv_missing_cases'])} |",
             "",
         ]
     )
@@ -4399,6 +4494,14 @@ def main() -> int:
                 "decode_stage_error_rows": decode_stage_health_summary["error_rows"],
                 "decode_stage_matched_error_rows": decode_stage_health_summary["matched_error_rows"],
                 "decode_stage_unmatched_error_rows": decode_stage_health_summary["unmatched_error_rows"],
+                "decode_stage_csv_present": decode_stage_health_summary["csv_present"],
+                "decode_stage_csv_rows": decode_stage_health_summary["csv_rows"],
+                "decode_stage_csv_positive_rows": decode_stage_health_summary["csv_positive_rows"],
+                "decode_stage_csv_header_rows": decode_stage_health_summary["csv_header_rows"],
+                "decode_stage_csv_dynamic_rows": decode_stage_health_summary["csv_dynamic_rows"],
+                "decode_stage_csv_fixed_rows": decode_stage_health_summary["csv_fixed_rows"],
+                "decode_stage_csv_stored_rows": decode_stage_health_summary["csv_stored_rows"],
+                "decode_stage_csv_missing_cases": decode_stage_health_summary["csv_missing_cases"],
                 "native_fuzz_corpus_present": native_fuzz["present"],
                 "native_fuzz_corpus_coverage_present": native_fuzz["coverage_present"],
                 "native_fuzz_corpus_healthy": native_fuzz["healthy"],

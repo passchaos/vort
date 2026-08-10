@@ -97,6 +97,7 @@ def main() -> int:
         fuzz_coverage_path = ROOT / "tools" / "fuzz_corpus_expected_coverage.json"
         fuzz_coverage_smoke_path = ROOT / "zig-out" / "vort-fuzz-corpus-coverage-smoke.json"
         decode_stage_path = ROOT / "zig-out" / "vort-deflate-decode-stage-report.json"
+        decode_stage_csv_path = ROOT / "zig-out" / "vort-deflate-decode-stage-report.csv"
         checksum_bench_path = ROOT / "zig-out" / "vort-checksum-bench.csv"
         chunk_cursor_bench_path = ROOT / "zig-out" / "vort-chunk-cursor-bench.csv"
         deflate_match_copy_bench_path = ROOT / "zig-out" / "vort-deflate-match-copy-bench.csv"
@@ -249,6 +250,9 @@ def main() -> int:
         assert fuzz_coverage_smoke["mode_requirement_count"] == len(fuzz_coverage["mode_requirements"])
         assert fuzz_coverage_smoke["error_requirement_count"] == len(fuzz_coverage["error_requirements"])
         validate_value_against_manifest(fuzz_coverage_smoke, schemas_def)
+        with decode_stage_csv_path.open(newline="") as f:
+            decode_stage_csv_rows = list(csv.DictReader(f))
+        assert len(decode_stage_csv_rows) == 10
         decode_stage = json.loads(decode_stage_path.read_text())
         assert decode_stage["schema"] == "vort.deflate_decode_stage_report"
         assert decode_stage["schema_version"] == 1
@@ -886,6 +890,7 @@ def main() -> int:
         shutil.copyfile(fuzz_report_path, root / "vort-deflate-wrapper-fuzz-corpus.json")
         shutil.copyfile(fuzz_coverage_smoke_path, root / "vort-fuzz-corpus-coverage-smoke.json")
         shutil.copyfile(decode_stage_path, root / "vort-deflate-decode-stage-report.json")
+        shutil.copyfile(decode_stage_csv_path, root / "vort-deflate-decode-stage-report.csv")
         for artifact_name in (
             "vort-zstd-compare-gate.json",
             "vort-zstd-compare-standard-gate.json",
