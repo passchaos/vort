@@ -2475,6 +2475,15 @@ def main() -> int:
                 payload["ok"] = False
                 (fixture_root / ZSTD_COMPARE_ARTIFACT).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
                 write_producer_map(producer_map)
+            elif fixture == "missing_br_static_dictionary_artifact":
+                (fixture_root / BR_STATIC_CANDIDATES_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "br_static_dictionary_failed":
+                write_br_static_dictionary_artifacts(fixture_root)
+                payload = json.loads((fixture_root / BR_STATIC_NODE_ARTIFACT).read_text())
+                payload["ok"] = False
+                (fixture_root / BR_STATIC_NODE_ARTIFACT).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+                write_producer_map(producer_map)
             elif fixture == "missing_native_summary_error_dashboard_artifact":
                 (fixture_root / NATIVE_SUMMARY_ERROR_ARTIFACT).unlink()
                 write_producer_map(producer_map)

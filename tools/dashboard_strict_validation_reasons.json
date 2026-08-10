@@ -158,6 +158,16 @@
       "fixture": "zstd_compare_failed"
     },
     {
+      "reason": "missing_br_static_dictionary_artifact",
+      "check": "validation_missing_br_static_dictionary_artifact",
+      "fixture": "missing_br_static_dictionary_artifact"
+    },
+    {
+      "reason": "br_static_dictionary_failed",
+      "check": "validation_br_static_dictionary_failed",
+      "fixture": "br_static_dictionary_failed"
+    },
+    {
       "reason": "missing_native_summary_error_dashboard_artifact",
       "check": "validation_missing_native_summary_error_dashboard_artifact",
       "fixture": "missing_native_summary_error_dashboard_artifact"

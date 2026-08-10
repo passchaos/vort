@@ -601,6 +601,11 @@ def native_fuzz_corpus_health(artifacts: list[Path]) -> dict:
 
 
 def br_static_dictionary_health(artifacts: list[Path]) -> dict:
+    # Multiple exploratory Brotli static-dictionary probes intentionally share
+    # the same schemas as the canonical smoke artifacts. Keep this aggregate
+    # health gate pinned to the stable CI artifact names so stale wide-probe
+    # outputs in zig-out cannot make the dashboard look healthier or less
+    # healthy than the retained validation set.
     candidate = None
     upstream = None
     node = None
@@ -611,13 +616,13 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
         schema = data.get("schema")
         if schema == "vort.br_static_dictionary_candidate_report" and artifact.name == "vort-br-static-dictionary-candidates.json":
             candidate = data
-        elif schema == "vort.br_static_dictionary_candidate_upstream_smoke":
+        elif schema == "vort.br_static_dictionary_candidate_upstream_smoke" and artifact.name == "vort-br-static-dictionary-candidate-upstream-smoke.json":
             upstream = data
         elif schema == "vort.br_static_dictionary_node_probe" and artifact.name == "vort-br-static-dictionary-node-probe.json":
             node = data
-        elif schema == "vort.br_static_dictionary_source_audit":
+        elif schema == "vort.br_static_dictionary_source_audit" and artifact.name == "vort-br-static-dictionary-source-audit.json":
             audit = data
-        elif schema == "vort.br_static_dictionary_source_audit_negative_smoke":
+        elif schema == "vort.br_static_dictionary_source_audit_negative_smoke" and artifact.name == "vort-br-static-dictionary-source-audit-negative-smoke.json":
             negative = data
 
     def int_field(data: dict | None, field: str) -> int:
@@ -634,20 +639,38 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
     node_present = isinstance(node, dict)
     audit_present = isinstance(audit, dict)
     negative_present = isinstance(negative, dict)
+    candidate_count = int_field(candidate, "candidate_count")
+    raw_word_count = int_field(candidate, "raw_word_count")
+    upstream_candidate_count = int_field(upstream, "candidate_count")
+    upstream_raw_word_count = int_field(upstream, "raw_word_count")
+    node_probed_count = int_field(node, "probed_count")
+    node_decode_successes = int_field(node, "node_decode_successes")
+    audit_entry_count = int_field(audit, "entry_count")
+    audit_anchor_count = int_field(audit, "anchor_count")
+    audit_generated_zig_bytes = int_field(audit, "generated_zig_bytes")
+    negative_case_count = int_field(negative, "case_count")
     healthy = (
         candidate_present
         and upstream_present
         and node_present
         and audit_present
         and negative_present
-        and int_field(candidate, "candidate_count") > 0
+        and candidate_count > 0
+        and raw_word_count > 0
         and bool(upstream.get("ok"))
+        and upstream_candidate_count > 0
+        and upstream_raw_word_count > 0
         and bool(node.get("ok"))
-        and int_field(node, "node_decode_successes") == int_field(node, "probed_count")
+        and node_probed_count > 0
+        and node_decode_successes == node_probed_count
         and bool(audit.get("ok"))
         and bool(audit.get("generated_table_matches_source"))
+        and audit_entry_count > 0
+        and audit_anchor_count > 0
+        and audit_generated_zig_bytes > 0
         and bool(negative.get("ok"))
-        and negative_matched == int_field(negative, "case_count")
+        and negative_case_count > 0
+        and negative_matched == negative_case_count
     )
     return {
         "present": candidate_present,
@@ -656,17 +679,17 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
         "audit_present": audit_present,
         "negative_present": negative_present,
         "healthy": healthy,
-        "candidate_count": int_field(candidate, "candidate_count"),
-        "raw_word_count": int_field(candidate, "raw_word_count"),
-        "upstream_candidate_count": int_field(upstream, "candidate_count"),
-        "upstream_raw_word_count": int_field(upstream, "raw_word_count"),
-        "node_probed_count": int_field(node, "probed_count"),
-        "node_decode_successes": int_field(node, "node_decode_successes"),
+        "candidate_count": candidate_count,
+        "raw_word_count": raw_word_count,
+        "upstream_candidate_count": upstream_candidate_count,
+        "upstream_raw_word_count": upstream_raw_word_count,
+        "node_probed_count": node_probed_count,
+        "node_decode_successes": node_decode_successes,
         "node_size_winner_count": int_field(node, "size_winner_count"),
-        "audit_entry_count": int_field(audit, "entry_count"),
-        "audit_anchor_count": int_field(audit, "anchor_count"),
-        "audit_generated_zig_bytes": int_field(audit, "generated_zig_bytes"),
-        "negative_case_count": int_field(negative, "case_count"),
+        "audit_entry_count": audit_entry_count,
+        "audit_anchor_count": audit_anchor_count,
+        "audit_generated_zig_bytes": audit_generated_zig_bytes,
+        "negative_case_count": negative_case_count,
         "negative_matched": negative_matched,
     }
 
@@ -1720,6 +1743,7 @@ def main() -> int:
         and python_zlib_healthy
         and native_codec_health["healthy"]
         and zstd_compare["healthy"]
+        and br_static_dictionary["healthy"]
         and native_summary_error_healthy
         and native_summary_error_negative_healthy
         and lz4_native_summary_healthy
@@ -1806,6 +1830,17 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_zstd_compare_artifact")
     elif not zstd_compare["healthy"]:
         validation_unhealthy_reasons.append("zstd_compare_failed")
+    br_static_dictionary_present = (
+        br_static_dictionary["present"]
+        and br_static_dictionary["upstream_present"]
+        and br_static_dictionary["node_present"]
+        and br_static_dictionary["audit_present"]
+        and br_static_dictionary["negative_present"]
+    )
+    if not br_static_dictionary_present:
+        validation_unhealthy_reasons.append("missing_br_static_dictionary_artifact")
+    elif not br_static_dictionary["healthy"]:
+        validation_unhealthy_reasons.append("br_static_dictionary_failed")
     if not native_summary_error_health["present"]:
         validation_unhealthy_reasons.append("missing_native_summary_error_dashboard_artifact")
     elif not native_summary_error_healthy:
