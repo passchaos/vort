@@ -2458,6 +2458,8 @@ Current unhealthy reason values are:
 - `deflate_huffman_build_bench_failed`
 - `missing_deflate_huffman_lookup_bench_artifact`
 - `deflate_huffman_lookup_bench_failed`
+- `missing_deflate_chunked_huffman_bench_artifact`
+- `deflate_chunked_huffman_bench_failed`
 - `missing_fuzz_corpus_artifact`
 - `fuzz_corpus_failed`
 - `missing_fuzz_coverage_artifact`
@@ -2604,6 +2606,14 @@ Top-level fields:
   `deflate_huffman_lookup_bench_positive_rows`,
   `deflate_huffman_lookup_bench_lookup_rows`,
   `deflate_huffman_lookup_bench_missing_pairs`
+- `deflate_chunked_huffman_bench_present`,
+  `deflate_chunked_huffman_bench_healthy`,
+  `deflate_chunked_huffman_bench_rows`,
+  `deflate_chunked_huffman_bench_expected_rows`,
+  `deflate_chunked_huffman_bench_positive_rows`,
+  `deflate_chunked_huffman_bench_shape_rows`,
+  `deflate_chunked_huffman_bench_buffered_zero_chunk_rows`,
+  `deflate_chunked_huffman_bench_missing_pairs`
 - `fuzz_corpus_present`, `fuzz_corpus_ok`,
   `fuzz_corpus_coverage_present`, `fuzz_corpus_coverage_ok`,
   `fuzz_corpus_healthy`, `fuzz_corpus_cases`,
@@ -2794,6 +2804,7 @@ Example:
     "missing_deflate_match_copy_bench_artifact",
     "missing_deflate_huffman_build_bench_artifact",
     "missing_deflate_huffman_lookup_bench_artifact",
+    "missing_deflate_chunked_huffman_bench_artifact",
     "missing_fuzz_corpus_artifact",
     "missing_fuzz_coverage_artifact",
     "missing_native_fuzz_corpus_artifact",
@@ -2944,6 +2955,14 @@ Example:
   "deflate_huffman_lookup_bench_positive_rows": 0,
   "deflate_huffman_lookup_bench_lookup_rows": 0,
   "deflate_huffman_lookup_bench_missing_pairs": [],
+  "deflate_chunked_huffman_bench_present": false,
+  "deflate_chunked_huffman_bench_healthy": false,
+  "deflate_chunked_huffman_bench_rows": 0,
+  "deflate_chunked_huffman_bench_expected_rows": 0,
+  "deflate_chunked_huffman_bench_positive_rows": 0,
+  "deflate_chunked_huffman_bench_shape_rows": 0,
+  "deflate_chunked_huffman_bench_buffered_zero_chunk_rows": 0,
+  "deflate_chunked_huffman_bench_missing_pairs": [],
   "fuzz_corpus_present": false,
   "fuzz_corpus_ok": false,
   "fuzz_corpus_coverage_present": false,
@@ -3337,9 +3356,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 67,
-      "min_expected_failures": 67,
-      "min_matched": 67
+      "min_checks": 69,
+      "min_expected_failures": 69,
+      "min_matched": 69
     },
     {
       "mode": "native-tier-range-health",
@@ -3433,7 +3452,7 @@ aggregate health reasons must be backed by real failing dashboard inputs before
 the smoke artifact can pass. The expected reason/check/fixture matrix lives in
 `tools/dashboard_strict_validation_reasons.json`; the retained
 `strict-validation-health` mode minimums must cover every configured reason,
-currently 67. The `dashboard-markdown` mode verifies that important human-facing
+currently 69. The `dashboard-markdown` mode verifies that important human-facing
 sections, including artifact inventory, aggregate validation health, producer/smoke-gate
 coverage, dashboard strict gate coverage, dashboard configuration coverage, validation JSON schema coverage, header inspect coverage, corrupt-sidecar
 rejection coverage, Huffman optimality, zstd comparison gate coverage, native fuzz corpus coverage, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, Python zlib
@@ -3472,9 +3491,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 67,
-      "min_expected_failures": 67,
-      "min_matched": 67
+      "min_checks": 69,
+      "min_expected_failures": 69,
+      "min_matched": 69
     },
     {
       "mode": "native-tier-range-health",
@@ -3512,14 +3531,14 @@ Example:
     {
       "mode": "strict-validation-health",
       "checks": 1,
-      "min_checks": 67,
-      "missing_checks": 66,
+      "min_checks": 69,
+      "missing_checks": 68,
       "expected_failures": 1,
-      "min_expected_failures": 67,
-      "missing_expected_failures": 66,
+      "min_expected_failures": 69,
+      "missing_expected_failures": 68,
       "matched": 1,
-      "min_matched": 67,
-      "missing_matched": 66
+      "min_matched": 69,
+      "missing_matched": 68
     },
     {
       "mode": "native-tier-range-health",

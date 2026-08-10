@@ -258,6 +258,16 @@
       "fixture": "deflate_huffman_lookup_bench_failed"
     },
     {
+      "reason": "missing_deflate_chunked_huffman_bench_artifact",
+      "check": "validation_missing_deflate_chunked_huffman_bench_artifact",
+      "fixture": "missing_deflate_chunked_huffman_bench_artifact"
+    },
+    {
+      "reason": "deflate_chunked_huffman_bench_failed",
+      "check": "validation_deflate_chunked_huffman_bench_failed",
+      "fixture": "deflate_chunked_huffman_bench_failed"
+    },
+    {
       "reason": "missing_zstd_compare_artifact",
       "check": "validation_missing_zstd_compare_artifact",
       "fixture": "missing_zstd_compare_artifact"

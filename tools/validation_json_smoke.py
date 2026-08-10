@@ -102,6 +102,7 @@ def main() -> int:
         deflate_match_copy_bench_path = ROOT / "zig-out" / "vort-deflate-match-copy-bench.csv"
         deflate_huffman_build_bench_path = ROOT / "zig-out" / "vort-deflate-huffman-build-bench.csv"
         deflate_huffman_lookup_bench_path = ROOT / "zig-out" / "vort-deflate-huffman-lookup-bench.csv"
+        deflate_chunked_huffman_bench_path = ROOT / "zig-out" / "vort-deflate-chunked-huffman-bench.csv"
         python_zlib_diff_path = ROOT / "zig-out" / "vort-python-zlib-diff-smoke.json"
         native_codec_probes_path = ROOT / "zig-out" / "vort-native-codec-probes.json"
         native_summary_error_dashboard_path = ROOT / "zig-out" / "vort-native-summary-error-dashboard.json"
@@ -425,6 +426,9 @@ def main() -> int:
         with deflate_huffman_lookup_bench_path.open(newline="") as f:
             deflate_huffman_lookup_bench_rows = list(csv.DictReader(f))
         assert len(deflate_huffman_lookup_bench_rows) == 21
+        with deflate_chunked_huffman_bench_path.open(newline="") as f:
+            deflate_chunked_huffman_bench_rows = list(csv.DictReader(f))
+        assert len(deflate_chunked_huffman_bench_rows) == 57
         with snappy_report_path.open(newline="") as f:
             snappy_report_rows = list(csv.DictReader(f))
         assert len(snappy_report_rows) == 20
@@ -838,6 +842,7 @@ def main() -> int:
         shutil.copyfile(deflate_match_copy_bench_path, root / "vort-deflate-match-copy-bench.csv")
         shutil.copyfile(deflate_huffman_build_bench_path, root / "vort-deflate-huffman-build-bench.csv")
         shutil.copyfile(deflate_huffman_lookup_bench_path, root / "vort-deflate-huffman-lookup-bench.csv")
+        shutil.copyfile(deflate_chunked_huffman_bench_path, root / "vort-deflate-chunked-huffman-bench.csv")
         shutil.copyfile(fuzz_report_path, root / "vort-deflate-wrapper-fuzz-corpus.json")
         shutil.copyfile(fuzz_coverage_smoke_path, root / "vort-fuzz-corpus-coverage-smoke.json")
         shutil.copyfile(decode_stage_path, root / "vort-deflate-decode-stage-report.json")
@@ -1106,6 +1111,14 @@ def main() -> int:
         assert dashboard["deflate_huffman_lookup_bench_positive_rows"] == len(deflate_huffman_lookup_bench_rows)
         assert dashboard["deflate_huffman_lookup_bench_lookup_rows"] == len(deflate_huffman_lookup_bench_rows)
         assert dashboard["deflate_huffman_lookup_bench_missing_pairs"] == []
+        assert dashboard["deflate_chunked_huffman_bench_present"] is True
+        assert dashboard["deflate_chunked_huffman_bench_healthy"] is True
+        assert dashboard["deflate_chunked_huffman_bench_rows"] == len(deflate_chunked_huffman_bench_rows)
+        assert dashboard["deflate_chunked_huffman_bench_expected_rows"] == 57
+        assert dashboard["deflate_chunked_huffman_bench_positive_rows"] == len(deflate_chunked_huffman_bench_rows)
+        assert dashboard["deflate_chunked_huffman_bench_shape_rows"] == len(deflate_chunked_huffman_bench_rows)
+        assert dashboard["deflate_chunked_huffman_bench_buffered_zero_chunk_rows"] == 3
+        assert dashboard["deflate_chunked_huffman_bench_missing_pairs"] == []
         assert dashboard["native_allocation_present"] is True
         assert dashboard["native_allocation_smoke_present"] is True
         assert dashboard["native_allocation_negative_present"] is True
@@ -1256,6 +1269,7 @@ def main() -> int:
             and dashboard["deflate_match_copy_bench_healthy"]
             and dashboard["deflate_huffman_build_bench_healthy"]
             and dashboard["deflate_huffman_lookup_bench_healthy"]
+            and dashboard["deflate_chunked_huffman_bench_healthy"]
             and dashboard["snappy_report_healthy"]
             and dashboard["zstd_compare_healthy"]
             and dashboard["native_fuzz_corpus_healthy"]

@@ -2521,3 +2521,12 @@ architecture blindly.
   strict-validation-health. Validation JSON dashboard generation now depends on
   `run-deflate-huffman-lookup-bench-gate` so clean dashboard runs retain the CSV
   before aggregate health is enforced.
+
+- Promoted the existing deflate chunked-Huffman microbenchmark CSV into
+  aggregate dashboard validation health. The dashboard now parses
+  `vort-deflate-chunked-huffman-bench.csv`, validates the 57-row case/reader
+  matrix, decoder/lookup/chunk-shape metadata, buffered zero-chunk rows, and
+  positive symbol-throughput/checksum rows, and exposes missing/failed
+  chunked-Huffman benchmark reasons in strict-validation-health. Validation JSON
+  dashboard generation now depends on `run-deflate-chunked-huffman-bench-gate`
+  so clean dashboard runs retain the CSV before aggregate health is enforced.
