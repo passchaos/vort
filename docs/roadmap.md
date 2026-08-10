@@ -2503,3 +2503,12 @@ architecture blindly.
   match-copy benchmark reasons in strict-validation-health. Validation JSON
   dashboard generation now depends on `run-deflate-match-copy-bench-gate` so
   clean dashboard runs retain the CSV before aggregate health is enforced.
+
+- Promoted the existing deflate Huffman table-build microbenchmark CSV into
+  aggregate dashboard validation health. The dashboard now parses
+  `vort-deflate-huffman-build-bench.csv`, validates the 14-row case/build
+  matrix, lookup-bit metadata, and positive timing/checksum rows, and exposes
+  missing/failed Huffman-build benchmark reasons in strict-validation-health.
+  Validation JSON dashboard generation now depends on
+  `run-deflate-huffman-build-bench-gate` so clean dashboard runs retain the CSV
+  before aggregate health is enforced.

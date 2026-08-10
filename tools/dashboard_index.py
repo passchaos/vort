@@ -1160,6 +1160,70 @@ def deflate_match_copy_bench_health(artifacts: list[Path]) -> dict:
     }
 
 
+def deflate_huffman_build_bench_health(artifacts: list[Path]) -> dict:
+    expected = {
+        "literal-mixed": {"table", "fast9", "fast11", "fast12"},
+        "literal-long-tail": {"table", "fast9", "fast11", "fast12"},
+        "distance-mixed": {"table", "fast5", "fast8"},
+        "code-length": {"table", "fast5", "fast7"},
+    }
+    lookup_bits = {"table": 0, "fast5": 5, "fast7": 7, "fast8": 8, "fast9": 9, "fast11": 11, "fast12": 12}
+    expected_pairs = {(case, build) for case, builds in expected.items() for build in builds}
+    for artifact in artifacts:
+        if artifact.name != "vort-deflate-huffman-build-bench.csv":
+            continue
+        try:
+            with artifact.open(newline="") as f:
+                rows = list(csv.DictReader(f))
+        except Exception:
+            rows = []
+
+        seen: set[tuple[str, str]] = set()
+        positive_rows = 0
+        lookup_rows = 0
+        for row in rows:
+            case = str(row.get("case") or "")
+            build = str(row.get("build") or "")
+            pair = (case, build)
+            if pair in expected_pairs:
+                seen.add(pair)
+            try:
+                row_lookup_bits = int(row.get("lookup_bits") or "-1")
+                symbols = int(row.get("symbols") or "0")
+                iterations = int(row.get("iterations") or "0")
+                elapsed_ns = int(row.get("elapsed_ns") or "0")
+                checksum = int(row.get("checksum") or "0")
+                builds_per_s = float(row.get("builds_per_s") or "0")
+            except ValueError:
+                continue
+            if row_lookup_bits == lookup_bits.get(build, -2):
+                lookup_rows += 1
+            if symbols > 0 and iterations > 0 and elapsed_ns > 0 and checksum > 0 and builds_per_s > 0.0:
+                positive_rows += 1
+
+        missing_pairs = sorted(f"{case}:{build}" for case, build in expected_pairs - seen)
+        row_count = len(rows)
+        healthy = row_count == len(expected_pairs) and not missing_pairs and positive_rows == row_count and lookup_rows == row_count
+        return {
+            "present": True,
+            "healthy": healthy,
+            "row_count": row_count,
+            "expected_rows": len(expected_pairs),
+            "positive_rows": positive_rows,
+            "lookup_rows": lookup_rows,
+            "missing_pairs": missing_pairs,
+        }
+    return {
+        "present": False,
+        "healthy": False,
+        "row_count": 0,
+        "expected_rows": len(expected_pairs),
+        "positive_rows": 0,
+        "lookup_rows": 0,
+        "missing_pairs": [],
+    }
+
+
 def zstd_compare_health(artifacts: list[Path]) -> dict:
     compare = None
     standard = None
@@ -2035,6 +2099,7 @@ def main() -> int:
     checksum_bench = checksum_bench_health(artifacts)
     chunk_cursor_bench = chunk_cursor_bench_health(artifacts)
     deflate_match_copy_bench = deflate_match_copy_bench_health(artifacts)
+    deflate_huffman_build_bench = deflate_huffman_build_bench_health(artifacts)
     zstd_compare = zstd_compare_health(artifacts)
     native_allocation = native_allocation_health(artifacts)
     python_zlib_health = python_zlib_diff_health(artifacts)
@@ -2083,6 +2148,7 @@ def main() -> int:
     checksum_bench_healthy = checksum_bench["healthy"]
     chunk_cursor_bench_healthy = chunk_cursor_bench["healthy"]
     deflate_match_copy_bench_healthy = deflate_match_copy_bench["healthy"]
+    deflate_huffman_build_bench_healthy = deflate_huffman_build_bench["healthy"]
     native_allocation_healthy = native_allocation["healthy"]
     native_summary_error_healthy = native_summary_error_health["healthy"]
     native_summary_error_negative_healthy = native_summary_error_negative["healthy"]
@@ -2112,6 +2178,7 @@ def main() -> int:
         and checksum_bench_healthy
         and chunk_cursor_bench_healthy
         and deflate_match_copy_bench_healthy
+        and deflate_huffman_build_bench_healthy
         and br_static_dictionary["healthy"]
         and native_summary_error_healthy
         and native_summary_error_negative_healthy
@@ -2216,6 +2283,10 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_deflate_match_copy_bench_artifact")
     elif not deflate_match_copy_bench_healthy:
         validation_unhealthy_reasons.append("deflate_match_copy_bench_failed")
+    if not deflate_huffman_build_bench["present"]:
+        validation_unhealthy_reasons.append("missing_deflate_huffman_build_bench_artifact")
+    elif not deflate_huffman_build_bench_healthy:
+        validation_unhealthy_reasons.append("deflate_huffman_build_bench_failed")
     native_allocation_present = (
         native_allocation["present"]
         and native_allocation["smoke_present"]
@@ -2306,6 +2377,7 @@ def main() -> int:
         f"- checksum bench: {checksum_bench['row_count']}/{checksum_bench['expected_rows']} rows, workload {checksum_bench['workload_rows']}, positive {checksum_bench['positive_rows']}, mix groups crc32/crc32c {checksum_bench['crc32_mix_groups']}/{checksum_bench['crc32c_mix_groups']}, healthy `{checksum_bench_healthy}`",
         f"- chunk cursor bench: {chunk_cursor_bench['row_count']}/{chunk_cursor_bench['expected_rows']} rows, shape {chunk_cursor_bench['shape_rows']}, positive {chunk_cursor_bench['positive_rows']}, healthy `{chunk_cursor_bench_healthy}`",
         f"- deflate match-copy bench: {deflate_match_copy_bench['row_count']}/{deflate_match_copy_bench['expected_rows']} rows, classes {deflate_match_copy_bench['expected_class_rows']}, positive {deflate_match_copy_bench['positive_rows']}, healthy `{deflate_match_copy_bench_healthy}`",
+        f"- deflate Huffman build bench: {deflate_huffman_build_bench['row_count']}/{deflate_huffman_build_bench['expected_rows']} rows, lookup {deflate_huffman_build_bench['lookup_rows']}, positive {deflate_huffman_build_bench['positive_rows']}, healthy `{deflate_huffman_build_bench_healthy}`",
         f"- native tier range bench: {native_tier_health['ok_count']}/{native_tier_health['summary_count']} summaries ok across {native_tier_health['rows']} rows ({native_tier_health['enforced_count']} throughput-enforced), sources built-in/project/standard/custom/legacy {native_tier_health['built_in_summary_count']}/{native_tier_health['project_files_summary_count']}/{native_tier_health['standard_corpus_summary_count']}/{native_tier_health['custom_summary_count']}/{native_tier_health['legacy_summary_count']} missing {','.join(native_tier_health['missing_sources']) or 'none'}, min range MiB/s seek_fast/balanced/ratio {native_tier_health['seek_fast_min_range_mib_s']:.2f}/{native_tier_health['balanced_min_range_mib_s']:.2f}/{native_tier_health['ratio_min_range_mib_s']:.2f}, healthy `{native_tier_health['healthy']}`",
         f"- native tier corpus discovery: source mode `{native_tier_discovery_health['source_mode']}`, sources {native_tier_discovery_health['source_count']}/{native_tier_discovery_health['candidate_count']}, selected cases {native_tier_discovery_health['selected_case_count']}, missing reason `{native_tier_discovery_health['missing_reason'] or 'none'}`, healthy `{native_tier_discovery_health['healthy']}`",
         "",
@@ -2512,6 +2584,18 @@ def main() -> int:
             f"| rows | {deflate_match_copy_bench['row_count']} | expected {deflate_match_copy_bench['expected_rows']}, present `{deflate_match_copy_bench['present']}` |",
             f"| class rows | {deflate_match_copy_bench['expected_class_rows']} | positive rows {deflate_match_copy_bench['positive_rows']} |",
             f"| missing pairs | {len(deflate_match_copy_bench['missing_pairs'])} | healthy `{deflate_match_copy_bench['healthy']}` |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
+            "## Deflate Huffman build benchmark coverage",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| rows | {deflate_huffman_build_bench['row_count']} | expected {deflate_huffman_build_bench['expected_rows']}, present `{deflate_huffman_build_bench['present']}` |",
+            f"| lookup rows | {deflate_huffman_build_bench['lookup_rows']} | positive rows {deflate_huffman_build_bench['positive_rows']} |",
+            f"| missing pairs | {len(deflate_huffman_build_bench['missing_pairs'])} | healthy `{deflate_huffman_build_bench['healthy']}` |",
             "",
         ]
     )
@@ -2996,6 +3080,13 @@ def main() -> int:
                 "deflate_match_copy_bench_positive_rows": deflate_match_copy_bench["positive_rows"],
                 "deflate_match_copy_bench_expected_class_rows": deflate_match_copy_bench["expected_class_rows"],
                 "deflate_match_copy_bench_missing_pairs": deflate_match_copy_bench["missing_pairs"],
+                "deflate_huffman_build_bench_present": deflate_huffman_build_bench["present"],
+                "deflate_huffman_build_bench_healthy": deflate_huffman_build_bench["healthy"],
+                "deflate_huffman_build_bench_rows": deflate_huffman_build_bench["row_count"],
+                "deflate_huffman_build_bench_expected_rows": deflate_huffman_build_bench["expected_rows"],
+                "deflate_huffman_build_bench_positive_rows": deflate_huffman_build_bench["positive_rows"],
+                "deflate_huffman_build_bench_lookup_rows": deflate_huffman_build_bench["lookup_rows"],
+                "deflate_huffman_build_bench_missing_pairs": deflate_huffman_build_bench["missing_pairs"],
                 "zstd_compare_present": zstd_compare["present"],
                 "zstd_compare_standard_present": zstd_compare["standard_present"],
                 "zstd_compare_block_sweep_present": zstd_compare["block_sweep_present"],
