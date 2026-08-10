@@ -2581,3 +2581,9 @@ architecture blindly.
   metadata/full rejection booleans, error names, and stream/sidecar byte counts,
   and exposes item-count plus Markdown drift counters before corrupt-payload
   validation coverage can pass.
+- Tightened deflate wrapper fuzz corpus dashboard health by requiring the
+  retained `vort-deflate-wrapper-fuzz-corpus.md` companion beside the JSON
+  report and coverage smoke. Aggregate health now cross-checks Markdown
+  metadata, mode/error summaries, and sample rows against the JSON corpus
+  report, verifies coverage-smoke matched requirements, and exposes report,
+  coverage, and Markdown drift counters before wrapper fuzz coverage can pass.

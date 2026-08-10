@@ -664,18 +664,28 @@
             "fuzz_corpus_present",
             "fuzz_corpus_ok",
             "fuzz_corpus_coverage_present",
-            "fuzz_corpus_coverage_ok"
+            "fuzz_corpus_coverage_ok",
+            "fuzz_corpus_markdown_present"
           ],
           "positive": [
             "fuzz_corpus_cases",
+            "fuzz_corpus_report_rows",
+            "fuzz_corpus_matched_rows",
             "fuzz_corpus_exact_error_expectations",
             "fuzz_corpus_mode_count_rows",
             "fuzz_corpus_error_count_rows",
             "fuzz_corpus_coverage_mode_requirements",
-            "fuzz_corpus_coverage_error_requirements"
+            "fuzz_corpus_coverage_error_requirements",
+            "fuzz_corpus_coverage_mode_matched",
+            "fuzz_corpus_coverage_error_matched",
+            "fuzz_corpus_markdown_rows",
+            "fuzz_corpus_markdown_matched"
           ],
           "zero": [
-            "fuzz_corpus_unmatched_rows"
+            "fuzz_corpus_report_count_mismatch",
+            "fuzz_corpus_unmatched_rows",
+            "fuzz_corpus_coverage_unmatched",
+            "fuzz_corpus_markdown_unmatched"
           ]
         },
         "header_inspect_healthy": {
@@ -1698,13 +1708,24 @@
         "native_allocation_markdown_matched": "int",
         "native_allocation_markdown_unmatched": "int",
         "fuzz_corpus_cases": "int",
+        "fuzz_corpus_accepted": "int",
+        "fuzz_corpus_rejected": "int",
+        "fuzz_corpus_report_rows": "int",
+        "fuzz_corpus_report_count_mismatch": "int",
         "fuzz_corpus_coverage_error_requirements": "int",
+        "fuzz_corpus_coverage_error_matched": "int",
         "fuzz_corpus_coverage_mode_requirements": "int",
+        "fuzz_corpus_coverage_mode_matched": "int",
         "fuzz_corpus_coverage_ok": "bool",
         "fuzz_corpus_coverage_present": "bool",
+        "fuzz_corpus_coverage_unmatched": "int",
         "fuzz_corpus_error_count_rows": "int",
         "fuzz_corpus_exact_error_expectations": "int",
         "fuzz_corpus_healthy": "bool",
+        "fuzz_corpus_markdown_present": "bool",
+        "fuzz_corpus_markdown_rows": "int",
+        "fuzz_corpus_markdown_matched": "int",
+        "fuzz_corpus_markdown_unmatched": "int",
         "fuzz_corpus_matched_rows": "int",
         "fuzz_corpus_mode_count_rows": "int",
         "fuzz_corpus_ok": "bool",
@@ -2346,6 +2367,31 @@
           "left": "native_codec_probes_markdown_matched",
           "op": "eq",
           "right": "native_codec_probes_markdown_rows"
+        },
+        {
+          "left": "fuzz_corpus_report_rows",
+          "op": "eq",
+          "right": "fuzz_corpus_cases"
+        },
+        {
+          "left": "fuzz_corpus_matched_rows",
+          "op": "eq",
+          "right": "fuzz_corpus_cases"
+        },
+        {
+          "left": "fuzz_corpus_coverage_mode_matched",
+          "op": "eq",
+          "right": "fuzz_corpus_coverage_mode_requirements"
+        },
+        {
+          "left": "fuzz_corpus_coverage_error_matched",
+          "op": "eq",
+          "right": "fuzz_corpus_coverage_error_requirements"
+        },
+        {
+          "left": "fuzz_corpus_markdown_matched",
+          "op": "eq",
+          "right": "fuzz_corpus_markdown_rows"
         },
         {
           "left": "native_fuzz_corpus_report_rows",

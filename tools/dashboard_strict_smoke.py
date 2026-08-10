@@ -44,6 +44,7 @@ CHUNKED_ZLIB_BENCH_ARTIFACT = "vort-chunked-zlib-bench-report-repeat3.csv"
 PNG_STREAMING_ZLIB_BENCH_ARTIFACT = "vort-png-streaming-zlib-bench-report-repeat3.csv"
 DEFLATE_DYNAMIC_DECODE_PROFILE_ARTIFACT = "vort-deflate-dynamic-decode-profile.csv"
 FUZZ_CORPUS_ARTIFACT = "vort-deflate-wrapper-fuzz-corpus.json"
+FUZZ_CORPUS_MARKDOWN_ARTIFACT = "vort-deflate-wrapper-fuzz-corpus.md"
 FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
 DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
 DECODE_STAGE_CSV_ARTIFACT = "vort-deflate-decode-stage-report.csv"
@@ -325,6 +326,10 @@ def write_producer_map(
             "expected_format": "json",
             "smoke_gate": "zig build run-deflate-wrapper-fuzz-corpus-dashboard",
         }
+        artifact_metadata[FUZZ_CORPUS_MARKDOWN_ARTIFACT] = {
+            "expected_format": "md",
+            "smoke_gate": "zig build run-deflate-wrapper-fuzz-corpus-dashboard",
+        }
     if include_fuzz_coverage_smoke:
         artifact_metadata[FUZZ_COVERAGE_ARTIFACT] = {
             "expected_format": "json",
@@ -500,6 +505,7 @@ def write_producer_map(
         exact[DEFLATE_DYNAMIC_DECODE_PROFILE_ARTIFACT] = "zig build run-deflate-dynamic-decode-profile-gate"
     if include_fuzz_corpus_exact:
         exact[FUZZ_CORPUS_ARTIFACT] = "zig build run-deflate-wrapper-fuzz-corpus-dashboard"
+        exact[FUZZ_CORPUS_MARKDOWN_ARTIFACT] = "zig build run-deflate-wrapper-fuzz-corpus-dashboard"
     if include_fuzz_coverage_exact:
         exact[FUZZ_COVERAGE_ARTIFACT] = "zig build run-fuzz-corpus-coverage-smoke"
     if include_decode_stage_exact:
@@ -2039,6 +2045,46 @@ def write_fuzz_corpus_report(path: Path, *, ok: bool = True) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def write_fuzz_corpus_markdown(path: Path, *, ok: bool = True) -> None:
+    matched_rows = 3 if ok else 2
+    actual_zlib_error = "InvalidDeflateBlockType" if ok else "ChecksumMismatch"
+    zlib_matched = "true" if ok else "false"
+    lines = [
+        "# Deflate wrapper fuzz corpus report",
+        "",
+        "- mode: `mixed`",
+        "- cases: 3",
+        "- accepted: 1",
+        "- rejected: 2",
+        "- exact error expectations: 2",
+        f"- matched rows: {matched_rows}",
+        "",
+        "## Mode summary",
+        "",
+        "| mode | cases | accepted | rejected | exact error expectations | matched rows |",
+        "| --- | ---: | ---: | ---: | ---: | ---: |",
+        "| deflate | 1 | 0 | 1 | 1 | 1 |",
+        f"| zlib | 1 | 0 | 1 | 1 | {1 if ok else 0} |",
+        "| gzip | 1 | 1 | 0 | 0 | 1 |",
+        "",
+        "## Error summary",
+        "",
+        "| mode | error | count |",
+        "| --- | --- | ---: |",
+        "| deflate | `InvalidDeflateBlockType` | 1 |",
+        f"| zlib | `{actual_zlib_error}` | 1 |",
+        "",
+        "## Samples",
+        "",
+        "| index | mode | input bytes | expected | expected error | outcome | actual error | matched |",
+        "| ---: | --- | ---: | --- | --- | --- | --- | --- |",
+        "| 0 | deflate | 2 | reject | `InvalidDeflateBlockType` | rejected | `InvalidDeflateBlockType` | true |",
+        f"| 1 | zlib | 2 | reject | `InvalidDeflateBlockType` | rejected | `{actual_zlib_error}` | {zlib_matched} |",
+        "| 2 | gzip | 3 | accept | `` | accepted | `` | true |",
+    ]
+    path.write_text("\n".join(lines) + "\n")
+
+
 def write_fuzz_coverage_report(path: Path, *, ok: bool = True) -> None:
     payload = {
         "schema": "vort.fuzz_corpus_coverage_smoke",
@@ -3455,6 +3501,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_png_streaming_zlib_bench_csv(root / PNG_STREAMING_ZLIB_BENCH_ARTIFACT)
     write_deflate_dynamic_decode_profile_csv(root / DEFLATE_DYNAMIC_DECODE_PROFILE_ARTIFACT)
     write_fuzz_corpus_report(root / FUZZ_CORPUS_ARTIFACT)
+    write_fuzz_corpus_markdown(root / FUZZ_CORPUS_MARKDOWN_ARTIFACT)
     write_fuzz_coverage_report(root / FUZZ_COVERAGE_ARTIFACT)
     write_decode_stage_report(root / DECODE_STAGE_ARTIFACT)
     write_decode_stage_csv(root / DECODE_STAGE_CSV_ARTIFACT)
@@ -3877,8 +3924,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 79/79 | 0 | allowed missing 0 |",
-                    "| smoke gates | 79/79 | 0 | required missing 0 |",
+                    "| producer steps | 80/80 | 0 | allowed missing 0 |",
+                    "| smoke gates | 80/80 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -4416,8 +4463,10 @@ def main() -> int:
                     "## Fuzz corpus coverage",
                     "| category | count | detail |",
                     "| corpus cases | 3 | matched/unmatched 3/0 |",
+                    "| report rows | 3/3 | accepted/rejected 1/2, count mismatch 0 |",
                     "| exact error expectations | 2 | mode/error rows 3/2 |",
-                    "| coverage requirements | 5 | modes/errors 3/2 |",
+                    "| coverage requirements | 5 | matched modes/errors 3/2, unmatched 0 |",
+                    "| Markdown rows | 17/17 | present `True`, unmatched 0 |",
                 ],
             )
         )
@@ -4724,6 +4773,7 @@ def main() -> int:
                 write_producer_map(producer_map)
             elif fixture == "fuzz_corpus_failed":
                 write_fuzz_corpus_report(fixture_root / FUZZ_CORPUS_ARTIFACT, ok=False)
+                write_fuzz_corpus_markdown(fixture_root / FUZZ_CORPUS_MARKDOWN_ARTIFACT, ok=False)
                 write_producer_map(producer_map)
             elif fixture == "missing_fuzz_coverage_artifact":
                 (fixture_root / FUZZ_COVERAGE_ARTIFACT).unlink()

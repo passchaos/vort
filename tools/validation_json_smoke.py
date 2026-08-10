@@ -122,6 +122,7 @@ def main() -> int:
         dynamic_plan_path = ROOT / "zig-out" / "vort-dynamic-plan-report.csv"
         dynamic_plan_builtins_path = ROOT / "zig-out" / "vort-dynamic-plan-builtins-report.csv"
         fuzz_report_path = ROOT / "zig-out" / "vort-deflate-wrapper-fuzz-corpus.json"
+        fuzz_markdown_path = ROOT / "zig-out" / "vort-deflate-wrapper-fuzz-corpus.md"
         fuzz_coverage_path = ROOT / "tools" / "fuzz_corpus_expected_coverage.json"
         fuzz_coverage_smoke_path = ROOT / "zig-out" / "vort-fuzz-corpus-coverage-smoke.json"
         native_fuzz_report_path = ROOT / "zig-out" / "vort-native-fuzz-corpus.json"
@@ -287,12 +288,14 @@ def main() -> int:
         assert dashboard_producers["schema"] == "vort.dashboard_producers"
         validate_value_against_manifest(dashboard_producers, schemas_def)
         fuzz_report = json.loads(fuzz_report_path.read_text())
+        fuzz_markdown = fuzz_markdown_path.read_text()
         assert fuzz_report["schema"] == "vort.fuzz_corpus_report"
         assert fuzz_report["schema_version"] == 1
         assert fuzz_report["ok"] is True
         assert fuzz_report["cases"] >= 1
         assert fuzz_report["exact_error_expectations"] >= 1
         assert fuzz_report["matched_rows"] == fuzz_report["cases"]
+        assert f"- cases: {fuzz_report['cases']}" in fuzz_markdown
         validate_value_against_manifest(fuzz_report, schemas_def)
         fuzz_coverage = json.loads(fuzz_coverage_path.read_text())
         assert fuzz_coverage["schema"] == "vort.fuzz_corpus_expected_coverage"
@@ -967,6 +970,7 @@ def main() -> int:
         shutil.copyfile(png_streaming_zlib_bench_path, root / "vort-png-streaming-zlib-bench-report-repeat3.csv")
         shutil.copyfile(deflate_dynamic_decode_profile_path, root / "vort-deflate-dynamic-decode-profile.csv")
         shutil.copyfile(fuzz_report_path, root / "vort-deflate-wrapper-fuzz-corpus.json")
+        shutil.copyfile(fuzz_markdown_path, root / "vort-deflate-wrapper-fuzz-corpus.md")
         shutil.copyfile(fuzz_coverage_smoke_path, root / "vort-fuzz-corpus-coverage-smoke.json")
         shutil.copyfile(decode_stage_path, root / "vort-deflate-decode-stage-report.json")
         shutil.copyfile(decode_stage_csv_path, root / "vort-deflate-decode-stage-report.csv")
@@ -1171,8 +1175,13 @@ def main() -> int:
         assert dashboard["fuzz_corpus_ok"] is True
         assert dashboard["fuzz_corpus_coverage_present"] is True
         assert dashboard["fuzz_corpus_coverage_ok"] is True
+        assert dashboard["fuzz_corpus_markdown_present"] is True
         assert dashboard["fuzz_corpus_healthy"] is True
         assert dashboard["fuzz_corpus_cases"] == fuzz_report["cases"]
+        assert dashboard["fuzz_corpus_accepted"] == fuzz_report["accepted"]
+        assert dashboard["fuzz_corpus_rejected"] == fuzz_report["rejected"]
+        assert dashboard["fuzz_corpus_report_rows"] == len(fuzz_report["items"])
+        assert dashboard["fuzz_corpus_report_count_mismatch"] == 0
         assert dashboard["fuzz_corpus_matched_rows"] == fuzz_report["matched_rows"]
         assert dashboard["fuzz_corpus_unmatched_rows"] == 0
         assert dashboard["fuzz_corpus_exact_error_expectations"] == fuzz_report["exact_error_expectations"]
@@ -1180,6 +1189,14 @@ def main() -> int:
         assert dashboard["fuzz_corpus_error_count_rows"] == fuzz_report["error_count_rows"]
         assert dashboard["fuzz_corpus_coverage_mode_requirements"] == fuzz_coverage_smoke["mode_requirement_count"]
         assert dashboard["fuzz_corpus_coverage_error_requirements"] == fuzz_coverage_smoke["error_requirement_count"]
+        assert dashboard["fuzz_corpus_coverage_mode_matched"] == fuzz_coverage_smoke["mode_requirement_count"]
+        assert dashboard["fuzz_corpus_coverage_error_matched"] == fuzz_coverage_smoke["error_requirement_count"]
+        assert dashboard["fuzz_corpus_coverage_unmatched"] == 0
+        assert dashboard["fuzz_corpus_markdown_rows"] == (
+            9 + len(fuzz_report["mode_counts"]) + len(fuzz_report["error_counts"]) + len(fuzz_report["items"])
+        )
+        assert dashboard["fuzz_corpus_markdown_matched"] == dashboard["fuzz_corpus_markdown_rows"]
+        assert dashboard["fuzz_corpus_markdown_unmatched"] == 0
         assert dashboard["decode_stage_present"] is True
         assert dashboard["decode_stage_ok"] is True
         assert dashboard["decode_stage_healthy"] is True

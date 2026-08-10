@@ -861,6 +861,7 @@ def dynamic_plan_health(artifacts: list[Path]) -> dict:
 def fuzz_corpus_health(artifacts: list[Path]) -> dict:
     report = None
     coverage = None
+    markdown = None
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
         schema = data.get("schema")
@@ -868,12 +869,82 @@ def fuzz_corpus_health(artifacts: list[Path]) -> dict:
             report = data
         elif schema == "vort.fuzz_corpus_coverage_smoke" and artifact.name == "vort-fuzz-corpus-coverage-smoke.json":
             coverage = data
+        elif artifact.name == "vort-deflate-wrapper-fuzz-corpus.md":
+            markdown = artifact
 
     def as_int(data: dict | None, field: str) -> int:
         if not isinstance(data, dict):
             return 0
         value = data.get(field)
         return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    def row_int(row: dict, field: str) -> int:
+        value = row.get(field)
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    def markdown_cell(value: object) -> str:
+        return str(value or "")
+
+    def markdown_checks(report_data: dict | None) -> tuple[bool, int, int, int]:
+        if markdown is None:
+            return (False, 0, 0, 1)
+        if not isinstance(report_data, dict):
+            return (True, 0, 0, 1)
+        try:
+            text = markdown.read_text(errors="replace")
+        except Exception:
+            return (True, 0, 0, 1)
+        expected = [
+            f"- mode: `{report_data.get('mode')}`",
+            f"- cases: {as_int(report_data, 'cases')}",
+            f"- accepted: {as_int(report_data, 'accepted')}",
+            f"- rejected: {as_int(report_data, 'rejected')}",
+            f"- exact error expectations: {as_int(report_data, 'exact_error_expectations')}",
+            f"- matched rows: {as_int(report_data, 'matched_rows')}",
+            "## Mode summary",
+            "## Error summary",
+            "## Samples",
+        ]
+        for row in mode_counts:
+            if not isinstance(row, dict):
+                continue
+            expected.append(
+                "| {mode} | {cases} | {accepted} | {rejected} | {exact} | {matched} |".format(
+                    mode=markdown_cell(row.get("mode")),
+                    cases=row_int(row, "cases"),
+                    accepted=row_int(row, "accepted"),
+                    rejected=row_int(row, "rejected"),
+                    exact=row_int(row, "exact_error_expectations"),
+                    matched=row_int(row, "matched_rows"),
+                )
+            )
+        for row in error_counts:
+            if not isinstance(row, dict):
+                continue
+            expected.append(
+                "| {mode} | `{error}` | {count} |".format(
+                    mode=markdown_cell(row.get("mode")),
+                    error=markdown_cell(row.get("error")),
+                    count=row_int(row, "count"),
+                )
+            )
+        for row in items:
+            if not isinstance(row, dict):
+                continue
+            expected.append(
+                "| {index} | {mode} | {input_bytes} | {expected} | `{expected_error}` | {outcome} | `{actual_error}` | {matched} |".format(
+                    index=row_int(row, "index"),
+                    mode=markdown_cell(row.get("mode")),
+                    input_bytes=row_int(row, "input_bytes"),
+                    expected=markdown_cell(row.get("expected")),
+                    expected_error=markdown_cell(row.get("expected_error")),
+                    outcome=markdown_cell(row.get("outcome")),
+                    actual_error=markdown_cell(row.get("actual_error")),
+                    matched="true" if row.get("matched") is True else "false",
+                )
+            )
+        matched = sum(1 for needle in expected if needle in text)
+        return (True, len(expected), matched, len(expected) - matched)
 
     report_present = isinstance(report, dict)
     coverage_present = isinstance(coverage, dict)
@@ -885,10 +956,46 @@ def fuzz_corpus_health(artifacts: list[Path]) -> dict:
     coverage_mode_requirements = as_int(coverage, "mode_requirement_count")
     coverage_error_requirements = as_int(coverage, "error_requirement_count")
     unmatched_rows = cases - matched_rows
+    items = report.get("items") if isinstance(report, dict) else []
+    items = items if isinstance(items, list) else []
+    mode_counts = report.get("mode_counts") if isinstance(report, dict) else []
+    mode_counts = mode_counts if isinstance(mode_counts, list) else []
+    error_counts = report.get("error_counts") if isinstance(report, dict) else []
+    error_counts = error_counts if isinstance(error_counts, list) else []
+    report_rows = len(items)
+    accepted_from_items = sum(1 for row in items if isinstance(row, dict) and row.get("outcome") == "accepted")
+    rejected_from_items = sum(1 for row in items if isinstance(row, dict) and row.get("outcome") == "rejected")
+    matched_from_items = sum(1 for row in items if isinstance(row, dict) and row.get("matched") is True)
+    exact_from_items = sum(1 for row in items if isinstance(row, dict) and str(row.get("expected_error") or "") != "")
+    report_count_mismatch = (
+        abs(cases - report_rows)
+        + abs(as_int(report, "accepted") - accepted_from_items)
+        + abs(as_int(report, "rejected") - rejected_from_items)
+        + abs(matched_rows - matched_from_items)
+        + abs(exact_error_expectations - exact_from_items)
+        + abs(mode_count_rows - len(mode_counts))
+        + abs(error_count_rows - len(error_counts))
+    )
+    mode_requirements = coverage.get("mode_requirements") if isinstance(coverage, dict) else []
+    mode_requirements = mode_requirements if isinstance(mode_requirements, list) else []
+    error_requirements = coverage.get("error_requirements") if isinstance(coverage, dict) else []
+    error_requirements = error_requirements if isinstance(error_requirements, list) else []
+    coverage_mode_matched = sum(1 for row in mode_requirements if isinstance(row, dict) and row.get("matched") is True)
+    coverage_error_matched = sum(1 for row in error_requirements if isinstance(row, dict) and row.get("matched") is True)
+    coverage_unmatched = (
+        abs(coverage_mode_requirements - len(mode_requirements))
+        + abs(coverage_error_requirements - len(error_requirements))
+        + (len(mode_requirements) - coverage_mode_matched)
+        + (len(error_requirements) - coverage_error_matched)
+    )
+    markdown_present, markdown_rows, markdown_matched, markdown_unmatched = markdown_checks(report if report_present else None)
     report_healthy = (
         report_present
         and bool(report.get("ok"))
+        and str(report.get("mode") or "") == "mixed"
         and cases > 0
+        and report_count_mismatch == 0
+        and matched_rows == cases
         and unmatched_rows == 0
         and exact_error_expectations > 0
         and mode_count_rows > 0
@@ -899,13 +1006,20 @@ def fuzz_corpus_health(artifacts: list[Path]) -> dict:
         and bool(coverage.get("ok"))
         and coverage_mode_requirements > 0
         and coverage_error_requirements > 0
+        and coverage_unmatched == 0
     )
+    markdown_healthy = markdown_present and markdown_rows > 0 and markdown_unmatched == 0
     return {
         "present": report_present,
         "ok": bool(report.get("ok")) if report_present else False,
         "coverage_present": coverage_present,
         "coverage_ok": bool(coverage.get("ok")) if coverage_present else False,
+        "markdown_present": markdown_present,
         "cases": cases,
+        "accepted": as_int(report, "accepted"),
+        "rejected": as_int(report, "rejected"),
+        "report_rows": report_rows,
+        "report_count_mismatch": report_count_mismatch,
         "matched_rows": matched_rows,
         "unmatched_rows": unmatched_rows,
         "exact_error_expectations": exact_error_expectations,
@@ -913,9 +1027,16 @@ def fuzz_corpus_health(artifacts: list[Path]) -> dict:
         "error_count_rows": error_count_rows,
         "coverage_mode_requirements": coverage_mode_requirements,
         "coverage_error_requirements": coverage_error_requirements,
+        "coverage_mode_matched": coverage_mode_matched,
+        "coverage_error_matched": coverage_error_matched,
+        "coverage_unmatched": coverage_unmatched,
+        "markdown_rows": markdown_rows,
+        "markdown_matched": markdown_matched,
+        "markdown_unmatched": markdown_unmatched,
         "report_healthy": report_healthy,
         "coverage_healthy": coverage_healthy,
-        "healthy": report_healthy and coverage_healthy,
+        "markdown_healthy": markdown_healthy,
+        "healthy": report_healthy and coverage_healthy and markdown_healthy,
     }
 
 
@@ -5087,9 +5208,9 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_dynamic_plan_artifact")
     elif not dynamic_plan_healthy:
         validation_unhealthy_reasons.append("dynamic_plan_failed")
-    if not fuzz_health["present"]:
+    if not (fuzz_health["present"] and fuzz_health["markdown_present"]):
         validation_unhealthy_reasons.append("missing_fuzz_corpus_artifact")
-    elif not fuzz_health["report_healthy"]:
+    elif not (fuzz_health["report_healthy"] and fuzz_health["markdown_healthy"]):
         validation_unhealthy_reasons.append("fuzz_corpus_failed")
     if not fuzz_health["coverage_present"]:
         validation_unhealthy_reasons.append("missing_fuzz_coverage_artifact")
@@ -5254,7 +5375,7 @@ def main() -> int:
         f"- huffman length oracle: {huffman_health['optimal_rows']}/{huffman_health['row_count']} production optimal rows, {huffman_health['package_merge_optimal_rows']}/{huffman_health['row_count']} package-merge optimal rows, gaps {huffman_health['worst_gap_bits']}/{huffman_health['package_merge_worst_gap_bits']}, malformed rows {huffman_health['malformed_rows']}, healthy `{huffman_healthy}`",
         f"- level report: {level_report['rows']}/{level_report['expected_rows']} rows, shape {level_report['shape_rows']}, token/ratio/roundtrip {level_report['token_accounting_rows']}/{level_report['ratio_rows']}/{level_report['roundtrip_rows']}, Markdown {level_report['markdown_matched']}/{level_report['markdown_summary_rows']}, healthy `{level_report_healthy}`",
         f"- dynamic plan: {dynamic_plan['rows']}/{dynamic_plan['expected_rows']} rows across {dynamic_plan['source_count']}/{dynamic_plan['expected_source_count']} sources, token/histogram/ratio/slack/wrapper {dynamic_plan['token_accounting_rows']}/{dynamic_plan['histogram_rows']}/{dynamic_plan['ratio_rows']}/{dynamic_plan['slack_rows']}/{dynamic_plan['wrapper_rows']}, healthy `{dynamic_plan_healthy}`",
-        f"- fuzz corpus coverage: {fuzz_health['matched_rows']}/{fuzz_health['cases']} rows matched, exact-error rows {fuzz_health['exact_error_expectations']}, coverage requirements {fuzz_health['coverage_mode_requirements']}/{fuzz_health['coverage_error_requirements']}, healthy `{fuzz_healthy}`",
+        f"- fuzz corpus coverage: {fuzz_health['matched_rows']}/{fuzz_health['cases']} rows matched, Markdown {fuzz_health['markdown_matched']}/{fuzz_health['markdown_rows']}, exact-error rows {fuzz_health['exact_error_expectations']}, coverage requirements {fuzz_health['coverage_mode_requirements']}/{fuzz_health['coverage_error_requirements']}, healthy `{fuzz_healthy}`",
         f"- native fuzz corpus: {native_fuzz['matched_rows']}/{native_fuzz['cases']} rows matched, Markdown {native_fuzz['markdown_matched']}/{native_fuzz['markdown_rows']}, coverage matched modes/errors {native_fuzz['coverage_mode_matched']}/{native_fuzz['coverage_error_matched']}, healthy `{native_fuzz['healthy']}`",
         f"- decode-stage smoke: {decode_stage_health_summary['matched_error_rows']}/{decode_stage_health_summary['error_rows']} error rows matched across {decode_stage_health_summary['rows']} timing rows, healthy `{decode_stage_healthy}`",
         f"- Python zlib differential: payloads {python_zlib_health['payloads']} (large-file {python_zlib_health['large_file_payloads']}, file-hex encodes {python_zlib_health['file_hex_encode_cases']}), dynamic {python_zlib_health['dynamic_payloads']}, dictionary encode raw/zlib {python_zlib_health['raw_dict_encode_cases']}/{python_zlib_health['zlib_dict_encode_cases']}, CLI successes/failures {python_zlib_health['cli_successes']}/{python_zlib_health['expected_failures']}, healthy `{python_zlib_healthy}`",
@@ -5728,8 +5849,10 @@ def main() -> int:
             "| category | count | detail |",
             "| --- | ---: | --- |",
             f"| corpus cases | {fuzz_health['cases']} | matched/unmatched {fuzz_health['matched_rows']}/{fuzz_health['unmatched_rows']} |",
+            f"| report rows | {fuzz_health['report_rows']}/{fuzz_health['cases']} | accepted/rejected {fuzz_health['accepted']}/{fuzz_health['rejected']}, count mismatch {fuzz_health['report_count_mismatch']} |",
             f"| exact error expectations | {fuzz_health['exact_error_expectations']} | mode/error rows {fuzz_health['mode_count_rows']}/{fuzz_health['error_count_rows']} |",
-            f"| coverage requirements | {fuzz_health['coverage_mode_requirements'] + fuzz_health['coverage_error_requirements']} | modes/errors {fuzz_health['coverage_mode_requirements']}/{fuzz_health['coverage_error_requirements']} |",
+            f"| coverage requirements | {fuzz_health['coverage_mode_requirements'] + fuzz_health['coverage_error_requirements']} | matched modes/errors {fuzz_health['coverage_mode_matched']}/{fuzz_health['coverage_error_matched']}, unmatched {fuzz_health['coverage_unmatched']} |",
+            f"| Markdown rows | {fuzz_health['markdown_matched']}/{fuzz_health['markdown_rows']} | present `{fuzz_health['markdown_present']}`, unmatched {fuzz_health['markdown_unmatched']} |",
             "",
         ]
     )
@@ -6082,8 +6205,13 @@ def main() -> int:
                 "fuzz_corpus_ok": fuzz_health["ok"],
                 "fuzz_corpus_coverage_present": fuzz_health["coverage_present"],
                 "fuzz_corpus_coverage_ok": fuzz_health["coverage_ok"],
+                "fuzz_corpus_markdown_present": fuzz_health["markdown_present"],
                 "fuzz_corpus_healthy": fuzz_healthy,
                 "fuzz_corpus_cases": fuzz_health["cases"],
+                "fuzz_corpus_accepted": fuzz_health["accepted"],
+                "fuzz_corpus_rejected": fuzz_health["rejected"],
+                "fuzz_corpus_report_rows": fuzz_health["report_rows"],
+                "fuzz_corpus_report_count_mismatch": fuzz_health["report_count_mismatch"],
                 "fuzz_corpus_matched_rows": fuzz_health["matched_rows"],
                 "fuzz_corpus_unmatched_rows": fuzz_health["unmatched_rows"],
                 "fuzz_corpus_exact_error_expectations": fuzz_health["exact_error_expectations"],
@@ -6091,6 +6219,12 @@ def main() -> int:
                 "fuzz_corpus_error_count_rows": fuzz_health["error_count_rows"],
                 "fuzz_corpus_coverage_mode_requirements": fuzz_health["coverage_mode_requirements"],
                 "fuzz_corpus_coverage_error_requirements": fuzz_health["coverage_error_requirements"],
+                "fuzz_corpus_coverage_mode_matched": fuzz_health["coverage_mode_matched"],
+                "fuzz_corpus_coverage_error_matched": fuzz_health["coverage_error_matched"],
+                "fuzz_corpus_coverage_unmatched": fuzz_health["coverage_unmatched"],
+                "fuzz_corpus_markdown_rows": fuzz_health["markdown_rows"],
+                "fuzz_corpus_markdown_matched": fuzz_health["markdown_matched"],
+                "fuzz_corpus_markdown_unmatched": fuzz_health["markdown_unmatched"],
                 "decode_stage_present": decode_stage_health_summary["present"],
                 "decode_stage_ok": decode_stage_health_summary["ok"],
                 "decode_stage_healthy": decode_stage_healthy,
