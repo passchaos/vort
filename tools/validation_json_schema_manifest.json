@@ -850,6 +850,7 @@
             "png_scratch_healthy",
             "zlib_relaxed_healthy",
             "checksum_bench_healthy",
+            "chunk_cursor_bench_healthy",
             "snappy_report_healthy",
             "zstd_compare_healthy",
             "native_fuzz_corpus_healthy",
@@ -1045,6 +1046,20 @@
           ],
           "zero": [
             "checksum_bench_missing_algorithms"
+          ]
+        },
+        "chunk_cursor_bench_healthy": {
+          "all": [
+            "chunk_cursor_bench_present"
+          ],
+          "positive": [
+            "chunk_cursor_bench_rows",
+            "chunk_cursor_bench_expected_rows",
+            "chunk_cursor_bench_positive_rows",
+            "chunk_cursor_bench_shape_rows"
+          ],
+          "zero": [
+            "chunk_cursor_bench_missing_pairs"
           ]
         }
       },
@@ -1447,7 +1462,14 @@
         "checksum_bench_workload_rows": "int",
         "checksum_bench_crc32_mix_groups": "int",
         "checksum_bench_crc32c_mix_groups": "int",
-        "checksum_bench_missing_algorithms": "list"
+        "checksum_bench_missing_algorithms": "list",
+        "chunk_cursor_bench_present": "bool",
+        "chunk_cursor_bench_healthy": "bool",
+        "chunk_cursor_bench_rows": "int",
+        "chunk_cursor_bench_expected_rows": "int",
+        "chunk_cursor_bench_positive_rows": "int",
+        "chunk_cursor_bench_shape_rows": "int",
+        "chunk_cursor_bench_missing_pairs": "list"
       },
       "item_collection": "artifacts",
       "item_enums": {
@@ -1536,6 +1558,8 @@
           "snappy_report_failed",
           "checksum_bench_failed",
           "missing_checksum_bench_artifact",
+          "chunk_cursor_bench_failed",
+          "missing_chunk_cursor_bench_artifact",
           "missing_snappy_report_artifact",
           "missing_zstd_compare_artifact",
           "zstd_compare_failed",
@@ -1893,6 +1917,8 @@
               "validation_native_codec_probes_failed",
               "validation_missing_checksum_bench_artifact",
               "validation_checksum_bench_failed",
+              "validation_missing_chunk_cursor_bench_artifact",
+              "validation_chunk_cursor_bench_failed",
               "validation_missing_snappy_report_artifact",
               "validation_snappy_report_failed",
               "validation_missing_zstd_compare_artifact",
@@ -1954,6 +1980,8 @@
               "native_codec_probes_failed",
               "missing_checksum_bench_artifact",
               "checksum_bench_failed",
+              "missing_chunk_cursor_bench_artifact",
+              "chunk_cursor_bench_failed",
               "missing_snappy_report_artifact",
               "snappy_report_failed",
               "missing_zstd_compare_artifact",
@@ -2035,7 +2063,9 @@
                 "validation_missing_snappy_report_artifact": "missing_snappy_report_artifact",
                 "validation_snappy_report_failed": "snappy_report_failed",
                 "validation_missing_checksum_bench_artifact": "missing_checksum_bench_artifact",
-                "validation_checksum_bench_failed": "checksum_bench_failed"
+                "validation_checksum_bench_failed": "checksum_bench_failed",
+                "validation_missing_chunk_cursor_bench_artifact": "missing_chunk_cursor_bench_artifact",
+                "validation_chunk_cursor_bench_failed": "chunk_cursor_bench_failed"
               },
               "target": "reason"
             }
@@ -2115,6 +2145,9 @@
           "static_dictionary_markdown_table",
           "png_scratch_markdown_table",
           "zlib_relaxed_markdown_table",
+          "chunk_cursor_bench_markdown_table",
+          "validation_missing_chunk_cursor_bench_artifact",
+          "validation_chunk_cursor_bench_failed",
           "snappy_report_markdown_table",
           "python_zlib_diff_markdown_table",
           "decode_stage_markdown_table",
@@ -2252,6 +2285,8 @@
           "validation_native_codec_probes_failed",
           "validation_missing_checksum_bench_artifact",
           "validation_checksum_bench_failed",
+          "validation_missing_chunk_cursor_bench_artifact",
+          "validation_chunk_cursor_bench_failed",
           "validation_missing_snappy_report_artifact",
           "validation_snappy_report_failed",
           "validation_missing_zstd_compare_artifact",
@@ -2313,6 +2348,8 @@
           "native_codec_probes_failed",
           "missing_checksum_bench_artifact",
           "checksum_bench_failed",
+          "missing_chunk_cursor_bench_artifact",
+          "chunk_cursor_bench_failed",
           "missing_snappy_report_artifact",
           "snappy_report_failed",
           "missing_zstd_compare_artifact",
@@ -2374,6 +2411,8 @@
           "native_codec_probes_failed",
           "missing_checksum_bench_artifact",
           "checksum_bench_failed",
+          "missing_chunk_cursor_bench_artifact",
+          "chunk_cursor_bench_failed",
           "missing_snappy_report_artifact",
           "snappy_report_failed",
           "missing_zstd_compare_artifact",
@@ -2455,7 +2494,9 @@
             "validation_missing_snappy_report_artifact": "missing_snappy_report_artifact",
             "validation_snappy_report_failed": "snappy_report_failed",
             "validation_missing_checksum_bench_artifact": "missing_checksum_bench_artifact",
-            "validation_checksum_bench_failed": "checksum_bench_failed"
+            "validation_checksum_bench_failed": "checksum_bench_failed",
+            "validation_missing_chunk_cursor_bench_artifact": "missing_chunk_cursor_bench_artifact",
+            "validation_chunk_cursor_bench_failed": "chunk_cursor_bench_failed"
           },
           "target": "reason"
         },
@@ -2519,7 +2560,9 @@
             "missing_snappy_report_artifact": "missing_snappy_report_artifact",
             "snappy_report_failed": "snappy_report_failed",
             "missing_checksum_bench_artifact": "missing_checksum_bench_artifact",
-            "checksum_bench_failed": "checksum_bench_failed"
+            "checksum_bench_failed": "checksum_bench_failed",
+            "missing_chunk_cursor_bench_artifact": "missing_chunk_cursor_bench_artifact",
+            "chunk_cursor_bench_failed": "chunk_cursor_bench_failed"
           },
           "target": "reason"
         }

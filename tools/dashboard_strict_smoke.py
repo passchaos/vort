@@ -26,6 +26,7 @@ VALIDATION_JSON_DOCS_NEGATIVE_ARTIFACT = "vort-validation-json-docs-negative-smo
 SIDECAR_CORRUPT_ARTIFACT = "vort-sidecar-corrupt-smoke.json"
 HUFFMAN_LENGTH_ARTIFACT = "vort-huffman-length-report.csv"
 CHECKSUM_BENCH_ARTIFACT = "vort-checksum-bench.csv"
+CHUNK_CURSOR_BENCH_ARTIFACT = "vort-chunk-cursor-bench.csv"
 FUZZ_CORPUS_ARTIFACT = "vort-deflate-wrapper-fuzz-corpus.json"
 FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
 DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
@@ -90,6 +91,8 @@ def write_producer_map(
     include_huffman_smoke: bool = True,
     include_checksum_bench_exact: bool = True,
     include_checksum_bench_smoke: bool = True,
+    include_chunk_cursor_bench_exact: bool = True,
+    include_chunk_cursor_bench_smoke: bool = True,
     include_fuzz_corpus_exact: bool = True,
     include_fuzz_corpus_smoke: bool = True,
     include_fuzz_coverage_exact: bool = True,
@@ -169,6 +172,11 @@ def write_producer_map(
         artifact_metadata[CHECKSUM_BENCH_ARTIFACT] = {
             "expected_format": "csv",
             "smoke_gate": "zig build -Doptimize=ReleaseFast run-checksum-bench-gate",
+        }
+    if include_chunk_cursor_bench_smoke:
+        artifact_metadata[CHUNK_CURSOR_BENCH_ARTIFACT] = {
+            "expected_format": "csv",
+            "smoke_gate": "zig build run-chunk-cursor-bench-gate",
         }
     if include_fuzz_corpus_smoke:
         artifact_metadata[FUZZ_CORPUS_ARTIFACT] = {
@@ -288,6 +296,8 @@ def write_producer_map(
         exact[HUFFMAN_LENGTH_ARTIFACT] = "zig build run-huffman-length-report-dashboard"
     if include_checksum_bench_exact:
         exact[CHECKSUM_BENCH_ARTIFACT] = "zig build -Doptimize=ReleaseFast run-checksum-bench-gate"
+    if include_chunk_cursor_bench_exact:
+        exact[CHUNK_CURSOR_BENCH_ARTIFACT] = "zig build run-chunk-cursor-bench-gate"
     if include_fuzz_corpus_exact:
         exact[FUZZ_CORPUS_ARTIFACT] = "zig build run-deflate-wrapper-fuzz-corpus-dashboard"
     if include_fuzz_coverage_exact:
@@ -765,6 +775,59 @@ def write_checksum_bench_csv(path: Path, *, healthy: bool = True) -> None:
         if algorithm == "adler32":
             mix = "255981175488"
         lines.append(",".join([algorithm, str(1 << 20), "128", "0.1", "1000.0", mix]))
+    path.write_text("\n".join(lines) + "\n")
+
+
+def write_chunk_cursor_bench_csv(path: Path, *, healthy: bool = True) -> None:
+    columns = [
+        "case",
+        "operation",
+        "kernel",
+        "payload_bytes",
+        "chunk_bytes",
+        "chunk_count",
+        "include_empty_chunks",
+        "iterations",
+        "elapsed_ns",
+        "bytes_per_s",
+        "mib_per_s",
+        "checksum",
+    ]
+    cases = {
+        "read-1b-empty": ("read-byte", 8 * 1024, 1, "true"),
+        "copy-1b-empty": ("copy-to", 8 * 1024, 1, "true"),
+        "copy-7b-empty": ("copy-to", 32 * 1024, 7, "true"),
+        "copy-256b": ("copy-to", 64 * 1024, 256, "false"),
+    }
+    kernels = ("current", "skip_empty_advance")
+
+    def chunk_count(payload_bytes: int, chunk_bytes: int, include_empty: str) -> int:
+        non_empty = (payload_bytes + chunk_bytes - 1) // chunk_bytes
+        return non_empty * 2 + 1 if include_empty == "true" else non_empty
+
+    lines = [",".join(columns)]
+    for case, (operation, payload_bytes, chunk_bytes, include_empty) in cases.items():
+        for kernel in kernels:
+            if not healthy and case == "copy-256b" and kernel == "skip_empty_advance":
+                continue
+            lines.append(
+                ",".join(
+                    [
+                        case,
+                        operation,
+                        kernel,
+                        str(payload_bytes),
+                        str(chunk_bytes),
+                        str(chunk_count(payload_bytes, chunk_bytes, include_empty)),
+                        include_empty,
+                        "128",
+                        "1000",
+                        "1000000.0",
+                        "1.0",
+                        "12345",
+                    ]
+                )
+            )
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -1629,6 +1692,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_sidecar_corrupt_report(root / SIDECAR_CORRUPT_ARTIFACT)
     write_huffman_length_csv(root / HUFFMAN_LENGTH_ARTIFACT)
     write_checksum_bench_csv(root / CHECKSUM_BENCH_ARTIFACT)
+    write_chunk_cursor_bench_csv(root / CHUNK_CURSOR_BENCH_ARTIFACT)
     write_fuzz_corpus_report(root / FUZZ_CORPUS_ARTIFACT)
     write_fuzz_coverage_report(root / FUZZ_COVERAGE_ARTIFACT)
     write_decode_stage_report(root / DECODE_STAGE_ARTIFACT)
@@ -2030,8 +2094,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 41/41 | 0 | allowed missing 0 |",
-                    "| smoke gates | 41/41 | 0 | required missing 0 |",
+                    "| producer steps | 42/42 | 0 | allowed missing 0 |",
+                    "| smoke gates | 42/42 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -2218,6 +2282,20 @@ def main() -> int:
                     "| rows | 21 | expected 21, present `True` |",
                     "| workload rows | 21 | positive rows 21 |",
                     "| digest mix groups | 2 | crc32/crc32c 1/1, missing algorithms 0, healthy `True` |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
+                "chunk_cursor_bench_markdown_table",
+                "chunk cursor benchmark Markdown table",
+                dashboard_markdown,
+                [
+                    "## Chunk cursor benchmark coverage",
+                    "| category | count | detail |",
+                    "| rows | 8 | expected 8, present `True` |",
+                    "| shape rows | 8 | positive rows 8 |",
+                    "| missing pairs | 0 | healthy `True` |",
                 ],
             )
         )
@@ -2576,6 +2654,12 @@ def main() -> int:
                 write_producer_map(producer_map)
             elif fixture == "checksum_bench_failed":
                 write_checksum_bench_csv(fixture_root / CHECKSUM_BENCH_ARTIFACT, healthy=False)
+                write_producer_map(producer_map)
+            elif fixture == "missing_chunk_cursor_bench_artifact":
+                (fixture_root / CHUNK_CURSOR_BENCH_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "chunk_cursor_bench_failed":
+                write_chunk_cursor_bench_csv(fixture_root / CHUNK_CURSOR_BENCH_ARTIFACT, healthy=False)
                 write_producer_map(producer_map)
             elif fixture == "missing_fuzz_corpus_artifact":
                 (fixture_root / FUZZ_CORPUS_ARTIFACT).unlink()

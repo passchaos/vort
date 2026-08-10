@@ -998,6 +998,92 @@ def checksum_bench_health(artifacts: list[Path]) -> dict:
     }
 
 
+def chunk_cursor_bench_health(artifacts: list[Path]) -> dict:
+    expected_cases = {
+        "read-1b-empty": {"operation": "read-byte", "payload_bytes": 8 * 1024, "chunk_bytes": 1, "include_empty_chunks": "true"},
+        "copy-1b-empty": {"operation": "copy-to", "payload_bytes": 8 * 1024, "chunk_bytes": 1, "include_empty_chunks": "true"},
+        "copy-7b-empty": {"operation": "copy-to", "payload_bytes": 32 * 1024, "chunk_bytes": 7, "include_empty_chunks": "true"},
+        "copy-256b": {"operation": "copy-to", "payload_bytes": 64 * 1024, "chunk_bytes": 256, "include_empty_chunks": "false"},
+    }
+    expected_kernels = {"current", "skip_empty_advance"}
+    expected_pairs = {(case, kernel) for case in expected_cases for kernel in expected_kernels}
+
+    def expected_chunk_count(payload_bytes: int, chunk_bytes: int, include_empty: bool) -> int:
+        non_empty = (payload_bytes + chunk_bytes - 1) // chunk_bytes
+        return non_empty * 2 + 1 if include_empty else non_empty
+
+    for artifact in artifacts:
+        if artifact.name != "vort-chunk-cursor-bench.csv":
+            continue
+        try:
+            with artifact.open(newline="") as f:
+                rows = list(csv.DictReader(f))
+        except Exception:
+            rows = []
+
+        seen: set[tuple[str, str]] = set()
+        positive_rows = 0
+        shape_rows = 0
+        for row in rows:
+            case = str(row.get("case") or "")
+            kernel = str(row.get("kernel") or "")
+            pair = (case, kernel)
+            if pair in expected_pairs:
+                seen.add(pair)
+            expected = expected_cases.get(case)
+            try:
+                payload_bytes = int(row.get("payload_bytes") or "0")
+                chunk_bytes = int(row.get("chunk_bytes") or "0")
+                chunk_count = int(row.get("chunk_count") or "0")
+                iterations = int(row.get("iterations") or "0")
+                elapsed_ns = int(row.get("elapsed_ns") or "0")
+                checksum = int(row.get("checksum") or "0")
+                bytes_per_s = float(row.get("bytes_per_s") or "0")
+                mib_per_s = float(row.get("mib_per_s") or "0")
+            except ValueError:
+                continue
+            if iterations > 0 and elapsed_ns > 0 and checksum > 0 and bytes_per_s > 0.0 and mib_per_s > 0.0:
+                positive_rows += 1
+            if expected is not None:
+                expected_chunks = expected_chunk_count(expected["payload_bytes"], expected["chunk_bytes"], expected["include_empty_chunks"] == "true")
+                if (
+                    row.get("operation") == expected["operation"]
+                    and row.get("include_empty_chunks") == expected["include_empty_chunks"]
+                    and payload_bytes == expected["payload_bytes"]
+                    and chunk_bytes == expected["chunk_bytes"]
+                    and chunk_count == expected_chunks
+                ):
+                    shape_rows += 1
+
+        missing_pairs = sorted(f"{case}:{kernel}" for case, kernel in expected_pairs - seen)
+        row_count = len(rows)
+        healthy = (
+            row_count == len(expected_pairs)
+            and not missing_pairs
+            and positive_rows == row_count
+            and shape_rows == row_count
+        )
+        return {
+            "present": True,
+            "healthy": healthy,
+            "row_count": row_count,
+            "expected_rows": len(expected_pairs),
+            "positive_rows": positive_rows,
+            "shape_rows": shape_rows,
+            "missing_pairs": missing_pairs,
+        }
+
+    return {
+        "present": False,
+        "healthy": False,
+        "row_count": 0,
+        "expected_rows": len(expected_pairs),
+        "positive_rows": 0,
+        "shape_rows": 0,
+        "missing_pairs": [],
+    }
+
+
 def zstd_compare_health(artifacts: list[Path]) -> dict:
     compare = None
     standard = None
@@ -1871,6 +1957,7 @@ def main() -> int:
     zlib_relaxed = zlib_relaxed_health(artifacts)
     snappy_report = snappy_report_health(artifacts)
     checksum_bench = checksum_bench_health(artifacts)
+    chunk_cursor_bench = chunk_cursor_bench_health(artifacts)
     zstd_compare = zstd_compare_health(artifacts)
     native_allocation = native_allocation_health(artifacts)
     python_zlib_health = python_zlib_diff_health(artifacts)
@@ -1917,6 +2004,7 @@ def main() -> int:
     zlib_relaxed_healthy = zlib_relaxed["healthy"]
     snappy_report_healthy = snappy_report["healthy"]
     checksum_bench_healthy = checksum_bench["healthy"]
+    chunk_cursor_bench_healthy = chunk_cursor_bench["healthy"]
     native_allocation_healthy = native_allocation["healthy"]
     native_summary_error_healthy = native_summary_error_health["healthy"]
     native_summary_error_negative_healthy = native_summary_error_negative["healthy"]
@@ -1944,6 +2032,7 @@ def main() -> int:
         and zstd_compare["healthy"]
         and snappy_report_healthy
         and checksum_bench_healthy
+        and chunk_cursor_bench_healthy
         and br_static_dictionary["healthy"]
         and native_summary_error_healthy
         and native_summary_error_negative_healthy
@@ -2040,6 +2129,10 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_checksum_bench_artifact")
     elif not checksum_bench_healthy:
         validation_unhealthy_reasons.append("checksum_bench_failed")
+    if not chunk_cursor_bench["present"]:
+        validation_unhealthy_reasons.append("missing_chunk_cursor_bench_artifact")
+    elif not chunk_cursor_bench_healthy:
+        validation_unhealthy_reasons.append("chunk_cursor_bench_failed")
     native_allocation_present = (
         native_allocation["present"]
         and native_allocation["smoke_present"]
@@ -2128,6 +2221,7 @@ def main() -> int:
         f"- zstd native summary: frames/skippable/checksum/dictionary/content-size/blocks raw/rle/compressed {zstd_native_summary['frame_count']}/{zstd_native_summary['skippable_frame_count']}/{zstd_native_summary['checksum_frame_count']}/{zstd_native_summary['dictionary_id_frame_count']}/{zstd_native_summary['content_size_frame_count']}/{zstd_native_summary['block_count']} {zstd_native_summary['raw_block_count']}/{zstd_native_summary['rle_block_count']}/{zstd_native_summary['compressed_block_count']}, declared/payload/skippable bytes {zstd_native_summary['declared_content_bytes']}/{zstd_native_summary['payload_bytes']}/{zstd_native_summary['skippable_payload_bytes']}, healthy `{zstd_native_summary_healthy}`",
         f"- Snappy report: {snappy_report['row_count']}/{snappy_report['expected_rows']} rows, positive timing {snappy_report['positive_timing_rows']}, repetitive shrunk {snappy_report['repetitive_shrunk_rows']}, reusable size matches {snappy_report['reusable_size_matched_cases']}, healthy `{snappy_report_healthy}`",
         f"- checksum bench: {checksum_bench['row_count']}/{checksum_bench['expected_rows']} rows, workload {checksum_bench['workload_rows']}, positive {checksum_bench['positive_rows']}, mix groups crc32/crc32c {checksum_bench['crc32_mix_groups']}/{checksum_bench['crc32c_mix_groups']}, healthy `{checksum_bench_healthy}`",
+        f"- chunk cursor bench: {chunk_cursor_bench['row_count']}/{chunk_cursor_bench['expected_rows']} rows, shape {chunk_cursor_bench['shape_rows']}, positive {chunk_cursor_bench['positive_rows']}, healthy `{chunk_cursor_bench_healthy}`",
         f"- native tier range bench: {native_tier_health['ok_count']}/{native_tier_health['summary_count']} summaries ok across {native_tier_health['rows']} rows ({native_tier_health['enforced_count']} throughput-enforced), sources built-in/project/standard/custom/legacy {native_tier_health['built_in_summary_count']}/{native_tier_health['project_files_summary_count']}/{native_tier_health['standard_corpus_summary_count']}/{native_tier_health['custom_summary_count']}/{native_tier_health['legacy_summary_count']} missing {','.join(native_tier_health['missing_sources']) or 'none'}, min range MiB/s seek_fast/balanced/ratio {native_tier_health['seek_fast_min_range_mib_s']:.2f}/{native_tier_health['balanced_min_range_mib_s']:.2f}/{native_tier_health['ratio_min_range_mib_s']:.2f}, healthy `{native_tier_health['healthy']}`",
         f"- native tier corpus discovery: source mode `{native_tier_discovery_health['source_mode']}`, sources {native_tier_discovery_health['source_count']}/{native_tier_discovery_health['candidate_count']}, selected cases {native_tier_discovery_health['selected_case_count']}, missing reason `{native_tier_discovery_health['missing_reason'] or 'none'}`, healthy `{native_tier_discovery_health['healthy']}`",
         "",
@@ -2310,6 +2404,18 @@ def main() -> int:
             f"| rows | {checksum_bench['row_count']} | expected {checksum_bench['expected_rows']}, present `{checksum_bench['present']}` |",
             f"| workload rows | {checksum_bench['workload_rows']} | positive rows {checksum_bench['positive_rows']} |",
             f"| digest mix groups | {checksum_bench['crc32_mix_groups'] + checksum_bench['crc32c_mix_groups']} | crc32/crc32c {checksum_bench['crc32_mix_groups']}/{checksum_bench['crc32c_mix_groups']}, missing algorithms {len(checksum_bench['missing_algorithms'])}, healthy `{checksum_bench['healthy']}` |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
+            "## Chunk cursor benchmark coverage",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| rows | {chunk_cursor_bench['row_count']} | expected {chunk_cursor_bench['expected_rows']}, present `{chunk_cursor_bench['present']}` |",
+            f"| shape rows | {chunk_cursor_bench['shape_rows']} | positive rows {chunk_cursor_bench['positive_rows']} |",
+            f"| missing pairs | {len(chunk_cursor_bench['missing_pairs'])} | healthy `{chunk_cursor_bench['healthy']}` |",
             "",
         ]
     )
@@ -2780,6 +2886,13 @@ def main() -> int:
                 "checksum_bench_crc32_mix_groups": checksum_bench["crc32_mix_groups"],
                 "checksum_bench_crc32c_mix_groups": checksum_bench["crc32c_mix_groups"],
                 "checksum_bench_missing_algorithms": checksum_bench["missing_algorithms"],
+                "chunk_cursor_bench_present": chunk_cursor_bench["present"],
+                "chunk_cursor_bench_healthy": chunk_cursor_bench["healthy"],
+                "chunk_cursor_bench_rows": chunk_cursor_bench["row_count"],
+                "chunk_cursor_bench_expected_rows": chunk_cursor_bench["expected_rows"],
+                "chunk_cursor_bench_positive_rows": chunk_cursor_bench["positive_rows"],
+                "chunk_cursor_bench_shape_rows": chunk_cursor_bench["shape_rows"],
+                "chunk_cursor_bench_missing_pairs": chunk_cursor_bench["missing_pairs"],
                 "zstd_compare_present": zstd_compare["present"],
                 "zstd_compare_standard_present": zstd_compare["standard_present"],
                 "zstd_compare_block_sweep_present": zstd_compare["block_sweep_present"],

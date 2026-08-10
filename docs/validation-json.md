@@ -2450,6 +2450,8 @@ Current unhealthy reason values are:
 - `huffman_length_failed`
 - `missing_checksum_bench_artifact`
 - `checksum_bench_failed`
+- `missing_chunk_cursor_bench_artifact`
+- `chunk_cursor_bench_failed`
 - `missing_fuzz_corpus_artifact`
 - `fuzz_corpus_failed`
 - `missing_fuzz_coverage_artifact`
@@ -2574,6 +2576,10 @@ Top-level fields:
   `checksum_bench_positive_rows`, `checksum_bench_workload_rows`,
   `checksum_bench_crc32_mix_groups`, `checksum_bench_crc32c_mix_groups`,
   `checksum_bench_missing_algorithms`
+- `chunk_cursor_bench_present`, `chunk_cursor_bench_healthy`,
+  `chunk_cursor_bench_rows`, `chunk_cursor_bench_expected_rows`,
+  `chunk_cursor_bench_positive_rows`, `chunk_cursor_bench_shape_rows`,
+  `chunk_cursor_bench_missing_pairs`
 - `fuzz_corpus_present`, `fuzz_corpus_ok`,
   `fuzz_corpus_coverage_present`, `fuzz_corpus_coverage_ok`,
   `fuzz_corpus_healthy`, `fuzz_corpus_cases`,
@@ -2760,6 +2766,7 @@ Example:
     "missing_sidecar_corrupt_artifact",
     "missing_huffman_length_artifact",
     "missing_checksum_bench_artifact",
+    "missing_chunk_cursor_bench_artifact",
     "missing_fuzz_corpus_artifact",
     "missing_fuzz_coverage_artifact",
     "missing_native_fuzz_corpus_artifact",
@@ -2882,6 +2889,13 @@ Example:
   "checksum_bench_crc32_mix_groups": 0,
   "checksum_bench_crc32c_mix_groups": 0,
   "checksum_bench_missing_algorithms": [],
+  "chunk_cursor_bench_present": false,
+  "chunk_cursor_bench_healthy": false,
+  "chunk_cursor_bench_rows": 0,
+  "chunk_cursor_bench_expected_rows": 0,
+  "chunk_cursor_bench_positive_rows": 0,
+  "chunk_cursor_bench_shape_rows": 0,
+  "chunk_cursor_bench_missing_pairs": [],
   "fuzz_corpus_present": false,
   "fuzz_corpus_ok": false,
   "fuzz_corpus_coverage_present": false,
@@ -3275,9 +3289,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 59,
-      "min_expected_failures": 59,
-      "min_matched": 59
+      "min_checks": 61,
+      "min_expected_failures": 61,
+      "min_matched": 61
     },
     {
       "mode": "native-tier-range-health",
@@ -3371,7 +3385,7 @@ aggregate health reasons must be backed by real failing dashboard inputs before
 the smoke artifact can pass. The expected reason/check/fixture matrix lives in
 `tools/dashboard_strict_validation_reasons.json`; the retained
 `strict-validation-health` mode minimums must cover every configured reason,
-currently 59. The `dashboard-markdown` mode verifies that important human-facing
+currently 61. The `dashboard-markdown` mode verifies that important human-facing
 sections, including artifact inventory, aggregate validation health, producer/smoke-gate
 coverage, dashboard strict gate coverage, dashboard configuration coverage, validation JSON schema coverage, header inspect coverage, corrupt-sidecar
 rejection coverage, Huffman optimality, zstd comparison gate coverage, native fuzz corpus coverage, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, Python zlib
@@ -3410,9 +3424,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 59,
-      "min_expected_failures": 59,
-      "min_matched": 59
+      "min_checks": 61,
+      "min_expected_failures": 61,
+      "min_matched": 61
     },
     {
       "mode": "native-tier-range-health",
@@ -3450,14 +3464,14 @@ Example:
     {
       "mode": "strict-validation-health",
       "checks": 1,
-      "min_checks": 59,
-      "missing_checks": 58,
+      "min_checks": 61,
+      "missing_checks": 60,
       "expected_failures": 1,
-      "min_expected_failures": 59,
-      "missing_expected_failures": 58,
+      "min_expected_failures": 61,
+      "missing_expected_failures": 60,
       "matched": 1,
-      "min_matched": 59,
-      "missing_matched": 58
+      "min_matched": 61,
+      "missing_matched": 60
     },
     {
       "mode": "native-tier-range-health",

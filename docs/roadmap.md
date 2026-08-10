@@ -2487,3 +2487,11 @@ architecture blindly.
   strict-validation-health now includes missing/failed checksum benchmark
   reasons, and validation/dashboard steps depend on the checksum bench gate so
   clean dashboards retain the CSV before enforcing aggregate health.
+
+- Promoted the existing chunk cursor microbenchmark CSV into aggregate dashboard
+  validation health. The dashboard now parses `vort-chunk-cursor-bench.csv`,
+  validates the 8-row read/copy and current/skip-empty kernel matrix, checks
+  chunk shape metadata and positive timing rows, and exposes missing/failed
+  chunk-cursor benchmark reasons in strict-validation-health. Validation JSON
+  dashboard generation now depends on `run-chunk-cursor-bench-gate` so clean
+  dashboard runs retain the CSV before aggregate health is enforced.

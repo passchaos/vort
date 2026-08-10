@@ -98,6 +98,7 @@ def main() -> int:
         fuzz_coverage_smoke_path = ROOT / "zig-out" / "vort-fuzz-corpus-coverage-smoke.json"
         decode_stage_path = ROOT / "zig-out" / "vort-deflate-decode-stage-report.json"
         checksum_bench_path = ROOT / "zig-out" / "vort-checksum-bench.csv"
+        chunk_cursor_bench_path = ROOT / "zig-out" / "vort-chunk-cursor-bench.csv"
         python_zlib_diff_path = ROOT / "zig-out" / "vort-python-zlib-diff-smoke.json"
         native_codec_probes_path = ROOT / "zig-out" / "vort-native-codec-probes.json"
         native_summary_error_dashboard_path = ROOT / "zig-out" / "vort-native-summary-error-dashboard.json"
@@ -409,6 +410,9 @@ def main() -> int:
         with checksum_bench_path.open(newline="") as f:
             checksum_bench_rows = list(csv.DictReader(f))
         assert len(checksum_bench_rows) == 21
+        with chunk_cursor_bench_path.open(newline="") as f:
+            chunk_cursor_bench_rows = list(csv.DictReader(f))
+        assert len(chunk_cursor_bench_rows) == 8
         with snappy_report_path.open(newline="") as f:
             snappy_report_rows = list(csv.DictReader(f))
         assert len(snappy_report_rows) == 20
@@ -818,6 +822,7 @@ def main() -> int:
         write_huffman_length_csv(huffman_length_csv_path)
         huffman_length_markdown_path.write_text("# Huffman length smoke\n\nAll rows are optimal.\n")
         shutil.copyfile(checksum_bench_path, root / "vort-checksum-bench.csv")
+        shutil.copyfile(chunk_cursor_bench_path, root / "vort-chunk-cursor-bench.csv")
         shutil.copyfile(fuzz_report_path, root / "vort-deflate-wrapper-fuzz-corpus.json")
         shutil.copyfile(fuzz_coverage_smoke_path, root / "vort-fuzz-corpus-coverage-smoke.json")
         shutil.copyfile(decode_stage_path, root / "vort-deflate-decode-stage-report.json")
@@ -1058,6 +1063,13 @@ def main() -> int:
         assert dashboard["checksum_bench_crc32_mix_groups"] == 1
         assert dashboard["checksum_bench_crc32c_mix_groups"] == 1
         assert dashboard["checksum_bench_missing_algorithms"] == []
+        assert dashboard["chunk_cursor_bench_present"] is True
+        assert dashboard["chunk_cursor_bench_healthy"] is True
+        assert dashboard["chunk_cursor_bench_rows"] == len(chunk_cursor_bench_rows)
+        assert dashboard["chunk_cursor_bench_expected_rows"] == 8
+        assert dashboard["chunk_cursor_bench_positive_rows"] == len(chunk_cursor_bench_rows)
+        assert dashboard["chunk_cursor_bench_shape_rows"] == len(chunk_cursor_bench_rows)
+        assert dashboard["chunk_cursor_bench_missing_pairs"] == []
         assert dashboard["native_allocation_present"] is True
         assert dashboard["native_allocation_smoke_present"] is True
         assert dashboard["native_allocation_negative_present"] is True
@@ -1204,6 +1216,7 @@ def main() -> int:
             and dashboard["png_scratch_healthy"]
             and dashboard["zlib_relaxed_healthy"]
             and dashboard["checksum_bench_healthy"]
+            and dashboard["chunk_cursor_bench_healthy"]
             and dashboard["snappy_report_healthy"]
             and dashboard["zstd_compare_healthy"]
             and dashboard["native_fuzz_corpus_healthy"]

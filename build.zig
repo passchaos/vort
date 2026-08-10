@@ -2839,6 +2839,7 @@ pub fn build(b: *std.Build) void {
     validation_json_smoke.step.dependOn(fuzz_corpus_coverage_smoke_step);
     validation_json_smoke.step.dependOn(deflate_decode_stage_report_dashboard_step);
     validation_json_smoke.step.dependOn(checksum_bench_gate_step);
+    validation_json_smoke.step.dependOn(chunk_cursor_bench_gate_step);
     validation_json_smoke.step.dependOn(python_zlib_diff_dashboard_step);
     validation_json_smoke.step.dependOn(zlib_relaxed_report_step);
     validation_json_smoke.step.dependOn(snappy_report_gate_step);
@@ -2867,6 +2868,7 @@ pub fn build(b: *std.Build) void {
     validation_json_dashboard.step.dependOn(fuzz_corpus_coverage_smoke_step);
     validation_json_dashboard.step.dependOn(deflate_decode_stage_report_dashboard_step);
     validation_json_dashboard.step.dependOn(checksum_bench_gate_step);
+    validation_json_dashboard.step.dependOn(chunk_cursor_bench_gate_step);
     validation_json_dashboard.step.dependOn(python_zlib_diff_dashboard_step);
     validation_json_dashboard.step.dependOn(zlib_relaxed_report_step);
     validation_json_dashboard.step.dependOn(snappy_report_gate_step);
