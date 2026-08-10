@@ -247,6 +247,35 @@ def huffman_length_health(artifacts: list[Path]) -> dict:
         package_merge_worst_gap_bits = max((value for value in package_merge_gap_values if value is not None), default=0)
         non_optimal_rows = row_count - optimal_rows
         package_merge_non_optimal_rows = row_count - package_merge_optimal_rows
+        markdown_present = False
+        markdown_summary_rows = 0
+        markdown_matched = 0
+        markdown_expected = {
+            "rows": row_count,
+            "optimal rows": optimal_rows,
+            "non-optimal rows": non_optimal_rows,
+            "worst gap bits": worst_gap_bits,
+            "package-merge optimal rows": package_merge_optimal_rows,
+            "package-merge non-optimal rows": package_merge_non_optimal_rows,
+            "package-merge worst gap bits": package_merge_worst_gap_bits,
+        }
+        for md_artifact in artifacts:
+            if md_artifact.name != "vort-huffman-length-report.md":
+                continue
+            markdown_present = True
+            text = md_artifact.read_text(errors="replace")
+            markdown_lines = {line.strip() for line in text.splitlines()}
+            for label, expected in markdown_expected.items():
+                markdown_summary_rows += 1
+                if f"- {label}: {expected}" in markdown_lines:
+                    markdown_matched += 1
+            break
+        markdown_unmatched = markdown_summary_rows - markdown_matched
+        markdown_healthy = (
+            markdown_present
+            and markdown_summary_rows == len(markdown_expected)
+            and markdown_unmatched == 0
+        )
         return {
             "present": True,
             "row_count": row_count,
@@ -257,12 +286,17 @@ def huffman_length_health(artifacts: list[Path]) -> dict:
             "package_merge_optimal_rows": package_merge_optimal_rows,
             "package_merge_non_optimal_rows": package_merge_non_optimal_rows,
             "package_merge_worst_gap_bits": package_merge_worst_gap_bits,
+            "markdown_present": markdown_present,
+            "markdown_summary_rows": markdown_summary_rows,
+            "markdown_matched": markdown_matched,
+            "markdown_unmatched": markdown_unmatched,
             "healthy": row_count > 0
             and malformed_rows == 0
             and non_optimal_rows == 0
             and worst_gap_bits == 0
             and package_merge_non_optimal_rows == 0
-            and package_merge_worst_gap_bits == 0,
+            and package_merge_worst_gap_bits == 0
+            and markdown_healthy,
         }
     return {
         "present": False,
@@ -274,6 +308,10 @@ def huffman_length_health(artifacts: list[Path]) -> dict:
         "package_merge_optimal_rows": 0,
         "package_merge_non_optimal_rows": 0,
         "package_merge_worst_gap_bits": 0,
+        "markdown_present": False,
+        "markdown_summary_rows": 0,
+        "markdown_matched": 0,
+        "markdown_unmatched": 0,
         "healthy": False,
     }
 
@@ -4137,6 +4175,7 @@ def main() -> int:
             "| validation | count | detail |",
             "| --- | ---: | --- |",
             f"| malformed rows | {huffman_health['malformed_rows']} | healthy `{huffman_healthy}` |",
+            f"| Markdown summary | {huffman_health['markdown_matched']}/{huffman_health['markdown_summary_rows']} | present `{huffman_health['markdown_present']}` |",
             "",
         ]
     )
@@ -4474,6 +4513,10 @@ def main() -> int:
                 "huffman_length_package_merge_optimal_rows": huffman_health["package_merge_optimal_rows"],
                 "huffman_length_package_merge_non_optimal_rows": huffman_health["package_merge_non_optimal_rows"],
                 "huffman_length_package_merge_worst_gap_bits": huffman_health["package_merge_worst_gap_bits"],
+                "huffman_length_markdown_present": huffman_health["markdown_present"],
+                "huffman_length_markdown_summary_rows": huffman_health["markdown_summary_rows"],
+                "huffman_length_markdown_matched": huffman_health["markdown_matched"],
+                "huffman_length_markdown_unmatched": huffman_health["markdown_unmatched"],
                 "fuzz_corpus_present": fuzz_health["present"],
                 "fuzz_corpus_ok": fuzz_health["ok"],
                 "fuzz_corpus_coverage_present": fuzz_health["coverage_present"],

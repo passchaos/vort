@@ -209,6 +209,10 @@ def write_producer_map(
             "expected_format": "csv",
             "smoke_gate": "zig build run-huffman-length-report-dashboard",
         }
+        artifact_metadata["vort-huffman-length-report.md"] = {
+            "expected_format": "md",
+            "smoke_gate": "zig build run-huffman-length-report-dashboard",
+        }
     if include_checksum_bench_smoke:
         artifact_metadata[CHECKSUM_BENCH_ARTIFACT] = {
             "expected_format": "csv",
@@ -395,6 +399,7 @@ def write_producer_map(
         exact[SIDECAR_CORRUPT_ARTIFACT] = "zig build run-sidecar-corrupt-dashboard"
     if include_huffman_exact:
         exact[HUFFMAN_LENGTH_ARTIFACT] = "zig build run-huffman-length-report-dashboard"
+        exact["vort-huffman-length-report.md"] = "zig build run-huffman-length-report-dashboard"
     if include_checksum_bench_exact:
         exact[CHECKSUM_BENCH_ARTIFACT] = "zig build -Doptimize=ReleaseFast run-checksum-bench-gate"
     if include_chunk_cursor_bench_exact:
@@ -843,6 +848,33 @@ def write_sidecar_corrupt_report(path: Path, *, ok: bool = True) -> None:
         ],
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def write_huffman_length_markdown(
+    path: Path,
+    *,
+    row_count: int = 1,
+    optimal_rows: int = 1,
+    non_optimal_rows: int = 0,
+    worst_gap_bits: int = 0,
+    package_merge_optimal_rows: int = 1,
+    package_merge_non_optimal_rows: int = 0,
+    package_merge_worst_gap_bits: int = 0,
+) -> None:
+    lines = [
+        "# Huffman length-limit report",
+        "",
+        f"- rows: {row_count}",
+        f"- optimal rows: {optimal_rows}",
+        f"- non-optimal rows: {non_optimal_rows}",
+        f"- worst gap bits: {worst_gap_bits}",
+        "",
+        f"- package-merge optimal rows: {package_merge_optimal_rows}",
+        f"- package-merge non-optimal rows: {package_merge_non_optimal_rows}",
+        f"- package-merge worst gap bits: {package_merge_worst_gap_bits}",
+        "",
+    ]
+    path.write_text("\n".join(lines) + "\n")
 
 
 def write_huffman_length_csv(path: Path, *, optimal: bool = True) -> None:
@@ -2516,6 +2548,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_validation_json_artifacts(root)
     write_sidecar_corrupt_report(root / SIDECAR_CORRUPT_ARTIFACT)
     write_huffman_length_csv(root / HUFFMAN_LENGTH_ARTIFACT)
+    write_huffman_length_markdown(root / "vort-huffman-length-report.md")
     write_checksum_bench_csv(root / CHECKSUM_BENCH_ARTIFACT)
     write_chunk_cursor_bench_csv(root / CHUNK_CURSOR_BENCH_ARTIFACT)
     write_deflate_match_copy_bench_csv(root / DEFLATE_MATCH_COPY_BENCH_ARTIFACT)
@@ -2940,8 +2973,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 58/58 | 0 | allowed missing 0 |",
-                    "| smoke gates | 58/58 | 0 | required missing 0 |",
+                    "| producer steps | 59/59 | 0 | allowed missing 0 |",
+                    "| smoke gates | 59/59 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -3118,6 +3151,7 @@ def main() -> int:
                     "| package-merge | 1/1 | 0 | 0 |",
                     "| validation | count | detail |",
                     "| malformed rows | 0 | healthy `True` |",
+                    "| Markdown summary | 7/7 | present `True` |",
                 ],
             )
         )
@@ -3639,6 +3673,15 @@ def main() -> int:
                 write_producer_map(producer_map)
             elif fixture == "huffman_length_failed":
                 write_huffman_length_csv(fixture_root / HUFFMAN_LENGTH_ARTIFACT, optimal=False)
+                write_huffman_length_markdown(
+                    fixture_root / "vort-huffman-length-report.md",
+                    optimal_rows=0,
+                    non_optimal_rows=1,
+                    worst_gap_bits=1,
+                    package_merge_optimal_rows=0,
+                    package_merge_non_optimal_rows=1,
+                    package_merge_worst_gap_bits=1,
+                )
                 write_producer_map(producer_map)
             elif fixture == "missing_checksum_bench_artifact":
                 (fixture_root / CHECKSUM_BENCH_ARTIFACT).unlink()

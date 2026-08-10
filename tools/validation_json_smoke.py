@@ -55,6 +55,29 @@ def write_huffman_length_csv(path: Path) -> None:
     path.write_text(",".join(columns) + "\n" + ",".join(row[column] for column in columns) + "\n")
 
 
+def write_huffman_length_markdown(path: Path) -> None:
+    # Keep this fixture in lockstep with the CSV row above so the dashboard
+    # smoke covers Markdown/CSV drift instead of only artifact presence.
+    path.write_text(
+        "\n".join(
+            [
+                "# Huffman length smoke",
+                "",
+                "- rows: 1",
+                "- optimal rows: 1",
+                "- non-optimal rows: 0",
+                "- worst gap bits: 0",
+                "",
+                "- package-merge optimal rows: 1",
+                "- package-merge non-optimal rows: 0",
+                "- package-merge worst gap bits: 0",
+                "",
+            ]
+        )
+        + "\n"
+    )
+
+
 def main() -> int:
     if len(sys.argv) not in (3, 5):
         print("usage: validation_json_smoke.py <vort-cli> <sidecar-report> [--summary <path>]", file=sys.stderr)
@@ -874,7 +897,7 @@ def main() -> int:
         }
         validate_value_against_manifest(header_summary, schemas_def)
         write_huffman_length_csv(huffman_length_csv_path)
-        huffman_length_markdown_path.write_text("# Huffman length smoke\n\nAll rows are optimal.\n")
+        write_huffman_length_markdown(huffman_length_markdown_path)
         shutil.copyfile(checksum_bench_path, root / "vort-checksum-bench.csv")
         shutil.copyfile(chunk_cursor_bench_path, root / "vort-chunk-cursor-bench.csv")
         shutil.copyfile(deflate_match_copy_bench_path, root / "vort-deflate-match-copy-bench.csv")
@@ -1034,6 +1057,10 @@ def main() -> int:
         assert dashboard["huffman_length_package_merge_optimal_rows"] == 1
         assert dashboard["huffman_length_package_merge_non_optimal_rows"] == 0
         assert dashboard["huffman_length_package_merge_worst_gap_bits"] == 0
+        assert dashboard["huffman_length_markdown_present"] is True
+        assert dashboard["huffman_length_markdown_summary_rows"] == 7
+        assert dashboard["huffman_length_markdown_matched"] == 7
+        assert dashboard["huffman_length_markdown_unmatched"] == 0
         assert dashboard["fuzz_corpus_present"] is True
         assert dashboard["fuzz_corpus_ok"] is True
         assert dashboard["fuzz_corpus_coverage_present"] is True

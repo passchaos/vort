@@ -707,17 +707,21 @@
         },
         "huffman_length_healthy": {
           "all": [
-            "huffman_length_present"
+            "huffman_length_present",
+            "huffman_length_markdown_present"
           ],
           "positive": [
-            "huffman_length_row_count"
+            "huffman_length_row_count",
+            "huffman_length_markdown_summary_rows",
+            "huffman_length_markdown_matched"
           ],
           "zero": [
             "huffman_length_non_optimal_rows",
             "huffman_length_malformed_rows",
             "huffman_length_worst_gap_bits",
             "huffman_length_package_merge_non_optimal_rows",
-            "huffman_length_package_merge_worst_gap_bits"
+            "huffman_length_package_merge_worst_gap_bits",
+            "huffman_length_markdown_unmatched"
           ]
         },
         "native_tier_corpus_discovery_healthy": {
@@ -1507,6 +1511,10 @@
         "huffman_length_package_merge_non_optimal_rows": "int",
         "huffman_length_package_merge_optimal_rows": "int",
         "huffman_length_package_merge_worst_gap_bits": "int",
+        "huffman_length_markdown_present": "bool",
+        "huffman_length_markdown_summary_rows": "int",
+        "huffman_length_markdown_matched": "int",
+        "huffman_length_markdown_unmatched": "int",
         "huffman_length_present": "bool",
         "huffman_length_row_count": "int",
         "huffman_length_worst_gap_bits": "int",

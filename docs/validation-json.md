@@ -2597,7 +2597,11 @@ Top-level fields:
   `huffman_length_worst_gap_bits`,
   `huffman_length_package_merge_optimal_rows`,
   `huffman_length_package_merge_non_optimal_rows`,
-  `huffman_length_package_merge_worst_gap_bits`
+  `huffman_length_package_merge_worst_gap_bits`,
+  `huffman_length_markdown_present`,
+  `huffman_length_markdown_summary_rows`,
+  `huffman_length_markdown_matched`,
+  `huffman_length_markdown_unmatched`
 - `checksum_bench_present`, `checksum_bench_healthy`,
   `checksum_bench_rows`, `checksum_bench_expected_rows`,
   `checksum_bench_positive_rows`, `checksum_bench_workload_rows`,
@@ -3002,6 +3006,10 @@ Example:
   "huffman_length_package_merge_optimal_rows": 0,
   "huffman_length_package_merge_non_optimal_rows": 0,
   "huffman_length_package_merge_worst_gap_bits": 0,
+  "huffman_length_markdown_present": false,
+  "huffman_length_markdown_summary_rows": 0,
+  "huffman_length_markdown_matched": 0,
+  "huffman_length_markdown_unmatched": 0,
   "checksum_bench_present": false,
   "checksum_bench_healthy": false,
   "checksum_bench_rows": 0,
