@@ -147,6 +147,7 @@ def main() -> int:
         zlib_relaxed_gate_path = ROOT / "zig-out" / "vort-zlib-relaxed-report-gate.json"
         snappy_report_path = ROOT / "zig-out" / "vort-snappy-report.csv"
         native_allocation_path = ROOT / "zig-out" / "vort-native-allocation-report.json"
+        native_allocation_markdown_path = ROOT / "zig-out" / "vort-native-allocation-report.md"
         native_library_bench_path = ROOT / "zig-out" / "vort-native-library-bench.csv"
         native_allocation_smoke_path = ROOT / "zig-out" / "vort-native-allocation-smoke.json"
         native_allocation_negative_smoke_path = ROOT / "zig-out" / "vort-native-allocation-negative-smoke.json"
@@ -516,6 +517,7 @@ def main() -> int:
             native_library_bench_rows = list(csv.DictReader(f))
         assert len(native_library_bench_rows) == 93
         native_allocation = json.loads(native_allocation_path.read_text())
+        native_allocation_markdown = native_allocation_markdown_path.read_text()
         assert native_allocation["schema"] == "vort.native_allocation_report"
         assert native_allocation["schema_version"] == 1
         assert native_allocation["case_count"] >= 1
@@ -972,6 +974,7 @@ def main() -> int:
         shutil.copyfile(png_scratch_path, root / "vort-png-scratch-report.json")
         shutil.copyfile(native_library_bench_path, root / "vort-native-library-bench.csv")
         shutil.copyfile(native_allocation_path, root / "vort-native-allocation-report.json")
+        shutil.copyfile(native_allocation_markdown_path, root / "vort-native-allocation-report.md")
         shutil.copyfile(native_allocation_smoke_path, root / "vort-native-allocation-smoke.json")
         shutil.copyfile(native_allocation_negative_smoke_path, root / "vort-native-allocation-negative-smoke.json")
         shutil.copyfile(python_zlib_diff_path, root / "vort-python-zlib-diff-smoke.json")
@@ -1359,14 +1362,29 @@ def main() -> int:
         assert dashboard["native_allocation_present"] is True
         assert dashboard["native_allocation_smoke_present"] is True
         assert dashboard["native_allocation_negative_present"] is True
+        assert dashboard["native_allocation_markdown_present"] is True
         assert dashboard["native_allocation_healthy"] is True
         assert dashboard["native_allocation_report_case_count"] == native_allocation["case_count"]
+        assert dashboard["native_allocation_report_rows"] == len(native_allocation["cases"])
+        assert dashboard["native_allocation_report_count_mismatch"] == 0
+        assert dashboard["native_allocation_report_balanced_rows"] == len(native_allocation["cases"])
+        assert dashboard["native_allocation_report_duplicate_cases"] == 0
+        assert dashboard["native_allocation_report_unbalanced_rows"] == 0
         assert dashboard["native_allocation_required_zero_allocation_cases"] == native_allocation_smoke["required_zero_allocation_cases"]
         assert dashboard["native_allocation_zero_allocation_matched"] == len(native_allocation_smoke["cases"])
+        assert dashboard["native_allocation_zero_report_matched"] == native_allocation_smoke["required_zero_allocation_cases"]
+        assert dashboard["native_allocation_zero_report_unmatched"] == 0
         assert dashboard["native_allocation_required_budget_cases"] == native_allocation_smoke["required_budget_cases"]
         assert dashboard["native_allocation_budget_matched"] == len(native_allocation_smoke["budget_cases"])
+        assert dashboard["native_allocation_budget_report_matched"] == native_allocation_smoke["required_budget_cases"]
+        assert dashboard["native_allocation_budget_report_unmatched"] == 0
         assert dashboard["native_allocation_negative_case_count"] == native_allocation_negative_smoke["case_count"]
         assert dashboard["native_allocation_negative_matched"] == native_allocation_negative_smoke["case_count"]
+        assert dashboard["native_allocation_negative_unmatched"] == 0
+        assert dashboard["native_allocation_markdown_rows"] == len(native_allocation["cases"])
+        assert dashboard["native_allocation_markdown_matched"] == len(native_allocation["cases"])
+        assert dashboard["native_allocation_markdown_unmatched"] == 0
+        assert "| concat_alloc |" in native_allocation_markdown
         assert dashboard["python_zlib_diff_present"] is True
         assert dashboard["python_zlib_diff_ok"] is True
         assert dashboard["python_zlib_diff_healthy"] is True

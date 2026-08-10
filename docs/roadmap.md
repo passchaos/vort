@@ -2549,3 +2549,9 @@ architecture blindly.
   TOTAL rows, block-sweep row counts and best-block metrics, Markdown metadata
   and summary snippets, and the validation/dashboard build steps now depend on
   the compare gates so clean dashboard runs retain all companion artifacts.
+- Tightened native allocation dashboard health by consuming the retained
+  `vort-native-allocation-report.md` companion alongside the report, smoke, and
+  negative-smoke JSON. Aggregate health now verifies report row/count balance,
+  allocation/free byte balance, zero-allocation and budget smoke rows against
+  measured report rows, negative-smoke matches, and Markdown table drift before
+  native allocation coverage can pass.

@@ -922,16 +922,32 @@
           "all": [
             "native_allocation_present",
             "native_allocation_smoke_present",
-            "native_allocation_negative_present"
+            "native_allocation_negative_present",
+            "native_allocation_markdown_present"
           ],
           "positive": [
             "native_allocation_report_case_count",
+            "native_allocation_report_rows",
+            "native_allocation_report_balanced_rows",
             "native_allocation_required_zero_allocation_cases",
             "native_allocation_zero_allocation_matched",
+            "native_allocation_zero_report_matched",
             "native_allocation_required_budget_cases",
             "native_allocation_budget_matched",
+            "native_allocation_budget_report_matched",
             "native_allocation_negative_case_count",
-            "native_allocation_negative_matched"
+            "native_allocation_negative_matched",
+            "native_allocation_markdown_rows",
+            "native_allocation_markdown_matched"
+          ],
+          "zero": [
+            "native_allocation_report_count_mismatch",
+            "native_allocation_report_duplicate_cases",
+            "native_allocation_report_unbalanced_rows",
+            "native_allocation_zero_report_unmatched",
+            "native_allocation_budget_report_unmatched",
+            "native_allocation_negative_unmatched",
+            "native_allocation_markdown_unmatched"
           ]
         },
         "zstd_compare_healthy": {
@@ -1604,6 +1620,20 @@
         "native_allocation_budget_matched": "int",
         "native_allocation_negative_case_count": "int",
         "native_allocation_negative_matched": "int",
+        "native_allocation_markdown_present": "bool",
+        "native_allocation_report_rows": "int",
+        "native_allocation_report_count_mismatch": "int",
+        "native_allocation_report_balanced_rows": "int",
+        "native_allocation_report_duplicate_cases": "int",
+        "native_allocation_report_unbalanced_rows": "int",
+        "native_allocation_zero_report_matched": "int",
+        "native_allocation_zero_report_unmatched": "int",
+        "native_allocation_budget_report_matched": "int",
+        "native_allocation_budget_report_unmatched": "int",
+        "native_allocation_negative_unmatched": "int",
+        "native_allocation_markdown_rows": "int",
+        "native_allocation_markdown_matched": "int",
+        "native_allocation_markdown_unmatched": "int",
         "fuzz_corpus_cases": "int",
         "fuzz_corpus_coverage_error_requirements": "int",
         "fuzz_corpus_coverage_mode_requirements": "int",
@@ -2169,7 +2199,54 @@
           "lz4",
           "zstd"
         ]
-      }
+      },
+      "numeric_relations": [
+        {
+          "left": "native_allocation_report_rows",
+          "op": "eq",
+          "right": "native_allocation_report_case_count"
+        },
+        {
+          "left": "native_allocation_report_balanced_rows",
+          "op": "eq",
+          "right": "native_allocation_report_rows"
+        },
+        {
+          "left": "native_allocation_zero_allocation_matched",
+          "op": "eq",
+          "right": "native_allocation_required_zero_allocation_cases"
+        },
+        {
+          "left": "native_allocation_zero_report_matched",
+          "op": "eq",
+          "right": "native_allocation_required_zero_allocation_cases"
+        },
+        {
+          "left": "native_allocation_budget_matched",
+          "op": "eq",
+          "right": "native_allocation_required_budget_cases"
+        },
+        {
+          "left": "native_allocation_budget_report_matched",
+          "op": "eq",
+          "right": "native_allocation_required_budget_cases"
+        },
+        {
+          "left": "native_allocation_negative_matched",
+          "op": "eq",
+          "right": "native_allocation_negative_case_count"
+        },
+        {
+          "left": "native_allocation_markdown_rows",
+          "op": "eq",
+          "right": "native_allocation_report_rows"
+        },
+        {
+          "left": "native_allocation_markdown_matched",
+          "op": "eq",
+          "right": "native_allocation_report_rows"
+        }
+      ]
     },
     "vort.dashboard_producers": {
       "fields": {

@@ -3463,6 +3463,7 @@ def native_allocation_health(artifacts: list[Path]) -> dict:
     report = None
     smoke = None
     negative = None
+    markdown = None
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
         schema = data.get("schema")
@@ -3472,6 +3473,8 @@ def native_allocation_health(artifacts: list[Path]) -> dict:
             smoke = data
         elif schema == "vort.native_allocation_negative_smoke":
             negative = data
+        elif artifact.name == "vort-native-allocation-report.md":
+            markdown = artifact
 
     def int_field(data: dict | None, field: str) -> int:
         if not isinstance(data, dict):
@@ -3479,6 +3482,118 @@ def native_allocation_health(artifacts: list[Path]) -> dict:
         value = data.get(field)
         return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
+    def row_int(row: dict, field: str) -> int | None:
+        value = row.get(field)
+        return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+    def report_row_balanced(row: dict) -> bool:
+        allocations = row_int(row, "allocations")
+        deallocations = row_int(row, "deallocations")
+        allocated_bytes = row_int(row, "allocated_bytes")
+        freed_bytes = row_int(row, "freed_bytes")
+        return (
+            allocations is not None
+            and deallocations is not None
+            and allocated_bytes is not None
+            and freed_bytes is not None
+            and allocations == deallocations
+            and allocated_bytes == freed_bytes
+        )
+
+    def parse_markdown_rows(path: Path | None) -> list[dict[str, int | str]]:
+        if path is None:
+            return []
+        rows: list[dict[str, int | str]] = []
+        try:
+            text = path.read_text(errors="replace")
+        except Exception:
+            return rows
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped.startswith("|"):
+                continue
+            cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+            if len(cells) != 7 or cells[0] in {"case", "---"} or set(cells[0]) == {"-"}:
+                continue
+            try:
+                rows.append({
+                    "case": cells[0],
+                    "input_bytes": int(cells[1]),
+                    "output_bytes": int(cells[2]),
+                    "allocations": int(cells[3]),
+                    "deallocations": int(cells[4]),
+                    "allocated_bytes": int(cells[5]),
+                    "freed_bytes": int(cells[6]),
+                })
+            except ValueError:
+                continue
+        return rows
+
+    def row_metrics_match(left: dict, right: dict, fields: tuple[str, ...]) -> bool:
+        return all(row_int(left, field) == row_int(right, field) for field in fields)
+
+    def smoke_rows_match_report(rows: list[dict], *, require_zero: bool, require_budget: bool) -> tuple[int, int]:
+        matched_cases: set[str] = set()
+        unmatched = 0
+        for row in rows:
+            if not isinstance(row, dict):
+                unmatched += 1
+                continue
+            case = str(row.get("case") or "")
+            report_row = report_by_case.get(case)
+            if not isinstance(report_row, dict):
+                unmatched += 1
+                continue
+            metrics_match = row_metrics_match(
+                row,
+                report_row,
+                ("allocations", "deallocations", "allocated_bytes", "freed_bytes"),
+            )
+            if row.get("present") is not True or row.get("matched") is not True or not metrics_match:
+                unmatched += 1
+                continue
+            if case in matched_cases:
+                unmatched += 1
+                continue
+            if require_zero and any(row_int(report_row, field) != 0 for field in ("allocations", "deallocations", "allocated_bytes", "freed_bytes")):
+                unmatched += 1
+                continue
+            if require_budget:
+                max_fields = (
+                    ("allocations", "max_allocations"),
+                    ("deallocations", "max_deallocations"),
+                    ("allocated_bytes", "max_allocated_bytes"),
+                    ("freed_bytes", "max_freed_bytes"),
+                )
+                within_budget = row.get("balanced") is True and report_row_balanced(report_row)
+                for report_field, max_field in max_fields:
+                    value = row_int(report_row, report_field)
+                    max_value = row_int(row, max_field)
+                    within_budget = within_budget and value is not None and max_value is not None and value <= max_value
+                if not within_budget:
+                    unmatched += 1
+                    continue
+            matched_cases.add(case)
+        return len(matched_cases), unmatched
+
+    report_cases = report.get("cases") if isinstance(report, dict) else []
+    report_cases = report_cases if isinstance(report_cases, list) else []
+    report_rows = len(report_cases)
+    report_count_mismatch = abs(int_field(report, "case_count") - report_rows)
+    report_by_case: dict[str, dict] = {}
+    report_duplicate_cases = 0
+    report_balanced_rows = 0
+    for row in report_cases:
+        if not isinstance(row, dict):
+            continue
+        case = str(row.get("case") or "")
+        if case in report_by_case:
+            report_duplicate_cases += 1
+        else:
+            report_by_case[case] = row
+        if report_row_balanced(row):
+            report_balanced_rows += 1
+    report_unbalanced_rows = report_rows - report_balanced_rows
     cases = smoke.get("cases") if isinstance(smoke, dict) else []
     cases = cases if isinstance(cases, list) else []
     budget_cases = smoke.get("budget_cases") if isinstance(smoke, dict) else []
@@ -3494,32 +3609,87 @@ def native_allocation_health(artifacts: list[Path]) -> dict:
     required_zero_cases = int_field(smoke, "required_zero_allocation_cases")
     required_budget_cases = int_field(smoke, "required_budget_cases")
     negative_case_count = int_field(negative, "case_count")
+    zero_report_matched, zero_report_unmatched = smoke_rows_match_report(cases, require_zero=True, require_budget=False)
+    zero_report_unmatched += abs(required_zero_cases - len(cases))
+    budget_report_matched, budget_report_unmatched = smoke_rows_match_report(budget_cases, require_zero=False, require_budget=True)
+    budget_report_unmatched += abs(required_budget_cases - len(budget_cases))
+    negative_unmatched = max(negative_case_count, len(negative_cases)) - negative_matched
+    markdown_present = isinstance(markdown, Path)
+    markdown_rows_data = parse_markdown_rows(markdown if markdown_present else None)
+    markdown_rows = len(markdown_rows_data)
+    markdown_matched_cases: set[str] = set()
+    markdown_malformed_rows = 0
+    for row in markdown_rows_data:
+        case = str(row.get("case") or "")
+        report_row = report_by_case.get(case)
+        if not isinstance(report_row, dict):
+            markdown_malformed_rows += 1
+            continue
+        if case in markdown_matched_cases:
+            markdown_malformed_rows += 1
+            continue
+        if row_metrics_match(
+            row,
+            report_row,
+            ("input_bytes", "output_bytes", "allocations", "deallocations", "allocated_bytes", "freed_bytes"),
+        ):
+            markdown_matched_cases.add(case)
+        else:
+            markdown_malformed_rows += 1
+    markdown_matched = len(markdown_matched_cases)
+    markdown_unmatched = max(markdown_rows, report_rows) - markdown_matched + markdown_malformed_rows
     healthy = (
         report_present
         and smoke_present
         and negative_present
+        and markdown_present
         and bool(smoke.get("ok"))
         and bool(negative.get("ok"))
         and int_field(report, "case_count") > 0
+        and report_count_mismatch == 0
+        and report_duplicate_cases == 0
+        and report_unbalanced_rows == 0
         and required_zero_cases > 0
         and zero_matched == required_zero_cases
+        and zero_report_matched == required_zero_cases
+        and zero_report_unmatched == 0
         and required_budget_cases > 0
         and budget_matched == required_budget_cases
+        and budget_report_matched == required_budget_cases
+        and budget_report_unmatched == 0
         and negative_case_count > 0
         and negative_matched == negative_case_count
+        and negative_unmatched == 0
+        and markdown_rows == report_rows
+        and markdown_matched == report_rows
+        and markdown_unmatched == 0
     )
     return {
         "present": report_present,
         "smoke_present": smoke_present,
         "negative_present": negative_present,
+        "markdown_present": markdown_present,
         "healthy": healthy,
         "report_case_count": int_field(report, "case_count"),
+        "report_rows": report_rows,
+        "report_count_mismatch": report_count_mismatch,
+        "report_balanced_rows": report_balanced_rows,
+        "report_duplicate_cases": report_duplicate_cases,
+        "report_unbalanced_rows": report_unbalanced_rows,
         "required_zero_allocation_cases": required_zero_cases,
         "zero_allocation_matched": zero_matched,
+        "zero_report_matched": zero_report_matched,
+        "zero_report_unmatched": zero_report_unmatched,
         "required_budget_cases": required_budget_cases,
         "budget_matched": budget_matched,
+        "budget_report_matched": budget_report_matched,
+        "budget_report_unmatched": budget_report_unmatched,
         "negative_case_count": negative_case_count,
         "negative_matched": negative_matched,
+        "negative_unmatched": negative_unmatched,
+        "markdown_rows": markdown_rows,
+        "markdown_matched": markdown_matched,
+        "markdown_unmatched": markdown_unmatched,
     }
 
 
@@ -4543,6 +4713,7 @@ def main() -> int:
         native_allocation["present"]
         and native_allocation["smoke_present"]
         and native_allocation["negative_present"]
+        and native_allocation["markdown_present"]
     )
     if not native_allocation_present:
         validation_unhealthy_reasons.append("missing_native_allocation_artifact")
@@ -4992,9 +5163,13 @@ def main() -> int:
             "| category | count | detail |",
             "| --- | ---: | --- |",
             f"| report cases | {native_allocation['report_case_count']} | present `{native_allocation['present']}` |",
+            f"| report rows | {native_allocation['report_rows']}/{native_allocation['report_case_count']} | balanced {native_allocation['report_balanced_rows']}, count mismatch {native_allocation['report_count_mismatch']}, duplicate {native_allocation['report_duplicate_cases']}, unbalanced {native_allocation['report_unbalanced_rows']} |",
             f"| zero-allocation cases | {native_allocation['zero_allocation_matched']}/{native_allocation['required_zero_allocation_cases']} | smoke present `{native_allocation['smoke_present']}` |",
+            f"| zero/report drift | {native_allocation['zero_report_matched']}/{native_allocation['required_zero_allocation_cases']} | unmatched {native_allocation['zero_report_unmatched']} |",
             f"| budget cases | {native_allocation['budget_matched']}/{native_allocation['required_budget_cases']} | healthy `{native_allocation['healthy']}` |",
-            f"| negative smoke cases | {native_allocation['negative_matched']}/{native_allocation['negative_case_count']} | present `{native_allocation['negative_present']}` |",
+            f"| budget/report drift | {native_allocation['budget_report_matched']}/{native_allocation['required_budget_cases']} | unmatched {native_allocation['budget_report_unmatched']} |",
+            f"| negative smoke cases | {native_allocation['negative_matched']}/{native_allocation['negative_case_count']} | present `{native_allocation['negative_present']}`, unmatched {native_allocation['negative_unmatched']} |",
+            f"| Markdown rows | {native_allocation['markdown_matched']}/{native_allocation['markdown_rows']} | present `{native_allocation['markdown_present']}`, unmatched {native_allocation['markdown_unmatched']} |",
             "",
         ]
     )
@@ -5679,14 +5854,28 @@ def main() -> int:
                 "native_allocation_present": native_allocation["present"],
                 "native_allocation_smoke_present": native_allocation["smoke_present"],
                 "native_allocation_negative_present": native_allocation["negative_present"],
+                "native_allocation_markdown_present": native_allocation["markdown_present"],
                 "native_allocation_healthy": native_allocation["healthy"],
                 "native_allocation_report_case_count": native_allocation["report_case_count"],
+                "native_allocation_report_rows": native_allocation["report_rows"],
+                "native_allocation_report_count_mismatch": native_allocation["report_count_mismatch"],
+                "native_allocation_report_balanced_rows": native_allocation["report_balanced_rows"],
+                "native_allocation_report_duplicate_cases": native_allocation["report_duplicate_cases"],
+                "native_allocation_report_unbalanced_rows": native_allocation["report_unbalanced_rows"],
                 "native_allocation_required_zero_allocation_cases": native_allocation["required_zero_allocation_cases"],
                 "native_allocation_zero_allocation_matched": native_allocation["zero_allocation_matched"],
+                "native_allocation_zero_report_matched": native_allocation["zero_report_matched"],
+                "native_allocation_zero_report_unmatched": native_allocation["zero_report_unmatched"],
                 "native_allocation_required_budget_cases": native_allocation["required_budget_cases"],
                 "native_allocation_budget_matched": native_allocation["budget_matched"],
+                "native_allocation_budget_report_matched": native_allocation["budget_report_matched"],
+                "native_allocation_budget_report_unmatched": native_allocation["budget_report_unmatched"],
                 "native_allocation_negative_case_count": native_allocation["negative_case_count"],
                 "native_allocation_negative_matched": native_allocation["negative_matched"],
+                "native_allocation_negative_unmatched": native_allocation["negative_unmatched"],
+                "native_allocation_markdown_rows": native_allocation["markdown_rows"],
+                "native_allocation_markdown_matched": native_allocation["markdown_matched"],
+                "native_allocation_markdown_unmatched": native_allocation["markdown_unmatched"],
                 "python_zlib_diff_present": python_zlib_health["present"],
                 "python_zlib_diff_ok": python_zlib_health["ok"],
                 "python_zlib_diff_healthy": python_zlib_healthy,

@@ -2808,14 +2808,26 @@ Top-level fields:
   `zstd_compare_markdown_summary_rows`, `zstd_compare_markdown_matched`,
   `zstd_compare_markdown_unmatched`
 - `native_allocation_present`, `native_allocation_smoke_present`,
-  `native_allocation_negative_present`, `native_allocation_healthy`,
-  `native_allocation_report_case_count`,
+  `native_allocation_negative_present`, `native_allocation_markdown_present`,
+  `native_allocation_healthy`, `native_allocation_report_case_count`,
+  `native_allocation_report_rows`,
+  `native_allocation_report_count_mismatch`,
+  `native_allocation_report_balanced_rows`,
+  `native_allocation_report_duplicate_cases`,
+  `native_allocation_report_unbalanced_rows`,
   `native_allocation_required_zero_allocation_cases`,
   `native_allocation_zero_allocation_matched`,
+  `native_allocation_zero_report_matched`,
+  `native_allocation_zero_report_unmatched`,
   `native_allocation_required_budget_cases`,
   `native_allocation_budget_matched`,
+  `native_allocation_budget_report_matched`,
+  `native_allocation_budget_report_unmatched`,
   `native_allocation_negative_case_count`,
-  `native_allocation_negative_matched`
+  `native_allocation_negative_matched`,
+  `native_allocation_negative_unmatched`, `native_allocation_markdown_rows`,
+  `native_allocation_markdown_matched`,
+  `native_allocation_markdown_unmatched`
 - `python_zlib_diff_present`, `python_zlib_diff_ok`,
   `python_zlib_diff_healthy`, `python_zlib_diff_payloads`,
   `python_zlib_diff_large_file_payloads`,
@@ -3352,14 +3364,28 @@ Example:
   "native_allocation_present": false,
   "native_allocation_smoke_present": false,
   "native_allocation_negative_present": false,
+  "native_allocation_markdown_present": false,
   "native_allocation_healthy": false,
   "native_allocation_report_case_count": 0,
+  "native_allocation_report_rows": 0,
+  "native_allocation_report_count_mismatch": 0,
+  "native_allocation_report_balanced_rows": 0,
+  "native_allocation_report_duplicate_cases": 0,
+  "native_allocation_report_unbalanced_rows": 0,
   "native_allocation_required_zero_allocation_cases": 0,
   "native_allocation_zero_allocation_matched": 0,
+  "native_allocation_zero_report_matched": 0,
+  "native_allocation_zero_report_unmatched": 0,
   "native_allocation_required_budget_cases": 0,
   "native_allocation_budget_matched": 0,
+  "native_allocation_budget_report_matched": 0,
+  "native_allocation_budget_report_unmatched": 0,
   "native_allocation_negative_case_count": 0,
   "native_allocation_negative_matched": 0,
+  "native_allocation_negative_unmatched": 0,
+  "native_allocation_markdown_rows": 0,
+  "native_allocation_markdown_matched": 0,
+  "native_allocation_markdown_unmatched": 0,
   "python_zlib_diff_present": false,
   "python_zlib_diff_ok": false,
   "python_zlib_diff_healthy": false,
@@ -4359,7 +4385,9 @@ Produced by:
 zig build run-native-allocation-smoke
 ```
 
-This smoke report gates the allocation report by requiring selected
+Dashboard aggregate health also cross-checks the retained Markdown companion
+against the JSON allocation report and verifies that smoke rows still match the
+measured report rows. This smoke report gates the allocation report by requiring selected
 caller-owned/native decode paths to remain zero-allocation, including AnyDecoder,
 ZlibDecoder chunk/dictionary/varied-PNG scanline decode and PNG filter reconstruction,
 the PNG zlib scanline row pipeline, fixed/dynamic contiguous/chunked streaming

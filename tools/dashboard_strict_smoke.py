@@ -63,6 +63,7 @@ BR_STATIC_REPORT_NEGATIVE_ARTIFACT = "vort-br-static-dictionary-report-negative-
 NATIVE_FUZZ_ARTIFACT = "vort-native-fuzz-corpus.json"
 NATIVE_FUZZ_COVERAGE_ARTIFACT = "vort-native-fuzz-corpus-coverage-smoke.json"
 NATIVE_ALLOCATION_REPORT_ARTIFACT = "vort-native-allocation-report.json"
+NATIVE_ALLOCATION_REPORT_MARKDOWN_ARTIFACT = "vort-native-allocation-report.md"
 NATIVE_ALLOCATION_SMOKE_ARTIFACT = "vort-native-allocation-smoke.json"
 NATIVE_ALLOCATION_NEGATIVE_ARTIFACT = "vort-native-allocation-negative-smoke.json"
 NATIVE_LIBRARY_BENCH_ARTIFACT = "vort-native-library-bench.csv"
@@ -367,13 +368,14 @@ def write_producer_map(
         artifact_metadata[NATIVE_FUZZ_ARTIFACT] = {"expected_format": "json", "smoke_gate": "zig build run-native-fuzz-corpus-dashboard"}
         artifact_metadata[NATIVE_FUZZ_COVERAGE_ARTIFACT] = {"expected_format": "json", "smoke_gate": "zig build run-native-fuzz-corpus-coverage-smoke"}
     if include_native_allocation_smoke:
-        for artifact, smoke_gate in (
-            (NATIVE_ALLOCATION_REPORT_ARTIFACT, "zig build run-native-allocation-report-dashboard"),
-            (NATIVE_ALLOCATION_SMOKE_ARTIFACT, "zig build run-native-allocation-smoke"),
-            (NATIVE_ALLOCATION_NEGATIVE_ARTIFACT, "zig build run-native-allocation-negative-smoke"),
+        for artifact, expected_format, smoke_gate in (
+            (NATIVE_ALLOCATION_REPORT_ARTIFACT, "json", "zig build run-native-allocation-report-dashboard"),
+            (NATIVE_ALLOCATION_REPORT_MARKDOWN_ARTIFACT, "md", "zig build run-native-allocation-report-dashboard"),
+            (NATIVE_ALLOCATION_SMOKE_ARTIFACT, "json", "zig build run-native-allocation-smoke"),
+            (NATIVE_ALLOCATION_NEGATIVE_ARTIFACT, "json", "zig build run-native-allocation-negative-smoke"),
         ):
             artifact_metadata[artifact] = {
-                "expected_format": "json",
+                "expected_format": expected_format,
                 "smoke_gate": smoke_gate,
             }
     if include_native_library_bench_smoke:
@@ -508,6 +510,7 @@ def write_producer_map(
         exact[NATIVE_FUZZ_COVERAGE_ARTIFACT] = "zig build run-native-fuzz-corpus-coverage-smoke"
     if include_native_allocation_exact:
         exact[NATIVE_ALLOCATION_REPORT_ARTIFACT] = "zig build run-native-allocation-report-dashboard"
+        exact[NATIVE_ALLOCATION_REPORT_MARKDOWN_ARTIFACT] = "zig build run-native-allocation-report-dashboard"
         exact[NATIVE_ALLOCATION_SMOKE_ARTIFACT] = "zig build run-native-allocation-smoke"
         exact[NATIVE_ALLOCATION_NEGATIVE_ARTIFACT] = "zig build run-native-allocation-negative-smoke"
     if include_native_library_bench_exact:
@@ -2529,6 +2532,17 @@ def write_native_allocation_artifacts(root: Path) -> None:
         ],
     }
     (root / NATIVE_ALLOCATION_REPORT_ARTIFACT).write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    markdown_lines = [
+        "# Native allocation strict-smoke report",
+        "",
+        "| case | input bytes | output bytes | allocations | deallocations | allocated bytes | freed bytes |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for row in report["cases"]:
+        markdown_lines.append(
+            f"| {row['case']} | {row['input_bytes']} | {row['output_bytes']} | {row['allocations']} | {row['deallocations']} | {row['allocated_bytes']} | {row['freed_bytes']} |"
+        )
+    (root / NATIVE_ALLOCATION_REPORT_MARKDOWN_ARTIFACT).write_text("\n".join(markdown_lines) + "\n")
     (root / NATIVE_ALLOCATION_SMOKE_ARTIFACT).write_text(json.dumps(smoke, indent=2, sort_keys=True) + "\n")
     (root / NATIVE_ALLOCATION_NEGATIVE_ARTIFACT).write_text(json.dumps(negative, indent=2, sort_keys=True) + "\n")
 
@@ -3679,8 +3693,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 73/73 | 0 | allowed missing 0 |",
-                    "| smoke gates | 73/73 | 0 | required missing 0 |",
+                    "| producer steps | 74/74 | 0 | allowed missing 0 |",
+                    "| smoke gates | 74/74 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -4083,9 +4097,13 @@ def main() -> int:
                     "## Native allocation coverage",
                     "| category | count | detail |",
                     "| report cases | 3 | present `True` |",
+                    "| report rows | 3/3 | balanced 3, count mismatch 0, duplicate 0, unbalanced 0 |",
                     "| zero-allocation cases | 2/2 | smoke present `True` |",
+                    "| zero/report drift | 2/2 | unmatched 0 |",
                     "| budget cases | 1/1 | healthy `True` |",
-                    "| negative smoke cases | 1/1 | present `True` |",
+                    "| budget/report drift | 1/1 | unmatched 0 |",
+                    "| negative smoke cases | 1/1 | present `True`, unmatched 0 |",
+                    "| Markdown rows | 3/3 | present `True`, unmatched 0 |",
                 ],
             )
         )
