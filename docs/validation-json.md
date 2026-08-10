@@ -2705,7 +2705,11 @@ Top-level fields:
   `chunked_zlib_bench_rows`, `chunked_zlib_bench_expected_rows`,
   `chunked_zlib_bench_positive_rows`, `chunked_zlib_bench_shape_rows`,
   `chunked_zlib_bench_chunk_count_rows`, `chunked_zlib_bench_ratio_rows`,
-  `chunked_zlib_bench_missing_cases`
+  `chunked_zlib_bench_missing_cases`,
+  `chunked_zlib_bench_markdown_present`,
+  `chunked_zlib_bench_markdown_rows`,
+  `chunked_zlib_bench_markdown_matched`,
+  `chunked_zlib_bench_markdown_unmatched`
 - `png_streaming_zlib_bench_present`, `png_streaming_zlib_bench_healthy`,
   `png_streaming_zlib_bench_rows`,
   `png_streaming_zlib_bench_expected_rows`,
@@ -3273,6 +3277,10 @@ Example:
   "chunked_zlib_bench_chunk_count_rows": 0,
   "chunked_zlib_bench_ratio_rows": 0,
   "chunked_zlib_bench_missing_cases": [],
+  "chunked_zlib_bench_markdown_present": false,
+  "chunked_zlib_bench_markdown_rows": 0,
+  "chunked_zlib_bench_markdown_matched": 0,
+  "chunked_zlib_bench_markdown_unmatched": 0,
   "png_streaming_zlib_bench_present": false,
   "png_streaming_zlib_bench_healthy": false,
   "png_streaming_zlib_bench_rows": 0,

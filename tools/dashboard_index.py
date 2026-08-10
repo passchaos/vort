@@ -3112,6 +3112,7 @@ def png_scanline_bench_health(artifacts: list[Path]) -> dict:
 
 
 def chunked_zlib_bench_health(artifacts: list[Path]) -> dict:
+    markdown = next((artifact for artifact in artifacts if artifact.name == "vort-chunked-zlib-bench-report.md"), None)
     expected_cases = {
         "png-rgb8-dynamic-64b": {
             "encoder": "best",
@@ -3183,6 +3184,62 @@ def chunked_zlib_bench_health(artifacts: list[Path]) -> dict:
             return False
         return abs(reported - computed) <= 0.005
 
+    def markdown_cells(line: str) -> list[str]:
+        return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+    def markdown_row_matches(row: dict[str, str], cells: list[str]) -> bool:
+        if len(cells) != 18:
+            return False
+        try:
+            int_fields = (
+                ("input_bytes", 2),
+                ("zlib_bytes", 3),
+                ("chunk_bytes", 4),
+                ("chunk_count", 5),
+                ("iterations", 7),
+                ("repeat", 8),
+            )
+            float_fields = (
+                ("contiguous_mib_s", 9, 0.005),
+                ("chunk_join_mib_s", 10, 0.005),
+                ("chunk_direct_mib_s", 11, 0.005),
+                ("chunk_exact_mib_s", 12, 0.005),
+                ("direct_over_contiguous", 14, 0.001),
+                ("direct_over_join", 15, 0.001),
+                ("join_over_contiguous", 16, 0.001),
+                ("exact_over_direct", 17, 0.001),
+            )
+            return (
+                cells[0] == row.get("case")
+                and cells[1] == row.get("encoder")
+                and all(int(cells[index]) == int(row.get(field) or "0") for field, index in int_fields)
+                and cells[6] == row.get("include_empty_chunks")
+                and cells[13] == row.get("direct_strategy")
+                and all(abs(float(cells[index]) - float(row.get(field) or "0")) <= tolerance for field, index, tolerance in float_fields)
+            )
+        except ValueError:
+            return False
+
+    def markdown_health(rows: list[dict[str, str]]) -> tuple[bool, int, int, int]:
+        if markdown is None:
+            return (False, 0, 0, 1)
+        try:
+            markdown_rows_by_case = {
+                cells[0]: cells
+                for line in markdown.read_text(errors="replace").splitlines()
+                if line.startswith("| ")
+                for cells in [markdown_cells(line)]
+                if cells and cells[0] not in {"case", "---"}
+            }
+        except Exception:
+            return (True, len(rows), 0, len(rows) or 1)
+        matched = 0
+        for row in rows:
+            cells = markdown_rows_by_case.get(str(row.get("case") or ""))
+            if cells is not None and markdown_row_matches(row, cells):
+                matched += 1
+        return (True, len(rows), matched, len(rows) - matched)
+
     for artifact in artifacts:
         if artifact.name != "vort-chunked-zlib-bench-report-repeat3.csv":
             continue
@@ -3253,6 +3310,7 @@ def chunked_zlib_bench_health(artifacts: list[Path]) -> dict:
                 ratio_rows += 1
         missing_cases = sorted(set(expected_cases) - seen)
         row_count = len(rows)
+        markdown_present, markdown_rows, markdown_matched, markdown_unmatched = markdown_health(rows)
         healthy = (
             row_count == len(expected_cases)
             and not missing_cases
@@ -3260,6 +3318,9 @@ def chunked_zlib_bench_health(artifacts: list[Path]) -> dict:
             and shape_rows == row_count
             and chunk_count_rows == row_count
             and ratio_rows == row_count
+            and markdown_present
+            and markdown_rows == row_count
+            and markdown_unmatched == 0
         )
         return {
             "present": True,
@@ -3271,6 +3332,10 @@ def chunked_zlib_bench_health(artifacts: list[Path]) -> dict:
             "chunk_count_rows": chunk_count_rows,
             "ratio_rows": ratio_rows,
             "missing_cases": missing_cases,
+            "markdown_present": markdown_present,
+            "markdown_rows": markdown_rows,
+            "markdown_matched": markdown_matched,
+            "markdown_unmatched": markdown_unmatched,
         }
     return {
         "present": False,
@@ -3282,6 +3347,10 @@ def chunked_zlib_bench_health(artifacts: list[Path]) -> dict:
         "chunk_count_rows": 0,
         "ratio_rows": 0,
         "missing_cases": [],
+        "markdown_present": False,
+        "markdown_rows": 0,
+        "markdown_matched": 0,
+        "markdown_unmatched": 0,
     }
 
 
@@ -5702,7 +5771,7 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_png_scanline_bench_artifact")
     elif not png_scanline_bench_healthy:
         validation_unhealthy_reasons.append("png_scanline_bench_failed")
-    if not chunked_zlib_bench["present"]:
+    if not (chunked_zlib_bench["present"] and chunked_zlib_bench["markdown_present"]):
         validation_unhealthy_reasons.append("missing_chunked_zlib_bench_artifact")
     elif not chunked_zlib_bench_healthy:
         validation_unhealthy_reasons.append("chunked_zlib_bench_failed")
@@ -6123,6 +6192,7 @@ def main() -> int:
             f"| rows | {chunked_zlib_bench['row_count']} | expected {chunked_zlib_bench['expected_rows']}, present `{chunked_zlib_bench['present']}` |",
             f"| shape rows | {chunked_zlib_bench['shape_rows']} | positive rows {chunked_zlib_bench['positive_rows']} |",
             f"| ratio rows | {chunked_zlib_bench['ratio_rows']} | chunk-count rows {chunked_zlib_bench['chunk_count_rows']}, missing cases {len(chunked_zlib_bench['missing_cases'])}, healthy `{chunked_zlib_bench['healthy']}` |",
+            f"| Markdown rows | {chunked_zlib_bench['markdown_matched']}/{chunked_zlib_bench['markdown_rows']} | present `{chunked_zlib_bench['markdown_present']}`, unmatched {chunked_zlib_bench['markdown_unmatched']} |",
             "",
         ]
     )
@@ -6910,6 +6980,10 @@ def main() -> int:
                 "chunked_zlib_bench_chunk_count_rows": chunked_zlib_bench["chunk_count_rows"],
                 "chunked_zlib_bench_ratio_rows": chunked_zlib_bench["ratio_rows"],
                 "chunked_zlib_bench_missing_cases": chunked_zlib_bench["missing_cases"],
+                "chunked_zlib_bench_markdown_present": chunked_zlib_bench["markdown_present"],
+                "chunked_zlib_bench_markdown_rows": chunked_zlib_bench["markdown_rows"],
+                "chunked_zlib_bench_markdown_matched": chunked_zlib_bench["markdown_matched"],
+                "chunked_zlib_bench_markdown_unmatched": chunked_zlib_bench["markdown_unmatched"],
                 "png_streaming_zlib_bench_present": png_streaming_zlib_bench["present"],
                 "png_streaming_zlib_bench_healthy": png_streaming_zlib_bench["healthy"],
                 "png_streaming_zlib_bench_rows": png_streaming_zlib_bench["row_count"],

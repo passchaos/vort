@@ -1030,6 +1030,7 @@
     "vort-checksum-bench.csv",
     "vort-chunk-cursor-bench.csv",
     "vort-chunked-zlib-bench-report-repeat3.csv",
+    "vort-chunked-zlib-bench-report.md",
     "vort-dashboard-category-negative-smoke.json",
     "vort-dashboard-config-index-negative-smoke.json",
     "vort-dashboard-config-index-smoke.json",

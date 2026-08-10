@@ -379,20 +379,20 @@ pub fn build(b: *std.Build) void {
     const chunked_zlib_bench_report_csv_repeat3_step = b.step("run-chunked-zlib-bench-report-csv-repeat3", "Write median-of-3 contiguous vs chunked zlib decode throughput CSV to zig-out");
     chunked_zlib_bench_report_csv_repeat3_step.dependOn(&run_chunked_zlib_bench_report_csv_repeat3.step);
 
+    const run_chunked_zlib_bench_report_dashboard = b.addRunArtifact(chunked_zlib_bench_report_exe);
+    run_chunked_zlib_bench_report_dashboard.addArgs(&.{ "--repeat", "3", "--csv", "zig-out/vort-chunked-zlib-bench-report-repeat3.csv", "--markdown", "zig-out/vort-chunked-zlib-bench-report.md" });
+    const chunked_zlib_bench_report_dashboard_step = b.step("run-chunked-zlib-bench-report-dashboard", "Write repeat3 contiguous vs chunked zlib decode dashboard artifacts");
+    chunked_zlib_bench_report_dashboard_step.dependOn(&run_chunked_zlib_bench_report_dashboard.step);
+
     const chunked_zlib_bench_report_gate = b.addSystemCommand(&.{
         "python3",
         "tools/chunked_zlib_bench_gate.py",
         "--csv",
         "zig-out/vort-chunked-zlib-bench-report-repeat3.csv",
     });
-    chunked_zlib_bench_report_gate.step.dependOn(chunked_zlib_bench_report_csv_repeat3_step);
+    chunked_zlib_bench_report_gate.step.dependOn(chunked_zlib_bench_report_dashboard_step);
     const chunked_zlib_bench_report_gate_step = b.step("run-chunked-zlib-bench-report-gate", "Validate repeat3 contiguous vs chunked zlib decode throughput CSV");
     chunked_zlib_bench_report_gate_step.dependOn(&chunked_zlib_bench_report_gate.step);
-
-    const run_chunked_zlib_bench_report_dashboard = b.addRunArtifact(chunked_zlib_bench_report_exe);
-    run_chunked_zlib_bench_report_dashboard.addArgs(&.{ "--csv", "zig-out/vort-chunked-zlib-bench-report.csv", "--markdown", "zig-out/vort-chunked-zlib-bench-report.md" });
-    const chunked_zlib_bench_report_dashboard_step = b.step("run-chunked-zlib-bench-report-dashboard", "Write contiguous vs chunked zlib decode throughput dashboard artifacts");
-    chunked_zlib_bench_report_dashboard_step.dependOn(&run_chunked_zlib_bench_report_dashboard.step);
 
     const png_streaming_zlib_bench_report_exe = b.addExecutable(.{
         .name = "vort-png-streaming-zlib-bench-report",

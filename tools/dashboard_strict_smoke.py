@@ -43,6 +43,7 @@ DEFLATE_EXTRA_BITS_BENCH_ARTIFACT = "vort-deflate-extra-bits-bench.csv"
 DICTIONARY_DECODE_BENCH_ARTIFACT = "vort-dictionary-decode-bench.csv"
 PNG_SCANLINE_BENCH_ARTIFACT = "vort-png-scanline-bench.csv"
 CHUNKED_ZLIB_BENCH_ARTIFACT = "vort-chunked-zlib-bench-report-repeat3.csv"
+CHUNKED_ZLIB_BENCH_MARKDOWN_ARTIFACT = "vort-chunked-zlib-bench-report.md"
 PNG_STREAMING_ZLIB_BENCH_ARTIFACT = "vort-png-streaming-zlib-bench-report-repeat3.csv"
 DEFLATE_DYNAMIC_DECODE_PROFILE_ARTIFACT = "vort-deflate-dynamic-decode-profile.csv"
 FUZZ_CORPUS_ARTIFACT = "vort-deflate-wrapper-fuzz-corpus.json"
@@ -322,6 +323,10 @@ def write_producer_map(
             "expected_format": "csv",
             "smoke_gate": "zig build run-chunked-zlib-bench-report-gate",
         }
+        artifact_metadata[CHUNKED_ZLIB_BENCH_MARKDOWN_ARTIFACT] = {
+            "expected_format": "md",
+            "smoke_gate": "zig build run-chunked-zlib-bench-report-gate",
+        }
     if include_png_streaming_zlib_bench_smoke:
         artifact_metadata[PNG_STREAMING_ZLIB_BENCH_ARTIFACT] = {
             "expected_format": "csv",
@@ -516,6 +521,7 @@ def write_producer_map(
         exact[PNG_SCANLINE_BENCH_ARTIFACT] = "zig build run-png-scanline-bench-gate"
     if include_chunked_zlib_bench_exact:
         exact[CHUNKED_ZLIB_BENCH_ARTIFACT] = "zig build run-chunked-zlib-bench-report-gate"
+        exact[CHUNKED_ZLIB_BENCH_MARKDOWN_ARTIFACT] = "zig build run-chunked-zlib-bench-report-gate"
     if include_png_streaming_zlib_bench_exact:
         exact[PNG_STREAMING_ZLIB_BENCH_ARTIFACT] = "zig build run-png-streaming-zlib-bench-report-gate"
     if include_deflate_dynamic_decode_profile_exact:
@@ -1974,6 +1980,34 @@ def write_chunked_zlib_bench_csv(path: Path, *, healthy: bool = True) -> None:
             "12345",
         ]
         lines.append(",".join(values))
+    path.write_text("\n".join(lines) + "\n")
+
+
+def write_chunked_zlib_bench_markdown(path: Path, *, healthy: bool = True) -> None:
+    with tempfile.NamedTemporaryFile("w+", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+    try:
+        write_chunked_zlib_bench_csv(tmp_path, healthy=healthy)
+        with tmp_path.open(newline="") as f:
+            rows = list(csv.DictReader(f))
+    finally:
+        tmp_path.unlink(missing_ok=True)
+    lines = [
+        "# Chunked zlib decode benchmark",
+        "",
+        "| case | encoder | input bytes | zlib bytes | chunk bytes | chunks | empty chunks | iterations | repeat | contiguous MiB/s | join MiB/s | direct MiB/s | exact alloc MiB/s | direct strategy | direct/contiguous | direct/join | join/contiguous | exact/direct |",
+        "| --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: |",
+    ]
+    for row in rows:
+        lines.append(
+            f"| {row['case']} | {row['encoder']} | {int(row['input_bytes'])} | {int(row['zlib_bytes'])} | "
+            f"{int(row['chunk_bytes'])} | {int(row['chunk_count'])} | {row['include_empty_chunks']} | "
+            f"{int(row['iterations'])} | {int(row['repeat'])} | {float(row['contiguous_mib_s']):.2f} | "
+            f"{float(row['chunk_join_mib_s']):.2f} | {float(row['chunk_direct_mib_s']):.2f} | "
+            f"{float(row['chunk_exact_mib_s']):.2f} | {row['direct_strategy']} | "
+            f"{float(row['direct_over_contiguous']):.3f} | {float(row['direct_over_join']):.3f} | "
+            f"{float(row['join_over_contiguous']):.3f} | {float(row['exact_over_direct']):.3f} |"
+        )
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -3778,6 +3812,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_dictionary_decode_bench_csv(root / DICTIONARY_DECODE_BENCH_ARTIFACT)
     write_png_scanline_bench_csv(root / PNG_SCANLINE_BENCH_ARTIFACT)
     write_chunked_zlib_bench_csv(root / CHUNKED_ZLIB_BENCH_ARTIFACT)
+    write_chunked_zlib_bench_markdown(root / CHUNKED_ZLIB_BENCH_MARKDOWN_ARTIFACT)
     write_png_streaming_zlib_bench_csv(root / PNG_STREAMING_ZLIB_BENCH_ARTIFACT)
     write_deflate_dynamic_decode_profile_csv(root / DEFLATE_DYNAMIC_DECODE_PROFILE_ARTIFACT)
     write_fuzz_corpus_report(root / FUZZ_CORPUS_ARTIFACT)
@@ -4207,8 +4242,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 83/83 | 0 | allowed missing 0 |",
-                    "| smoke gates | 83/83 | 0 | required missing 0 |",
+                    "| producer steps | 84/84 | 0 | allowed missing 0 |",
+                    "| smoke gates | 84/84 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -4564,6 +4599,7 @@ def main() -> int:
                     "| rows | 8 | expected 8, present `True` |",
                     "| shape rows | 8 | positive rows 8 |",
                     "| ratio rows | 8 | chunk-count rows 8, missing cases 0, healthy `True` |",
+                    "| Markdown rows | 8/8 | present `True`, unmatched 0 |",
                 ],
             )
         )
@@ -5043,9 +5079,11 @@ def main() -> int:
                 write_producer_map(producer_map)
             elif fixture == "missing_chunked_zlib_bench_artifact":
                 (fixture_root / CHUNKED_ZLIB_BENCH_ARTIFACT).unlink()
+                (fixture_root / CHUNKED_ZLIB_BENCH_MARKDOWN_ARTIFACT).unlink()
                 write_producer_map(producer_map)
             elif fixture == "chunked_zlib_bench_failed":
                 write_chunked_zlib_bench_csv(fixture_root / CHUNKED_ZLIB_BENCH_ARTIFACT, healthy=False)
+                write_chunked_zlib_bench_markdown(fixture_root / CHUNKED_ZLIB_BENCH_MARKDOWN_ARTIFACT, healthy=False)
                 write_producer_map(producer_map)
             elif fixture == "missing_png_streaming_zlib_bench_artifact":
                 (fixture_root / PNG_STREAMING_ZLIB_BENCH_ARTIFACT).unlink()

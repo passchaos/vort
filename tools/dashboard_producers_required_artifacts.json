@@ -683,7 +683,7 @@
       "expected_format": "md",
       "name": "vort-chunked-zlib-bench-report.md",
       "producer_step": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-dashboard",
-      "required_smoke_gate": false,
+      "required_smoke_gate": true,
       "smoke_gate": "zig build -Doptimize=ReleaseFast run-chunked-zlib-bench-report-dashboard"
     },
     {

@@ -668,9 +668,9 @@
     {
       "category": "benchmark",
       "name": "vort-chunked-zlib-bench-report-repeat3.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
     },
     {
       "category": "benchmark",
@@ -682,9 +682,9 @@
     {
       "category": "benchmark",
       "name": "vort-chunked-zlib-bench-report.md",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
     },
     {
       "category": "validation",

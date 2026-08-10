@@ -145,6 +145,7 @@ def main() -> int:
         dictionary_decode_bench_path = ROOT / "zig-out" / "vort-dictionary-decode-bench.csv"
         png_scanline_bench_path = ROOT / "zig-out" / "vort-png-scanline-bench.csv"
         chunked_zlib_bench_path = ROOT / "zig-out" / "vort-chunked-zlib-bench-report-repeat3.csv"
+        chunked_zlib_bench_markdown_path = ROOT / "zig-out" / "vort-chunked-zlib-bench-report.md"
         png_streaming_zlib_bench_path = ROOT / "zig-out" / "vort-png-streaming-zlib-bench-report-repeat3.csv"
         deflate_dynamic_decode_profile_path = ROOT / "zig-out" / "vort-deflate-dynamic-decode-profile.csv"
         python_zlib_diff_path = ROOT / "zig-out" / "vort-python-zlib-diff-smoke.json"
@@ -990,6 +991,7 @@ def main() -> int:
         shutil.copyfile(dictionary_decode_bench_path, root / "vort-dictionary-decode-bench.csv")
         shutil.copyfile(png_scanline_bench_path, root / "vort-png-scanline-bench.csv")
         shutil.copyfile(chunked_zlib_bench_path, root / "vort-chunked-zlib-bench-report-repeat3.csv")
+        shutil.copyfile(chunked_zlib_bench_markdown_path, root / "vort-chunked-zlib-bench-report.md")
         shutil.copyfile(png_streaming_zlib_bench_path, root / "vort-png-streaming-zlib-bench-report-repeat3.csv")
         shutil.copyfile(deflate_dynamic_decode_profile_path, root / "vort-deflate-dynamic-decode-profile.csv")
         shutil.copyfile(fuzz_report_path, root / "vort-deflate-wrapper-fuzz-corpus.json")
@@ -1481,6 +1483,10 @@ def main() -> int:
         assert dashboard["chunked_zlib_bench_chunk_count_rows"] == len(chunked_zlib_bench_rows)
         assert dashboard["chunked_zlib_bench_ratio_rows"] == len(chunked_zlib_bench_rows)
         assert dashboard["chunked_zlib_bench_missing_cases"] == []
+        assert dashboard["chunked_zlib_bench_markdown_present"] is True
+        assert dashboard["chunked_zlib_bench_markdown_rows"] == len(chunked_zlib_bench_rows)
+        assert dashboard["chunked_zlib_bench_markdown_matched"] == len(chunked_zlib_bench_rows)
+        assert dashboard["chunked_zlib_bench_markdown_unmatched"] == 0
         assert dashboard["png_streaming_zlib_bench_present"] is True
         assert dashboard["png_streaming_zlib_bench_healthy"] is True
         assert dashboard["png_streaming_zlib_bench_rows"] == len(png_streaming_zlib_bench_rows)

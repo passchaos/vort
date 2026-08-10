@@ -1305,7 +1305,8 @@
         },
         "chunked_zlib_bench_healthy": {
           "all": [
-            "chunked_zlib_bench_present"
+            "chunked_zlib_bench_present",
+            "chunked_zlib_bench_markdown_present"
           ],
           "positive": [
             "chunked_zlib_bench_rows",
@@ -1313,10 +1314,13 @@
             "chunked_zlib_bench_positive_rows",
             "chunked_zlib_bench_shape_rows",
             "chunked_zlib_bench_chunk_count_rows",
-            "chunked_zlib_bench_ratio_rows"
+            "chunked_zlib_bench_ratio_rows",
+            "chunked_zlib_bench_markdown_rows",
+            "chunked_zlib_bench_markdown_matched"
           ],
           "zero": [
-            "chunked_zlib_bench_missing_cases"
+            "chunked_zlib_bench_missing_cases",
+            "chunked_zlib_bench_markdown_unmatched"
           ]
         },
         "png_streaming_zlib_bench_healthy": {
@@ -2129,6 +2133,10 @@
         "chunked_zlib_bench_chunk_count_rows": "int",
         "chunked_zlib_bench_ratio_rows": "int",
         "chunked_zlib_bench_missing_cases": "list",
+        "chunked_zlib_bench_markdown_present": "bool",
+        "chunked_zlib_bench_markdown_rows": "int",
+        "chunked_zlib_bench_markdown_matched": "int",
+        "chunked_zlib_bench_markdown_unmatched": "int",
         "png_streaming_zlib_bench_present": "bool",
         "png_streaming_zlib_bench_healthy": "bool",
         "png_streaming_zlib_bench_rows": "int",
@@ -2660,6 +2668,16 @@
           "left": "level_report_markdown_detail_matched",
           "op": "eq",
           "right": "level_report_markdown_detail_rows"
+        },
+        {
+          "left": "chunked_zlib_bench_markdown_rows",
+          "op": "eq",
+          "right": "chunked_zlib_bench_rows"
+        },
+        {
+          "left": "chunked_zlib_bench_markdown_matched",
+          "op": "eq",
+          "right": "chunked_zlib_bench_markdown_rows"
         }
       ]
     },

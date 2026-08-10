@@ -2612,3 +2612,8 @@ architecture blindly.
   Aggregate health now exposes Markdown detail-row matched/unmatched counters
   alongside the existing best-row summary checks before level-report coverage
   can pass.
+- Tightened chunked zlib dashboard health by requiring the retained
+  `vort-chunked-zlib-bench-report.md` rows to match the repeat3 CSV gate rows.
+  The dashboard generation step now writes the CSV/Markdown pair together, and
+  aggregate health exposes Markdown matched/unmatched counters before chunked
+  zlib benchmark coverage can pass.
