@@ -79,6 +79,7 @@ ZSTD_COMPARE_BLOCK_SWEEP_MARKDOWN_ARTIFACT = "vort-zstd-compare-block-sweep.md"
 NATIVE_SUMMARY_ERROR_ARTIFACT = "vort-native-summary-error-dashboard.json"
 NATIVE_SUMMARY_ERROR_NEGATIVE_ARTIFACT = "vort-native-summary-error-negative-smoke.json"
 NATIVE_CODEC_PROBES_ARTIFACT = "vort-native-codec-probes.json"
+NATIVE_CODEC_PROBES_MARKDOWN_ARTIFACT = "vort-native-codec-probes.md"
 LZ4_NATIVE_SUMMARY_ARTIFACT = "vort-lz4-native-stream-summary.json"
 ZSTD_NATIVE_SUMMARY_ARTIFACT = "vort-zstd-native-stream-summary.json"
 NATIVE_TIER_RANGE_ARTIFACT = "vort-native-tier-range-bench-gate.json"
@@ -414,6 +415,10 @@ def write_producer_map(
             "expected_format": "json",
             "smoke_gate": "zig build run-native-codec-probes-dashboard",
         }
+        artifact_metadata[NATIVE_CODEC_PROBES_MARKDOWN_ARTIFACT] = {
+            "expected_format": "md",
+            "smoke_gate": "zig build run-native-codec-probes-dashboard",
+        }
     if include_lz4_native_summary_smoke:
         artifact_metadata[LZ4_NATIVE_SUMMARY_ARTIFACT] = {
             "expected_format": "json",
@@ -531,6 +536,7 @@ def write_producer_map(
         exact[NATIVE_SUMMARY_ERROR_NEGATIVE_ARTIFACT] = "zig build run-native-summary-error-negative-smoke"
     if include_native_codec_probes_exact:
         exact[NATIVE_CODEC_PROBES_ARTIFACT] = "zig build run-native-codec-probes-dashboard"
+        exact[NATIVE_CODEC_PROBES_MARKDOWN_ARTIFACT] = "zig build run-native-codec-probes-dashboard"
     if include_lz4_native_summary_exact:
         exact[LZ4_NATIVE_SUMMARY_ARTIFACT] = "zig build run-lz4-native-summary-dashboard"
     if include_zstd_native_summary_exact:
@@ -3049,6 +3055,46 @@ def write_native_codec_probes(path: Path) -> None:
         "probes": probes,
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    markdown_path = path.with_suffix(".md")
+    markdown_lines = [
+        "# Native codec probes",
+        "",
+        "- ok: `true`",
+        f"- total cases: `{payload['total_cases']}`",
+        "",
+        "## Coverage",
+        "",
+        "| codec | surface | present | ok | probes | cases |",
+        "| --- | --- | --- | --- | ---: | ---: |",
+    ]
+    for row in payload["coverage"]:
+        markdown_lines.append(
+            f"| {row['codec']} | {row['surface']} | `true` | `true` | {row['ok_probe_count']}/{row['probe_count']} | {row['cases']} |"
+        )
+    markdown_lines.extend([
+        "",
+        "## Capabilities",
+        "",
+        "| capability | present | ok | probes | cases |",
+        "| --- | --- | --- | ---: | ---: |",
+    ])
+    for row in payload["capabilities"]:
+        markdown_lines.append(
+            f"| {row['capability']} | `true` | `true` | {row['ok_probe_count']}/{row['probe_count']} | {row['cases']} |"
+        )
+    markdown_lines.extend([
+        "",
+        "## Probes",
+        "",
+        "| probe | ok | cases | returncode | timed out | timeout seconds |",
+        "| --- | --- | ---: | ---: | --- | ---: |",
+    ])
+    for probe in payload["probes"]:
+        markdown_lines.append(
+            f"| {probe['label']} | `true` | {probe['cases']} | 0 | `false` | {probe['timeout_seconds']:g} |"
+        )
+    markdown_lines.append("")
+    markdown_path.write_text("\n".join(markdown_lines))
 
 def write_zstd_native_summary(path: Path, *, healthy: bool = True) -> None:
     payload = {
@@ -3693,8 +3739,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 74/74 | 0 | allowed missing 0 |",
-                    "| smoke gates | 74/74 | 0 | required missing 0 |",
+                    "| producer steps | 75/75 | 0 | allowed missing 0 |",
+                    "| smoke gates | 75/75 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -3825,6 +3871,9 @@ def main() -> int:
                     "## Native codec probe executables",
                     "| probe | ok | cases | returncode | timed out |",
                     "| `zstd-native-frame-probe` | `True` | 213 | 0 | `False` |",
+                    "## Native codec probe Markdown drift",
+                    "| Markdown checks | 29/29 | present `True`, unmatched 0 |",
+                    "| coverage rows | 4/4 | case sum 362/362 |",
                 ],
             )
         )

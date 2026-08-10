@@ -2555,3 +2555,8 @@ architecture blindly.
   allocation/free byte balance, zero-allocation and budget smoke rows against
   measured report rows, negative-smoke matches, and Markdown table drift before
   native allocation coverage can pass.
+- Tightened native codec probe dashboard health by requiring the retained
+  `vort-native-codec-probes.md` companion beside the JSON summary. Aggregate
+  health now cross-checks Markdown coverage, capability, and executable rows
+  against the JSON probe data, verifies coverage case totals against total
+  cases, and exposes Markdown drift counters in the validation dashboard.

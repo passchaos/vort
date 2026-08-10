@@ -139,6 +139,7 @@ def main() -> int:
         deflate_dynamic_decode_profile_path = ROOT / "zig-out" / "vort-deflate-dynamic-decode-profile.csv"
         python_zlib_diff_path = ROOT / "zig-out" / "vort-python-zlib-diff-smoke.json"
         native_codec_probes_path = ROOT / "zig-out" / "vort-native-codec-probes.json"
+        native_codec_probes_markdown_path = ROOT / "zig-out" / "vort-native-codec-probes.md"
         native_summary_error_dashboard_path = ROOT / "zig-out" / "vort-native-summary-error-dashboard.json"
         native_summary_error_negative_path = ROOT / "zig-out" / "vort-native-summary-error-negative-smoke.json"
         lz4_native_summary_path = ROOT / "zig-out" / "vort-lz4-native-stream-summary.json"
@@ -324,6 +325,7 @@ def main() -> int:
         assert python_zlib_diff["expected_failures"] >= 1
         validate_value_against_manifest(python_zlib_diff, schemas_def)
         native_codec_probes = json.loads(native_codec_probes_path.read_text())
+        native_codec_probes_markdown = native_codec_probes_markdown_path.read_text()
         assert native_codec_probes["schema"] == "vort.native_codec_probes"
         assert native_codec_probes["schema_version"] == 1
         assert native_codec_probes["ok"] is True
@@ -979,6 +981,7 @@ def main() -> int:
         shutil.copyfile(native_allocation_negative_smoke_path, root / "vort-native-allocation-negative-smoke.json")
         shutil.copyfile(python_zlib_diff_path, root / "vort-python-zlib-diff-smoke.json")
         shutil.copyfile(native_codec_probes_path, root / "vort-native-codec-probes.json")
+        shutil.copyfile(native_codec_probes_markdown_path, root / "vort-native-codec-probes.md")
         shutil.copyfile(native_summary_error_dashboard_path, root / "vort-native-summary-error-dashboard.json")
         shutil.copyfile(native_summary_error_negative_path, root / "vort-native-summary-error-negative-smoke.json")
         shutil.copyfile(lz4_native_summary_path, root / "vort-lz4-native-stream-summary.json")
@@ -1400,12 +1403,17 @@ def main() -> int:
         assert dashboard["python_zlib_diff_malformed_deflate_cases"] == python_zlib_diff["malformed_deflate_cases"]
         assert dashboard["python_zlib_diff_cli_successes"] == python_zlib_diff["cli_successes"]
         assert dashboard["python_zlib_diff_expected_failures"] == python_zlib_diff["expected_failures"]
+        dashboard_markdown = dashboard_path.read_text()
         assert dashboard["native_codec_probes_present"] is True
         assert dashboard["native_codec_probes_ok"] is True
+        assert dashboard["native_codec_probes_markdown_present"] is True
         assert dashboard["native_codec_probes_healthy"] is True
         assert dashboard["native_codec_probes_probe_count"] == native_codec_probes["probe_count"]
         assert dashboard["native_codec_probes_ok_probe_count"] == native_codec_probes["probe_count"]
         assert dashboard["native_codec_probes_timed_out_probes"] == 0
+        assert dashboard["native_codec_probes_coverage_rows"] == native_codec_probes["coverage_count"]
+        assert dashboard["native_codec_probes_coverage_ok_rows"] == native_codec_probes["coverage_count"]
+        assert dashboard["native_codec_probes_coverage_case_sum"] == native_codec_probes["total_cases"]
         assert dashboard["native_codec_probes_capability_count"] == native_codec_probes["capability_count"]
         assert dashboard["native_codec_probes_ok_capability_count"] == native_codec_probes["capability_count"]
         assert dashboard["native_codec_probes_lib_generated_cases"] == capabilities_by_name["lib-generated"]["cases"]
@@ -1422,6 +1430,11 @@ def main() -> int:
         }
         assert dashboard["native_codec_probes_zstd_frame_cases"] == probes_by_label["zstd-native-frame-probe"]["cases"]
         assert dashboard["native_codec_probes_zstd_dictionary_cases"] == probes_by_label["zstd-native-dictionary-probe"]["cases"]
+        assert dashboard["native_codec_probes_markdown_rows"] > 0
+        assert dashboard["native_codec_probes_markdown_matched"] == dashboard["native_codec_probes_markdown_rows"]
+        assert dashboard["native_codec_probes_markdown_unmatched"] == 0
+        assert "## Native codec probe Markdown drift" in dashboard_markdown
+        assert "## Capabilities" in native_codec_probes_markdown
         assert dashboard["native_summary_error_present"] is True
         assert dashboard["native_summary_error_healthy"] is True
         assert dashboard["native_summary_error_case_count"] == native_summary_error_dashboard["case_count"]
@@ -1454,7 +1467,6 @@ def main() -> int:
         assert dashboard["native_summary_error_negative_present"] is True
         assert dashboard["native_summary_error_negative_healthy"] is True
         assert dashboard["native_summary_error_negative_case_count"] == native_summary_error_negative["case_count"]
-        dashboard_markdown = dashboard_path.read_text()
         assert "## Native summary error codec coverage" in dashboard_markdown
         assert "| codec | cases | errors | phases | required phases | missing phases |" in dashboard_markdown
         for codec in ("lz4", "zstd"):

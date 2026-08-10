@@ -1817,7 +1817,9 @@ python3 tools/native_codec_probes_dashboard.py --json zig-out/vort-native-codec-
 ```
 
 This schema summarizes the library-level native LZ4/Zstd probes, retains the
-case counts from the frame and dictionary probe executables, adds a
+case counts from the frame and dictionary probe executables, and the dashboard
+aggregate health cross-checks the retained Markdown tables against the JSON
+coverage/capability/probe rows. It adds a
 `coverage` list keyed by codec (`lz4`/`zstd`) and surface (`frame`/`dictionary`),
 and adds a `capabilities` list for cross-cutting library behaviors such as
 lib-generated frames, incremental drains, chunked split input, reusable chunked
@@ -2840,9 +2842,12 @@ Top-level fields:
   `python_zlib_diff_malformed_deflate_cases`, `python_zlib_diff_cli_successes`,
   `python_zlib_diff_expected_failures`
 - `native_codec_probes_present`, `native_codec_probes_ok`,
-  `native_codec_probes_healthy`, `native_codec_probes_probe_count`,
-  `native_codec_probes_ok_probe_count`,
+  `native_codec_probes_markdown_present`, `native_codec_probes_healthy`,
+  `native_codec_probes_probe_count`, `native_codec_probes_ok_probe_count`,
   `native_codec_probes_timed_out_probes`,
+  `native_codec_probes_coverage_rows`,
+  `native_codec_probes_coverage_ok_rows`,
+  `native_codec_probes_coverage_case_sum`,
   `native_codec_probes_capability_count`,
   `native_codec_probes_ok_capability_count`,
   `native_codec_probes_lib_generated_cases`,
@@ -2854,7 +2859,10 @@ Top-level fields:
   `native_codec_probes_malformed_cases`,
   `native_codec_probes_total_cases`,
   `native_codec_probes_zstd_frame_cases`,
-  `native_codec_probes_zstd_dictionary_cases`
+  `native_codec_probes_zstd_dictionary_cases`,
+  `native_codec_probes_markdown_rows`,
+  `native_codec_probes_markdown_matched`,
+  `native_codec_probes_markdown_unmatched`
 - `native_summary_error_present`, `native_summary_error_healthy`,
   `native_summary_error_case_count`, `native_summary_error_lz4_case_count`,
   `native_summary_error_zstd_case_count`,
@@ -3403,10 +3411,14 @@ Example:
   "python_zlib_diff_expected_failures": 0,
   "native_codec_probes_present": false,
   "native_codec_probes_ok": false,
+  "native_codec_probes_markdown_present": false,
   "native_codec_probes_healthy": false,
   "native_codec_probes_probe_count": 0,
   "native_codec_probes_ok_probe_count": 0,
   "native_codec_probes_timed_out_probes": 0,
+  "native_codec_probes_coverage_rows": 0,
+  "native_codec_probes_coverage_ok_rows": 0,
+  "native_codec_probes_coverage_case_sum": 0,
   "native_codec_probes_capability_count": 0,
   "native_codec_probes_ok_capability_count": 0,
   "native_codec_probes_lib_generated_cases": 0,
@@ -3419,6 +3431,9 @@ Example:
   "native_codec_probes_total_cases": 0,
   "native_codec_probes_zstd_frame_cases": 0,
   "native_codec_probes_zstd_dictionary_cases": 0,
+  "native_codec_probes_markdown_rows": 0,
+  "native_codec_probes_markdown_matched": 0,
+  "native_codec_probes_markdown_unmatched": 0,
   "native_summary_error_present": false,
   "native_summary_error_healthy": false,
   "native_summary_error_case_count": 0,

@@ -745,7 +745,8 @@
         "native_codec_probes_healthy": {
           "all": [
             "native_codec_probes_present",
-            "native_codec_probes_ok"
+            "native_codec_probes_ok",
+            "native_codec_probes_markdown_present"
           ],
           "positive": [
             "native_codec_probes_capability_count",
@@ -759,10 +760,16 @@
             "native_codec_probes_zstd_dictionary_cases",
             "native_codec_probes_probe_count",
             "native_codec_probes_ok_probe_count",
-            "native_codec_probes_total_cases"
+            "native_codec_probes_coverage_rows",
+            "native_codec_probes_coverage_ok_rows",
+            "native_codec_probes_coverage_case_sum",
+            "native_codec_probes_total_cases",
+            "native_codec_probes_markdown_rows",
+            "native_codec_probes_markdown_matched"
           ],
           "zero": [
-            "native_codec_probes_timed_out_probes"
+            "native_codec_probes_timed_out_probes",
+            "native_codec_probes_markdown_unmatched"
           ]
         },
         "lz4_native_summary_healthy": {
@@ -1717,12 +1724,16 @@
         "native_codec_probes_chunked_cases": "int",
         "native_codec_probes_reusable_chunked_cases": "int",
         "native_codec_probes_timed_out_probes": "int",
+        "native_codec_probes_coverage_rows": "int",
+        "native_codec_probes_coverage_ok_rows": "int",
+        "native_codec_probes_coverage_case_sum": "int",
         "native_codec_probes_fse_repeat_cases": "int",
         "native_codec_probes_dictionary_cases": "int",
         "native_codec_probes_incremental_cases": "int",
         "native_codec_probes_lib_generated_cases": "int",
         "native_codec_probes_malformed_cases": "int",
         "native_codec_probes_ok": "bool",
+        "native_codec_probes_markdown_present": "bool",
         "native_codec_probes_ok_capability_count": "int",
         "native_codec_probes_ok_probe_count": "int",
         "native_codec_probes_present": "bool",
@@ -1730,6 +1741,9 @@
         "native_codec_probes_total_cases": "int",
         "native_codec_probes_zstd_dictionary_cases": "int",
         "native_codec_probes_zstd_frame_cases": "int",
+        "native_codec_probes_markdown_rows": "int",
+        "native_codec_probes_markdown_matched": "int",
+        "native_codec_probes_markdown_unmatched": "int",
         "native_summary_error_present": "bool",
         "native_summary_error_healthy": "bool",
         "native_summary_error_case_count": "int",
@@ -2245,6 +2259,31 @@
           "left": "native_allocation_markdown_matched",
           "op": "eq",
           "right": "native_allocation_report_rows"
+        },
+        {
+          "left": "native_codec_probes_ok_probe_count",
+          "op": "eq",
+          "right": "native_codec_probes_probe_count"
+        },
+        {
+          "left": "native_codec_probes_ok_capability_count",
+          "op": "eq",
+          "right": "native_codec_probes_capability_count"
+        },
+        {
+          "left": "native_codec_probes_coverage_ok_rows",
+          "op": "eq",
+          "right": "native_codec_probes_coverage_rows"
+        },
+        {
+          "left": "native_codec_probes_coverage_case_sum",
+          "op": "eq",
+          "right": "native_codec_probes_total_cases"
+        },
+        {
+          "left": "native_codec_probes_markdown_matched",
+          "op": "eq",
+          "right": "native_codec_probes_markdown_rows"
         }
       ]
     },
