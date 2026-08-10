@@ -4881,6 +4881,92 @@ def validation_json_health(artifacts: list[Path]) -> dict:
 
 
 def header_inspect_health(artifacts: list[Path]) -> dict:
+    markdown = next((artifact for artifact in artifacts if artifact.name == "vort-header-inspect-smoke.md"), None)
+
+    def markdown_cell(value: object) -> str:
+        return str(value).replace("|", "\\|")
+
+    def markdown_sample(value: object, limit: int = 32) -> str:
+        text = str(value)
+        if len(text) <= limit:
+            return markdown_cell(text)
+        head = max(8, limit - 12)
+        tail = 8
+        return markdown_cell(f"{text[:head]}…{text[-tail:]} ({len(text)} hex)")
+
+    def markdown_checks(data: dict) -> tuple[bool, int, int, int]:
+        if markdown is None:
+            return (False, 0, 0, 1)
+        try:
+            text = markdown.read_text(errors="replace")
+        except Exception:
+            return (True, 0, 0, 1)
+
+        cases = data.get("cases") if isinstance(data.get("cases"), list) else []
+        negative_items = data.get("negative_items") if isinstance(data.get("negative_items"), list) else []
+        command_coverage = data.get("command_coverage") if isinstance(data.get("command_coverage"), list) else []
+        workflow_coverage = data.get("workflow_coverage") if isinstance(data.get("workflow_coverage"), list) else []
+        missing_workflows = data.get("missing_workflows") if isinstance(data.get("missing_workflows"), list) else []
+        negative_error_counts = data.get("negative_error_counts") if isinstance(data.get("negative_error_counts"), dict) else {}
+        expected = [
+            f"- ok: `{bool(data.get('ok'))}`",
+            f"- cases: {as_int('case_count')} (raw={as_int('raw_cases')}, zlib={as_int('zlib_cases')}, gzip={as_int('gzip_cases')})",
+            f"- dictionary cases: {as_int('dictionary_cases')}",
+            f"- optional gzip header cases: {as_int('optional_header_cases')}",
+            f"- FHCRC cases: {as_int('fhcrc_cases')}",
+            f"- malformed negative cases: {as_int('negative_cases')}",
+            "## Format summary",
+            "## Command coverage",
+            "## Workflow coverage",
+            "### Required workflow coverage",
+            f"- required rows: {as_int('required_workflow_count')}",
+            f"- missing rows: {as_int('missing_workflow_count')}",
+            "## Successful inspections",
+            "## Expected failures",
+            "### Error summary",
+        ]
+        for format_name in ("raw", "zlib", "gzip"):
+            format_cases = [case for case in cases if isinstance(case, dict) and case.get("format") == format_name]
+            expected.append(
+                "| {format} | {cases} | {bytes} | {dictionary} | {optional} | {fhcrc} |".format(
+                    format=markdown_cell(format_name),
+                    cases=len(format_cases),
+                    bytes=sum(as_row_int(case, "bytes") for case in format_cases),
+                    dictionary=sum(1 for case in format_cases if case.get("has_dictionary") is True),
+                    optional=sum(1 for case in format_cases if case.get("has_optional_fields") is True),
+                    fhcrc=sum(1 for case in format_cases if case.get("header_crc") is True),
+                )
+            )
+            expected.append(f"| {markdown_cell(format_name)} | {sum(1 for item in negative_items if isinstance(item, dict) and item.get('format') == format_name)} |")
+        for row in command_coverage:
+            if isinstance(row, dict):
+                expected.append(f"| `{markdown_cell(row.get('command', ''))}` | {markdown_cell(row.get('format', ''))} | {as_row_int(row, 'successes')} | {as_row_int(row, 'failures')} |")
+        for row in workflow_coverage:
+            if isinstance(row, dict):
+                expected.append(f"| `{markdown_cell(row.get('command', ''))}` | {markdown_cell(row.get('workflow', ''))} | {markdown_cell(row.get('format', ''))} | {as_row_int(row, 'successes')} |")
+        for row in missing_workflows:
+            if isinstance(row, dict):
+                expected.append(f"| `{markdown_cell(row.get('command', ''))}` | {markdown_cell(row.get('workflow', ''))} | {markdown_cell(row.get('format', ''))} |")
+        for row in cases:
+            if isinstance(row, dict):
+                expected.append(
+                    f"| {markdown_cell(row.get('name', ''))} | `{markdown_cell(row.get('schema_name', ''))}` | {as_row_int(row, 'bytes')} | {markdown_cell(row.get('detail', ''))} | `{markdown_cell(row.get('command', ''))}` | `{markdown_sample(row.get('sample', ''))}` |"
+                )
+        for error_name, count in sorted((str(key), value) for key, value in negative_error_counts.items()):
+            if isinstance(count, int) and not isinstance(count, bool):
+                expected.append(f"| `{markdown_cell(error_name)}` | {count} |")
+        for row in negative_items:
+            if isinstance(row, dict):
+                expected.append(
+                    f"| {markdown_cell(row.get('name', ''))} | `{markdown_cell(row.get('command', ''))}` | `{markdown_sample(row.get('sample', ''))}` | `{markdown_cell(row.get('expected_error', ''))}` |"
+                )
+        matched = sum(1 for needle in expected if needle in text)
+        return (True, len(expected), matched, len(expected) - matched)
+
+    def as_row_int(row: dict, field: str) -> int:
+        value = row.get(field)
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
         if data.get("schema") == "vort.header_inspect_smoke":
@@ -4890,9 +4976,56 @@ def header_inspect_health(artifacts: list[Path]) -> dict:
             def as_int(field: str) -> int:
                 value = data.get(field)
                 return value if isinstance(value, int) and not isinstance(value, bool) else 0
+            cases = data.get("cases") if isinstance(data.get("cases"), list) else []
+            negative_items = data.get("negative_items") if isinstance(data.get("negative_items"), list) else []
+            command_coverage = data.get("command_coverage") if isinstance(data.get("command_coverage"), list) else []
+            workflow_coverage = data.get("workflow_coverage") if isinstance(data.get("workflow_coverage"), list) else []
+            required_workflows = data.get("required_workflows") if isinstance(data.get("required_workflows"), list) else []
+            help_workflows = data.get("help_workflows") if isinstance(data.get("help_workflows"), list) else []
+            negative_error_counts = data.get("negative_error_counts") if isinstance(data.get("negative_error_counts"), dict) else {}
+            report_rows = len(cases)
+            negative_item_rows = len(negative_items)
+            command_coverage_rows = len(command_coverage)
+            workflow_coverage_rows = len(workflow_coverage)
+            required_workflow_rows = len(required_workflows)
+            help_workflow_rows = len(help_workflows)
+            report_count_mismatch = (
+                abs(as_int("case_count") - report_rows)
+                + abs(as_int("raw_cases") - sum(1 for row in cases if isinstance(row, dict) and row.get("format") == "raw"))
+                + abs(as_int("zlib_cases") - sum(1 for row in cases if isinstance(row, dict) and row.get("format") == "zlib"))
+                + abs(as_int("gzip_cases") - sum(1 for row in cases if isinstance(row, dict) and row.get("format") == "gzip"))
+                + abs(as_int("negative_cases") - negative_item_rows)
+                + abs(as_int("raw_negative_cases") - sum(1 for row in negative_items if isinstance(row, dict) and row.get("format") == "raw"))
+                + abs(as_int("zlib_negative_cases") - sum(1 for row in negative_items if isinstance(row, dict) and row.get("format") == "zlib"))
+                + abs(as_int("gzip_negative_cases") - sum(1 for row in negative_items if isinstance(row, dict) and row.get("format") == "gzip"))
+                + abs(as_int("command_count") - command_coverage_rows)
+                + abs(as_int("command_successes") - sum(as_row_int(row, "successes") for row in command_coverage if isinstance(row, dict)))
+                + abs(as_int("command_failures") - sum(as_row_int(row, "failures") for row in command_coverage if isinstance(row, dict)))
+                + abs(as_int("workflow_count") - workflow_coverage_rows)
+                + abs(as_int("workflow_successes") - sum(as_row_int(row, "successes") for row in workflow_coverage if isinstance(row, dict)))
+                + abs(as_int("dictionary_cases") - sum(1 for row in cases if isinstance(row, dict) and row.get("has_dictionary") is True))
+                + abs(as_int("optional_header_cases") - sum(1 for row in cases if isinstance(row, dict) and row.get("has_optional_fields") is True))
+                + abs(as_int("fhcrc_cases") - sum(1 for row in cases if isinstance(row, dict) and row.get("header_crc") is True))
+                + abs(as_int("required_workflow_count") - required_workflow_rows)
+                + abs(as_int("missing_workflow_count") - len(missing_workflows))
+                + abs(as_int("help_workflow_count") - help_workflow_rows)
+                + abs(as_int("negative_cases") - sum(value for value in negative_error_counts.values() if isinstance(value, int) and not isinstance(value, bool)))
+            )
+            markdown_present, markdown_rows, markdown_matched, markdown_unmatched = markdown_checks(data)
             return {
                 "present": True,
                 "ok": bool(data.get("ok")),
+                "report_rows": report_rows,
+                "negative_item_rows": negative_item_rows,
+                "command_coverage_rows": command_coverage_rows,
+                "workflow_coverage_rows": workflow_coverage_rows,
+                "required_workflow_rows": required_workflow_rows,
+                "help_workflow_rows": help_workflow_rows,
+                "report_count_mismatch": report_count_mismatch,
+                "markdown_present": markdown_present,
+                "markdown_rows": markdown_rows,
+                "markdown_matched": markdown_matched,
+                "markdown_unmatched": markdown_unmatched,
                 "case_count": as_int("case_count"),
                 "raw_cases": as_int("raw_cases"),
                 "zlib_cases": as_int("zlib_cases"),
@@ -4916,6 +5049,17 @@ def header_inspect_health(artifacts: list[Path]) -> dict:
     return {
         "present": False,
         "ok": False,
+        "report_rows": 0,
+        "negative_item_rows": 0,
+        "command_coverage_rows": 0,
+        "workflow_coverage_rows": 0,
+        "required_workflow_rows": 0,
+        "help_workflow_rows": 0,
+        "report_count_mismatch": 0,
+        "markdown_present": False,
+        "markdown_rows": 0,
+        "markdown_matched": 0,
+        "markdown_unmatched": 0,
         "case_count": 0,
         "raw_cases": 0,
         "zlib_cases": 0,
@@ -5050,23 +5194,33 @@ def main() -> int:
     header_healthy = (
         header_health["present"]
         and header_health["ok"]
+        and header_health["markdown_present"]
         and header_health["missing_workflow_count"] == 0
+        and header_health["report_count_mismatch"] == 0
         and header_health["case_count"] > 0
+        and header_health["report_rows"] == header_health["case_count"]
         and header_health["raw_cases"] > 0
         and header_health["zlib_cases"] > 0
         and header_health["gzip_cases"] > 0
         and header_health["negative_cases"] > 0
+        and header_health["negative_item_rows"] == header_health["negative_cases"]
         and header_health["raw_negative_cases"] > 0
         and header_health["zlib_negative_cases"] > 0
         and header_health["gzip_negative_cases"] > 0
         and header_health["command_count"] > 0
+        and header_health["command_coverage_rows"] == header_health["command_count"]
         and header_health["command_successes"] > 0
         and header_health["command_failures"] > 0
         and header_health["workflow_count"] > 0
+        and header_health["workflow_coverage_rows"] == header_health["workflow_count"]
         and header_health["workflow_successes"] > 0
         and header_health["dictionary_cases"] > 0
         and header_health["optional_header_cases"] > 0
         and header_health["fhcrc_cases"] > 0
+        and header_health["required_workflow_rows"] == header_health["required_workflow_count"]
+        and header_health["help_workflow_rows"] == header_health["required_workflow_count"]
+        and header_health["markdown_rows"] > 0
+        and header_health["markdown_unmatched"] == 0
     )
     strict_healthy = strict_health["present"] and strict_health["ok"] and strict_health["missing_mode_count"] == 0
     dashboard_configuration_healthy = dashboard_configuration["healthy"]
@@ -5149,7 +5303,7 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_producer_steps")
     if not smoke_gate_healthy:
         validation_unhealthy_reasons.append("missing_required_smoke_gates")
-    if not header_health["present"]:
+    if not (header_health["present"] and header_health["markdown_present"]):
         validation_unhealthy_reasons.append("missing_header_inspect_artifact")
     elif not header_health["ok"]:
         validation_unhealthy_reasons.append("header_inspect_failed")
@@ -5498,6 +5652,8 @@ def main() -> int:
             f"| commands | {header_health['command_count']} | successes/failures {header_health['command_successes']}/{header_health['command_failures']} |",
             f"| workflows | {header_health['workflow_count']} | successes {header_health['workflow_successes']}, required/missing {header_health['required_workflow_count']}/{header_health['missing_workflow_count']} |",
             f"| dictionary cases | {header_health['dictionary_cases']} | optional/FHCRC {header_health['optional_header_cases']}/{header_health['fhcrc_cases']} |",
+            f"| JSON row checks | {header_health['report_rows']}/{header_health['case_count']} | negatives {header_health['negative_item_rows']}/{header_health['negative_cases']}, count mismatch {header_health['report_count_mismatch']} |",
+            f"| Markdown rows | {header_health['markdown_matched']}/{header_health['markdown_rows']} | present `{header_health['markdown_present']}`, unmatched {header_health['markdown_unmatched']} |",
             "",
         ]
     )
@@ -6072,6 +6228,17 @@ def main() -> int:
                 "header_inspect_present": header_health["present"],
                 "header_inspect_ok": header_health["ok"],
                 "header_inspect_healthy": header_healthy,
+                "header_inspect_markdown_present": header_health["markdown_present"],
+                "header_inspect_report_rows": header_health["report_rows"],
+                "header_inspect_negative_item_rows": header_health["negative_item_rows"],
+                "header_inspect_command_coverage_rows": header_health["command_coverage_rows"],
+                "header_inspect_workflow_coverage_rows": header_health["workflow_coverage_rows"],
+                "header_inspect_required_workflow_rows": header_health["required_workflow_rows"],
+                "header_inspect_help_workflow_rows": header_health["help_workflow_rows"],
+                "header_inspect_report_count_mismatch": header_health["report_count_mismatch"],
+                "header_inspect_markdown_rows": header_health["markdown_rows"],
+                "header_inspect_markdown_matched": header_health["markdown_matched"],
+                "header_inspect_markdown_unmatched": header_health["markdown_unmatched"],
                 "header_inspect_case_count": header_health["case_count"],
                 "header_inspect_raw_cases": header_health["raw_cases"],
                 "header_inspect_zlib_cases": header_health["zlib_cases"],

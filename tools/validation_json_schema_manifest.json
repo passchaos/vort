@@ -691,28 +691,39 @@
         "header_inspect_healthy": {
           "all": [
             "header_inspect_present",
-            "header_inspect_ok"
+            "header_inspect_ok",
+            "header_inspect_markdown_present"
           ],
           "positive": [
             "header_inspect_case_count",
+            "header_inspect_report_rows",
             "header_inspect_raw_cases",
             "header_inspect_zlib_cases",
             "header_inspect_gzip_cases",
             "header_inspect_negative_cases",
+            "header_inspect_negative_item_rows",
             "header_inspect_raw_negative_cases",
             "header_inspect_zlib_negative_cases",
             "header_inspect_gzip_negative_cases",
             "header_inspect_command_count",
+            "header_inspect_command_coverage_rows",
             "header_inspect_command_successes",
             "header_inspect_command_failures",
             "header_inspect_workflow_count",
+            "header_inspect_workflow_coverage_rows",
             "header_inspect_workflow_successes",
+            "header_inspect_required_workflow_rows",
+            "header_inspect_help_workflow_rows",
             "header_inspect_dictionary_cases",
             "header_inspect_optional_header_cases",
-            "header_inspect_fhcrc_cases"
+            "header_inspect_fhcrc_cases",
+            "header_inspect_markdown_rows",
+            "header_inspect_markdown_matched"
           ],
           "zero": [
-            "header_inspect_missing_workflow_count"
+            "header_inspect_missing_workflow_count",
+            "header_inspect_report_count_mismatch",
+            "header_inspect_markdown_unmatched"
           ]
         },
         "huffman_length_healthy": {
@@ -1732,6 +1743,17 @@
         "fuzz_corpus_present": "bool",
         "fuzz_corpus_unmatched_rows": "int",
         "header_inspect_case_count": "int",
+        "header_inspect_report_rows": "int",
+        "header_inspect_negative_item_rows": "int",
+        "header_inspect_command_coverage_rows": "int",
+        "header_inspect_workflow_coverage_rows": "int",
+        "header_inspect_required_workflow_rows": "int",
+        "header_inspect_help_workflow_rows": "int",
+        "header_inspect_report_count_mismatch": "int",
+        "header_inspect_markdown_present": "bool",
+        "header_inspect_markdown_rows": "int",
+        "header_inspect_markdown_matched": "int",
+        "header_inspect_markdown_unmatched": "int",
         "header_inspect_command_count": "int",
         "header_inspect_command_failures": "int",
         "header_inspect_command_successes": "int",
@@ -2367,6 +2389,41 @@
           "left": "native_codec_probes_markdown_matched",
           "op": "eq",
           "right": "native_codec_probes_markdown_rows"
+        },
+        {
+          "left": "header_inspect_report_rows",
+          "op": "eq",
+          "right": "header_inspect_case_count"
+        },
+        {
+          "left": "header_inspect_negative_item_rows",
+          "op": "eq",
+          "right": "header_inspect_negative_cases"
+        },
+        {
+          "left": "header_inspect_command_coverage_rows",
+          "op": "eq",
+          "right": "header_inspect_command_count"
+        },
+        {
+          "left": "header_inspect_workflow_coverage_rows",
+          "op": "eq",
+          "right": "header_inspect_workflow_count"
+        },
+        {
+          "left": "header_inspect_required_workflow_rows",
+          "op": "eq",
+          "right": "header_inspect_required_workflow_count"
+        },
+        {
+          "left": "header_inspect_help_workflow_rows",
+          "op": "eq",
+          "right": "header_inspect_required_workflow_count"
+        },
+        {
+          "left": "header_inspect_markdown_matched",
+          "op": "eq",
+          "right": "header_inspect_markdown_rows"
         },
         {
           "left": "fuzz_corpus_report_rows",

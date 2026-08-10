@@ -16,6 +16,7 @@ DASHBOARD_INDEX = ROOT / "tools" / "dashboard_index.py"
 EXPECTED_MODES = ROOT / "tools" / "dashboard_strict_expected_modes.json"
 VALIDATION_REASONS = ROOT / "tools" / "dashboard_strict_validation_reasons.json"
 HEADER_INSPECT_ARTIFACT = "vort-header-inspect-smoke.json"
+HEADER_INSPECT_MARKDOWN_ARTIFACT = "vort-header-inspect-smoke.md"
 DASHBOARD_STRICT_ARTIFACT = "vort-dashboard-strict-smoke.json"
 DASHBOARD_CONFIG_INDEX_SMOKE_ARTIFACT = "vort-dashboard-config-index-smoke.json"
 DASHBOARD_CONFIG_INDEX_NEGATIVE_ARTIFACT = "vort-dashboard-config-index-negative-smoke.json"
@@ -200,6 +201,10 @@ def write_producer_map(
     if include_header_smoke:
         artifact_metadata[HEADER_INSPECT_ARTIFACT] = {
             "expected_format": "json",
+            "smoke_gate": "zig build run-header-inspect-dashboard",
+        }
+        artifact_metadata[HEADER_INSPECT_MARKDOWN_ARTIFACT] = {
+            "expected_format": "md",
             "smoke_gate": "zig build run-header-inspect-dashboard",
         }
     if include_strict_smoke:
@@ -456,6 +461,7 @@ def write_producer_map(
     exact = {}
     if include_header_exact:
         exact[HEADER_INSPECT_ARTIFACT] = "zig build run-header-inspect-dashboard"
+        exact[HEADER_INSPECT_MARKDOWN_ARTIFACT] = "zig build run-header-inspect-dashboard"
     if include_strict_exact:
         exact[DASHBOARD_STRICT_ARTIFACT] = "zig build run-dashboard-strict-smoke"
     if include_dashboard_configuration_exact:
@@ -596,10 +602,107 @@ def write_header_summary(
     command_successes = raw_cases + zlib_cases + gzip_cases
     command_failures = raw_negative_cases + zlib_negative_cases + gzip_negative_cases
     workflow_successes = command_successes
+    cases = [
+        {
+            "name": "raw_fixed",
+            "schema_name": "vort.raw_deflate_header_info",
+            "command": "inspect-raw-header-file",
+            "sample": "cb48cdc9c90700",
+            "argv": ["inspect-raw-header-file", "raw.bin"],
+            "workflow": "file",
+            "detail": "fixed",
+            "format": "raw",
+            "bytes": 7,
+            "data_offset": 1,
+            "has_dictionary": False,
+            "has_optional_fields": False,
+            "header_crc": False,
+        },
+        {
+            "name": "zlib_dictionary",
+            "schema_name": "vort.zlib_header_info",
+            "command": "inspect-zlib-header-file",
+            "sample": "78bb08610235cb4027013a2e067d",
+            "argv": ["inspect-zlib-header-file", "zlib.bin"],
+            "workflow": "file",
+            "detail": "FDICT",
+            "format": "zlib",
+            "bytes": 14,
+            "data_offset": 6,
+            "has_dictionary": True,
+            "has_optional_fields": False,
+            "header_crc": False,
+        },
+        {
+            "name": "gzip_optional",
+            "schema_name": "vort.gzip_header_info",
+            "command": "inspect-gzip-header-file",
+            "sample": "1f8b081e000000000003a2b2",
+            "argv": ["inspect-gzip-header-file", "gzip.bin"],
+            "workflow": "file",
+            "detail": "FEXTRA/FNAME/FCOMMENT/FHCRC",
+            "format": "gzip",
+            "bytes": 25,
+            "data_offset": 10,
+            "has_dictionary": False,
+            "has_optional_fields": True,
+            "header_crc": True,
+        },
+    ]
+    if undercovered:
+        cases = [case for case in cases if case["format"] != "raw"]
+    negative_items = [
+        {
+            "name": "raw_reserved_btype",
+            "format": "raw",
+            "command": "inspect-raw-header-file",
+            "sample": "07",
+            "argv": ["inspect-raw-header-file", "raw-bad.bin"],
+            "expected_error": "InvalidDeflateBlockType",
+            "matched": True,
+        },
+        {
+            "name": "zlib_bad_fcheck",
+            "format": "zlib",
+            "command": "inspect-zlib-header-file",
+            "sample": "7802",
+            "argv": ["inspect-zlib-header-file", "zlib-bad.bin"],
+            "expected_error": "BadZlibHeader",
+            "matched": True,
+        },
+        {
+            "name": "gzip_bad_fhcrc",
+            "format": "gzip",
+            "command": "inspect-gzip-header-file",
+            "sample": "1f8b0802000000000403a2b2",
+            "argv": ["inspect-gzip-header-file", "gzip-bad.bin"],
+            "expected_error": "BadGzipHeader",
+            "matched": True,
+        },
+    ]
+    command_coverage = [
+        {"command": "inspect-raw-header-file", "format": "raw", "successes": raw_cases, "failures": raw_negative_cases},
+        {"command": "inspect-zlib-header-file", "format": "zlib", "successes": zlib_cases, "failures": zlib_negative_cases},
+        {"command": "inspect-gzip-header-file", "format": "gzip", "successes": gzip_cases, "failures": gzip_negative_cases},
+    ]
+    workflow_coverage = [
+        {"command": "inspect-raw-header-file", "workflow": "file", "format": "raw", "successes": raw_cases},
+        {"command": "inspect-zlib-header-file", "workflow": "file", "format": "zlib", "successes": zlib_cases},
+        {"command": "inspect-gzip-header-file", "workflow": "file", "format": "gzip", "successes": gzip_cases},
+    ]
+    required_workflows = [{"command": "inspect-raw-header-file", "workflow": "file", "format": "raw"}]
     payload = {
         "schema": "vort.header_inspect_smoke",
         "schema_version": 1,
         "ok": ok,
+        "cases": cases,
+        "negative_items": negative_items,
+        "command_coverage": command_coverage,
+        "workflow_coverage": workflow_coverage,
+        "required_workflows": required_workflows,
+        "help_workflows": required_workflows,
+        "help_workflow_count": len(required_workflows),
+        "negative_error_counts": {"BadGzipHeader": 1, "BadZlibHeader": 1, "InvalidDeflateBlockType": 1},
         "case_count": raw_cases + zlib_cases + gzip_cases,
         "raw_cases": raw_cases,
         "zlib_cases": zlib_cases,
@@ -621,6 +724,105 @@ def write_header_summary(
         "missing_workflows": missing,
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def write_header_markdown(path: Path, *, ok: bool = True, undercovered: bool = False) -> None:
+    raw_case_rows = [] if undercovered else ["| raw_fixed | `vort.raw_deflate_header_info` | 7 | fixed | `inspect-raw-header-file` | `cb48cdc9c90700` |"]
+    raw_cases = 0 if undercovered else 1
+    lines = [
+        "# Vort header inspect smoke",
+        "",
+        f"- ok: `{ok}`",
+        f"- cases: {raw_cases + 2} (raw={raw_cases}, zlib=1, gzip=1)",
+        "- dictionary cases: 1",
+        "- optional gzip header cases: 1",
+        "- FHCRC cases: 1",
+        "- malformed negative cases: 3",
+        "",
+        "## Format summary",
+        "",
+        "| format | cases | bytes | dictionary | optional headers | FHCRC |",
+        "| --- | ---: | ---: | ---: | ---: | ---: |",
+        f"| raw | {raw_cases} | {7 if raw_cases else 0} | 0 | 0 | 0 |",
+        "| zlib | 1 | 14 | 1 | 0 | 0 |",
+        "| gzip | 1 | 25 | 0 | 1 | 1 |",
+        "",
+        "## Command coverage",
+        "",
+        "| command | format | successes | failures |",
+        "| --- | --- | ---: | ---: |",
+        f"| `inspect-raw-header-file` | raw | {raw_cases} | 1 |",
+        "| `inspect-zlib-header-file` | zlib | 1 | 1 |",
+        "| `inspect-gzip-header-file` | gzip | 1 | 1 |",
+        "",
+        "## Workflow coverage",
+        "",
+        "| command | workflow | format | successes |",
+        "| --- | --- | --- | ---: |",
+        f"| `inspect-raw-header-file` | file | raw | {raw_cases} |",
+        "| `inspect-zlib-header-file` | file | zlib | 1 |",
+        "| `inspect-gzip-header-file` | file | gzip | 1 |",
+        "",
+        "### Required workflow coverage",
+        "",
+        "- required rows: 1",
+        "- missing rows: 0",
+        "",
+        "## Successful inspections",
+        "",
+        "### raw",
+        "",
+        "| name | schema | bytes | details | command | sample |",
+        "| --- | --- | ---: | --- | --- | --- |",
+        *raw_case_rows,
+        "",
+        "### zlib",
+        "",
+        "| name | schema | bytes | details | command | sample |",
+        "| --- | --- | ---: | --- | --- | --- |",
+        "| zlib_dictionary | `vort.zlib_header_info` | 14 | FDICT | `inspect-zlib-header-file` | `78bb08610235cb4027013a2e067d` |",
+        "",
+        "### gzip",
+        "",
+        "| name | schema | bytes | details | command | sample |",
+        "| --- | --- | ---: | --- | --- | --- |",
+        "| gzip_optional | `vort.gzip_header_info` | 25 | FEXTRA/FNAME/FCOMMENT/FHCRC | `inspect-gzip-header-file` | `1f8b081e000000000003a2b2` |",
+        "",
+        "## Expected failures",
+        "",
+        "| format | failures |",
+        "| --- | ---: |",
+        "| raw | 1 |",
+        "| zlib | 1 |",
+        "| gzip | 1 |",
+        "",
+        "### Error summary",
+        "",
+        "| expected error | failures |",
+        "| --- | ---: |",
+        "| `BadGzipHeader` | 1 |",
+        "| `BadZlibHeader` | 1 |",
+        "| `InvalidDeflateBlockType` | 1 |",
+        "",
+        "### raw",
+        "",
+        "| name | command | sample | expected error |",
+        "| --- | --- | --- | --- |",
+        "| raw_reserved_btype | `inspect-raw-header-file` | `07` | `InvalidDeflateBlockType` |",
+        "",
+        "### zlib",
+        "",
+        "| name | command | sample | expected error |",
+        "| --- | --- | --- | --- |",
+        "| zlib_bad_fcheck | `inspect-zlib-header-file` | `7802` | `BadZlibHeader` |",
+        "",
+        "### gzip",
+        "",
+        "| name | command | sample | expected error |",
+        "| --- | --- | --- | --- |",
+        "| gzip_bad_fhcrc | `inspect-gzip-header-file` | `1f8b0802000000000403a2b2` | `BadGzipHeader` |",
+    ]
+    path.write_text("\n".join(lines) + "\n")
 
 
 def write_dashboard_strict_summary(path: Path, *, ok: bool = True, missing_modes: list[dict[str, object]] | None = None) -> None:
@@ -3466,6 +3668,7 @@ def write_native_tier_range_summaries(root: Path) -> None:
 
 def write_healthy_artifacts(root: Path) -> None:
     write_header_summary(root / HEADER_INSPECT_ARTIFACT)
+    write_header_markdown(root / HEADER_INSPECT_MARKDOWN_ARTIFACT)
     write_dashboard_strict_summary(root / DASHBOARD_STRICT_ARTIFACT)
     write_dashboard_configuration_artifacts(root)
     write_validation_json_artifacts(root)
@@ -3795,6 +3998,7 @@ def main() -> int:
             producer_map,
             required_names=[
                 HEADER_INSPECT_ARTIFACT,
+                HEADER_INSPECT_MARKDOWN_ARTIFACT,
                 DASHBOARD_STRICT_ARTIFACT,
                 DASHBOARD_CONFIG_INDEX_SMOKE_ARTIFACT,
                 DASHBOARD_CONFIG_INDEX_NEGATIVE_ARTIFACT,
@@ -3924,8 +4128,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 80/80 | 0 | allowed missing 0 |",
-                    "| smoke gates | 80/80 | 0 | required missing 0 |",
+                    "| producer steps | 81/81 | 0 | allowed missing 0 |",
+                    "| smoke gates | 81/81 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -4076,6 +4280,8 @@ def main() -> int:
                     "| commands | 3 | successes/failures 3/3 |",
                     "| workflows | 3 | successes 3, required/missing 1/0 |",
                     "| dictionary cases | 1 | optional/FHCRC 1/1 |",
+                    "| JSON row checks | 3/3 | negatives 3/3, count mismatch 0 |",
+                    "| Markdown rows | 36/36 | present `True`, unmatched 0 |",
                 ],
             )
         )

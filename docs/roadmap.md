@@ -2587,3 +2587,8 @@ architecture blindly.
   metadata, mode/error summaries, and sample rows against the JSON corpus
   report, verifies coverage-smoke matched requirements, and exposes report,
   coverage, and Markdown drift counters before wrapper fuzz coverage can pass.
+- Tightened header-inspect dashboard health by requiring the retained
+  `vort-header-inspect-smoke.md` companion beside the JSON smoke. Aggregate
+  health now cross-checks JSON row totals for successes, negatives, command and
+  workflow coverage, required/help workflows, and Markdown format/command/
+  workflow/success/failure rows before header-inspect coverage can pass.

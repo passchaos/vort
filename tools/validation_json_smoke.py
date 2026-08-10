@@ -816,6 +816,7 @@ def main() -> int:
         validate_value_against_manifest(validation_json_dashboard_smoke, schemas_def)
 
         header_summary_path = root / "vort-header-inspect-smoke.json"
+        header_markdown_path = root / "vort-header-inspect-smoke.md"
         required_workflows = json.loads((ROOT / "tools" / "header_inspect_required_workflows.json").read_text())
         assert required_workflows["schema"] == "vort.header_inspect_required_workflows"
         assert required_workflows["required_workflows"]
@@ -918,11 +919,21 @@ def main() -> int:
         assert gzip_header["schema_version"] == 1
         assert gzip_header["mtime"] == 0
         validate_value_against_manifest(gzip_header, schemas_def)
-        run(["python3", str(ROOT / "tools" / "header_inspect_smoke.py"), cli, "--summary", str(header_summary_path)])
+        run([
+            "python3",
+            str(ROOT / "tools" / "header_inspect_smoke.py"),
+            cli,
+            "--summary",
+            str(header_summary_path),
+            "--markdown",
+            str(header_markdown_path),
+        ])
         header_summary = json.loads(header_summary_path.read_text())
+        header_markdown = header_markdown_path.read_text()
         assert header_summary["schema"] == "vort.header_inspect_smoke"
         assert header_summary["schema_version"] == 1
         assert header_summary["ok"] is True
+        assert f"- cases: {header_summary['case_count']}" in header_markdown
         assert header_summary["raw_cases"] >= 1
         assert header_summary["cases"][0]["schema_name"] in (
             "vort.raw_deflate_header_info",
@@ -1042,6 +1053,17 @@ def main() -> int:
         assert dashboard["header_inspect_present"] is True
         assert dashboard["header_inspect_ok"] is True
         assert dashboard["header_inspect_healthy"] is True
+        assert dashboard["header_inspect_markdown_present"] is True
+        assert dashboard["header_inspect_report_rows"] == len(header_summary["cases"])
+        assert dashboard["header_inspect_negative_item_rows"] == len(header_summary["negative_items"])
+        assert dashboard["header_inspect_command_coverage_rows"] == len(header_summary["command_coverage"])
+        assert dashboard["header_inspect_workflow_coverage_rows"] == len(header_summary["workflow_coverage"])
+        assert dashboard["header_inspect_required_workflow_rows"] == len(header_summary["required_workflows"])
+        assert dashboard["header_inspect_help_workflow_rows"] == len(header_summary["help_workflows"])
+        assert dashboard["header_inspect_report_count_mismatch"] == 0
+        assert dashboard["header_inspect_markdown_rows"] > 0
+        assert dashboard["header_inspect_markdown_matched"] == dashboard["header_inspect_markdown_rows"]
+        assert dashboard["header_inspect_markdown_unmatched"] == 0
         assert dashboard["header_inspect_required_workflow_count"] == header_summary["required_workflow_count"]
         assert dashboard["header_inspect_missing_workflow_count"] == header_summary["missing_workflow_count"]
         assert dashboard["header_inspect_missing_workflows"] == header_summary["missing_workflows"]
