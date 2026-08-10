@@ -775,6 +775,10 @@
     "vort-native-summary-error-negative-smoke.json": {
       "expected_format": "json",
       "smoke_gate": "zig build run-native-summary-error-negative-smoke"
+    },
+    "vort-snappy-report.csv": {
+      "expected_format": "csv",
+      "smoke_gate": "zig build run-snappy-report-gate"
     }
   },
   "contains": [
@@ -789,6 +793,26 @@
     {
       "match": "tar-dashboard",
       "producer_step": "zig build -Doptimize=ReleaseFast run-standard-corpus-report -- --paths <tar>"
+    },
+    {
+      "match": "br-static-dictionary-candidates-upstream8192",
+      "producer_step": "python3 tools/br_static_dictionary_candidate_report.py --source-limit 8192 --brotli-common-dir <path> --json <out.json> --markdown <out.md>"
+    },
+    {
+      "match": "br-static-dictionary-node-probe-upstream8192",
+      "producer_step": "python3 tools/br_static_dictionary_node_probe.py <vort-cli> --candidates zig-out/vort-br-static-dictionary-candidates-upstream8192.json --start-index <n> --limit 1024 --json <out.json> --markdown <out.md> --require-vort-ok"
+    },
+    {
+      "match": "br-static-dictionary-source-audit-current",
+      "producer_step": "python3 tools/br_static_dictionary_source_audit.py --brotli-common-dir <path> --summary zig-out/vort-br-static-dictionary-source-audit-current.json --generated-zig zig-out/vort-br-static-dictionary-generated-current.zig"
+    },
+    {
+      "match": "dashboard-index-summary-fields",
+      "producer_step": "python3 tools/dashboard_index.py --output zig-out/vort-dashboard-index-summary-fields.md --manifest zig-out/vort-dashboard-index-summary-fields.json"
+    },
+    {
+      "match": "dashboard-index-lz4-summary",
+      "producer_step": "python3 tools/dashboard_index.py --output zig-out/vort-dashboard-index-lz4-summary.md --manifest zig-out/vort-dashboard-index-lz4-summary.json"
     }
   ],
   "exact": {
@@ -984,7 +1008,8 @@
     "vort-lz4-native-stream-summary.json": "zig build run-lz4-native-summary-dashboard",
     "vort-zstd-native-stream-summary.json": "zig build run-zstd-native-summary-dashboard",
     "vort-native-summary-error-dashboard.json": "zig build run-native-summary-error-dashboard",
-    "vort-native-summary-error-negative-smoke.json": "zig build run-native-summary-error-negative-smoke"
+    "vort-native-summary-error-negative-smoke.json": "zig build run-native-summary-error-negative-smoke",
+    "vort-snappy-report.csv": "zig build run-snappy-report-gate"
   },
   "required_smoke_gates": [
     "vort-br-static-dictionary-candidates-upstream.json",

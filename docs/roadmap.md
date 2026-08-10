@@ -2447,3 +2447,12 @@ architecture blindly.
   identity tuples and nine alternate 9-byte identity/omit-last-one tuples
   selected by Node. All 501 unique failing frames are source-anchored and
   unit-tested, and the reindexed 1024-row window now has no Vort failures.
+
+- Restored dashboard producer completeness for existing exploratory artifacts
+  without adding any new compression-format scope. `dashboard_producers.json`
+  now records reproducible fallback producer commands for manual Brotli
+  upstream8192/static-dictionary and alternate dashboard-index artifacts, and
+  exact producer metadata for the optional Snappy report CSV. The current
+  `zig-out` dashboard strict run now reports zero missing producer steps and an
+  aggregate healthy validation state while keeping Snappy classified as benchmark
+  evidence.

@@ -1350,6 +1350,13 @@
       "producer_step": "zig build run-zstd-native-summary-dashboard",
       "required_smoke_gate": true,
       "smoke_gate": "zig build run-zstd-native-summary-dashboard"
+    },
+    {
+      "expected_format": "csv",
+      "name": "vort-snappy-report.csv",
+      "producer_step": "zig build run-snappy-report-gate",
+      "required_smoke_gate": false,
+      "smoke_gate": "zig build run-snappy-report-gate"
     }
   ],
   "schema": "vort.dashboard_producers_required_artifacts",
