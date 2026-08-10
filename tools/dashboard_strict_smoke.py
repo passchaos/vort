@@ -34,6 +34,7 @@ DEFLATE_CHUNKED_HUFFMAN_BENCH_ARTIFACT = "vort-deflate-chunked-huffman-bench.csv
 DEFLATE_EXTRA_BITS_BENCH_ARTIFACT = "vort-deflate-extra-bits-bench.csv"
 DICTIONARY_DECODE_BENCH_ARTIFACT = "vort-dictionary-decode-bench.csv"
 PNG_SCANLINE_BENCH_ARTIFACT = "vort-png-scanline-bench.csv"
+CHUNKED_ZLIB_BENCH_ARTIFACT = "vort-chunked-zlib-bench-report-repeat3.csv"
 FUZZ_CORPUS_ARTIFACT = "vort-deflate-wrapper-fuzz-corpus.json"
 FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
 DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
@@ -114,6 +115,8 @@ def write_producer_map(
     include_dictionary_decode_bench_smoke: bool = True,
     include_png_scanline_bench_exact: bool = True,
     include_png_scanline_bench_smoke: bool = True,
+    include_chunked_zlib_bench_exact: bool = True,
+    include_chunked_zlib_bench_smoke: bool = True,
     include_fuzz_corpus_exact: bool = True,
     include_fuzz_corpus_smoke: bool = True,
     include_fuzz_coverage_exact: bool = True,
@@ -233,6 +236,11 @@ def write_producer_map(
         artifact_metadata[PNG_SCANLINE_BENCH_ARTIFACT] = {
             "expected_format": "csv",
             "smoke_gate": "zig build run-png-scanline-bench-gate",
+        }
+    if include_chunked_zlib_bench_smoke:
+        artifact_metadata[CHUNKED_ZLIB_BENCH_ARTIFACT] = {
+            "expected_format": "csv",
+            "smoke_gate": "zig build run-chunked-zlib-bench-report-gate",
         }
     if include_fuzz_corpus_smoke:
         artifact_metadata[FUZZ_CORPUS_ARTIFACT] = {
@@ -368,6 +376,8 @@ def write_producer_map(
         exact[DICTIONARY_DECODE_BENCH_ARTIFACT] = "zig build run-dictionary-decode-bench-gate"
     if include_png_scanline_bench_exact:
         exact[PNG_SCANLINE_BENCH_ARTIFACT] = "zig build run-png-scanline-bench-gate"
+    if include_chunked_zlib_bench_exact:
+        exact[CHUNKED_ZLIB_BENCH_ARTIFACT] = "zig build run-chunked-zlib-bench-report-gate"
     if include_fuzz_corpus_exact:
         exact[FUZZ_CORPUS_ARTIFACT] = "zig build run-deflate-wrapper-fuzz-corpus-dashboard"
     if include_fuzz_coverage_exact:
@@ -1121,6 +1131,76 @@ def write_png_scanline_bench_csv(path: Path, *, healthy: bool = True) -> None:
             if not healthy and stage == "paeth" and bpp == "8":
                 continue
             lines.append(",".join([stage, bpp, "64", "1", "8192", "8192", "1000", "1000.0", "12345"]))
+    path.write_text("\n".join(lines) + "\n")
+
+
+def write_chunked_zlib_bench_csv(path: Path, *, healthy: bool = True) -> None:
+    columns = [
+        "case",
+        "encoder",
+        "input_bytes",
+        "zlib_bytes",
+        "chunk_bytes",
+        "chunk_count",
+        "include_empty_chunks",
+        "iterations",
+        "repeat",
+        "contiguous_mib_s",
+        "chunk_join_mib_s",
+        "chunk_direct_mib_s",
+        "chunk_exact_mib_s",
+        "direct_strategy",
+        "direct_over_contiguous",
+        "direct_over_join",
+        "join_over_contiguous",
+        "exact_over_direct",
+        "mix",
+    ]
+    cases = {
+        "png-rgb8-dynamic-64b": ("best", (96 * 3 + 1) * 64, 1180, 64, "false", "stack-join"),
+        "png-rgb8-dynamic-1b-empty": ("best", (48 * 3 + 1) * 48, 1136, 1, "true", "stack-join"),
+        "png-rgb8-literal-large-4k": ("dynamic_literal", (512 * 3 + 1) * 256, 4096, 4096, "false", "span-reader"),
+        "png-rgb8-match-large-4k": ("best", (512 * 3 + 1) * 256, 4096, 4096, "false", "span-reader"),
+        "png-rgba8-stored-256b": ("stored", (128 * 4 + 1) * 96, 49184, 256, "false", "stored-direct"),
+        "png-indexed-stored-1b-empty": ("stored", (96 + 1) * 64, 6208, 1, "true", "stack-join"),
+        "png-indexed-stored-7b-empty": ("stored", (257 + 1) * 48, 12392, 7, "true", "stack-join"),
+        "png-literal-16b": ("dynamic_literal", (80 * 3 + 1) * 80, 256, 16, "false", "stack-join"),
+    }
+
+    def chunk_count(zlib_bytes: int, chunk_bytes: int, include_empty: str) -> int:
+        non_empty = max(1, (zlib_bytes + chunk_bytes - 1) // chunk_bytes)
+        return non_empty * 2 + 1 if include_empty == "true" else non_empty
+
+    lines = [",".join(columns)]
+    for case, (encoder, input_bytes, zlib_bytes, chunk_bytes, include_empty, direct_strategy) in cases.items():
+        if not healthy and case == "png-literal-16b":
+            continue
+        contiguous = 100.0
+        join = 90.0
+        direct = 80.0
+        exact = 70.0
+        values = [
+            case,
+            encoder,
+            str(input_bytes),
+            str(zlib_bytes),
+            str(chunk_bytes),
+            str(chunk_count(zlib_bytes, chunk_bytes, include_empty)),
+            include_empty,
+            "64",
+            "3",
+            f"{contiguous:.2f}",
+            f"{join:.2f}",
+            f"{direct:.2f}",
+            f"{exact:.2f}",
+            direct_strategy,
+            f"{direct / contiguous:.4f}",
+            f"{direct / join:.4f}",
+            f"{join / contiguous:.4f}",
+            f"{exact / direct:.4f}",
+            "12345",
+        ]
+        lines.append(",".join(values))
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -1993,6 +2073,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_deflate_extra_bits_bench_csv(root / DEFLATE_EXTRA_BITS_BENCH_ARTIFACT)
     write_dictionary_decode_bench_csv(root / DICTIONARY_DECODE_BENCH_ARTIFACT)
     write_png_scanline_bench_csv(root / PNG_SCANLINE_BENCH_ARTIFACT)
+    write_chunked_zlib_bench_csv(root / CHUNKED_ZLIB_BENCH_ARTIFACT)
     write_fuzz_corpus_report(root / FUZZ_CORPUS_ARTIFACT)
     write_fuzz_coverage_report(root / FUZZ_COVERAGE_ARTIFACT)
     write_decode_stage_report(root / DECODE_STAGE_ARTIFACT)
@@ -2394,8 +2475,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 49/49 | 0 | allowed missing 0 |",
-                    "| smoke gates | 49/49 | 0 | required missing 0 |",
+                    "| producer steps | 50/50 | 0 | allowed missing 0 |",
+                    "| smoke gates | 50/50 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -2694,6 +2775,20 @@ def main() -> int:
                     "| rows | 30 | expected 30, present `True` |",
                     "| shape rows | 30 | positive rows 30 |",
                     "| input/output rows | 30 | missing pairs 0, healthy `True` |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
+                "chunked_zlib_bench_markdown_table",
+                "chunked zlib benchmark Markdown table",
+                dashboard_markdown,
+                [
+                    "## Chunked zlib benchmark coverage",
+                    "| category | count | detail |",
+                    "| rows | 8 | expected 8, present `True` |",
+                    "| shape rows | 8 | positive rows 8 |",
+                    "| ratio rows | 8 | chunk-count rows 8, missing cases 0, healthy `True` |",
                 ],
             )
         )
@@ -3100,6 +3195,12 @@ def main() -> int:
                 write_producer_map(producer_map)
             elif fixture == "png_scanline_bench_failed":
                 write_png_scanline_bench_csv(fixture_root / PNG_SCANLINE_BENCH_ARTIFACT, healthy=False)
+                write_producer_map(producer_map)
+            elif fixture == "missing_chunked_zlib_bench_artifact":
+                (fixture_root / CHUNKED_ZLIB_BENCH_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "chunked_zlib_bench_failed":
+                write_chunked_zlib_bench_csv(fixture_root / CHUNKED_ZLIB_BENCH_ARTIFACT, healthy=False)
                 write_producer_map(producer_map)
             elif fixture == "missing_fuzz_corpus_artifact":
                 (fixture_root / FUZZ_CORPUS_ARTIFACT).unlink()

@@ -1644,6 +1644,180 @@ def png_scanline_bench_health(artifacts: list[Path]) -> dict:
     }
 
 
+def chunked_zlib_bench_health(artifacts: list[Path]) -> dict:
+    expected_cases = {
+        "png-rgb8-dynamic-64b": {
+            "encoder": "best",
+            "input_bytes": (96 * 3 + 1) * 64,
+            "chunk_bytes": 64,
+            "include_empty_chunks": "false",
+            "direct_strategy": "stack-join",
+        },
+        "png-rgb8-dynamic-1b-empty": {
+            "encoder": "best",
+            "input_bytes": (48 * 3 + 1) * 48,
+            "chunk_bytes": 1,
+            "include_empty_chunks": "true",
+            "direct_strategy": "stack-join",
+        },
+        "png-rgb8-literal-large-4k": {
+            "encoder": "dynamic_literal",
+            "input_bytes": (512 * 3 + 1) * 256,
+            "chunk_bytes": 4096,
+            "include_empty_chunks": "false",
+            "direct_strategy": "span-reader",
+        },
+        "png-rgb8-match-large-4k": {
+            "encoder": "best",
+            "input_bytes": (512 * 3 + 1) * 256,
+            "chunk_bytes": 4096,
+            "include_empty_chunks": "false",
+            "direct_strategy": "span-reader",
+        },
+        "png-rgba8-stored-256b": {
+            "encoder": "stored",
+            "input_bytes": (128 * 4 + 1) * 96,
+            "chunk_bytes": 256,
+            "include_empty_chunks": "false",
+            "direct_strategy": "stored-direct",
+        },
+        "png-indexed-stored-1b-empty": {
+            "encoder": "stored",
+            "input_bytes": (96 + 1) * 64,
+            "chunk_bytes": 1,
+            "include_empty_chunks": "true",
+            "direct_strategy": "stack-join",
+        },
+        "png-indexed-stored-7b-empty": {
+            "encoder": "stored",
+            "input_bytes": (257 + 1) * 48,
+            "chunk_bytes": 7,
+            "include_empty_chunks": "true",
+            "direct_strategy": "stack-join",
+        },
+        "png-literal-16b": {
+            "encoder": "dynamic_literal",
+            "input_bytes": (80 * 3 + 1) * 80,
+            "chunk_bytes": 16,
+            "include_empty_chunks": "false",
+            "direct_strategy": "stack-join",
+        },
+    }
+
+    def expected_chunk_count(zlib_bytes: int, chunk_bytes: int, include_empty: bool) -> int:
+        non_empty = max(1, (zlib_bytes + chunk_bytes - 1) // chunk_bytes)
+        return non_empty * 2 + 1 if include_empty else non_empty
+
+    def ratio_ok(row: dict[str, str], numerator: str, denominator: str, ratio_key: str) -> bool:
+        try:
+            reported = float(row.get(ratio_key) or "0")
+            computed = float(row.get(numerator) or "0") / float(row.get(denominator) or "0")
+        except (ValueError, ZeroDivisionError):
+            return False
+        return abs(reported - computed) <= 0.005
+
+    for artifact in artifacts:
+        if artifact.name != "vort-chunked-zlib-bench-report-repeat3.csv":
+            continue
+        try:
+            with artifact.open(newline="") as f:
+                rows = list(csv.DictReader(f))
+        except Exception:
+            rows = []
+        seen: set[str] = set()
+        positive_rows = 0
+        shape_rows = 0
+        chunk_count_rows = 0
+        ratio_rows = 0
+        for row in rows:
+            case = str(row.get("case") or "")
+            expected = expected_cases.get(case)
+            if expected is not None:
+                seen.add(case)
+            try:
+                input_bytes = int(row.get("input_bytes") or "0")
+                zlib_bytes = int(row.get("zlib_bytes") or "0")
+                chunk_bytes = int(row.get("chunk_bytes") or "0")
+                chunk_count = int(row.get("chunk_count") or "0")
+                iterations = int(row.get("iterations") or "0")
+                repeat = int(row.get("repeat") or "0")
+                mix = int(row.get("mix") or "0")
+                contiguous_mib_s = float(row.get("contiguous_mib_s") or "0")
+                chunk_join_mib_s = float(row.get("chunk_join_mib_s") or "0")
+                chunk_direct_mib_s = float(row.get("chunk_direct_mib_s") or "0")
+                chunk_exact_mib_s = float(row.get("chunk_exact_mib_s") or "0")
+                direct_over_contiguous = float(row.get("direct_over_contiguous") or "0")
+                direct_over_join = float(row.get("direct_over_join") or "0")
+                join_over_contiguous = float(row.get("join_over_contiguous") or "0")
+                exact_over_direct = float(row.get("exact_over_direct") or "0")
+            except ValueError:
+                continue
+            if (
+                expected is not None
+                and row.get("encoder") == expected["encoder"]
+                and input_bytes == expected["input_bytes"]
+                and chunk_bytes == expected["chunk_bytes"]
+                and row.get("include_empty_chunks") == expected["include_empty_chunks"]
+                and row.get("direct_strategy") == expected["direct_strategy"]
+            ):
+                shape_rows += 1
+            if all(value > 0 for value in (zlib_bytes, chunk_count, iterations, repeat, mix)) and all(
+                value > 0.0
+                for value in (
+                    contiguous_mib_s,
+                    chunk_join_mib_s,
+                    chunk_direct_mib_s,
+                    chunk_exact_mib_s,
+                    direct_over_contiguous,
+                    direct_over_join,
+                    join_over_contiguous,
+                    exact_over_direct,
+                )
+            ):
+                positive_rows += 1
+            if chunk_bytes > 0 and zlib_bytes >= 6 and chunk_count == expected_chunk_count(zlib_bytes, chunk_bytes, row.get("include_empty_chunks") == "true"):
+                chunk_count_rows += 1
+            if (
+                ratio_ok(row, "chunk_direct_mib_s", "contiguous_mib_s", "direct_over_contiguous")
+                and ratio_ok(row, "chunk_direct_mib_s", "chunk_join_mib_s", "direct_over_join")
+                and ratio_ok(row, "chunk_join_mib_s", "contiguous_mib_s", "join_over_contiguous")
+                and ratio_ok(row, "chunk_exact_mib_s", "chunk_direct_mib_s", "exact_over_direct")
+            ):
+                ratio_rows += 1
+        missing_cases = sorted(set(expected_cases) - seen)
+        row_count = len(rows)
+        healthy = (
+            row_count == len(expected_cases)
+            and not missing_cases
+            and positive_rows == row_count
+            and shape_rows == row_count
+            and chunk_count_rows == row_count
+            and ratio_rows == row_count
+        )
+        return {
+            "present": True,
+            "healthy": healthy,
+            "row_count": row_count,
+            "expected_rows": len(expected_cases),
+            "positive_rows": positive_rows,
+            "shape_rows": shape_rows,
+            "chunk_count_rows": chunk_count_rows,
+            "ratio_rows": ratio_rows,
+            "missing_cases": missing_cases,
+        }
+    return {
+        "present": False,
+        "healthy": False,
+        "row_count": 0,
+        "expected_rows": len(expected_cases),
+        "positive_rows": 0,
+        "shape_rows": 0,
+        "chunk_count_rows": 0,
+        "ratio_rows": 0,
+        "missing_cases": [],
+    }
+
+
 def zstd_compare_health(artifacts: list[Path]) -> dict:
     compare = None
     standard = None
@@ -2525,6 +2699,7 @@ def main() -> int:
     deflate_extra_bits_bench = deflate_extra_bits_bench_health(artifacts)
     dictionary_decode_bench = dictionary_decode_bench_health(artifacts)
     png_scanline_bench = png_scanline_bench_health(artifacts)
+    chunked_zlib_bench = chunked_zlib_bench_health(artifacts)
     zstd_compare = zstd_compare_health(artifacts)
     native_allocation = native_allocation_health(artifacts)
     python_zlib_health = python_zlib_diff_health(artifacts)
@@ -2579,6 +2754,7 @@ def main() -> int:
     deflate_extra_bits_bench_healthy = deflate_extra_bits_bench["healthy"]
     dictionary_decode_bench_healthy = dictionary_decode_bench["healthy"]
     png_scanline_bench_healthy = png_scanline_bench["healthy"]
+    chunked_zlib_bench_healthy = chunked_zlib_bench["healthy"]
     native_allocation_healthy = native_allocation["healthy"]
     native_summary_error_healthy = native_summary_error_health["healthy"]
     native_summary_error_negative_healthy = native_summary_error_negative["healthy"]
@@ -2614,6 +2790,7 @@ def main() -> int:
         and deflate_extra_bits_bench_healthy
         and dictionary_decode_bench_healthy
         and png_scanline_bench_healthy
+        and chunked_zlib_bench_healthy
         and br_static_dictionary["healthy"]
         and native_summary_error_healthy
         and native_summary_error_negative_healthy
@@ -2742,6 +2919,10 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_png_scanline_bench_artifact")
     elif not png_scanline_bench_healthy:
         validation_unhealthy_reasons.append("png_scanline_bench_failed")
+    if not chunked_zlib_bench["present"]:
+        validation_unhealthy_reasons.append("missing_chunked_zlib_bench_artifact")
+    elif not chunked_zlib_bench_healthy:
+        validation_unhealthy_reasons.append("chunked_zlib_bench_failed")
     native_allocation_present = (
         native_allocation["present"]
         and native_allocation["smoke_present"]
@@ -3113,6 +3294,18 @@ def main() -> int:
             f"| rows | {png_scanline_bench['row_count']} | expected {png_scanline_bench['expected_rows']}, present `{png_scanline_bench['present']}` |",
             f"| shape rows | {png_scanline_bench['shape_rows']} | positive rows {png_scanline_bench['positive_rows']} |",
             f"| input/output rows | {png_scanline_bench['io_match_rows']} | missing pairs {len(png_scanline_bench['missing_pairs'])}, healthy `{png_scanline_bench['healthy']}` |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
+            "## Chunked zlib benchmark coverage",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| rows | {chunked_zlib_bench['row_count']} | expected {chunked_zlib_bench['expected_rows']}, present `{chunked_zlib_bench['present']}` |",
+            f"| shape rows | {chunked_zlib_bench['shape_rows']} | positive rows {chunked_zlib_bench['positive_rows']} |",
+            f"| ratio rows | {chunked_zlib_bench['ratio_rows']} | chunk-count rows {chunked_zlib_bench['chunk_count_rows']}, missing cases {len(chunked_zlib_bench['missing_cases'])}, healthy `{chunked_zlib_bench['healthy']}` |",
             "",
         ]
     )
@@ -3644,6 +3837,15 @@ def main() -> int:
                 "png_scanline_bench_shape_rows": png_scanline_bench["shape_rows"],
                 "png_scanline_bench_io_match_rows": png_scanline_bench["io_match_rows"],
                 "png_scanline_bench_missing_pairs": png_scanline_bench["missing_pairs"],
+                "chunked_zlib_bench_present": chunked_zlib_bench["present"],
+                "chunked_zlib_bench_healthy": chunked_zlib_bench["healthy"],
+                "chunked_zlib_bench_rows": chunked_zlib_bench["row_count"],
+                "chunked_zlib_bench_expected_rows": chunked_zlib_bench["expected_rows"],
+                "chunked_zlib_bench_positive_rows": chunked_zlib_bench["positive_rows"],
+                "chunked_zlib_bench_shape_rows": chunked_zlib_bench["shape_rows"],
+                "chunked_zlib_bench_chunk_count_rows": chunked_zlib_bench["chunk_count_rows"],
+                "chunked_zlib_bench_ratio_rows": chunked_zlib_bench["ratio_rows"],
+                "chunked_zlib_bench_missing_cases": chunked_zlib_bench["missing_cases"],
                 "zstd_compare_present": zstd_compare["present"],
                 "zstd_compare_standard_present": zstd_compare["standard_present"],
                 "zstd_compare_block_sweep_present": zstd_compare["block_sweep_present"],
