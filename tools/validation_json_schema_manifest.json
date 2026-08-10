@@ -1010,10 +1010,13 @@
         },
         "png_scratch_healthy": {
           "all": [
-            "png_scratch_present"
+            "png_scratch_present",
+            "png_scratch_markdown_present"
           ],
           "positive": [
             "png_scratch_case_count",
+            "png_scratch_report_rows",
+            "png_scratch_row_consistent_count",
             "png_scratch_adam7_cases",
             "png_scratch_stored_achieved",
             "png_scratch_fixed_achieved",
@@ -1022,7 +1025,14 @@
             "png_scratch_max_working_scratch",
             "png_scratch_max_streaming_working_scratch",
             "png_scratch_max_fixed_dynamic_streaming_working_scratch",
-            "png_scratch_min_streaming_ratio"
+            "png_scratch_min_streaming_ratio",
+            "png_scratch_markdown_rows",
+            "png_scratch_markdown_matched"
+          ],
+          "zero": [
+            "png_scratch_report_count_mismatch",
+            "png_scratch_row_inconsistent_count",
+            "png_scratch_markdown_unmatched"
           ]
         },
         "br_static_dictionary_healthy": {
@@ -1578,8 +1588,13 @@
         "br_static_dictionary_report_negative_matched": "int",
         "br_static_dictionary_report_negative_unmatched": "int",
         "png_scratch_present": "bool",
+        "png_scratch_markdown_present": "bool",
         "png_scratch_healthy": "bool",
         "png_scratch_case_count": "int",
+        "png_scratch_report_rows": "int",
+        "png_scratch_report_count_mismatch": "int",
+        "png_scratch_row_consistent_count": "int",
+        "png_scratch_row_inconsistent_count": "int",
         "png_scratch_adam7_cases": "int",
         "png_scratch_stored_achieved": "int",
         "png_scratch_fixed_achieved": "int",
@@ -1589,6 +1604,9 @@
         "png_scratch_max_streaming_working_scratch": "int",
         "png_scratch_max_fixed_dynamic_streaming_working_scratch": "int",
         "png_scratch_min_streaming_ratio": "int",
+        "png_scratch_markdown_rows": "int",
+        "png_scratch_markdown_matched": "int",
+        "png_scratch_markdown_unmatched": "int",
         "zlib_relaxed_present": "bool",
         "zlib_relaxed_healthy": "bool",
         "zlib_relaxed_gate_present": "bool",
@@ -2327,6 +2345,36 @@
           "left": "native_fuzz_corpus_markdown_matched",
           "op": "eq",
           "right": "native_fuzz_corpus_markdown_rows"
+        },
+        {
+          "left": "png_scratch_report_rows",
+          "op": "eq",
+          "right": "png_scratch_case_count"
+        },
+        {
+          "left": "png_scratch_row_consistent_count",
+          "op": "eq",
+          "right": "png_scratch_report_rows"
+        },
+        {
+          "left": "png_scratch_stored_achieved",
+          "op": "eq",
+          "right": "png_scratch_case_count"
+        },
+        {
+          "left": "png_scratch_fixed_achieved",
+          "op": "eq",
+          "right": "png_scratch_case_count"
+        },
+        {
+          "left": "png_scratch_total_streaming_savings",
+          "op": "eq",
+          "right": "png_scratch_total_zlib_scratch"
+        },
+        {
+          "left": "png_scratch_markdown_matched",
+          "op": "eq",
+          "right": "png_scratch_markdown_rows"
         }
       ]
     },

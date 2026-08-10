@@ -51,6 +51,7 @@ ZLIB_RELAXED_ARTIFACT = "vort-zlib-relaxed-report.json"
 ZLIB_RELAXED_GATE_ARTIFACT = "vort-zlib-relaxed-report-gate.json"
 SNAPPY_REPORT_ARTIFACT = "vort-snappy-report.csv"
 PNG_SCRATCH_ARTIFACT = "vort-png-scratch-report.json"
+PNG_SCRATCH_MARKDOWN_ARTIFACT = "vort-png-scratch-report.md"
 BR_STATIC_CANDIDATES_ARTIFACT = "vort-br-static-dictionary-candidates.json"
 BR_STATIC_UPSTREAM_ARTIFACT = "vort-br-static-dictionary-candidate-upstream-smoke.json"
 BR_STATIC_NODE_ARTIFACT = "vort-br-static-dictionary-node-probe.json"
@@ -353,6 +354,10 @@ def write_producer_map(
             "expected_format": "json",
             "smoke_gate": "zig build run-png-scratch-report-dashboard",
         }
+        artifact_metadata[PNG_SCRATCH_MARKDOWN_ARTIFACT] = {
+            "expected_format": "md",
+            "smoke_gate": "zig build run-png-scratch-report-dashboard",
+        }
     if include_br_static_smoke:
         for artifact, expected_format, smoke_gate in (
             (BR_STATIC_CANDIDATES_ARTIFACT, "json", "zig build run-br-static-dictionary-candidate-report-smoke"),
@@ -502,6 +507,7 @@ def write_producer_map(
         exact[SNAPPY_REPORT_ARTIFACT] = "zig build run-snappy-report-gate"
     if include_png_scratch_exact:
         exact[PNG_SCRATCH_ARTIFACT] = "zig build run-png-scratch-report-dashboard"
+        exact[PNG_SCRATCH_MARKDOWN_ARTIFACT] = "zig build run-png-scratch-report-dashboard"
     if include_br_static_exact:
         exact[BR_STATIC_CANDIDATES_ARTIFACT] = "zig build run-br-static-dictionary-candidate-report-smoke"
         exact[BR_STATIC_UPSTREAM_ARTIFACT] = "zig build run-br-static-dictionary-candidate-upstream-smoke"
@@ -2341,6 +2347,17 @@ def write_png_scratch_report(path: Path) -> None:
     ]
     payload = {"schema": "vort.png_scratch_report", "schema_version": 1, "case_count": len(cases), "cases": cases}
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    markdown_lines = [
+        "# PNG scratch footprint report",
+        "",
+        "| case | interlace | dimensions | bit depth | color type | stored streaming | fixed/dynamic streaming | zlib scratch | filtered row scratch | previous row scratch | fixed/dynamic history scratch | image output | working scratch | stored/row streaming scratch | fixed/dynamic streaming scratch | scratch savings | target ratio x10000 | total caller-owned | stored/row streaming total | fixed/dynamic streaming total |",
+        "| --- | --- | ---: | ---: | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for row in cases:
+        markdown_lines.append(
+            f"| {row['case']} | {row['interlace']} | {row['width']}x{row['height']} | {row['bit_depth']} | {row['color_type']} | {row['stored_streaming_status']} | {row['fixed_dynamic_streaming_status']} | {row['zlib_scratch_bytes']} | {row['filtered_row_scratch_bytes']} | {row['previous_row_scratch_bytes']} | {row['fixed_dynamic_history_scratch_bytes']} | {row['image_output_bytes']} | {row['working_scratch_bytes']} | {row['streaming_working_scratch_bytes']} | {row['fixed_dynamic_streaming_working_scratch_bytes']} | {row['streaming_scratch_savings_bytes']} | {row['streaming_scratch_ratio_x10000']} | {row['total_caller_owned_bytes']} | {row['streaming_total_caller_owned_bytes']} | {row['fixed_dynamic_streaming_total_caller_owned_bytes']} |"
+        )
+    path.with_suffix(".md").write_text("\n".join(markdown_lines) + "\n")
 
 
 def write_native_fuzz_corpus_artifacts(root: Path) -> None:
@@ -3779,8 +3796,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 76/76 | 0 | allowed missing 0 |",
-                    "| smoke gates | 76/76 | 0 | required missing 0 |",
+                    "| producer steps | 77/77 | 0 | allowed missing 0 |",
+                    "| smoke gates | 77/77 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -4239,10 +4256,12 @@ def main() -> int:
                     "## PNG scratch coverage",
                     "| category | count | detail |",
                     "| cases | 2 | Adam7 1, healthy `True` |",
+                    "| report rows | 2/2 | consistent 2, count mismatch 0, inconsistent 0 |",
                     "| streaming achieved | 2/2 | fixed/dynamic 2/2 |",
                     "| zlib scratch savings | 166 | zlib scratch 166 |",
                     "| max working scratch | 116 | streaming/fixed-dynamic 30/32798 |",
                     "| min streaming ratio x10000 | 2586 | lower is better |",
+                    "| Markdown rows | 2/2 | present `True`, unmatched 0 |",
                 ],
             )
         )

@@ -2781,13 +2781,17 @@ Top-level fields:
   `br_static_dictionary_report_negative_case_count`,
   `br_static_dictionary_report_negative_matched`,
   `br_static_dictionary_report_negative_unmatched`
-- `png_scratch_present`, `png_scratch_healthy`, `png_scratch_case_count`,
+- `png_scratch_present`, `png_scratch_markdown_present`,
+  `png_scratch_healthy`, `png_scratch_case_count`,
+  `png_scratch_report_rows`, `png_scratch_report_count_mismatch`,
+  `png_scratch_row_consistent_count`, `png_scratch_row_inconsistent_count`,
   `png_scratch_adam7_cases`, `png_scratch_stored_achieved`,
   `png_scratch_fixed_achieved`, `png_scratch_total_zlib_scratch`,
   `png_scratch_total_streaming_savings`, `png_scratch_max_working_scratch`,
   `png_scratch_max_streaming_working_scratch`,
   `png_scratch_max_fixed_dynamic_streaming_working_scratch`,
-  `png_scratch_min_streaming_ratio`
+  `png_scratch_min_streaming_ratio`, `png_scratch_markdown_rows`,
+  `png_scratch_markdown_matched`, `png_scratch_markdown_unmatched`
 - `zlib_relaxed_present`, `zlib_relaxed_healthy`,
   `zlib_relaxed_gate_present`, `zlib_relaxed_gate_ok`,
   `zlib_relaxed_gate_check_count`, `zlib_relaxed_gate_passed_count`,
@@ -3324,8 +3328,13 @@ Example:
   "br_static_dictionary_report_negative_matched": 0,
   "br_static_dictionary_report_negative_unmatched": 0,
   "png_scratch_present": false,
+  "png_scratch_markdown_present": false,
   "png_scratch_healthy": false,
   "png_scratch_case_count": 0,
+  "png_scratch_report_rows": 0,
+  "png_scratch_report_count_mismatch": 0,
+  "png_scratch_row_consistent_count": 0,
+  "png_scratch_row_inconsistent_count": 0,
   "png_scratch_adam7_cases": 0,
   "png_scratch_stored_achieved": 0,
   "png_scratch_fixed_achieved": 0,
@@ -3335,6 +3344,9 @@ Example:
   "png_scratch_max_streaming_working_scratch": 0,
   "png_scratch_max_fixed_dynamic_streaming_working_scratch": 0,
   "png_scratch_min_streaming_ratio": 0,
+  "png_scratch_markdown_rows": 0,
+  "png_scratch_markdown_matched": 0,
+  "png_scratch_markdown_unmatched": 0,
   "zlib_relaxed_present": false,
   "zlib_relaxed_healthy": false,
   "zlib_relaxed_gate_present": false,
@@ -4785,7 +4797,9 @@ zig build run-png-scratch-report-dashboard
 ```
 
 This report records caller-owned scratch and output footprint baselines for
-representative PNG-like zlib decode paths. It includes non-interlaced and Adam7
+representative PNG-like zlib decode paths. Dashboard aggregate health also
+cross-checks the retained Markdown table against the JSON rows and verifies
+per-row scratch arithmetic. It includes non-interlaced and Adam7
 cases across RGB8, packed indexed rows, and RGBA16 so future incremental inflate
 work can prove peak `zlib_scratch_bytes` reductions against a stable baseline.
 The status columns make the milestone split explicit: stored-deflate scanline

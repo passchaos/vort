@@ -2565,3 +2565,8 @@ architecture blindly.
   smoke. Aggregate health now cross-checks Markdown mode/error/sample rows,
   report item counts, accepted/rejected/matched totals, and coverage-smoke
   matched mode/error requirements before native fuzz coverage can pass.
+- Tightened PNG scratch dashboard health by requiring the retained
+  `vort-png-scratch-report.md` companion beside the JSON report. Aggregate
+  health now cross-checks every Markdown row against JSON scratch metrics,
+  verifies per-row scratch/total arithmetic, and exposes row-consistency plus
+  Markdown drift counters before PNG scratch coverage can pass.

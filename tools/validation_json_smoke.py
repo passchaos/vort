@@ -156,6 +156,7 @@ def main() -> int:
         native_allocation_smoke_path = ROOT / "zig-out" / "vort-native-allocation-smoke.json"
         native_allocation_negative_smoke_path = ROOT / "zig-out" / "vort-native-allocation-negative-smoke.json"
         png_scratch_path = ROOT / "zig-out" / "vort-png-scratch-report.json"
+        png_scratch_markdown_path = ROOT / "zig-out" / "vort-png-scratch-report.md"
         input_bytes = (b"validation json schema smoke\n" * 64) + (b"abcdef" * 128)
         input_path.write_bytes(input_bytes)
 
@@ -559,6 +560,7 @@ def main() -> int:
         assert native_allocation_negative_smoke["cases"]
         validate_value_against_manifest(native_allocation_negative_smoke, schemas_def)
         png_scratch = json.loads(png_scratch_path.read_text())
+        png_scratch_markdown = png_scratch_markdown_path.read_text()
         assert png_scratch["schema"] == "vort.png_scratch_report"
         assert png_scratch["schema_version"] == 1
         assert png_scratch["case_count"] >= 1
@@ -994,6 +996,7 @@ def main() -> int:
         shutil.copyfile(zlib_relaxed_gate_path, root / "vort-zlib-relaxed-report-gate.json")
         shutil.copyfile(snappy_report_path, root / "vort-snappy-report.csv")
         shutil.copyfile(png_scratch_path, root / "vort-png-scratch-report.json")
+        shutil.copyfile(png_scratch_markdown_path, root / "vort-png-scratch-report.md")
         shutil.copyfile(native_library_bench_path, root / "vort-native-library-bench.csv")
         shutil.copyfile(native_allocation_path, root / "vort-native-allocation-report.json")
         shutil.copyfile(native_allocation_markdown_path, root / "vort-native-allocation-report.md")
@@ -1260,8 +1263,13 @@ def main() -> int:
         assert dashboard["br_static_dictionary_report_negative_matched"] == br_static_dictionary_report_negative["case_count"]
         assert dashboard["br_static_dictionary_report_negative_unmatched"] == 0
         assert dashboard["png_scratch_present"] is True
+        assert dashboard["png_scratch_markdown_present"] is True
         assert dashboard["png_scratch_healthy"] is True
         assert dashboard["png_scratch_case_count"] == png_scratch["case_count"]
+        assert dashboard["png_scratch_report_rows"] == len(png_scratch["cases"])
+        assert dashboard["png_scratch_report_count_mismatch"] == 0
+        assert dashboard["png_scratch_row_consistent_count"] == len(png_scratch["cases"])
+        assert dashboard["png_scratch_row_inconsistent_count"] == 0
         assert dashboard["png_scratch_adam7_cases"] >= 1
         assert dashboard["png_scratch_stored_achieved"] == png_scratch["case_count"]
         assert dashboard["png_scratch_fixed_achieved"] == png_scratch["case_count"]
@@ -1269,6 +1277,10 @@ def main() -> int:
         assert dashboard["png_scratch_max_working_scratch"] > dashboard["png_scratch_max_streaming_working_scratch"]
         assert dashboard["png_scratch_max_fixed_dynamic_streaming_working_scratch"] >= 32768
         assert dashboard["png_scratch_min_streaming_ratio"] > 0
+        assert dashboard["png_scratch_markdown_rows"] == len(png_scratch["cases"])
+        assert dashboard["png_scratch_markdown_matched"] == len(png_scratch["cases"])
+        assert dashboard["png_scratch_markdown_unmatched"] == 0
+        assert "| png_rgb8_noninterlaced |" in png_scratch_markdown
         assert dashboard["zlib_relaxed_present"] is True
         assert dashboard["zlib_relaxed_healthy"] is True
         assert dashboard["zlib_relaxed_gate_present"] is True

@@ -1637,16 +1637,88 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
 
 
 def png_scratch_health(artifacts: list[Path]) -> dict:
+    markdown = next((artifact for artifact in artifacts if artifact.name == "vort-png-scratch-report.md"), None)
+
+    def int_case(row: dict, field: str) -> int:
+        value = row.get(field)
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    def str_case(row: dict, field: str) -> str:
+        value = row.get(field)
+        return str(value) if isinstance(value, str) else ""
+
+    def row_consistent(row: dict) -> bool:
+        working = int_case(row, "working_scratch_bytes")
+        streaming_working = int_case(row, "streaming_working_scratch_bytes")
+        fixed_streaming_working = int_case(row, "fixed_dynamic_streaming_working_scratch_bytes")
+        image_output = int_case(row, "image_output_bytes")
+        zlib_scratch = int_case(row, "zlib_scratch_bytes")
+        filtered = int_case(row, "filtered_row_scratch_bytes")
+        previous = int_case(row, "previous_row_scratch_bytes")
+        history = int_case(row, "fixed_dynamic_history_scratch_bytes")
+        ratio = int_case(row, "streaming_scratch_ratio_x10000")
+        expected_ratio = streaming_working * 10000 // working if working > 0 else 0
+        return (
+            working == zlib_scratch + filtered + previous
+            and streaming_working == filtered + previous
+            and fixed_streaming_working == history + filtered + previous
+            and int_case(row, "streaming_scratch_savings_bytes") == zlib_scratch
+            and int_case(row, "total_caller_owned_bytes") == working + image_output
+            and int_case(row, "streaming_total_caller_owned_bytes") == streaming_working + image_output
+            and int_case(row, "fixed_dynamic_streaming_total_caller_owned_bytes") == fixed_streaming_working + image_output
+            and ratio == expected_ratio
+        )
+
+    def markdown_checks(cases: list[object]) -> tuple[bool, int, int, int]:
+        if markdown is None:
+            return (False, 0, 0, 1)
+        try:
+            text = markdown.read_text(errors="replace")
+        except Exception:
+            return (True, 0, 0, 1)
+        expected: list[str] = []
+        for row in cases:
+            if not isinstance(row, dict):
+                continue
+            expected.append(
+                "| {case} | {interlace} | {width}x{height} | {bit_depth} | {color_type} | {stored} | {fixed} | {zlib} | {filtered} | {previous} | {history} | {output} | {working} | {streaming_working} | {fixed_streaming_working} | {savings} | {ratio} | {total} | {streaming_total} | {fixed_total} |".format(
+                    case=str_case(row, "case"),
+                    interlace=str_case(row, "interlace"),
+                    width=int_case(row, "width"),
+                    height=int_case(row, "height"),
+                    bit_depth=int_case(row, "bit_depth"),
+                    color_type=str_case(row, "color_type"),
+                    stored=str_case(row, "stored_streaming_status"),
+                    fixed=str_case(row, "fixed_dynamic_streaming_status"),
+                    zlib=int_case(row, "zlib_scratch_bytes"),
+                    filtered=int_case(row, "filtered_row_scratch_bytes"),
+                    previous=int_case(row, "previous_row_scratch_bytes"),
+                    history=int_case(row, "fixed_dynamic_history_scratch_bytes"),
+                    output=int_case(row, "image_output_bytes"),
+                    working=int_case(row, "working_scratch_bytes"),
+                    streaming_working=int_case(row, "streaming_working_scratch_bytes"),
+                    fixed_streaming_working=int_case(row, "fixed_dynamic_streaming_working_scratch_bytes"),
+                    savings=int_case(row, "streaming_scratch_savings_bytes"),
+                    ratio=int_case(row, "streaming_scratch_ratio_x10000"),
+                    total=int_case(row, "total_caller_owned_bytes"),
+                    streaming_total=int_case(row, "streaming_total_caller_owned_bytes"),
+                    fixed_total=int_case(row, "fixed_dynamic_streaming_total_caller_owned_bytes"),
+                )
+            )
+        matched = sum(1 for needle in expected if needle in text)
+        return (True, len(expected), matched, len(expected) - matched)
+
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
         if data.get("schema") != "vort.png_scratch_report":
             continue
         cases = data.get("cases")
         cases = cases if isinstance(cases, list) else []
-        def int_case(row: dict, field: str) -> int:
-            value = row.get(field)
-            return value if isinstance(value, int) and not isinstance(value, bool) else 0
         case_count = int(data.get("case_count") or 0)
+        report_rows = len(cases)
+        report_count_mismatch = abs(case_count - report_rows)
+        row_consistent_count = sum(1 for row in cases if isinstance(row, dict) and row_consistent(row))
+        row_inconsistent_count = report_rows - row_consistent_count
         adam7_cases = sum(1 for row in cases if isinstance(row, dict) and row.get("interlace") == "adam7")
         stored_achieved = sum(1 for row in cases if isinstance(row, dict) and row.get("stored_streaming_status") == "achieved")
         fixed_achieved = sum(1 for row in cases if isinstance(row, dict) and row.get("fixed_dynamic_streaming_status") == "achieved")
@@ -1656,19 +1728,30 @@ def png_scratch_health(artifacts: list[Path]) -> dict:
         max_streaming_working_scratch = max((int_case(row, "streaming_working_scratch_bytes") for row in cases if isinstance(row, dict)), default=0)
         max_fixed_dynamic_streaming_working_scratch = max((int_case(row, "fixed_dynamic_streaming_working_scratch_bytes") for row in cases if isinstance(row, dict)), default=0)
         min_streaming_ratio = min((int_case(row, "streaming_scratch_ratio_x10000") for row in cases if isinstance(row, dict)), default=0)
+        markdown_present, markdown_rows, markdown_matched, markdown_unmatched = markdown_checks(cases)
         healthy = (
             case_count > 0
+            and report_count_mismatch == 0
+            and row_inconsistent_count == 0
             and adam7_cases > 0
             and stored_achieved == case_count
             and fixed_achieved == case_count
             and total_streaming_savings == total_zlib_scratch
             and max_working_scratch > max_streaming_working_scratch
             and max_fixed_dynamic_streaming_working_scratch >= 32768
+            and markdown_present
+            and markdown_rows == case_count
+            and markdown_unmatched == 0
         )
         return {
             "present": True,
+            "markdown_present": markdown_present,
             "healthy": healthy,
             "case_count": case_count,
+            "report_rows": report_rows,
+            "report_count_mismatch": report_count_mismatch,
+            "row_consistent_count": row_consistent_count,
+            "row_inconsistent_count": row_inconsistent_count,
             "adam7_cases": adam7_cases,
             "stored_achieved": stored_achieved,
             "fixed_achieved": fixed_achieved,
@@ -1678,11 +1761,19 @@ def png_scratch_health(artifacts: list[Path]) -> dict:
             "max_streaming_working_scratch": max_streaming_working_scratch,
             "max_fixed_dynamic_streaming_working_scratch": max_fixed_dynamic_streaming_working_scratch,
             "min_streaming_ratio": min_streaming_ratio,
+            "markdown_rows": markdown_rows,
+            "markdown_matched": markdown_matched,
+            "markdown_unmatched": markdown_unmatched,
         }
     return {
         "present": False,
+        "markdown_present": False,
         "healthy": False,
         "case_count": 0,
+        "report_rows": 0,
+        "report_count_mismatch": 0,
+        "row_consistent_count": 0,
+        "row_inconsistent_count": 0,
         "adam7_cases": 0,
         "stored_achieved": 0,
         "fixed_achieved": 0,
@@ -1692,6 +1783,9 @@ def png_scratch_health(artifacts: list[Path]) -> dict:
         "max_streaming_working_scratch": 0,
         "max_fixed_dynamic_streaming_working_scratch": 0,
         "min_streaming_ratio": 0,
+        "markdown_rows": 0,
+        "markdown_matched": 0,
+        "markdown_unmatched": 0,
     }
 
 
@@ -4851,7 +4945,7 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_native_fuzz_coverage_artifact")
     elif not native_fuzz["coverage_healthy"]:
         validation_unhealthy_reasons.append("native_fuzz_coverage_failed")
-    if not png_scratch["present"]:
+    if not (png_scratch["present"] and png_scratch["markdown_present"]):
         validation_unhealthy_reasons.append("missing_png_scratch_artifact")
     elif not png_scratch_healthy:
         validation_unhealthy_reasons.append("png_scratch_failed")
@@ -5165,10 +5259,12 @@ def main() -> int:
             "| category | count | detail |",
             "| --- | ---: | --- |",
             f"| cases | {png_scratch['case_count']} | Adam7 {png_scratch['adam7_cases']}, healthy `{png_scratch['healthy']}` |",
+            f"| report rows | {png_scratch['report_rows']}/{png_scratch['case_count']} | consistent {png_scratch['row_consistent_count']}, count mismatch {png_scratch['report_count_mismatch']}, inconsistent {png_scratch['row_inconsistent_count']} |",
             f"| streaming achieved | {png_scratch['stored_achieved']}/{png_scratch['case_count']} | fixed/dynamic {png_scratch['fixed_achieved']}/{png_scratch['case_count']} |",
             f"| zlib scratch savings | {png_scratch['total_streaming_savings']} | zlib scratch {png_scratch['total_zlib_scratch']} |",
             f"| max working scratch | {png_scratch['max_working_scratch']} | streaming/fixed-dynamic {png_scratch['max_streaming_working_scratch']}/{png_scratch['max_fixed_dynamic_streaming_working_scratch']} |",
             f"| min streaming ratio x10000 | {png_scratch['min_streaming_ratio']} | lower is better |",
+            f"| Markdown rows | {png_scratch['markdown_matched']}/{png_scratch['markdown_rows']} | present `{png_scratch['markdown_present']}`, unmatched {png_scratch['markdown_unmatched']} |",
             "",
         ]
     )
@@ -5910,8 +6006,13 @@ def main() -> int:
                 "br_static_dictionary_report_negative_matched": br_static_dictionary["report_negative_matched"],
                 "br_static_dictionary_report_negative_unmatched": br_static_dictionary["report_negative_unmatched"],
                 "png_scratch_present": png_scratch["present"],
+                "png_scratch_markdown_present": png_scratch["markdown_present"],
                 "png_scratch_healthy": png_scratch["healthy"],
                 "png_scratch_case_count": png_scratch["case_count"],
+                "png_scratch_report_rows": png_scratch["report_rows"],
+                "png_scratch_report_count_mismatch": png_scratch["report_count_mismatch"],
+                "png_scratch_row_consistent_count": png_scratch["row_consistent_count"],
+                "png_scratch_row_inconsistent_count": png_scratch["row_inconsistent_count"],
                 "png_scratch_adam7_cases": png_scratch["adam7_cases"],
                 "png_scratch_stored_achieved": png_scratch["stored_achieved"],
                 "png_scratch_fixed_achieved": png_scratch["fixed_achieved"],
@@ -5921,6 +6022,9 @@ def main() -> int:
                 "png_scratch_max_streaming_working_scratch": png_scratch["max_streaming_working_scratch"],
                 "png_scratch_max_fixed_dynamic_streaming_working_scratch": png_scratch["max_fixed_dynamic_streaming_working_scratch"],
                 "png_scratch_min_streaming_ratio": png_scratch["min_streaming_ratio"],
+                "png_scratch_markdown_rows": png_scratch["markdown_rows"],
+                "png_scratch_markdown_matched": png_scratch["markdown_matched"],
+                "png_scratch_markdown_unmatched": png_scratch["markdown_unmatched"],
                 "zlib_relaxed_present": zlib_relaxed["present"],
                 "zlib_relaxed_healthy": zlib_relaxed["healthy"],
                 "zlib_relaxed_gate_present": zlib_relaxed["gate_present"],
