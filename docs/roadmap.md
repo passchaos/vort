@@ -2530,3 +2530,4 @@ architecture blindly.
   chunked-Huffman benchmark reasons in strict-validation-health. Validation JSON
   dashboard generation now depends on `run-deflate-chunked-huffman-bench-gate`
   so clean dashboard runs retain the CSV before aggregate health is enforced.
+- Promoted `run-deflate-extra-bits-bench-gate` into dashboard aggregate validation health: the dashboard now checks the 105-row extra-bit CSV shape, positive timing fields, expected case/reader/kernel coverage, and paired checksum equivalence for staged/current and fused/current rows, with strict missing/failed reasons plus schema/docs smoke coverage.

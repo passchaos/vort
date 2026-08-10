@@ -1381,6 +1381,111 @@ def deflate_chunked_huffman_bench_health(artifacts: list[Path]) -> dict:
     }
 
 
+def deflate_extra_bits_bench_health(artifacts: list[Path]) -> dict:
+    expected_cases = {
+        "extra-1": {"bits": 1, "kernels": {"single"}},
+        "extra-3": {"bits": 3, "kernels": {"single"}},
+        "extra-5": {"bits": 5, "kernels": {"single"}},
+        "extra-9": {"bits": 9, "kernels": {"single"}},
+        "extra-13": {"bits": 13, "kernels": {"single"}},
+        "mixed-readme-length": {"bits": 0, "kernels": {"current", "staged"}},
+        "mixed-roadmap-length": {"bits": 0, "kernels": {"current", "staged"}},
+        "mixed-readme-distance": {"bits": 0, "kernels": {"mixed-extra"}},
+        "mixed-roadmap-distance": {"bits": 0, "kernels": {"mixed-extra"}},
+        "distance-readme-symbol-extra": {"bits": 0, "kernels": {"current", "fused18"}},
+        "distance-roadmap-symbol-extra": {"bits": 0, "kernels": {"current", "fused18"}},
+    }
+    expected_readers = {"buffered", "chunked_4096", "span_4096", "chunked_64", "span_64", "chunked_1", "span_1"}
+    expected_pairs = {
+        (case, reader, kernel)
+        for case, case_info in expected_cases.items()
+        for reader in expected_readers
+        for kernel in case_info["kernels"]
+    }
+    paired_kernels = {
+        "mixed-readme-length": ("current", "staged"),
+        "mixed-roadmap-length": ("current", "staged"),
+        "distance-readme-symbol-extra": ("current", "fused18"),
+        "distance-roadmap-symbol-extra": ("current", "fused18"),
+    }
+    for artifact in artifacts:
+        if artifact.name != "vort-deflate-extra-bits-bench.csv":
+            continue
+        try:
+            with artifact.open(newline="") as f:
+                rows = list(csv.DictReader(f))
+        except Exception:
+            rows = []
+        seen: set[tuple[str, str, str]] = set()
+        by_key: dict[tuple[str, str, str], dict[str, str]] = {}
+        positive_rows = 0
+        shape_rows = 0
+        paired_checksum_rows = 0
+        for row in rows:
+            case = str(row.get("case") or "")
+            reader = str(row.get("reader") or "")
+            kernel = str(row.get("kernel") or "")
+            key = (case, reader, kernel)
+            if key in expected_pairs:
+                seen.add(key)
+                by_key[key] = row
+            try:
+                bits = int(row.get("bits") or "-1")
+                reads_per_iter = int(row.get("reads_per_iter") or "0")
+                iterations = int(row.get("iterations") or "0")
+                repeat = int(row.get("repeat") or "0")
+                input_bytes = int(row.get("input_bytes") or "0")
+                elapsed_ns = int(row.get("elapsed_ns") or "0")
+                checksum = int(row.get("checksum") or "0")
+                reads_per_s = float(row.get("reads_per_s") or "0")
+                mib_per_s = float(row.get("mib_per_s") or "0")
+            except ValueError:
+                continue
+            if all(value > 0 for value in (reads_per_iter, iterations, repeat, input_bytes, elapsed_ns, checksum)) and reads_per_s > 0.0 and mib_per_s > 0.0:
+                positive_rows += 1
+            case_info = expected_cases.get(case)
+            if case_info is not None and reader in expected_readers and kernel in case_info["kernels"] and bits == case_info["bits"]:
+                shape_rows += 1
+        for case, kernels in paired_kernels.items():
+            lhs, rhs = kernels
+            for reader in expected_readers:
+                lhs_row = by_key.get((case, reader, lhs))
+                rhs_row = by_key.get((case, reader, rhs))
+                if lhs_row is not None and rhs_row is not None and lhs_row.get("checksum") == rhs_row.get("checksum"):
+                    paired_checksum_rows += 1
+        missing_pairs = sorted(f"{case}:{reader}:{kernel}" for case, reader, kernel in expected_pairs - seen)
+        row_count = len(rows)
+        healthy = (
+            row_count == len(expected_pairs)
+            and not missing_pairs
+            and positive_rows == row_count
+            and shape_rows == row_count
+            and paired_checksum_rows == len(paired_kernels) * len(expected_readers)
+        )
+        return {
+            "present": True,
+            "healthy": healthy,
+            "row_count": row_count,
+            "expected_rows": len(expected_pairs),
+            "positive_rows": positive_rows,
+            "shape_rows": shape_rows,
+            "paired_checksum_rows": paired_checksum_rows,
+            "expected_paired_checksum_rows": len(paired_kernels) * len(expected_readers),
+            "missing_pairs": missing_pairs,
+        }
+    return {
+        "present": False,
+        "healthy": False,
+        "row_count": 0,
+        "expected_rows": len(expected_pairs),
+        "positive_rows": 0,
+        "shape_rows": 0,
+        "paired_checksum_rows": 0,
+        "expected_paired_checksum_rows": len(paired_kernels) * len(expected_readers),
+        "missing_pairs": [],
+    }
+
+
 def zstd_compare_health(artifacts: list[Path]) -> dict:
     compare = None
     standard = None
@@ -2259,6 +2364,7 @@ def main() -> int:
     deflate_huffman_build_bench = deflate_huffman_build_bench_health(artifacts)
     deflate_huffman_lookup_bench = deflate_huffman_lookup_bench_health(artifacts)
     deflate_chunked_huffman_bench = deflate_chunked_huffman_bench_health(artifacts)
+    deflate_extra_bits_bench = deflate_extra_bits_bench_health(artifacts)
     zstd_compare = zstd_compare_health(artifacts)
     native_allocation = native_allocation_health(artifacts)
     python_zlib_health = python_zlib_diff_health(artifacts)
@@ -2310,6 +2416,7 @@ def main() -> int:
     deflate_huffman_build_bench_healthy = deflate_huffman_build_bench["healthy"]
     deflate_huffman_lookup_bench_healthy = deflate_huffman_lookup_bench["healthy"]
     deflate_chunked_huffman_bench_healthy = deflate_chunked_huffman_bench["healthy"]
+    deflate_extra_bits_bench_healthy = deflate_extra_bits_bench["healthy"]
     native_allocation_healthy = native_allocation["healthy"]
     native_summary_error_healthy = native_summary_error_health["healthy"]
     native_summary_error_negative_healthy = native_summary_error_negative["healthy"]
@@ -2342,6 +2449,7 @@ def main() -> int:
         and deflate_huffman_build_bench_healthy
         and deflate_huffman_lookup_bench_healthy
         and deflate_chunked_huffman_bench_healthy
+        and deflate_extra_bits_bench_healthy
         and br_static_dictionary["healthy"]
         and native_summary_error_healthy
         and native_summary_error_negative_healthy
@@ -2458,6 +2566,10 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_deflate_chunked_huffman_bench_artifact")
     elif not deflate_chunked_huffman_bench_healthy:
         validation_unhealthy_reasons.append("deflate_chunked_huffman_bench_failed")
+    if not deflate_extra_bits_bench["present"]:
+        validation_unhealthy_reasons.append("missing_deflate_extra_bits_bench_artifact")
+    elif not deflate_extra_bits_bench_healthy:
+        validation_unhealthy_reasons.append("deflate_extra_bits_bench_failed")
     native_allocation_present = (
         native_allocation["present"]
         and native_allocation["smoke_present"]
@@ -2793,6 +2905,18 @@ def main() -> int:
             f"| rows | {deflate_chunked_huffman_bench['row_count']} | expected {deflate_chunked_huffman_bench['expected_rows']}, present `{deflate_chunked_huffman_bench['present']}` |",
             f"| shape rows | {deflate_chunked_huffman_bench['shape_rows']} | positive rows {deflate_chunked_huffman_bench['positive_rows']} |",
             f"| buffered rows | {deflate_chunked_huffman_bench['buffered_zero_chunk_rows']} | missing pairs {len(deflate_chunked_huffman_bench['missing_pairs'])}, healthy `{deflate_chunked_huffman_bench['healthy']}` |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
+            "## Deflate extra-bit benchmark coverage",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| rows | {deflate_extra_bits_bench['row_count']} | expected {deflate_extra_bits_bench['expected_rows']}, present `{deflate_extra_bits_bench['present']}` |",
+            f"| shape rows | {deflate_extra_bits_bench['shape_rows']} | positive rows {deflate_extra_bits_bench['positive_rows']} |",
+            f"| paired checksums | {deflate_extra_bits_bench['paired_checksum_rows']}/{deflate_extra_bits_bench['expected_paired_checksum_rows']} | missing pairs {len(deflate_extra_bits_bench['missing_pairs'])}, healthy `{deflate_extra_bits_bench['healthy']}` |",
             "",
         ]
     )
@@ -3299,6 +3423,15 @@ def main() -> int:
                 "deflate_chunked_huffman_bench_shape_rows": deflate_chunked_huffman_bench["shape_rows"],
                 "deflate_chunked_huffman_bench_buffered_zero_chunk_rows": deflate_chunked_huffman_bench["buffered_zero_chunk_rows"],
                 "deflate_chunked_huffman_bench_missing_pairs": deflate_chunked_huffman_bench["missing_pairs"],
+                "deflate_extra_bits_bench_present": deflate_extra_bits_bench["present"],
+                "deflate_extra_bits_bench_healthy": deflate_extra_bits_bench["healthy"],
+                "deflate_extra_bits_bench_rows": deflate_extra_bits_bench["row_count"],
+                "deflate_extra_bits_bench_expected_rows": deflate_extra_bits_bench["expected_rows"],
+                "deflate_extra_bits_bench_positive_rows": deflate_extra_bits_bench["positive_rows"],
+                "deflate_extra_bits_bench_shape_rows": deflate_extra_bits_bench["shape_rows"],
+                "deflate_extra_bits_bench_paired_checksum_rows": deflate_extra_bits_bench["paired_checksum_rows"],
+                "deflate_extra_bits_bench_expected_paired_checksum_rows": deflate_extra_bits_bench["expected_paired_checksum_rows"],
+                "deflate_extra_bits_bench_missing_pairs": deflate_extra_bits_bench["missing_pairs"],
                 "zstd_compare_present": zstd_compare["present"],
                 "zstd_compare_standard_present": zstd_compare["standard_present"],
                 "zstd_compare_block_sweep_present": zstd_compare["block_sweep_present"],

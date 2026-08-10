@@ -31,6 +31,7 @@ DEFLATE_MATCH_COPY_BENCH_ARTIFACT = "vort-deflate-match-copy-bench.csv"
 DEFLATE_HUFFMAN_BUILD_BENCH_ARTIFACT = "vort-deflate-huffman-build-bench.csv"
 DEFLATE_HUFFMAN_LOOKUP_BENCH_ARTIFACT = "vort-deflate-huffman-lookup-bench.csv"
 DEFLATE_CHUNKED_HUFFMAN_BENCH_ARTIFACT = "vort-deflate-chunked-huffman-bench.csv"
+DEFLATE_EXTRA_BITS_BENCH_ARTIFACT = "vort-deflate-extra-bits-bench.csv"
 FUZZ_CORPUS_ARTIFACT = "vort-deflate-wrapper-fuzz-corpus.json"
 FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
 DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
@@ -105,6 +106,8 @@ def write_producer_map(
     include_deflate_huffman_lookup_bench_smoke: bool = True,
     include_deflate_chunked_huffman_bench_exact: bool = True,
     include_deflate_chunked_huffman_bench_smoke: bool = True,
+    include_deflate_extra_bits_bench_exact: bool = True,
+    include_deflate_extra_bits_bench_smoke: bool = True,
     include_fuzz_corpus_exact: bool = True,
     include_fuzz_corpus_smoke: bool = True,
     include_fuzz_coverage_exact: bool = True,
@@ -209,6 +212,11 @@ def write_producer_map(
         artifact_metadata[DEFLATE_CHUNKED_HUFFMAN_BENCH_ARTIFACT] = {
             "expected_format": "csv",
             "smoke_gate": "zig build run-deflate-chunked-huffman-bench-gate",
+        }
+    if include_deflate_extra_bits_bench_smoke:
+        artifact_metadata[DEFLATE_EXTRA_BITS_BENCH_ARTIFACT] = {
+            "expected_format": "csv",
+            "smoke_gate": "zig build run-deflate-extra-bits-bench-gate",
         }
     if include_fuzz_corpus_smoke:
         artifact_metadata[FUZZ_CORPUS_ARTIFACT] = {
@@ -338,6 +346,8 @@ def write_producer_map(
         exact[DEFLATE_HUFFMAN_LOOKUP_BENCH_ARTIFACT] = "zig build run-deflate-huffman-lookup-bench-gate"
     if include_deflate_chunked_huffman_bench_exact:
         exact[DEFLATE_CHUNKED_HUFFMAN_BENCH_ARTIFACT] = "zig build run-deflate-chunked-huffman-bench-gate"
+    if include_deflate_extra_bits_bench_exact:
+        exact[DEFLATE_EXTRA_BITS_BENCH_ARTIFACT] = "zig build run-deflate-extra-bits-bench-gate"
     if include_fuzz_corpus_exact:
         exact[FUZZ_CORPUS_ARTIFACT] = "zig build run-deflate-wrapper-fuzz-corpus-dashboard"
     if include_fuzz_coverage_exact:
@@ -951,6 +961,69 @@ def write_deflate_chunked_huffman_bench_csv(path: Path, *, healthy: bool = True)
                 continue
             chunk_count = 0 if reader == "buffered" else max(1, 8192 // max(1, chunk_bytes))
             lines.append(",".join([case, reader, decoder, str(lookup_bits), str(chunk_bytes), str(chunk_count), str(128 * 1024), "64", "1048576", "1000", "1000.0", "1.0", "12345"]))
+    path.write_text("\n".join(lines) + "\n")
+
+
+def write_deflate_extra_bits_bench_csv(path: Path, *, healthy: bool = True) -> None:
+    columns = [
+        "case",
+        "reader",
+        "kernel",
+        "bits",
+        "reads_per_iter",
+        "iterations",
+        "repeat",
+        "input_bytes",
+        "elapsed_ns",
+        "reads_per_s",
+        "mib_per_s",
+        "checksum",
+    ]
+    cases = {
+        "extra-1": (1, ("single",)),
+        "extra-3": (3, ("single",)),
+        "extra-5": (5, ("single",)),
+        "extra-9": (9, ("single",)),
+        "extra-13": (13, ("single",)),
+        "mixed-readme-length": (0, ("current", "staged")),
+        "mixed-roadmap-length": (0, ("current", "staged")),
+        "mixed-readme-distance": (0, ("mixed-extra",)),
+        "mixed-roadmap-distance": (0, ("mixed-extra",)),
+        "distance-readme-symbol-extra": (0, ("current", "fused18")),
+        "distance-roadmap-symbol-extra": (0, ("current", "fused18")),
+    }
+    readers = ("buffered", "chunked_4096", "span_4096", "chunked_64", "span_64", "chunked_1", "span_1")
+    paired_cases = {
+        "mixed-readme-length",
+        "mixed-roadmap-length",
+        "distance-readme-symbol-extra",
+        "distance-roadmap-symbol-extra",
+    }
+    lines = [",".join(columns)]
+    for case, (bits, kernels) in cases.items():
+        for reader in readers:
+            checksum = "67890" if case in paired_cases else "12345"
+            for kernel in kernels:
+                if not healthy and case == "distance-roadmap-symbol-extra" and reader == "span_1" and kernel == "fused18":
+                    continue
+                lines.append(
+                    ",".join(
+                        [
+                            case,
+                            reader,
+                            kernel,
+                            str(bits),
+                            "131072",
+                            "32",
+                            "3",
+                            "1048576",
+                            "1000",
+                            "1000.0",
+                            "1.0",
+                            checksum,
+                        ]
+                    )
+                )
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -1820,6 +1893,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_deflate_huffman_build_bench_csv(root / DEFLATE_HUFFMAN_BUILD_BENCH_ARTIFACT)
     write_deflate_huffman_lookup_bench_csv(root / DEFLATE_HUFFMAN_LOOKUP_BENCH_ARTIFACT)
     write_deflate_chunked_huffman_bench_csv(root / DEFLATE_CHUNKED_HUFFMAN_BENCH_ARTIFACT)
+    write_deflate_extra_bits_bench_csv(root / DEFLATE_EXTRA_BITS_BENCH_ARTIFACT)
     write_fuzz_corpus_report(root / FUZZ_CORPUS_ARTIFACT)
     write_fuzz_coverage_report(root / FUZZ_COVERAGE_ARTIFACT)
     write_decode_stage_report(root / DECODE_STAGE_ARTIFACT)
@@ -2221,8 +2295,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 46/46 | 0 | allowed missing 0 |",
-                    "| smoke gates | 46/46 | 0 | required missing 0 |",
+                    "| producer steps | 47/47 | 0 | allowed missing 0 |",
+                    "| smoke gates | 47/47 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -2479,6 +2553,20 @@ def main() -> int:
                     "| rows | 57 | expected 57, present `True` |",
                     "| shape rows | 57 | positive rows 57 |",
                     "| buffered rows | 3 | missing pairs 0, healthy `True` |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
+                "deflate_extra_bits_bench_markdown_table",
+                "deflate extra-bit benchmark Markdown table",
+                dashboard_markdown,
+                [
+                    "## Deflate extra-bit benchmark coverage",
+                    "| category | count | detail |",
+                    "| rows | 105 | expected 105, present `True` |",
+                    "| shape rows | 105 | positive rows 105 |",
+                    "| paired checksums | 28/28 | missing pairs 0, healthy `True` |",
                 ],
             )
         )
@@ -2867,6 +2955,12 @@ def main() -> int:
                 write_producer_map(producer_map)
             elif fixture == "deflate_chunked_huffman_bench_failed":
                 write_deflate_chunked_huffman_bench_csv(fixture_root / DEFLATE_CHUNKED_HUFFMAN_BENCH_ARTIFACT, healthy=False)
+                write_producer_map(producer_map)
+            elif fixture == "missing_deflate_extra_bits_bench_artifact":
+                (fixture_root / DEFLATE_EXTRA_BITS_BENCH_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "deflate_extra_bits_bench_failed":
+                write_deflate_extra_bits_bench_csv(fixture_root / DEFLATE_EXTRA_BITS_BENCH_ARTIFACT, healthy=False)
                 write_producer_map(producer_map)
             elif fixture == "missing_fuzz_corpus_artifact":
                 (fixture_root / FUZZ_CORPUS_ARTIFACT).unlink()
