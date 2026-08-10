@@ -1792,12 +1792,30 @@ def png_scratch_health(artifacts: list[Path]) -> dict:
 def zlib_relaxed_health(artifacts: list[Path]) -> dict:
     report = None
     gate = None
+    markdown = None
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
         if data.get("schema") == "vort.zlib_relaxed_report":
             report = data
         elif data.get("schema") == "vort.zlib_relaxed_report_gate":
             gate = data
+        elif artifact.name == "vort-zlib-relaxed-report.md":
+            markdown = artifact
+
+    metric_rows = (
+        ("strict_rejections", "zlib strict rejections"),
+        ("relaxed_successes", "zlib relaxed successes"),
+        ("dictionary_successes", "zlib dictionary successes"),
+        ("zlib_concatenated_successes", "zlib concatenated successes"),
+        ("zlib_decoder_successes", "zlib decoder successes"),
+        ("limited_rejections", "zlib limited rejections"),
+        ("gzip_strict_rejections", "gzip strict rejections"),
+        ("gzip_relaxed_successes", "gzip relaxed successes"),
+        ("gzip_concatenated_successes", "gzip concatenated successes"),
+        ("gzip_decoder_successes", "gzip decoder successes"),
+        ("gzip_limited_rejections", "gzip limited rejections"),
+    )
+    metric_fields = {field for field, _ in metric_rows}
 
     def int_field(field: str) -> int:
         if not isinstance(report, dict):
@@ -1805,13 +1823,29 @@ def zlib_relaxed_health(artifacts: list[Path]) -> dict:
         value = report.get(field)
         return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
+    def markdown_checks() -> tuple[bool, int, int, int]:
+        if markdown is None:
+            return (False, 0, 0, 1)
+        try:
+            text = markdown.read_text(errors="replace")
+        except Exception:
+            return (True, 0, 0, 1)
+        expected = [f"| {label} | {int_field(field)} |" for field, label in metric_rows]
+        matched = sum(1 for needle in expected if needle in text)
+        return (True, len(expected), matched, len(expected) - matched)
+
     gate_checks = gate.get("checks") if isinstance(gate, dict) else {}
     gate_checks = gate_checks if isinstance(gate_checks, dict) else {}
     gate_check_count = len(gate_checks)
+    gate_expected_checks = len(metric_rows)
     gate_passed_count = sum(1 for value in gate_checks.values() if value is True)
     gate_failed_checks = sorted(str(name) for name, value in gate_checks.items() if value is not True)
     gate_present = isinstance(gate, dict)
     gate_ok = bool(gate.get("ok")) if isinstance(gate, dict) else False
+    gate_keys = {str(name) for name in gate_checks}
+    gate_report_matched = sum(1 for field in metric_fields if gate_checks.get(field) is True and int_field(field) > 0)
+    gate_report_unmatched = len(metric_fields ^ gate_keys) + sum(1 for field in metric_fields & gate_keys if gate_checks.get(field) is not True or int_field(field) <= 0)
+    markdown_present, markdown_rows, markdown_matched, markdown_unmatched = markdown_checks()
     zlib_total = int_field("strict_rejections") + int_field("relaxed_successes") + int_field("dictionary_successes") + int_field("zlib_concatenated_successes") + int_field("zlib_decoder_successes") + int_field("limited_rejections")
     gzip_total = int_field("gzip_strict_rejections") + int_field("gzip_relaxed_successes") + int_field("gzip_concatenated_successes") + int_field("gzip_decoder_successes") + int_field("gzip_limited_rejections")
     report_present = isinstance(report, dict)
@@ -1828,15 +1862,21 @@ def zlib_relaxed_health(artifacts: list[Path]) -> dict:
         and int_field("gzip_decoder_successes") >= 4
         and int_field("gzip_limited_rejections") >= 1
     )
-    healthy = report_present and report_healthy and gate_present and gate_ok and gate_check_count > 0 and gate_passed_count == gate_check_count
+    markdown_healthy = markdown_present and markdown_rows == gate_expected_checks and markdown_unmatched == 0
+    gate_healthy = gate_present and gate_ok and gate_check_count == gate_expected_checks and gate_report_unmatched == 0 and gate_passed_count == gate_check_count
+    healthy = report_present and report_healthy and gate_healthy and markdown_healthy
     return {
         "present": report_present,
+        "markdown_present": markdown_present,
         "healthy": healthy,
         "gate_present": gate_present,
         "gate_ok": gate_ok,
         "gate_check_count": gate_check_count,
+        "gate_expected_checks": gate_expected_checks,
         "gate_passed_count": gate_passed_count,
         "gate_failed_checks": gate_failed_checks,
+        "gate_report_matched": gate_report_matched,
+        "gate_report_unmatched": gate_report_unmatched,
         "strict_rejections": int_field("strict_rejections"),
         "relaxed_successes": int_field("relaxed_successes"),
         "dictionary_successes": int_field("dictionary_successes"),
@@ -1850,6 +1890,9 @@ def zlib_relaxed_health(artifacts: list[Path]) -> dict:
         "gzip_limited_rejections": int_field("gzip_limited_rejections"),
         "zlib_total": zlib_total,
         "gzip_total": gzip_total,
+        "markdown_rows": markdown_rows,
+        "markdown_matched": markdown_matched,
+        "markdown_unmatched": markdown_unmatched,
     }
 
 def snappy_report_health(artifacts: list[Path]) -> dict:
@@ -4949,7 +4992,7 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_png_scratch_artifact")
     elif not png_scratch_healthy:
         validation_unhealthy_reasons.append("png_scratch_failed")
-    if not (zlib_relaxed["present"] and zlib_relaxed["gate_present"]):
+    if not (zlib_relaxed["present"] and zlib_relaxed["gate_present"] and zlib_relaxed["markdown_present"]):
         validation_unhealthy_reasons.append("missing_zlib_relaxed_artifact")
     elif not zlib_relaxed_healthy:
         validation_unhealthy_reasons.append("zlib_relaxed_failed")
@@ -5277,6 +5320,8 @@ def main() -> int:
             f"| zlib | {zlib_relaxed['strict_rejections']} | {zlib_relaxed['relaxed_successes']} | {zlib_relaxed['zlib_concatenated_successes']} | {zlib_relaxed['zlib_decoder_successes']} | {zlib_relaxed['limited_rejections']} | dictionary {zlib_relaxed['dictionary_successes']} |",
             f"| gzip | {zlib_relaxed['gzip_strict_rejections']} | {zlib_relaxed['gzip_relaxed_successes']} | {zlib_relaxed['gzip_concatenated_successes']} | {zlib_relaxed['gzip_decoder_successes']} | {zlib_relaxed['gzip_limited_rejections']} | total {zlib_relaxed['gzip_total']} |",
             f"| gate | {zlib_relaxed['gate_check_count']} | {zlib_relaxed['gate_passed_count']} | 0 | 0 | {len(zlib_relaxed['gate_failed_checks'])} | ok `{zlib_relaxed['gate_ok']}` |",
+            f"| gate/report drift | {zlib_relaxed['gate_report_matched']} | {zlib_relaxed['gate_expected_checks']} | 0 | 0 | {zlib_relaxed['gate_report_unmatched']} | expected checks |",
+            f"| Markdown rows | {zlib_relaxed['markdown_matched']} | {zlib_relaxed['markdown_rows']} | 0 | 0 | {zlib_relaxed['markdown_unmatched']} | present `{zlib_relaxed['markdown_present']}` |",
             "",
         ]
     )
@@ -6026,12 +6071,16 @@ def main() -> int:
                 "png_scratch_markdown_matched": png_scratch["markdown_matched"],
                 "png_scratch_markdown_unmatched": png_scratch["markdown_unmatched"],
                 "zlib_relaxed_present": zlib_relaxed["present"],
+                "zlib_relaxed_markdown_present": zlib_relaxed["markdown_present"],
                 "zlib_relaxed_healthy": zlib_relaxed["healthy"],
                 "zlib_relaxed_gate_present": zlib_relaxed["gate_present"],
                 "zlib_relaxed_gate_ok": zlib_relaxed["gate_ok"],
                 "zlib_relaxed_gate_check_count": zlib_relaxed["gate_check_count"],
+                "zlib_relaxed_gate_expected_checks": zlib_relaxed["gate_expected_checks"],
                 "zlib_relaxed_gate_passed_count": zlib_relaxed["gate_passed_count"],
                 "zlib_relaxed_gate_failed_checks": zlib_relaxed["gate_failed_checks"],
+                "zlib_relaxed_gate_report_matched": zlib_relaxed["gate_report_matched"],
+                "zlib_relaxed_gate_report_unmatched": zlib_relaxed["gate_report_unmatched"],
                 "zlib_relaxed_strict_rejections": zlib_relaxed["strict_rejections"],
                 "zlib_relaxed_successes": zlib_relaxed["relaxed_successes"],
                 "zlib_relaxed_dictionary_successes": zlib_relaxed["dictionary_successes"],
@@ -6043,6 +6092,9 @@ def main() -> int:
                 "gzip_relaxed_concatenated_successes": zlib_relaxed["gzip_concatenated_successes"],
                 "gzip_relaxed_decoder_successes": zlib_relaxed["gzip_decoder_successes"],
                 "gzip_relaxed_limited_rejections": zlib_relaxed["gzip_limited_rejections"],
+                "zlib_relaxed_markdown_rows": zlib_relaxed["markdown_rows"],
+                "zlib_relaxed_markdown_matched": zlib_relaxed["markdown_matched"],
+                "zlib_relaxed_markdown_unmatched": zlib_relaxed["markdown_unmatched"],
                 "snappy_report_present": snappy_report["present"],
                 "snappy_report_healthy": snappy_report["healthy"],
                 "snappy_report_rows": snappy_report["row_count"],

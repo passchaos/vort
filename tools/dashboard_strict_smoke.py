@@ -48,6 +48,7 @@ DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
 DECODE_STAGE_CSV_ARTIFACT = "vort-deflate-decode-stage-report.csv"
 PYTHON_ZLIB_DIFF_ARTIFACT = "vort-python-zlib-diff-smoke.json"
 ZLIB_RELAXED_ARTIFACT = "vort-zlib-relaxed-report.json"
+ZLIB_RELAXED_MARKDOWN_ARTIFACT = "vort-zlib-relaxed-report.md"
 ZLIB_RELAXED_GATE_ARTIFACT = "vort-zlib-relaxed-report-gate.json"
 SNAPPY_REPORT_ARTIFACT = "vort-snappy-report.csv"
 PNG_SCRATCH_ARTIFACT = "vort-png-scratch-report.json"
@@ -339,9 +340,9 @@ def write_producer_map(
             "smoke_gate": "zig build run-python-zlib-diff-dashboard",
         }
     if include_zlib_relaxed_smoke:
-        for artifact in (ZLIB_RELAXED_ARTIFACT, ZLIB_RELAXED_GATE_ARTIFACT):
+        for artifact, expected_format in ((ZLIB_RELAXED_ARTIFACT, "json"), (ZLIB_RELAXED_MARKDOWN_ARTIFACT, "md"), (ZLIB_RELAXED_GATE_ARTIFACT, "json")):
             artifact_metadata[artifact] = {
-                "expected_format": "json",
+                "expected_format": expected_format,
                 "smoke_gate": "zig build run-zlib-relaxed-report-gate",
             }
     if include_snappy_report_smoke:
@@ -502,6 +503,7 @@ def write_producer_map(
         exact[PYTHON_ZLIB_DIFF_ARTIFACT] = "zig build run-python-zlib-diff-dashboard"
     if include_zlib_relaxed_exact:
         exact[ZLIB_RELAXED_ARTIFACT] = "zig build run-zlib-relaxed-report-gate"
+        exact[ZLIB_RELAXED_MARKDOWN_ARTIFACT] = "zig build run-zlib-relaxed-report-gate"
         exact[ZLIB_RELAXED_GATE_ARTIFACT] = "zig build run-zlib-relaxed-report-gate"
     if include_snappy_report_exact:
         exact[SNAPPY_REPORT_ARTIFACT] = "zig build run-snappy-report-gate"
@@ -2227,6 +2229,24 @@ def write_zlib_relaxed_report(path: Path) -> None:
         "gzip_limited_rejections": 1,
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    markdown_lines = [
+        "# relaxed wrapper decode report",
+        "",
+        "| metric | value |",
+        "| --- | ---: |",
+        "| zlib strict rejections | 2 |",
+        "| zlib relaxed successes | 5 |",
+        "| zlib dictionary successes | 2 |",
+        "| zlib concatenated successes | 3 |",
+        "| zlib decoder successes | 8 |",
+        "| zlib limited rejections | 1 |",
+        "| gzip strict rejections | 3 |",
+        "| gzip relaxed successes | 9 |",
+        "| gzip concatenated successes | 4 |",
+        "| gzip decoder successes | 4 |",
+        "| gzip limited rejections | 1 |",
+    ]
+    path.with_suffix(".md").write_text("\n".join(markdown_lines) + "\n")
 
 
 def write_zlib_relaxed_gate(path: Path, *, ok: bool = True) -> None:
@@ -3796,8 +3816,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 77/77 | 0 | allowed missing 0 |",
-                    "| smoke gates | 77/77 | 0 | required missing 0 |",
+                    "| producer steps | 78/78 | 0 | allowed missing 0 |",
+                    "| smoke gates | 78/78 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -4276,6 +4296,8 @@ def main() -> int:
                     "| zlib | 2 | 5 | 3 | 8 | 1 | dictionary 2 |",
                     "| gzip | 3 | 9 | 4 | 4 | 1 | total 21 |",
                     "| gate | 11 | 11 | 0 | 0 | 0 | ok `True` |",
+                    "| gate/report drift | 11 | 11 | 0 | 0 | 0 | expected checks |",
+                    "| Markdown rows | 11 | 11 | 0 | 0 | 0 | present `True` |",
                 ],
             )
         )

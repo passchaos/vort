@@ -986,6 +986,7 @@
         "zlib_relaxed_healthy": {
           "all": [
             "zlib_relaxed_present",
+            "zlib_relaxed_markdown_present",
             "zlib_relaxed_gate_present",
             "zlib_relaxed_gate_ok"
           ],
@@ -1002,10 +1003,16 @@
             "gzip_relaxed_decoder_successes",
             "gzip_relaxed_limited_rejections",
             "zlib_relaxed_gate_check_count",
-            "zlib_relaxed_gate_passed_count"
+            "zlib_relaxed_gate_expected_checks",
+            "zlib_relaxed_gate_passed_count",
+            "zlib_relaxed_gate_report_matched",
+            "zlib_relaxed_markdown_rows",
+            "zlib_relaxed_markdown_matched"
           ],
           "zero": [
-            "zlib_relaxed_gate_failed_checks"
+            "zlib_relaxed_gate_failed_checks",
+            "zlib_relaxed_gate_report_unmatched",
+            "zlib_relaxed_markdown_unmatched"
           ]
         },
         "png_scratch_healthy": {
@@ -1608,12 +1615,16 @@
         "png_scratch_markdown_matched": "int",
         "png_scratch_markdown_unmatched": "int",
         "zlib_relaxed_present": "bool",
+        "zlib_relaxed_markdown_present": "bool",
         "zlib_relaxed_healthy": "bool",
         "zlib_relaxed_gate_present": "bool",
         "zlib_relaxed_gate_ok": "bool",
         "zlib_relaxed_gate_check_count": "int",
+        "zlib_relaxed_gate_expected_checks": "int",
         "zlib_relaxed_gate_passed_count": "int",
         "zlib_relaxed_gate_failed_checks": "list",
+        "zlib_relaxed_gate_report_matched": "int",
+        "zlib_relaxed_gate_report_unmatched": "int",
         "zlib_relaxed_strict_rejections": "int",
         "zlib_relaxed_successes": "int",
         "zlib_relaxed_dictionary_successes": "int",
@@ -1625,6 +1636,9 @@
         "gzip_relaxed_concatenated_successes": "int",
         "gzip_relaxed_decoder_successes": "int",
         "gzip_relaxed_limited_rejections": "int",
+        "zlib_relaxed_markdown_rows": "int",
+        "zlib_relaxed_markdown_matched": "int",
+        "zlib_relaxed_markdown_unmatched": "int",
         "zstd_compare_present": "bool",
         "zstd_compare_standard_present": "bool",
         "zstd_compare_block_sweep_present": "bool",
@@ -2375,6 +2389,31 @@
           "left": "png_scratch_markdown_matched",
           "op": "eq",
           "right": "png_scratch_markdown_rows"
+        },
+        {
+          "left": "zlib_relaxed_gate_check_count",
+          "op": "eq",
+          "right": "zlib_relaxed_gate_expected_checks"
+        },
+        {
+          "left": "zlib_relaxed_gate_passed_count",
+          "op": "eq",
+          "right": "zlib_relaxed_gate_expected_checks"
+        },
+        {
+          "left": "zlib_relaxed_gate_report_matched",
+          "op": "eq",
+          "right": "zlib_relaxed_gate_expected_checks"
+        },
+        {
+          "left": "zlib_relaxed_markdown_rows",
+          "op": "eq",
+          "right": "zlib_relaxed_gate_expected_checks"
+        },
+        {
+          "left": "zlib_relaxed_markdown_matched",
+          "op": "eq",
+          "right": "zlib_relaxed_markdown_rows"
         }
       ]
     },

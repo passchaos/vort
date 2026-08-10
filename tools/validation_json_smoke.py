@@ -148,6 +148,7 @@ def main() -> int:
         lz4_native_summary_path = ROOT / "zig-out" / "vort-lz4-native-stream-summary.json"
         zstd_native_summary_path = ROOT / "zig-out" / "vort-zstd-native-stream-summary.json"
         zlib_relaxed_path = ROOT / "zig-out" / "vort-zlib-relaxed-report.json"
+        zlib_relaxed_markdown_path = ROOT / "zig-out" / "vort-zlib-relaxed-report.md"
         zlib_relaxed_gate_path = ROOT / "zig-out" / "vort-zlib-relaxed-report-gate.json"
         snappy_report_path = ROOT / "zig-out" / "vort-snappy-report.csv"
         native_allocation_path = ROOT / "zig-out" / "vort-native-allocation-report.json"
@@ -477,6 +478,7 @@ def main() -> int:
         assert zstd_native_summary["skippable_payload_bytes"] > 0
         validate_value_against_manifest(zstd_native_summary, schemas_def)
         zlib_relaxed = json.loads(zlib_relaxed_path.read_text())
+        zlib_relaxed_markdown = zlib_relaxed_markdown_path.read_text()
         assert zlib_relaxed["schema"] == "vort.zlib_relaxed_report"
         assert zlib_relaxed["schema_version"] >= 2
         assert zlib_relaxed["strict_rejections"] >= 2
@@ -993,6 +995,7 @@ def main() -> int:
         ):
             shutil.copyfile(ROOT / "zig-out" / artifact_name, root / artifact_name)
         shutil.copyfile(zlib_relaxed_path, root / "vort-zlib-relaxed-report.json")
+        shutil.copyfile(zlib_relaxed_markdown_path, root / "vort-zlib-relaxed-report.md")
         shutil.copyfile(zlib_relaxed_gate_path, root / "vort-zlib-relaxed-report-gate.json")
         shutil.copyfile(snappy_report_path, root / "vort-snappy-report.csv")
         shutil.copyfile(png_scratch_path, root / "vort-png-scratch-report.json")
@@ -1282,12 +1285,16 @@ def main() -> int:
         assert dashboard["png_scratch_markdown_unmatched"] == 0
         assert "| png_rgb8_noninterlaced |" in png_scratch_markdown
         assert dashboard["zlib_relaxed_present"] is True
+        assert dashboard["zlib_relaxed_markdown_present"] is True
         assert dashboard["zlib_relaxed_healthy"] is True
         assert dashboard["zlib_relaxed_gate_present"] is True
         assert dashboard["zlib_relaxed_gate_ok"] is True
         assert dashboard["zlib_relaxed_gate_check_count"] == len(zlib_relaxed_gate["checks"])
+        assert dashboard["zlib_relaxed_gate_expected_checks"] == len(zlib_relaxed_gate["checks"])
         assert dashboard["zlib_relaxed_gate_passed_count"] == len(zlib_relaxed_gate["checks"])
         assert dashboard["zlib_relaxed_gate_failed_checks"] == []
+        assert dashboard["zlib_relaxed_gate_report_matched"] == len(zlib_relaxed_gate["checks"])
+        assert dashboard["zlib_relaxed_gate_report_unmatched"] == 0
         assert dashboard["zlib_relaxed_strict_rejections"] == zlib_relaxed["strict_rejections"]
         assert dashboard["zlib_relaxed_successes"] == zlib_relaxed["relaxed_successes"]
         assert dashboard["zlib_relaxed_dictionary_successes"] == zlib_relaxed["dictionary_successes"]
@@ -1299,6 +1306,10 @@ def main() -> int:
         assert dashboard["gzip_relaxed_concatenated_successes"] == zlib_relaxed["gzip_concatenated_successes"]
         assert dashboard["gzip_relaxed_decoder_successes"] == zlib_relaxed["gzip_decoder_successes"]
         assert dashboard["gzip_relaxed_limited_rejections"] == zlib_relaxed["gzip_limited_rejections"]
+        assert dashboard["zlib_relaxed_markdown_rows"] == len(zlib_relaxed_gate["checks"])
+        assert dashboard["zlib_relaxed_markdown_matched"] == len(zlib_relaxed_gate["checks"])
+        assert dashboard["zlib_relaxed_markdown_unmatched"] == 0
+        assert "| zlib strict rejections |" in zlib_relaxed_markdown
         assert dashboard["snappy_report_present"] is True
         assert dashboard["snappy_report_healthy"] is True
         assert dashboard["snappy_report_rows"] == len(snappy_report_rows)

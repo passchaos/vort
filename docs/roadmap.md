@@ -2570,3 +2570,8 @@ architecture blindly.
   health now cross-checks every Markdown row against JSON scratch metrics,
   verifies per-row scratch/total arithmetic, and exposes row-consistency plus
   Markdown drift counters before PNG scratch coverage can pass.
+- Tightened zlib relaxed dashboard health by requiring the retained
+  `vort-zlib-relaxed-report.md` companion beside the report and gate JSON.
+  Aggregate health now cross-checks Markdown metric rows and gate check names
+  against the JSON report, and exposes gate/report plus Markdown drift counters
+  before relaxed wrapper coverage can pass.

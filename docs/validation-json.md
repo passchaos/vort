@@ -2792,17 +2792,21 @@ Top-level fields:
   `png_scratch_max_fixed_dynamic_streaming_working_scratch`,
   `png_scratch_min_streaming_ratio`, `png_scratch_markdown_rows`,
   `png_scratch_markdown_matched`, `png_scratch_markdown_unmatched`
-- `zlib_relaxed_present`, `zlib_relaxed_healthy`,
-  `zlib_relaxed_gate_present`, `zlib_relaxed_gate_ok`,
-  `zlib_relaxed_gate_check_count`, `zlib_relaxed_gate_passed_count`,
-  `zlib_relaxed_gate_failed_checks`,
+- `zlib_relaxed_present`, `zlib_relaxed_markdown_present`,
+  `zlib_relaxed_healthy`, `zlib_relaxed_gate_present`,
+  `zlib_relaxed_gate_ok`, `zlib_relaxed_gate_check_count`,
+  `zlib_relaxed_gate_expected_checks`,
+  `zlib_relaxed_gate_passed_count`, `zlib_relaxed_gate_failed_checks`,
+  `zlib_relaxed_gate_report_matched`,
+  `zlib_relaxed_gate_report_unmatched`,
   `zlib_relaxed_strict_rejections`, `zlib_relaxed_successes`,
   `zlib_relaxed_dictionary_successes`,
   `zlib_relaxed_concatenated_successes`,
   `zlib_relaxed_decoder_successes`, `zlib_relaxed_limited_rejections`,
   `gzip_relaxed_strict_rejections`, `gzip_relaxed_successes`,
   `gzip_relaxed_concatenated_successes`, `gzip_relaxed_decoder_successes`,
-  `gzip_relaxed_limited_rejections`
+  `gzip_relaxed_limited_rejections`, `zlib_relaxed_markdown_rows`,
+  `zlib_relaxed_markdown_matched`, `zlib_relaxed_markdown_unmatched`
 - `snappy_report_present`, `snappy_report_healthy`, `snappy_report_rows`,
   `snappy_report_expected_rows`, `snappy_report_positive_timing_rows`,
   `snappy_report_repetitive_shrunk_rows`,
@@ -3348,12 +3352,16 @@ Example:
   "png_scratch_markdown_matched": 0,
   "png_scratch_markdown_unmatched": 0,
   "zlib_relaxed_present": false,
+  "zlib_relaxed_markdown_present": false,
   "zlib_relaxed_healthy": false,
   "zlib_relaxed_gate_present": false,
   "zlib_relaxed_gate_ok": false,
   "zlib_relaxed_gate_check_count": 0,
+  "zlib_relaxed_gate_expected_checks": 0,
   "zlib_relaxed_gate_passed_count": 0,
   "zlib_relaxed_gate_failed_checks": [],
+  "zlib_relaxed_gate_report_matched": 0,
+  "zlib_relaxed_gate_report_unmatched": 0,
   "zlib_relaxed_strict_rejections": 0,
   "zlib_relaxed_successes": 0,
   "zlib_relaxed_dictionary_successes": 0,
@@ -3365,6 +3373,9 @@ Example:
   "gzip_relaxed_concatenated_successes": 0,
   "gzip_relaxed_decoder_successes": 0,
   "gzip_relaxed_limited_rejections": 0,
+  "zlib_relaxed_markdown_rows": 0,
+  "zlib_relaxed_markdown_matched": 0,
+  "zlib_relaxed_markdown_unmatched": 0,
   "snappy_report_present": false,
   "snappy_report_healthy": false,
   "snappy_report_rows": 0,
@@ -4529,7 +4540,9 @@ zig build run-zlib-relaxed-report-gate
 ```
 
 This schema records direct public-API coverage for relaxed zlib and gzip decode
-options, including strict rejection, relaxed success, dictionary-aware zlib
+options. Dashboard aggregate health cross-checks the retained Markdown metric
+table and the gate checks against the JSON report before relaxed wrapper
+coverage can pass. The report includes strict rejection, relaxed success, dictionary-aware zlib
 decode, zlib/gzip concatenated decode, caller-owned `ZlibDecoder` and
 `GzipDecoder` options coverage, and output-limit rejection behavior.
 
