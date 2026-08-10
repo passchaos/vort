@@ -2611,6 +2611,14 @@ Top-level fields:
   `level_report_roundtrip_rows`, `level_report_missing_pairs`,
   `level_report_markdown_present`, `level_report_markdown_summary_rows`,
   `level_report_markdown_matched`, `level_report_markdown_unmatched`
+- `dynamic_plan_present`, `dynamic_plan_healthy`,
+  `dynamic_plan_source_count`, `dynamic_plan_expected_source_count`,
+  `dynamic_plan_rows`, `dynamic_plan_expected_rows`,
+  `dynamic_plan_positive_rows`, `dynamic_plan_token_accounting_rows`,
+  `dynamic_plan_histogram_rows`, `dynamic_plan_ratio_rows`,
+  `dynamic_plan_slack_rows`, `dynamic_plan_wrapper_rows`,
+  `dynamic_plan_malformed_rows`, `dynamic_plan_missing_sources`,
+  `dynamic_plan_missing_paths`
 - `checksum_bench_present`, `checksum_bench_healthy`,
   `checksum_bench_rows`, `checksum_bench_expected_rows`,
   `checksum_bench_positive_rows`, `checksum_bench_workload_rows`,
@@ -3060,6 +3068,21 @@ Example:
   "level_report_markdown_summary_rows": 0,
   "level_report_markdown_matched": 0,
   "level_report_markdown_unmatched": 0,
+  "dynamic_plan_present": false,
+  "dynamic_plan_healthy": false,
+  "dynamic_plan_source_count": 0,
+  "dynamic_plan_expected_source_count": 0,
+  "dynamic_plan_rows": 0,
+  "dynamic_plan_expected_rows": 0,
+  "dynamic_plan_positive_rows": 0,
+  "dynamic_plan_token_accounting_rows": 0,
+  "dynamic_plan_histogram_rows": 0,
+  "dynamic_plan_ratio_rows": 0,
+  "dynamic_plan_slack_rows": 0,
+  "dynamic_plan_wrapper_rows": 0,
+  "dynamic_plan_malformed_rows": 0,
+  "dynamic_plan_missing_sources": [],
+  "dynamic_plan_missing_paths": [],
   "checksum_bench_present": false,
   "checksum_bench_healthy": false,
   "checksum_bench_rows": 0,
@@ -3609,9 +3632,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 85,
-      "min_expected_failures": 85,
-      "min_matched": 85
+      "min_checks": 87,
+      "min_expected_failures": 87,
+      "min_matched": 87
     },
     {
       "mode": "native-tier-range-health",
@@ -3705,10 +3728,10 @@ aggregate health reasons must be backed by real failing dashboard inputs before
 the smoke artifact can pass. The expected reason/check/fixture matrix lives in
 `tools/dashboard_strict_validation_reasons.json`; the retained
 `strict-validation-health` mode minimums must cover every configured reason,
-currently 85. The `dashboard-markdown` mode verifies that important human-facing
+currently 87. The `dashboard-markdown` mode verifies that important human-facing
 sections, including artifact inventory, aggregate validation health, producer/smoke-gate
 coverage, dashboard strict gate coverage, dashboard configuration coverage, validation JSON schema coverage, header inspect coverage, corrupt-sidecar
-rejection coverage, Huffman optimality, compression level report coverage, deflate extra-bit benchmark coverage, dictionary decode benchmark coverage, PNG scanline benchmark coverage, chunked zlib benchmark coverage, PNG streaming zlib benchmark coverage, deflate dynamic decode profile coverage, native library benchmark coverage, zstd comparison gate coverage, native fuzz corpus coverage, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, Python zlib
+rejection coverage, Huffman optimality, compression level report coverage, dynamic plan CSV coverage, deflate extra-bit benchmark coverage, dictionary decode benchmark coverage, PNG scanline benchmark coverage, chunked zlib benchmark coverage, PNG streaming zlib benchmark coverage, deflate dynamic decode profile coverage, native library benchmark coverage, zstd comparison gate coverage, native fuzz corpus coverage, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, Python zlib
 differential coverage, decode-stage error matching, fuzz corpus matching, native
 stream metadata coverage, native tier corpus discovery, native summary error
 codec/phase-offset tables, native codec probe coverage/capability tables, and
@@ -3744,9 +3767,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 85,
-      "min_expected_failures": 85,
-      "min_matched": 85
+      "min_checks": 87,
+      "min_expected_failures": 87,
+      "min_matched": 87
     },
     {
       "mode": "native-tier-range-health",
@@ -3784,14 +3807,14 @@ Example:
     {
       "mode": "strict-validation-health",
       "checks": 1,
-      "min_checks": 85,
-      "missing_checks": 84,
+      "min_checks": 87,
+      "missing_checks": 86,
       "expected_failures": 1,
-      "min_expected_failures": 85,
-      "missing_expected_failures": 84,
+      "min_expected_failures": 87,
+      "missing_expected_failures": 86,
       "matched": 1,
-      "min_matched": 85,
-      "missing_matched": 84
+      "min_matched": 87,
+      "missing_matched": 86
     },
     {
       "mode": "native-tier-range-health",

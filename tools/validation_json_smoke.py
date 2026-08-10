@@ -118,6 +118,8 @@ def main() -> int:
         huffman_length_markdown_path = root / "vort-huffman-length-report.md"
         level_report_csv_path = ROOT / "zig-out" / "vort-level-report.csv"
         level_report_markdown_path = ROOT / "zig-out" / "vort-level-report.md"
+        dynamic_plan_path = ROOT / "zig-out" / "vort-dynamic-plan-report.csv"
+        dynamic_plan_builtins_path = ROOT / "zig-out" / "vort-dynamic-plan-builtins-report.csv"
         fuzz_report_path = ROOT / "zig-out" / "vort-deflate-wrapper-fuzz-corpus.json"
         fuzz_coverage_path = ROOT / "tools" / "fuzz_corpus_expected_coverage.json"
         fuzz_coverage_smoke_path = ROOT / "zig-out" / "vort-fuzz-corpus-coverage-smoke.json"
@@ -920,6 +922,8 @@ def main() -> int:
         write_huffman_length_markdown(huffman_length_markdown_path)
         shutil.copyfile(level_report_csv_path, root / "vort-level-report.csv")
         shutil.copyfile(level_report_markdown_path, root / "vort-level-report.md")
+        shutil.copyfile(dynamic_plan_path, root / "vort-dynamic-plan-report.csv")
+        shutil.copyfile(dynamic_plan_builtins_path, root / "vort-dynamic-plan-builtins-report.csv")
         shutil.copyfile(checksum_bench_path, root / "vort-checksum-bench.csv")
         shutil.copyfile(chunk_cursor_bench_path, root / "vort-chunk-cursor-bench.csv")
         shutil.copyfile(deflate_match_copy_bench_path, root / "vort-deflate-match-copy-bench.csv")
@@ -1101,6 +1105,21 @@ def main() -> int:
         assert dashboard["level_report_markdown_summary_rows"] == 4
         assert dashboard["level_report_markdown_matched"] == 4
         assert dashboard["level_report_markdown_unmatched"] == 0
+        assert dashboard["dynamic_plan_present"] is True
+        assert dashboard["dynamic_plan_healthy"] is True
+        assert dashboard["dynamic_plan_source_count"] == 2
+        assert dashboard["dynamic_plan_expected_source_count"] == 2
+        assert dashboard["dynamic_plan_rows"] == 9
+        assert dashboard["dynamic_plan_expected_rows"] == 9
+        assert dashboard["dynamic_plan_positive_rows"] == 9
+        assert dashboard["dynamic_plan_token_accounting_rows"] == 9
+        assert dashboard["dynamic_plan_histogram_rows"] == 9
+        assert dashboard["dynamic_plan_ratio_rows"] == 9
+        assert dashboard["dynamic_plan_slack_rows"] == 9
+        assert dashboard["dynamic_plan_wrapper_rows"] == 9
+        assert dashboard["dynamic_plan_malformed_rows"] == 0
+        assert dashboard["dynamic_plan_missing_sources"] == []
+        assert dashboard["dynamic_plan_missing_paths"] == []
         assert dashboard["fuzz_corpus_present"] is True
         assert dashboard["fuzz_corpus_ok"] is True
         assert dashboard["fuzz_corpus_coverage_present"] is True
@@ -1468,6 +1487,7 @@ def main() -> int:
             and dashboard["sidecar_corrupt_healthy"]
             and dashboard["huffman_length_healthy"]
             and dashboard["level_report_healthy"]
+            and dashboard["dynamic_plan_healthy"]
             and dashboard["fuzz_corpus_healthy"]
             and dashboard["decode_stage_healthy"]
             and dashboard["native_allocation_healthy"]

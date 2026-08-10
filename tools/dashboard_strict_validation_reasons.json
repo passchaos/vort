@@ -108,6 +108,16 @@
       "fixture": "level_report_failed"
     },
     {
+      "reason": "missing_dynamic_plan_artifact",
+      "check": "validation_missing_dynamic_plan_artifact",
+      "fixture": "missing_dynamic_plan_artifact"
+    },
+    {
+      "reason": "dynamic_plan_failed",
+      "check": "validation_dynamic_plan_failed",
+      "fixture": "dynamic_plan_failed"
+    },
+    {
       "reason": "missing_fuzz_corpus_artifact",
       "check": "validation_missing_fuzz_corpus_artifact",
       "fixture": "missing_fuzz_corpus_artifact"

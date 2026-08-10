@@ -526,6 +526,223 @@ def level_report_health(artifacts: list[Path]) -> dict:
     }
 
 
+def dynamic_plan_health(artifacts: list[Path]) -> dict:
+    expected_sources = {
+        "project_files": {
+            "artifact": "vort-dynamic-plan-report.csv",
+            "paths": {"README.md", "docs/roadmap.md"},
+        },
+        "builtins": {
+            "artifact": "vort-dynamic-plan-builtins-report.csv",
+            "paths": {"tiny", "repetitive", "overlap-rle", "distance-heavy", "dynamic-match", "text", "binary"},
+        },
+    }
+    histogram_fields = {
+        "length_symbol_hist": 29,
+        "distance_symbol_hist": 30,
+        "length_extra_hist": 6,
+        "distance_extra_hist": 14,
+        "best_preset_length_symbol_hist": 29,
+        "best_preset_distance_symbol_hist": 30,
+        "best_preset_length_extra_hist": 6,
+        "best_preset_distance_extra_hist": 14,
+    }
+
+    def parse_int(row: dict[str, str], field: str) -> int | None:
+        try:
+            return int(row.get(field) or "0")
+        except ValueError:
+            return None
+
+    def parse_float(row: dict[str, str], field: str) -> float | None:
+        try:
+            return float(row.get(field) or "0")
+        except ValueError:
+            return None
+
+    def ratio_close(row: dict[str, str], field: str, numerator: int, denominator: int) -> bool:
+        reported = parse_float(row, field)
+        if reported is None:
+            return False
+        expected = (numerator / denominator) if denominator else 0.0
+        return abs(reported - expected) <= 0.0001
+
+    def histogram_ok(row: dict[str, str], field: str, expected_len: int) -> bool:
+        parts = str(row.get(field) or "").split(";")
+        if len(parts) != expected_len:
+            return False
+        try:
+            return all(int(part) >= 0 for part in parts)
+        except ValueError:
+            return False
+
+    total_rows = 0
+    expected_rows = sum(len(config["paths"]) for config in expected_sources.values())
+    present_sources: set[str] = set()
+    seen_paths: set[tuple[str, str]] = set()
+    positive_rows = 0
+    token_accounting_rows = 0
+    histogram_rows = 0
+    ratio_rows = 0
+    slack_rows = 0
+    wrapper_rows = 0
+    malformed_rows = 0
+
+    for source, config in expected_sources.items():
+        artifact_name = config["artifact"]
+        artifact = next((path for path in artifacts if path.name == artifact_name), None)
+        if artifact is None:
+            continue
+        present_sources.add(source)
+        try:
+            with artifact.open(newline="") as f:
+                rows = list(csv.DictReader(f))
+        except Exception:
+            rows = []
+        total_rows += len(rows)
+        for row in rows:
+            path_name = str(row.get("path") or "")
+            if path_name in config["paths"]:
+                seen_paths.add((source, path_name))
+
+            int_fields = {
+                field: parse_int(row, field)
+                for field in (
+                    "input_bytes",
+                    "token_count",
+                    "literal_tokens",
+                    "match_tokens",
+                    "matched_bytes",
+                    "short_match_tokens",
+                    "far_match_tokens",
+                    "stored_bytes",
+                    "fixed_bytes",
+                    "dynamic_bytes",
+                    "dynamic_header_bits",
+                    "dynamic_literal_bits",
+                    "dynamic_length_bits",
+                    "dynamic_distance_bits",
+                    "dynamic_length_extra_bits",
+                    "dynamic_distance_extra_bits",
+                    "dynamic_extra_bits",
+                    "hlit",
+                    "hdist",
+                    "hclen",
+                    "code_length_ops",
+                    "stats_ns",
+                    "dynamic_encode_ns",
+                    "best_encode_ns",
+                    "dynamic_zlib_bytes",
+                    "best_zlib_bytes",
+                    "best_preset_token_count",
+                    "best_preset_literal_tokens",
+                    "best_preset_match_tokens",
+                    "best_preset_matched_bytes",
+                    "best_preset_zlib_bytes",
+                    "best_preset_header_bits",
+                    "best_preset_literal_bits",
+                    "best_preset_length_bits",
+                    "best_preset_distance_bits",
+                    "best_preset_length_extra_bits",
+                    "best_preset_distance_extra_bits",
+                    "best_preset_extra_bits",
+                    "dynamic_bits_mod8",
+                    "dynamic_bits_to_save_byte",
+                    "best_preset_bits_mod8",
+                    "best_preset_bits_to_save_byte",
+                )
+            }
+            if any(value is None for value in int_fields.values()):
+                malformed_rows += 1
+                continue
+            values = {key: int(value) for key, value in int_fields.items() if value is not None}
+            if (
+                values["input_bytes"] > 0
+                and values["token_count"] > 0
+                and values["stored_bytes"] > 0
+                and values["fixed_bytes"] > 0
+                and values["dynamic_bytes"] > 0
+                and values["dynamic_zlib_bytes"] > 0
+                and values["best_zlib_bytes"] > 0
+                and values["stats_ns"] > 0
+                and values["dynamic_encode_ns"] > 0
+                and values["best_encode_ns"] > 0
+                and 257 <= values["hlit"] <= 286
+                and 1 <= values["hdist"] <= 30
+                and 4 <= values["hclen"] <= 19
+            ):
+                positive_rows += 1
+            if (
+                values["token_count"] == values["literal_tokens"] + values["match_tokens"]
+                and values["best_preset_token_count"] == values["best_preset_literal_tokens"] + values["best_preset_match_tokens"]
+                and values["matched_bytes"] <= values["input_bytes"]
+                and values["best_preset_matched_bytes"] <= values["input_bytes"]
+                and values["short_match_tokens"] + values["far_match_tokens"] <= values["match_tokens"]
+            ):
+                token_accounting_rows += 1
+            if all(histogram_ok(row, field, expected_len) for field, expected_len in histogram_fields.items()):
+                histogram_rows += 1
+            if (
+                ratio_close(row, "fixed_dynamic_size_ratio", values["fixed_bytes"], values["dynamic_bytes"])
+                and ratio_close(row, "best_dynamic_time_ratio", values["best_encode_ns"], values["dynamic_encode_ns"])
+                and ratio_close(row, "stats_dynamic_time_ratio", values["stats_ns"], values["dynamic_encode_ns"])
+                and ratio_close(row, "best_preset_default_size_ratio", values["best_preset_zlib_bytes"], values["best_zlib_bytes"])
+                and ratio_close(row, "best_preset_default_token_ratio", values["best_preset_token_count"], values["token_count"])
+            ):
+                ratio_rows += 1
+            if (
+                0 <= values["dynamic_bits_mod8"] < 8
+                and values["dynamic_bits_to_save_byte"] == values["dynamic_bits_mod8"]
+                and 0 <= values["best_preset_bits_mod8"] < 8
+                and values["best_preset_bits_to_save_byte"] == values["best_preset_bits_mod8"]
+            ):
+                slack_rows += 1
+            if (
+                values["dynamic_zlib_bytes"] == values["dynamic_bytes"] + 6
+                and values["best_zlib_bytes"] > 0
+                and values["best_preset_zlib_bytes"] > 0
+            ):
+                wrapper_rows += 1
+
+    expected_path_pairs = {
+        (source, path)
+        for source, config in expected_sources.items()
+        for path in config["paths"]
+    }
+    missing_sources = sorted(source for source in expected_sources if source not in present_sources)
+    missing_paths = sorted(f"{source}:{path}" for source, path in expected_path_pairs - seen_paths)
+    healthy = (
+        len(present_sources) == len(expected_sources)
+        and total_rows == expected_rows
+        and not missing_sources
+        and not missing_paths
+        and malformed_rows == 0
+        and positive_rows == total_rows
+        and token_accounting_rows == total_rows
+        and histogram_rows == total_rows
+        and ratio_rows == total_rows
+        and slack_rows == total_rows
+        and wrapper_rows == total_rows
+    )
+    return {
+        "present": len(present_sources) == len(expected_sources),
+        "healthy": healthy,
+        "source_count": len(present_sources),
+        "expected_source_count": len(expected_sources),
+        "rows": total_rows,
+        "expected_rows": expected_rows,
+        "positive_rows": positive_rows,
+        "token_accounting_rows": token_accounting_rows,
+        "histogram_rows": histogram_rows,
+        "ratio_rows": ratio_rows,
+        "slack_rows": slack_rows,
+        "wrapper_rows": wrapper_rows,
+        "malformed_rows": malformed_rows,
+        "missing_sources": missing_sources,
+        "missing_paths": missing_paths,
+    }
+
+
 def fuzz_corpus_health(artifacts: list[Path]) -> dict:
     report = None
     coverage = None
@@ -3838,6 +4055,7 @@ def main() -> int:
     sidecar_corrupt_health_summary = sidecar_corrupt_health(artifacts)
     huffman_health = huffman_length_health(artifacts)
     level_report = level_report_health(artifacts)
+    dynamic_plan = dynamic_plan_health(artifacts)
     fuzz_health = fuzz_corpus_health(artifacts)
     decode_stage_health_summary = decode_stage_health(artifacts)
     native_fuzz = native_fuzz_corpus_health(artifacts)
@@ -3897,6 +4115,7 @@ def main() -> int:
     sidecar_corrupt_healthy = sidecar_corrupt_health_summary["healthy"]
     huffman_healthy = huffman_health["healthy"]
     level_report_healthy = level_report["healthy"]
+    dynamic_plan_healthy = dynamic_plan["healthy"]
     fuzz_healthy = fuzz_health["healthy"]
     decode_stage_healthy = decode_stage_health_summary["healthy"]
     python_zlib_healthy = python_zlib_health["healthy"]
@@ -3934,6 +4153,7 @@ def main() -> int:
         and sidecar_corrupt_healthy
         and huffman_healthy
         and level_report_healthy
+        and dynamic_plan_healthy
         and fuzz_healthy
         and decode_stage_healthy
         and native_fuzz_healthy
@@ -4025,6 +4245,10 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_level_report_artifact")
     elif not level_report_healthy:
         validation_unhealthy_reasons.append("level_report_failed")
+    if not dynamic_plan["present"]:
+        validation_unhealthy_reasons.append("missing_dynamic_plan_artifact")
+    elif not dynamic_plan_healthy:
+        validation_unhealthy_reasons.append("dynamic_plan_failed")
     if not fuzz_health["present"]:
         validation_unhealthy_reasons.append("missing_fuzz_corpus_artifact")
     elif not fuzz_health["report_healthy"]:
@@ -4188,6 +4412,7 @@ def main() -> int:
         f"- sidecar corrupt smoke: {sidecar_corrupt_health_summary['metadata_ok_rows']}/{sidecar_corrupt_health_summary['rows']} metadata-ok rows, {sidecar_corrupt_health_summary['full_rejected_rows']}/{sidecar_corrupt_health_summary['rows']} full-rejected rows, healthy `{sidecar_corrupt_healthy}`",
         f"- huffman length oracle: {huffman_health['optimal_rows']}/{huffman_health['row_count']} production optimal rows, {huffman_health['package_merge_optimal_rows']}/{huffman_health['row_count']} package-merge optimal rows, gaps {huffman_health['worst_gap_bits']}/{huffman_health['package_merge_worst_gap_bits']}, malformed rows {huffman_health['malformed_rows']}, healthy `{huffman_healthy}`",
         f"- level report: {level_report['rows']}/{level_report['expected_rows']} rows, shape {level_report['shape_rows']}, token/ratio/roundtrip {level_report['token_accounting_rows']}/{level_report['ratio_rows']}/{level_report['roundtrip_rows']}, Markdown {level_report['markdown_matched']}/{level_report['markdown_summary_rows']}, healthy `{level_report_healthy}`",
+        f"- dynamic plan: {dynamic_plan['rows']}/{dynamic_plan['expected_rows']} rows across {dynamic_plan['source_count']}/{dynamic_plan['expected_source_count']} sources, token/histogram/ratio/slack/wrapper {dynamic_plan['token_accounting_rows']}/{dynamic_plan['histogram_rows']}/{dynamic_plan['ratio_rows']}/{dynamic_plan['slack_rows']}/{dynamic_plan['wrapper_rows']}, healthy `{dynamic_plan_healthy}`",
         f"- fuzz corpus coverage: {fuzz_health['matched_rows']}/{fuzz_health['cases']} rows matched, exact-error rows {fuzz_health['exact_error_expectations']}, coverage requirements {fuzz_health['coverage_mode_requirements']}/{fuzz_health['coverage_error_requirements']}, healthy `{fuzz_healthy}`",
         f"- decode-stage smoke: {decode_stage_health_summary['matched_error_rows']}/{decode_stage_health_summary['error_rows']} error rows matched across {decode_stage_health_summary['rows']} timing rows, healthy `{decode_stage_healthy}`",
         f"- Python zlib differential: payloads {python_zlib_health['payloads']} (large-file {python_zlib_health['large_file_payloads']}, file-hex encodes {python_zlib_health['file_hex_encode_cases']}), dynamic {python_zlib_health['dynamic_payloads']}, dictionary encode raw/zlib {python_zlib_health['raw_dict_encode_cases']}/{python_zlib_health['zlib_dict_encode_cases']}, CLI successes/failures {python_zlib_health['cli_successes']}/{python_zlib_health['expected_failures']}, healthy `{python_zlib_healthy}`",
@@ -4603,6 +4828,18 @@ def main() -> int:
     )
     lines.extend(
         [
+            "## Dynamic plan report coverage",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| rows | {dynamic_plan['rows']} | expected {dynamic_plan['expected_rows']}, sources {dynamic_plan['source_count']}/{dynamic_plan['expected_source_count']} |",
+            f"| row checks | {dynamic_plan['positive_rows']} | token/histogram/ratio {dynamic_plan['token_accounting_rows']}/{dynamic_plan['histogram_rows']}/{dynamic_plan['ratio_rows']} |",
+            f"| bit/zlib checks | {dynamic_plan['slack_rows']}/{dynamic_plan['wrapper_rows']} | malformed {dynamic_plan['malformed_rows']}, missing paths {len(dynamic_plan['missing_paths'])}, healthy `{dynamic_plan_healthy}` |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
             "## Python zlib differential coverage",
             "",
             "| category | count | detail |",
@@ -4953,6 +5190,21 @@ def main() -> int:
                 "level_report_markdown_summary_rows": level_report["markdown_summary_rows"],
                 "level_report_markdown_matched": level_report["markdown_matched"],
                 "level_report_markdown_unmatched": level_report["markdown_unmatched"],
+                "dynamic_plan_present": dynamic_plan["present"],
+                "dynamic_plan_healthy": dynamic_plan_healthy,
+                "dynamic_plan_source_count": dynamic_plan["source_count"],
+                "dynamic_plan_expected_source_count": dynamic_plan["expected_source_count"],
+                "dynamic_plan_rows": dynamic_plan["rows"],
+                "dynamic_plan_expected_rows": dynamic_plan["expected_rows"],
+                "dynamic_plan_positive_rows": dynamic_plan["positive_rows"],
+                "dynamic_plan_token_accounting_rows": dynamic_plan["token_accounting_rows"],
+                "dynamic_plan_histogram_rows": dynamic_plan["histogram_rows"],
+                "dynamic_plan_ratio_rows": dynamic_plan["ratio_rows"],
+                "dynamic_plan_slack_rows": dynamic_plan["slack_rows"],
+                "dynamic_plan_wrapper_rows": dynamic_plan["wrapper_rows"],
+                "dynamic_plan_malformed_rows": dynamic_plan["malformed_rows"],
+                "dynamic_plan_missing_sources": dynamic_plan["missing_sources"],
+                "dynamic_plan_missing_paths": dynamic_plan["missing_paths"],
                 "fuzz_corpus_present": fuzz_health["present"],
                 "fuzz_corpus_ok": fuzz_health["ok"],
                 "fuzz_corpus_coverage_present": fuzz_health["coverage_present"],

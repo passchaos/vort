@@ -27,6 +27,8 @@ SIDECAR_CORRUPT_ARTIFACT = "vort-sidecar-corrupt-smoke.json"
 HUFFMAN_LENGTH_ARTIFACT = "vort-huffman-length-report.csv"
 LEVEL_REPORT_CSV_ARTIFACT = "vort-level-report.csv"
 LEVEL_REPORT_MARKDOWN_ARTIFACT = "vort-level-report.md"
+DYNAMIC_PLAN_ARTIFACT = "vort-dynamic-plan-report.csv"
+DYNAMIC_PLAN_BUILTINS_ARTIFACT = "vort-dynamic-plan-builtins-report.csv"
 CHECKSUM_BENCH_ARTIFACT = "vort-checksum-bench.csv"
 CHUNK_CURSOR_BENCH_ARTIFACT = "vort-chunk-cursor-bench.csv"
 DEFLATE_MATCH_COPY_BENCH_ARTIFACT = "vort-deflate-match-copy-bench.csv"
@@ -116,6 +118,8 @@ def write_producer_map(
     include_huffman_smoke: bool = True,
     include_level_report_exact: bool = True,
     include_level_report_smoke: bool = True,
+    include_dynamic_plan_exact: bool = True,
+    include_dynamic_plan_smoke: bool = True,
     include_checksum_bench_exact: bool = True,
     include_checksum_bench_smoke: bool = True,
     include_chunk_cursor_bench_exact: bool = True,
@@ -229,6 +233,15 @@ def write_producer_map(
         artifact_metadata[LEVEL_REPORT_MARKDOWN_ARTIFACT] = {
             "expected_format": "md",
             "smoke_gate": "zig build run-level-report-dashboard",
+        }
+    if include_dynamic_plan_smoke:
+        artifact_metadata[DYNAMIC_PLAN_ARTIFACT] = {
+            "expected_format": "csv",
+            "smoke_gate": "zig build run-dynamic-plan-report-csv",
+        }
+        artifact_metadata[DYNAMIC_PLAN_BUILTINS_ARTIFACT] = {
+            "expected_format": "csv",
+            "smoke_gate": "zig build run-dynamic-plan-builtins-report-csv",
         }
     if include_checksum_bench_smoke:
         artifact_metadata[CHECKSUM_BENCH_ARTIFACT] = {
@@ -424,6 +437,9 @@ def write_producer_map(
     if include_level_report_exact:
         exact[LEVEL_REPORT_CSV_ARTIFACT] = "zig build run-level-report-csv"
         exact[LEVEL_REPORT_MARKDOWN_ARTIFACT] = "zig build run-level-report-dashboard"
+    if include_dynamic_plan_exact:
+        exact[DYNAMIC_PLAN_ARTIFACT] = "zig build run-dynamic-plan-report-csv"
+        exact[DYNAMIC_PLAN_BUILTINS_ARTIFACT] = "zig build run-dynamic-plan-builtins-report-csv"
     if include_checksum_bench_exact:
         exact[CHECKSUM_BENCH_ARTIFACT] = "zig build -Doptimize=ReleaseFast run-checksum-bench-gate"
     if include_chunk_cursor_bench_exact:
@@ -1080,6 +1096,164 @@ def write_level_report_markdown(path: Path, *, healthy: bool = True) -> None:
             f"{percent(best_adaptive['match_coverage_x10000'])} | {best_adaptive['tokens']} |"
         )
     lines.append("")
+    path.write_text("\n".join(lines) + "\n")
+
+
+
+def write_dynamic_plan_csv(path: Path, rows: list[dict[str, str]], *, healthy: bool = True) -> None:
+    columns = [
+        "path",
+        "input_bytes",
+        "token_count",
+        "literal_tokens",
+        "match_tokens",
+        "matched_bytes",
+        "avg_match_len_x100",
+        "avg_match_distance",
+        "short_match_tokens",
+        "far_match_tokens",
+        "stored_bytes",
+        "fixed_bytes",
+        "dynamic_bytes",
+        "dynamic_header_bits",
+        "dynamic_literal_bits",
+        "dynamic_length_bits",
+        "dynamic_distance_bits",
+        "dynamic_length_extra_bits",
+        "dynamic_distance_extra_bits",
+        "dynamic_extra_bits",
+        "length_symbol_hist",
+        "distance_symbol_hist",
+        "length_extra_hist",
+        "distance_extra_hist",
+        "hlit",
+        "hdist",
+        "hclen",
+        "code_length_ops",
+        "stats_ns",
+        "dynamic_encode_ns",
+        "best_encode_ns",
+        "dynamic_zlib_bytes",
+        "best_zlib_bytes",
+        "best_preset_token_count",
+        "best_preset_literal_tokens",
+        "best_preset_match_tokens",
+        "best_preset_matched_bytes",
+        "best_preset_avg_match_len_x100",
+        "best_preset_avg_match_distance",
+        "best_preset_short_match_tokens",
+        "best_preset_far_match_tokens",
+        "best_preset_zlib_bytes",
+        "best_preset_header_bits",
+        "best_preset_literal_bits",
+        "best_preset_length_bits",
+        "best_preset_distance_bits",
+        "best_preset_length_extra_bits",
+        "best_preset_distance_extra_bits",
+        "best_preset_extra_bits",
+        "best_preset_length_symbol_hist",
+        "best_preset_distance_symbol_hist",
+        "best_preset_length_extra_hist",
+        "best_preset_distance_extra_hist",
+        "best_preset_default_size_ratio",
+        "best_preset_default_token_ratio",
+        "best_preset_default_avg_len_ratio",
+        "best_preset_default_avg_distance_ratio",
+        "best_preset_default_header_ratio",
+        "best_preset_default_literal_ratio",
+        "best_preset_default_match_symbol_ratio",
+        "best_preset_default_length_extra_ratio",
+        "best_preset_default_distance_extra_ratio",
+        "best_preset_default_extra_ratio",
+        "fixed_dynamic_size_ratio",
+        "best_dynamic_time_ratio",
+        "stats_dynamic_time_ratio",
+        "dynamic_bits_mod8",
+        "dynamic_bits_to_save_byte",
+        "best_preset_bits_mod8",
+        "best_preset_bits_to_save_byte",
+    ]
+    length_symbol_hist = "1" + ";0" * 28
+    distance_symbol_hist = "1" + ";0" * 29
+    length_extra_hist = "1;0;0;0;0;0"
+    distance_extra_hist = "1" + ";0" * 13
+    lines = [",".join(columns)]
+    for row in rows:
+        values = {
+            "input_bytes": "1024",
+            "token_count": "11",
+            "literal_tokens": "3",
+            "match_tokens": "8",
+            "matched_bytes": "1000",
+            "avg_match_len_x100": "12500",
+            "avg_match_distance": "4",
+            "short_match_tokens": "2",
+            "far_match_tokens": "3",
+            "stored_bytes": "1029",
+            "fixed_bytes": "80",
+            "dynamic_bytes": "50",
+            "dynamic_header_bits": "100",
+            "dynamic_literal_bits": "20",
+            "dynamic_length_bits": "12",
+            "dynamic_distance_bits": "10",
+            "dynamic_length_extra_bits": "4",
+            "dynamic_distance_extra_bits": "6",
+            "dynamic_extra_bits": "10",
+            "length_symbol_hist": length_symbol_hist,
+            "distance_symbol_hist": distance_symbol_hist,
+            "length_extra_hist": length_extra_hist,
+            "distance_extra_hist": distance_extra_hist,
+            "hlit": "286",
+            "hdist": "30",
+            "hclen": "18",
+            "code_length_ops": "16",
+            "stats_ns": "1000",
+            "dynamic_encode_ns": "2000",
+            "best_encode_ns": "3000",
+            "dynamic_zlib_bytes": "56",
+            "best_zlib_bytes": "55",
+            "best_preset_token_count": "10",
+            "best_preset_literal_tokens": "3",
+            "best_preset_match_tokens": "7",
+            "best_preset_matched_bytes": "990",
+            "best_preset_avg_match_len_x100": "14142",
+            "best_preset_avg_match_distance": "5",
+            "best_preset_short_match_tokens": "2",
+            "best_preset_far_match_tokens": "3",
+            "best_preset_zlib_bytes": "54",
+            "best_preset_header_bits": "90",
+            "best_preset_literal_bits": "18",
+            "best_preset_length_bits": "10",
+            "best_preset_distance_bits": "9",
+            "best_preset_length_extra_bits": "3",
+            "best_preset_distance_extra_bits": "5",
+            "best_preset_extra_bits": "8",
+            "best_preset_length_symbol_hist": length_symbol_hist,
+            "best_preset_distance_symbol_hist": distance_symbol_hist,
+            "best_preset_length_extra_hist": length_extra_hist,
+            "best_preset_distance_extra_hist": distance_extra_hist,
+            "best_preset_default_size_ratio": f"{54 / 55:.4f}",
+            "best_preset_default_token_ratio": f"{10 / 11:.4f}",
+            "best_preset_default_avg_len_ratio": f"{14142 / 12500:.4f}",
+            "best_preset_default_avg_distance_ratio": f"{5 / 4:.4f}",
+            "best_preset_default_header_ratio": f"{90 / 100:.4f}",
+            "best_preset_default_literal_ratio": f"{18 / 20:.4f}",
+            "best_preset_default_match_symbol_ratio": f"{(10 + 9) / (12 + 10):.4f}",
+            "best_preset_default_length_extra_ratio": f"{3 / 4:.4f}",
+            "best_preset_default_distance_extra_ratio": f"{5 / 6:.4f}",
+            "best_preset_default_extra_ratio": f"{8 / 10:.4f}",
+            "fixed_dynamic_size_ratio": f"{80 / 50:.4f}",
+            "best_dynamic_time_ratio": f"{3000 / 2000:.4f}",
+            "stats_dynamic_time_ratio": f"{1000 / 2000:.4f}",
+            "dynamic_bits_mod8": "3",
+            "dynamic_bits_to_save_byte": "3",
+            "best_preset_bits_mod8": "5",
+            "best_preset_bits_to_save_byte": "5",
+        }
+        values.update(row)
+        if not healthy and values["path"] == rows[-1]["path"]:
+            values["token_count"] = "12"
+        lines.append(",".join(values[column] for column in columns))
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -2789,6 +2963,19 @@ def write_healthy_artifacts(root: Path) -> None:
     write_huffman_length_markdown(root / "vort-huffman-length-report.md")
     write_level_report_csv(root / LEVEL_REPORT_CSV_ARTIFACT)
     write_level_report_markdown(root / LEVEL_REPORT_MARKDOWN_ARTIFACT)
+    write_dynamic_plan_csv(root / DYNAMIC_PLAN_ARTIFACT, [{"path": "README.md"}, {"path": "docs/roadmap.md"}])
+    write_dynamic_plan_csv(
+        root / DYNAMIC_PLAN_BUILTINS_ARTIFACT,
+        [
+            {"path": "tiny"},
+            {"path": "repetitive"},
+            {"path": "overlap-rle"},
+            {"path": "distance-heavy"},
+            {"path": "dynamic-match"},
+            {"path": "text"},
+            {"path": "binary"},
+        ],
+    )
     write_checksum_bench_csv(root / CHECKSUM_BENCH_ARTIFACT)
     write_chunk_cursor_bench_csv(root / CHUNK_CURSOR_BENCH_ARTIFACT)
     write_deflate_match_copy_bench_csv(root / DEFLATE_MATCH_COPY_BENCH_ARTIFACT)
@@ -3213,8 +3400,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 65/65 | 0 | allowed missing 0 |",
-                    "| smoke gates | 65/65 | 0 | required missing 0 |",
+                    "| producer steps | 67/67 | 0 | allowed missing 0 |",
+                    "| smoke gates | 67/67 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -3406,6 +3593,20 @@ def main() -> int:
                     "| rows | 48 | expected 48, present `True` |",
                     "| row checks | 48 | positive/token/ratio/roundtrip 48/48/48/48 |",
                     "| Markdown summary | 4/4 | present `True`, healthy `True` |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
+                "dynamic_plan_markdown_table",
+                "dynamic plan Markdown table",
+                dashboard_markdown,
+                [
+                    "## Dynamic plan report coverage",
+                    "| category | count | detail |",
+                    "| rows | 9 | expected 9, sources 2/2 |",
+                    "| row checks | 9 | token/histogram/ratio 9/9/9 |",
+                    "| bit/zlib checks | 9/9 | malformed 0, missing paths 0, healthy `True` |",
                 ],
             )
         )
@@ -3945,6 +4146,12 @@ def main() -> int:
             elif fixture == "level_report_failed":
                 write_level_report_csv(fixture_root / LEVEL_REPORT_CSV_ARTIFACT, healthy=False)
                 write_level_report_markdown(fixture_root / LEVEL_REPORT_MARKDOWN_ARTIFACT, healthy=False)
+                write_producer_map(producer_map)
+            elif fixture == "missing_dynamic_plan_artifact":
+                (fixture_root / DYNAMIC_PLAN_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "dynamic_plan_failed":
+                write_dynamic_plan_csv(fixture_root / DYNAMIC_PLAN_ARTIFACT, [{"path": "README.md"}, {"path": "docs/roadmap.md"}], healthy=False)
                 write_producer_map(producer_map)
             elif fixture == "missing_checksum_bench_artifact":
                 (fixture_root / CHECKSUM_BENCH_ARTIFACT).unlink()

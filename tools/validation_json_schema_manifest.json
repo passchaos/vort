@@ -855,6 +855,7 @@
             "sidecar_corrupt_healthy",
             "huffman_length_healthy",
             "level_report_healthy",
+            "dynamic_plan_healthy",
             "fuzz_corpus_healthy",
             "decode_stage_healthy",
             "native_allocation_healthy",
@@ -1329,6 +1330,28 @@
             "br_static_dictionary_report_markdown_unmatched",
             "br_static_dictionary_report_negative_unmatched"
           ]
+        },
+        "dynamic_plan_healthy": {
+          "all": [
+            "dynamic_plan_present"
+          ],
+          "positive": [
+            "dynamic_plan_source_count",
+            "dynamic_plan_expected_source_count",
+            "dynamic_plan_rows",
+            "dynamic_plan_expected_rows",
+            "dynamic_plan_positive_rows",
+            "dynamic_plan_token_accounting_rows",
+            "dynamic_plan_histogram_rows",
+            "dynamic_plan_ratio_rows",
+            "dynamic_plan_slack_rows",
+            "dynamic_plan_wrapper_rows"
+          ],
+          "zero": [
+            "dynamic_plan_malformed_rows",
+            "dynamic_plan_missing_sources",
+            "dynamic_plan_missing_paths"
+          ]
         }
       },
       "collections": {
@@ -1620,6 +1643,21 @@
         "level_report_markdown_summary_rows": "int",
         "level_report_markdown_matched": "int",
         "level_report_markdown_unmatched": "int",
+        "dynamic_plan_present": "bool",
+        "dynamic_plan_healthy": "bool",
+        "dynamic_plan_source_count": "int",
+        "dynamic_plan_expected_source_count": "int",
+        "dynamic_plan_rows": "int",
+        "dynamic_plan_expected_rows": "int",
+        "dynamic_plan_positive_rows": "int",
+        "dynamic_plan_token_accounting_rows": "int",
+        "dynamic_plan_histogram_rows": "int",
+        "dynamic_plan_ratio_rows": "int",
+        "dynamic_plan_slack_rows": "int",
+        "dynamic_plan_wrapper_rows": "int",
+        "dynamic_plan_malformed_rows": "int",
+        "dynamic_plan_missing_sources": "list",
+        "dynamic_plan_missing_paths": "list",
         "native_codec_probes_healthy": "bool",
         "native_codec_probes_capability_count": "int",
         "native_codec_probes_chunked_cases": "int",
@@ -1963,6 +2001,8 @@
           "huffman_length_failed",
           "missing_level_report_artifact",
           "level_report_failed",
+          "missing_dynamic_plan_artifact",
+          "dynamic_plan_failed",
           "missing_fuzz_corpus_artifact",
           "fuzz_corpus_failed",
           "missing_fuzz_coverage_artifact",
@@ -2352,6 +2392,8 @@
               "validation_huffman_length_failed",
               "validation_missing_level_report_artifact",
               "validation_level_report_failed",
+              "validation_missing_dynamic_plan_artifact",
+              "validation_dynamic_plan_failed",
               "validation_missing_fuzz_corpus_artifact",
               "validation_fuzz_corpus_failed",
               "validation_missing_fuzz_coverage_artifact",
@@ -2439,6 +2481,8 @@
               "huffman_length_failed",
               "missing_level_report_artifact",
               "level_report_failed",
+              "missing_dynamic_plan_artifact",
+              "dynamic_plan_failed",
               "missing_fuzz_corpus_artifact",
               "fuzz_corpus_failed",
               "missing_fuzz_coverage_artifact",
@@ -2592,7 +2636,9 @@
                 "validation_missing_native_library_bench_artifact": "missing_native_library_bench_artifact",
                 "validation_native_library_bench_failed": "native_library_bench_failed",
                 "validation_missing_level_report_artifact": "missing_level_report_artifact",
-                "validation_level_report_failed": "level_report_failed"
+                "validation_level_report_failed": "level_report_failed",
+                "validation_missing_dynamic_plan_artifact": "missing_dynamic_plan_artifact",
+                "validation_dynamic_plan_failed": "dynamic_plan_failed"
               },
               "target": "reason"
             }
@@ -2666,6 +2712,7 @@
           "sidecar_corrupt_markdown_table",
           "huffman_length_markdown_table",
           "level_report_markdown_table",
+          "dynamic_plan_markdown_table",
           "checksum_bench_markdown_table",
           "deflate_match_copy_bench_markdown_table",
           "validation_missing_deflate_match_copy_bench_artifact",
@@ -2739,6 +2786,8 @@
           "validation_huffman_length_failed",
           "validation_missing_level_report_artifact",
           "validation_level_report_failed",
+          "validation_missing_dynamic_plan_artifact",
+          "validation_dynamic_plan_failed",
           "validation_missing_fuzz_corpus_artifact",
           "validation_fuzz_corpus_failed",
           "validation_missing_fuzz_coverage_artifact",
@@ -2828,6 +2877,8 @@
           "validation_huffman_length_failed",
           "validation_missing_level_report_artifact",
           "validation_level_report_failed",
+          "validation_missing_dynamic_plan_artifact",
+          "validation_dynamic_plan_failed",
           "validation_missing_fuzz_corpus_artifact",
           "validation_fuzz_corpus_failed",
           "validation_missing_fuzz_coverage_artifact",
@@ -2915,6 +2966,8 @@
           "huffman_length_failed",
           "missing_level_report_artifact",
           "level_report_failed",
+          "missing_dynamic_plan_artifact",
+          "dynamic_plan_failed",
           "missing_fuzz_corpus_artifact",
           "fuzz_corpus_failed",
           "missing_fuzz_coverage_artifact",
@@ -3002,6 +3055,8 @@
           "huffman_length_failed",
           "missing_level_report_artifact",
           "level_report_failed",
+          "missing_dynamic_plan_artifact",
+          "dynamic_plan_failed",
           "missing_fuzz_corpus_artifact",
           "fuzz_corpus_failed",
           "missing_fuzz_coverage_artifact",
@@ -3155,7 +3210,9 @@
             "validation_missing_native_library_bench_artifact": "missing_native_library_bench_artifact",
             "validation_native_library_bench_failed": "native_library_bench_failed",
             "validation_missing_level_report_artifact": "missing_level_report_artifact",
-            "validation_level_report_failed": "level_report_failed"
+            "validation_level_report_failed": "level_report_failed",
+            "validation_missing_dynamic_plan_artifact": "missing_dynamic_plan_artifact",
+            "validation_dynamic_plan_failed": "dynamic_plan_failed"
           },
           "target": "reason"
         },
@@ -3245,7 +3302,9 @@
             "missing_native_library_bench_artifact": "missing_native_library_bench_artifact",
             "native_library_bench_failed": "native_library_bench_failed",
             "missing_level_report_artifact": "missing_level_report_artifact",
-            "level_report_failed": "level_report_failed"
+            "level_report_failed": "level_report_failed",
+            "missing_dynamic_plan_artifact": "missing_dynamic_plan_artifact",
+            "dynamic_plan_failed": "dynamic_plan_failed"
           },
           "target": "reason"
         }
