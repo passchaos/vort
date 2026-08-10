@@ -857,6 +857,7 @@
             "deflate_huffman_lookup_bench_healthy",
             "deflate_chunked_huffman_bench_healthy",
             "deflate_extra_bits_bench_healthy",
+            "dictionary_decode_bench_healthy",
             "zstd_compare_healthy",
             "native_fuzz_corpus_healthy",
             "br_static_dictionary_healthy",
@@ -1138,6 +1139,21 @@
           ],
           "zero": [
             "deflate_extra_bits_bench_missing_pairs"
+          ]
+        },
+        "dictionary_decode_bench_healthy": {
+          "all": [
+            "dictionary_decode_bench_present"
+          ],
+          "positive": [
+            "dictionary_decode_bench_rows",
+            "dictionary_decode_bench_expected_rows",
+            "dictionary_decode_bench_positive_rows",
+            "dictionary_decode_bench_shape_rows",
+            "dictionary_decode_bench_output_size_rows"
+          ],
+          "zero": [
+            "dictionary_decode_bench_missing_pairs"
           ]
         }
       },
@@ -1585,7 +1601,15 @@
         "deflate_extra_bits_bench_shape_rows": "int",
         "deflate_extra_bits_bench_paired_checksum_rows": "int",
         "deflate_extra_bits_bench_expected_paired_checksum_rows": "int",
-        "deflate_extra_bits_bench_missing_pairs": "list"
+        "deflate_extra_bits_bench_missing_pairs": "list",
+        "dictionary_decode_bench_present": "bool",
+        "dictionary_decode_bench_healthy": "bool",
+        "dictionary_decode_bench_rows": "int",
+        "dictionary_decode_bench_expected_rows": "int",
+        "dictionary_decode_bench_positive_rows": "int",
+        "dictionary_decode_bench_shape_rows": "int",
+        "dictionary_decode_bench_output_size_rows": "int",
+        "dictionary_decode_bench_missing_pairs": "list"
       },
       "item_collection": "artifacts",
       "item_enums": {
@@ -1687,6 +1711,8 @@
           "missing_deflate_chunked_huffman_bench_artifact",
           "missing_deflate_extra_bits_bench_artifact",
           "deflate_extra_bits_bench_failed",
+          "dictionary_decode_bench_failed",
+          "missing_dictionary_decode_bench_artifact",
           "missing_zstd_compare_artifact",
           "zstd_compare_failed",
           "missing_br_static_dictionary_artifact",
@@ -2056,6 +2082,8 @@
               "validation_missing_deflate_chunked_huffman_bench_artifact",
               "validation_deflate_chunked_huffman_bench_failed",
               "validation_deflate_extra_bits_bench_failed",
+              "validation_dictionary_decode_bench_failed",
+              "validation_missing_dictionary_decode_bench_artifact",
               "validation_missing_deflate_extra_bits_bench_artifact",
               "validation_missing_zstd_compare_artifact",
               "validation_zstd_compare_failed",
@@ -2129,6 +2157,8 @@
               "missing_deflate_chunked_huffman_bench_artifact",
               "deflate_chunked_huffman_bench_failed",
               "deflate_extra_bits_bench_failed",
+              "dictionary_decode_bench_failed",
+              "missing_dictionary_decode_bench_artifact",
               "missing_deflate_extra_bits_bench_artifact",
               "missing_zstd_compare_artifact",
               "zstd_compare_failed",
@@ -2221,7 +2251,9 @@
                 "validation_missing_deflate_chunked_huffman_bench_artifact": "missing_deflate_chunked_huffman_bench_artifact",
                 "validation_deflate_chunked_huffman_bench_failed": "deflate_chunked_huffman_bench_failed",
                 "validation_missing_deflate_extra_bits_bench_artifact": "missing_deflate_extra_bits_bench_artifact",
-                "validation_deflate_extra_bits_bench_failed": "deflate_extra_bits_bench_failed"
+                "validation_deflate_extra_bits_bench_failed": "deflate_extra_bits_bench_failed",
+                "validation_missing_dictionary_decode_bench_artifact": "missing_dictionary_decode_bench_artifact",
+                "validation_dictionary_decode_bench_failed": "dictionary_decode_bench_failed"
               },
               "target": "reason"
             }
@@ -2310,6 +2342,9 @@
           "validation_deflate_extra_bits_bench_failed",
           "validation_missing_deflate_extra_bits_bench_artifact",
           "deflate_extra_bits_bench_markdown_table",
+          "validation_dictionary_decode_bench_failed",
+          "validation_missing_dictionary_decode_bench_artifact",
+          "dictionary_decode_bench_markdown_table",
           "zstd_compare_markdown_table",
           "native_allocation_markdown_table",
           "native_fuzz_corpus_markdown_table",
@@ -2469,6 +2504,8 @@
           "validation_missing_deflate_chunked_huffman_bench_artifact",
           "validation_deflate_chunked_huffman_bench_failed",
           "validation_deflate_extra_bits_bench_failed",
+          "validation_dictionary_decode_bench_failed",
+          "validation_missing_dictionary_decode_bench_artifact",
           "validation_missing_deflate_extra_bits_bench_artifact",
           "validation_missing_zstd_compare_artifact",
           "validation_zstd_compare_failed",
@@ -2542,6 +2579,8 @@
           "missing_deflate_chunked_huffman_bench_artifact",
           "deflate_chunked_huffman_bench_failed",
           "deflate_extra_bits_bench_failed",
+          "dictionary_decode_bench_failed",
+          "missing_dictionary_decode_bench_artifact",
           "missing_deflate_extra_bits_bench_artifact",
           "missing_zstd_compare_artifact",
           "zstd_compare_failed",
@@ -2615,6 +2654,8 @@
           "missing_deflate_chunked_huffman_bench_artifact",
           "deflate_chunked_huffman_bench_failed",
           "deflate_extra_bits_bench_failed",
+          "dictionary_decode_bench_failed",
+          "missing_dictionary_decode_bench_artifact",
           "missing_deflate_extra_bits_bench_artifact",
           "missing_zstd_compare_artifact",
           "zstd_compare_failed",
@@ -2707,7 +2748,9 @@
             "validation_missing_deflate_chunked_huffman_bench_artifact": "missing_deflate_chunked_huffman_bench_artifact",
             "validation_deflate_chunked_huffman_bench_failed": "deflate_chunked_huffman_bench_failed",
             "validation_missing_deflate_extra_bits_bench_artifact": "missing_deflate_extra_bits_bench_artifact",
-            "validation_deflate_extra_bits_bench_failed": "deflate_extra_bits_bench_failed"
+            "validation_deflate_extra_bits_bench_failed": "deflate_extra_bits_bench_failed",
+            "validation_missing_dictionary_decode_bench_artifact": "missing_dictionary_decode_bench_artifact",
+            "validation_dictionary_decode_bench_failed": "dictionary_decode_bench_failed"
           },
           "target": "reason"
         },
@@ -2783,7 +2826,9 @@
             "missing_deflate_chunked_huffman_bench_artifact": "missing_deflate_chunked_huffman_bench_artifact",
             "deflate_chunked_huffman_bench_failed": "deflate_chunked_huffman_bench_failed",
             "missing_deflate_extra_bits_bench_artifact": "missing_deflate_extra_bits_bench_artifact",
-            "deflate_extra_bits_bench_failed": "deflate_extra_bits_bench_failed"
+            "deflate_extra_bits_bench_failed": "deflate_extra_bits_bench_failed",
+            "missing_dictionary_decode_bench_artifact": "missing_dictionary_decode_bench_artifact",
+            "dictionary_decode_bench_failed": "dictionary_decode_bench_failed"
           },
           "target": "reason"
         }

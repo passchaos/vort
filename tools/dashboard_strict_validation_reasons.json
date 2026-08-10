@@ -278,6 +278,16 @@
       "fixture": "deflate_extra_bits_bench_failed"
     },
     {
+      "reason": "missing_dictionary_decode_bench_artifact",
+      "check": "validation_missing_dictionary_decode_bench_artifact",
+      "fixture": "missing_dictionary_decode_bench_artifact"
+    },
+    {
+      "reason": "dictionary_decode_bench_failed",
+      "check": "validation_dictionary_decode_bench_failed",
+      "fixture": "dictionary_decode_bench_failed"
+    },
+    {
       "reason": "missing_zstd_compare_artifact",
       "check": "validation_missing_zstd_compare_artifact",
       "fixture": "missing_zstd_compare_artifact"

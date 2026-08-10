@@ -1486,6 +1486,96 @@ def deflate_extra_bits_bench_health(artifacts: list[Path]) -> dict:
     }
 
 
+def dictionary_decode_bench_health(artifacts: list[Path]) -> dict:
+    expected_rows = {
+        ("history-replay-raw-dynamic-alloc", "raw", "dynamic", "alloc"),
+        ("history-replay-raw-dynamic-exact_alloc", "raw", "dynamic", "exact_alloc"),
+        ("history-replay-raw-dynamic-into", "raw", "dynamic", "into"),
+        ("history-replay-raw-best-alloc", "raw", "best", "alloc"),
+        ("history-replay-zlib-fixed-alloc", "zlib", "fixed", "alloc"),
+        ("history-replay-zlib-fixed-exact_alloc", "zlib", "fixed", "exact_alloc"),
+        ("history-replay-zlib-fixed-into", "zlib", "fixed", "into"),
+        ("history-replay-zlib-dynamic-alloc", "zlib", "dynamic", "alloc"),
+        ("history-replay-zlib-dynamic-exact_alloc", "zlib", "dynamic", "exact_alloc"),
+        ("history-replay-zlib-dynamic-into", "zlib", "dynamic", "into"),
+        ("json-prefix-raw-dynamic-alloc", "raw", "dynamic", "alloc"),
+        ("json-prefix-raw-dynamic-into", "raw", "dynamic", "into"),
+        ("json-prefix-zlib-dynamic-alloc", "zlib", "dynamic", "alloc"),
+        ("json-prefix-zlib-dynamic-into", "zlib", "dynamic", "into"),
+        ("log-prefix-raw-dynamic-alloc", "raw", "dynamic", "alloc"),
+        ("log-prefix-raw-dynamic-into", "raw", "dynamic", "into"),
+        ("log-prefix-zlib-dynamic-alloc", "zlib", "dynamic", "alloc"),
+        ("log-prefix-zlib-dynamic-into", "zlib", "dynamic", "into"),
+    }
+    for artifact in artifacts:
+        if artifact.name != "vort-dictionary-decode-bench.csv":
+            continue
+        try:
+            with artifact.open(newline="") as f:
+                rows = list(csv.DictReader(f))
+        except Exception:
+            rows = []
+        seen: set[tuple[str, str, str, str]] = set()
+        positive_rows = 0
+        shape_rows = 0
+        output_size_rows = 0
+        for row in rows:
+            key = (
+                str(row.get("case") or ""),
+                str(row.get("format") or ""),
+                str(row.get("encoder") or ""),
+                str(row.get("mode") or ""),
+            )
+            if key in expected_rows:
+                seen.add(key)
+                shape_rows += 1
+            try:
+                input_bytes = int(row.get("input_bytes") or "0")
+                dict_bytes = int(row.get("dict_bytes") or "0")
+                compressed_bytes = int(row.get("compressed_bytes") or "0")
+                iterations = int(row.get("iterations") or "0")
+                repeat = int(row.get("repeat") or "0")
+                output_bytes = int(row.get("output_bytes") or "0")
+                elapsed_ns = int(row.get("elapsed_ns") or "0")
+                checksum = int(row.get("checksum") or "0")
+                decode_mib_s = float(row.get("decode_mib_s") or "0")
+            except ValueError:
+                continue
+            if all(value > 0 for value in (input_bytes, dict_bytes, compressed_bytes, iterations, repeat, output_bytes, elapsed_ns, checksum)) and decode_mib_s > 0.0:
+                positive_rows += 1
+            if input_bytes > 0 and iterations > 0 and output_bytes == input_bytes * iterations:
+                output_size_rows += 1
+        missing_pairs = sorted(":".join(key) for key in expected_rows - seen)
+        row_count = len(rows)
+        healthy = (
+            row_count == len(expected_rows)
+            and not missing_pairs
+            and positive_rows == row_count
+            and shape_rows == row_count
+            and output_size_rows == row_count
+        )
+        return {
+            "present": True,
+            "healthy": healthy,
+            "row_count": row_count,
+            "expected_rows": len(expected_rows),
+            "positive_rows": positive_rows,
+            "shape_rows": shape_rows,
+            "output_size_rows": output_size_rows,
+            "missing_pairs": missing_pairs,
+        }
+    return {
+        "present": False,
+        "healthy": False,
+        "row_count": 0,
+        "expected_rows": len(expected_rows),
+        "positive_rows": 0,
+        "shape_rows": 0,
+        "output_size_rows": 0,
+        "missing_pairs": [],
+    }
+
+
 def zstd_compare_health(artifacts: list[Path]) -> dict:
     compare = None
     standard = None
@@ -2365,6 +2455,7 @@ def main() -> int:
     deflate_huffman_lookup_bench = deflate_huffman_lookup_bench_health(artifacts)
     deflate_chunked_huffman_bench = deflate_chunked_huffman_bench_health(artifacts)
     deflate_extra_bits_bench = deflate_extra_bits_bench_health(artifacts)
+    dictionary_decode_bench = dictionary_decode_bench_health(artifacts)
     zstd_compare = zstd_compare_health(artifacts)
     native_allocation = native_allocation_health(artifacts)
     python_zlib_health = python_zlib_diff_health(artifacts)
@@ -2417,6 +2508,7 @@ def main() -> int:
     deflate_huffman_lookup_bench_healthy = deflate_huffman_lookup_bench["healthy"]
     deflate_chunked_huffman_bench_healthy = deflate_chunked_huffman_bench["healthy"]
     deflate_extra_bits_bench_healthy = deflate_extra_bits_bench["healthy"]
+    dictionary_decode_bench_healthy = dictionary_decode_bench["healthy"]
     native_allocation_healthy = native_allocation["healthy"]
     native_summary_error_healthy = native_summary_error_health["healthy"]
     native_summary_error_negative_healthy = native_summary_error_negative["healthy"]
@@ -2450,6 +2542,7 @@ def main() -> int:
         and deflate_huffman_lookup_bench_healthy
         and deflate_chunked_huffman_bench_healthy
         and deflate_extra_bits_bench_healthy
+        and dictionary_decode_bench_healthy
         and br_static_dictionary["healthy"]
         and native_summary_error_healthy
         and native_summary_error_negative_healthy
@@ -2570,6 +2663,10 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_deflate_extra_bits_bench_artifact")
     elif not deflate_extra_bits_bench_healthy:
         validation_unhealthy_reasons.append("deflate_extra_bits_bench_failed")
+    if not dictionary_decode_bench["present"]:
+        validation_unhealthy_reasons.append("missing_dictionary_decode_bench_artifact")
+    elif not dictionary_decode_bench_healthy:
+        validation_unhealthy_reasons.append("dictionary_decode_bench_failed")
     native_allocation_present = (
         native_allocation["present"]
         and native_allocation["smoke_present"]
@@ -2917,6 +3014,18 @@ def main() -> int:
             f"| rows | {deflate_extra_bits_bench['row_count']} | expected {deflate_extra_bits_bench['expected_rows']}, present `{deflate_extra_bits_bench['present']}` |",
             f"| shape rows | {deflate_extra_bits_bench['shape_rows']} | positive rows {deflate_extra_bits_bench['positive_rows']} |",
             f"| paired checksums | {deflate_extra_bits_bench['paired_checksum_rows']}/{deflate_extra_bits_bench['expected_paired_checksum_rows']} | missing pairs {len(deflate_extra_bits_bench['missing_pairs'])}, healthy `{deflate_extra_bits_bench['healthy']}` |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
+            "## Dictionary decode benchmark coverage",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| rows | {dictionary_decode_bench['row_count']} | expected {dictionary_decode_bench['expected_rows']}, present `{dictionary_decode_bench['present']}` |",
+            f"| shape rows | {dictionary_decode_bench['shape_rows']} | positive rows {dictionary_decode_bench['positive_rows']} |",
+            f"| output-size rows | {dictionary_decode_bench['output_size_rows']} | missing pairs {len(dictionary_decode_bench['missing_pairs'])}, healthy `{dictionary_decode_bench['healthy']}` |",
             "",
         ]
     )
@@ -3432,6 +3541,14 @@ def main() -> int:
                 "deflate_extra_bits_bench_paired_checksum_rows": deflate_extra_bits_bench["paired_checksum_rows"],
                 "deflate_extra_bits_bench_expected_paired_checksum_rows": deflate_extra_bits_bench["expected_paired_checksum_rows"],
                 "deflate_extra_bits_bench_missing_pairs": deflate_extra_bits_bench["missing_pairs"],
+                "dictionary_decode_bench_present": dictionary_decode_bench["present"],
+                "dictionary_decode_bench_healthy": dictionary_decode_bench["healthy"],
+                "dictionary_decode_bench_rows": dictionary_decode_bench["row_count"],
+                "dictionary_decode_bench_expected_rows": dictionary_decode_bench["expected_rows"],
+                "dictionary_decode_bench_positive_rows": dictionary_decode_bench["positive_rows"],
+                "dictionary_decode_bench_shape_rows": dictionary_decode_bench["shape_rows"],
+                "dictionary_decode_bench_output_size_rows": dictionary_decode_bench["output_size_rows"],
+                "dictionary_decode_bench_missing_pairs": dictionary_decode_bench["missing_pairs"],
                 "zstd_compare_present": zstd_compare["present"],
                 "zstd_compare_standard_present": zstd_compare["standard_present"],
                 "zstd_compare_block_sweep_present": zstd_compare["block_sweep_present"],

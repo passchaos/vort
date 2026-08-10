@@ -32,6 +32,7 @@ DEFLATE_HUFFMAN_BUILD_BENCH_ARTIFACT = "vort-deflate-huffman-build-bench.csv"
 DEFLATE_HUFFMAN_LOOKUP_BENCH_ARTIFACT = "vort-deflate-huffman-lookup-bench.csv"
 DEFLATE_CHUNKED_HUFFMAN_BENCH_ARTIFACT = "vort-deflate-chunked-huffman-bench.csv"
 DEFLATE_EXTRA_BITS_BENCH_ARTIFACT = "vort-deflate-extra-bits-bench.csv"
+DICTIONARY_DECODE_BENCH_ARTIFACT = "vort-dictionary-decode-bench.csv"
 FUZZ_CORPUS_ARTIFACT = "vort-deflate-wrapper-fuzz-corpus.json"
 FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
 DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
@@ -108,6 +109,8 @@ def write_producer_map(
     include_deflate_chunked_huffman_bench_smoke: bool = True,
     include_deflate_extra_bits_bench_exact: bool = True,
     include_deflate_extra_bits_bench_smoke: bool = True,
+    include_dictionary_decode_bench_exact: bool = True,
+    include_dictionary_decode_bench_smoke: bool = True,
     include_fuzz_corpus_exact: bool = True,
     include_fuzz_corpus_smoke: bool = True,
     include_fuzz_coverage_exact: bool = True,
@@ -217,6 +220,11 @@ def write_producer_map(
         artifact_metadata[DEFLATE_EXTRA_BITS_BENCH_ARTIFACT] = {
             "expected_format": "csv",
             "smoke_gate": "zig build run-deflate-extra-bits-bench-gate",
+        }
+    if include_dictionary_decode_bench_smoke:
+        artifact_metadata[DICTIONARY_DECODE_BENCH_ARTIFACT] = {
+            "expected_format": "csv",
+            "smoke_gate": "zig build run-dictionary-decode-bench-gate",
         }
     if include_fuzz_corpus_smoke:
         artifact_metadata[FUZZ_CORPUS_ARTIFACT] = {
@@ -348,6 +356,8 @@ def write_producer_map(
         exact[DEFLATE_CHUNKED_HUFFMAN_BENCH_ARTIFACT] = "zig build run-deflate-chunked-huffman-bench-gate"
     if include_deflate_extra_bits_bench_exact:
         exact[DEFLATE_EXTRA_BITS_BENCH_ARTIFACT] = "zig build run-deflate-extra-bits-bench-gate"
+    if include_dictionary_decode_bench_exact:
+        exact[DICTIONARY_DECODE_BENCH_ARTIFACT] = "zig build run-dictionary-decode-bench-gate"
     if include_fuzz_corpus_exact:
         exact[FUZZ_CORPUS_ARTIFACT] = "zig build run-deflate-wrapper-fuzz-corpus-dashboard"
     if include_fuzz_coverage_exact:
@@ -1024,6 +1034,70 @@ def write_deflate_extra_bits_bench_csv(path: Path, *, healthy: bool = True) -> N
                         ]
                     )
                 )
+    path.write_text("\n".join(lines) + "\n")
+
+
+def write_dictionary_decode_bench_csv(path: Path, *, healthy: bool = True) -> None:
+    columns = [
+        "case",
+        "format",
+        "encoder",
+        "mode",
+        "input_bytes",
+        "dict_bytes",
+        "compressed_bytes",
+        "iterations",
+        "repeat",
+        "output_bytes",
+        "elapsed_ns",
+        "decode_mib_s",
+        "checksum",
+    ]
+    rows = [
+        ("history-replay-raw-dynamic-alloc", "raw", "dynamic", "alloc"),
+        ("history-replay-raw-dynamic-exact_alloc", "raw", "dynamic", "exact_alloc"),
+        ("history-replay-raw-dynamic-into", "raw", "dynamic", "into"),
+        ("history-replay-raw-best-alloc", "raw", "best", "alloc"),
+        ("history-replay-zlib-fixed-alloc", "zlib", "fixed", "alloc"),
+        ("history-replay-zlib-fixed-exact_alloc", "zlib", "fixed", "exact_alloc"),
+        ("history-replay-zlib-fixed-into", "zlib", "fixed", "into"),
+        ("history-replay-zlib-dynamic-alloc", "zlib", "dynamic", "alloc"),
+        ("history-replay-zlib-dynamic-exact_alloc", "zlib", "dynamic", "exact_alloc"),
+        ("history-replay-zlib-dynamic-into", "zlib", "dynamic", "into"),
+        ("json-prefix-raw-dynamic-alloc", "raw", "dynamic", "alloc"),
+        ("json-prefix-raw-dynamic-into", "raw", "dynamic", "into"),
+        ("json-prefix-zlib-dynamic-alloc", "zlib", "dynamic", "alloc"),
+        ("json-prefix-zlib-dynamic-into", "zlib", "dynamic", "into"),
+        ("log-prefix-raw-dynamic-alloc", "raw", "dynamic", "alloc"),
+        ("log-prefix-raw-dynamic-into", "raw", "dynamic", "into"),
+        ("log-prefix-zlib-dynamic-alloc", "zlib", "dynamic", "alloc"),
+        ("log-prefix-zlib-dynamic-into", "zlib", "dynamic", "into"),
+    ]
+    lines = [",".join(columns)]
+    for case, fmt, encoder, mode in rows:
+        if not healthy and case == "log-prefix-zlib-dynamic-into":
+            continue
+        input_bytes = 1024
+        iterations = 16
+        lines.append(
+            ",".join(
+                [
+                    case,
+                    fmt,
+                    encoder,
+                    mode,
+                    str(input_bytes),
+                    "128",
+                    "64",
+                    str(iterations),
+                    "3",
+                    str(input_bytes * iterations),
+                    "1000",
+                    "1000.0",
+                    "12345",
+                ]
+            )
+        )
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -1894,6 +1968,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_deflate_huffman_lookup_bench_csv(root / DEFLATE_HUFFMAN_LOOKUP_BENCH_ARTIFACT)
     write_deflate_chunked_huffman_bench_csv(root / DEFLATE_CHUNKED_HUFFMAN_BENCH_ARTIFACT)
     write_deflate_extra_bits_bench_csv(root / DEFLATE_EXTRA_BITS_BENCH_ARTIFACT)
+    write_dictionary_decode_bench_csv(root / DICTIONARY_DECODE_BENCH_ARTIFACT)
     write_fuzz_corpus_report(root / FUZZ_CORPUS_ARTIFACT)
     write_fuzz_coverage_report(root / FUZZ_COVERAGE_ARTIFACT)
     write_decode_stage_report(root / DECODE_STAGE_ARTIFACT)
@@ -2295,8 +2370,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 47/47 | 0 | allowed missing 0 |",
-                    "| smoke gates | 47/47 | 0 | required missing 0 |",
+                    "| producer steps | 48/48 | 0 | allowed missing 0 |",
+                    "| smoke gates | 48/48 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -2567,6 +2642,20 @@ def main() -> int:
                     "| rows | 105 | expected 105, present `True` |",
                     "| shape rows | 105 | positive rows 105 |",
                     "| paired checksums | 28/28 | missing pairs 0, healthy `True` |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
+                "dictionary_decode_bench_markdown_table",
+                "dictionary decode benchmark Markdown table",
+                dashboard_markdown,
+                [
+                    "## Dictionary decode benchmark coverage",
+                    "| category | count | detail |",
+                    "| rows | 18 | expected 18, present `True` |",
+                    "| shape rows | 18 | positive rows 18 |",
+                    "| output-size rows | 18 | missing pairs 0, healthy `True` |",
                 ],
             )
         )
@@ -2961,6 +3050,12 @@ def main() -> int:
                 write_producer_map(producer_map)
             elif fixture == "deflate_extra_bits_bench_failed":
                 write_deflate_extra_bits_bench_csv(fixture_root / DEFLATE_EXTRA_BITS_BENCH_ARTIFACT, healthy=False)
+                write_producer_map(producer_map)
+            elif fixture == "missing_dictionary_decode_bench_artifact":
+                (fixture_root / DICTIONARY_DECODE_BENCH_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "dictionary_decode_bench_failed":
+                write_dictionary_decode_bench_csv(fixture_root / DICTIONARY_DECODE_BENCH_ARTIFACT, healthy=False)
                 write_producer_map(producer_map)
             elif fixture == "missing_fuzz_corpus_artifact":
                 (fixture_root / FUZZ_CORPUS_ARTIFACT).unlink()
