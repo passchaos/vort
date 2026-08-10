@@ -53,6 +53,10 @@ BR_STATIC_UPSTREAM_ARTIFACT = "vort-br-static-dictionary-candidate-upstream-smok
 BR_STATIC_NODE_ARTIFACT = "vort-br-static-dictionary-node-probe.json"
 BR_STATIC_AUDIT_ARTIFACT = "vort-br-static-dictionary-source-audit.json"
 BR_STATIC_AUDIT_NEGATIVE_ARTIFACT = "vort-br-static-dictionary-source-audit-negative-smoke.json"
+BR_STATIC_REPORT_CSV_ARTIFACT = "vort-br-static-dictionary-report.csv"
+BR_STATIC_REPORT_JSON_ARTIFACT = "vort-br-static-dictionary-report.json"
+BR_STATIC_REPORT_MARKDOWN_ARTIFACT = "vort-br-static-dictionary-report.md"
+BR_STATIC_REPORT_NEGATIVE_ARTIFACT = "vort-br-static-dictionary-report-negative-smoke.json"
 NATIVE_FUZZ_ARTIFACT = "vort-native-fuzz-corpus.json"
 NATIVE_FUZZ_COVERAGE_ARTIFACT = "vort-native-fuzz-corpus-coverage-smoke.json"
 NATIVE_ALLOCATION_REPORT_ARTIFACT = "vort-native-allocation-report.json"
@@ -327,14 +331,18 @@ def write_producer_map(
             "smoke_gate": "zig build run-png-scratch-report-dashboard",
         }
     if include_br_static_smoke:
-        for artifact, smoke_gate in (
-            (BR_STATIC_CANDIDATES_ARTIFACT, "zig build run-br-static-dictionary-candidate-report-smoke"),
-            (BR_STATIC_UPSTREAM_ARTIFACT, "zig build run-br-static-dictionary-candidate-upstream-smoke"),
-            (BR_STATIC_NODE_ARTIFACT, "zig build run-br-static-dictionary-node-probe"),
-            (BR_STATIC_AUDIT_ARTIFACT, "zig build run-br-static-dictionary-source-audit"),
-            (BR_STATIC_AUDIT_NEGATIVE_ARTIFACT, "zig build run-br-static-dictionary-source-audit-negative-smoke"),
+        for artifact, expected_format, smoke_gate in (
+            (BR_STATIC_CANDIDATES_ARTIFACT, "json", "zig build run-br-static-dictionary-candidate-report-smoke"),
+            (BR_STATIC_UPSTREAM_ARTIFACT, "json", "zig build run-br-static-dictionary-candidate-upstream-smoke"),
+            (BR_STATIC_NODE_ARTIFACT, "json", "zig build run-br-static-dictionary-node-probe"),
+            (BR_STATIC_AUDIT_ARTIFACT, "json", "zig build run-br-static-dictionary-source-audit"),
+            (BR_STATIC_AUDIT_NEGATIVE_ARTIFACT, "json", "zig build run-br-static-dictionary-source-audit-negative-smoke"),
+            (BR_STATIC_REPORT_CSV_ARTIFACT, "csv", "zig build run-br-static-dictionary-report-smoke"),
+            (BR_STATIC_REPORT_JSON_ARTIFACT, "json", "zig build run-br-static-dictionary-report-smoke"),
+            (BR_STATIC_REPORT_MARKDOWN_ARTIFACT, "md", "zig build run-br-static-dictionary-report-smoke"),
+            (BR_STATIC_REPORT_NEGATIVE_ARTIFACT, "json", "zig build run-br-static-dictionary-report-negative-smoke"),
         ):
-            artifact_metadata[artifact] = {"expected_format": "json", "smoke_gate": smoke_gate}
+            artifact_metadata[artifact] = {"expected_format": expected_format, "smoke_gate": smoke_gate}
     if include_native_fuzz_smoke:
         artifact_metadata[NATIVE_FUZZ_ARTIFACT] = {"expected_format": "json", "smoke_gate": "zig build run-native-fuzz-corpus-dashboard"}
         artifact_metadata[NATIVE_FUZZ_COVERAGE_ARTIFACT] = {"expected_format": "json", "smoke_gate": "zig build run-native-fuzz-corpus-coverage-smoke"}
@@ -462,6 +470,10 @@ def write_producer_map(
         exact[BR_STATIC_NODE_ARTIFACT] = "zig build run-br-static-dictionary-node-probe"
         exact[BR_STATIC_AUDIT_ARTIFACT] = "zig build run-br-static-dictionary-source-audit"
         exact[BR_STATIC_AUDIT_NEGATIVE_ARTIFACT] = "zig build run-br-static-dictionary-source-audit-negative-smoke"
+        exact[BR_STATIC_REPORT_CSV_ARTIFACT] = "zig build run-br-static-dictionary-report-dashboard"
+        exact[BR_STATIC_REPORT_JSON_ARTIFACT] = "zig build run-br-static-dictionary-report-dashboard"
+        exact[BR_STATIC_REPORT_MARKDOWN_ARTIFACT] = "zig build run-br-static-dictionary-report-dashboard"
+        exact[BR_STATIC_REPORT_NEGATIVE_ARTIFACT] = "zig build run-br-static-dictionary-report-negative-smoke"
     if include_native_fuzz_exact:
         exact[NATIVE_FUZZ_ARTIFACT] = "zig build run-native-fuzz-corpus-dashboard"
         exact[NATIVE_FUZZ_COVERAGE_ARTIFACT] = "zig build run-native-fuzz-corpus-coverage-smoke"
@@ -2224,14 +2236,68 @@ def write_br_static_dictionary_artifacts(root: Path) -> None:
         "case_count": 1,
         "cases": [{"name": "bad_anchor_count", "expected_failure": True, "expected_error": "anchor_count mismatch", "actual_error": "anchor_count mismatch", "matched": True}],
     }
+    report_entries = [
+        {"transform": 0, "copy_len": 5, "word_index": 0, "word_bytes": 5, "word": "first"},
+        {"transform": 1, "copy_len": 5, "word_index": 43, "word_bytes": 6, "word": "words "},
+        {"transform": 6, "copy_len": 5, "word_index": 44, "word_bytes": 6, "word": " games"},
+        {"transform": 9, "copy_len": 7, "word_index": 5, "word_bytes": 7, "word": "Content"},
+        {"transform": 12, "copy_len": 5, "word_index": 43, "word_bytes": 4, "word": "word"},
+        {"transform": 20, "copy_len": 7, "word_index": 37, "word_bytes": 8, "word": "history."},
+    ]
+    report = {
+        "schema": "vort.br_static_dictionary_report",
+        "schema_version": 1,
+        "entry_count": len(report_entries),
+        "transform_count": 6,
+        "length_count": 2,
+        "category_counts": {"identity": 1, "transform": 3, "phrase": 2},
+        "matrix_rows": [
+            {"transform": 0, "identity": 1, "transform_entries": 0, "phrase": 0, "total": 1},
+            {"transform": 1, "identity": 0, "transform_entries": 0, "phrase": 1, "total": 1},
+            {"transform": 6, "identity": 0, "transform_entries": 0, "phrase": 1, "total": 1},
+            {"transform": 9, "identity": 0, "transform_entries": 1, "phrase": 0, "total": 1},
+            {"transform": 12, "identity": 0, "transform_entries": 1, "phrase": 0, "total": 1},
+            {"transform": 20, "identity": 0, "transform_entries": 1, "phrase": 0, "total": 1},
+        ],
+        "entries": report_entries,
+    }
+    report_negative = {
+        "schema": "vort.br_static_dictionary_report_negative_smoke",
+        "schema_version": 1,
+        "ok": True,
+        "case_count": 1,
+        "cases": [{"name": "missing_required_tuple", "expected_output": "missing required coverage rows", "returncode": 1, "matched": True}],
+    }
     for artifact, payload in (
         (BR_STATIC_CANDIDATES_ARTIFACT, candidates),
         (BR_STATIC_UPSTREAM_ARTIFACT, upstream),
         (BR_STATIC_NODE_ARTIFACT, node),
         (BR_STATIC_AUDIT_ARTIFACT, audit),
         (BR_STATIC_AUDIT_NEGATIVE_ARTIFACT, negative),
+        (BR_STATIC_REPORT_JSON_ARTIFACT, report),
+        (BR_STATIC_REPORT_NEGATIVE_ARTIFACT, report_negative),
     ):
         (root / artifact).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    report_columns = ["transform", "copy_len", "word_index", "word_bytes", "word"]
+    report_lines = [",".join(report_columns)]
+    report_lines.extend(",".join(str(row[column]) for column in report_columns) for row in report_entries)
+    (root / BR_STATIC_REPORT_CSV_ARTIFACT).write_text("\n".join(report_lines) + "\n")
+    markdown_lines = [
+        "# Brotli static dictionary subset",
+        "",
+        "- Entries: 6",
+        "- Distinct transforms: 6",
+        "- Distinct lengths: 2",
+        "- Identity entries: 1",
+        "- Transform entries: 3",
+        "- Phrase entries: 2",
+        "",
+        "| Transform | Identity | Transform entries | Phrase | Total |",
+        "| ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for row in report["matrix_rows"]:
+        markdown_lines.append(f"| {row['transform']} | {row['identity']} | {row['transform_entries']} | {row['phrase']} | {row['total']} |")
+    (root / BR_STATIC_REPORT_MARKDOWN_ARTIFACT).write_text("\n".join(markdown_lines) + "\n")
 
 
 def write_native_allocation_artifacts(root: Path) -> None:
@@ -3147,8 +3213,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 61/61 | 0 | allowed missing 0 |",
-                    "| smoke gates | 61/61 | 0 | required missing 0 |",
+                    "| producer steps | 65/65 | 0 | allowed missing 0 |",
+                    "| smoke gates | 65/65 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -3569,6 +3635,8 @@ def main() -> int:
                     "| node probe | 48/48 | size winners 1 |",
                     "| source audit | 83 | anchors 83, generated bytes 4096 |",
                     "| negative smoke | 1/1 | healthy `True` |",
+                    "| report entries | 6 | csv 6/6, Markdown 6/6 |",
+                    "| report negative smoke | 1/1 | report healthy `True` |",
                 ],
             )
         )
@@ -4049,13 +4117,13 @@ def main() -> int:
                 (fixture_root / ZSTD_COMPARE_ARTIFACT).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
                 write_producer_map(producer_map)
             elif fixture == "missing_br_static_dictionary_artifact":
-                (fixture_root / BR_STATIC_CANDIDATES_ARTIFACT).unlink()
+                (fixture_root / BR_STATIC_REPORT_JSON_ARTIFACT).unlink()
                 write_producer_map(producer_map)
             elif fixture == "br_static_dictionary_failed":
                 write_br_static_dictionary_artifacts(fixture_root)
-                payload = json.loads((fixture_root / BR_STATIC_NODE_ARTIFACT).read_text())
-                payload["ok"] = False
-                (fixture_root / BR_STATIC_NODE_ARTIFACT).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+                payload = json.loads((fixture_root / BR_STATIC_REPORT_JSON_ARTIFACT).read_text())
+                payload["entry_count"] = 999
+                (fixture_root / BR_STATIC_REPORT_JSON_ARTIFACT).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
                 write_producer_map(producer_map)
             elif fixture == "missing_native_summary_error_dashboard_artifact":
                 (fixture_root / NATIVE_SUMMARY_ERROR_ARTIFACT).unlink()

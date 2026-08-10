@@ -1165,8 +1165,10 @@ zig build run-br-static-dictionary-report-smoke
 This schema describes the retained Brotli static-dictionary subset currently
 implemented by Vort. Each entry identifies a supported RFC transform index, copy
 length, dictionary word index, transformed word byte length, and transformed
-word bytes. The report is intentionally a subset manifest rather than a claim of
-complete Brotli dictionary support.
+word bytes. Dashboard aggregate health cross-checks this JSON against the CSV,
+Markdown summary, and negative smoke artifact before static-dictionary coverage
+is considered healthy. The report is intentionally a subset manifest rather than
+a claim of complete Brotli dictionary support.
 
 Example:
 
@@ -2731,7 +2733,34 @@ Top-level fields:
   `br_static_dictionary_audit_anchor_count`,
   `br_static_dictionary_audit_generated_zig_bytes`,
   `br_static_dictionary_negative_case_count`,
-  `br_static_dictionary_negative_matched`
+  `br_static_dictionary_negative_matched`,
+  `br_static_dictionary_report_present`,
+  `br_static_dictionary_report_csv_present`,
+  `br_static_dictionary_report_markdown_present`,
+  `br_static_dictionary_report_negative_present`,
+  `br_static_dictionary_core_healthy`,
+  `br_static_dictionary_report_healthy`,
+  `br_static_dictionary_report_entry_count`,
+  `br_static_dictionary_report_json_entries`,
+  `br_static_dictionary_report_transform_count`,
+  `br_static_dictionary_report_length_count`,
+  `br_static_dictionary_report_identity_count`,
+  `br_static_dictionary_report_transform_entry_count`,
+  `br_static_dictionary_report_phrase_count`,
+  `br_static_dictionary_report_category_total`,
+  `br_static_dictionary_report_category_mismatch_rows`,
+  `br_static_dictionary_report_matrix_rows`,
+  `br_static_dictionary_report_matrix_total`,
+  `br_static_dictionary_report_matrix_mismatch_rows`,
+  `br_static_dictionary_report_csv_rows`,
+  `br_static_dictionary_report_csv_matched`,
+  `br_static_dictionary_report_csv_unmatched`,
+  `br_static_dictionary_report_markdown_summary_rows`,
+  `br_static_dictionary_report_markdown_matched`,
+  `br_static_dictionary_report_markdown_unmatched`,
+  `br_static_dictionary_report_negative_case_count`,
+  `br_static_dictionary_report_negative_matched`,
+  `br_static_dictionary_report_negative_unmatched`
 - `png_scratch_present`, `png_scratch_healthy`, `png_scratch_case_count`,
   `png_scratch_adam7_cases`, `png_scratch_stored_achieved`,
   `png_scratch_fixed_achieved`, `png_scratch_total_zlib_scratch`,
@@ -3198,6 +3227,33 @@ Example:
   "br_static_dictionary_audit_generated_zig_bytes": 0,
   "br_static_dictionary_negative_case_count": 0,
   "br_static_dictionary_negative_matched": 0,
+  "br_static_dictionary_report_present": false,
+  "br_static_dictionary_report_csv_present": false,
+  "br_static_dictionary_report_markdown_present": false,
+  "br_static_dictionary_report_negative_present": false,
+  "br_static_dictionary_core_healthy": false,
+  "br_static_dictionary_report_healthy": false,
+  "br_static_dictionary_report_entry_count": 0,
+  "br_static_dictionary_report_json_entries": 0,
+  "br_static_dictionary_report_transform_count": 0,
+  "br_static_dictionary_report_length_count": 0,
+  "br_static_dictionary_report_identity_count": 0,
+  "br_static_dictionary_report_transform_entry_count": 0,
+  "br_static_dictionary_report_phrase_count": 0,
+  "br_static_dictionary_report_category_total": 0,
+  "br_static_dictionary_report_category_mismatch_rows": 0,
+  "br_static_dictionary_report_matrix_rows": 0,
+  "br_static_dictionary_report_matrix_total": 0,
+  "br_static_dictionary_report_matrix_mismatch_rows": 0,
+  "br_static_dictionary_report_csv_rows": 0,
+  "br_static_dictionary_report_csv_matched": 0,
+  "br_static_dictionary_report_csv_unmatched": 0,
+  "br_static_dictionary_report_markdown_summary_rows": 0,
+  "br_static_dictionary_report_markdown_matched": 0,
+  "br_static_dictionary_report_markdown_unmatched": 0,
+  "br_static_dictionary_report_negative_case_count": 0,
+  "br_static_dictionary_report_negative_matched": 0,
+  "br_static_dictionary_report_negative_unmatched": 0,
   "png_scratch_present": false,
   "png_scratch_healthy": false,
   "png_scratch_case_count": 0,

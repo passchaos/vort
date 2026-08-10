@@ -2868,6 +2868,8 @@ pub fn build(b: *std.Build) void {
     validation_json_smoke.step.dependOn(br_static_dictionary_candidate_report_smoke_step);
     validation_json_smoke.step.dependOn(br_static_dictionary_candidate_upstream_smoke_step);
     validation_json_smoke.step.dependOn(br_static_dictionary_node_probe_step);
+    validation_json_smoke.step.dependOn(br_static_dictionary_report_smoke_step);
+    validation_json_smoke.step.dependOn(br_static_dictionary_report_negative_smoke_step);
     validation_json_smoke.step.dependOn(level_report_dashboard_step);
     const validation_json_smoke_step = b.step("run-validation-json-smoke", "Validate CLI and report JSON schema outputs");
     validation_json_smoke_step.dependOn(&validation_json_smoke.step);
@@ -2907,6 +2909,8 @@ pub fn build(b: *std.Build) void {
     validation_json_dashboard.step.dependOn(br_static_dictionary_candidate_report_smoke_step);
     validation_json_dashboard.step.dependOn(br_static_dictionary_candidate_upstream_smoke_step);
     validation_json_dashboard.step.dependOn(br_static_dictionary_node_probe_step);
+    validation_json_dashboard.step.dependOn(br_static_dictionary_report_smoke_step);
+    validation_json_dashboard.step.dependOn(br_static_dictionary_report_negative_smoke_step);
     validation_json_dashboard.step.dependOn(level_report_dashboard_step);
     const validation_json_dashboard_step = b.step("run-validation-json-dashboard", "Write validation JSON schema smoke summary to zig-out");
     validation_json_dashboard_step.dependOn(&validation_json_dashboard.step);

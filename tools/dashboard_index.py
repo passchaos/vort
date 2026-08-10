@@ -1030,6 +1030,10 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
     node = None
     audit = None
     negative = None
+    report = None
+    report_csv = None
+    report_markdown = None
+    report_negative = None
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
         schema = data.get("schema")
@@ -1043,12 +1047,138 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
             audit = data
         elif schema == "vort.br_static_dictionary_source_audit_negative_smoke" and artifact.name == "vort-br-static-dictionary-source-audit-negative-smoke.json":
             negative = data
+        elif schema == "vort.br_static_dictionary_report" and artifact.name == "vort-br-static-dictionary-report.json":
+            report = data
+        elif schema == "vort.br_static_dictionary_report_negative_smoke" and artifact.name == "vort-br-static-dictionary-report-negative-smoke.json":
+            report_negative = data
+        elif artifact.name == "vort-br-static-dictionary-report.csv":
+            report_csv = artifact
+        elif artifact.name == "vort-br-static-dictionary-report.md":
+            report_markdown = artifact
 
     def int_field(data: dict | None, field: str) -> int:
         if not isinstance(data, dict):
             return 0
         value = data.get(field)
         return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    def entry_key(row: dict) -> tuple[int, int, int, str] | None:
+        transform = row.get("transform")
+        copy_len = row.get("copy_len")
+        word_index = row.get("word_index")
+        word = row.get("word")
+        word_bytes = row.get("word_bytes")
+        if (
+            not isinstance(transform, int)
+            or isinstance(transform, bool)
+            or not isinstance(copy_len, int)
+            or isinstance(copy_len, bool)
+            or not isinstance(word_index, int)
+            or isinstance(word_index, bool)
+            or not isinstance(word, str)
+            or not isinstance(word_bytes, int)
+            or isinstance(word_bytes, bool)
+            or word_bytes != len(word.encode())
+        ):
+            return None
+        return (transform, copy_len, word_index, word)
+
+    report_entries = report.get("entries") if isinstance(report, dict) else []
+    report_entries = report_entries if isinstance(report_entries, list) else []
+    report_entry_keys = {key for row in report_entries if isinstance(row, dict) for key in [entry_key(row)] if key is not None}
+    report_json_entries = len(report_entries)
+    report_entry_count = int_field(report, "entry_count")
+    report_transform_count = int_field(report, "transform_count")
+    report_length_count = int_field(report, "length_count")
+    report_category_counts = report.get("category_counts") if isinstance(report, dict) else {}
+    report_category_counts = report_category_counts if isinstance(report_category_counts, dict) else {}
+
+    def dict_int(data: dict, field: str) -> int:
+        value = data.get(field)
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    report_identity_count = sum(1 for transform, _, _, word in report_entry_keys if transform == 0 and " " not in word)
+    report_transform_entry_count = sum(1 for transform, _, _, word in report_entry_keys if transform != 0 and " " not in word)
+    report_phrase_count = sum(1 for _, _, _, word in report_entry_keys if " " in word)
+    report_category_total = sum(
+        value for value in report_category_counts.values()
+        if isinstance(value, int) and not isinstance(value, bool)
+    )
+    report_category_mismatch_rows = sum(
+        1
+        for key, actual in (
+            ("identity", report_identity_count),
+            ("transform", report_transform_entry_count),
+            ("phrase", report_phrase_count),
+        )
+        if report_category_counts.get(key) != actual
+    )
+    report_actual_transform_count = len({transform for transform, _, _, _ in report_entry_keys})
+    report_actual_length_count = len({copy_len for _, copy_len, _, _ in report_entry_keys})
+    report_matrix_rows_data = report.get("matrix_rows") if isinstance(report, dict) else []
+    report_matrix_rows_data = report_matrix_rows_data if isinstance(report_matrix_rows_data, list) else []
+    report_matrix_total = 0
+    report_matrix_mismatch_rows = 0
+    for row in report_matrix_rows_data:
+        if not isinstance(row, dict):
+            report_matrix_mismatch_rows += 1
+            continue
+        identity = row.get("identity")
+        transform_entries = row.get("transform_entries")
+        phrase = row.get("phrase")
+        total = row.get("total")
+        if all(isinstance(value, int) and not isinstance(value, bool) for value in (identity, transform_entries, phrase, total)):
+            assert isinstance(identity, int)
+            assert isinstance(transform_entries, int)
+            assert isinstance(phrase, int)
+            assert isinstance(total, int)
+            report_matrix_total += total
+            if identity + transform_entries + phrase != total:
+                report_matrix_mismatch_rows += 1
+        else:
+            report_matrix_mismatch_rows += 1
+
+    report_csv_rows = 0
+    report_csv_matched = 0
+    if isinstance(report_csv, Path):
+        try:
+            with report_csv.open(newline="") as f:
+                csv_rows = list(csv.DictReader(f))
+        except Exception:
+            csv_rows = []
+        report_csv_rows = len(csv_rows)
+        csv_keys: set[tuple[int, int, int, str]] = set()
+        for row in csv_rows:
+            try:
+                csv_keys.add((int(row.get("transform") or "0"), int(row.get("copy_len") or "0"), int(row.get("word_index") or "0"), str(row.get("word") or "")))
+            except ValueError:
+                continue
+        report_csv_matched = len(report_entry_keys & csv_keys)
+    report_csv_unmatched = max(report_csv_rows, report_entry_count) - report_csv_matched
+
+    report_markdown_summary_rows = 0
+    report_markdown_matched = 0
+    if isinstance(report_markdown, Path):
+        markdown = report_markdown.read_text(errors="replace")
+        markdown_expected = {
+            "Entries": report_entry_count,
+            "Distinct transforms": report_transform_count,
+            "Distinct lengths": report_length_count,
+            "Identity entries": dict_int(report_category_counts, "identity"),
+            "Transform entries": dict_int(report_category_counts, "transform"),
+            "Phrase entries": dict_int(report_category_counts, "phrase"),
+        }
+        for label, expected in markdown_expected.items():
+            report_markdown_summary_rows += 1
+            if f"- {label}: {expected}" in markdown:
+                report_markdown_matched += 1
+    report_markdown_unmatched = report_markdown_summary_rows - report_markdown_matched
+
+    report_negative_cases = report_negative.get("cases") if isinstance(report_negative, dict) else []
+    report_negative_cases = report_negative_cases if isinstance(report_negative_cases, list) else []
+    report_negative_matched = sum(1 for row in report_negative_cases if isinstance(row, dict) and row.get("matched") is True)
+    report_negative_case_count = int_field(report_negative, "case_count")
+    report_negative_unmatched = max(report_negative_case_count, len(report_negative_cases)) - report_negative_matched
 
     negative_cases = negative.get("cases") if isinstance(negative, dict) else []
     negative_cases = negative_cases if isinstance(negative_cases, list) else []
@@ -1058,6 +1188,10 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
     node_present = isinstance(node, dict)
     audit_present = isinstance(audit, dict)
     negative_present = isinstance(negative, dict)
+    report_present = isinstance(report, dict)
+    report_csv_present = isinstance(report_csv, Path)
+    report_markdown_present = isinstance(report_markdown, Path)
+    report_negative_present = isinstance(report_negative, dict)
     candidate_count = int_field(candidate, "candidate_count")
     raw_word_count = int_field(candidate, "raw_word_count")
     upstream_candidate_count = int_field(upstream, "candidate_count")
@@ -1068,7 +1202,7 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
     audit_anchor_count = int_field(audit, "anchor_count")
     audit_generated_zig_bytes = int_field(audit, "generated_zig_bytes")
     negative_case_count = int_field(negative, "case_count")
-    healthy = (
+    core_healthy = (
         candidate_present
         and upstream_present
         and node_present
@@ -1091,12 +1225,43 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
         and negative_case_count > 0
         and negative_matched == negative_case_count
     )
+    report_healthy = (
+        report_present
+        and report_csv_present
+        and report_markdown_present
+        and report_negative_present
+        and report_entry_count > 0
+        and report_json_entries == report_entry_count
+        and len(report_entry_keys) == report_entry_count
+        and report_transform_count > 0
+        and report_transform_count == report_actual_transform_count
+        and report_length_count > 0
+        and report_length_count == report_actual_length_count
+        and report_category_total == report_entry_count
+        and report_category_mismatch_rows == 0
+        and report_matrix_total == report_entry_count
+        and report_matrix_mismatch_rows == 0
+        and report_csv_rows == report_entry_count
+        and report_csv_unmatched == 0
+        and report_markdown_summary_rows == 6
+        and report_markdown_unmatched == 0
+        and bool(report_negative.get("ok"))
+        and report_negative_case_count > 0
+        and report_negative_unmatched == 0
+    )
+    healthy = core_healthy and report_healthy
     return {
         "present": candidate_present,
         "upstream_present": upstream_present,
         "node_present": node_present,
         "audit_present": audit_present,
         "negative_present": negative_present,
+        "report_present": report_present,
+        "report_csv_present": report_csv_present,
+        "report_markdown_present": report_markdown_present,
+        "report_negative_present": report_negative_present,
+        "core_healthy": core_healthy,
+        "report_healthy": report_healthy,
         "healthy": healthy,
         "candidate_count": candidate_count,
         "raw_word_count": raw_word_count,
@@ -1110,6 +1275,27 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
         "audit_generated_zig_bytes": audit_generated_zig_bytes,
         "negative_case_count": negative_case_count,
         "negative_matched": negative_matched,
+        "report_entry_count": report_entry_count,
+        "report_json_entries": report_json_entries,
+        "report_transform_count": report_transform_count,
+        "report_length_count": report_length_count,
+        "report_identity_count": report_identity_count,
+        "report_transform_entry_count": report_transform_entry_count,
+        "report_phrase_count": report_phrase_count,
+        "report_category_total": report_category_total,
+        "report_category_mismatch_rows": report_category_mismatch_rows,
+        "report_matrix_rows": len(report_matrix_rows_data),
+        "report_matrix_total": report_matrix_total,
+        "report_matrix_mismatch_rows": report_matrix_mismatch_rows,
+        "report_csv_rows": report_csv_rows,
+        "report_csv_matched": report_csv_matched,
+        "report_csv_unmatched": report_csv_unmatched,
+        "report_markdown_summary_rows": report_markdown_summary_rows,
+        "report_markdown_matched": report_markdown_matched,
+        "report_markdown_unmatched": report_markdown_unmatched,
+        "report_negative_case_count": report_negative_case_count,
+        "report_negative_matched": report_negative_matched,
+        "report_negative_unmatched": report_negative_unmatched,
     }
 
 
@@ -3950,6 +4136,10 @@ def main() -> int:
         and br_static_dictionary["node_present"]
         and br_static_dictionary["audit_present"]
         and br_static_dictionary["negative_present"]
+        and br_static_dictionary["report_present"]
+        and br_static_dictionary["report_csv_present"]
+        and br_static_dictionary["report_markdown_present"]
+        and br_static_dictionary["report_negative_present"]
     )
     if not br_static_dictionary_present:
         validation_unhealthy_reasons.append("missing_br_static_dictionary_artifact")
@@ -4146,6 +4336,8 @@ def main() -> int:
             f"| node probe | {br_static_dictionary['node_decode_successes']}/{br_static_dictionary['node_probed_count']} | size winners {br_static_dictionary['node_size_winner_count']} |",
             f"| source audit | {br_static_dictionary['audit_entry_count']} | anchors {br_static_dictionary['audit_anchor_count']}, generated bytes {br_static_dictionary['audit_generated_zig_bytes']} |",
             f"| negative smoke | {br_static_dictionary['negative_matched']}/{br_static_dictionary['negative_case_count']} | healthy `{br_static_dictionary['healthy']}` |",
+            f"| report entries | {br_static_dictionary['report_entry_count']} | csv {br_static_dictionary['report_csv_matched']}/{br_static_dictionary['report_csv_rows']}, Markdown {br_static_dictionary['report_markdown_matched']}/{br_static_dictionary['report_markdown_summary_rows']} |",
+            f"| report negative smoke | {br_static_dictionary['report_negative_matched']}/{br_static_dictionary['report_negative_case_count']} | report healthy `{br_static_dictionary['report_healthy']}` |",
             "",
         ]
     )
@@ -4807,6 +4999,12 @@ def main() -> int:
                 "br_static_dictionary_node_present": br_static_dictionary["node_present"],
                 "br_static_dictionary_audit_present": br_static_dictionary["audit_present"],
                 "br_static_dictionary_negative_present": br_static_dictionary["negative_present"],
+                "br_static_dictionary_report_present": br_static_dictionary["report_present"],
+                "br_static_dictionary_report_csv_present": br_static_dictionary["report_csv_present"],
+                "br_static_dictionary_report_markdown_present": br_static_dictionary["report_markdown_present"],
+                "br_static_dictionary_report_negative_present": br_static_dictionary["report_negative_present"],
+                "br_static_dictionary_core_healthy": br_static_dictionary["core_healthy"],
+                "br_static_dictionary_report_healthy": br_static_dictionary["report_healthy"],
                 "br_static_dictionary_healthy": br_static_dictionary["healthy"],
                 "br_static_dictionary_candidate_count": br_static_dictionary["candidate_count"],
                 "br_static_dictionary_raw_word_count": br_static_dictionary["raw_word_count"],
@@ -4820,6 +5018,27 @@ def main() -> int:
                 "br_static_dictionary_audit_generated_zig_bytes": br_static_dictionary["audit_generated_zig_bytes"],
                 "br_static_dictionary_negative_case_count": br_static_dictionary["negative_case_count"],
                 "br_static_dictionary_negative_matched": br_static_dictionary["negative_matched"],
+                "br_static_dictionary_report_entry_count": br_static_dictionary["report_entry_count"],
+                "br_static_dictionary_report_json_entries": br_static_dictionary["report_json_entries"],
+                "br_static_dictionary_report_transform_count": br_static_dictionary["report_transform_count"],
+                "br_static_dictionary_report_length_count": br_static_dictionary["report_length_count"],
+                "br_static_dictionary_report_identity_count": br_static_dictionary["report_identity_count"],
+                "br_static_dictionary_report_transform_entry_count": br_static_dictionary["report_transform_entry_count"],
+                "br_static_dictionary_report_phrase_count": br_static_dictionary["report_phrase_count"],
+                "br_static_dictionary_report_category_total": br_static_dictionary["report_category_total"],
+                "br_static_dictionary_report_category_mismatch_rows": br_static_dictionary["report_category_mismatch_rows"],
+                "br_static_dictionary_report_matrix_rows": br_static_dictionary["report_matrix_rows"],
+                "br_static_dictionary_report_matrix_total": br_static_dictionary["report_matrix_total"],
+                "br_static_dictionary_report_matrix_mismatch_rows": br_static_dictionary["report_matrix_mismatch_rows"],
+                "br_static_dictionary_report_csv_rows": br_static_dictionary["report_csv_rows"],
+                "br_static_dictionary_report_csv_matched": br_static_dictionary["report_csv_matched"],
+                "br_static_dictionary_report_csv_unmatched": br_static_dictionary["report_csv_unmatched"],
+                "br_static_dictionary_report_markdown_summary_rows": br_static_dictionary["report_markdown_summary_rows"],
+                "br_static_dictionary_report_markdown_matched": br_static_dictionary["report_markdown_matched"],
+                "br_static_dictionary_report_markdown_unmatched": br_static_dictionary["report_markdown_unmatched"],
+                "br_static_dictionary_report_negative_case_count": br_static_dictionary["report_negative_case_count"],
+                "br_static_dictionary_report_negative_matched": br_static_dictionary["report_negative_matched"],
+                "br_static_dictionary_report_negative_unmatched": br_static_dictionary["report_negative_unmatched"],
                 "png_scratch_present": png_scratch["present"],
                 "png_scratch_healthy": png_scratch["healthy"],
                 "png_scratch_case_count": png_scratch["case_count"],
