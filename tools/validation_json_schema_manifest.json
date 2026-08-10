@@ -854,6 +854,7 @@
             "snappy_report_healthy",
             "deflate_match_copy_bench_healthy",
             "deflate_huffman_build_bench_healthy",
+            "deflate_huffman_lookup_bench_healthy",
             "zstd_compare_healthy",
             "native_fuzz_corpus_healthy",
             "br_static_dictionary_healthy",
@@ -1090,6 +1091,20 @@
           ],
           "zero": [
             "deflate_huffman_build_bench_missing_pairs"
+          ]
+        },
+        "deflate_huffman_lookup_bench_healthy": {
+          "all": [
+            "deflate_huffman_lookup_bench_present"
+          ],
+          "positive": [
+            "deflate_huffman_lookup_bench_rows",
+            "deflate_huffman_lookup_bench_expected_rows",
+            "deflate_huffman_lookup_bench_positive_rows",
+            "deflate_huffman_lookup_bench_lookup_rows"
+          ],
+          "zero": [
+            "deflate_huffman_lookup_bench_missing_pairs"
           ]
         }
       },
@@ -1513,7 +1528,14 @@
         "deflate_huffman_build_bench_expected_rows": "int",
         "deflate_huffman_build_bench_positive_rows": "int",
         "deflate_huffman_build_bench_lookup_rows": "int",
-        "deflate_huffman_build_bench_missing_pairs": "list"
+        "deflate_huffman_build_bench_missing_pairs": "list",
+        "deflate_huffman_lookup_bench_present": "bool",
+        "deflate_huffman_lookup_bench_healthy": "bool",
+        "deflate_huffman_lookup_bench_rows": "int",
+        "deflate_huffman_lookup_bench_expected_rows": "int",
+        "deflate_huffman_lookup_bench_positive_rows": "int",
+        "deflate_huffman_lookup_bench_lookup_rows": "int",
+        "deflate_huffman_lookup_bench_missing_pairs": "list"
       },
       "item_collection": "artifacts",
       "item_enums": {
@@ -1609,6 +1631,8 @@
           "missing_deflate_match_copy_bench_artifact",
           "deflate_huffman_build_bench_failed",
           "missing_deflate_huffman_build_bench_artifact",
+          "deflate_huffman_lookup_bench_failed",
+          "missing_deflate_huffman_lookup_bench_artifact",
           "missing_zstd_compare_artifact",
           "zstd_compare_failed",
           "missing_br_static_dictionary_artifact",
@@ -1973,6 +1997,8 @@
               "validation_deflate_match_copy_bench_failed",
               "validation_missing_deflate_huffman_build_bench_artifact",
               "validation_deflate_huffman_build_bench_failed",
+              "validation_missing_deflate_huffman_lookup_bench_artifact",
+              "validation_deflate_huffman_lookup_bench_failed",
               "validation_missing_zstd_compare_artifact",
               "validation_zstd_compare_failed",
               "validation_missing_br_static_dictionary_artifact",
@@ -2040,6 +2066,8 @@
               "deflate_match_copy_bench_failed",
               "missing_deflate_huffman_build_bench_artifact",
               "deflate_huffman_build_bench_failed",
+              "missing_deflate_huffman_lookup_bench_artifact",
+              "deflate_huffman_lookup_bench_failed",
               "missing_zstd_compare_artifact",
               "zstd_compare_failed",
               "missing_br_static_dictionary_artifact",
@@ -2125,7 +2153,9 @@
                 "validation_missing_deflate_match_copy_bench_artifact": "missing_deflate_match_copy_bench_artifact",
                 "validation_deflate_match_copy_bench_failed": "deflate_match_copy_bench_failed",
                 "validation_missing_deflate_huffman_build_bench_artifact": "missing_deflate_huffman_build_bench_artifact",
-                "validation_deflate_huffman_build_bench_failed": "deflate_huffman_build_bench_failed"
+                "validation_deflate_huffman_build_bench_failed": "deflate_huffman_build_bench_failed",
+                "validation_missing_deflate_huffman_lookup_bench_artifact": "missing_deflate_huffman_lookup_bench_artifact",
+                "validation_deflate_huffman_lookup_bench_failed": "deflate_huffman_lookup_bench_failed"
               },
               "target": "reason"
             }
@@ -2205,6 +2235,9 @@
           "deflate_huffman_build_bench_markdown_table",
           "validation_missing_deflate_huffman_build_bench_artifact",
           "validation_deflate_huffman_build_bench_failed",
+          "deflate_huffman_lookup_bench_markdown_table",
+          "validation_missing_deflate_huffman_lookup_bench_artifact",
+          "validation_deflate_huffman_lookup_bench_failed",
           "zstd_compare_markdown_table",
           "native_allocation_markdown_table",
           "native_fuzz_corpus_markdown_table",
@@ -2359,6 +2392,8 @@
           "validation_deflate_match_copy_bench_failed",
           "validation_missing_deflate_huffman_build_bench_artifact",
           "validation_deflate_huffman_build_bench_failed",
+          "validation_missing_deflate_huffman_lookup_bench_artifact",
+          "validation_deflate_huffman_lookup_bench_failed",
           "validation_missing_zstd_compare_artifact",
           "validation_zstd_compare_failed",
           "validation_missing_br_static_dictionary_artifact",
@@ -2426,6 +2461,8 @@
           "deflate_match_copy_bench_failed",
           "missing_deflate_huffman_build_bench_artifact",
           "deflate_huffman_build_bench_failed",
+          "missing_deflate_huffman_lookup_bench_artifact",
+          "deflate_huffman_lookup_bench_failed",
           "missing_zstd_compare_artifact",
           "zstd_compare_failed",
           "missing_br_static_dictionary_artifact",
@@ -2493,6 +2530,8 @@
           "deflate_match_copy_bench_failed",
           "missing_deflate_huffman_build_bench_artifact",
           "deflate_huffman_build_bench_failed",
+          "missing_deflate_huffman_lookup_bench_artifact",
+          "deflate_huffman_lookup_bench_failed",
           "missing_zstd_compare_artifact",
           "zstd_compare_failed",
           "missing_br_static_dictionary_artifact",
@@ -2578,7 +2617,9 @@
             "validation_missing_deflate_match_copy_bench_artifact": "missing_deflate_match_copy_bench_artifact",
             "validation_deflate_match_copy_bench_failed": "deflate_match_copy_bench_failed",
             "validation_missing_deflate_huffman_build_bench_artifact": "missing_deflate_huffman_build_bench_artifact",
-            "validation_deflate_huffman_build_bench_failed": "deflate_huffman_build_bench_failed"
+            "validation_deflate_huffman_build_bench_failed": "deflate_huffman_build_bench_failed",
+            "validation_missing_deflate_huffman_lookup_bench_artifact": "missing_deflate_huffman_lookup_bench_artifact",
+            "validation_deflate_huffman_lookup_bench_failed": "deflate_huffman_lookup_bench_failed"
           },
           "target": "reason"
         },
@@ -2648,7 +2689,9 @@
             "missing_deflate_match_copy_bench_artifact": "missing_deflate_match_copy_bench_artifact",
             "deflate_match_copy_bench_failed": "deflate_match_copy_bench_failed",
             "missing_deflate_huffman_build_bench_artifact": "missing_deflate_huffman_build_bench_artifact",
-            "deflate_huffman_build_bench_failed": "deflate_huffman_build_bench_failed"
+            "deflate_huffman_build_bench_failed": "deflate_huffman_build_bench_failed",
+            "missing_deflate_huffman_lookup_bench_artifact": "missing_deflate_huffman_lookup_bench_artifact",
+            "deflate_huffman_lookup_bench_failed": "deflate_huffman_lookup_bench_failed"
           },
           "target": "reason"
         }

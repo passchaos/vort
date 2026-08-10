@@ -29,6 +29,7 @@ CHECKSUM_BENCH_ARTIFACT = "vort-checksum-bench.csv"
 CHUNK_CURSOR_BENCH_ARTIFACT = "vort-chunk-cursor-bench.csv"
 DEFLATE_MATCH_COPY_BENCH_ARTIFACT = "vort-deflate-match-copy-bench.csv"
 DEFLATE_HUFFMAN_BUILD_BENCH_ARTIFACT = "vort-deflate-huffman-build-bench.csv"
+DEFLATE_HUFFMAN_LOOKUP_BENCH_ARTIFACT = "vort-deflate-huffman-lookup-bench.csv"
 FUZZ_CORPUS_ARTIFACT = "vort-deflate-wrapper-fuzz-corpus.json"
 FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
 DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
@@ -99,6 +100,8 @@ def write_producer_map(
     include_deflate_match_copy_bench_smoke: bool = True,
     include_deflate_huffman_build_bench_exact: bool = True,
     include_deflate_huffman_build_bench_smoke: bool = True,
+    include_deflate_huffman_lookup_bench_exact: bool = True,
+    include_deflate_huffman_lookup_bench_smoke: bool = True,
     include_fuzz_corpus_exact: bool = True,
     include_fuzz_corpus_smoke: bool = True,
     include_fuzz_coverage_exact: bool = True,
@@ -193,6 +196,11 @@ def write_producer_map(
         artifact_metadata[DEFLATE_HUFFMAN_BUILD_BENCH_ARTIFACT] = {
             "expected_format": "csv",
             "smoke_gate": "zig build run-deflate-huffman-build-bench-gate",
+        }
+    if include_deflate_huffman_lookup_bench_smoke:
+        artifact_metadata[DEFLATE_HUFFMAN_LOOKUP_BENCH_ARTIFACT] = {
+            "expected_format": "csv",
+            "smoke_gate": "zig build run-deflate-huffman-lookup-bench-gate",
         }
     if include_fuzz_corpus_smoke:
         artifact_metadata[FUZZ_CORPUS_ARTIFACT] = {
@@ -318,6 +326,8 @@ def write_producer_map(
         exact[DEFLATE_MATCH_COPY_BENCH_ARTIFACT] = "zig build run-deflate-match-copy-bench-gate"
     if include_deflate_huffman_build_bench_exact:
         exact[DEFLATE_HUFFMAN_BUILD_BENCH_ARTIFACT] = "zig build run-deflate-huffman-build-bench-gate"
+    if include_deflate_huffman_lookup_bench_exact:
+        exact[DEFLATE_HUFFMAN_LOOKUP_BENCH_ARTIFACT] = "zig build run-deflate-huffman-lookup-bench-gate"
     if include_fuzz_corpus_exact:
         exact[FUZZ_CORPUS_ARTIFACT] = "zig build run-deflate-wrapper-fuzz-corpus-dashboard"
     if include_fuzz_coverage_exact:
@@ -898,6 +908,25 @@ def write_deflate_huffman_build_bench_csv(path: Path, *, healthy: bool = True) -
             if not healthy and case == "code-length" and build == "fast7":
                 continue
             lines.append(",".join([case, build, str(lookup_bits), str(symbols), "4096", "1000", "1000.0", "12345"]))
+    path.write_text("\n".join(lines) + "\n")
+
+
+def write_deflate_huffman_lookup_bench_csv(path: Path, *, healthy: bool = True) -> None:
+    columns = ["case", "decoder", "lookup_bits", "symbols_per_iter", "iterations", "input_bytes", "elapsed_ns", "symbols_per_s", "mib_per_s", "checksum"]
+    expected = {
+        "fixed-literal": [("table", 0), ("fixed_fast", 9), ("fast9", 9)],
+        "fixed-distance": [("table", 0), ("fixed_fast", 9), ("fast5", 5), ("fast8", 8)],
+        "code-length": [("table", 0), ("fast5", 5), ("fast7", 7)],
+        "dynamic-mixed": [("table", 0), ("fast9", 9), ("fast11", 11), ("fast12", 12)],
+        "dynamic-long-tail": [("table", 0), ("fast9", 9), ("fast11", 11), ("fast12", 12)],
+        "dynamic-distance": [("table", 0), ("fast5", 5), ("fast8", 8)],
+    }
+    lines = [",".join(columns)]
+    for case, rows in expected.items():
+        for decoder, lookup_bits in rows:
+            if not healthy and case == "dynamic-distance" and decoder == "fast8":
+                continue
+            lines.append(",".join([case, decoder, str(lookup_bits), "131072", "96", "1048576", "1000", "1000.0", "1.0", "12345"]))
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -1765,6 +1794,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_chunk_cursor_bench_csv(root / CHUNK_CURSOR_BENCH_ARTIFACT)
     write_deflate_match_copy_bench_csv(root / DEFLATE_MATCH_COPY_BENCH_ARTIFACT)
     write_deflate_huffman_build_bench_csv(root / DEFLATE_HUFFMAN_BUILD_BENCH_ARTIFACT)
+    write_deflate_huffman_lookup_bench_csv(root / DEFLATE_HUFFMAN_LOOKUP_BENCH_ARTIFACT)
     write_fuzz_corpus_report(root / FUZZ_CORPUS_ARTIFACT)
     write_fuzz_coverage_report(root / FUZZ_COVERAGE_ARTIFACT)
     write_decode_stage_report(root / DECODE_STAGE_ARTIFACT)
@@ -2166,8 +2196,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 44/44 | 0 | allowed missing 0 |",
-                    "| smoke gates | 44/44 | 0 | required missing 0 |",
+                    "| producer steps | 45/45 | 0 | allowed missing 0 |",
+                    "| smoke gates | 45/45 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -2395,6 +2425,20 @@ def main() -> int:
                     "| category | count | detail |",
                     "| rows | 14 | expected 14, present `True` |",
                     "| lookup rows | 14 | positive rows 14 |",
+                    "| missing pairs | 0 | healthy `True` |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
+                "deflate_huffman_lookup_bench_markdown_table",
+                "deflate Huffman lookup benchmark Markdown table",
+                dashboard_markdown,
+                [
+                    "## Deflate Huffman lookup benchmark coverage",
+                    "| category | count | detail |",
+                    "| rows | 21 | expected 21, present `True` |",
+                    "| lookup rows | 21 | positive rows 21 |",
                     "| missing pairs | 0 | healthy `True` |",
                 ],
             )
@@ -2772,6 +2816,12 @@ def main() -> int:
                 write_producer_map(producer_map)
             elif fixture == "deflate_huffman_build_bench_failed":
                 write_deflate_huffman_build_bench_csv(fixture_root / DEFLATE_HUFFMAN_BUILD_BENCH_ARTIFACT, healthy=False)
+                write_producer_map(producer_map)
+            elif fixture == "missing_deflate_huffman_lookup_bench_artifact":
+                (fixture_root / DEFLATE_HUFFMAN_LOOKUP_BENCH_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "deflate_huffman_lookup_bench_failed":
+                write_deflate_huffman_lookup_bench_csv(fixture_root / DEFLATE_HUFFMAN_LOOKUP_BENCH_ARTIFACT, healthy=False)
                 write_producer_map(producer_map)
             elif fixture == "missing_fuzz_corpus_artifact":
                 (fixture_root / FUZZ_CORPUS_ARTIFACT).unlink()
