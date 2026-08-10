@@ -671,6 +671,10 @@ def main() -> int:
         assert dashboard_strict["missing_modes"] == []
         assert dashboard_strict["mode_requirements"]
         assert all(row["missing_checks"] == 0 and row["missing_expected_failures"] == 0 and row["missing_matched"] == 0 for row in dashboard_strict["mode_requirements"])
+        assert len(dashboard_strict["checks"]) == dashboard_strict["check_count"]
+        assert len(dashboard_strict["mode_counts"]) == dashboard_strict["mode_count"]
+        assert len(dashboard_strict["expected_modes"]) == dashboard_strict["expected_mode_count"]
+        assert len(dashboard_strict["mode_requirements"]) == dashboard_strict["expected_mode_count"]
         assert sum(row["checks"] for row in dashboard_strict["mode_counts"]) == dashboard_strict["check_count"]
         assert any(row["mode"] == "strict-header-inspect" and row["checks"] >= 1 for row in dashboard_strict["mode_counts"])
         expected_validation_reasons = set(
@@ -681,6 +685,7 @@ def main() -> int:
         assert configured_validation_reasons == expected_validation_reasons
         assert dashboard_strict["validation_unhealthy_reason_count"] == len(expected_validation_reasons)
         assert covered_validation_reasons == expected_validation_reasons
+        assert len(dashboard_strict["validation_unhealthy_reason_checks"]) == dashboard_strict["validation_unhealthy_reason_count"]
         assert all(row["matched"] is True for row in dashboard_strict["validation_unhealthy_reason_checks"])
         assert any(row["mode"] == "strict-validation-health" and row["checks"] >= len(expected_validation_reasons) for row in dashboard_strict["mode_counts"])
         assert any(row["mode"] == "dashboard-markdown" and row["checks"] >= 20 and row["matched"] >= 20 for row in dashboard_strict["mode_counts"])
@@ -1091,15 +1096,25 @@ def main() -> int:
         assert dashboard["dashboard_strict_ok"] is True
         assert dashboard["dashboard_strict_healthy"] is True
         assert dashboard["dashboard_strict_check_count"] == dashboard_strict["check_count"]
+        assert dashboard["dashboard_strict_check_rows"] == len(dashboard_strict["checks"])
         assert dashboard["dashboard_strict_mode_count"] == dashboard_strict["mode_count"]
+        assert dashboard["dashboard_strict_mode_count_rows"] == len(dashboard_strict["mode_counts"])
         assert dashboard["dashboard_strict_expected_failure_count"] == sum(row["expected_failures"] for row in dashboard_strict["mode_counts"])
         assert dashboard["dashboard_strict_matched_count"] == sum(row["matched"] for row in dashboard_strict["mode_counts"])
         assert dashboard["dashboard_strict_expected_mode_count"] == dashboard_strict["expected_mode_count"]
+        assert dashboard["dashboard_strict_expected_mode_rows"] == len(dashboard_strict["expected_modes"])
+        assert dashboard["dashboard_strict_mode_requirement_rows"] == len(dashboard_strict["mode_requirements"])
+        assert dashboard["dashboard_strict_validation_reason_rows"] == len(dashboard_strict["validation_unhealthy_reason_checks"])
+        assert dashboard["dashboard_strict_report_count_mismatch"] == 0
         assert dashboard["dashboard_strict_missing_mode_count"] == dashboard_strict["missing_mode_count"]
         assert dashboard["dashboard_strict_missing_checks"] == sum(row["missing_checks"] for row in dashboard_strict["mode_requirements"])
         assert dashboard["dashboard_strict_missing_expected_failures"] == sum(row["missing_expected_failures"] for row in dashboard_strict["mode_requirements"])
         assert dashboard["dashboard_strict_missing_matched"] == sum(row["missing_matched"] for row in dashboard_strict["mode_requirements"])
         assert dashboard["dashboard_strict_missing_modes"] == dashboard_strict["missing_modes"]
+        assert dashboard["dashboard_strict_markdown_present"] is True
+        assert dashboard["dashboard_strict_markdown_rows"] > 0
+        assert dashboard["dashboard_strict_markdown_matched"] == dashboard["dashboard_strict_markdown_rows"]
+        assert dashboard["dashboard_strict_markdown_unmatched"] == 0
         assert dashboard["dashboard_configuration_healthy"] is True
         assert dashboard["dashboard_config_index_present"] is True
         assert dashboard["dashboard_config_index_ok"] is True

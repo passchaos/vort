@@ -2597,3 +2597,8 @@ architecture blindly.
   reports. Aggregate health now cross-checks timing/error item counts,
   malformed/error-path Markdown rows, and the retained Markdown table snippets
   before decode-stage coverage can pass.
+- Tightened dashboard strict smoke dashboard health by requiring the retained
+  `vort-dashboard-strict-smoke.md` companion beside the JSON summary.
+  Aggregate health now cross-checks strict check rows, mode counts, expected
+  mode requirements, validation-unhealthy reason rows, and Markdown snippets
+  before dashboard-strict coverage can pass.

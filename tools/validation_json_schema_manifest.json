@@ -578,10 +578,25 @@
         "dashboard_strict_healthy": {
           "all": [
             "dashboard_strict_present",
-            "dashboard_strict_ok"
+            "dashboard_strict_ok",
+            "dashboard_strict_markdown_present"
+          ],
+          "positive": [
+            "dashboard_strict_check_count",
+            "dashboard_strict_check_rows",
+            "dashboard_strict_mode_count",
+            "dashboard_strict_mode_count_rows",
+            "dashboard_strict_expected_mode_count",
+            "dashboard_strict_expected_mode_rows",
+            "dashboard_strict_mode_requirement_rows",
+            "dashboard_strict_validation_reason_rows",
+            "dashboard_strict_markdown_rows",
+            "dashboard_strict_markdown_matched"
           ],
           "zero": [
-            "dashboard_strict_missing_mode_count"
+            "dashboard_strict_missing_mode_count",
+            "dashboard_strict_report_count_mismatch",
+            "dashboard_strict_markdown_unmatched"
           ]
         },
         "dashboard_configuration_healthy": {
@@ -1493,8 +1508,13 @@
         "artifact_count": "int",
         "artifacts": "list",
         "dashboard_strict_check_count": "int",
+        "dashboard_strict_check_rows": "int",
         "dashboard_strict_expected_failure_count": "int",
         "dashboard_strict_expected_mode_count": "int",
+        "dashboard_strict_expected_mode_rows": "int",
+        "dashboard_strict_mode_requirement_rows": "int",
+        "dashboard_strict_validation_reason_rows": "int",
+        "dashboard_strict_report_count_mismatch": "int",
         "dashboard_strict_healthy": "bool",
         "dashboard_strict_matched_count": "int",
         "dashboard_strict_missing_checks": "int",
@@ -1502,7 +1522,12 @@
         "dashboard_strict_missing_matched": "int",
         "dashboard_strict_missing_mode_count": "int",
         "dashboard_strict_missing_modes": "list",
+        "dashboard_strict_markdown_present": "bool",
+        "dashboard_strict_markdown_rows": "int",
+        "dashboard_strict_markdown_matched": "int",
+        "dashboard_strict_markdown_unmatched": "int",
         "dashboard_strict_mode_count": "int",
+        "dashboard_strict_mode_count_rows": "int",
         "dashboard_strict_ok": "bool",
         "dashboard_strict_present": "bool",
         "dashboard_configuration_healthy": "bool",
@@ -2423,6 +2448,31 @@
           "left": "decode_stage_markdown_matched",
           "op": "eq",
           "right": "decode_stage_markdown_rows"
+        },
+        {
+          "left": "dashboard_strict_check_rows",
+          "op": "eq",
+          "right": "dashboard_strict_check_count"
+        },
+        {
+          "left": "dashboard_strict_mode_count_rows",
+          "op": "eq",
+          "right": "dashboard_strict_mode_count"
+        },
+        {
+          "left": "dashboard_strict_expected_mode_rows",
+          "op": "eq",
+          "right": "dashboard_strict_expected_mode_count"
+        },
+        {
+          "left": "dashboard_strict_mode_requirement_rows",
+          "op": "eq",
+          "right": "dashboard_strict_expected_mode_count"
+        },
+        {
+          "left": "dashboard_strict_markdown_matched",
+          "op": "eq",
+          "right": "dashboard_strict_markdown_rows"
         },
         {
           "left": "header_inspect_report_rows",

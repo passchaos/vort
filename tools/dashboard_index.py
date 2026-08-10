@@ -4777,6 +4777,65 @@ def artifact_metadata(path: Path) -> str:
 
 
 def dashboard_strict_health(artifacts: list[Path]) -> dict:
+    markdown = next((artifact for artifact in artifacts if artifact.name == "vort-dashboard-strict-smoke.md"), None)
+
+    def as_int(data: dict, field: str) -> int:
+        value = data.get(field)
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    def row_int(row: dict, field: str) -> int:
+        value = row.get(field)
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    def markdown_checks(data: dict) -> tuple[bool, int, int, int]:
+        if markdown is None:
+            return (False, 0, 0, 1)
+        try:
+            text = markdown.read_text(errors="replace")
+        except Exception:
+            return (True, 0, 0, 1)
+        mode_counts = data.get("mode_counts") if isinstance(data.get("mode_counts"), list) else []
+        mode_requirements = data.get("mode_requirements") if isinstance(data.get("mode_requirements"), list) else []
+        missing_modes = data.get("missing_modes") if isinstance(data.get("missing_modes"), list) else []
+        validation_reason_checks = data.get("validation_unhealthy_reason_checks") if isinstance(data.get("validation_unhealthy_reason_checks"), list) else []
+        checks = data.get("checks") if isinstance(data.get("checks"), list) else []
+        expected = [
+            f"- ok: `{bool(data.get('ok'))}`",
+            f"- checks: {as_int(data, 'check_count')}",
+            "## Mode summary",
+            "### Expected mode matrix",
+            f"- expected modes: {as_int(data, 'expected_mode_count')}",
+            f"- missing modes: {as_int(data, 'missing_mode_count')}",
+            "### Validation unhealthy reason coverage",
+            f"- covered reasons: {as_int(data, 'validation_unhealthy_reason_count')}",
+            "## Checks",
+        ]
+        for row in mode_counts:
+            if isinstance(row, dict):
+                expected.append(
+                    f"| `{row.get('mode')}` | {row_int(row, 'checks')} | {row_int(row, 'expected_failures')} | {row_int(row, 'matched')} |"
+                )
+        for row in mode_requirements:
+            if isinstance(row, dict):
+                expected.append(
+                    f"| `{row.get('mode')}` | {row_int(row, 'checks')} | {row_int(row, 'min_checks')} | {row_int(row, 'missing_checks')} | {row_int(row, 'expected_failures')} | {row_int(row, 'min_expected_failures')} | {row_int(row, 'missing_expected_failures')} | {row_int(row, 'matched')} | {row_int(row, 'min_matched')} | {row_int(row, 'missing_matched')} |"
+                )
+        for row in missing_modes:
+            if isinstance(row, dict):
+                expected.append(
+                    f"| `{row.get('mode')}` | {row_int(row, 'min_checks')} | {row_int(row, 'min_expected_failures')} | {row_int(row, 'min_matched')} |"
+                )
+        for row in validation_reason_checks:
+            if isinstance(row, dict):
+                expected.append(f"| `{row.get('reason')}` | `{row.get('check')}` | `{row.get('matched')}` |")
+        for row in checks:
+            if isinstance(row, dict):
+                expected.append(
+                    f"| `{row.get('name')}` | `{row.get('mode')}` | `{row.get('expected_failure')}` | {row_int(row, 'returncode')} | `{row.get('expected_output')}` | {row_int(row, 'actual_output_bytes')} | `{row.get('actual_output')}` | `{row.get('actual_output_truncated')}` | `{row.get('matched')}` |"
+                )
+        matched = sum(1 for needle in expected if needle in text)
+        return (True, len(expected), matched, len(expected) - matched)
+
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
         if data.get("schema") == "vort.dashboard_strict_smoke":
@@ -4786,36 +4845,86 @@ def dashboard_strict_health(artifacts: list[Path]) -> dict:
             mode_counts = data.get("mode_counts")
             if not isinstance(mode_counts, list):
                 mode_counts = []
+            expected_modes = data.get("expected_modes")
+            if not isinstance(expected_modes, list):
+                expected_modes = []
             mode_requirements = data.get("mode_requirements")
             if not isinstance(mode_requirements, list):
                 mode_requirements = []
+            checks = data.get("checks")
+            if not isinstance(checks, list):
+                checks = []
+            validation_reason_checks = data.get("validation_unhealthy_reason_checks")
+            if not isinstance(validation_reason_checks, list):
+                validation_reason_checks = []
+            check_rows = len(checks)
+            mode_count_rows = len(mode_counts)
+            expected_mode_rows = len(expected_modes)
+            mode_requirement_rows = len(mode_requirements)
+            validation_reason_rows = len(validation_reason_checks)
+            expected_failure_count = sum(row_int(row, "expected_failures") for row in mode_counts if isinstance(row, dict))
+            matched_count = sum(row_int(row, "matched") for row in mode_counts if isinstance(row, dict))
+            missing_checks = sum(row_int(row, "missing_checks") for row in mode_requirements if isinstance(row, dict))
+            missing_expected_failures = sum(row_int(row, "missing_expected_failures") for row in mode_requirements if isinstance(row, dict))
+            missing_matched = sum(row_int(row, "missing_matched") for row in mode_requirements if isinstance(row, dict))
+            report_count_mismatch = (
+                abs(as_int(data, "check_count") - check_rows)
+                + abs(as_int(data, "check_count") - sum(row_int(row, "checks") for row in mode_counts if isinstance(row, dict)))
+                + abs(as_int(data, "mode_count") - mode_count_rows)
+                + abs(as_int(data, "expected_mode_count") - expected_mode_rows)
+                + abs(as_int(data, "expected_mode_count") - mode_requirement_rows)
+                + abs(as_int(data, "missing_mode_count") - len(missing_modes))
+                + abs(as_int(data, "validation_unhealthy_reason_count") - validation_reason_rows)
+                + (check_rows - sum(1 for row in checks if isinstance(row, dict) and row.get("matched") is True))
+            )
+            markdown_present, markdown_rows, markdown_matched, markdown_unmatched = markdown_checks(data)
             return {
                 "present": True,
                 "ok": bool(data.get("ok")),
-                "check_count": int(data.get("check_count") or 0),
-                "mode_count": int(data.get("mode_count") or 0),
-                "expected_failure_count": sum(int(row.get("expected_failures") or 0) for row in mode_counts if isinstance(row, dict)),
-                "matched_count": sum(int(row.get("matched") or 0) for row in mode_counts if isinstance(row, dict)),
-                "expected_mode_count": int(data.get("expected_mode_count") or 0),
-                "missing_mode_count": int(data.get("missing_mode_count") or 0),
-                "missing_checks": sum(int(row.get("missing_checks") or 0) for row in mode_requirements if isinstance(row, dict)),
-                "missing_expected_failures": sum(int(row.get("missing_expected_failures") or 0) for row in mode_requirements if isinstance(row, dict)),
-                "missing_matched": sum(int(row.get("missing_matched") or 0) for row in mode_requirements if isinstance(row, dict)),
+                "check_count": as_int(data, "check_count"),
+                "check_rows": check_rows,
+                "mode_count": as_int(data, "mode_count"),
+                "mode_count_rows": mode_count_rows,
+                "expected_failure_count": expected_failure_count,
+                "matched_count": matched_count,
+                "expected_mode_count": as_int(data, "expected_mode_count"),
+                "expected_mode_rows": expected_mode_rows,
+                "mode_requirement_rows": mode_requirement_rows,
+                "validation_reason_rows": validation_reason_rows,
+                "report_count_mismatch": report_count_mismatch,
+                "missing_mode_count": as_int(data, "missing_mode_count"),
+                "missing_checks": missing_checks,
+                "missing_expected_failures": missing_expected_failures,
+                "missing_matched": missing_matched,
                 "missing_modes": missing_modes,
+                "markdown_present": markdown_present,
+                "markdown_rows": markdown_rows,
+                "markdown_matched": markdown_matched,
+                "markdown_unmatched": markdown_unmatched,
             }
     return {
         "present": False,
         "ok": False,
         "check_count": 0,
+        "check_rows": 0,
         "mode_count": 0,
+        "mode_count_rows": 0,
         "expected_failure_count": 0,
         "matched_count": 0,
         "expected_mode_count": 0,
+        "expected_mode_rows": 0,
+        "mode_requirement_rows": 0,
+        "validation_reason_rows": 0,
+        "report_count_mismatch": 0,
         "missing_mode_count": 0,
         "missing_checks": 0,
         "missing_expected_failures": 0,
         "missing_matched": 0,
         "missing_modes": [],
+        "markdown_present": False,
+        "markdown_rows": 0,
+        "markdown_matched": 0,
+        "markdown_unmatched": 0,
     }
 
 
@@ -5318,7 +5427,19 @@ def main() -> int:
         and header_health["markdown_rows"] > 0
         and header_health["markdown_unmatched"] == 0
     )
-    strict_healthy = strict_health["present"] and strict_health["ok"] and strict_health["missing_mode_count"] == 0
+    strict_healthy = (
+        strict_health["present"]
+        and strict_health["ok"]
+        and strict_health["markdown_present"]
+        and strict_health["missing_mode_count"] == 0
+        and strict_health["report_count_mismatch"] == 0
+        and strict_health["check_rows"] == strict_health["check_count"]
+        and strict_health["mode_count_rows"] == strict_health["mode_count"]
+        and strict_health["expected_mode_rows"] == strict_health["expected_mode_count"]
+        and strict_health["mode_requirement_rows"] == strict_health["expected_mode_count"]
+        and strict_health["markdown_rows"] > 0
+        and strict_health["markdown_unmatched"] == 0
+    )
     dashboard_configuration_healthy = dashboard_configuration["healthy"]
     validation_json_healthy = validation_json["healthy"]
     sidecar_corrupt_healthy = sidecar_corrupt_health_summary["healthy"]
@@ -5407,12 +5528,14 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_header_workflows")
     elif not header_healthy:
         validation_unhealthy_reasons.append("header_inspect_undercovered")
-    if not strict_health["present"]:
+    if not (strict_health["present"] and strict_health["markdown_present"]):
         validation_unhealthy_reasons.append("missing_dashboard_strict_artifact")
     elif not strict_health["ok"]:
         validation_unhealthy_reasons.append("dashboard_strict_failed")
     elif strict_health["missing_mode_count"]:
         validation_unhealthy_reasons.append("missing_dashboard_strict_modes")
+    elif not strict_healthy:
+        validation_unhealthy_reasons.append("dashboard_strict_failed")
     dashboard_configuration_present = (
         dashboard_configuration["config_index_present"]
         and dashboard_configuration["config_index_negative_present"]
@@ -5702,9 +5825,10 @@ def main() -> int:
             "",
             "| category | count | detail |",
             "| --- | ---: | --- |",
-            f"| strict checks | {strict_health['check_count']} | expected failures/matched {strict_health['expected_failure_count']}/{strict_health['matched_count']} |",
-            f"| modes | {strict_health['mode_count']} | expected/missing {strict_health['expected_mode_count']}/{strict_health['missing_mode_count']} |",
-            f"| requirement deltas | {strict_health['missing_checks'] + strict_health['missing_expected_failures'] + strict_health['missing_matched']} | checks/expected/matched {strict_health['missing_checks']}/{strict_health['missing_expected_failures']}/{strict_health['missing_matched']} |",
+            f"| strict checks | {strict_health['check_count']} | rows {strict_health['check_rows']}, expected failures/matched {strict_health['expected_failure_count']}/{strict_health['matched_count']} |",
+            f"| modes | {strict_health['mode_count']} | rows {strict_health['mode_count_rows']}, expected/missing {strict_health['expected_mode_count']}/{strict_health['missing_mode_count']} |",
+            f"| requirement deltas | {strict_health['missing_checks'] + strict_health['missing_expected_failures'] + strict_health['missing_matched']} | checks/expected/matched {strict_health['missing_checks']}/{strict_health['missing_expected_failures']}/{strict_health['missing_matched']}, count mismatch {strict_health['report_count_mismatch']} |",
+            f"| Markdown rows | {strict_health['markdown_matched']}/{strict_health['markdown_rows']} | present `{strict_health['markdown_present']}`, unmatched {strict_health['markdown_unmatched']} |",
             "",
         ]
     )
@@ -6360,15 +6484,25 @@ def main() -> int:
                 "dashboard_strict_ok": strict_health["ok"],
                 "dashboard_strict_healthy": strict_healthy,
                 "dashboard_strict_check_count": strict_health["check_count"],
+                "dashboard_strict_check_rows": strict_health["check_rows"],
                 "dashboard_strict_mode_count": strict_health["mode_count"],
+                "dashboard_strict_mode_count_rows": strict_health["mode_count_rows"],
                 "dashboard_strict_expected_failure_count": strict_health["expected_failure_count"],
                 "dashboard_strict_matched_count": strict_health["matched_count"],
                 "dashboard_strict_expected_mode_count": strict_health["expected_mode_count"],
+                "dashboard_strict_expected_mode_rows": strict_health["expected_mode_rows"],
+                "dashboard_strict_mode_requirement_rows": strict_health["mode_requirement_rows"],
+                "dashboard_strict_validation_reason_rows": strict_health["validation_reason_rows"],
+                "dashboard_strict_report_count_mismatch": strict_health["report_count_mismatch"],
                 "dashboard_strict_missing_mode_count": strict_health["missing_mode_count"],
                 "dashboard_strict_missing_checks": strict_health["missing_checks"],
                 "dashboard_strict_missing_expected_failures": strict_health["missing_expected_failures"],
                 "dashboard_strict_missing_matched": strict_health["missing_matched"],
                 "dashboard_strict_missing_modes": strict_health["missing_modes"],
+                "dashboard_strict_markdown_present": strict_health["markdown_present"],
+                "dashboard_strict_markdown_rows": strict_health["markdown_rows"],
+                "dashboard_strict_markdown_matched": strict_health["markdown_matched"],
+                "dashboard_strict_markdown_unmatched": strict_health["markdown_unmatched"],
                 "dashboard_configuration_healthy": dashboard_configuration["healthy"],
                 "dashboard_config_index_present": dashboard_configuration["config_index_present"],
                 "dashboard_config_index_ok": dashboard_configuration["config_index_ok"],

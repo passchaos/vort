@@ -2566,11 +2566,18 @@ Top-level fields:
   `header_inspect_missing_workflow_count`,
   `header_inspect_missing_workflows`
 - `dashboard_strict_present`, `dashboard_strict_ok`, `dashboard_strict_healthy`,
-  `dashboard_strict_check_count`, `dashboard_strict_mode_count`,
+  `dashboard_strict_check_count`, `dashboard_strict_check_rows`,
+  `dashboard_strict_mode_count`, `dashboard_strict_mode_count_rows`,
   `dashboard_strict_expected_failure_count`, `dashboard_strict_matched_count`,
-  `dashboard_strict_expected_mode_count`, `dashboard_strict_missing_mode_count`,
-  `dashboard_strict_missing_checks`, `dashboard_strict_missing_expected_failures`,
-  `dashboard_strict_missing_matched`, `dashboard_strict_missing_modes`
+  `dashboard_strict_expected_mode_count`, `dashboard_strict_expected_mode_rows`,
+  `dashboard_strict_mode_requirement_rows`,
+  `dashboard_strict_validation_reason_rows`,
+  `dashboard_strict_report_count_mismatch`,
+  `dashboard_strict_missing_mode_count`, `dashboard_strict_missing_checks`,
+  `dashboard_strict_missing_expected_failures`,
+  `dashboard_strict_missing_matched`, `dashboard_strict_missing_modes`,
+  `dashboard_strict_markdown_present`, `dashboard_strict_markdown_rows`,
+  `dashboard_strict_markdown_matched`, `dashboard_strict_markdown_unmatched`
 - `dashboard_configuration_healthy`, `dashboard_config_index_present`,
   `dashboard_config_index_ok`, `dashboard_config_index_config_count`,
   `dashboard_config_index_matched`, `dashboard_config_index_unmatched`,
@@ -3059,15 +3066,25 @@ Example:
   "dashboard_strict_ok": false,
   "dashboard_strict_healthy": false,
   "dashboard_strict_check_count": 0,
+  "dashboard_strict_check_rows": 0,
   "dashboard_strict_mode_count": 0,
+  "dashboard_strict_mode_count_rows": 0,
   "dashboard_strict_expected_failure_count": 0,
   "dashboard_strict_matched_count": 0,
   "dashboard_strict_expected_mode_count": 0,
+  "dashboard_strict_expected_mode_rows": 0,
+  "dashboard_strict_mode_requirement_rows": 0,
+  "dashboard_strict_validation_reason_rows": 0,
+  "dashboard_strict_report_count_mismatch": 0,
   "dashboard_strict_missing_mode_count": 0,
   "dashboard_strict_missing_checks": 0,
   "dashboard_strict_missing_expected_failures": 0,
   "dashboard_strict_missing_matched": 0,
   "dashboard_strict_missing_modes": [],
+  "dashboard_strict_markdown_present": false,
+  "dashboard_strict_markdown_rows": 0,
+  "dashboard_strict_markdown_matched": 0,
+  "dashboard_strict_markdown_unmatched": 0,
   "dashboard_configuration_healthy": false,
   "dashboard_config_index_present": false,
   "dashboard_config_index_ok": false,
@@ -3884,7 +3901,10 @@ aggregate health reasons must be backed by real failing dashboard inputs before
 the smoke artifact can pass. The expected reason/check/fixture matrix lives in
 `tools/dashboard_strict_validation_reasons.json`; the retained
 `strict-validation-health` mode minimums must cover every configured reason,
-currently 87. The `dashboard-markdown` mode verifies that important human-facing
+currently 87. Dashboard aggregate health also reads the retained
+`vort-dashboard-strict-smoke.md` companion and requires its mode, requirement,
+validation-reason, and check rows to match the JSON counts before
+`dashboard_strict_healthy` can pass. The `dashboard-markdown` mode verifies that important human-facing
 sections, including artifact inventory, aggregate validation health, producer/smoke-gate
 coverage, dashboard strict gate coverage, dashboard configuration coverage, validation JSON schema coverage, header inspect coverage, corrupt-sidecar
 rejection coverage, Huffman optimality, compression level report coverage, dynamic plan CSV coverage, deflate extra-bit benchmark coverage, dictionary decode benchmark coverage, PNG scanline benchmark coverage, chunked zlib benchmark coverage, PNG streaming zlib benchmark coverage, deflate dynamic decode profile coverage, native library benchmark coverage, zstd comparison gate coverage, native fuzz corpus coverage, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, Python zlib

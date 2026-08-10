@@ -18,6 +18,7 @@ VALIDATION_REASONS = ROOT / "tools" / "dashboard_strict_validation_reasons.json"
 HEADER_INSPECT_ARTIFACT = "vort-header-inspect-smoke.json"
 HEADER_INSPECT_MARKDOWN_ARTIFACT = "vort-header-inspect-smoke.md"
 DASHBOARD_STRICT_ARTIFACT = "vort-dashboard-strict-smoke.json"
+DASHBOARD_STRICT_MARKDOWN_ARTIFACT = "vort-dashboard-strict-smoke.md"
 DASHBOARD_CONFIG_INDEX_SMOKE_ARTIFACT = "vort-dashboard-config-index-smoke.json"
 DASHBOARD_CONFIG_INDEX_NEGATIVE_ARTIFACT = "vort-dashboard-config-index-negative-smoke.json"
 DASHBOARD_CATEGORY_NEGATIVE_ARTIFACT = "vort-dashboard-category-negative-smoke.json"
@@ -211,6 +212,10 @@ def write_producer_map(
     if include_strict_smoke:
         artifact_metadata[DASHBOARD_STRICT_ARTIFACT] = {
             "expected_format": "json",
+            "smoke_gate": "zig build run-dashboard-strict-smoke",
+        }
+        artifact_metadata[DASHBOARD_STRICT_MARKDOWN_ARTIFACT] = {
+            "expected_format": "md",
             "smoke_gate": "zig build run-dashboard-strict-smoke",
         }
     if include_dashboard_configuration_smoke:
@@ -469,6 +474,7 @@ def write_producer_map(
         exact[HEADER_INSPECT_MARKDOWN_ARTIFACT] = "zig build run-header-inspect-dashboard"
     if include_strict_exact:
         exact[DASHBOARD_STRICT_ARTIFACT] = "zig build run-dashboard-strict-smoke"
+        exact[DASHBOARD_STRICT_MARKDOWN_ARTIFACT] = "zig build run-dashboard-strict-smoke"
     if include_dashboard_configuration_exact:
         exact[DASHBOARD_CONFIG_INDEX_SMOKE_ARTIFACT] = "zig build run-dashboard-config-index-smoke"
         exact[DASHBOARD_CONFIG_INDEX_NEGATIVE_ARTIFACT] = "zig build run-dashboard-config-index-negative-smoke"
@@ -925,6 +931,7 @@ def write_dashboard_strict_summary(path: Path, *, ok: bool = True, missing_modes
         "validation_unhealthy_reason_checks": validation_reason_checks,
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    write_markdown(path.with_name(DASHBOARD_STRICT_MARKDOWN_ARTIFACT), payload)
 
 
 def write_dashboard_configuration_artifacts(root: Path) -> None:
@@ -4042,6 +4049,7 @@ def main() -> int:
                 HEADER_INSPECT_ARTIFACT,
                 HEADER_INSPECT_MARKDOWN_ARTIFACT,
                 DASHBOARD_STRICT_ARTIFACT,
+                DASHBOARD_STRICT_MARKDOWN_ARTIFACT,
                 DASHBOARD_CONFIG_INDEX_SMOKE_ARTIFACT,
                 DASHBOARD_CONFIG_INDEX_NEGATIVE_ARTIFACT,
                 DASHBOARD_CATEGORY_NEGATIVE_ARTIFACT,
@@ -4170,8 +4178,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 82/82 | 0 | allowed missing 0 |",
-                    "| smoke gates | 82/82 | 0 | required missing 0 |",
+                    "| producer steps | 83/83 | 0 | allowed missing 0 |",
+                    "| smoke gates | 83/83 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -4183,9 +4191,10 @@ def main() -> int:
                 [
                     "## Dashboard strict mode coverage",
                     "| category | count | detail |",
-                    "| strict checks | 1 | expected failures/matched 0/1 |",
-                    "| modes | 1 | expected/missing 1/0 |",
-                    "| requirement deltas | 0 | checks/expected/matched 0/0/0 |",
+                    "| strict checks | 1 | rows 1, expected failures/matched 0/1 |",
+                    "| modes | 1 | rows 1, expected/missing 1/0 |",
+                    "| requirement deltas | 0 | checks/expected/matched 0/0/0, count mismatch 0 |",
+                    f"| Markdown rows | {len(load_expected_validation_reasons(VALIDATION_REASONS)) + 12}/{len(load_expected_validation_reasons(VALIDATION_REASONS)) + 12} | present `True`, unmatched 0 |",
                 ],
             )
         )
