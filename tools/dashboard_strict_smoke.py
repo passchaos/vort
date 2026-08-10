@@ -3174,8 +3174,16 @@ def write_zstd_compare_artifacts(root: Path) -> None:
             rows.append(row)
         rows.append(total)
         write_csv(path, compare_fields, rows)
+        return rows
 
-    def write_compare_markdown(path: Path, gate: dict[str, object], total: dict[str, object]) -> None:
+    def ratio_text(value: object) -> str:
+        number = float(value)
+        return "n/a" if number < 0 else f"{number:.4f}"
+
+    def float_text(value: object) -> str:
+        return f"{float(value):.2f}"
+
+    def write_compare_markdown(path: Path, gate: dict[str, object], rows: list[dict[str, object]]) -> None:
         lines = [
             "# Vort vs zstd size and decode smoke",
             "",
@@ -3185,12 +3193,20 @@ def write_zstd_compare_artifacts(root: Path) -> None:
             f"- Decode repeats: `{gate['decode_repeats']}`",
             f"- Native block length: `{gate['native_block_len']}`",
             "",
-            "| path | input bytes | zstd bytes | Vort native stream bytes | Vort native embedded bytes |",
-            "| --- | ---: | ---: | ---: | ---: |",
-            f"| **TOTAL** | {total['input_bytes']} | {total['zstd_bytes']} | {total['vort_native_stream_bytes']} | {total['vort_native_embedded_bytes']} |",
-            "",
+            "| path | input bytes | zstd bytes | Vort raw fixed bytes | Vort native best bytes | Vort native stream bytes | Vort native embedded bytes | stream overhead bytes | embedded-index bytes | total embedded overhead bytes | stream / native best | embedded / stream | embedded / native best | Vort raw / zstd | Vort native best / zstd | Vort native stream / zstd | Vort native embedded / zstd | zstd decode MiB/s | Vort raw fixed decode MiB/s | Vort native best decode MiB/s | Vort native embedded decode MiB/s | Vort raw decode / zstd | Vort native best decode / zstd | Vort native embedded decode / zstd |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
-        path.write_text("\n".join(lines))
+        for row in rows:
+            path_cell = "**TOTAL**" if row["path"] == "TOTAL" else f"`{row['path']}`"
+            lines.append(
+                f"| {path_cell} | {row['input_bytes']} | {row['zstd_bytes']} | {row['vort_raw_fixed_bytes']} | {row['vort_native_best_bytes']} | {row['vort_native_stream_bytes']} | {row['vort_native_embedded_bytes']} | "
+                f"{row['vort_stream_over_native_best_bytes']} | {row['vort_embedded_over_native_stream_bytes']} | {row['vort_embedded_over_native_best_bytes']} | "
+                f"{ratio_text(row['vort_stream_over_native_best'])} | {ratio_text(row['vort_embedded_over_native_stream'])} | {ratio_text(row['vort_embedded_over_native_best'])} | "
+                f"{ratio_text(row['vort_over_zstd'])} | {ratio_text(row['vort_native_best_over_zstd'])} | {ratio_text(row['vort_native_stream_over_zstd'])} | {ratio_text(row['vort_native_over_zstd'])} | "
+                f"{float_text(row['zstd_decode_mib_s'])} | {float_text(row['vort_raw_fixed_decode_mib_s'])} | {float_text(row['vort_native_best_decode_mib_s'])} | {float_text(row['vort_native_decode_mib_s'])} | "
+                f"{ratio_text(row['vort_decode_vs_zstd'])} | {ratio_text(row['vort_native_best_decode_vs_zstd'])} | {ratio_text(row['vort_native_decode_vs_zstd'])} |"
+            )
+        path.write_text("\n".join(lines) + "\n")
 
     def write_sweep_csv(path: Path, gate: dict[str, object]) -> None:
         rows = []
@@ -3265,8 +3281,12 @@ def write_zstd_compare_artifacts(root: Path) -> None:
                 "optimize": gate["optimize"],
             })
         write_csv(path, sweep_fields, rows)
+        return rows
 
-    def write_sweep_markdown(path: Path, gate: dict[str, object]) -> None:
+    def pct_text(value: object) -> str:
+        return f"{float(value):.2f}%"
+
+    def write_sweep_markdown(path: Path, gate: dict[str, object], rows: list[dict[str, object]]) -> None:
         lines = [
             "# Vort native block length sweep vs zstd",
             "",
@@ -3279,15 +3299,29 @@ def write_zstd_compare_artifacts(root: Path) -> None:
             "",
             "## TOTAL by block length",
             "",
-            "| tier | block length | stream overhead bytes | embedded-index bytes | range decode MiB/s |",
-            "| --- | ---: | ---: | ---: | ---: |",
-            "| `ratio` | 65536 | 2621 | 288 | 3.47 |",
+            "| tier | block length | input bytes | zstd bytes | native best bytes | native stream bytes | native embedded bytes | stream / zstd | embedded / zstd | stream / native best | stream overhead bytes | stream overhead pct | embedded / stream | embedded-index bytes | range decode MiB/s |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+        for row in rows:
+            if row["path"] == "TOTAL":
+                lines.append(
+                    f"| `{row['seekability_tier']}` | {row['block_len']} | {row['input_bytes']} | {row['zstd_bytes']} | {row['vort_native_best_bytes']} | {row['vort_native_stream_bytes']} | {row['vort_native_embedded_bytes']} | "
+                    f"{ratio_text(row['vort_native_stream_over_zstd'])} | {ratio_text(row['vort_native_embedded_over_zstd'])} | {ratio_text(row['vort_stream_over_native_best'])} | {row['vort_stream_over_native_best_bytes']} | {pct_text(row['vort_stream_over_native_best_pct'])} | "
+                    f"{ratio_text(row['vort_embedded_over_native_stream'])} | {row['vort_embedded_over_native_stream_bytes']} | {float_text(row['vort_range_decode_mib_s'])} |"
+                )
+        lines.extend([
             "",
             "## Per-input rows",
             "",
-            "| path | tier | block length | range decode MiB/s |",
-            "| --- | --- | ---: | ---: |",
-        ]
+            "| path | tier | block length | input bytes | zstd bytes | native best bytes | native stream bytes | native embedded bytes | stream / native best | embedded / stream | range offset | range decode MiB/s |",
+            "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ])
+        for row in rows:
+            if row["path"] != "TOTAL":
+                lines.append(
+                    f"| `{row['path']}` | `{row['seekability_tier']}` | {row['block_len']} | {row['input_bytes']} | {row['zstd_bytes']} | {row['vort_native_best_bytes']} | {row['vort_native_stream_bytes']} | {row['vort_native_embedded_bytes']} | "
+                    f"{ratio_text(row['vort_stream_over_native_best'])} | {ratio_text(row['vort_embedded_over_native_stream'])} | {row['range_offset']} | {float_text(row['vort_range_decode_mib_s'])} |"
+                )
         path.write_text("\n".join(lines) + "\n")
 
     compare = {
@@ -3368,14 +3402,12 @@ def write_zstd_compare_artifacts(root: Path) -> None:
     (root / ZSTD_COMPARE_ARTIFACT).write_text(json.dumps(compare, indent=2, sort_keys=True) + "\n")
     (root / ZSTD_COMPARE_STANDARD_ARTIFACT).write_text(json.dumps(standard, indent=2, sort_keys=True) + "\n")
     (root / ZSTD_COMPARE_BLOCK_SWEEP_ARTIFACT).write_text(json.dumps(sweep, indent=2, sort_keys=True) + "\n")
-    write_compare_csv(root / ZSTD_COMPARE_CSV_ARTIFACT, compare, int(compare["data_rows"]))
-    write_compare_csv(root / ZSTD_COMPARE_STANDARD_CSV_ARTIFACT, standard, int(standard["data_rows"]))
-    compare_total = list(csv.DictReader((root / ZSTD_COMPARE_CSV_ARTIFACT).open(newline="")))[-1]
-    standard_total = list(csv.DictReader((root / ZSTD_COMPARE_STANDARD_CSV_ARTIFACT).open(newline="")))[-1]
-    write_compare_markdown(root / ZSTD_COMPARE_MARKDOWN_ARTIFACT, compare, compare_total)
-    write_compare_markdown(root / ZSTD_COMPARE_STANDARD_MARKDOWN_ARTIFACT, standard, standard_total)
-    write_sweep_csv(root / ZSTD_COMPARE_BLOCK_SWEEP_CSV_ARTIFACT, sweep)
-    write_sweep_markdown(root / ZSTD_COMPARE_BLOCK_SWEEP_MARKDOWN_ARTIFACT, sweep)
+    compare_rows = write_compare_csv(root / ZSTD_COMPARE_CSV_ARTIFACT, compare, int(compare["data_rows"]))
+    standard_rows = write_compare_csv(root / ZSTD_COMPARE_STANDARD_CSV_ARTIFACT, standard, int(standard["data_rows"]))
+    write_compare_markdown(root / ZSTD_COMPARE_MARKDOWN_ARTIFACT, compare, compare_rows)
+    write_compare_markdown(root / ZSTD_COMPARE_STANDARD_MARKDOWN_ARTIFACT, standard, standard_rows)
+    sweep_rows = write_sweep_csv(root / ZSTD_COMPARE_BLOCK_SWEEP_CSV_ARTIFACT, sweep)
+    write_sweep_markdown(root / ZSTD_COMPARE_BLOCK_SWEEP_MARKDOWN_ARTIFACT, sweep, sweep_rows)
 
 
 def write_native_summary_error_dashboard(path: Path, *, healthy: bool = True) -> None:

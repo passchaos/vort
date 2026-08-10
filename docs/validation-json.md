@@ -2863,7 +2863,9 @@ Top-level fields:
   `zstd_compare_csv_unmatched_rows`, `zstd_compare_markdown_present_count`,
   `zstd_compare_markdown_expected_present_count`,
   `zstd_compare_markdown_summary_rows`, `zstd_compare_markdown_matched`,
-  `zstd_compare_markdown_unmatched`
+  `zstd_compare_markdown_unmatched`, `zstd_compare_markdown_detail_rows`,
+  `zstd_compare_markdown_detail_matched`,
+  `zstd_compare_markdown_detail_unmatched`
 - `native_allocation_present`, `native_allocation_smoke_present`,
   `native_allocation_negative_present`, `native_allocation_markdown_present`,
   `native_allocation_healthy`, `native_allocation_report_case_count`,
@@ -3503,6 +3505,9 @@ Example:
   "zstd_compare_markdown_summary_rows": 0,
   "zstd_compare_markdown_matched": 0,
   "zstd_compare_markdown_unmatched": 0,
+  "zstd_compare_markdown_detail_rows": 0,
+  "zstd_compare_markdown_detail_matched": 0,
+  "zstd_compare_markdown_detail_unmatched": 0,
   "native_allocation_present": false,
   "native_allocation_smoke_present": false,
   "native_allocation_negative_present": false,

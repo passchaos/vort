@@ -2617,3 +2617,8 @@ architecture blindly.
   The dashboard generation step now writes the CSV/Markdown pair together, and
   aggregate health exposes Markdown matched/unmatched counters before chunked
   zlib benchmark coverage can pass.
+- Tightened zstd compare dashboard health by requiring the retained
+  `vort-zstd-compare*.md` tables to match every CSV compare/standard/block-sweep
+  row, not just metadata and TOTAL snippets. Aggregate health now exposes
+  Markdown detail-row matched/unmatched counters before zstd compare coverage
+  can pass.

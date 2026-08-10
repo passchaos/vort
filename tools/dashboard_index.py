@@ -4100,6 +4100,134 @@ def zstd_compare_health(artifacts: list[Path]) -> dict:
         matched = sum(1 for needle in expected if needle in text)
         return (len(expected), matched)
 
+    def markdown_cells(line: str) -> list[str]:
+        return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+    def plain_cell(cell: str) -> str:
+        value = cell.strip()
+        if value.startswith("`") and value.endswith("`") and len(value) >= 2:
+            value = value[1:-1]
+        if value.startswith("**") and value.endswith("**") and len(value) >= 4:
+            value = value[2:-2]
+        return value
+
+    def formatted_ratio(row: dict[str, str], field: str) -> str:
+        try:
+            value = float(row.get(field) or "0")
+        except ValueError:
+            return "n/a"
+        return "n/a" if value < 0 else f"{value:.4f}"
+
+    def formatted_float(row: dict[str, str], field: str, decimals: int = 2, suffix: str = "") -> str:
+        try:
+            value = float(row.get(field) or "0")
+        except ValueError:
+            return "n/a"
+        return f"{value:.{decimals}f}{suffix}"
+
+    def formatted_int(row: dict[str, str], field: str) -> str:
+        try:
+            return str(int(row.get(field) or "0"))
+        except ValueError:
+            return ""
+
+    def compare_markdown_row_matches(row: dict[str, str], cells: list[str]) -> bool:
+        if len(cells) != 24 or plain_cell(cells[0]) != str(row.get("path") or ""):
+            return False
+        expected = [
+            formatted_int(row, "input_bytes"),
+            formatted_int(row, "zstd_bytes"),
+            formatted_int(row, "vort_raw_fixed_bytes"),
+            formatted_int(row, "vort_native_best_bytes"),
+            formatted_int(row, "vort_native_stream_bytes"),
+            formatted_int(row, "vort_native_embedded_bytes"),
+            formatted_int(row, "vort_stream_over_native_best_bytes"),
+            formatted_int(row, "vort_embedded_over_native_stream_bytes"),
+            formatted_int(row, "vort_embedded_over_native_best_bytes"),
+            formatted_ratio(row, "vort_stream_over_native_best"),
+            formatted_ratio(row, "vort_embedded_over_native_stream"),
+            formatted_ratio(row, "vort_embedded_over_native_best"),
+            formatted_ratio(row, "vort_over_zstd"),
+            formatted_ratio(row, "vort_native_best_over_zstd"),
+            formatted_ratio(row, "vort_native_stream_over_zstd"),
+            formatted_ratio(row, "vort_native_over_zstd"),
+            formatted_float(row, "zstd_decode_mib_s"),
+            formatted_float(row, "vort_raw_fixed_decode_mib_s"),
+            formatted_float(row, "vort_native_best_decode_mib_s"),
+            formatted_float(row, "vort_native_decode_mib_s"),
+            formatted_ratio(row, "vort_decode_vs_zstd"),
+            formatted_ratio(row, "vort_native_best_decode_vs_zstd"),
+            formatted_ratio(row, "vort_native_decode_vs_zstd"),
+        ]
+        return cells[1:] == expected
+
+    def sweep_markdown_row_matches(row: dict[str, str], cells: list[str]) -> bool:
+        if str(row.get("path") or "") == "TOTAL":
+            if len(cells) != 15 or plain_cell(cells[0]) != str(row.get("seekability_tier") or ""):
+                return False
+            expected = [
+                formatted_int(row, "block_len"),
+                formatted_int(row, "input_bytes"),
+                formatted_int(row, "zstd_bytes"),
+                formatted_int(row, "vort_native_best_bytes"),
+                formatted_int(row, "vort_native_stream_bytes"),
+                formatted_int(row, "vort_native_embedded_bytes"),
+                formatted_ratio(row, "vort_native_stream_over_zstd"),
+                formatted_ratio(row, "vort_native_embedded_over_zstd"),
+                formatted_ratio(row, "vort_stream_over_native_best"),
+                formatted_int(row, "vort_stream_over_native_best_bytes"),
+                formatted_float(row, "vort_stream_over_native_best_pct", suffix="%"),
+                formatted_ratio(row, "vort_embedded_over_native_stream"),
+                formatted_int(row, "vort_embedded_over_native_stream_bytes"),
+                formatted_float(row, "vort_range_decode_mib_s"),
+            ]
+            return cells[1:] == expected
+        if len(cells) != 12 or plain_cell(cells[0]) != str(row.get("path") or "") or plain_cell(cells[1]) != str(row.get("seekability_tier") or ""):
+            return False
+        expected = [
+            formatted_int(row, "block_len"),
+            formatted_int(row, "input_bytes"),
+            formatted_int(row, "zstd_bytes"),
+            formatted_int(row, "vort_native_best_bytes"),
+            formatted_int(row, "vort_native_stream_bytes"),
+            formatted_int(row, "vort_native_embedded_bytes"),
+            formatted_ratio(row, "vort_stream_over_native_best"),
+            formatted_ratio(row, "vort_embedded_over_native_stream"),
+            formatted_int(row, "range_offset"),
+            formatted_float(row, "vort_range_decode_mib_s"),
+        ]
+        return cells[2:] == expected
+
+    def markdown_detail_checks(kind: str, rows: list[dict[str, str]]) -> tuple[int, int]:
+        artifact = markdown_artifacts.get(kind)
+        if artifact is None:
+            return (len(rows), 0)
+        try:
+            table_rows = [
+                markdown_cells(line)
+                for line in artifact.read_text(errors="replace").splitlines()
+                if line.startswith("| ")
+            ]
+        except Exception:
+            return (len(rows), 0)
+        table_rows = [
+            cells
+            for cells in table_rows
+            if cells and plain_cell(cells[0]) not in {"path", "tier", "---"}
+        ]
+        matched = 0
+        used: set[int] = set()
+        for row in rows:
+            matcher = sweep_markdown_row_matches if kind == "sweep" else compare_markdown_row_matches
+            for index, cells in enumerate(table_rows):
+                if index in used:
+                    continue
+                if matcher(row, cells):
+                    used.add(index)
+                    matched += 1
+                    break
+        return (len(rows), matched)
+
     compare_present = isinstance(compare, dict)
     standard_present = isinstance(standard, dict)
     sweep_present = isinstance(sweep, dict)
@@ -4126,6 +4254,12 @@ def zstd_compare_health(artifacts: list[Path]) -> dict:
     markdown_summary_rows = compare_md_rows + standard_md_rows + sweep_md_rows
     markdown_matched = compare_md_matched + standard_md_matched + sweep_md_matched
     markdown_unmatched = markdown_summary_rows - markdown_matched + (markdown_expected_present_count - markdown_present_count)
+    compare_md_detail_rows, compare_md_detail_matched = markdown_detail_checks("compare", compare_rows)
+    standard_md_detail_rows, standard_md_detail_matched = markdown_detail_checks("standard", standard_rows)
+    sweep_md_detail_rows, sweep_md_detail_matched = markdown_detail_checks("sweep", sweep_rows)
+    markdown_detail_rows = compare_md_detail_rows + standard_md_detail_rows + sweep_md_detail_rows
+    markdown_detail_matched = compare_md_detail_matched + standard_md_detail_matched + sweep_md_detail_matched
+    markdown_detail_unmatched = markdown_detail_rows - markdown_detail_matched
     healthy = (
         compare_present
         and standard_present
@@ -4142,6 +4276,8 @@ def zstd_compare_health(artifacts: list[Path]) -> dict:
         and markdown_present_count == markdown_expected_present_count
         and markdown_summary_rows > 0
         and markdown_unmatched == 0
+        and markdown_detail_rows == csv_row_count
+        and markdown_detail_unmatched == 0
     )
     return {
         "present": compare_present,
@@ -4171,6 +4307,9 @@ def zstd_compare_health(artifacts: list[Path]) -> dict:
         "markdown_summary_rows": markdown_summary_rows,
         "markdown_matched": markdown_matched,
         "markdown_unmatched": markdown_unmatched,
+        "markdown_detail_rows": markdown_detail_rows,
+        "markdown_detail_matched": markdown_detail_matched,
+        "markdown_detail_unmatched": markdown_detail_unmatched,
     }
 
 
@@ -6243,6 +6382,7 @@ def main() -> int:
             f"| block sweep rows | {zstd_compare['block_sweep_rows']} | best block {zstd_compare['best_block_len']} bytes, range/full MiB/s {zstd_compare['best_range_decode_mib_s']:.2f}/{zstd_compare['best_range_decode_full_input_mib_s']:.2f} |",
             f"| CSV drift checks | {zstd_compare['csv_matched_rows']}/{zstd_compare['csv_rows']} | artifacts {zstd_compare['csv_present_count']}/{zstd_compare['csv_expected_present_count']}, unmatched {zstd_compare['csv_unmatched_rows']} |",
             f"| Markdown drift checks | {zstd_compare['markdown_matched']}/{zstd_compare['markdown_summary_rows']} | artifacts {zstd_compare['markdown_present_count']}/{zstd_compare['markdown_expected_present_count']}, unmatched {zstd_compare['markdown_unmatched']} |",
+            f"| Markdown detail rows | {zstd_compare['markdown_detail_matched']}/{zstd_compare['markdown_detail_rows']} | unmatched {zstd_compare['markdown_detail_unmatched']} |",
             f"| gate health | {1 if zstd_compare['healthy'] else 0} | compare/standard/sweep present {zstd_compare['present']}/{zstd_compare['standard_present']}/{zstd_compare['block_sweep_present']} |",
             "",
         ]
@@ -7040,6 +7180,9 @@ def main() -> int:
                 "zstd_compare_markdown_summary_rows": zstd_compare["markdown_summary_rows"],
                 "zstd_compare_markdown_matched": zstd_compare["markdown_matched"],
                 "zstd_compare_markdown_unmatched": zstd_compare["markdown_unmatched"],
+                "zstd_compare_markdown_detail_rows": zstd_compare["markdown_detail_rows"],
+                "zstd_compare_markdown_detail_matched": zstd_compare["markdown_detail_matched"],
+                "zstd_compare_markdown_detail_unmatched": zstd_compare["markdown_detail_unmatched"],
                 "native_allocation_present": native_allocation["present"],
                 "native_allocation_smoke_present": native_allocation["smoke_present"],
                 "native_allocation_negative_present": native_allocation["negative_present"],

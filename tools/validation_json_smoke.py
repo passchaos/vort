@@ -1284,6 +1284,9 @@ def main() -> int:
         assert dashboard["zstd_compare_markdown_summary_rows"] > 0
         assert dashboard["zstd_compare_markdown_matched"] == dashboard["zstd_compare_markdown_summary_rows"]
         assert dashboard["zstd_compare_markdown_unmatched"] == 0
+        assert dashboard["zstd_compare_markdown_detail_rows"] == dashboard["zstd_compare_csv_rows"]
+        assert dashboard["zstd_compare_markdown_detail_matched"] == dashboard["zstd_compare_csv_rows"]
+        assert dashboard["zstd_compare_markdown_detail_unmatched"] == 0
         assert dashboard["native_fuzz_corpus_present"] is True
         assert dashboard["native_fuzz_corpus_coverage_present"] is True
         assert dashboard["native_fuzz_corpus_markdown_present"] is True
