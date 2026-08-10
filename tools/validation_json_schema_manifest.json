@@ -854,6 +854,7 @@
             "validation_json_healthy",
             "sidecar_corrupt_healthy",
             "huffman_length_healthy",
+            "level_report_healthy",
             "fuzz_corpus_healthy",
             "decode_stage_healthy",
             "native_allocation_healthy",
@@ -1268,6 +1269,27 @@
           "zero": [
             "native_library_bench_missing_pairs"
           ]
+        },
+        "level_report_healthy": {
+          "all": [
+            "level_report_present",
+            "level_report_markdown_present"
+          ],
+          "positive": [
+            "level_report_rows",
+            "level_report_expected_rows",
+            "level_report_positive_rows",
+            "level_report_shape_rows",
+            "level_report_token_accounting_rows",
+            "level_report_ratio_rows",
+            "level_report_roundtrip_rows",
+            "level_report_markdown_summary_rows",
+            "level_report_markdown_matched"
+          ],
+          "zero": [
+            "level_report_missing_pairs",
+            "level_report_markdown_unmatched"
+          ]
         }
       },
       "collections": {
@@ -1518,6 +1540,20 @@
         "huffman_length_present": "bool",
         "huffman_length_row_count": "int",
         "huffman_length_worst_gap_bits": "int",
+        "level_report_present": "bool",
+        "level_report_healthy": "bool",
+        "level_report_rows": "int",
+        "level_report_expected_rows": "int",
+        "level_report_positive_rows": "int",
+        "level_report_shape_rows": "int",
+        "level_report_token_accounting_rows": "int",
+        "level_report_ratio_rows": "int",
+        "level_report_roundtrip_rows": "int",
+        "level_report_missing_pairs": "list",
+        "level_report_markdown_present": "bool",
+        "level_report_markdown_summary_rows": "int",
+        "level_report_markdown_matched": "int",
+        "level_report_markdown_unmatched": "int",
         "native_codec_probes_healthy": "bool",
         "native_codec_probes_capability_count": "int",
         "native_codec_probes_chunked_cases": "int",
@@ -1859,6 +1895,8 @@
           "sidecar_corrupt_failed",
           "missing_huffman_length_artifact",
           "huffman_length_failed",
+          "missing_level_report_artifact",
+          "level_report_failed",
           "missing_fuzz_corpus_artifact",
           "fuzz_corpus_failed",
           "missing_fuzz_coverage_artifact",
@@ -2246,6 +2284,8 @@
               "validation_sidecar_corrupt_failed",
               "validation_missing_huffman_length_artifact",
               "validation_huffman_length_failed",
+              "validation_missing_level_report_artifact",
+              "validation_level_report_failed",
               "validation_missing_fuzz_corpus_artifact",
               "validation_fuzz_corpus_failed",
               "validation_missing_fuzz_coverage_artifact",
@@ -2331,6 +2371,8 @@
               "sidecar_corrupt_failed",
               "missing_huffman_length_artifact",
               "huffman_length_failed",
+              "missing_level_report_artifact",
+              "level_report_failed",
               "missing_fuzz_corpus_artifact",
               "fuzz_corpus_failed",
               "missing_fuzz_coverage_artifact",
@@ -2482,7 +2524,9 @@
                 "validation_missing_deflate_dynamic_decode_profile_artifact": "missing_deflate_dynamic_decode_profile_artifact",
                 "validation_deflate_dynamic_decode_profile_failed": "deflate_dynamic_decode_profile_failed",
                 "validation_missing_native_library_bench_artifact": "missing_native_library_bench_artifact",
-                "validation_native_library_bench_failed": "native_library_bench_failed"
+                "validation_native_library_bench_failed": "native_library_bench_failed",
+                "validation_missing_level_report_artifact": "missing_level_report_artifact",
+                "validation_level_report_failed": "level_report_failed"
               },
               "target": "reason"
             }
@@ -2555,6 +2599,7 @@
           "header_inspect_markdown_table",
           "sidecar_corrupt_markdown_table",
           "huffman_length_markdown_table",
+          "level_report_markdown_table",
           "checksum_bench_markdown_table",
           "deflate_match_copy_bench_markdown_table",
           "validation_missing_deflate_match_copy_bench_artifact",
@@ -2626,6 +2671,8 @@
           "validation_sidecar_corrupt_failed",
           "validation_missing_huffman_length_artifact",
           "validation_huffman_length_failed",
+          "validation_missing_level_report_artifact",
+          "validation_level_report_failed",
           "validation_missing_fuzz_corpus_artifact",
           "validation_fuzz_corpus_failed",
           "validation_missing_fuzz_coverage_artifact",
@@ -2713,6 +2760,8 @@
           "validation_sidecar_corrupt_failed",
           "validation_missing_huffman_length_artifact",
           "validation_huffman_length_failed",
+          "validation_missing_level_report_artifact",
+          "validation_level_report_failed",
           "validation_missing_fuzz_corpus_artifact",
           "validation_fuzz_corpus_failed",
           "validation_missing_fuzz_coverage_artifact",
@@ -2798,6 +2847,8 @@
           "sidecar_corrupt_failed",
           "missing_huffman_length_artifact",
           "huffman_length_failed",
+          "missing_level_report_artifact",
+          "level_report_failed",
           "missing_fuzz_corpus_artifact",
           "fuzz_corpus_failed",
           "missing_fuzz_coverage_artifact",
@@ -2883,6 +2934,8 @@
           "sidecar_corrupt_failed",
           "missing_huffman_length_artifact",
           "huffman_length_failed",
+          "missing_level_report_artifact",
+          "level_report_failed",
           "missing_fuzz_corpus_artifact",
           "fuzz_corpus_failed",
           "missing_fuzz_coverage_artifact",
@@ -3034,7 +3087,9 @@
             "validation_missing_deflate_dynamic_decode_profile_artifact": "missing_deflate_dynamic_decode_profile_artifact",
             "validation_deflate_dynamic_decode_profile_failed": "deflate_dynamic_decode_profile_failed",
             "validation_missing_native_library_bench_artifact": "missing_native_library_bench_artifact",
-            "validation_native_library_bench_failed": "native_library_bench_failed"
+            "validation_native_library_bench_failed": "native_library_bench_failed",
+            "validation_missing_level_report_artifact": "missing_level_report_artifact",
+            "validation_level_report_failed": "level_report_failed"
           },
           "target": "reason"
         },
@@ -3122,7 +3177,9 @@
             "missing_deflate_dynamic_decode_profile_artifact": "missing_deflate_dynamic_decode_profile_artifact",
             "deflate_dynamic_decode_profile_failed": "deflate_dynamic_decode_profile_failed",
             "missing_native_library_bench_artifact": "missing_native_library_bench_artifact",
-            "native_library_bench_failed": "native_library_bench_failed"
+            "native_library_bench_failed": "native_library_bench_failed",
+            "missing_level_report_artifact": "missing_level_report_artifact",
+            "level_report_failed": "level_report_failed"
           },
           "target": "reason"
         }

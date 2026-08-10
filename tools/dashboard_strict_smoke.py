@@ -25,6 +25,8 @@ VALIDATION_JSON_SMOKE_ARTIFACT = "vort-validation-json-smoke.json"
 VALIDATION_JSON_DOCS_NEGATIVE_ARTIFACT = "vort-validation-json-docs-negative-smoke.json"
 SIDECAR_CORRUPT_ARTIFACT = "vort-sidecar-corrupt-smoke.json"
 HUFFMAN_LENGTH_ARTIFACT = "vort-huffman-length-report.csv"
+LEVEL_REPORT_CSV_ARTIFACT = "vort-level-report.csv"
+LEVEL_REPORT_MARKDOWN_ARTIFACT = "vort-level-report.md"
 CHECKSUM_BENCH_ARTIFACT = "vort-checksum-bench.csv"
 CHUNK_CURSOR_BENCH_ARTIFACT = "vort-chunk-cursor-bench.csv"
 DEFLATE_MATCH_COPY_BENCH_ARTIFACT = "vort-deflate-match-copy-bench.csv"
@@ -108,6 +110,8 @@ def write_producer_map(
     include_sidecar_corrupt_smoke: bool = True,
     include_huffman_exact: bool = True,
     include_huffman_smoke: bool = True,
+    include_level_report_exact: bool = True,
+    include_level_report_smoke: bool = True,
     include_checksum_bench_exact: bool = True,
     include_checksum_bench_smoke: bool = True,
     include_chunk_cursor_bench_exact: bool = True,
@@ -212,6 +216,15 @@ def write_producer_map(
         artifact_metadata["vort-huffman-length-report.md"] = {
             "expected_format": "md",
             "smoke_gate": "zig build run-huffman-length-report-dashboard",
+        }
+    if include_level_report_smoke:
+        artifact_metadata[LEVEL_REPORT_CSV_ARTIFACT] = {
+            "expected_format": "csv",
+            "smoke_gate": "zig build run-level-report-csv",
+        }
+        artifact_metadata[LEVEL_REPORT_MARKDOWN_ARTIFACT] = {
+            "expected_format": "md",
+            "smoke_gate": "zig build run-level-report-dashboard",
         }
     if include_checksum_bench_smoke:
         artifact_metadata[CHECKSUM_BENCH_ARTIFACT] = {
@@ -400,6 +413,9 @@ def write_producer_map(
     if include_huffman_exact:
         exact[HUFFMAN_LENGTH_ARTIFACT] = "zig build run-huffman-length-report-dashboard"
         exact["vort-huffman-length-report.md"] = "zig build run-huffman-length-report-dashboard"
+    if include_level_report_exact:
+        exact[LEVEL_REPORT_CSV_ARTIFACT] = "zig build run-level-report-csv"
+        exact[LEVEL_REPORT_MARKDOWN_ARTIFACT] = "zig build run-level-report-dashboard"
     if include_checksum_bench_exact:
         exact[CHECKSUM_BENCH_ARTIFACT] = "zig build -Doptimize=ReleaseFast run-checksum-bench-gate"
     if include_chunk_cursor_bench_exact:
@@ -897,6 +913,162 @@ def write_huffman_length_csv(path: Path, *, optimal: bool = True) -> None:
     }
     columns = list(row)
     path.write_text(",".join(columns) + "\n" + ",".join(row[column] for column in columns) + "\n")
+
+
+def level_report_rows(*, healthy: bool = True) -> list[dict[str, str]]:
+    cases = {
+        "text": {"input": 2816, "base_raw": 65, "crc": 1058255176},
+        "structured": {"input": 3136, "base_raw": 52, "crc": 682749180},
+        "repeated": {"input": 2048, "base_raw": 16, "crc": 1144877804},
+    }
+    levels = [
+        ("fastest", "hash", 40),
+        ("fast", "hash", 28),
+        ("default", "lazy", 0),
+        ("best", "optimal", 2),
+    ]
+    strategies = [
+        ("default", 0),
+        ("filtered", 4),
+        ("huffman_only", 320),
+        ("rle", 12),
+    ]
+
+    rows: list[dict[str, str]] = []
+    for case, case_info in cases.items():
+        input_bytes = int(case_info["input"])
+        base_raw = int(case_info["base_raw"])
+        crc = int(case_info["crc"])
+        for level, parser, level_delta in levels:
+            for strategy, strategy_delta in strategies:
+                if not healthy and case == "repeated" and level == "best" and strategy == "rle":
+                    continue
+                huffman_only = strategy == "huffman_only"
+                raw_best_bytes = input_bytes + 2 if huffman_only else base_raw + level_delta + strategy_delta
+                adaptive_bytes = raw_best_bytes
+                literal_tokens = input_bytes if huffman_only else 1
+                match_tokens = 0 if huffman_only else 1
+                tokens = literal_tokens + match_tokens
+                matched_bytes = 0 if huffman_only else input_bytes - 1
+                match_coverage = (matched_bytes * 10_000) // input_bytes
+                avg_match_len = 0 if match_tokens == 0 else (matched_bytes * 100) // match_tokens
+                fixed_bits = input_bytes * 8
+                rows.append(
+                    {
+                        "case": case,
+                        "input_bytes": str(input_bytes),
+                        "level": level,
+                        "strategy": strategy,
+                        "parser": parser,
+                        "block_selection": "stored_fixed_dynamic",
+                        "window_len": "32768",
+                        "max_chain": "160",
+                        "nice_len": "80",
+                        "max_candidates": "6",
+                        "lazy_min_gain": "1",
+                        "min_match": "3",
+                        "max_match": "258",
+                        "min_savings_bits": "1",
+                        "split_min": "8192",
+                        "split_max": "65535",
+                        "split_step": "8192",
+                        "stored_fast_path": "false",
+                        "tokens": str(tokens),
+                        "literal_tokens": str(literal_tokens),
+                        "match_tokens": str(match_tokens),
+                        "matched_bytes": str(matched_bytes),
+                        "match_coverage_x10000": str(match_coverage),
+                        "avg_match_len_x100": str(avg_match_len),
+                        "fixed_bits": str(fixed_bits),
+                        "fixed_bits_per_byte_x100": str((fixed_bits * 100) // input_bytes),
+                        "raw_best_bytes": str(raw_best_bytes),
+                        "raw_best_ratio_x10000": str((raw_best_bytes * 10_000) // input_bytes),
+                        "adaptive_bytes": str(adaptive_bytes),
+                        "adaptive_ratio_x10000": str((adaptive_bytes * 10_000) // input_bytes),
+                        "roundtrip_crc32": str(crc),
+                    }
+                )
+    return rows
+
+
+def write_level_report_csv(path: Path, *, healthy: bool = True) -> None:
+    rows = level_report_rows(healthy=healthy)
+    columns = [
+        "case",
+        "input_bytes",
+        "level",
+        "strategy",
+        "parser",
+        "block_selection",
+        "window_len",
+        "max_chain",
+        "nice_len",
+        "max_candidates",
+        "lazy_min_gain",
+        "min_match",
+        "max_match",
+        "min_savings_bits",
+        "split_min",
+        "split_max",
+        "split_step",
+        "stored_fast_path",
+        "tokens",
+        "literal_tokens",
+        "match_tokens",
+        "matched_bytes",
+        "match_coverage_x10000",
+        "avg_match_len_x100",
+        "fixed_bits",
+        "fixed_bits_per_byte_x100",
+        "raw_best_bytes",
+        "raw_best_ratio_x10000",
+        "adaptive_bytes",
+        "adaptive_ratio_x10000",
+        "roundtrip_crc32",
+    ]
+    lines = [",".join(columns)]
+    lines.extend(",".join(row[column] for column in columns) for row in rows)
+    path.write_text("\n".join(lines) + "\n")
+
+
+def write_level_report_markdown(path: Path, *, healthy: bool = True) -> None:
+    rows = level_report_rows(healthy=healthy)
+
+    def row_key(row: dict[str, str]) -> tuple[int, int, int]:
+        return (int(row["raw_best_bytes"]), int(row["adaptive_bytes"]), int(row["tokens"]))
+
+    def adaptive_key(row: dict[str, str]) -> tuple[int, int, int]:
+        return (int(row["adaptive_bytes"]), int(row["raw_best_bytes"]), int(row["tokens"]))
+
+    def percent(value: str) -> str:
+        scaled = int(value)
+        return f"{scaled // 100}.{scaled % 100:02d}%"
+
+    lines = [
+        "# Vort compression level report",
+        "",
+        f"Rows: {len(rows)}",
+        "",
+        "## Best rows by case",
+        "",
+        "| case | best raw | raw config | best adaptive | adaptive config | match coverage | tokens |",
+        "|---|---:|---|---:|---|---:|---:|",
+    ]
+    for case in ("text", "structured", "repeated"):
+        case_rows = [row for row in rows if row["case"] == case]
+        if not case_rows:
+            continue
+        best_raw = min(case_rows, key=row_key)
+        best_adaptive = min(case_rows, key=adaptive_key)
+        lines.append(
+            f"|{case} | {best_raw['raw_best_bytes']} | "
+            f"{best_raw['level']}/{best_raw['strategy']}/{best_raw['parser']} | "
+            f"{best_adaptive['adaptive_bytes']} | "
+            f"{best_adaptive['level']}/{best_adaptive['strategy']}/{best_adaptive['parser']} | "
+            f"{percent(best_adaptive['match_coverage_x10000'])} | {best_adaptive['tokens']} |"
+        )
+    lines.append("")
+    path.write_text("\n".join(lines) + "\n")
 
 
 def write_checksum_bench_csv(path: Path, *, healthy: bool = True) -> None:
@@ -2549,6 +2721,8 @@ def write_healthy_artifacts(root: Path) -> None:
     write_sidecar_corrupt_report(root / SIDECAR_CORRUPT_ARTIFACT)
     write_huffman_length_csv(root / HUFFMAN_LENGTH_ARTIFACT)
     write_huffman_length_markdown(root / "vort-huffman-length-report.md")
+    write_level_report_csv(root / LEVEL_REPORT_CSV_ARTIFACT)
+    write_level_report_markdown(root / LEVEL_REPORT_MARKDOWN_ARTIFACT)
     write_checksum_bench_csv(root / CHECKSUM_BENCH_ARTIFACT)
     write_chunk_cursor_bench_csv(root / CHUNK_CURSOR_BENCH_ARTIFACT)
     write_deflate_match_copy_bench_csv(root / DEFLATE_MATCH_COPY_BENCH_ARTIFACT)
@@ -2973,8 +3147,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 59/59 | 0 | allowed missing 0 |",
-                    "| smoke gates | 59/59 | 0 | required missing 0 |",
+                    "| producer steps | 61/61 | 0 | allowed missing 0 |",
+                    "| smoke gates | 61/61 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -3152,6 +3326,20 @@ def main() -> int:
                     "| validation | count | detail |",
                     "| malformed rows | 0 | healthy `True` |",
                     "| Markdown summary | 7/7 | present `True` |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
+                "level_report_markdown_table",
+                "level report Markdown table",
+                dashboard_markdown,
+                [
+                    "## Compression level report coverage",
+                    "| category | count | detail |",
+                    "| rows | 48 | expected 48, present `True` |",
+                    "| row checks | 48 | positive/token/ratio/roundtrip 48/48/48/48 |",
+                    "| Markdown summary | 4/4 | present `True`, healthy `True` |",
                 ],
             )
         )
@@ -3682,6 +3870,13 @@ def main() -> int:
                     package_merge_non_optimal_rows=1,
                     package_merge_worst_gap_bits=1,
                 )
+                write_producer_map(producer_map)
+            elif fixture == "missing_level_report_artifact":
+                (fixture_root / LEVEL_REPORT_CSV_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "level_report_failed":
+                write_level_report_csv(fixture_root / LEVEL_REPORT_CSV_ARTIFACT, healthy=False)
+                write_level_report_markdown(fixture_root / LEVEL_REPORT_MARKDOWN_ARTIFACT, healthy=False)
                 write_producer_map(producer_map)
             elif fixture == "missing_checksum_bench_artifact":
                 (fixture_root / CHECKSUM_BENCH_ARTIFACT).unlink()

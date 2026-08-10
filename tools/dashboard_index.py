@@ -316,6 +316,216 @@ def huffman_length_health(artifacts: list[Path]) -> dict:
     }
 
 
+def level_report_health(artifacts: list[Path]) -> dict:
+    expected_cases = {"text", "structured", "repeated"}
+    expected_levels = {"fastest", "fast", "default", "best"}
+    expected_strategies = {"default", "filtered", "huffman_only", "rle"}
+    expected_pairs = {
+        (case, level, strategy)
+        for case in expected_cases
+        for level in expected_levels
+        for strategy in expected_strategies
+    }
+    expected_rows = len(expected_pairs)
+
+    def parse_int(value: str | None) -> int | None:
+        try:
+            return int(value or "0")
+        except ValueError:
+            return None
+
+    def scaled_ratio(numerator: int, denominator: int, scale: int) -> int:
+        return (numerator * scale) // denominator if denominator > 0 else 0
+
+    def row_key(row: dict[str, str]) -> tuple[int, int, int]:
+        raw = parse_int(row.get("raw_best_bytes")) or 0
+        adaptive = parse_int(row.get("adaptive_bytes")) or 0
+        tokens = parse_int(row.get("tokens")) or 0
+        return raw, adaptive, tokens
+
+    def adaptive_key(row: dict[str, str]) -> tuple[int, int, int]:
+        raw = parse_int(row.get("raw_best_bytes")) or 0
+        adaptive = parse_int(row.get("adaptive_bytes")) or 0
+        tokens = parse_int(row.get("tokens")) or 0
+        return adaptive, raw, tokens
+
+    def percent(value: int) -> str:
+        return f"{value // 100}.{value % 100:02d}%"
+
+    for artifact in artifacts:
+        if artifact.name != "vort-level-report.csv":
+            continue
+        try:
+            with artifact.open(newline="") as f:
+                rows = list(csv.DictReader(f))
+        except Exception:
+            rows = []
+
+        seen: set[tuple[str, str, str]] = set()
+        rows_by_case: dict[str, list[dict[str, str]]] = {case: [] for case in expected_cases}
+        positive_rows = 0
+        shape_rows = 0
+        token_accounting_rows = 0
+        ratio_rows = 0
+        roundtrip_rows = 0
+        for row in rows:
+            case = str(row.get("case") or "")
+            level = str(row.get("level") or "")
+            strategy = str(row.get("strategy") or "")
+            triple = (case, level, strategy)
+            if triple in expected_pairs:
+                seen.add(triple)
+                rows_by_case.setdefault(case, []).append(row)
+                shape_rows += 1
+
+            input_bytes = parse_int(row.get("input_bytes"))
+            tokens = parse_int(row.get("tokens"))
+            literal_tokens = parse_int(row.get("literal_tokens"))
+            match_tokens = parse_int(row.get("match_tokens"))
+            matched_bytes = parse_int(row.get("matched_bytes"))
+            match_coverage = parse_int(row.get("match_coverage_x10000"))
+            fixed_bits = parse_int(row.get("fixed_bits"))
+            fixed_bits_per_byte = parse_int(row.get("fixed_bits_per_byte_x100"))
+            raw_best_bytes = parse_int(row.get("raw_best_bytes"))
+            raw_best_ratio = parse_int(row.get("raw_best_ratio_x10000"))
+            adaptive_bytes = parse_int(row.get("adaptive_bytes"))
+            adaptive_ratio = parse_int(row.get("adaptive_ratio_x10000"))
+            roundtrip_crc32 = parse_int(row.get("roundtrip_crc32"))
+            numeric_values = (
+                input_bytes,
+                tokens,
+                literal_tokens,
+                match_tokens,
+                matched_bytes,
+                match_coverage,
+                fixed_bits,
+                fixed_bits_per_byte,
+                raw_best_bytes,
+                raw_best_ratio,
+                adaptive_bytes,
+                adaptive_ratio,
+                roundtrip_crc32,
+            )
+            if any(value is None for value in numeric_values):
+                continue
+            assert input_bytes is not None
+            assert tokens is not None
+            assert literal_tokens is not None
+            assert match_tokens is not None
+            assert matched_bytes is not None
+            assert match_coverage is not None
+            assert fixed_bits is not None
+            assert fixed_bits_per_byte is not None
+            assert raw_best_bytes is not None
+            assert raw_best_ratio is not None
+            assert adaptive_bytes is not None
+            assert adaptive_ratio is not None
+            assert roundtrip_crc32 is not None
+
+            if input_bytes > 0 and tokens > 0 and raw_best_bytes > 0 and adaptive_bytes > 0:
+                positive_rows += 1
+            if (
+                tokens == literal_tokens + match_tokens
+                and matched_bytes <= input_bytes
+                and match_coverage <= 10_000
+            ):
+                token_accounting_rows += 1
+            if (
+                raw_best_ratio == scaled_ratio(raw_best_bytes, input_bytes, 10_000)
+                and adaptive_ratio == scaled_ratio(adaptive_bytes, input_bytes, 10_000)
+                and fixed_bits_per_byte == scaled_ratio(fixed_bits, input_bytes, 100)
+                and match_coverage == scaled_ratio(matched_bytes, input_bytes, 10_000)
+            ):
+                ratio_rows += 1
+            if roundtrip_crc32 > 0:
+                roundtrip_rows += 1
+
+        missing_pairs = sorted("/".join(pair) for pair in expected_pairs - seen)
+        markdown_present = False
+        markdown_summary_rows = 0
+        markdown_matched = 0
+        for md_artifact in artifacts:
+            if md_artifact.name != "vort-level-report.md":
+                continue
+            markdown_present = True
+            markdown_lines = {line.rstrip() for line in md_artifact.read_text(errors="replace").splitlines()}
+            expected_lines = [f"Rows: {len(rows)}"]
+            for case in sorted(expected_cases):
+                case_rows = rows_by_case.get(case, [])
+                if not case_rows:
+                    continue
+                best_raw = min(case_rows, key=row_key)
+                best_adaptive = min(case_rows, key=adaptive_key)
+                expected_lines.append(
+                    "|{case} | {raw_bytes} | {raw_level}/{raw_strategy}/{raw_parser} | "
+                    "{adaptive_bytes} | {adaptive_level}/{adaptive_strategy}/{adaptive_parser} | "
+                    "{coverage} | {tokens} |".format(
+                        case=case,
+                        raw_bytes=best_raw.get("raw_best_bytes", ""),
+                        raw_level=best_raw.get("level", ""),
+                        raw_strategy=best_raw.get("strategy", ""),
+                        raw_parser=best_raw.get("parser", ""),
+                        adaptive_bytes=best_adaptive.get("adaptive_bytes", ""),
+                        adaptive_level=best_adaptive.get("level", ""),
+                        adaptive_strategy=best_adaptive.get("strategy", ""),
+                        adaptive_parser=best_adaptive.get("parser", ""),
+                        coverage=percent(parse_int(best_adaptive.get("match_coverage_x10000")) or 0),
+                        tokens=best_adaptive.get("tokens", ""),
+                    )
+                )
+            for line in expected_lines:
+                markdown_summary_rows += 1
+                if line in markdown_lines:
+                    markdown_matched += 1
+            break
+        markdown_unmatched = markdown_summary_rows - markdown_matched
+        row_count = len(rows)
+        healthy = (
+            row_count == expected_rows
+            and not missing_pairs
+            and positive_rows == row_count
+            and shape_rows == row_count
+            and token_accounting_rows == row_count
+            and ratio_rows == row_count
+            and roundtrip_rows == row_count
+            and markdown_present
+            and markdown_summary_rows == 1 + len(expected_cases)
+            and markdown_unmatched == 0
+        )
+        return {
+            "present": True,
+            "healthy": healthy,
+            "rows": row_count,
+            "expected_rows": expected_rows,
+            "positive_rows": positive_rows,
+            "shape_rows": shape_rows,
+            "token_accounting_rows": token_accounting_rows,
+            "ratio_rows": ratio_rows,
+            "roundtrip_rows": roundtrip_rows,
+            "missing_pairs": missing_pairs,
+            "markdown_present": markdown_present,
+            "markdown_summary_rows": markdown_summary_rows,
+            "markdown_matched": markdown_matched,
+            "markdown_unmatched": markdown_unmatched,
+        }
+    return {
+        "present": False,
+        "healthy": False,
+        "rows": 0,
+        "expected_rows": expected_rows,
+        "positive_rows": 0,
+        "shape_rows": 0,
+        "token_accounting_rows": 0,
+        "ratio_rows": 0,
+        "roundtrip_rows": 0,
+        "missing_pairs": [],
+        "markdown_present": False,
+        "markdown_summary_rows": 0,
+        "markdown_matched": 0,
+        "markdown_unmatched": 0,
+    }
+
+
 def fuzz_corpus_health(artifacts: list[Path]) -> dict:
     report = None
     coverage = None
@@ -3441,6 +3651,7 @@ def main() -> int:
     validation_json = validation_json_health(artifacts)
     sidecar_corrupt_health_summary = sidecar_corrupt_health(artifacts)
     huffman_health = huffman_length_health(artifacts)
+    level_report = level_report_health(artifacts)
     fuzz_health = fuzz_corpus_health(artifacts)
     decode_stage_health_summary = decode_stage_health(artifacts)
     native_fuzz = native_fuzz_corpus_health(artifacts)
@@ -3499,6 +3710,7 @@ def main() -> int:
     validation_json_healthy = validation_json["healthy"]
     sidecar_corrupt_healthy = sidecar_corrupt_health_summary["healthy"]
     huffman_healthy = huffman_health["healthy"]
+    level_report_healthy = level_report["healthy"]
     fuzz_healthy = fuzz_health["healthy"]
     decode_stage_healthy = decode_stage_health_summary["healthy"]
     python_zlib_healthy = python_zlib_health["healthy"]
@@ -3535,6 +3747,7 @@ def main() -> int:
         and validation_json_healthy
         and sidecar_corrupt_healthy
         and huffman_healthy
+        and level_report_healthy
         and fuzz_healthy
         and decode_stage_healthy
         and native_fuzz_healthy
@@ -3622,6 +3835,10 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_huffman_length_artifact")
     elif not huffman_healthy:
         validation_unhealthy_reasons.append("huffman_length_failed")
+    if not level_report["present"]:
+        validation_unhealthy_reasons.append("missing_level_report_artifact")
+    elif not level_report_healthy:
+        validation_unhealthy_reasons.append("level_report_failed")
     if not fuzz_health["present"]:
         validation_unhealthy_reasons.append("missing_fuzz_corpus_artifact")
     elif not fuzz_health["report_healthy"]:
@@ -3780,6 +3997,7 @@ def main() -> int:
         f"- dashboard strict smoke: {strict_health['check_count']} checks, {strict_health['expected_failure_count']} expected failures, {strict_health['matched_count']} matched across {strict_health['mode_count']} modes ({strict_health['missing_mode_count']} missing modes, checks/expected/matched deltas {strict_health['missing_checks']}/{strict_health['missing_expected_failures']}/{strict_health['missing_matched']}), healthy `{strict_healthy}`",
         f"- sidecar corrupt smoke: {sidecar_corrupt_health_summary['metadata_ok_rows']}/{sidecar_corrupt_health_summary['rows']} metadata-ok rows, {sidecar_corrupt_health_summary['full_rejected_rows']}/{sidecar_corrupt_health_summary['rows']} full-rejected rows, healthy `{sidecar_corrupt_healthy}`",
         f"- huffman length oracle: {huffman_health['optimal_rows']}/{huffman_health['row_count']} production optimal rows, {huffman_health['package_merge_optimal_rows']}/{huffman_health['row_count']} package-merge optimal rows, gaps {huffman_health['worst_gap_bits']}/{huffman_health['package_merge_worst_gap_bits']}, malformed rows {huffman_health['malformed_rows']}, healthy `{huffman_healthy}`",
+        f"- level report: {level_report['rows']}/{level_report['expected_rows']} rows, shape {level_report['shape_rows']}, token/ratio/roundtrip {level_report['token_accounting_rows']}/{level_report['ratio_rows']}/{level_report['roundtrip_rows']}, Markdown {level_report['markdown_matched']}/{level_report['markdown_summary_rows']}, healthy `{level_report_healthy}`",
         f"- fuzz corpus coverage: {fuzz_health['matched_rows']}/{fuzz_health['cases']} rows matched, exact-error rows {fuzz_health['exact_error_expectations']}, coverage requirements {fuzz_health['coverage_mode_requirements']}/{fuzz_health['coverage_error_requirements']}, healthy `{fuzz_healthy}`",
         f"- decode-stage smoke: {decode_stage_health_summary['matched_error_rows']}/{decode_stage_health_summary['error_rows']} error rows matched across {decode_stage_health_summary['rows']} timing rows, healthy `{decode_stage_healthy}`",
         f"- Python zlib differential: payloads {python_zlib_health['payloads']} (large-file {python_zlib_health['large_file_payloads']}, file-hex encodes {python_zlib_health['file_hex_encode_cases']}), dynamic {python_zlib_health['dynamic_payloads']}, dictionary encode raw/zlib {python_zlib_health['raw_dict_encode_cases']}/{python_zlib_health['zlib_dict_encode_cases']}, CLI successes/failures {python_zlib_health['cli_successes']}/{python_zlib_health['expected_failures']}, healthy `{python_zlib_healthy}`",
@@ -4181,6 +4399,18 @@ def main() -> int:
     )
     lines.extend(
         [
+            "## Compression level report coverage",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| rows | {level_report['rows']} | expected {level_report['expected_rows']}, present `{level_report['present']}` |",
+            f"| row checks | {level_report['shape_rows']} | positive/token/ratio/roundtrip {level_report['positive_rows']}/{level_report['token_accounting_rows']}/{level_report['ratio_rows']}/{level_report['roundtrip_rows']} |",
+            f"| Markdown summary | {level_report['markdown_matched']}/{level_report['markdown_summary_rows']} | present `{level_report['markdown_present']}`, healthy `{level_report_healthy}` |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
             "## Python zlib differential coverage",
             "",
             "| category | count | detail |",
@@ -4517,6 +4747,20 @@ def main() -> int:
                 "huffman_length_markdown_summary_rows": huffman_health["markdown_summary_rows"],
                 "huffman_length_markdown_matched": huffman_health["markdown_matched"],
                 "huffman_length_markdown_unmatched": huffman_health["markdown_unmatched"],
+                "level_report_present": level_report["present"],
+                "level_report_healthy": level_report_healthy,
+                "level_report_rows": level_report["rows"],
+                "level_report_expected_rows": level_report["expected_rows"],
+                "level_report_positive_rows": level_report["positive_rows"],
+                "level_report_shape_rows": level_report["shape_rows"],
+                "level_report_token_accounting_rows": level_report["token_accounting_rows"],
+                "level_report_ratio_rows": level_report["ratio_rows"],
+                "level_report_roundtrip_rows": level_report["roundtrip_rows"],
+                "level_report_missing_pairs": level_report["missing_pairs"],
+                "level_report_markdown_present": level_report["markdown_present"],
+                "level_report_markdown_summary_rows": level_report["markdown_summary_rows"],
+                "level_report_markdown_matched": level_report["markdown_matched"],
+                "level_report_markdown_unmatched": level_report["markdown_unmatched"],
                 "fuzz_corpus_present": fuzz_health["present"],
                 "fuzz_corpus_ok": fuzz_health["ok"],
                 "fuzz_corpus_coverage_present": fuzz_health["coverage_present"],

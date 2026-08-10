@@ -98,6 +98,16 @@
       "fixture": "huffman_length_failed"
     },
     {
+      "reason": "missing_level_report_artifact",
+      "check": "validation_missing_level_report_artifact",
+      "fixture": "missing_level_report_artifact"
+    },
+    {
+      "reason": "level_report_failed",
+      "check": "validation_level_report_failed",
+      "fixture": "level_report_failed"
+    },
+    {
       "reason": "missing_fuzz_corpus_artifact",
       "check": "validation_missing_fuzz_corpus_artifact",
       "fixture": "missing_fuzz_corpus_artifact"

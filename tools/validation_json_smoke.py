@@ -116,6 +116,8 @@ def main() -> int:
         native_tier_corpus_discovery_path = root / "vort-native-tier-range-corpus-discovery.json"
         huffman_length_csv_path = root / "vort-huffman-length-report.csv"
         huffman_length_markdown_path = root / "vort-huffman-length-report.md"
+        level_report_csv_path = ROOT / "zig-out" / "vort-level-report.csv"
+        level_report_markdown_path = ROOT / "zig-out" / "vort-level-report.md"
         fuzz_report_path = ROOT / "zig-out" / "vort-deflate-wrapper-fuzz-corpus.json"
         fuzz_coverage_path = ROOT / "tools" / "fuzz_corpus_expected_coverage.json"
         fuzz_coverage_smoke_path = ROOT / "zig-out" / "vort-fuzz-corpus-coverage-smoke.json"
@@ -898,6 +900,8 @@ def main() -> int:
         validate_value_against_manifest(header_summary, schemas_def)
         write_huffman_length_csv(huffman_length_csv_path)
         write_huffman_length_markdown(huffman_length_markdown_path)
+        shutil.copyfile(level_report_csv_path, root / "vort-level-report.csv")
+        shutil.copyfile(level_report_markdown_path, root / "vort-level-report.md")
         shutil.copyfile(checksum_bench_path, root / "vort-checksum-bench.csv")
         shutil.copyfile(chunk_cursor_bench_path, root / "vort-chunk-cursor-bench.csv")
         shutil.copyfile(deflate_match_copy_bench_path, root / "vort-deflate-match-copy-bench.csv")
@@ -1061,6 +1065,20 @@ def main() -> int:
         assert dashboard["huffman_length_markdown_summary_rows"] == 7
         assert dashboard["huffman_length_markdown_matched"] == 7
         assert dashboard["huffman_length_markdown_unmatched"] == 0
+        assert dashboard["level_report_present"] is True
+        assert dashboard["level_report_healthy"] is True
+        assert dashboard["level_report_rows"] == 48
+        assert dashboard["level_report_expected_rows"] == 48
+        assert dashboard["level_report_positive_rows"] == 48
+        assert dashboard["level_report_shape_rows"] == 48
+        assert dashboard["level_report_token_accounting_rows"] == 48
+        assert dashboard["level_report_ratio_rows"] == 48
+        assert dashboard["level_report_roundtrip_rows"] == 48
+        assert dashboard["level_report_missing_pairs"] == []
+        assert dashboard["level_report_markdown_present"] is True
+        assert dashboard["level_report_markdown_summary_rows"] == 4
+        assert dashboard["level_report_markdown_matched"] == 4
+        assert dashboard["level_report_markdown_unmatched"] == 0
         assert dashboard["fuzz_corpus_present"] is True
         assert dashboard["fuzz_corpus_ok"] is True
         assert dashboard["fuzz_corpus_coverage_present"] is True
@@ -1400,6 +1418,7 @@ def main() -> int:
             and dashboard["validation_json_healthy"]
             and dashboard["sidecar_corrupt_healthy"]
             and dashboard["huffman_length_healthy"]
+            and dashboard["level_report_healthy"]
             and dashboard["fuzz_corpus_healthy"]
             and dashboard["decode_stage_healthy"]
             and dashboard["native_allocation_healthy"]

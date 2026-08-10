@@ -2602,6 +2602,13 @@ Top-level fields:
   `huffman_length_markdown_summary_rows`,
   `huffman_length_markdown_matched`,
   `huffman_length_markdown_unmatched`
+- `level_report_present`, `level_report_healthy`,
+  `level_report_rows`, `level_report_expected_rows`,
+  `level_report_positive_rows`, `level_report_shape_rows`,
+  `level_report_token_accounting_rows`, `level_report_ratio_rows`,
+  `level_report_roundtrip_rows`, `level_report_missing_pairs`,
+  `level_report_markdown_present`, `level_report_markdown_summary_rows`,
+  `level_report_markdown_matched`, `level_report_markdown_unmatched`
 - `checksum_bench_present`, `checksum_bench_healthy`,
   `checksum_bench_rows`, `checksum_bench_expected_rows`,
   `checksum_bench_positive_rows`, `checksum_bench_workload_rows`,
@@ -3010,6 +3017,20 @@ Example:
   "huffman_length_markdown_summary_rows": 0,
   "huffman_length_markdown_matched": 0,
   "huffman_length_markdown_unmatched": 0,
+  "level_report_present": false,
+  "level_report_healthy": false,
+  "level_report_rows": 0,
+  "level_report_expected_rows": 0,
+  "level_report_positive_rows": 0,
+  "level_report_shape_rows": 0,
+  "level_report_token_accounting_rows": 0,
+  "level_report_ratio_rows": 0,
+  "level_report_roundtrip_rows": 0,
+  "level_report_missing_pairs": [],
+  "level_report_markdown_present": false,
+  "level_report_markdown_summary_rows": 0,
+  "level_report_markdown_matched": 0,
+  "level_report_markdown_unmatched": 0,
   "checksum_bench_present": false,
   "checksum_bench_healthy": false,
   "checksum_bench_rows": 0,
@@ -3532,9 +3553,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 83,
-      "min_expected_failures": 83,
-      "min_matched": 83
+      "min_checks": 85,
+      "min_expected_failures": 85,
+      "min_matched": 85
     },
     {
       "mode": "native-tier-range-health",
@@ -3628,10 +3649,10 @@ aggregate health reasons must be backed by real failing dashboard inputs before
 the smoke artifact can pass. The expected reason/check/fixture matrix lives in
 `tools/dashboard_strict_validation_reasons.json`; the retained
 `strict-validation-health` mode minimums must cover every configured reason,
-currently 83. The `dashboard-markdown` mode verifies that important human-facing
+currently 85. The `dashboard-markdown` mode verifies that important human-facing
 sections, including artifact inventory, aggregate validation health, producer/smoke-gate
 coverage, dashboard strict gate coverage, dashboard configuration coverage, validation JSON schema coverage, header inspect coverage, corrupt-sidecar
-rejection coverage, Huffman optimality, deflate extra-bit benchmark coverage, dictionary decode benchmark coverage, PNG scanline benchmark coverage, chunked zlib benchmark coverage, PNG streaming zlib benchmark coverage, deflate dynamic decode profile coverage, native library benchmark coverage, zstd comparison gate coverage, native fuzz corpus coverage, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, Python zlib
+rejection coverage, Huffman optimality, compression level report coverage, deflate extra-bit benchmark coverage, dictionary decode benchmark coverage, PNG scanline benchmark coverage, chunked zlib benchmark coverage, PNG streaming zlib benchmark coverage, deflate dynamic decode profile coverage, native library benchmark coverage, zstd comparison gate coverage, native fuzz corpus coverage, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, Python zlib
 differential coverage, decode-stage error matching, fuzz corpus matching, native
 stream metadata coverage, native tier corpus discovery, native summary error
 codec/phase-offset tables, native codec probe coverage/capability tables, and
@@ -3667,9 +3688,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 83,
-      "min_expected_failures": 83,
-      "min_matched": 83
+      "min_checks": 85,
+      "min_expected_failures": 85,
+      "min_matched": 85
     },
     {
       "mode": "native-tier-range-health",
@@ -3707,14 +3728,14 @@ Example:
     {
       "mode": "strict-validation-health",
       "checks": 1,
-      "min_checks": 83,
-      "missing_checks": 82,
+      "min_checks": 85,
+      "missing_checks": 84,
       "expected_failures": 1,
-      "min_expected_failures": 83,
-      "missing_expected_failures": 82,
+      "min_expected_failures": 85,
+      "missing_expected_failures": 84,
       "matched": 1,
-      "min_matched": 83,
-      "missing_matched": 82
+      "min_matched": 85,
+      "missing_matched": 84
     },
     {
       "mode": "native-tier-range-health",
