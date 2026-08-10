@@ -944,7 +944,20 @@
             "zstd_compare_rows",
             "zstd_compare_standard_rows",
             "zstd_compare_block_sweep_rows",
-            "zstd_compare_best_block_len"
+            "zstd_compare_best_block_len",
+            "zstd_compare_csv_present_count",
+            "zstd_compare_csv_expected_present_count",
+            "zstd_compare_csv_rows",
+            "zstd_compare_csv_expected_rows",
+            "zstd_compare_csv_matched_rows",
+            "zstd_compare_markdown_present_count",
+            "zstd_compare_markdown_expected_present_count",
+            "zstd_compare_markdown_summary_rows",
+            "zstd_compare_markdown_matched"
+          ],
+          "zero": [
+            "zstd_compare_csv_unmatched_rows",
+            "zstd_compare_markdown_unmatched"
           ]
         },
         "zlib_relaxed_healthy": {
@@ -1569,6 +1582,17 @@
         "zstd_compare_best_block_len": "int",
         "zstd_compare_best_range_decode_mib_s": "float",
         "zstd_compare_best_range_decode_full_input_mib_s": "float",
+        "zstd_compare_csv_present_count": "int",
+        "zstd_compare_csv_expected_present_count": "int",
+        "zstd_compare_csv_rows": "int",
+        "zstd_compare_csv_expected_rows": "int",
+        "zstd_compare_csv_matched_rows": "int",
+        "zstd_compare_csv_unmatched_rows": "int",
+        "zstd_compare_markdown_present_count": "int",
+        "zstd_compare_markdown_expected_present_count": "int",
+        "zstd_compare_markdown_summary_rows": "int",
+        "zstd_compare_markdown_matched": "int",
+        "zstd_compare_markdown_unmatched": "int",
         "native_allocation_present": "bool",
         "native_allocation_smoke_present": "bool",
         "native_allocation_negative_present": "bool",

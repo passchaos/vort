@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import subprocess
 import sys
@@ -68,6 +69,12 @@ NATIVE_LIBRARY_BENCH_ARTIFACT = "vort-native-library-bench.csv"
 ZSTD_COMPARE_ARTIFACT = "vort-zstd-compare-gate.json"
 ZSTD_COMPARE_STANDARD_ARTIFACT = "vort-zstd-compare-standard-gate.json"
 ZSTD_COMPARE_BLOCK_SWEEP_ARTIFACT = "vort-zstd-compare-block-sweep-gate.json"
+ZSTD_COMPARE_CSV_ARTIFACT = "vort-zstd-compare.csv"
+ZSTD_COMPARE_MARKDOWN_ARTIFACT = "vort-zstd-compare.md"
+ZSTD_COMPARE_STANDARD_CSV_ARTIFACT = "vort-zstd-compare-standard.csv"
+ZSTD_COMPARE_STANDARD_MARKDOWN_ARTIFACT = "vort-zstd-compare-standard.md"
+ZSTD_COMPARE_BLOCK_SWEEP_CSV_ARTIFACT = "vort-zstd-compare-block-sweep.csv"
+ZSTD_COMPARE_BLOCK_SWEEP_MARKDOWN_ARTIFACT = "vort-zstd-compare-block-sweep.md"
 NATIVE_SUMMARY_ERROR_ARTIFACT = "vort-native-summary-error-dashboard.json"
 NATIVE_SUMMARY_ERROR_NEGATIVE_ARTIFACT = "vort-native-summary-error-negative-smoke.json"
 NATIVE_CODEC_PROBES_ARTIFACT = "vort-native-codec-probes.json"
@@ -375,13 +382,19 @@ def write_producer_map(
             "smoke_gate": "zig build run-native-library-bench-gate",
         }
     if include_zstd_compare_smoke:
-        for artifact, smoke_gate in (
-            (ZSTD_COMPARE_ARTIFACT, "zig build run-zstd-compare-gate"),
-            (ZSTD_COMPARE_STANDARD_ARTIFACT, "zig build run-zstd-compare-standard-gate"),
-            (ZSTD_COMPARE_BLOCK_SWEEP_ARTIFACT, "zig build run-zstd-compare-block-sweep-gate"),
+        for artifact, expected_format, smoke_gate in (
+            (ZSTD_COMPARE_ARTIFACT, "json", "zig build run-zstd-compare-gate"),
+            (ZSTD_COMPARE_CSV_ARTIFACT, "csv", "zig build run-zstd-compare-gate"),
+            (ZSTD_COMPARE_MARKDOWN_ARTIFACT, "md", "zig build run-zstd-compare-gate"),
+            (ZSTD_COMPARE_STANDARD_ARTIFACT, "json", "zig build run-zstd-compare-standard-gate"),
+            (ZSTD_COMPARE_STANDARD_CSV_ARTIFACT, "csv", "zig build run-zstd-compare-standard-gate"),
+            (ZSTD_COMPARE_STANDARD_MARKDOWN_ARTIFACT, "md", "zig build run-zstd-compare-standard-gate"),
+            (ZSTD_COMPARE_BLOCK_SWEEP_ARTIFACT, "json", "zig build run-zstd-compare-block-sweep-gate"),
+            (ZSTD_COMPARE_BLOCK_SWEEP_CSV_ARTIFACT, "csv", "zig build run-zstd-compare-block-sweep-gate"),
+            (ZSTD_COMPARE_BLOCK_SWEEP_MARKDOWN_ARTIFACT, "md", "zig build run-zstd-compare-block-sweep-gate"),
         ):
             artifact_metadata[artifact] = {
-                "expected_format": "json",
+                "expected_format": expected_format,
                 "smoke_gate": smoke_gate,
             }
     if include_native_summary_error_smoke:
@@ -501,8 +514,14 @@ def write_producer_map(
         exact[NATIVE_LIBRARY_BENCH_ARTIFACT] = "zig build run-native-library-bench-gate"
     if include_zstd_compare_exact:
         exact[ZSTD_COMPARE_ARTIFACT] = "zig build run-zstd-compare-gate"
+        exact[ZSTD_COMPARE_CSV_ARTIFACT] = "zig build run-zstd-compare-gate"
+        exact[ZSTD_COMPARE_MARKDOWN_ARTIFACT] = "zig build run-zstd-compare-gate"
         exact[ZSTD_COMPARE_STANDARD_ARTIFACT] = "zig build run-zstd-compare-standard-gate"
+        exact[ZSTD_COMPARE_STANDARD_CSV_ARTIFACT] = "zig build run-zstd-compare-standard-gate"
+        exact[ZSTD_COMPARE_STANDARD_MARKDOWN_ARTIFACT] = "zig build run-zstd-compare-standard-gate"
         exact[ZSTD_COMPARE_BLOCK_SWEEP_ARTIFACT] = "zig build run-zstd-compare-block-sweep-gate"
+        exact[ZSTD_COMPARE_BLOCK_SWEEP_CSV_ARTIFACT] = "zig build run-zstd-compare-block-sweep-gate"
+        exact[ZSTD_COMPARE_BLOCK_SWEEP_MARKDOWN_ARTIFACT] = "zig build run-zstd-compare-block-sweep-gate"
     if include_native_summary_error_exact:
         exact[NATIVE_SUMMARY_ERROR_ARTIFACT] = "zig build run-native-summary-error-dashboard"
     if include_native_summary_error_negative_exact:
@@ -2516,11 +2535,262 @@ def write_native_allocation_artifacts(root: Path) -> None:
 
 
 def write_zstd_compare_artifacts(root: Path) -> None:
+    compare_fields = [
+        "path",
+        "input_bytes",
+        "zstd_bytes",
+        "vort_raw_fixed_bytes",
+        "vort_native_best_bytes",
+        "vort_native_stream_bytes",
+        "vort_native_embedded_bytes",
+        "vort_over_zstd",
+        "vort_native_best_over_zstd",
+        "vort_native_stream_over_zstd",
+        "vort_native_over_zstd",
+        "vort_stream_over_native_best",
+        "vort_stream_over_native_best_bytes",
+        "vort_stream_over_native_best_pct",
+        "vort_embedded_over_native_stream",
+        "vort_embedded_over_native_stream_bytes",
+        "vort_embedded_over_native_stream_pct",
+        "vort_embedded_over_native_best",
+        "vort_embedded_over_native_best_bytes",
+        "vort_embedded_over_native_best_pct",
+        "zstd_decode_ms",
+        "vort_raw_fixed_decode_ms",
+        "vort_native_best_decode_ms",
+        "vort_native_decode_ms",
+        "zstd_decode_mib_s",
+        "vort_raw_fixed_decode_mib_s",
+        "vort_native_best_decode_mib_s",
+        "vort_native_decode_mib_s",
+        "vort_decode_vs_zstd",
+        "vort_native_best_decode_vs_zstd",
+        "vort_native_decode_vs_zstd",
+        "decode_repeats",
+        "native_block_len",
+        "source_mode",
+        "size_mode",
+        "case_limit",
+        "zstd_version",
+        "vort_commit",
+        "zig_version",
+        "cpu_model",
+        "optimize",
+    ]
+    sweep_fields = [
+        "path",
+        "block_len",
+        "seekability_tier",
+        "input_bytes",
+        "zstd_bytes",
+        "vort_native_best_bytes",
+        "vort_native_stream_bytes",
+        "vort_native_embedded_bytes",
+        "vort_native_best_over_zstd",
+        "vort_native_stream_over_zstd",
+        "vort_native_embedded_over_zstd",
+        "vort_stream_over_native_best",
+        "vort_stream_over_native_best_bytes",
+        "vort_stream_over_native_best_pct",
+        "vort_embedded_over_native_stream",
+        "vort_embedded_over_native_stream_bytes",
+        "vort_embedded_over_native_stream_pct",
+        "range_offset",
+        "range_len",
+        "range_iterations",
+        "vort_range_decode_ms",
+        "vort_range_decode_mib_s",
+        "vort_range_decode_full_input_mib_s",
+        "source_mode",
+        "size_mode",
+        "case_limit",
+        "zstd_version",
+        "vort_commit",
+        "zig_version",
+        "cpu_model",
+        "optimize",
+    ]
+
+    def write_csv(path: Path, fields: list[str], rows: list[dict[str, object]]) -> None:
+        lines = [",".join(fields)]
+        for row in rows:
+            lines.append(",".join(str(row.get(field, "")) for field in fields))
+        path.write_text("\n".join(lines) + "\n")
+
+    def write_compare_csv(path: Path, gate: dict[str, object], data_count: int) -> None:
+        total = {
+            "path": "TOTAL",
+            "input_bytes": 1000,
+            "zstd_bytes": 100,
+            "vort_raw_fixed_bytes": 104,
+            "vort_native_best_bytes": 102,
+            "vort_native_stream_bytes": 116,
+            "vort_native_embedded_bytes": 118,
+            "vort_over_zstd": gate["total_ratio"],
+            "vort_native_best_over_zstd": gate["total_native_best_ratio"],
+            "vort_native_stream_over_zstd": gate["total_native_stream_ratio"],
+            "vort_native_over_zstd": gate["total_native_ratio"],
+            "vort_stream_over_native_best": gate["total_stream_over_native_best"],
+            "vort_stream_over_native_best_bytes": gate["total_stream_over_native_best_bytes"],
+            "vort_stream_over_native_best_pct": gate["total_stream_over_native_best_pct"],
+            "vort_embedded_over_native_stream": gate["total_embedded_over_native_stream"],
+            "vort_embedded_over_native_stream_bytes": gate["total_embedded_over_native_stream_bytes"],
+            "vort_embedded_over_native_stream_pct": gate["total_embedded_over_native_stream_pct"],
+            "vort_embedded_over_native_best": gate["total_embedded_over_native_best"],
+            "vort_embedded_over_native_best_bytes": gate["total_embedded_over_native_best_bytes"],
+            "vort_embedded_over_native_best_pct": gate["total_embedded_over_native_best_pct"],
+            "zstd_decode_ms": 1.0,
+            "vort_raw_fixed_decode_ms": 1.0,
+            "vort_native_best_decode_ms": 1.0,
+            "vort_native_decode_ms": 1.0,
+            "zstd_decode_mib_s": gate["total_zstd_decode_mib_s"],
+            "vort_raw_fixed_decode_mib_s": gate["total_vort_raw_fixed_decode_mib_s"],
+            "vort_native_best_decode_mib_s": gate["total_vort_native_best_decode_mib_s"],
+            "vort_native_decode_mib_s": gate["total_vort_native_decode_mib_s"],
+            "vort_decode_vs_zstd": gate["total_vort_decode_vs_zstd"],
+            "vort_native_best_decode_vs_zstd": gate["total_vort_native_best_decode_vs_zstd"],
+            "vort_native_decode_vs_zstd": gate["total_vort_native_decode_vs_zstd"],
+            "decode_repeats": gate["decode_repeats"],
+            "native_block_len": gate["native_block_len"],
+            "source_mode": gate["source_mode"],
+            "size_mode": gate["size_mode"],
+            "case_limit": gate["case_limit"],
+            "zstd_version": "zstd-smoke",
+            "vort_commit": "strict-smoke",
+            "zig_version": "0.16.0",
+            "cpu_model": "strict-smoke-cpu",
+            "optimize": gate["optimize"],
+        }
+        rows = []
+        for index in range(data_count):
+            row = dict(total)
+            row["path"] = f"case-{index}"
+            rows.append(row)
+        rows.append(total)
+        write_csv(path, compare_fields, rows)
+
+    def write_compare_markdown(path: Path, gate: dict[str, object], total: dict[str, object]) -> None:
+        lines = [
+            "# Vort vs zstd size and decode smoke",
+            "",
+            f"- source mode: `{gate['source_mode']}`",
+            f"- size mode: `{gate['size_mode']}`",
+            f"- case limit: `{gate['case_limit']}`",
+            f"- Decode repeats: `{gate['decode_repeats']}`",
+            f"- Native block length: `{gate['native_block_len']}`",
+            "",
+            "| path | input bytes | zstd bytes | Vort native stream bytes | Vort native embedded bytes |",
+            "| --- | ---: | ---: | ---: | ---: |",
+            f"| **TOTAL** | {total['input_bytes']} | {total['zstd_bytes']} | {total['vort_native_stream_bytes']} | {total['vort_native_embedded_bytes']} |",
+            "",
+        ]
+        path.write_text("\n".join(lines))
+
+    def write_sweep_csv(path: Path, gate: dict[str, object]) -> None:
+        rows = []
+        for block_len in gate["block_lens"]:
+            tier = {8192: "seek_fast", 32768: "balanced", 65536: "ratio"}.get(block_len, "custom")
+            for index in range(gate["path_count"]):
+                rows.append({
+                    "path": f"case-{index}",
+                    "block_len": block_len,
+                    "seekability_tier": tier,
+                    "input_bytes": 1000,
+                    "zstd_bytes": 100,
+                    "vort_native_best_bytes": 100,
+                    "vort_native_stream_bytes": 110 + block_len // 4096,
+                    "vort_native_embedded_bytes": 112 + block_len // 4096,
+                    "vort_native_best_over_zstd": 1.0,
+                    "vort_native_stream_over_zstd": 1.1,
+                    "vort_native_embedded_over_zstd": 1.12,
+                    "vort_stream_over_native_best": 1.1,
+                    "vort_stream_over_native_best_bytes": 10,
+                    "vort_stream_over_native_best_pct": 10.0,
+                    "vort_embedded_over_native_stream": 1.02,
+                    "vort_embedded_over_native_stream_bytes": 2,
+                    "vort_embedded_over_native_stream_pct": 2.0,
+                    "range_offset": 0,
+                    "range_len": 100,
+                    "range_iterations": 5,
+                    "vort_range_decode_ms": 1.0,
+                    "vort_range_decode_mib_s": 10.0,
+                    "vort_range_decode_full_input_mib_s": 100.0,
+                    "source_mode": gate["source_mode"],
+                    "size_mode": gate["size_mode"],
+                    "case_limit": gate["case_limit"],
+                    "zstd_version": "zstd-smoke",
+                    "vort_commit": "strict-smoke",
+                    "zig_version": "0.16.0",
+                    "cpu_model": "strict-smoke-cpu",
+                    "optimize": gate["optimize"],
+                })
+            total_stream = gate["best_native_stream_bytes"] if block_len == gate["best_block_len"] else gate["best_native_stream_bytes"] + block_len
+            rows.append({
+                "path": "TOTAL",
+                "block_len": block_len,
+                "seekability_tier": tier,
+                "input_bytes": 3000,
+                "zstd_bytes": 300,
+                "vort_native_best_bytes": 300,
+                "vort_native_stream_bytes": total_stream,
+                "vort_native_embedded_bytes": total_stream + gate["best_embedded_over_native_stream_bytes"],
+                "vort_native_best_over_zstd": 1.0,
+                "vort_native_stream_over_zstd": gate["best_native_stream_ratio"] if block_len == gate["best_block_len"] else 1.2,
+                "vort_native_embedded_over_zstd": 1.21,
+                "vort_stream_over_native_best": gate["best_stream_over_native_best"] if block_len == gate["best_block_len"] else 1.2,
+                "vort_stream_over_native_best_bytes": gate["best_stream_over_native_best_bytes"] if block_len == gate["best_block_len"] else 100,
+                "vort_stream_over_native_best_pct": 2.0,
+                "vort_embedded_over_native_stream": gate["best_embedded_over_native_stream"] if block_len == gate["best_block_len"] else 1.01,
+                "vort_embedded_over_native_stream_bytes": gate["best_embedded_over_native_stream_bytes"],
+                "vort_embedded_over_native_stream_pct": 1.0,
+                "range_offset": 0,
+                "range_len": 300,
+                "range_iterations": 5,
+                "vort_range_decode_ms": 1.0,
+                "vort_range_decode_mib_s": gate["best_range_decode_mib_s"] if block_len == gate["best_block_len"] else 10.0,
+                "vort_range_decode_full_input_mib_s": gate["best_range_decode_full_input_mib_s"] if block_len == gate["best_block_len"] else 100.0,
+                "source_mode": gate["source_mode"],
+                "size_mode": gate["size_mode"],
+                "case_limit": gate["case_limit"],
+                "zstd_version": "zstd-smoke",
+                "vort_commit": "strict-smoke",
+                "zig_version": "0.16.0",
+                "cpu_model": "strict-smoke-cpu",
+                "optimize": gate["optimize"],
+            })
+        write_csv(path, sweep_fields, rows)
+
+    def write_sweep_markdown(path: Path, gate: dict[str, object]) -> None:
+        lines = [
+            "# Vort native block length sweep vs zstd",
+            "",
+            f"- source mode: `{gate['source_mode']}`",
+            f"- size mode: `{gate['size_mode']}`",
+            f"- case limit: `{gate['case_limit']}`",
+            f"- Swept native block lengths: `{','.join(str(item) for item in gate['block_lens'])}`",
+            "",
+            f"Best total native stream bytes in this smoke: block length `{gate['best_block_len']}` with `{gate['best_native_stream_bytes']}` bytes.",
+            "",
+            "## TOTAL by block length",
+            "",
+            "| tier | block length | stream overhead bytes | embedded-index bytes | range decode MiB/s |",
+            "| --- | ---: | ---: | ---: | ---: |",
+            "| `ratio` | 65536 | 2621 | 288 | 3.47 |",
+            "",
+            "## Per-input rows",
+            "",
+            "| path | tier | block length | range decode MiB/s |",
+            "| --- | --- | ---: | ---: |",
+        ]
+        path.write_text("\n".join(lines) + "\n")
+
     compare = {
         "schema": "vort.zstd_compare_gate",
         "schema_version": 1,
         "ok": True,
         "data_rows": 2,
+        "rows": 3,
         "case_limit": "none",
         "csv": "zig-out/vort-zstd-compare.csv",
         "markdown": "zig-out/vort-zstd-compare.md",
@@ -2530,17 +2800,18 @@ def write_zstd_compare_artifacts(root: Path) -> None:
         "source_mode": "default-samples",
         "decode_repeats": 3,
         "total_ratio": 1.04,
+        "total_native_best_ratio": 1.02,
         "total_native_ratio": 1.18,
         "total_native_stream_ratio": 1.16,
-        "total_embedded_over_native_best": 1.15,
-        "total_embedded_over_native_best_bytes": 11279,
-        "total_embedded_over_native_best_pct": 15.0,
-        "total_embedded_over_native_stream": 1.02,
-        "total_embedded_over_native_stream_bytes": 1312,
-        "total_embedded_over_native_stream_pct": 1.5,
-        "total_stream_over_native_best": 1.13,
-        "total_stream_over_native_best_bytes": 9967,
-        "total_stream_over_native_best_pct": 13.3,
+        "total_embedded_over_native_best": 118.0 / 102.0,
+        "total_embedded_over_native_best_bytes": 16,
+        "total_embedded_over_native_best_pct": (118.0 / 102.0 - 1.0) * 100.0,
+        "total_embedded_over_native_stream": 118.0 / 116.0,
+        "total_embedded_over_native_stream_bytes": 2,
+        "total_embedded_over_native_stream_pct": (118.0 / 116.0 - 1.0) * 100.0,
+        "total_stream_over_native_best": 116.0 / 102.0,
+        "total_stream_over_native_best_bytes": 14,
+        "total_stream_over_native_best_pct": (116.0 / 102.0 - 1.0) * 100.0,
         "total_zstd_decode_mib_s": 90.0,
         "total_vort_decode_vs_zstd": 0.71,
         "total_vort_raw_fixed_decode_mib_s": 64.0,
@@ -2548,7 +2819,6 @@ def write_zstd_compare_artifacts(root: Path) -> None:
         "total_vort_native_decode_vs_zstd": 0.81,
         "total_vort_native_best_decode_mib_s": 96.0,
         "total_vort_native_best_decode_vs_zstd": 1.07,
-        "rows": [],
     }
     standard = dict(compare)
     standard.update({
@@ -2558,6 +2828,7 @@ def write_zstd_compare_artifacts(root: Path) -> None:
         "source_mode": "standard-suite",
         "size_mode": "bounded-128KiB",
         "data_rows": 3,
+        "rows": 4,
         "total_native_ratio": 1.13,
         "total_native_stream_ratio": 1.12,
         "total_vort_decode_vs_zstd": 0.74,
@@ -2568,6 +2839,7 @@ def write_zstd_compare_artifacts(root: Path) -> None:
         "ok": True,
         "data_rows": 15,
         "total_rows": 5,
+        "rows": 20,
         "case_limit": "3",
         "csv": "zig-out/vort-zstd-compare-block-sweep.csv",
         "markdown": "zig-out/vort-zstd-compare-block-sweep.md",
@@ -2587,11 +2859,18 @@ def write_zstd_compare_artifacts(root: Path) -> None:
         "best_embedded_over_native_stream_bytes": 288,
         "best_range_decode_mib_s": 3.47,
         "best_range_decode_full_input_mib_s": 111.0,
-        "rows": [],
     }
     (root / ZSTD_COMPARE_ARTIFACT).write_text(json.dumps(compare, indent=2, sort_keys=True) + "\n")
     (root / ZSTD_COMPARE_STANDARD_ARTIFACT).write_text(json.dumps(standard, indent=2, sort_keys=True) + "\n")
     (root / ZSTD_COMPARE_BLOCK_SWEEP_ARTIFACT).write_text(json.dumps(sweep, indent=2, sort_keys=True) + "\n")
+    write_compare_csv(root / ZSTD_COMPARE_CSV_ARTIFACT, compare, int(compare["data_rows"]))
+    write_compare_csv(root / ZSTD_COMPARE_STANDARD_CSV_ARTIFACT, standard, int(standard["data_rows"]))
+    compare_total = list(csv.DictReader((root / ZSTD_COMPARE_CSV_ARTIFACT).open(newline="")))[-1]
+    standard_total = list(csv.DictReader((root / ZSTD_COMPARE_STANDARD_CSV_ARTIFACT).open(newline="")))[-1]
+    write_compare_markdown(root / ZSTD_COMPARE_MARKDOWN_ARTIFACT, compare, compare_total)
+    write_compare_markdown(root / ZSTD_COMPARE_STANDARD_MARKDOWN_ARTIFACT, standard, standard_total)
+    write_sweep_csv(root / ZSTD_COMPARE_BLOCK_SWEEP_CSV_ARTIFACT, sweep)
+    write_sweep_markdown(root / ZSTD_COMPARE_BLOCK_SWEEP_MARKDOWN_ARTIFACT, sweep)
 
 
 def write_native_summary_error_dashboard(path: Path, *, healthy: bool = True) -> None:
@@ -3400,8 +3679,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 67/67 | 0 | allowed missing 0 |",
-                    "| smoke gates | 67/67 | 0 | required missing 0 |",
+                    "| producer steps | 73/73 | 0 | allowed missing 0 |",
+                    "| smoke gates | 73/73 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -3789,6 +4068,8 @@ def main() -> int:
                     "| compare rows | 2 | native/native-stream ratios 1.180/1.160, decode-vs-zstd 0.710 |",
                     "| standard rows | 3 | native/native-stream ratios 1.130/1.120, decode-vs-zstd 0.740 |",
                     "| block sweep rows | 15 | best block 65536 bytes, range/full MiB/s 3.47/111.00 |",
+                    "| CSV drift checks | 27/27 | artifacts 3/3, unmatched 0 |",
+                    "| Markdown drift checks | 26/26 | artifacts 3/3, unmatched 0 |",
                     "| gate health | 1 | compare/standard/sweep present True/True/True |",
                 ],
             )

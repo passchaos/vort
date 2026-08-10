@@ -942,8 +942,14 @@ def main() -> int:
         shutil.copyfile(decode_stage_csv_path, root / "vort-deflate-decode-stage-report.csv")
         for artifact_name in (
             "vort-zstd-compare-gate.json",
+            "vort-zstd-compare.csv",
+            "vort-zstd-compare.md",
             "vort-zstd-compare-standard-gate.json",
+            "vort-zstd-compare-standard.csv",
+            "vort-zstd-compare-standard.md",
             "vort-zstd-compare-block-sweep-gate.json",
+            "vort-zstd-compare-block-sweep.csv",
+            "vort-zstd-compare-block-sweep.md",
             "vort-native-fuzz-corpus.json",
             "vort-native-fuzz-corpus-coverage-smoke.json",
             "vort-br-static-dictionary-candidates.json",
@@ -1150,6 +1156,16 @@ def main() -> int:
         assert dashboard["zstd_compare_best_block_len"] > 0
         assert dashboard["zstd_compare_best_range_decode_mib_s"] > 0
         assert dashboard["zstd_compare_best_range_decode_full_input_mib_s"] > 0
+        assert dashboard["zstd_compare_csv_present_count"] == 3
+        assert dashboard["zstd_compare_csv_expected_present_count"] == 3
+        assert dashboard["zstd_compare_csv_rows"] == dashboard["zstd_compare_csv_expected_rows"]
+        assert dashboard["zstd_compare_csv_matched_rows"] == dashboard["zstd_compare_csv_rows"]
+        assert dashboard["zstd_compare_csv_unmatched_rows"] == 0
+        assert dashboard["zstd_compare_markdown_present_count"] == 3
+        assert dashboard["zstd_compare_markdown_expected_present_count"] == 3
+        assert dashboard["zstd_compare_markdown_summary_rows"] > 0
+        assert dashboard["zstd_compare_markdown_matched"] == dashboard["zstd_compare_markdown_summary_rows"]
+        assert dashboard["zstd_compare_markdown_unmatched"] == 0
         assert dashboard["native_fuzz_corpus_present"] is True
         assert dashboard["native_fuzz_corpus_coverage_present"] is True
         assert dashboard["native_fuzz_corpus_healthy"] is True

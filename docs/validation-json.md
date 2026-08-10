@@ -2799,7 +2799,14 @@ Top-level fields:
   `zstd_compare_standard_native_stream_ratio`, `zstd_compare_decode_vs_zstd`,
   `zstd_compare_standard_decode_vs_zstd`, `zstd_compare_best_block_len`,
   `zstd_compare_best_range_decode_mib_s`,
-  `zstd_compare_best_range_decode_full_input_mib_s`
+  `zstd_compare_best_range_decode_full_input_mib_s`,
+  `zstd_compare_csv_present_count`,
+  `zstd_compare_csv_expected_present_count`, `zstd_compare_csv_rows`,
+  `zstd_compare_csv_expected_rows`, `zstd_compare_csv_matched_rows`,
+  `zstd_compare_csv_unmatched_rows`, `zstd_compare_markdown_present_count`,
+  `zstd_compare_markdown_expected_present_count`,
+  `zstd_compare_markdown_summary_rows`, `zstd_compare_markdown_matched`,
+  `zstd_compare_markdown_unmatched`
 - `native_allocation_present`, `native_allocation_smoke_present`,
   `native_allocation_negative_present`, `native_allocation_healthy`,
   `native_allocation_report_case_count`,
@@ -3331,6 +3338,17 @@ Example:
   "zstd_compare_best_block_len": 0,
   "zstd_compare_best_range_decode_mib_s": 0.0,
   "zstd_compare_best_range_decode_full_input_mib_s": 0.0,
+  "zstd_compare_csv_present_count": 0,
+  "zstd_compare_csv_expected_present_count": 0,
+  "zstd_compare_csv_rows": 0,
+  "zstd_compare_csv_expected_rows": 0,
+  "zstd_compare_csv_matched_rows": 0,
+  "zstd_compare_csv_unmatched_rows": 0,
+  "zstd_compare_markdown_present_count": 0,
+  "zstd_compare_markdown_expected_present_count": 0,
+  "zstd_compare_markdown_summary_rows": 0,
+  "zstd_compare_markdown_matched": 0,
+  "zstd_compare_markdown_unmatched": 0,
   "native_allocation_present": false,
   "native_allocation_smoke_present": false,
   "native_allocation_negative_present": false,
@@ -4526,7 +4544,7 @@ zig build run-zstd-compare-standard-releasefast-gate
 ```
 
 This schema records the validation summary for retained `vort-zstd-compare*`
-CSV/Markdown artifacts. The gate checks
+CSV/Markdown artifacts. Dashboard aggregate health also cross-checks the retained CSV/Markdown companions against these gate summaries. The gate checks
 the CSV schema, requires one `TOTAL` aggregate row, verifies the aggregate byte
 and ratio math for raw fixed, single-frame native best, blocked native stream,
 and embedded-index native stream Vort rows, verifies the stream-fragmentation

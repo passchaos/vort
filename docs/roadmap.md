@@ -2543,3 +2543,9 @@ architecture blindly.
 - Promoted the existing compression level CSV/Markdown report into dashboard aggregate validation health. The dashboard now parses `vort-level-report.csv`, validates the 48-row built-in case/level/strategy matrix, token accounting, recomputed ratio fields, round-trip CRC evidence, and Markdown best-row summary drift before `validation_healthy` can pass. Strict validation now exposes missing/failed level-report reasons, and validation JSON dashboard generation depends on `run-level-report-dashboard` so clean dashboard runs retain both report artifacts.
 - Tightened Brotli static-dictionary dashboard health by consuming the retained `vort-br-static-dictionary-report.{csv,json,md}` and `vort-br-static-dictionary-report-negative-smoke.json` artifacts in addition to the candidate/node/source-audit smokes. Aggregate health now cross-checks JSON entry counts, transform/length/category/matrix totals, CSV row identity, Markdown summary drift, and report negative-smoke matches before static-dictionary coverage can pass.
 - Promoted the existing dynamic-plan CSV reports into dashboard aggregate validation health. The dashboard now parses both `vort-dynamic-plan-report.csv` and `vort-dynamic-plan-builtins-report.csv`, validates the README/roadmap plus built-in path coverage, token accounting, histogram widths, recomputed ratio fields, bit-boundary slack, and zlib-wrapper byte accounting, with strict missing/failed reasons plus schema/docs smoke coverage.
+- Tightened zstd compare dashboard health by cross-checking the retained
+  `vort-zstd-compare*.csv` and `vort-zstd-compare*.md` companions against the
+  three gate JSON summaries. Aggregate health now verifies compare/standard
+  TOTAL rows, block-sweep row counts and best-block metrics, Markdown metadata
+  and summary snippets, and the validation/dashboard build steps now depend on
+  the compare gates so clean dashboard runs retain all companion artifacts.

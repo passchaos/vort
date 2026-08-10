@@ -3193,6 +3193,8 @@ def zstd_compare_health(artifacts: list[Path]) -> dict:
     compare = None
     standard = None
     sweep = None
+    csv_artifacts: dict[str, Path] = {}
+    markdown_artifacts: dict[str, Path] = {}
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
         if data.get("schema") == "vort.zstd_compare_gate":
@@ -3202,6 +3204,18 @@ def zstd_compare_health(artifacts: list[Path]) -> dict:
                 standard = data
         elif data.get("schema") == "vort.zstd_compare_block_sweep_gate" and artifact.name == "vort-zstd-compare-block-sweep-gate.json":
             sweep = data
+        elif artifact.name == "vort-zstd-compare.csv":
+            csv_artifacts["compare"] = artifact
+        elif artifact.name == "vort-zstd-compare-standard.csv":
+            csv_artifacts["standard"] = artifact
+        elif artifact.name == "vort-zstd-compare-block-sweep.csv":
+            csv_artifacts["sweep"] = artifact
+        elif artifact.name == "vort-zstd-compare.md":
+            markdown_artifacts["compare"] = artifact
+        elif artifact.name == "vort-zstd-compare-standard.md":
+            markdown_artifacts["standard"] = artifact
+        elif artifact.name == "vort-zstd-compare-block-sweep.md":
+            markdown_artifacts["sweep"] = artifact
 
     def int_field(data: dict | None, field: str) -> int:
         if not isinstance(data, dict):
@@ -3215,9 +3229,188 @@ def zstd_compare_health(artifacts: list[Path]) -> dict:
         value = data.get(field)
         return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0.0
 
+    def close(actual: float, expected: float, tolerance: float = 0.0001) -> bool:
+        return abs(actual - expected) <= tolerance
+
+    def csv_rows_for(kind: str) -> list[dict[str, str]]:
+        artifact = csv_artifacts.get(kind)
+        if artifact is None:
+            return []
+        try:
+            with artifact.open(newline="") as f:
+                return list(csv.DictReader(f))
+        except Exception:
+            return []
+
+    def compare_csv_mismatches(rows: list[dict[str, str]], gate: dict | None) -> int:
+        if not isinstance(gate, dict):
+            return 1
+        mismatches = 0
+        data_rows = [row for row in rows if row.get("path") != "TOTAL"]
+        total_rows = [row for row in rows if row.get("path") == "TOTAL"]
+        if len(rows) != int_field(gate, "rows"):
+            mismatches += 1
+        if len(data_rows) != int_field(gate, "data_rows"):
+            mismatches += 1
+        if len(total_rows) != 1:
+            return mismatches + 1
+        total = total_rows[0]
+        float_pairs = (
+            ("total_native_ratio", "vort_native_over_zstd"),
+            ("total_native_stream_ratio", "vort_native_stream_over_zstd"),
+            ("total_native_best_ratio", "vort_native_best_over_zstd"),
+            ("total_vort_decode_vs_zstd", "vort_decode_vs_zstd"),
+            ("total_stream_over_native_best", "vort_stream_over_native_best"),
+            ("total_embedded_over_native_stream", "vort_embedded_over_native_stream"),
+            ("total_embedded_over_native_best", "vort_embedded_over_native_best"),
+        )
+        for gate_field, csv_field in float_pairs:
+            if gate_field in gate:
+                try:
+                    if not close(float(total.get(csv_field) or "0"), float_field(gate, gate_field)):
+                        mismatches += 1
+                except ValueError:
+                    mismatches += 1
+        int_pairs = (
+            ("native_block_len", "native_block_len"),
+            ("decode_repeats", "decode_repeats"),
+            ("total_stream_over_native_best_bytes", "vort_stream_over_native_best_bytes"),
+            ("total_embedded_over_native_stream_bytes", "vort_embedded_over_native_stream_bytes"),
+            ("total_embedded_over_native_best_bytes", "vort_embedded_over_native_best_bytes"),
+        )
+        for gate_field, csv_field in int_pairs:
+            if gate_field in gate:
+                try:
+                    if int(total.get(csv_field) or "0") != int_field(gate, gate_field):
+                        mismatches += 1
+                except ValueError:
+                    mismatches += 1
+        for field in ("source_mode", "size_mode", "case_limit", "optimize"):
+            if str(total.get(field) or "") != str(gate.get(field) or ""):
+                mismatches += 1
+        return mismatches
+
+    def sweep_csv_mismatches(rows: list[dict[str, str]], gate: dict | None) -> int:
+        if not isinstance(gate, dict):
+            return 1
+        mismatches = 0
+        data_rows = [row for row in rows if row.get("path") != "TOTAL"]
+        total_rows = [row for row in rows if row.get("path") == "TOTAL"]
+        if len(rows) != int_field(gate, "rows"):
+            mismatches += 1
+        if len(data_rows) != int_field(gate, "data_rows"):
+            mismatches += 1
+        if len(total_rows) != int_field(gate, "total_rows"):
+            mismatches += 1
+        paths = {row.get("path", "") for row in data_rows}
+        block_lens: set[int] = set()
+        for row in rows:
+            try:
+                block_lens.add(int(row.get("block_len") or "0"))
+            except ValueError:
+                mismatches += 1
+        if len(paths) != int_field(gate, "path_count"):
+            mismatches += 1
+        if len(block_lens) != int_field(gate, "block_len_count"):
+            mismatches += 1
+        expected_lens = gate.get("block_lens")
+        if isinstance(expected_lens, list) and sorted(block_lens) != sorted(int(value) for value in expected_lens):
+            mismatches += 1
+        best_total = None
+        for row in total_rows:
+            try:
+                if best_total is None or int(row.get("vort_native_stream_bytes") or "0") < int(best_total.get("vort_native_stream_bytes") or "0"):
+                    best_total = row
+            except ValueError:
+                mismatches += 1
+        if best_total is None:
+            return mismatches + 1
+        try:
+            if int(best_total.get("block_len") or "0") != int_field(gate, "best_block_len"):
+                mismatches += 1
+            if int(best_total.get("vort_native_stream_bytes") or "0") != int_field(gate, "best_native_stream_bytes"):
+                mismatches += 1
+            if int(best_total.get("vort_stream_over_native_best_bytes") or "0") != int_field(gate, "best_stream_over_native_best_bytes"):
+                mismatches += 1
+            if int(best_total.get("vort_embedded_over_native_stream_bytes") or "0") != int_field(gate, "best_embedded_over_native_stream_bytes"):
+                mismatches += 1
+            if not close(float(best_total.get("vort_native_stream_over_zstd") or "0"), float_field(gate, "best_native_stream_ratio")):
+                mismatches += 1
+            if not close(float(best_total.get("vort_range_decode_mib_s") or "0"), float_field(gate, "best_range_decode_mib_s")):
+                mismatches += 1
+            if not close(float(best_total.get("vort_range_decode_full_input_mib_s") or "0"), float_field(gate, "best_range_decode_full_input_mib_s")):
+                mismatches += 1
+        except ValueError:
+            mismatches += 1
+        for field in ("source_mode", "size_mode", "case_limit", "optimize"):
+            if str(best_total.get(field) or "") != str(gate.get(field) or ""):
+                mismatches += 1
+        return mismatches
+
+    def markdown_checks(kind: str, gate: dict | None, rows: list[dict[str, str]]) -> tuple[int, int]:
+        if not isinstance(gate, dict):
+            return (1, 0)
+        artifact = markdown_artifacts.get(kind)
+        if artifact is None:
+            return (1, 0)
+        text = artifact.read_text(errors="replace")
+        expected = [
+            f"- source mode: `{gate.get('source_mode')}`",
+            f"- size mode: `{gate.get('size_mode')}`",
+            f"- case limit: `{gate.get('case_limit')}`",
+        ]
+        if kind in {"compare", "standard"}:
+            expected.extend([
+                f"- Native block length: `{int_field(gate, 'native_block_len')}`",
+                f"- Decode repeats: `{int_field(gate, 'decode_repeats')}`",
+                "Vort native stream bytes",
+                "Vort native embedded bytes",
+            ])
+            total_rows = [row for row in rows if row.get("path") == "TOTAL"]
+            if total_rows:
+                total = total_rows[0]
+                expected.append(f"| **TOTAL** | {total.get('input_bytes')} | {total.get('zstd_bytes')} |")
+        else:
+            block_lens = gate.get("block_lens")
+            if isinstance(block_lens, list):
+                expected.append(f"- Swept native block lengths: `{','.join(str(item) for item in block_lens)}`")
+            expected.extend([
+                f"block length `{int_field(gate, 'best_block_len')}`",
+                "## TOTAL by block length",
+                "## Per-input rows",
+                "embedded-index bytes",
+                "stream overhead bytes",
+                "range decode MiB/s",
+            ])
+        matched = sum(1 for needle in expected if needle in text)
+        return (len(expected), matched)
+
     compare_present = isinstance(compare, dict)
     standard_present = isinstance(standard, dict)
     sweep_present = isinstance(sweep, dict)
+    compare_rows = csv_rows_for("compare")
+    standard_rows = csv_rows_for("standard")
+    sweep_rows = csv_rows_for("sweep")
+    csv_present_count = sum(1 for kind in ("compare", "standard", "sweep") if kind in csv_artifacts)
+    csv_expected_present_count = 3
+    csv_row_count = len(compare_rows) + len(standard_rows) + len(sweep_rows)
+    csv_expected_rows = int_field(compare, "rows") + int_field(standard, "rows") + int_field(sweep, "rows")
+    csv_unmatched_rows = (
+        csv_expected_present_count
+        - csv_present_count
+        + compare_csv_mismatches(compare_rows, compare)
+        + compare_csv_mismatches(standard_rows, standard)
+        + sweep_csv_mismatches(sweep_rows, sweep)
+    )
+    csv_matched_rows = csv_row_count if csv_unmatched_rows == 0 else 0
+    markdown_present_count = sum(1 for kind in ("compare", "standard", "sweep") if kind in markdown_artifacts)
+    markdown_expected_present_count = 3
+    compare_md_rows, compare_md_matched = markdown_checks("compare", compare, compare_rows)
+    standard_md_rows, standard_md_matched = markdown_checks("standard", standard, standard_rows)
+    sweep_md_rows, sweep_md_matched = markdown_checks("sweep", sweep, sweep_rows)
+    markdown_summary_rows = compare_md_rows + standard_md_rows + sweep_md_rows
+    markdown_matched = compare_md_matched + standard_md_matched + sweep_md_matched
+    markdown_unmatched = markdown_summary_rows - markdown_matched + (markdown_expected_present_count - markdown_present_count)
     healthy = (
         compare_present
         and standard_present
@@ -3228,6 +3421,12 @@ def zstd_compare_health(artifacts: list[Path]) -> dict:
         and int_field(compare, "data_rows") > 0
         and int_field(standard, "data_rows") > 0
         and int_field(sweep, "data_rows") > 0
+        and csv_present_count == csv_expected_present_count
+        and csv_row_count == csv_expected_rows
+        and csv_unmatched_rows == 0
+        and markdown_present_count == markdown_expected_present_count
+        and markdown_summary_rows > 0
+        and markdown_unmatched == 0
     )
     return {
         "present": compare_present,
@@ -3246,6 +3445,17 @@ def zstd_compare_health(artifacts: list[Path]) -> dict:
         "best_block_len": int_field(sweep, "best_block_len"),
         "best_range_decode_mib_s": float_field(sweep, "best_range_decode_mib_s"),
         "best_range_decode_full_input_mib_s": float_field(sweep, "best_range_decode_full_input_mib_s"),
+        "csv_present_count": csv_present_count,
+        "csv_expected_present_count": csv_expected_present_count,
+        "csv_rows": csv_row_count,
+        "csv_expected_rows": csv_expected_rows,
+        "csv_matched_rows": csv_matched_rows,
+        "csv_unmatched_rows": csv_unmatched_rows,
+        "markdown_present_count": markdown_present_count,
+        "markdown_expected_present_count": markdown_expected_present_count,
+        "markdown_summary_rows": markdown_summary_rows,
+        "markdown_matched": markdown_matched,
+        "markdown_unmatched": markdown_unmatched,
     }
 
 
@@ -4769,6 +4979,8 @@ def main() -> int:
             f"| compare rows | {zstd_compare['compare_rows']} | native/native-stream ratios {zstd_compare['native_ratio']:.3f}/{zstd_compare['native_stream_ratio']:.3f}, decode-vs-zstd {zstd_compare['decode_vs_zstd']:.3f} |",
             f"| standard rows | {zstd_compare['standard_rows']} | native/native-stream ratios {zstd_compare['standard_native_ratio']:.3f}/{zstd_compare['standard_native_stream_ratio']:.3f}, decode-vs-zstd {zstd_compare['standard_decode_vs_zstd']:.3f} |",
             f"| block sweep rows | {zstd_compare['block_sweep_rows']} | best block {zstd_compare['best_block_len']} bytes, range/full MiB/s {zstd_compare['best_range_decode_mib_s']:.2f}/{zstd_compare['best_range_decode_full_input_mib_s']:.2f} |",
+            f"| CSV drift checks | {zstd_compare['csv_matched_rows']}/{zstd_compare['csv_rows']} | artifacts {zstd_compare['csv_present_count']}/{zstd_compare['csv_expected_present_count']}, unmatched {zstd_compare['csv_unmatched_rows']} |",
+            f"| Markdown drift checks | {zstd_compare['markdown_matched']}/{zstd_compare['markdown_summary_rows']} | artifacts {zstd_compare['markdown_present_count']}/{zstd_compare['markdown_expected_present_count']}, unmatched {zstd_compare['markdown_unmatched']} |",
             f"| gate health | {1 if zstd_compare['healthy'] else 0} | compare/standard/sweep present {zstd_compare['present']}/{zstd_compare['standard_present']}/{zstd_compare['block_sweep_present']} |",
             "",
         ]
@@ -5453,6 +5665,17 @@ def main() -> int:
                 "zstd_compare_best_block_len": zstd_compare["best_block_len"],
                 "zstd_compare_best_range_decode_mib_s": zstd_compare["best_range_decode_mib_s"],
                 "zstd_compare_best_range_decode_full_input_mib_s": zstd_compare["best_range_decode_full_input_mib_s"],
+                "zstd_compare_csv_present_count": zstd_compare["csv_present_count"],
+                "zstd_compare_csv_expected_present_count": zstd_compare["csv_expected_present_count"],
+                "zstd_compare_csv_rows": zstd_compare["csv_rows"],
+                "zstd_compare_csv_expected_rows": zstd_compare["csv_expected_rows"],
+                "zstd_compare_csv_matched_rows": zstd_compare["csv_matched_rows"],
+                "zstd_compare_csv_unmatched_rows": zstd_compare["csv_unmatched_rows"],
+                "zstd_compare_markdown_present_count": zstd_compare["markdown_present_count"],
+                "zstd_compare_markdown_expected_present_count": zstd_compare["markdown_expected_present_count"],
+                "zstd_compare_markdown_summary_rows": zstd_compare["markdown_summary_rows"],
+                "zstd_compare_markdown_matched": zstd_compare["markdown_matched"],
+                "zstd_compare_markdown_unmatched": zstd_compare["markdown_unmatched"],
                 "native_allocation_present": native_allocation["present"],
                 "native_allocation_smoke_present": native_allocation["smoke_present"],
                 "native_allocation_negative_present": native_allocation["negative_present"],
