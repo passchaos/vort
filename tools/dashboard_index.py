@@ -177,31 +177,134 @@ def format_markdown_offset_range(value: object) -> str:
 
 
 def sidecar_corrupt_health(artifacts: list[Path]) -> dict:
+    markdown = next((artifact for artifact in artifacts if artifact.name == "vort-sidecar-corrupt-smoke.md"), None)
+
+    def int_field(data: dict, field: str) -> int:
+        value = data.get(field)
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    def item_bool(row: dict, field: str) -> bool | None:
+        value = row.get(field)
+        return value if isinstance(value, bool) else None
+
+    def item_int(row: dict, field: str) -> int | None:
+        value = row.get(field)
+        return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+    def item_str(row: dict, field: str) -> str:
+        value = row.get(field)
+        return value if isinstance(value, str) else ""
+
+    def parse_markdown_bool(value: str) -> bool | None:
+        if value == "true":
+            return True
+        if value == "false":
+            return False
+        return None
+
+    def parse_markdown_rows(path: Path | None) -> list[dict[str, bool | int | str | None]]:
+        if path is None:
+            return []
+        parsed: list[dict[str, bool | int | str | None]] = []
+        try:
+            text = path.read_text(errors="replace")
+        except Exception:
+            return parsed
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped.startswith("|"):
+                continue
+            cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+            if len(cells) != 6 or cells[0] in {"case", "---"} or set(cells[0]) == {"-"}:
+                continue
+            try:
+                stream_bytes = int(cells[4])
+                sidecar_bytes = int(cells[5])
+            except ValueError:
+                stream_bytes = None
+                sidecar_bytes = None
+            parsed.append(
+                {
+                    "case": cells[0],
+                    "metadata_ok": parse_markdown_bool(cells[1]),
+                    "full_rejected": parse_markdown_bool(cells[2]),
+                    "full_error": cells[3],
+                    "stream_bytes": stream_bytes,
+                    "sidecar_bytes": sidecar_bytes,
+                }
+            )
+        return parsed
+
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
         if data.get("schema") != "vort.sidecar_corrupt_smoke_report":
             continue
-        rows = int(data.get("rows") or 0)
-        metadata_ok_rows = int(data.get("metadata_ok_rows") or 0)
-        full_rejected_rows = int(data.get("full_rejected_rows") or 0)
+        rows = int_field(data, "rows")
+        metadata_ok_rows = int_field(data, "metadata_ok_rows")
+        full_rejected_rows = int_field(data, "full_rejected_rows")
         metadata_failed_rows = rows - metadata_ok_rows
         full_not_rejected_rows = rows - full_rejected_rows
-        lz4_error_counts = data.get("lz4_error_counts") if isinstance(data.get("lz4_error_counts"), dict) else {}
-        zstd_error_counts = data.get("zstd_error_counts") if isinstance(data.get("zstd_error_counts"), dict) else {}
-        lz4_phase_counts = data.get("lz4_phase_counts") if isinstance(data.get("lz4_phase_counts"), dict) else {}
-        zstd_phase_counts = data.get("zstd_phase_counts") if isinstance(data.get("zstd_phase_counts"), dict) else {}
-        offset_min = int(data.get("offset_min") or 0)
-        offset_max = int(data.get("offset_max") or 0)
-        lz4_offset_min = int(data.get("lz4_offset_min") or 0)
-        lz4_offset_max = int(data.get("lz4_offset_max") or 0)
-        zstd_offset_min = int(data.get("zstd_offset_min") or 0)
-        zstd_offset_max = int(data.get("zstd_offset_max") or 0)
-        phase_offset_ranges = data.get("phase_offset_ranges") if isinstance(data.get("phase_offset_ranges"), dict) else {}
-        required_codec_phases = data.get("required_codec_phases") if isinstance(data.get("required_codec_phases"), dict) else {}
-        lz4_required_phases = required_codec_phases.get("lz4") if isinstance(required_codec_phases.get("lz4"), list) else []
-        zstd_required_phases = required_codec_phases.get("zstd") if isinstance(required_codec_phases.get("zstd"), list) else []
-        lz4_missing_phases = sorted(str(phase) for phase in lz4_required_phases if int(lz4_phase_counts.get(str(phase)) or 0) == 0)
-        zstd_missing_phases = sorted(str(phase) for phase in zstd_required_phases if int(zstd_phase_counts.get(str(phase)) or 0) == 0)
+
+        items = data.get("items")
+        items = items if isinstance(items, list) else []
+        item_rows = len(items)
+        item_metadata_ok_rows = sum(1 for row in items if isinstance(row, dict) and row.get("metadata_ok") is True)
+        item_full_rejected_rows = sum(1 for row in items if isinstance(row, dict) and row.get("full_rejected") is True)
+        item_malformed_rows = 0
+        item_duplicate_rows = 0
+        expected_by_case: dict[str, dict[str, bool | int | str]] = {}
+        for row in items:
+            if not isinstance(row, dict):
+                item_malformed_rows += 1
+                continue
+            case = item_str(row, "case")
+            expected = {
+                "case": case,
+                "metadata_ok": item_bool(row, "metadata_ok"),
+                "full_rejected": item_bool(row, "full_rejected"),
+                "full_error": item_str(row, "full_error"),
+                "stream_bytes": item_int(row, "stream_bytes"),
+                "sidecar_bytes": item_int(row, "sidecar_bytes"),
+            }
+            if not case or any(value is None for value in expected.values()):
+                item_malformed_rows += 1
+                continue
+            if case in expected_by_case:
+                item_duplicate_rows += 1
+                continue
+            expected_by_case[case] = expected
+        item_count_mismatch = (
+            abs(rows - item_rows)
+            + abs(metadata_ok_rows - item_metadata_ok_rows)
+            + abs(full_rejected_rows - item_full_rejected_rows)
+            + item_malformed_rows
+            + item_duplicate_rows
+        )
+
+        markdown_present = markdown is not None
+        markdown_rows_data = parse_markdown_rows(markdown if markdown_present else None)
+        markdown_rows = len(markdown_rows_data)
+        markdown_matched_cases: set[str] = set()
+        for row in markdown_rows_data:
+            case = str(row.get("case") or "")
+            expected = expected_by_case.get(case)
+            if expected is None or case in markdown_matched_cases:
+                continue
+            if all(row.get(field) == expected[field] for field in ("case", "metadata_ok", "full_rejected", "full_error", "stream_bytes", "sidecar_bytes")):
+                markdown_matched_cases.add(case)
+        markdown_matched = len(markdown_matched_cases)
+        markdown_unmatched = max(markdown_rows, len(expected_by_case)) - markdown_matched
+        healthy = (
+            rows > 0
+            and metadata_failed_rows == 0
+            and full_not_rejected_rows == 0
+            and item_rows == rows
+            and item_count_mismatch == 0
+            and markdown_present
+            and markdown_rows == item_rows
+            and markdown_matched == item_rows
+            and markdown_unmatched == 0
+        )
         return {
             "present": True,
             "rows": rows,
@@ -209,7 +312,13 @@ def sidecar_corrupt_health(artifacts: list[Path]) -> dict:
             "full_rejected_rows": full_rejected_rows,
             "metadata_failed_rows": metadata_failed_rows,
             "full_not_rejected_rows": full_not_rejected_rows,
-            "healthy": rows > 0 and metadata_failed_rows == 0 and full_not_rejected_rows == 0,
+            "item_rows": item_rows,
+            "item_count_mismatch": item_count_mismatch,
+            "markdown_present": markdown_present,
+            "markdown_rows": markdown_rows,
+            "markdown_matched": markdown_matched,
+            "markdown_unmatched": markdown_unmatched,
+            "healthy": healthy,
         }
     return {
         "present": False,
@@ -218,6 +327,12 @@ def sidecar_corrupt_health(artifacts: list[Path]) -> dict:
         "full_rejected_rows": 0,
         "metadata_failed_rows": 0,
         "full_not_rejected_rows": 0,
+        "item_rows": 0,
+        "item_count_mismatch": 0,
+        "markdown_present": False,
+        "markdown_rows": 0,
+        "markdown_matched": 0,
+        "markdown_unmatched": 0,
         "healthy": False,
     }
 
@@ -4956,7 +5071,7 @@ def main() -> int:
         and validation_json["docs_negative_matched"] == validation_json["docs_negative_case_count"]
     ):
         validation_unhealthy_reasons.append("validation_json_docs_negative_failed")
-    if not sidecar_corrupt_health_summary["present"]:
+    if not (sidecar_corrupt_health_summary["present"] and sidecar_corrupt_health_summary["markdown_present"]):
         validation_unhealthy_reasons.append("missing_sidecar_corrupt_artifact")
     elif not sidecar_corrupt_healthy:
         validation_unhealthy_reasons.append("sidecar_corrupt_failed")
@@ -5135,7 +5250,7 @@ def main() -> int:
         f"- header inspect workflows: {header_health['required_workflow_count']} required, {header_health['missing_workflow_count']} missing, healthy `{header_healthy}`",
         f"- header inspect coverage: cases raw/zlib/gzip {header_health['raw_cases']}/{header_health['zlib_cases']}/{header_health['gzip_cases']}, negatives raw/zlib/gzip {header_health['raw_negative_cases']}/{header_health['zlib_negative_cases']}/{header_health['gzip_negative_cases']}, commands {header_health['command_successes']}/{header_health['command_failures']}, workflows {header_health['workflow_successes']}, dictionary/optional/FHCRC {header_health['dictionary_cases']}/{header_health['optional_header_cases']}/{header_health['fhcrc_cases']}",
         f"- dashboard strict smoke: {strict_health['check_count']} checks, {strict_health['expected_failure_count']} expected failures, {strict_health['matched_count']} matched across {strict_health['mode_count']} modes ({strict_health['missing_mode_count']} missing modes, checks/expected/matched deltas {strict_health['missing_checks']}/{strict_health['missing_expected_failures']}/{strict_health['missing_matched']}), healthy `{strict_healthy}`",
-        f"- sidecar corrupt smoke: {sidecar_corrupt_health_summary['metadata_ok_rows']}/{sidecar_corrupt_health_summary['rows']} metadata-ok rows, {sidecar_corrupt_health_summary['full_rejected_rows']}/{sidecar_corrupt_health_summary['rows']} full-rejected rows, healthy `{sidecar_corrupt_healthy}`",
+        f"- sidecar corrupt smoke: {sidecar_corrupt_health_summary['metadata_ok_rows']}/{sidecar_corrupt_health_summary['rows']} metadata-ok rows, {sidecar_corrupt_health_summary['full_rejected_rows']}/{sidecar_corrupt_health_summary['rows']} full-rejected rows, Markdown {sidecar_corrupt_health_summary['markdown_matched']}/{sidecar_corrupt_health_summary['markdown_rows']}, healthy `{sidecar_corrupt_healthy}`",
         f"- huffman length oracle: {huffman_health['optimal_rows']}/{huffman_health['row_count']} production optimal rows, {huffman_health['package_merge_optimal_rows']}/{huffman_health['row_count']} package-merge optimal rows, gaps {huffman_health['worst_gap_bits']}/{huffman_health['package_merge_worst_gap_bits']}, malformed rows {huffman_health['malformed_rows']}, healthy `{huffman_healthy}`",
         f"- level report: {level_report['rows']}/{level_report['expected_rows']} rows, shape {level_report['shape_rows']}, token/ratio/roundtrip {level_report['token_accounting_rows']}/{level_report['ratio_rows']}/{level_report['roundtrip_rows']}, Markdown {level_report['markdown_matched']}/{level_report['markdown_summary_rows']}, healthy `{level_report_healthy}`",
         f"- dynamic plan: {dynamic_plan['rows']}/{dynamic_plan['expected_rows']} rows across {dynamic_plan['source_count']}/{dynamic_plan['expected_source_count']} sources, token/histogram/ratio/slack/wrapper {dynamic_plan['token_accounting_rows']}/{dynamic_plan['histogram_rows']}/{dynamic_plan['ratio_rows']}/{dynamic_plan['slack_rows']}/{dynamic_plan['wrapper_rows']}, healthy `{dynamic_plan_healthy}`",
@@ -5534,6 +5649,8 @@ def main() -> int:
             f"| corrupt rows | {sidecar_corrupt_health_summary['rows']} | healthy `{sidecar_corrupt_healthy}` |",
             f"| metadata checks | {sidecar_corrupt_health_summary['metadata_ok_rows']} | failed {sidecar_corrupt_health_summary['metadata_failed_rows']} |",
             f"| full decode rejection | {sidecar_corrupt_health_summary['full_rejected_rows']} | not rejected {sidecar_corrupt_health_summary['full_not_rejected_rows']} |",
+            f"| JSON item rows | {sidecar_corrupt_health_summary['item_rows']} | count mismatch {sidecar_corrupt_health_summary['item_count_mismatch']} |",
+            f"| Markdown rows | {sidecar_corrupt_health_summary['markdown_matched']}/{sidecar_corrupt_health_summary['markdown_rows']} | present `{sidecar_corrupt_health_summary['markdown_present']}`, unmatched {sidecar_corrupt_health_summary['markdown_unmatched']} |",
             "",
         ]
     )
@@ -5912,6 +6029,12 @@ def main() -> int:
                 "sidecar_corrupt_full_rejected_rows": sidecar_corrupt_health_summary["full_rejected_rows"],
                 "sidecar_corrupt_metadata_failed_rows": sidecar_corrupt_health_summary["metadata_failed_rows"],
                 "sidecar_corrupt_full_not_rejected_rows": sidecar_corrupt_health_summary["full_not_rejected_rows"],
+                "sidecar_corrupt_item_rows": sidecar_corrupt_health_summary["item_rows"],
+                "sidecar_corrupt_item_count_mismatch": sidecar_corrupt_health_summary["item_count_mismatch"],
+                "sidecar_corrupt_markdown_present": sidecar_corrupt_health_summary["markdown_present"],
+                "sidecar_corrupt_markdown_rows": sidecar_corrupt_health_summary["markdown_rows"],
+                "sidecar_corrupt_markdown_matched": sidecar_corrupt_health_summary["markdown_matched"],
+                "sidecar_corrupt_markdown_unmatched": sidecar_corrupt_health_summary["markdown_unmatched"],
                 "huffman_length_present": huffman_health["present"],
                 "huffman_length_healthy": huffman_healthy,
                 "huffman_length_row_count": huffman_health["row_count"],

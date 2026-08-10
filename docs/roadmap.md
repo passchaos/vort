@@ -2575,3 +2575,9 @@ architecture blindly.
   Aggregate health now cross-checks Markdown metric rows and gate check names
   against the JSON report, and exposes gate/report plus Markdown drift counters
   before relaxed wrapper coverage can pass.
+- Tightened sidecar corrupt-payload dashboard health by requiring the retained
+  `vort-sidecar-corrupt-smoke.md` companion beside the JSON report. Aggregate
+  health now cross-checks every Markdown row against JSON `items` case names,
+  metadata/full rejection booleans, error names, and stream/sidecar byte counts,
+  and exposes item-count plus Markdown drift counters before corrupt-payload
+  validation coverage can pass.

@@ -25,6 +25,7 @@ DASHBOARD_PRODUCERS_NEGATIVE_ARTIFACT = "vort-dashboard-producers-negative-smoke
 VALIDATION_JSON_SMOKE_ARTIFACT = "vort-validation-json-smoke.json"
 VALIDATION_JSON_DOCS_NEGATIVE_ARTIFACT = "vort-validation-json-docs-negative-smoke.json"
 SIDECAR_CORRUPT_ARTIFACT = "vort-sidecar-corrupt-smoke.json"
+SIDECAR_CORRUPT_MARKDOWN_ARTIFACT = "vort-sidecar-corrupt-smoke.md"
 HUFFMAN_LENGTH_ARTIFACT = "vort-huffman-length-report.csv"
 LEVEL_REPORT_CSV_ARTIFACT = "vort-level-report.csv"
 LEVEL_REPORT_MARKDOWN_ARTIFACT = "vort-level-report.md"
@@ -226,6 +227,10 @@ def write_producer_map(
     if include_sidecar_corrupt_smoke:
         artifact_metadata[SIDECAR_CORRUPT_ARTIFACT] = {
             "expected_format": "json",
+            "smoke_gate": "zig build run-sidecar-corrupt-dashboard",
+        }
+        artifact_metadata[SIDECAR_CORRUPT_MARKDOWN_ARTIFACT] = {
+            "expected_format": "md",
             "smoke_gate": "zig build run-sidecar-corrupt-dashboard",
         }
     if include_huffman_smoke:
@@ -459,6 +464,7 @@ def write_producer_map(
         exact[VALIDATION_JSON_DOCS_NEGATIVE_ARTIFACT] = "zig build run-validation-json-docs-negative-smoke"
     if include_sidecar_corrupt_exact:
         exact[SIDECAR_CORRUPT_ARTIFACT] = "zig build run-sidecar-corrupt-dashboard"
+        exact[SIDECAR_CORRUPT_MARKDOWN_ARTIFACT] = "zig build run-sidecar-corrupt-dashboard"
     if include_huffman_exact:
         exact[HUFFMAN_LENGTH_ARTIFACT] = "zig build run-huffman-length-report-dashboard"
         exact["vort-huffman-length-report.md"] = "zig build run-huffman-length-report-dashboard"
@@ -931,6 +937,49 @@ def write_sidecar_corrupt_report(path: Path, *, ok: bool = True) -> None:
         ],
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def write_sidecar_corrupt_markdown(path: Path, *, ok: bool = True) -> None:
+    rows = [
+        {
+            "case": "deflate",
+            "metadata_ok": True,
+            "full_rejected": True,
+            "full_error": "TruncatedFrame",
+            "stream_bytes": 44,
+            "sidecar_bytes": 48,
+        },
+        {
+            "case": "ldm",
+            "metadata_ok": ok,
+            "full_rejected": ok,
+            "full_error": "InvalidMatch" if ok else "",
+            "stream_bytes": 128,
+            "sidecar_bytes": 48,
+        },
+    ]
+    lines = [
+        "# Sidecar corrupt-payload smoke report",
+        "",
+        f"- rows: {len(rows)}",
+        f"- metadata-ok rows: {sum(1 for row in rows if row['metadata_ok'])}",
+        f"- full-rejected rows: {sum(1 for row in rows if row['full_rejected'])}",
+        "",
+        "| case | metadata ok | full rejected | full error | stream bytes | sidecar bytes |",
+        "| --- | --- | --- | --- | ---: | ---: |",
+    ]
+    for row in rows:
+        lines.append(
+            "| {case} | {metadata_ok} | {full_rejected} | {full_error} | {stream_bytes} | {sidecar_bytes} |".format(
+                case=row["case"],
+                metadata_ok="true" if row["metadata_ok"] else "false",
+                full_rejected="true" if row["full_rejected"] else "false",
+                full_error=row["full_error"],
+                stream_bytes=row["stream_bytes"],
+                sidecar_bytes=row["sidecar_bytes"],
+            )
+        )
+    path.write_text("\n".join(lines) + "\n")
 
 
 def write_huffman_length_markdown(
@@ -3375,6 +3424,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_dashboard_configuration_artifacts(root)
     write_validation_json_artifacts(root)
     write_sidecar_corrupt_report(root / SIDECAR_CORRUPT_ARTIFACT)
+    write_sidecar_corrupt_markdown(root / SIDECAR_CORRUPT_MARKDOWN_ARTIFACT)
     write_huffman_length_csv(root / HUFFMAN_LENGTH_ARTIFACT)
     write_huffman_length_markdown(root / "vort-huffman-length-report.md")
     write_level_report_csv(root / LEVEL_REPORT_CSV_ARTIFACT)
@@ -3706,6 +3756,8 @@ def main() -> int:
                 DASHBOARD_PRODUCERS_NEGATIVE_ARTIFACT,
                 VALIDATION_JSON_SMOKE_ARTIFACT,
                 VALIDATION_JSON_DOCS_NEGATIVE_ARTIFACT,
+                SIDECAR_CORRUPT_ARTIFACT,
+                SIDECAR_CORRUPT_MARKDOWN_ARTIFACT,
             ],
         )
 
@@ -3723,6 +3775,15 @@ def main() -> int:
             raise AssertionError(f"dashboard index success output missing marker: {ok.stdout!r}")
         manifest = json.loads((root / "vort-dashboard-index.json").read_text())
         assert manifest["validation_healthy"] is True
+        assert manifest["sidecar_corrupt_present"] is True
+        assert manifest["sidecar_corrupt_markdown_present"] is True
+        assert manifest["sidecar_corrupt_healthy"] is True
+        assert manifest["sidecar_corrupt_rows"] == 2
+        assert manifest["sidecar_corrupt_item_rows"] == 2
+        assert manifest["sidecar_corrupt_item_count_mismatch"] == 0
+        assert manifest["sidecar_corrupt_markdown_rows"] == 2
+        assert manifest["sidecar_corrupt_markdown_matched"] == 2
+        assert manifest["sidecar_corrupt_markdown_unmatched"] == 0
         assert manifest["header_inspect_present"] is True
         assert manifest["header_inspect_ok"] is True
         assert manifest["header_inspect_missing_workflow_count"] == 0
@@ -3816,8 +3877,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 78/78 | 0 | allowed missing 0 |",
-                    "| smoke gates | 78/78 | 0 | required missing 0 |",
+                    "| producer steps | 79/79 | 0 | allowed missing 0 |",
+                    "| smoke gates | 79/79 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -3982,6 +4043,8 @@ def main() -> int:
                     "| corrupt rows | 2 | healthy `True` |",
                     "| metadata checks | 2 | failed 0 |",
                     "| full decode rejection | 2 | not rejected 0 |",
+                    "| JSON item rows | 2 | count mismatch 0 |",
+                    "| Markdown rows | 2/2 | present `True`, unmatched 0 |",
                 ],
             )
         )
@@ -4554,6 +4617,7 @@ def main() -> int:
                 write_producer_map(producer_map)
             elif fixture == "sidecar_corrupt_failed":
                 write_sidecar_corrupt_report(fixture_root / SIDECAR_CORRUPT_ARTIFACT, ok=False)
+                write_sidecar_corrupt_markdown(fixture_root / SIDECAR_CORRUPT_MARKDOWN_ARTIFACT, ok=False)
                 write_producer_map(producer_map)
             elif fixture == "missing_huffman_length_artifact":
                 (fixture_root / HUFFMAN_LENGTH_ARTIFACT).unlink()

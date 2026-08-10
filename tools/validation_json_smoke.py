@@ -107,6 +107,7 @@ def main() -> int:
         sidecar_path = root / "stream.vidx"
         report_path = root / "vort-sidecar-verify-report.json"
         corrupt_path = root / "vort-sidecar-corrupt-smoke.json"
+        corrupt_markdown_path = root / "vort-sidecar-corrupt-smoke.md"
         dashboard_path = root / "vort-dashboard-index.md"
         dashboard_manifest_path = root / "vort-dashboard-index.json"
         docs_negative_path = root / "vort-validation-json-docs-negative-smoke.json"
@@ -193,11 +194,13 @@ def main() -> int:
         assert report["rows"] == 1
         validate_value_against_manifest(report, schemas_def)
 
-        run([report_exe, "--self-test-corrupt", "--json", str(corrupt_path)])
+        run([report_exe, "--self-test-corrupt", "--markdown", str(corrupt_markdown_path), "--json", str(corrupt_path)])
         corrupt = json.loads(corrupt_path.read_text())
+        corrupt_markdown = corrupt_markdown_path.read_text()
         assert corrupt["schema"] == "vort.sidecar_corrupt_smoke_report"
         assert corrupt["schema_version"] == 1
         assert corrupt["rows"] >= 1
+        assert corrupt_markdown.count("\n| ") >= corrupt["rows"] + 2
         validate_value_against_manifest(corrupt, schemas_def)
 
         dashboard_config_index = json.loads((ROOT / "tools" / "dashboard_config_index.json").read_text())
@@ -1115,6 +1118,12 @@ def main() -> int:
         assert dashboard["sidecar_corrupt_full_rejected_rows"] == corrupt["full_rejected_rows"]
         assert dashboard["sidecar_corrupt_metadata_failed_rows"] == 0
         assert dashboard["sidecar_corrupt_full_not_rejected_rows"] == 0
+        assert dashboard["sidecar_corrupt_item_rows"] == len(corrupt["items"])
+        assert dashboard["sidecar_corrupt_item_count_mismatch"] == 0
+        assert dashboard["sidecar_corrupt_markdown_present"] is True
+        assert dashboard["sidecar_corrupt_markdown_rows"] == len(corrupt["items"])
+        assert dashboard["sidecar_corrupt_markdown_matched"] == len(corrupt["items"])
+        assert dashboard["sidecar_corrupt_markdown_unmatched"] == 0
         assert dashboard["huffman_length_present"] is True
         assert dashboard["huffman_length_healthy"] is True
         assert dashboard["huffman_length_row_count"] == 1

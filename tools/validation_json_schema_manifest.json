@@ -836,14 +836,20 @@
         },
         "sidecar_corrupt_healthy": {
           "all": [
-            "sidecar_corrupt_present"
+            "sidecar_corrupt_present",
+            "sidecar_corrupt_markdown_present"
           ],
           "positive": [
-            "sidecar_corrupt_rows"
+            "sidecar_corrupt_rows",
+            "sidecar_corrupt_item_rows",
+            "sidecar_corrupt_markdown_rows",
+            "sidecar_corrupt_markdown_matched"
           ],
           "zero": [
             "sidecar_corrupt_metadata_failed_rows",
-            "sidecar_corrupt_full_not_rejected_rows"
+            "sidecar_corrupt_full_not_rejected_rows",
+            "sidecar_corrupt_item_count_mismatch",
+            "sidecar_corrupt_markdown_unmatched"
           ]
         },
         "smoke_gate_healthy": {
@@ -1880,6 +1886,12 @@
         "sidecar_corrupt_full_not_rejected_rows": "int",
         "sidecar_corrupt_full_rejected_rows": "int",
         "sidecar_corrupt_healthy": "bool",
+        "sidecar_corrupt_item_count_mismatch": "int",
+        "sidecar_corrupt_item_rows": "int",
+        "sidecar_corrupt_markdown_matched": "int",
+        "sidecar_corrupt_markdown_present": "bool",
+        "sidecar_corrupt_markdown_rows": "int",
+        "sidecar_corrupt_markdown_unmatched": "int",
         "sidecar_corrupt_metadata_failed_rows": "int",
         "sidecar_corrupt_metadata_ok_rows": "int",
         "sidecar_corrupt_present": "bool",
@@ -2389,6 +2401,21 @@
           "left": "png_scratch_markdown_matched",
           "op": "eq",
           "right": "png_scratch_markdown_rows"
+        },
+        {
+          "left": "sidecar_corrupt_item_rows",
+          "op": "eq",
+          "right": "sidecar_corrupt_rows"
+        },
+        {
+          "left": "sidecar_corrupt_markdown_rows",
+          "op": "eq",
+          "right": "sidecar_corrupt_item_rows"
+        },
+        {
+          "left": "sidecar_corrupt_markdown_matched",
+          "op": "eq",
+          "right": "sidecar_corrupt_markdown_rows"
         },
         {
           "left": "zlib_relaxed_gate_check_count",

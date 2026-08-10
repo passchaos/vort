@@ -2430,7 +2430,7 @@ coverage`, `Deflate extra-bit benchmark coverage`, `Dictionary decode benchmark 
 probe executables`, `Native summary error codec coverage`, and `Native summary error phase offsets` tables
 so artifact inventory, aggregate validation health, producer/smoke-gate coverage, dashboard strict
 gate coverage, dashboard configuration guardrails, validation schema smoke coverage, header-format coverage, corrupt-sidecar rejection coverage,
-Huffman optimality, zstd comparison gate coverage, deflate extra-bit benchmark coverage, dictionary decode benchmark coverage, PNG scanline benchmark coverage, chunked zlib benchmark coverage, PNG streaming zlib benchmark coverage, deflate dynamic decode profile coverage, native library benchmark coverage, native fuzz corpus coverage, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, zlib differential coverage,
+sidecar corrupt Markdown/JSON drift checks, Huffman optimality, zstd comparison gate coverage, deflate extra-bit benchmark coverage, dictionary decode benchmark coverage, PNG scanline benchmark coverage, chunked zlib benchmark coverage, PNG streaming zlib benchmark coverage, deflate dynamic decode profile coverage, native library benchmark coverage, native fuzz corpus coverage, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, zlib differential coverage,
 decode-stage error matching, fuzz corpus matching, native stream metadata
 coverage, native tier corpus discovery, codec probe status, LZ4/Zstd
 structured-error counts, phase counts, required phases, missing phases, and phase
@@ -2537,6 +2537,10 @@ Top-level fields:
 - `smoke_gate_required_missing`
 - `validation_healthy`
 - `validation_unhealthy_reasons`
+- `sidecar_corrupt_*` fields summarize corrupt-payload smoke JSON coverage and
+  now require the retained Markdown table to match every JSON `items` row
+  (`case`, metadata/full booleans, error name, stream bytes, and sidecar bytes)
+  before aggregate validation health can pass.
 - `native_tier_range_*` fields summarize direct-API seekability tier range benchmark summaries,
   including the gate JSON summaries and the required CSV row/shape/throughput
   coverage fields (`native_tier_range_csv_*`).
@@ -3085,6 +3089,12 @@ Example:
   "sidecar_corrupt_full_rejected_rows": 0,
   "sidecar_corrupt_metadata_failed_rows": 0,
   "sidecar_corrupt_full_not_rejected_rows": 0,
+  "sidecar_corrupt_item_rows": 0,
+  "sidecar_corrupt_item_count_mismatch": 0,
+  "sidecar_corrupt_markdown_present": false,
+  "sidecar_corrupt_markdown_rows": 0,
+  "sidecar_corrupt_markdown_matched": 0,
+  "sidecar_corrupt_markdown_unmatched": 0,
   "huffman_length_present": false,
   "huffman_length_healthy": false,
   "huffman_length_row_count": 0,
