@@ -308,6 +308,16 @@
       "fixture": "chunked_zlib_bench_failed"
     },
     {
+      "reason": "missing_png_streaming_zlib_bench_artifact",
+      "check": "validation_missing_png_streaming_zlib_bench_artifact",
+      "fixture": "missing_png_streaming_zlib_bench_artifact"
+    },
+    {
+      "reason": "png_streaming_zlib_bench_failed",
+      "check": "validation_png_streaming_zlib_bench_failed",
+      "fixture": "png_streaming_zlib_bench_failed"
+    },
+    {
       "reason": "missing_zstd_compare_artifact",
       "check": "validation_missing_zstd_compare_artifact",
       "fixture": "missing_zstd_compare_artifact"

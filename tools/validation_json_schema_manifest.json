@@ -860,6 +860,7 @@
             "dictionary_decode_bench_healthy",
             "png_scanline_bench_healthy",
             "chunked_zlib_bench_healthy",
+            "png_streaming_zlib_bench_healthy",
             "zstd_compare_healthy",
             "native_fuzz_corpus_healthy",
             "br_static_dictionary_healthy",
@@ -1187,6 +1188,22 @@
           ],
           "zero": [
             "chunked_zlib_bench_missing_cases"
+          ]
+        },
+        "png_streaming_zlib_bench_healthy": {
+          "all": [
+            "png_streaming_zlib_bench_present"
+          ],
+          "positive": [
+            "png_streaming_zlib_bench_rows",
+            "png_streaming_zlib_bench_expected_rows",
+            "png_streaming_zlib_bench_positive_rows",
+            "png_streaming_zlib_bench_shape_rows",
+            "png_streaming_zlib_bench_image_size_rows",
+            "png_streaming_zlib_bench_ratio_rows"
+          ],
+          "zero": [
+            "png_streaming_zlib_bench_missing_cases"
           ]
         }
       },
@@ -1659,7 +1676,16 @@
         "chunked_zlib_bench_shape_rows": "int",
         "chunked_zlib_bench_chunk_count_rows": "int",
         "chunked_zlib_bench_ratio_rows": "int",
-        "chunked_zlib_bench_missing_cases": "list"
+        "chunked_zlib_bench_missing_cases": "list",
+        "png_streaming_zlib_bench_present": "bool",
+        "png_streaming_zlib_bench_healthy": "bool",
+        "png_streaming_zlib_bench_rows": "int",
+        "png_streaming_zlib_bench_expected_rows": "int",
+        "png_streaming_zlib_bench_positive_rows": "int",
+        "png_streaming_zlib_bench_shape_rows": "int",
+        "png_streaming_zlib_bench_image_size_rows": "int",
+        "png_streaming_zlib_bench_ratio_rows": "int",
+        "png_streaming_zlib_bench_missing_cases": "list"
       },
       "item_collection": "artifacts",
       "item_enums": {
@@ -1764,6 +1790,8 @@
           "dictionary_decode_bench_failed",
           "png_scanline_bench_failed",
           "chunked_zlib_bench_failed",
+          "png_streaming_zlib_bench_failed",
+          "missing_png_streaming_zlib_bench_artifact",
           "missing_chunked_zlib_bench_artifact",
           "missing_png_scanline_bench_artifact",
           "missing_dictionary_decode_bench_artifact",
@@ -2139,6 +2167,8 @@
               "validation_dictionary_decode_bench_failed",
               "validation_png_scanline_bench_failed",
               "validation_chunked_zlib_bench_failed",
+              "validation_png_streaming_zlib_bench_failed",
+              "validation_missing_png_streaming_zlib_bench_artifact",
               "validation_missing_chunked_zlib_bench_artifact",
               "validation_missing_png_scanline_bench_artifact",
               "validation_missing_dictionary_decode_bench_artifact",
@@ -2218,6 +2248,8 @@
               "dictionary_decode_bench_failed",
               "png_scanline_bench_failed",
               "chunked_zlib_bench_failed",
+              "png_streaming_zlib_bench_failed",
+              "missing_png_streaming_zlib_bench_artifact",
               "missing_chunked_zlib_bench_artifact",
               "missing_png_scanline_bench_artifact",
               "missing_dictionary_decode_bench_artifact",
@@ -2319,7 +2351,9 @@
                 "validation_missing_png_scanline_bench_artifact": "missing_png_scanline_bench_artifact",
                 "validation_png_scanline_bench_failed": "png_scanline_bench_failed",
                 "validation_missing_chunked_zlib_bench_artifact": "missing_chunked_zlib_bench_artifact",
-                "validation_chunked_zlib_bench_failed": "chunked_zlib_bench_failed"
+                "validation_chunked_zlib_bench_failed": "chunked_zlib_bench_failed",
+                "validation_missing_png_streaming_zlib_bench_artifact": "missing_png_streaming_zlib_bench_artifact",
+                "validation_png_streaming_zlib_bench_failed": "png_streaming_zlib_bench_failed"
               },
               "target": "reason"
             }
@@ -2417,6 +2451,9 @@
           "validation_chunked_zlib_bench_failed",
           "validation_missing_chunked_zlib_bench_artifact",
           "chunked_zlib_bench_markdown_table",
+          "validation_png_streaming_zlib_bench_failed",
+          "validation_missing_png_streaming_zlib_bench_artifact",
+          "png_streaming_zlib_bench_markdown_table",
           "zstd_compare_markdown_table",
           "native_allocation_markdown_table",
           "native_fuzz_corpus_markdown_table",
@@ -2579,6 +2616,8 @@
           "validation_dictionary_decode_bench_failed",
           "validation_png_scanline_bench_failed",
           "validation_chunked_zlib_bench_failed",
+          "validation_png_streaming_zlib_bench_failed",
+          "validation_missing_png_streaming_zlib_bench_artifact",
           "validation_missing_chunked_zlib_bench_artifact",
           "validation_missing_png_scanline_bench_artifact",
           "validation_missing_dictionary_decode_bench_artifact",
@@ -2658,6 +2697,8 @@
           "dictionary_decode_bench_failed",
           "png_scanline_bench_failed",
           "chunked_zlib_bench_failed",
+          "png_streaming_zlib_bench_failed",
+          "missing_png_streaming_zlib_bench_artifact",
           "missing_chunked_zlib_bench_artifact",
           "missing_png_scanline_bench_artifact",
           "missing_dictionary_decode_bench_artifact",
@@ -2737,6 +2778,8 @@
           "dictionary_decode_bench_failed",
           "png_scanline_bench_failed",
           "chunked_zlib_bench_failed",
+          "png_streaming_zlib_bench_failed",
+          "missing_png_streaming_zlib_bench_artifact",
           "missing_chunked_zlib_bench_artifact",
           "missing_png_scanline_bench_artifact",
           "missing_dictionary_decode_bench_artifact",
@@ -2838,7 +2881,9 @@
             "validation_missing_png_scanline_bench_artifact": "missing_png_scanline_bench_artifact",
             "validation_png_scanline_bench_failed": "png_scanline_bench_failed",
             "validation_missing_chunked_zlib_bench_artifact": "missing_chunked_zlib_bench_artifact",
-            "validation_chunked_zlib_bench_failed": "chunked_zlib_bench_failed"
+            "validation_chunked_zlib_bench_failed": "chunked_zlib_bench_failed",
+            "validation_missing_png_streaming_zlib_bench_artifact": "missing_png_streaming_zlib_bench_artifact",
+            "validation_png_streaming_zlib_bench_failed": "png_streaming_zlib_bench_failed"
           },
           "target": "reason"
         },
@@ -2920,7 +2965,9 @@
             "missing_png_scanline_bench_artifact": "missing_png_scanline_bench_artifact",
             "png_scanline_bench_failed": "png_scanline_bench_failed",
             "missing_chunked_zlib_bench_artifact": "missing_chunked_zlib_bench_artifact",
-            "chunked_zlib_bench_failed": "chunked_zlib_bench_failed"
+            "chunked_zlib_bench_failed": "chunked_zlib_bench_failed",
+            "missing_png_streaming_zlib_bench_artifact": "missing_png_streaming_zlib_bench_artifact",
+            "png_streaming_zlib_bench_failed": "png_streaming_zlib_bench_failed"
           },
           "target": "reason"
         }

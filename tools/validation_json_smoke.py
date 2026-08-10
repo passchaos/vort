@@ -107,6 +107,7 @@ def main() -> int:
         dictionary_decode_bench_path = ROOT / "zig-out" / "vort-dictionary-decode-bench.csv"
         png_scanline_bench_path = ROOT / "zig-out" / "vort-png-scanline-bench.csv"
         chunked_zlib_bench_path = ROOT / "zig-out" / "vort-chunked-zlib-bench-report-repeat3.csv"
+        png_streaming_zlib_bench_path = ROOT / "zig-out" / "vort-png-streaming-zlib-bench-report-repeat3.csv"
         python_zlib_diff_path = ROOT / "zig-out" / "vort-python-zlib-diff-smoke.json"
         native_codec_probes_path = ROOT / "zig-out" / "vort-native-codec-probes.json"
         native_summary_error_dashboard_path = ROOT / "zig-out" / "vort-native-summary-error-dashboard.json"
@@ -445,6 +446,9 @@ def main() -> int:
         with chunked_zlib_bench_path.open(newline="") as f:
             chunked_zlib_bench_rows = list(csv.DictReader(f))
         assert len(chunked_zlib_bench_rows) == 8
+        with png_streaming_zlib_bench_path.open(newline="") as f:
+            png_streaming_zlib_bench_rows = list(csv.DictReader(f))
+        assert len(png_streaming_zlib_bench_rows) == 10
         with snappy_report_path.open(newline="") as f:
             snappy_report_rows = list(csv.DictReader(f))
         assert len(snappy_report_rows) == 20
@@ -863,6 +867,7 @@ def main() -> int:
         shutil.copyfile(dictionary_decode_bench_path, root / "vort-dictionary-decode-bench.csv")
         shutil.copyfile(png_scanline_bench_path, root / "vort-png-scanline-bench.csv")
         shutil.copyfile(chunked_zlib_bench_path, root / "vort-chunked-zlib-bench-report-repeat3.csv")
+        shutil.copyfile(png_streaming_zlib_bench_path, root / "vort-png-streaming-zlib-bench-report-repeat3.csv")
         shutil.copyfile(fuzz_report_path, root / "vort-deflate-wrapper-fuzz-corpus.json")
         shutil.copyfile(fuzz_coverage_smoke_path, root / "vort-fuzz-corpus-coverage-smoke.json")
         shutil.copyfile(decode_stage_path, root / "vort-deflate-decode-stage-report.json")
@@ -1173,6 +1178,15 @@ def main() -> int:
         assert dashboard["chunked_zlib_bench_chunk_count_rows"] == len(chunked_zlib_bench_rows)
         assert dashboard["chunked_zlib_bench_ratio_rows"] == len(chunked_zlib_bench_rows)
         assert dashboard["chunked_zlib_bench_missing_cases"] == []
+        assert dashboard["png_streaming_zlib_bench_present"] is True
+        assert dashboard["png_streaming_zlib_bench_healthy"] is True
+        assert dashboard["png_streaming_zlib_bench_rows"] == len(png_streaming_zlib_bench_rows)
+        assert dashboard["png_streaming_zlib_bench_expected_rows"] == 10
+        assert dashboard["png_streaming_zlib_bench_positive_rows"] == len(png_streaming_zlib_bench_rows)
+        assert dashboard["png_streaming_zlib_bench_shape_rows"] == len(png_streaming_zlib_bench_rows)
+        assert dashboard["png_streaming_zlib_bench_image_size_rows"] == len(png_streaming_zlib_bench_rows)
+        assert dashboard["png_streaming_zlib_bench_ratio_rows"] == len(png_streaming_zlib_bench_rows)
+        assert dashboard["png_streaming_zlib_bench_missing_cases"] == []
         assert dashboard["native_allocation_present"] is True
         assert dashboard["native_allocation_smoke_present"] is True
         assert dashboard["native_allocation_negative_present"] is True
@@ -1328,6 +1342,7 @@ def main() -> int:
             and dashboard["dictionary_decode_bench_healthy"]
             and dashboard["png_scanline_bench_healthy"]
             and dashboard["chunked_zlib_bench_healthy"]
+            and dashboard["png_streaming_zlib_bench_healthy"]
             and dashboard["snappy_report_healthy"]
             and dashboard["zstd_compare_healthy"]
             and dashboard["native_fuzz_corpus_healthy"]
