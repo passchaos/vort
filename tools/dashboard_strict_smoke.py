@@ -2241,16 +2241,17 @@ def main() -> int:
             (missing_native_tier_root / artifact).unlink()
         missing_native_tier_producer = missing_native_tier_root / "producers.json"
         write_producer_map(missing_native_tier_producer)
-        missing_native_tier_result = run(dashboard_args(missing_native_tier_root, missing_native_tier_producer, "--strict-validation-health"))
+        missing_native_tier_result = run(dashboard_args(missing_native_tier_root, missing_native_tier_producer, "--strict-validation-health"), check=False)
         missing_native_tier_manifest = json.loads((missing_native_tier_root / "vort-dashboard-index.json").read_text())
         native_tier_missing_matched = (
-            missing_native_tier_result.returncode == 0
-            and missing_native_tier_manifest["validation_healthy"] is True
+            missing_native_tier_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=missing_native_tier_range_artifact" in missing_native_tier_result.stdout
+            and missing_native_tier_manifest["validation_healthy"] is False
             and missing_native_tier_manifest["native_tier_range_present"] is False
             and missing_native_tier_manifest["native_tier_range_healthy"] is False
             and missing_native_tier_manifest["native_tier_range_rows"] == 0
         )
-        checks.append(check_row("missing_native_tier_range_summary", "native-tier-range-health", False, native_tier_missing_matched, missing_native_tier_result.returncode, "dashboard_index=", missing_native_tier_result.stdout))
+        checks.append(check_row("missing_native_tier_range_summary", "native-tier-range-health", True, native_tier_missing_matched, missing_native_tier_result.returncode, "dashboard_index_validation_unhealthy=missing_native_tier_range_artifact", missing_native_tier_result.stdout))
 
         missing_native_tier_source_root = root / "missing-native-tier-source"
         missing_native_tier_source_root.mkdir()
@@ -2258,18 +2259,19 @@ def main() -> int:
         (missing_native_tier_source_root / NATIVE_TIER_RANGE_ARTIFACT).unlink()
         missing_native_tier_source_producer = missing_native_tier_source_root / "producers.json"
         write_producer_map(missing_native_tier_source_producer)
-        missing_native_tier_source_result = run(dashboard_args(missing_native_tier_source_root, missing_native_tier_source_producer, "--strict-validation-health"))
+        missing_native_tier_source_result = run(dashboard_args(missing_native_tier_source_root, missing_native_tier_source_producer, "--strict-validation-health"), check=False)
         missing_native_tier_source_manifest = json.loads((missing_native_tier_source_root / "vort-dashboard-index.json").read_text())
         native_tier_source_missing_matched = (
-            missing_native_tier_source_result.returncode == 0
-            and missing_native_tier_source_manifest["validation_healthy"] is True
+            missing_native_tier_source_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_tier_range_failed" in missing_native_tier_source_result.stdout
+            and missing_native_tier_source_manifest["validation_healthy"] is False
             and missing_native_tier_source_manifest["native_tier_range_present"] is True
             and missing_native_tier_source_manifest["native_tier_range_healthy"] is False
             and missing_native_tier_source_manifest["native_tier_range_summary_count"] == 2
             and missing_native_tier_source_manifest["native_tier_range_built_in_summary_count"] == 0
             and missing_native_tier_source_manifest["native_tier_range_missing_sources"] == ["built_in"]
         )
-        checks.append(check_row("missing_native_tier_range_source", "native-tier-range-health", False, native_tier_source_missing_matched, missing_native_tier_source_result.returncode, "dashboard_index=", missing_native_tier_source_result.stdout))
+        checks.append(check_row("missing_native_tier_range_source", "native-tier-range-health", True, native_tier_source_missing_matched, missing_native_tier_source_result.returncode, "dashboard_index_validation_unhealthy=native_tier_range_failed", missing_native_tier_source_result.stdout))
 
         failed_native_tier_root = root / "failed-native-tier"
         failed_native_tier_root.mkdir()
@@ -2277,16 +2279,17 @@ def main() -> int:
         write_native_tier_range_summary(failed_native_tier_root / NATIVE_TIER_RANGE_ARTIFACT, ok=False)
         failed_native_tier_producer = failed_native_tier_root / "producers.json"
         write_producer_map(failed_native_tier_producer)
-        failed_native_tier_result = run(dashboard_args(failed_native_tier_root, failed_native_tier_producer, "--strict-validation-health"))
+        failed_native_tier_result = run(dashboard_args(failed_native_tier_root, failed_native_tier_producer, "--strict-validation-health"), check=False)
         failed_native_tier_manifest = json.loads((failed_native_tier_root / "vort-dashboard-index.json").read_text())
         native_tier_failed_matched = (
-            failed_native_tier_result.returncode == 0
-            and failed_native_tier_manifest["validation_healthy"] is True
+            failed_native_tier_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_tier_range_failed" in failed_native_tier_result.stdout
+            and failed_native_tier_manifest["validation_healthy"] is False
             and failed_native_tier_manifest["native_tier_range_present"] is True
             and failed_native_tier_manifest["native_tier_range_healthy"] is False
             and failed_native_tier_manifest["native_tier_range_ok_count"] == 2
         )
-        checks.append(check_row("failed_native_tier_range_summary", "native-tier-range-health", False, native_tier_failed_matched, failed_native_tier_result.returncode, "dashboard_index=", failed_native_tier_result.stdout))
+        checks.append(check_row("failed_native_tier_range_summary", "native-tier-range-health", True, native_tier_failed_matched, failed_native_tier_result.returncode, "dashboard_index_validation_unhealthy=native_tier_range_failed", failed_native_tier_result.stdout))
 
         no_producer = root / "no-producer.json"
         write_producer_map(no_producer, include_header_exact=False, required_names=[HEADER_INSPECT_ARTIFACT, DASHBOARD_STRICT_ARTIFACT])
@@ -2552,6 +2555,16 @@ def main() -> int:
                 write_producer_map(producer_map)
             elif fixture == "zstd_native_summary_undercovered":
                 write_zstd_native_summary(fixture_root / ZSTD_NATIVE_SUMMARY_ARTIFACT, healthy=False)
+                write_producer_map(producer_map)
+            elif fixture == "missing_native_tier_range_artifact":
+                for artifact in (NATIVE_TIER_RANGE_ARTIFACT, NATIVE_TIER_RANGE_FILES_ARTIFACT, NATIVE_TIER_RANGE_CORPUS_ARTIFACT):
+                    (fixture_root / artifact).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "native_tier_range_failed":
+                write_native_tier_range_summaries(fixture_root)
+                payload = json.loads((fixture_root / NATIVE_TIER_RANGE_ARTIFACT).read_text())
+                payload["ok"] = False
+                (fixture_root / NATIVE_TIER_RANGE_ARTIFACT).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
                 write_producer_map(producer_map)
             elif fixture == "missing_native_tier_corpus_discovery_artifact":
                 (fixture_root / NATIVE_TIER_RANGE_CORPUS_DISCOVERY_ARTIFACT).unlink()

@@ -258,6 +258,16 @@
       "fixture": "zstd_native_summary_undercovered"
     },
     {
+      "reason": "missing_native_tier_range_artifact",
+      "check": "validation_missing_native_tier_range_artifact",
+      "fixture": "missing_native_tier_range_artifact"
+    },
+    {
+      "reason": "native_tier_range_failed",
+      "check": "validation_native_tier_range_failed",
+      "fixture": "native_tier_range_failed"
+    },
+    {
       "reason": "missing_native_tier_corpus_discovery_artifact",
       "check": "validation_missing_native_tier_corpus_discovery_artifact",
       "fixture": "missing_native_tier_corpus_discovery_artifact"

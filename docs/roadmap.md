@@ -2463,3 +2463,10 @@ architecture blindly.
   participate directly in `validation_healthy`, each has fine-grained missing
   and failed unhealthy reasons, and `dashboard_strict_smoke.py` exercises all 53
   strict-validation-health reasons with isolated fixtures.
+
+- Completed the dashboard health-field coverage audit for current retained
+  artifacts. `native_tier_range_healthy` now participates in aggregate
+  `validation_healthy`, has missing/failed strict-validation reasons, and the
+  schema manifest now leaves no top-level `*_healthy` dashboard field outside the
+  validation formula or its own boolean formula. The strict smoke covers 55
+  validation-health reasons with isolated fixtures.

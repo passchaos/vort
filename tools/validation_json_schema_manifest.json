@@ -856,6 +856,7 @@
             "native_summary_error_negative_healthy",
             "lz4_native_summary_healthy",
             "zstd_native_summary_healthy",
+            "native_tier_range_healthy",
             "native_tier_corpus_discovery_healthy"
           ]
         },
@@ -991,6 +992,26 @@
           ],
           "zero": [
             "native_fuzz_corpus_unmatched_rows"
+          ]
+        },
+        "native_tier_range_healthy": {
+          "all": [
+            "native_tier_range_present"
+          ],
+          "positive": [
+            "native_tier_range_summary_count",
+            "native_tier_range_ok_count",
+            "native_tier_range_rows",
+            "native_tier_range_fixture_count",
+            "native_tier_range_built_in_summary_count",
+            "native_tier_range_project_files_summary_count",
+            "native_tier_range_standard_corpus_summary_count",
+            "native_tier_range_built_in_rows",
+            "native_tier_range_project_files_rows",
+            "native_tier_range_standard_corpus_rows"
+          ],
+          "zero": [
+            "native_tier_range_missing_sources"
           ]
         }
       },
@@ -1474,6 +1495,8 @@
           "lz4_native_summary_undercovered",
           "missing_zstd_native_summary_artifact",
           "zstd_native_summary_undercovered",
+          "native_tier_range_failed",
+          "missing_native_tier_range_artifact",
           "missing_native_tier_corpus_discovery_artifact",
           "native_tier_corpus_discovery_failed"
         ],
@@ -1826,6 +1849,8 @@
               "validation_lz4_native_summary_undercovered",
               "validation_missing_zstd_native_summary_artifact",
               "validation_zstd_native_summary_undercovered",
+              "validation_missing_native_tier_range_artifact",
+              "validation_native_tier_range_failed",
               "validation_missing_native_tier_corpus_discovery_artifact",
               "validation_native_tier_corpus_discovery_failed"
             ],
@@ -1881,6 +1906,8 @@
               "lz4_native_summary_undercovered",
               "missing_zstd_native_summary_artifact",
               "zstd_native_summary_undercovered",
+              "missing_native_tier_range_artifact",
+              "native_tier_range_failed",
               "missing_native_tier_corpus_discovery_artifact",
               "native_tier_corpus_discovery_failed"
             ]
@@ -1940,7 +1967,9 @@
                 "validation_missing_zlib_relaxed_artifact": "missing_zlib_relaxed_artifact",
                 "validation_zlib_relaxed_failed": "zlib_relaxed_failed",
                 "validation_missing_native_allocation_artifact": "missing_native_allocation_artifact",
-                "validation_native_allocation_failed": "native_allocation_failed"
+                "validation_native_allocation_failed": "native_allocation_failed",
+                "validation_missing_native_tier_range_artifact": "missing_native_tier_range_artifact",
+                "validation_native_tier_range_failed": "native_tier_range_failed"
               },
               "target": "reason"
             }
@@ -2078,6 +2107,8 @@
           "validation_lz4_native_summary_undercovered",
           "validation_missing_zstd_native_summary_artifact",
           "validation_zstd_native_summary_undercovered",
+          "validation_missing_native_tier_range_artifact",
+          "validation_native_tier_range_failed",
           "validation_missing_native_tier_corpus_discovery_artifact",
           "validation_native_tier_corpus_discovery_failed",
           "truncated_output",
@@ -2159,6 +2190,8 @@
           "validation_lz4_native_summary_undercovered",
           "validation_missing_zstd_native_summary_artifact",
           "validation_zstd_native_summary_undercovered",
+          "validation_missing_native_tier_range_artifact",
+          "validation_native_tier_range_failed",
           "validation_missing_native_tier_corpus_discovery_artifact",
           "validation_native_tier_corpus_discovery_failed"
         ],
@@ -2214,6 +2247,8 @@
           "lz4_native_summary_undercovered",
           "missing_zstd_native_summary_artifact",
           "zstd_native_summary_undercovered",
+          "missing_native_tier_range_artifact",
+          "native_tier_range_failed",
           "missing_native_tier_corpus_discovery_artifact",
           "native_tier_corpus_discovery_failed"
         ],
@@ -2269,6 +2304,8 @@
           "lz4_native_summary_undercovered",
           "missing_zstd_native_summary_artifact",
           "zstd_native_summary_undercovered",
+          "missing_native_tier_range_artifact",
+          "native_tier_range_failed",
           "missing_native_tier_corpus_discovery_artifact",
           "native_tier_corpus_discovery_failed"
         ]
@@ -2328,7 +2365,9 @@
             "validation_missing_zlib_relaxed_artifact": "missing_zlib_relaxed_artifact",
             "validation_zlib_relaxed_failed": "zlib_relaxed_failed",
             "validation_missing_native_allocation_artifact": "missing_native_allocation_artifact",
-            "validation_native_allocation_failed": "native_allocation_failed"
+            "validation_native_allocation_failed": "native_allocation_failed",
+            "validation_missing_native_tier_range_artifact": "missing_native_tier_range_artifact",
+            "validation_native_tier_range_failed": "native_tier_range_failed"
           },
           "target": "reason"
         },
@@ -2386,7 +2425,9 @@
             "missing_zlib_relaxed_artifact": "missing_zlib_relaxed_artifact",
             "zlib_relaxed_failed": "zlib_relaxed_failed",
             "missing_native_allocation_artifact": "missing_native_allocation_artifact",
-            "native_allocation_failed": "native_allocation_failed"
+            "native_allocation_failed": "native_allocation_failed",
+            "missing_native_tier_range_artifact": "missing_native_tier_range_artifact",
+            "native_tier_range_failed": "native_tier_range_failed"
           },
           "target": "reason"
         }

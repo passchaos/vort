@@ -1737,6 +1737,7 @@ def main() -> int:
     native_summary_error_negative_healthy = native_summary_error_negative["healthy"]
     lz4_native_summary_healthy = lz4_native_summary["healthy"]
     zstd_native_summary_healthy = zstd_native_summary["healthy"]
+    native_tier_healthy = native_tier_health["healthy"]
     native_tier_discovery_healthy = native_tier_discovery_health["healthy"]
     validation_healthy = (
         producer_healthy
@@ -1761,6 +1762,7 @@ def main() -> int:
         and native_summary_error_negative_healthy
         and lz4_native_summary_healthy
         and zstd_native_summary_healthy
+        and native_tier_healthy
         and native_tier_discovery_healthy
     )
     validation_unhealthy_reasons = []
@@ -1895,6 +1897,10 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_zstd_native_summary_artifact")
     elif not zstd_native_summary_healthy:
         validation_unhealthy_reasons.append("zstd_native_summary_undercovered")
+    if not native_tier_health["present"]:
+        validation_unhealthy_reasons.append("missing_native_tier_range_artifact")
+    elif not native_tier_healthy:
+        validation_unhealthy_reasons.append("native_tier_range_failed")
     if not native_tier_discovery_health["present"]:
         validation_unhealthy_reasons.append("missing_native_tier_corpus_discovery_artifact")
     elif not native_tier_discovery_healthy:
