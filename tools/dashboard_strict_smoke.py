@@ -1392,6 +1392,10 @@ def write_level_report_markdown(path: Path, *, healthy: bool = True) -> None:
         scaled = int(value)
         return f"{scaled // 100}.{scaled % 100:02d}%"
 
+    def fixed2(value: str) -> str:
+        scaled = int(value)
+        return f"{scaled // 100}.{scaled % 100:02d}"
+
     lines = [
         "# Vort compression level report",
         "",
@@ -1416,6 +1420,20 @@ def write_level_report_markdown(path: Path, *, healthy: bool = True) -> None:
             f"{percent(best_adaptive['match_coverage_x10000'])} | {best_adaptive['tokens']} |"
         )
     lines.append("")
+    lines.extend(
+        [
+            "| case | level | strategy | parser | raw bytes | raw ratio | adaptive bytes | adaptive ratio | match coverage | avg match len | fixed bits/byte | tokens | stored fast path |",
+            "|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+        ]
+    )
+    for row in rows:
+        lines.append(
+            f"|{row['case']} | {row['level']} | {row['strategy']} | {row['parser']} | "
+            f"{row['raw_best_bytes']} | {percent(row['raw_best_ratio_x10000'])} | "
+            f"{row['adaptive_bytes']} | {percent(row['adaptive_ratio_x10000'])} | "
+            f"{percent(row['match_coverage_x10000'])} | {fixed2(row['avg_match_len_x100'])} | "
+            f"{fixed2(row['fixed_bits_per_byte_x100'])} | {row['tokens']} | {row['stored_fast_path']} |"
+        )
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -4391,6 +4409,7 @@ def main() -> int:
                     "| rows | 48 | expected 48, present `True` |",
                     "| row checks | 48 | positive/token/ratio/roundtrip 48/48/48/48 |",
                     "| Markdown summary | 4/4 | present `True`, healthy `True` |",
+                    "| Markdown detail rows | 48/48 | unmatched 0 |",
                 ],
             )
         )

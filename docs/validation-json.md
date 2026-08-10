@@ -2634,7 +2634,10 @@ Top-level fields:
   `level_report_token_accounting_rows`, `level_report_ratio_rows`,
   `level_report_roundtrip_rows`, `level_report_missing_pairs`,
   `level_report_markdown_present`, `level_report_markdown_summary_rows`,
-  `level_report_markdown_matched`, `level_report_markdown_unmatched`
+  `level_report_markdown_matched`, `level_report_markdown_unmatched`,
+  `level_report_markdown_detail_rows`,
+  `level_report_markdown_detail_matched`,
+  `level_report_markdown_detail_unmatched`
 - `dynamic_plan_present`, `dynamic_plan_healthy`,
   `dynamic_plan_source_count`, `dynamic_plan_expected_source_count`,
   `dynamic_plan_rows`, `dynamic_plan_expected_rows`,
@@ -3173,6 +3176,9 @@ Example:
   "level_report_markdown_summary_rows": 0,
   "level_report_markdown_matched": 0,
   "level_report_markdown_unmatched": 0,
+  "level_report_markdown_detail_rows": 0,
+  "level_report_markdown_detail_matched": 0,
+  "level_report_markdown_detail_unmatched": 0,
   "dynamic_plan_present": false,
   "dynamic_plan_healthy": false,
   "dynamic_plan_source_count": 0,

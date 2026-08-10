@@ -2607,3 +2607,8 @@ architecture blindly.
   Aggregate health now exposes Markdown case-row matched/unmatched counters in
   addition to the existing summary counters before Huffman length coverage can
   pass.
+- Tightened compression level dashboard health by requiring the retained
+  `vort-level-report.md` detail table to match every CSV level/strategy row.
+  Aggregate health now exposes Markdown detail-row matched/unmatched counters
+  alongside the existing best-row summary checks before level-report coverage
+  can pass.

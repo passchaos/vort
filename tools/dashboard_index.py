@@ -578,10 +578,13 @@ def level_report_health(artifacts: list[Path]) -> dict:
             if roundtrip_crc32 > 0:
                 roundtrip_rows += 1
 
+        row_count = len(rows)
         missing_pairs = sorted("/".join(pair) for pair in expected_pairs - seen)
         markdown_present = False
         markdown_summary_rows = 0
         markdown_matched = 0
+        markdown_detail_rows = 0
+        markdown_detail_matched = 0
         for md_artifact in artifacts:
             if md_artifact.name != "vort-level-report.md":
                 continue
@@ -615,9 +618,32 @@ def level_report_health(artifacts: list[Path]) -> dict:
                 markdown_summary_rows += 1
                 if line in markdown_lines:
                     markdown_matched += 1
+            markdown_detail_rows = row_count
+            for row in rows:
+                expected_row = (
+                    "|{case} | {level} | {strategy} | {parser} | {raw_bytes} | {raw_ratio} | "
+                    "{adaptive_bytes} | {adaptive_ratio} | {coverage} | {avg_match_len} | "
+                    "{fixed_bits_per_byte} | {tokens} | {stored_fast_path} |"
+                ).format(
+                    case=row.get("case", ""),
+                    level=row.get("level", ""),
+                    strategy=row.get("strategy", ""),
+                    parser=row.get("parser", ""),
+                    raw_bytes=row.get("raw_best_bytes", ""),
+                    raw_ratio=percent(parse_int(row.get("raw_best_ratio_x10000")) or 0),
+                    adaptive_bytes=row.get("adaptive_bytes", ""),
+                    adaptive_ratio=percent(parse_int(row.get("adaptive_ratio_x10000")) or 0),
+                    coverage=percent(parse_int(row.get("match_coverage_x10000")) or 0),
+                    avg_match_len=percent(parse_int(row.get("avg_match_len_x100")) or 0).removesuffix("%"),
+                    fixed_bits_per_byte=percent(parse_int(row.get("fixed_bits_per_byte_x100")) or 0).removesuffix("%"),
+                    tokens=row.get("tokens", ""),
+                    stored_fast_path=row.get("stored_fast_path", ""),
+                )
+                if expected_row in markdown_lines:
+                    markdown_detail_matched += 1
             break
         markdown_unmatched = markdown_summary_rows - markdown_matched
-        row_count = len(rows)
+        markdown_detail_unmatched = markdown_detail_rows - markdown_detail_matched
         healthy = (
             row_count == expected_rows
             and not missing_pairs
@@ -629,6 +655,8 @@ def level_report_health(artifacts: list[Path]) -> dict:
             and markdown_present
             and markdown_summary_rows == 1 + len(expected_cases)
             and markdown_unmatched == 0
+            and markdown_detail_rows == row_count
+            and markdown_detail_unmatched == 0
         )
         return {
             "present": True,
@@ -645,6 +673,9 @@ def level_report_health(artifacts: list[Path]) -> dict:
             "markdown_summary_rows": markdown_summary_rows,
             "markdown_matched": markdown_matched,
             "markdown_unmatched": markdown_unmatched,
+            "markdown_detail_rows": markdown_detail_rows,
+            "markdown_detail_matched": markdown_detail_matched,
+            "markdown_detail_unmatched": markdown_detail_unmatched,
         }
     return {
         "present": False,
@@ -661,6 +692,9 @@ def level_report_health(artifacts: list[Path]) -> dict:
         "markdown_summary_rows": 0,
         "markdown_matched": 0,
         "markdown_unmatched": 0,
+        "markdown_detail_rows": 0,
+        "markdown_detail_matched": 0,
+        "markdown_detail_unmatched": 0,
     }
 
 
@@ -6200,6 +6234,7 @@ def main() -> int:
             f"| rows | {level_report['rows']} | expected {level_report['expected_rows']}, present `{level_report['present']}` |",
             f"| row checks | {level_report['shape_rows']} | positive/token/ratio/roundtrip {level_report['positive_rows']}/{level_report['token_accounting_rows']}/{level_report['ratio_rows']}/{level_report['roundtrip_rows']} |",
             f"| Markdown summary | {level_report['markdown_matched']}/{level_report['markdown_summary_rows']} | present `{level_report['markdown_present']}`, healthy `{level_report_healthy}` |",
+            f"| Markdown detail rows | {level_report['markdown_detail_matched']}/{level_report['markdown_detail_rows']} | unmatched {level_report['markdown_detail_unmatched']} |",
             "",
         ]
     )
@@ -6612,6 +6647,9 @@ def main() -> int:
                 "level_report_markdown_summary_rows": level_report["markdown_summary_rows"],
                 "level_report_markdown_matched": level_report["markdown_matched"],
                 "level_report_markdown_unmatched": level_report["markdown_unmatched"],
+                "level_report_markdown_detail_rows": level_report["markdown_detail_rows"],
+                "level_report_markdown_detail_matched": level_report["markdown_detail_matched"],
+                "level_report_markdown_detail_unmatched": level_report["markdown_detail_unmatched"],
                 "dynamic_plan_present": dynamic_plan["present"],
                 "dynamic_plan_healthy": dynamic_plan_healthy,
                 "dynamic_plan_source_count": dynamic_plan["source_count"],

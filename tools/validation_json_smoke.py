@@ -1204,6 +1204,9 @@ def main() -> int:
         assert dashboard["level_report_markdown_summary_rows"] == 4
         assert dashboard["level_report_markdown_matched"] == 4
         assert dashboard["level_report_markdown_unmatched"] == 0
+        assert dashboard["level_report_markdown_detail_rows"] == dashboard["level_report_rows"]
+        assert dashboard["level_report_markdown_detail_matched"] == dashboard["level_report_rows"]
+        assert dashboard["level_report_markdown_detail_unmatched"] == 0
         assert dashboard["dynamic_plan_present"] is True
         assert dashboard["dynamic_plan_healthy"] is True
         assert dashboard["dynamic_plan_source_count"] == 2
