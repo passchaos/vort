@@ -756,7 +756,9 @@
           "positive": [
             "huffman_length_row_count",
             "huffman_length_markdown_summary_rows",
-            "huffman_length_markdown_matched"
+            "huffman_length_markdown_matched",
+            "huffman_length_markdown_case_rows",
+            "huffman_length_markdown_case_matched"
           ],
           "zero": [
             "huffman_length_non_optimal_rows",
@@ -764,7 +766,8 @@
             "huffman_length_worst_gap_bits",
             "huffman_length_package_merge_non_optimal_rows",
             "huffman_length_package_merge_worst_gap_bits",
-            "huffman_length_markdown_unmatched"
+            "huffman_length_markdown_unmatched",
+            "huffman_length_markdown_case_unmatched"
           ]
         },
         "native_tier_corpus_discovery_healthy": {
@@ -1825,6 +1828,9 @@
         "huffman_length_markdown_summary_rows": "int",
         "huffman_length_markdown_matched": "int",
         "huffman_length_markdown_unmatched": "int",
+        "huffman_length_markdown_case_rows": "int",
+        "huffman_length_markdown_case_matched": "int",
+        "huffman_length_markdown_case_unmatched": "int",
         "huffman_length_present": "bool",
         "huffman_length_row_count": "int",
         "huffman_length_worst_gap_bits": "int",
@@ -2628,6 +2634,16 @@
           "left": "zlib_relaxed_markdown_matched",
           "op": "eq",
           "right": "zlib_relaxed_markdown_rows"
+        },
+        {
+          "left": "huffman_length_markdown_case_rows",
+          "op": "eq",
+          "right": "huffman_length_row_count"
+        },
+        {
+          "left": "huffman_length_markdown_case_matched",
+          "op": "eq",
+          "right": "huffman_length_markdown_case_rows"
         }
       ]
     },

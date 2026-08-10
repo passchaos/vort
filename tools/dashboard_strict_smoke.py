@@ -1214,6 +1214,7 @@ def write_huffman_length_markdown(
     package_merge_non_optimal_rows: int = 0,
     package_merge_worst_gap_bits: int = 0,
 ) -> None:
+    row_is_optimal = non_optimal_rows == 0 and package_merge_non_optimal_rows == 0
     lines = [
         "# Huffman length-limit report",
         "",
@@ -1226,7 +1227,17 @@ def write_huffman_length_markdown(
         f"- package-merge non-optimal rows: {package_merge_non_optimal_rows}",
         f"- package-merge worst gap bits: {package_merge_worst_gap_bits}",
         "",
+        "| case | symbols | max bits | optimal cost | actual cost | gap bits | package-merge cost | package-merge gap | Kraft | optimal? | package-merge optimal? | lengths | oracle lengths | package-merge lengths |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|---|",
     ]
+    if row_count > 0:
+        actual_cost = "5" if row_is_optimal else "6"
+        gap_bits = "0" if row_is_optimal else "1"
+        optimal = "true" if row_is_optimal else "false"
+        lengths = "1;2;2" if row_is_optimal else "2;2;2"
+        lines.append(
+            f"| strict-smoke | 3 | 2 | 5 | {actual_cost} | {gap_bits} | {actual_cost} | {gap_bits} | 4/4 | {optimal} | {optimal} | {lengths} | 1;2;2 | {lengths} |"
+        )
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -4365,6 +4376,7 @@ def main() -> int:
                     "| validation | count | detail |",
                     "| malformed rows | 0 | healthy `True` |",
                     "| Markdown summary | 7/7 | present `True` |",
+                    "| Markdown case rows | 1/1 | unmatched 0 |",
                 ],
             )
         )

@@ -2602,3 +2602,8 @@ architecture blindly.
   Aggregate health now cross-checks strict check rows, mode counts, expected
   mode requirements, validation-unhealthy reason rows, and Markdown snippets
   before dashboard-strict coverage can pass.
+- Tightened Huffman length oracle dashboard health by requiring the retained
+  `vort-huffman-length-report.md` table rows to match every CSV oracle row.
+  Aggregate health now exposes Markdown case-row matched/unmatched counters in
+  addition to the existing summary counters before Huffman length coverage can
+  pass.

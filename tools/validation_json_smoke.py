@@ -57,7 +57,7 @@ def write_huffman_length_csv(path: Path) -> None:
 
 def write_huffman_length_markdown(path: Path) -> None:
     # Keep this fixture in lockstep with the CSV row above so the dashboard
-    # smoke covers Markdown/CSV drift instead of only artifact presence.
+    # smoke covers Markdown/CSV row drift instead of only artifact presence.
     path.write_text(
         "\n".join(
             [
@@ -71,6 +71,10 @@ def write_huffman_length_markdown(path: Path) -> None:
                 "- package-merge optimal rows: 1",
                 "- package-merge non-optimal rows: 0",
                 "- package-merge worst gap bits: 0",
+                "",
+                "| case | symbols | max bits | optimal cost | actual cost | gap bits | package-merge cost | package-merge gap | Kraft | optimal? | package-merge optimal? | lengths | oracle lengths | package-merge lengths |",
+                "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|---|",
+                "| validation-json-smoke | 3 | 2 | 5 | 5 | 0 | 5 | 0 | 4/4 | true | true | 1;2;2 | 1;2;2 | 1;2;2 |",
                 "",
             ]
         )
@@ -1183,6 +1187,9 @@ def main() -> int:
         assert dashboard["huffman_length_markdown_summary_rows"] == 7
         assert dashboard["huffman_length_markdown_matched"] == 7
         assert dashboard["huffman_length_markdown_unmatched"] == 0
+        assert dashboard["huffman_length_markdown_case_rows"] == dashboard["huffman_length_row_count"]
+        assert dashboard["huffman_length_markdown_case_matched"] == dashboard["huffman_length_row_count"]
+        assert dashboard["huffman_length_markdown_case_unmatched"] == 0
         assert dashboard["level_report_present"] is True
         assert dashboard["level_report_healthy"] is True
         assert dashboard["level_report_rows"] == 48

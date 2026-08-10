@@ -365,6 +365,8 @@ def huffman_length_health(artifacts: list[Path]) -> dict:
         markdown_present = False
         markdown_summary_rows = 0
         markdown_matched = 0
+        markdown_case_rows = 0
+        markdown_case_matched = 0
         markdown_expected = {
             "rows": row_count,
             "optimal rows": optimal_rows,
@@ -384,12 +386,27 @@ def huffman_length_health(artifacts: list[Path]) -> dict:
                 markdown_summary_rows += 1
                 if f"- {label}: {expected}" in markdown_lines:
                     markdown_matched += 1
+            markdown_case_rows = row_count
+            for row in rows:
+                expected_row = (
+                    f"| {row.get('case')} | {row.get('symbol_count')} | {row.get('max_bits')} | "
+                    f"{row.get('optimal_cost')} | {row.get('actual_cost')} | {row.get('gap_bits')} | "
+                    f"{row.get('package_merge_cost')} | {row.get('package_merge_gap_bits')} | "
+                    f"{row.get('kraft_cost')}/{row.get('kraft_limit')} | {row.get('optimal')} | "
+                    f"{row.get('package_merge_optimal')} | {row.get('lengths')} | "
+                    f"{row.get('optimal_lengths')} | {row.get('package_merge_lengths')} |"
+                )
+                if expected_row in markdown_lines:
+                    markdown_case_matched += 1
             break
         markdown_unmatched = markdown_summary_rows - markdown_matched
+        markdown_case_unmatched = markdown_case_rows - markdown_case_matched
         markdown_healthy = (
             markdown_present
             and markdown_summary_rows == len(markdown_expected)
             and markdown_unmatched == 0
+            and markdown_case_rows == row_count
+            and markdown_case_unmatched == 0
         )
         return {
             "present": True,
@@ -405,6 +422,9 @@ def huffman_length_health(artifacts: list[Path]) -> dict:
             "markdown_summary_rows": markdown_summary_rows,
             "markdown_matched": markdown_matched,
             "markdown_unmatched": markdown_unmatched,
+            "markdown_case_rows": markdown_case_rows,
+            "markdown_case_matched": markdown_case_matched,
+            "markdown_case_unmatched": markdown_case_unmatched,
             "healthy": row_count > 0
             and malformed_rows == 0
             and non_optimal_rows == 0
@@ -427,6 +447,9 @@ def huffman_length_health(artifacts: list[Path]) -> dict:
         "markdown_summary_rows": 0,
         "markdown_matched": 0,
         "markdown_unmatched": 0,
+        "markdown_case_rows": 0,
+        "markdown_case_matched": 0,
+        "markdown_case_unmatched": 0,
         "healthy": False,
     }
 
@@ -5569,7 +5592,7 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_sidecar_corrupt_artifact")
     elif not sidecar_corrupt_healthy:
         validation_unhealthy_reasons.append("sidecar_corrupt_failed")
-    if not huffman_health["present"]:
+    if not (huffman_health["present"] and huffman_health["markdown_present"]):
         validation_unhealthy_reasons.append("missing_huffman_length_artifact")
     elif not huffman_healthy:
         validation_unhealthy_reasons.append("huffman_length_failed")
@@ -6164,6 +6187,7 @@ def main() -> int:
             "| --- | ---: | --- |",
             f"| malformed rows | {huffman_health['malformed_rows']} | healthy `{huffman_healthy}` |",
             f"| Markdown summary | {huffman_health['markdown_matched']}/{huffman_health['markdown_summary_rows']} | present `{huffman_health['markdown_present']}` |",
+            f"| Markdown case rows | {huffman_health['markdown_case_matched']}/{huffman_health['markdown_case_rows']} | unmatched {huffman_health['markdown_case_unmatched']} |",
             "",
         ]
     )
@@ -6571,6 +6595,9 @@ def main() -> int:
                 "huffman_length_markdown_summary_rows": huffman_health["markdown_summary_rows"],
                 "huffman_length_markdown_matched": huffman_health["markdown_matched"],
                 "huffman_length_markdown_unmatched": huffman_health["markdown_unmatched"],
+                "huffman_length_markdown_case_rows": huffman_health["markdown_case_rows"],
+                "huffman_length_markdown_case_matched": huffman_health["markdown_case_matched"],
+                "huffman_length_markdown_case_unmatched": huffman_health["markdown_case_unmatched"],
                 "level_report_present": level_report["present"],
                 "level_report_healthy": level_report_healthy,
                 "level_report_rows": level_report["rows"],

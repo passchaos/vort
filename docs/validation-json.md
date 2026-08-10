@@ -2624,7 +2624,10 @@ Top-level fields:
   `huffman_length_markdown_present`,
   `huffman_length_markdown_summary_rows`,
   `huffman_length_markdown_matched`,
-  `huffman_length_markdown_unmatched`
+  `huffman_length_markdown_unmatched`,
+  `huffman_length_markdown_case_rows`,
+  `huffman_length_markdown_case_matched`,
+  `huffman_length_markdown_case_unmatched`
 - `level_report_present`, `level_report_healthy`,
   `level_report_rows`, `level_report_expected_rows`,
   `level_report_positive_rows`, `level_report_shape_rows`,
@@ -3153,6 +3156,9 @@ Example:
   "huffman_length_markdown_summary_rows": 0,
   "huffman_length_markdown_matched": 0,
   "huffman_length_markdown_unmatched": 0,
+  "huffman_length_markdown_case_rows": 0,
+  "huffman_length_markdown_case_matched": 0,
+  "huffman_length_markdown_case_unmatched": 0,
   "level_report_present": false,
   "level_report_healthy": false,
   "level_report_rows": 0,
