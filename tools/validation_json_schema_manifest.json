@@ -935,7 +935,9 @@
         },
         "zlib_relaxed_healthy": {
           "all": [
-            "zlib_relaxed_present"
+            "zlib_relaxed_present",
+            "zlib_relaxed_gate_present",
+            "zlib_relaxed_gate_ok"
           ],
           "positive": [
             "zlib_relaxed_strict_rejections",
@@ -948,7 +950,12 @@
             "gzip_relaxed_successes",
             "gzip_relaxed_concatenated_successes",
             "gzip_relaxed_decoder_successes",
-            "gzip_relaxed_limited_rejections"
+            "gzip_relaxed_limited_rejections",
+            "zlib_relaxed_gate_check_count",
+            "zlib_relaxed_gate_passed_count"
+          ],
+          "zero": [
+            "zlib_relaxed_gate_failed_checks"
           ]
         },
         "png_scratch_healthy": {
@@ -1399,6 +1406,11 @@
         "png_scratch_min_streaming_ratio": "int",
         "zlib_relaxed_present": "bool",
         "zlib_relaxed_healthy": "bool",
+        "zlib_relaxed_gate_present": "bool",
+        "zlib_relaxed_gate_ok": "bool",
+        "zlib_relaxed_gate_check_count": "int",
+        "zlib_relaxed_gate_passed_count": "int",
+        "zlib_relaxed_gate_failed_checks": "list",
         "zlib_relaxed_strict_rejections": "int",
         "zlib_relaxed_successes": "int",
         "zlib_relaxed_dictionary_successes": "int",

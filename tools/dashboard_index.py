@@ -832,63 +832,67 @@ def png_scratch_health(artifacts: list[Path]) -> dict:
 
 
 def zlib_relaxed_health(artifacts: list[Path]) -> dict:
+    report = None
+    gate = None
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
-        if data.get("schema") != "vort.zlib_relaxed_report":
-            continue
-        def int_field(field: str) -> int:
-            value = data.get(field)
-            return value if isinstance(value, int) and not isinstance(value, bool) else 0
-        zlib_total = int_field("strict_rejections") + int_field("relaxed_successes") + int_field("dictionary_successes") + int_field("zlib_concatenated_successes") + int_field("zlib_decoder_successes") + int_field("limited_rejections")
-        gzip_total = int_field("gzip_strict_rejections") + int_field("gzip_relaxed_successes") + int_field("gzip_concatenated_successes") + int_field("gzip_decoder_successes") + int_field("gzip_limited_rejections")
-        healthy = (
-            int_field("strict_rejections") >= 2
-            and int_field("relaxed_successes") >= 5
-            and int_field("dictionary_successes") >= 2
-            and int_field("zlib_concatenated_successes") >= 3
-            and int_field("zlib_decoder_successes") >= 8
-            and int_field("limited_rejections") >= 1
-            and int_field("gzip_strict_rejections") >= 3
-            and int_field("gzip_relaxed_successes") >= 9
-            and int_field("gzip_concatenated_successes") >= 4
-            and int_field("gzip_decoder_successes") >= 4
-            and int_field("gzip_limited_rejections") >= 1
-        )
-        return {
-            "present": True,
-            "healthy": healthy,
-            "strict_rejections": int_field("strict_rejections"),
-            "relaxed_successes": int_field("relaxed_successes"),
-            "dictionary_successes": int_field("dictionary_successes"),
-            "zlib_concatenated_successes": int_field("zlib_concatenated_successes"),
-            "zlib_decoder_successes": int_field("zlib_decoder_successes"),
-            "limited_rejections": int_field("limited_rejections"),
-            "gzip_strict_rejections": int_field("gzip_strict_rejections"),
-            "gzip_relaxed_successes": int_field("gzip_relaxed_successes"),
-            "gzip_concatenated_successes": int_field("gzip_concatenated_successes"),
-            "gzip_decoder_successes": int_field("gzip_decoder_successes"),
-            "gzip_limited_rejections": int_field("gzip_limited_rejections"),
-            "zlib_total": zlib_total,
-            "gzip_total": gzip_total,
-        }
-    return {
-        "present": False,
-        "healthy": False,
-        "strict_rejections": 0,
-        "relaxed_successes": 0,
-        "dictionary_successes": 0,
-        "zlib_concatenated_successes": 0,
-        "zlib_decoder_successes": 0,
-        "limited_rejections": 0,
-        "gzip_strict_rejections": 0,
-        "gzip_relaxed_successes": 0,
-        "gzip_concatenated_successes": 0,
-        "gzip_decoder_successes": 0,
-        "gzip_limited_rejections": 0,
-        "zlib_total": 0,
-        "gzip_total": 0,
-    }
+        if data.get("schema") == "vort.zlib_relaxed_report":
+            report = data
+        elif data.get("schema") == "vort.zlib_relaxed_report_gate":
+            gate = data
 
+    def int_field(field: str) -> int:
+        if not isinstance(report, dict):
+            return 0
+        value = report.get(field)
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    gate_checks = gate.get("checks") if isinstance(gate, dict) else {}
+    gate_checks = gate_checks if isinstance(gate_checks, dict) else {}
+    gate_check_count = len(gate_checks)
+    gate_passed_count = sum(1 for value in gate_checks.values() if value is True)
+    gate_failed_checks = sorted(str(name) for name, value in gate_checks.items() if value is not True)
+    gate_present = isinstance(gate, dict)
+    gate_ok = bool(gate.get("ok")) if isinstance(gate, dict) else False
+    zlib_total = int_field("strict_rejections") + int_field("relaxed_successes") + int_field("dictionary_successes") + int_field("zlib_concatenated_successes") + int_field("zlib_decoder_successes") + int_field("limited_rejections")
+    gzip_total = int_field("gzip_strict_rejections") + int_field("gzip_relaxed_successes") + int_field("gzip_concatenated_successes") + int_field("gzip_decoder_successes") + int_field("gzip_limited_rejections")
+    report_present = isinstance(report, dict)
+    report_healthy = (
+        int_field("strict_rejections") >= 2
+        and int_field("relaxed_successes") >= 5
+        and int_field("dictionary_successes") >= 2
+        and int_field("zlib_concatenated_successes") >= 3
+        and int_field("zlib_decoder_successes") >= 8
+        and int_field("limited_rejections") >= 1
+        and int_field("gzip_strict_rejections") >= 3
+        and int_field("gzip_relaxed_successes") >= 9
+        and int_field("gzip_concatenated_successes") >= 4
+        and int_field("gzip_decoder_successes") >= 4
+        and int_field("gzip_limited_rejections") >= 1
+    )
+    healthy = report_present and report_healthy and gate_present and gate_ok and gate_check_count > 0 and gate_passed_count == gate_check_count
+    return {
+        "present": report_present,
+        "healthy": healthy,
+        "gate_present": gate_present,
+        "gate_ok": gate_ok,
+        "gate_check_count": gate_check_count,
+        "gate_passed_count": gate_passed_count,
+        "gate_failed_checks": gate_failed_checks,
+        "strict_rejections": int_field("strict_rejections"),
+        "relaxed_successes": int_field("relaxed_successes"),
+        "dictionary_successes": int_field("dictionary_successes"),
+        "zlib_concatenated_successes": int_field("zlib_concatenated_successes"),
+        "zlib_decoder_successes": int_field("zlib_decoder_successes"),
+        "limited_rejections": int_field("limited_rejections"),
+        "gzip_strict_rejections": int_field("gzip_strict_rejections"),
+        "gzip_relaxed_successes": int_field("gzip_relaxed_successes"),
+        "gzip_concatenated_successes": int_field("gzip_concatenated_successes"),
+        "gzip_decoder_successes": int_field("gzip_decoder_successes"),
+        "gzip_limited_rejections": int_field("gzip_limited_rejections"),
+        "zlib_total": zlib_total,
+        "gzip_total": gzip_total,
+    }
 
 def snappy_report_health(artifacts: list[Path]) -> dict:
     expected_modes = {"raw_block", "framed", "raw_block_reusable", "framed_reusable"}
@@ -3507,7 +3511,7 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_png_scratch_artifact")
     elif not png_scratch_healthy:
         validation_unhealthy_reasons.append("png_scratch_failed")
-    if not zlib_relaxed["present"]:
+    if not (zlib_relaxed["present"] and zlib_relaxed["gate_present"]):
         validation_unhealthy_reasons.append("missing_zlib_relaxed_artifact")
     elif not zlib_relaxed_healthy:
         validation_unhealthy_reasons.append("zlib_relaxed_failed")
@@ -3818,6 +3822,7 @@ def main() -> int:
             "| --- | ---: | ---: | ---: | ---: | ---: | --- |",
             f"| zlib | {zlib_relaxed['strict_rejections']} | {zlib_relaxed['relaxed_successes']} | {zlib_relaxed['zlib_concatenated_successes']} | {zlib_relaxed['zlib_decoder_successes']} | {zlib_relaxed['limited_rejections']} | dictionary {zlib_relaxed['dictionary_successes']} |",
             f"| gzip | {zlib_relaxed['gzip_strict_rejections']} | {zlib_relaxed['gzip_relaxed_successes']} | {zlib_relaxed['gzip_concatenated_successes']} | {zlib_relaxed['gzip_decoder_successes']} | {zlib_relaxed['gzip_limited_rejections']} | total {zlib_relaxed['gzip_total']} |",
+            f"| gate | {zlib_relaxed['gate_check_count']} | {zlib_relaxed['gate_passed_count']} | 0 | 0 | {len(zlib_relaxed['gate_failed_checks'])} | ok `{zlib_relaxed['gate_ok']}` |",
             "",
         ]
     )
@@ -4439,6 +4444,11 @@ def main() -> int:
                 "png_scratch_min_streaming_ratio": png_scratch["min_streaming_ratio"],
                 "zlib_relaxed_present": zlib_relaxed["present"],
                 "zlib_relaxed_healthy": zlib_relaxed["healthy"],
+                "zlib_relaxed_gate_present": zlib_relaxed["gate_present"],
+                "zlib_relaxed_gate_ok": zlib_relaxed["gate_ok"],
+                "zlib_relaxed_gate_check_count": zlib_relaxed["gate_check_count"],
+                "zlib_relaxed_gate_passed_count": zlib_relaxed["gate_passed_count"],
+                "zlib_relaxed_gate_failed_checks": zlib_relaxed["gate_failed_checks"],
                 "zlib_relaxed_strict_rejections": zlib_relaxed["strict_rejections"],
                 "zlib_relaxed_successes": zlib_relaxed["relaxed_successes"],
                 "zlib_relaxed_dictionary_successes": zlib_relaxed["dictionary_successes"],

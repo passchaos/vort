@@ -42,6 +42,7 @@ FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
 DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
 PYTHON_ZLIB_DIFF_ARTIFACT = "vort-python-zlib-diff-smoke.json"
 ZLIB_RELAXED_ARTIFACT = "vort-zlib-relaxed-report.json"
+ZLIB_RELAXED_GATE_ARTIFACT = "vort-zlib-relaxed-report-gate.json"
 SNAPPY_REPORT_ARTIFACT = "vort-snappy-report.csv"
 PNG_SCRATCH_ARTIFACT = "vort-png-scratch-report.json"
 BR_STATIC_CANDIDATES_ARTIFACT = "vort-br-static-dictionary-candidates.json"
@@ -288,10 +289,11 @@ def write_producer_map(
             "smoke_gate": "zig build run-python-zlib-diff-dashboard",
         }
     if include_zlib_relaxed_smoke:
-        artifact_metadata[ZLIB_RELAXED_ARTIFACT] = {
-            "expected_format": "json",
-            "smoke_gate": "zig build run-zlib-relaxed-report-gate",
-        }
+        for artifact in (ZLIB_RELAXED_ARTIFACT, ZLIB_RELAXED_GATE_ARTIFACT):
+            artifact_metadata[artifact] = {
+                "expected_format": "json",
+                "smoke_gate": "zig build run-zlib-relaxed-report-gate",
+            }
     if include_snappy_report_smoke:
         artifact_metadata[SNAPPY_REPORT_ARTIFACT] = {
             "expected_format": "csv",
@@ -422,6 +424,7 @@ def write_producer_map(
         exact[PYTHON_ZLIB_DIFF_ARTIFACT] = "zig build run-python-zlib-diff-dashboard"
     if include_zlib_relaxed_exact:
         exact[ZLIB_RELAXED_ARTIFACT] = "zig build run-zlib-relaxed-report-gate"
+        exact[ZLIB_RELAXED_GATE_ARTIFACT] = "zig build run-zlib-relaxed-report-gate"
     if include_snappy_report_exact:
         exact[SNAPPY_REPORT_ARTIFACT] = "zig build run-snappy-report-gate"
     if include_png_scratch_exact:
@@ -1756,6 +1759,24 @@ def write_zlib_relaxed_report(path: Path) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def write_zlib_relaxed_gate(path: Path, *, ok: bool = True) -> None:
+    checks = {
+        "strict_rejections": ok,
+        "relaxed_successes": ok,
+        "dictionary_successes": ok,
+        "zlib_concatenated_successes": ok,
+        "zlib_decoder_successes": ok,
+        "limited_rejections": ok,
+        "gzip_strict_rejections": ok,
+        "gzip_relaxed_successes": ok,
+        "gzip_concatenated_successes": ok,
+        "gzip_decoder_successes": ok,
+        "gzip_limited_rejections": ok,
+    }
+    payload = {"schema": "vort.zlib_relaxed_report_gate", "schema_version": 1, "ok": ok, "report": "zig-out/vort-zlib-relaxed-report.json", "checks": checks}
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
 def write_snappy_report_csv(path: Path, *, healthy: bool = True) -> None:
     columns = [
         "mode",
@@ -2469,6 +2490,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_decode_stage_report(root / DECODE_STAGE_ARTIFACT)
     write_python_zlib_diff_report(root / PYTHON_ZLIB_DIFF_ARTIFACT)
     write_zlib_relaxed_report(root / ZLIB_RELAXED_ARTIFACT)
+    write_zlib_relaxed_gate(root / ZLIB_RELAXED_GATE_ARTIFACT)
     write_snappy_report_csv(root / SNAPPY_REPORT_ARTIFACT)
     write_png_scratch_report(root / PNG_SCRATCH_ARTIFACT)
     write_native_fuzz_corpus_artifacts(root)
@@ -2874,8 +2896,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 56/56 | 0 | allowed missing 0 |",
-                    "| smoke gates | 56/56 | 0 | required missing 0 |",
+                    "| producer steps | 57/57 | 0 | allowed missing 0 |",
+                    "| smoke gates | 57/57 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -3310,6 +3332,7 @@ def main() -> int:
                     "| wrapper | strict rejections | relaxed successes | concatenated successes | decoder successes | limited rejections | extra |",
                     "| zlib | 2 | 5 | 3 | 8 | 1 | dictionary 2 |",
                     "| gzip | 3 | 9 | 4 | 4 | 1 | total 21 |",
+                    "| gate | 11 | 11 | 0 | 0 | 0 | ok `True` |",
                 ],
             )
         )
@@ -3689,9 +3712,7 @@ def main() -> int:
                 write_producer_map(producer_map)
             elif fixture == "zlib_relaxed_failed":
                 write_zlib_relaxed_report(fixture_root / ZLIB_RELAXED_ARTIFACT)
-                payload = json.loads((fixture_root / ZLIB_RELAXED_ARTIFACT).read_text())
-                payload["relaxed_successes"] = 0
-                (fixture_root / ZLIB_RELAXED_ARTIFACT).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+                write_zlib_relaxed_gate(fixture_root / ZLIB_RELAXED_GATE_ARTIFACT, ok=False)
                 write_producer_map(producer_map)
             elif fixture == "missing_snappy_report_artifact":
                 (fixture_root / SNAPPY_REPORT_ARTIFACT).unlink()

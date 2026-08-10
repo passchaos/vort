@@ -116,6 +116,7 @@ def main() -> int:
         lz4_native_summary_path = ROOT / "zig-out" / "vort-lz4-native-stream-summary.json"
         zstd_native_summary_path = ROOT / "zig-out" / "vort-zstd-native-stream-summary.json"
         zlib_relaxed_path = ROOT / "zig-out" / "vort-zlib-relaxed-report.json"
+        zlib_relaxed_gate_path = ROOT / "zig-out" / "vort-zlib-relaxed-report-gate.json"
         snappy_report_path = ROOT / "zig-out" / "vort-snappy-report.csv"
         native_allocation_path = ROOT / "zig-out" / "vort-native-allocation-report.json"
         native_library_bench_path = ROOT / "zig-out" / "vort-native-library-bench.csv"
@@ -418,6 +419,10 @@ def main() -> int:
         assert zlib_relaxed["gzip_decoder_successes"] >= 4
         assert zlib_relaxed["gzip_limited_rejections"] >= 1
         validate_value_against_manifest(zlib_relaxed, schemas_def)
+        zlib_relaxed_gate = json.loads(zlib_relaxed_gate_path.read_text())
+        assert zlib_relaxed_gate["schema"] == "vort.zlib_relaxed_report_gate"
+        assert zlib_relaxed_gate["ok"] is True
+        assert all(zlib_relaxed_gate["checks"].values())
         with checksum_bench_path.open(newline="") as f:
             checksum_bench_rows = list(csv.DictReader(f))
         assert len(checksum_bench_rows) == 21
@@ -898,6 +903,7 @@ def main() -> int:
         ):
             shutil.copyfile(ROOT / "zig-out" / artifact_name, root / artifact_name)
         shutil.copyfile(zlib_relaxed_path, root / "vort-zlib-relaxed-report.json")
+        shutil.copyfile(zlib_relaxed_gate_path, root / "vort-zlib-relaxed-report-gate.json")
         shutil.copyfile(snappy_report_path, root / "vort-snappy-report.csv")
         shutil.copyfile(png_scratch_path, root / "vort-png-scratch-report.json")
         shutil.copyfile(native_library_bench_path, root / "vort-native-library-bench.csv")
@@ -1094,6 +1100,11 @@ def main() -> int:
         assert dashboard["png_scratch_min_streaming_ratio"] > 0
         assert dashboard["zlib_relaxed_present"] is True
         assert dashboard["zlib_relaxed_healthy"] is True
+        assert dashboard["zlib_relaxed_gate_present"] is True
+        assert dashboard["zlib_relaxed_gate_ok"] is True
+        assert dashboard["zlib_relaxed_gate_check_count"] == len(zlib_relaxed_gate["checks"])
+        assert dashboard["zlib_relaxed_gate_passed_count"] == len(zlib_relaxed_gate["checks"])
+        assert dashboard["zlib_relaxed_gate_failed_checks"] == []
         assert dashboard["zlib_relaxed_strict_rejections"] == zlib_relaxed["strict_rejections"]
         assert dashboard["zlib_relaxed_successes"] == zlib_relaxed["relaxed_successes"]
         assert dashboard["zlib_relaxed_dictionary_successes"] == zlib_relaxed["dictionary_successes"]
