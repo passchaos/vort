@@ -318,6 +318,16 @@
       "fixture": "png_streaming_zlib_bench_failed"
     },
     {
+      "reason": "missing_deflate_dynamic_decode_profile_artifact",
+      "check": "validation_missing_deflate_dynamic_decode_profile_artifact",
+      "fixture": "missing_deflate_dynamic_decode_profile_artifact"
+    },
+    {
+      "reason": "deflate_dynamic_decode_profile_failed",
+      "check": "validation_deflate_dynamic_decode_profile_failed",
+      "fixture": "deflate_dynamic_decode_profile_failed"
+    },
+    {
       "reason": "missing_zstd_compare_artifact",
       "check": "validation_missing_zstd_compare_artifact",
       "fixture": "missing_zstd_compare_artifact"

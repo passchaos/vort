@@ -861,6 +861,7 @@
             "png_scanline_bench_healthy",
             "chunked_zlib_bench_healthy",
             "png_streaming_zlib_bench_healthy",
+            "deflate_dynamic_decode_profile_healthy",
             "zstd_compare_healthy",
             "native_fuzz_corpus_healthy",
             "br_static_dictionary_healthy",
@@ -1204,6 +1205,23 @@
           ],
           "zero": [
             "png_streaming_zlib_bench_missing_cases"
+          ]
+        },
+        "deflate_dynamic_decode_profile_healthy": {
+          "all": [
+            "deflate_dynamic_decode_profile_present"
+          ],
+          "positive": [
+            "deflate_dynamic_decode_profile_rows",
+            "deflate_dynamic_decode_profile_required_rows",
+            "deflate_dynamic_decode_profile_positive_rows",
+            "deflate_dynamic_decode_profile_histogram_rows",
+            "deflate_dynamic_decode_profile_lookup_rows",
+            "deflate_dynamic_decode_profile_match_class_rows",
+            "deflate_dynamic_decode_profile_chunked_window_rows"
+          ],
+          "zero": [
+            "deflate_dynamic_decode_profile_missing_cases"
           ]
         }
       },
@@ -1685,7 +1703,17 @@
         "png_streaming_zlib_bench_shape_rows": "int",
         "png_streaming_zlib_bench_image_size_rows": "int",
         "png_streaming_zlib_bench_ratio_rows": "int",
-        "png_streaming_zlib_bench_missing_cases": "list"
+        "png_streaming_zlib_bench_missing_cases": "list",
+        "deflate_dynamic_decode_profile_present": "bool",
+        "deflate_dynamic_decode_profile_healthy": "bool",
+        "deflate_dynamic_decode_profile_rows": "int",
+        "deflate_dynamic_decode_profile_required_rows": "int",
+        "deflate_dynamic_decode_profile_positive_rows": "int",
+        "deflate_dynamic_decode_profile_histogram_rows": "int",
+        "deflate_dynamic_decode_profile_lookup_rows": "int",
+        "deflate_dynamic_decode_profile_match_class_rows": "int",
+        "deflate_dynamic_decode_profile_chunked_window_rows": "int",
+        "deflate_dynamic_decode_profile_missing_cases": "list"
       },
       "item_collection": "artifacts",
       "item_enums": {
@@ -1791,6 +1819,8 @@
           "png_scanline_bench_failed",
           "chunked_zlib_bench_failed",
           "png_streaming_zlib_bench_failed",
+          "deflate_dynamic_decode_profile_failed",
+          "missing_deflate_dynamic_decode_profile_artifact",
           "missing_png_streaming_zlib_bench_artifact",
           "missing_chunked_zlib_bench_artifact",
           "missing_png_scanline_bench_artifact",
@@ -2168,6 +2198,8 @@
               "validation_png_scanline_bench_failed",
               "validation_chunked_zlib_bench_failed",
               "validation_png_streaming_zlib_bench_failed",
+              "validation_deflate_dynamic_decode_profile_failed",
+              "validation_missing_deflate_dynamic_decode_profile_artifact",
               "validation_missing_png_streaming_zlib_bench_artifact",
               "validation_missing_chunked_zlib_bench_artifact",
               "validation_missing_png_scanline_bench_artifact",
@@ -2249,6 +2281,8 @@
               "png_scanline_bench_failed",
               "chunked_zlib_bench_failed",
               "png_streaming_zlib_bench_failed",
+              "deflate_dynamic_decode_profile_failed",
+              "missing_deflate_dynamic_decode_profile_artifact",
               "missing_png_streaming_zlib_bench_artifact",
               "missing_chunked_zlib_bench_artifact",
               "missing_png_scanline_bench_artifact",
@@ -2353,7 +2387,9 @@
                 "validation_missing_chunked_zlib_bench_artifact": "missing_chunked_zlib_bench_artifact",
                 "validation_chunked_zlib_bench_failed": "chunked_zlib_bench_failed",
                 "validation_missing_png_streaming_zlib_bench_artifact": "missing_png_streaming_zlib_bench_artifact",
-                "validation_png_streaming_zlib_bench_failed": "png_streaming_zlib_bench_failed"
+                "validation_png_streaming_zlib_bench_failed": "png_streaming_zlib_bench_failed",
+                "validation_missing_deflate_dynamic_decode_profile_artifact": "missing_deflate_dynamic_decode_profile_artifact",
+                "validation_deflate_dynamic_decode_profile_failed": "deflate_dynamic_decode_profile_failed"
               },
               "target": "reason"
             }
@@ -2454,6 +2490,9 @@
           "validation_png_streaming_zlib_bench_failed",
           "validation_missing_png_streaming_zlib_bench_artifact",
           "png_streaming_zlib_bench_markdown_table",
+          "validation_deflate_dynamic_decode_profile_failed",
+          "validation_missing_deflate_dynamic_decode_profile_artifact",
+          "deflate_dynamic_decode_profile_markdown_table",
           "zstd_compare_markdown_table",
           "native_allocation_markdown_table",
           "native_fuzz_corpus_markdown_table",
@@ -2617,6 +2656,8 @@
           "validation_png_scanline_bench_failed",
           "validation_chunked_zlib_bench_failed",
           "validation_png_streaming_zlib_bench_failed",
+          "validation_deflate_dynamic_decode_profile_failed",
+          "validation_missing_deflate_dynamic_decode_profile_artifact",
           "validation_missing_png_streaming_zlib_bench_artifact",
           "validation_missing_chunked_zlib_bench_artifact",
           "validation_missing_png_scanline_bench_artifact",
@@ -2698,6 +2739,8 @@
           "png_scanline_bench_failed",
           "chunked_zlib_bench_failed",
           "png_streaming_zlib_bench_failed",
+          "deflate_dynamic_decode_profile_failed",
+          "missing_deflate_dynamic_decode_profile_artifact",
           "missing_png_streaming_zlib_bench_artifact",
           "missing_chunked_zlib_bench_artifact",
           "missing_png_scanline_bench_artifact",
@@ -2779,6 +2822,8 @@
           "png_scanline_bench_failed",
           "chunked_zlib_bench_failed",
           "png_streaming_zlib_bench_failed",
+          "deflate_dynamic_decode_profile_failed",
+          "missing_deflate_dynamic_decode_profile_artifact",
           "missing_png_streaming_zlib_bench_artifact",
           "missing_chunked_zlib_bench_artifact",
           "missing_png_scanline_bench_artifact",
@@ -2883,7 +2928,9 @@
             "validation_missing_chunked_zlib_bench_artifact": "missing_chunked_zlib_bench_artifact",
             "validation_chunked_zlib_bench_failed": "chunked_zlib_bench_failed",
             "validation_missing_png_streaming_zlib_bench_artifact": "missing_png_streaming_zlib_bench_artifact",
-            "validation_png_streaming_zlib_bench_failed": "png_streaming_zlib_bench_failed"
+            "validation_png_streaming_zlib_bench_failed": "png_streaming_zlib_bench_failed",
+            "validation_missing_deflate_dynamic_decode_profile_artifact": "missing_deflate_dynamic_decode_profile_artifact",
+            "validation_deflate_dynamic_decode_profile_failed": "deflate_dynamic_decode_profile_failed"
           },
           "target": "reason"
         },
@@ -2967,7 +3014,9 @@
             "missing_chunked_zlib_bench_artifact": "missing_chunked_zlib_bench_artifact",
             "chunked_zlib_bench_failed": "chunked_zlib_bench_failed",
             "missing_png_streaming_zlib_bench_artifact": "missing_png_streaming_zlib_bench_artifact",
-            "png_streaming_zlib_bench_failed": "png_streaming_zlib_bench_failed"
+            "png_streaming_zlib_bench_failed": "png_streaming_zlib_bench_failed",
+            "missing_deflate_dynamic_decode_profile_artifact": "missing_deflate_dynamic_decode_profile_artifact",
+            "deflate_dynamic_decode_profile_failed": "deflate_dynamic_decode_profile_failed"
           },
           "target": "reason"
         }

@@ -2007,6 +2007,168 @@ def png_streaming_zlib_bench_health(artifacts: list[Path]) -> dict:
     }
 
 
+def deflate_dynamic_decode_profile_health(artifacts: list[Path]) -> dict:
+    required_cases = {"README.md", "docs/roadmap.md", "chunked-window-match"}
+    class_names = {"rle", "small_distance", "non_overlapping", "overlapping"}
+
+    def parse_int(row: dict[str, str], key: str) -> int:
+        return int(row.get(key) or "0")
+
+    def parse_float(row: dict[str, str], key: str) -> float:
+        return float(row.get(key) or "0")
+
+    def parse_hist(row: dict[str, str], key: str, expected_len: int) -> list[int]:
+        parts = str(row.get(key) or "").split(";")
+        if len(parts) != expected_len:
+            raise ValueError(key)
+        return [int(part) for part in parts]
+
+    def basic_positive(row: dict[str, str]) -> bool:
+        positive_int_fields = ("input_bytes", "raw_bytes", "payload_ns", "output_bytes", "literal_symbols", "literal_fast_hits", "literal_lookup_covered", "literal_lookup_size", "distance_lookup_covered", "distance_lookup_size", "mix")
+        return all(parse_int(row, field) > 0 for field in positive_int_fields)
+
+    def histogram_ok(row: dict[str, str]) -> bool:
+        length_hist = parse_hist(row, "length_symbol_histogram", 29)
+        distance_hist = parse_hist(row, "distance_symbol_histogram", 30)
+        length_width_reads = parse_hist(row, "length_extra_width_reads", 14)
+        distance_width_reads = parse_hist(row, "distance_extra_width_reads", 14)
+        length_width_bits = parse_hist(row, "length_extra_width_bits", 14)
+        distance_width_bits = parse_hist(row, "distance_extra_width_bits", 14)
+        return (
+            sum(length_hist) == parse_int(row, "length_symbols")
+            and sum(distance_hist) == parse_int(row, "distance_symbols")
+            and sum(length_width_reads) == parse_int(row, "length_symbols")
+            and sum(distance_width_reads) == parse_int(row, "distance_symbols")
+            and sum(length_width_bits) == parse_int(row, "length_extra_bits")
+            and sum(distance_width_bits) == parse_int(row, "distance_extra_bits")
+            and parse_int(row, "distance_code_plus_extra_bits") == parse_int(row, "distance_code_bits") + parse_int(row, "distance_extra_bits")
+        )
+
+    def lookup_ok(row: dict[str, str]) -> bool:
+        literal_lookup_bits = parse_int(row, "literal_lookup_bits")
+        literal_covered = parse_int(row, "literal_lookup_covered")
+        literal_size = parse_int(row, "literal_lookup_size")
+        distance_covered = parse_int(row, "distance_lookup_covered")
+        distance_size = parse_int(row, "distance_lookup_size")
+        literal_ratio = parse_float(row, "literal_lookup_coverage_ratio")
+        distance_ratio = parse_float(row, "distance_lookup_coverage_ratio")
+        return (
+            literal_size == (1 << literal_lookup_bits)
+            and distance_size == 256
+            and 0 < literal_covered <= literal_size
+            and 0 < distance_covered <= distance_size
+            and 0.0 < literal_ratio <= 1.0
+            and 0.0 < distance_ratio <= 1.0
+        )
+
+    def match_class_ok(row: dict[str, str]) -> bool:
+        class_counts = [
+            parse_int(row, "match_rle_count"),
+            parse_int(row, "match_small_distance_count"),
+            parse_int(row, "match_non_overlapping_count"),
+            parse_int(row, "match_overlapping_count"),
+        ]
+        class_bytes = [
+            parse_int(row, "match_rle_bytes"),
+            parse_int(row, "match_small_distance_bytes"),
+            parse_int(row, "match_non_overlapping_bytes"),
+            parse_int(row, "match_overlapping_bytes"),
+        ]
+        dominant = str(row.get("dominant_match_class") or "")
+        if dominant not in class_names:
+            return False
+        dominant_index = ["rle", "small_distance", "non_overlapping", "overlapping"].index(dominant)
+        if class_bytes[dominant_index] != max(class_bytes):
+            return False
+        ratio_fields = (
+            "dominant_match_byte_ratio",
+            "match_rle_byte_ratio",
+            "match_small_distance_byte_ratio",
+            "match_non_overlapping_byte_ratio",
+            "match_overlapping_byte_ratio",
+        )
+        return (
+            sum(class_counts) == parse_int(row, "distance_symbols")
+            and sum(class_bytes) == parse_int(row, "match_bytes")
+            and all(0.0 <= parse_float(row, field) <= 1.0 for field in ratio_fields)
+        )
+
+    for artifact in artifacts:
+        if artifact.name != "vort-deflate-dynamic-decode-profile.csv":
+            continue
+        try:
+            with artifact.open(newline="") as f:
+                rows = list(csv.DictReader(f))
+        except Exception:
+            rows = []
+        by_case = {str(row.get("case") or ""): row for row in rows}
+        missing_cases = sorted(required_cases - set(by_case))
+        required_rows = [by_case[case] for case in sorted(required_cases) if case in by_case]
+        positive_rows = 0
+        histogram_rows = 0
+        lookup_rows = 0
+        match_class_rows = 0
+        for row in required_rows:
+            try:
+                if basic_positive(row):
+                    positive_rows += 1
+                if histogram_ok(row):
+                    histogram_rows += 1
+                if lookup_ok(row):
+                    lookup_rows += 1
+                if match_class_ok(row):
+                    match_class_rows += 1
+            except (ValueError, OverflowError):
+                continue
+        chunked = by_case.get("chunked-window-match")
+        chunked_window_rows = 0
+        if chunked is not None:
+            try:
+                if (
+                    parse_int(chunked, "input_bytes") == (512 * 3 + 1) * 256
+                    and parse_int(chunked, "raw_bytes") > 64 * 1024
+                    and parse_int(chunked, "match_bytes") > parse_int(chunked, "literal_symbols")
+                    and chunked.get("dominant_match_class") == "non_overlapping"
+                ):
+                    chunked_window_rows = 1
+            except ValueError:
+                chunked_window_rows = 0
+        required_count = len(required_cases)
+        healthy = (
+            len(rows) >= required_count
+            and not missing_cases
+            and positive_rows == required_count
+            and histogram_rows == required_count
+            and lookup_rows == required_count
+            and match_class_rows == required_count
+            and chunked_window_rows == 1
+        )
+        return {
+            "present": True,
+            "healthy": healthy,
+            "row_count": len(rows),
+            "required_rows": required_count,
+            "positive_rows": positive_rows,
+            "histogram_rows": histogram_rows,
+            "lookup_rows": lookup_rows,
+            "match_class_rows": match_class_rows,
+            "chunked_window_rows": chunked_window_rows,
+            "missing_cases": missing_cases,
+        }
+    return {
+        "present": False,
+        "healthy": False,
+        "row_count": 0,
+        "required_rows": len(required_cases),
+        "positive_rows": 0,
+        "histogram_rows": 0,
+        "lookup_rows": 0,
+        "match_class_rows": 0,
+        "chunked_window_rows": 0,
+        "missing_cases": [],
+    }
+
+
 def zstd_compare_health(artifacts: list[Path]) -> dict:
     compare = None
     standard = None
@@ -2890,6 +3052,7 @@ def main() -> int:
     png_scanline_bench = png_scanline_bench_health(artifacts)
     chunked_zlib_bench = chunked_zlib_bench_health(artifacts)
     png_streaming_zlib_bench = png_streaming_zlib_bench_health(artifacts)
+    deflate_dynamic_decode_profile = deflate_dynamic_decode_profile_health(artifacts)
     zstd_compare = zstd_compare_health(artifacts)
     native_allocation = native_allocation_health(artifacts)
     python_zlib_health = python_zlib_diff_health(artifacts)
@@ -2946,6 +3109,7 @@ def main() -> int:
     png_scanline_bench_healthy = png_scanline_bench["healthy"]
     chunked_zlib_bench_healthy = chunked_zlib_bench["healthy"]
     png_streaming_zlib_bench_healthy = png_streaming_zlib_bench["healthy"]
+    deflate_dynamic_decode_profile_healthy = deflate_dynamic_decode_profile["healthy"]
     native_allocation_healthy = native_allocation["healthy"]
     native_summary_error_healthy = native_summary_error_health["healthy"]
     native_summary_error_negative_healthy = native_summary_error_negative["healthy"]
@@ -2983,6 +3147,7 @@ def main() -> int:
         and png_scanline_bench_healthy
         and chunked_zlib_bench_healthy
         and png_streaming_zlib_bench_healthy
+        and deflate_dynamic_decode_profile_healthy
         and br_static_dictionary["healthy"]
         and native_summary_error_healthy
         and native_summary_error_negative_healthy
@@ -3119,6 +3284,10 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_png_streaming_zlib_bench_artifact")
     elif not png_streaming_zlib_bench_healthy:
         validation_unhealthy_reasons.append("png_streaming_zlib_bench_failed")
+    if not deflate_dynamic_decode_profile["present"]:
+        validation_unhealthy_reasons.append("missing_deflate_dynamic_decode_profile_artifact")
+    elif not deflate_dynamic_decode_profile_healthy:
+        validation_unhealthy_reasons.append("deflate_dynamic_decode_profile_failed")
     native_allocation_present = (
         native_allocation["present"]
         and native_allocation["smoke_present"]
@@ -3514,6 +3683,18 @@ def main() -> int:
             f"| rows | {png_streaming_zlib_bench['row_count']} | expected {png_streaming_zlib_bench['expected_rows']}, present `{png_streaming_zlib_bench['present']}` |",
             f"| shape rows | {png_streaming_zlib_bench['shape_rows']} | positive rows {png_streaming_zlib_bench['positive_rows']} |",
             f"| ratio rows | {png_streaming_zlib_bench['ratio_rows']} | image-size rows {png_streaming_zlib_bench['image_size_rows']}, missing cases {len(png_streaming_zlib_bench['missing_cases'])}, healthy `{png_streaming_zlib_bench['healthy']}` |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
+            "## Deflate dynamic decode profile coverage",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| rows | {deflate_dynamic_decode_profile['row_count']} | required {deflate_dynamic_decode_profile['required_rows']}, present `{deflate_dynamic_decode_profile['present']}` |",
+            f"| required row checks | {deflate_dynamic_decode_profile['positive_rows']} | histograms/lookups {deflate_dynamic_decode_profile['histogram_rows']}/{deflate_dynamic_decode_profile['lookup_rows']} |",
+            f"| match class rows | {deflate_dynamic_decode_profile['match_class_rows']} | chunked-window {deflate_dynamic_decode_profile['chunked_window_rows']}, missing cases {len(deflate_dynamic_decode_profile['missing_cases'])}, healthy `{deflate_dynamic_decode_profile['healthy']}` |",
             "",
         ]
     )
@@ -4063,6 +4244,16 @@ def main() -> int:
                 "png_streaming_zlib_bench_image_size_rows": png_streaming_zlib_bench["image_size_rows"],
                 "png_streaming_zlib_bench_ratio_rows": png_streaming_zlib_bench["ratio_rows"],
                 "png_streaming_zlib_bench_missing_cases": png_streaming_zlib_bench["missing_cases"],
+                "deflate_dynamic_decode_profile_present": deflate_dynamic_decode_profile["present"],
+                "deflate_dynamic_decode_profile_healthy": deflate_dynamic_decode_profile["healthy"],
+                "deflate_dynamic_decode_profile_rows": deflate_dynamic_decode_profile["row_count"],
+                "deflate_dynamic_decode_profile_required_rows": deflate_dynamic_decode_profile["required_rows"],
+                "deflate_dynamic_decode_profile_positive_rows": deflate_dynamic_decode_profile["positive_rows"],
+                "deflate_dynamic_decode_profile_histogram_rows": deflate_dynamic_decode_profile["histogram_rows"],
+                "deflate_dynamic_decode_profile_lookup_rows": deflate_dynamic_decode_profile["lookup_rows"],
+                "deflate_dynamic_decode_profile_match_class_rows": deflate_dynamic_decode_profile["match_class_rows"],
+                "deflate_dynamic_decode_profile_chunked_window_rows": deflate_dynamic_decode_profile["chunked_window_rows"],
+                "deflate_dynamic_decode_profile_missing_cases": deflate_dynamic_decode_profile["missing_cases"],
                 "zstd_compare_present": zstd_compare["present"],
                 "zstd_compare_standard_present": zstd_compare["standard_present"],
                 "zstd_compare_block_sweep_present": zstd_compare["block_sweep_present"],

@@ -36,6 +36,7 @@ DICTIONARY_DECODE_BENCH_ARTIFACT = "vort-dictionary-decode-bench.csv"
 PNG_SCANLINE_BENCH_ARTIFACT = "vort-png-scanline-bench.csv"
 CHUNKED_ZLIB_BENCH_ARTIFACT = "vort-chunked-zlib-bench-report-repeat3.csv"
 PNG_STREAMING_ZLIB_BENCH_ARTIFACT = "vort-png-streaming-zlib-bench-report-repeat3.csv"
+DEFLATE_DYNAMIC_DECODE_PROFILE_ARTIFACT = "vort-deflate-dynamic-decode-profile.csv"
 FUZZ_CORPUS_ARTIFACT = "vort-deflate-wrapper-fuzz-corpus.json"
 FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
 DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
@@ -120,6 +121,8 @@ def write_producer_map(
     include_chunked_zlib_bench_smoke: bool = True,
     include_png_streaming_zlib_bench_exact: bool = True,
     include_png_streaming_zlib_bench_smoke: bool = True,
+    include_deflate_dynamic_decode_profile_exact: bool = True,
+    include_deflate_dynamic_decode_profile_smoke: bool = True,
     include_fuzz_corpus_exact: bool = True,
     include_fuzz_corpus_smoke: bool = True,
     include_fuzz_coverage_exact: bool = True,
@@ -249,6 +252,11 @@ def write_producer_map(
         artifact_metadata[PNG_STREAMING_ZLIB_BENCH_ARTIFACT] = {
             "expected_format": "csv",
             "smoke_gate": "zig build run-png-streaming-zlib-bench-report-gate",
+        }
+    if include_deflate_dynamic_decode_profile_smoke:
+        artifact_metadata[DEFLATE_DYNAMIC_DECODE_PROFILE_ARTIFACT] = {
+            "expected_format": "csv",
+            "smoke_gate": "zig build run-deflate-dynamic-decode-profile-gate",
         }
     if include_fuzz_corpus_smoke:
         artifact_metadata[FUZZ_CORPUS_ARTIFACT] = {
@@ -388,6 +396,8 @@ def write_producer_map(
         exact[CHUNKED_ZLIB_BENCH_ARTIFACT] = "zig build run-chunked-zlib-bench-report-gate"
     if include_png_streaming_zlib_bench_exact:
         exact[PNG_STREAMING_ZLIB_BENCH_ARTIFACT] = "zig build run-png-streaming-zlib-bench-report-gate"
+    if include_deflate_dynamic_decode_profile_exact:
+        exact[DEFLATE_DYNAMIC_DECODE_PROFILE_ARTIFACT] = "zig build run-deflate-dynamic-decode-profile-gate"
     if include_fuzz_corpus_exact:
         exact[FUZZ_CORPUS_ARTIFACT] = "zig build run-deflate-wrapper-fuzz-corpus-dashboard"
     if include_fuzz_coverage_exact:
@@ -1277,6 +1287,196 @@ def write_png_streaming_zlib_bench_csv(path: Path, *, healthy: bool = True) -> N
     path.write_text("\n".join(lines) + "\n")
 
 
+def write_deflate_dynamic_decode_profile_csv(path: Path, *, healthy: bool = True) -> None:
+    columns = [
+        "case",
+        "input_bytes",
+        "raw_bytes",
+        "dynamic_hlit",
+        "dynamic_hdist",
+        "dynamic_literal_max_bits",
+        "dynamic_distance_max_bits",
+        "literal_lookup_bits",
+        "payload_ns",
+        "output_bytes",
+        "literal_symbols",
+        "length_symbols",
+        "match_bytes",
+        "distance_symbols",
+        "length_symbol_histogram",
+        "distance_symbol_histogram",
+        "top_length_symbols",
+        "top_distance_symbols",
+        "top_length_extra_symbols",
+        "top_distance_extra_symbols",
+        "length_extra_width_reads",
+        "distance_extra_width_reads",
+        "length_extra_width_bits",
+        "distance_extra_width_bits",
+        "length_extra_reads",
+        "distance_extra_reads",
+        "length_extra_bits",
+        "length_code_bits",
+        "distance_extra_bits",
+        "distance_code_bits",
+        "distance_code_plus_extra_bits",
+        "literal_fast_hits",
+        "literal_fast_misses",
+        "distance_fast_hits",
+        "distance_fast_misses",
+        "literal_lookup_covered",
+        "literal_lookup_size",
+        "distance_lookup_covered",
+        "distance_lookup_size",
+        "literal_lookup_coverage_ratio",
+        "distance_lookup_coverage_ratio",
+        "dominant_match_class",
+        "dominant_match_byte_ratio",
+        "match_rle_count",
+        "match_rle_bytes",
+        "match_small_distance_count",
+        "match_small_distance_bytes",
+        "match_non_overlapping_count",
+        "match_non_overlapping_bytes",
+        "match_overlapping_count",
+        "match_overlapping_bytes",
+        "match_rle_byte_ratio",
+        "match_small_distance_byte_ratio",
+        "match_non_overlapping_byte_ratio",
+        "match_overlapping_byte_ratio",
+        "match_class_length_extra_reads",
+        "match_class_length_extra_bits",
+        "match_class_distance_extra_reads",
+        "match_class_distance_extra_bits",
+        "match_class_distance_code_bits",
+        "match_rle_extra_bits_per_match",
+        "match_small_distance_extra_bits_per_match",
+        "match_non_overlapping_extra_bits_per_match",
+        "match_overlapping_extra_bits_per_match",
+        "match_rle_extra_bits_per_byte",
+        "match_small_distance_extra_bits_per_byte",
+        "match_non_overlapping_extra_bits_per_byte",
+        "match_overlapping_extra_bits_per_byte",
+        "match_rle_distance_code_plus_extra_bits_per_match",
+        "match_small_distance_code_plus_extra_bits_per_match",
+        "match_non_overlapping_distance_code_plus_extra_bits_per_match",
+        "match_overlapping_distance_code_plus_extra_bits_per_match",
+        "literal_fast_miss_ratio",
+        "distance_fast_miss_ratio",
+        "extra_bits_per_match",
+        "distance_code_plus_extra_bits_per_match",
+        "mix",
+    ]
+
+    def zeros(count: int) -> list[str]:
+        return ["0"] * count
+
+    def row(case: str, *, chunked: bool = False) -> dict[str, str]:
+        length_symbols = 4
+        distance_symbols = 4
+        length_hist = zeros(29)
+        distance_hist = zeros(30)
+        length_hist[0] = str(length_symbols)
+        distance_hist[0] = str(distance_symbols)
+        length_width_reads = zeros(14)
+        distance_width_reads = zeros(14)
+        length_width_bits = zeros(14)
+        distance_width_bits = zeros(14)
+        length_width_reads[0] = str(length_symbols)
+        distance_width_reads[0] = str(distance_symbols)
+        length_width_bits[0] = "8"
+        distance_width_bits[0] = "12"
+        input_bytes = (512 * 3 + 1) * 256 if chunked else 4096
+        raw_bytes = 70000 if chunked else 512
+        return {
+            "case": case,
+            "input_bytes": str(input_bytes),
+            "raw_bytes": str(raw_bytes),
+            "dynamic_hlit": "286",
+            "dynamic_hdist": "30",
+            "dynamic_literal_max_bits": "9",
+            "dynamic_distance_max_bits": "5",
+            "literal_lookup_bits": "9",
+            "payload_ns": "1000",
+            "output_bytes": str(input_bytes),
+            "literal_symbols": "10",
+            "length_symbols": str(length_symbols),
+            "match_bytes": "400",
+            "distance_symbols": str(distance_symbols),
+            "length_symbol_histogram": ";".join(length_hist),
+            "distance_symbol_histogram": ";".join(distance_hist),
+            "top_length_symbols": "0:4;1:1;2:1",
+            "top_distance_symbols": "0:4;1:1;2:1",
+            "top_length_extra_symbols": "0:4;1:1;2:1",
+            "top_distance_extra_symbols": "0:4;1:1;2:1",
+            "length_extra_width_reads": ";".join(length_width_reads),
+            "distance_extra_width_reads": ";".join(distance_width_reads),
+            "length_extra_width_bits": ";".join(length_width_bits),
+            "distance_extra_width_bits": ";".join(distance_width_bits),
+            "length_extra_reads": "4",
+            "distance_extra_reads": "4",
+            "length_extra_bits": "8",
+            "length_code_bits": "10",
+            "distance_extra_bits": "12",
+            "distance_code_bits": "20",
+            "distance_code_plus_extra_bits": "32",
+            "literal_fast_hits": "10",
+            "literal_fast_misses": "0",
+            "distance_fast_hits": "4",
+            "distance_fast_misses": "0",
+            "literal_lookup_covered": "512",
+            "literal_lookup_size": "512",
+            "distance_lookup_covered": "128",
+            "distance_lookup_size": "256",
+            "literal_lookup_coverage_ratio": "1.000000",
+            "distance_lookup_coverage_ratio": "0.500000",
+            "dominant_match_class": "non_overlapping",
+            "dominant_match_byte_ratio": "1.000000",
+            "match_rle_count": "0",
+            "match_rle_bytes": "0",
+            "match_small_distance_count": "0",
+            "match_small_distance_bytes": "0",
+            "match_non_overlapping_count": "4",
+            "match_non_overlapping_bytes": "400",
+            "match_overlapping_count": "0",
+            "match_overlapping_bytes": "0",
+            "match_rle_byte_ratio": "0.000000",
+            "match_small_distance_byte_ratio": "0.000000",
+            "match_non_overlapping_byte_ratio": "1.000000",
+            "match_overlapping_byte_ratio": "0.000000",
+            "match_class_length_extra_reads": "0;0;4;0",
+            "match_class_length_extra_bits": "0;0;8;0",
+            "match_class_distance_extra_reads": "0;0;4;0",
+            "match_class_distance_extra_bits": "0;0;12;0",
+            "match_class_distance_code_bits": "0;0;20;0",
+            "match_rle_extra_bits_per_match": "0.000000",
+            "match_small_distance_extra_bits_per_match": "0.000000",
+            "match_non_overlapping_extra_bits_per_match": "5.000000",
+            "match_overlapping_extra_bits_per_match": "0.000000",
+            "match_rle_extra_bits_per_byte": "0.000000",
+            "match_small_distance_extra_bits_per_byte": "0.000000",
+            "match_non_overlapping_extra_bits_per_byte": "0.050000",
+            "match_overlapping_extra_bits_per_byte": "0.000000",
+            "match_rle_distance_code_plus_extra_bits_per_match": "0.000000",
+            "match_small_distance_code_plus_extra_bits_per_match": "0.000000",
+            "match_non_overlapping_distance_code_plus_extra_bits_per_match": "8.000000",
+            "match_overlapping_distance_code_plus_extra_bits_per_match": "0.000000",
+            "literal_fast_miss_ratio": "0.000000",
+            "distance_fast_miss_ratio": "0.000000",
+            "extra_bits_per_match": "5.000000",
+            "distance_code_plus_extra_bits_per_match": "8.000000",
+            "mix": "12345",
+        }
+
+    rows = [row("README.md"), row("docs/roadmap.md"), row("chunked-window-match", chunked=True)]
+    if not healthy:
+        rows.pop()
+    lines = [",".join(columns)]
+    for item in rows:
+        lines.append(",".join(item[column] for column in columns))
+    path.write_text("\n".join(lines) + "\n")
+
+
 def write_fuzz_corpus_report(path: Path, *, ok: bool = True) -> None:
     matched_rows = 3 if ok else 2
     payload = {
@@ -2148,6 +2348,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_png_scanline_bench_csv(root / PNG_SCANLINE_BENCH_ARTIFACT)
     write_chunked_zlib_bench_csv(root / CHUNKED_ZLIB_BENCH_ARTIFACT)
     write_png_streaming_zlib_bench_csv(root / PNG_STREAMING_ZLIB_BENCH_ARTIFACT)
+    write_deflate_dynamic_decode_profile_csv(root / DEFLATE_DYNAMIC_DECODE_PROFILE_ARTIFACT)
     write_fuzz_corpus_report(root / FUZZ_CORPUS_ARTIFACT)
     write_fuzz_coverage_report(root / FUZZ_COVERAGE_ARTIFACT)
     write_decode_stage_report(root / DECODE_STAGE_ARTIFACT)
@@ -2549,8 +2750,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 51/51 | 0 | allowed missing 0 |",
-                    "| smoke gates | 51/51 | 0 | required missing 0 |",
+                    "| producer steps | 52/52 | 0 | allowed missing 0 |",
+                    "| smoke gates | 52/52 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -2877,6 +3078,20 @@ def main() -> int:
                     "| rows | 10 | expected 10, present `True` |",
                     "| shape rows | 10 | positive rows 10 |",
                     "| ratio rows | 10 | image-size rows 10, missing cases 0, healthy `True` |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
+                "deflate_dynamic_decode_profile_markdown_table",
+                "deflate dynamic decode profile Markdown table",
+                dashboard_markdown,
+                [
+                    "## Deflate dynamic decode profile coverage",
+                    "| category | count | detail |",
+                    "| rows | 3 | required 3, present `True` |",
+                    "| required row checks | 3 | histograms/lookups 3/3 |",
+                    "| match class rows | 3 | chunked-window 1, missing cases 0, healthy `True` |",
                 ],
             )
         )
@@ -3295,6 +3510,12 @@ def main() -> int:
                 write_producer_map(producer_map)
             elif fixture == "png_streaming_zlib_bench_failed":
                 write_png_streaming_zlib_bench_csv(fixture_root / PNG_STREAMING_ZLIB_BENCH_ARTIFACT, healthy=False)
+                write_producer_map(producer_map)
+            elif fixture == "missing_deflate_dynamic_decode_profile_artifact":
+                (fixture_root / DEFLATE_DYNAMIC_DECODE_PROFILE_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "deflate_dynamic_decode_profile_failed":
+                write_deflate_dynamic_decode_profile_csv(fixture_root / DEFLATE_DYNAMIC_DECODE_PROFILE_ARTIFACT, healthy=False)
                 write_producer_map(producer_map)
             elif fixture == "missing_fuzz_corpus_artifact":
                 (fixture_root / FUZZ_CORPUS_ARTIFACT).unlink()
