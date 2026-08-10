@@ -228,6 +228,16 @@
       "fixture": "snappy_report_failed"
     },
     {
+      "reason": "missing_deflate_match_copy_bench_artifact",
+      "check": "validation_missing_deflate_match_copy_bench_artifact",
+      "fixture": "missing_deflate_match_copy_bench_artifact"
+    },
+    {
+      "reason": "deflate_match_copy_bench_failed",
+      "check": "validation_deflate_match_copy_bench_failed",
+      "fixture": "deflate_match_copy_bench_failed"
+    },
+    {
       "reason": "missing_zstd_compare_artifact",
       "check": "validation_missing_zstd_compare_artifact",
       "fixture": "missing_zstd_compare_artifact"

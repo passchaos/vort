@@ -2495,3 +2495,11 @@ architecture blindly.
   chunk-cursor benchmark reasons in strict-validation-health. Validation JSON
   dashboard generation now depends on `run-chunk-cursor-bench-gate` so clean
   dashboard runs retain the CSV before aggregate health is enforced.
+
+- Promoted the existing deflate match-copy microbenchmark CSV into aggregate
+  dashboard validation health. The dashboard now parses
+  `vort-deflate-match-copy-bench.csv`, validates the 21-row case/kernel matrix,
+  class coverage, and positive timing/checksum rows, and exposes missing/failed
+  match-copy benchmark reasons in strict-validation-health. Validation JSON
+  dashboard generation now depends on `run-deflate-match-copy-bench-gate` so
+  clean dashboard runs retain the CSV before aggregate health is enforced.

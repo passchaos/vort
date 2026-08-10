@@ -1084,6 +1084,82 @@ def chunk_cursor_bench_health(artifacts: list[Path]) -> dict:
     }
 
 
+def deflate_match_copy_bench_health(artifacts: list[Path]) -> dict:
+    expected_cases = {
+        "rle-long",
+        "small-distance-long",
+        "nonoverlap-len3",
+        "nonoverlap-len6",
+        "nonoverlap-len32",
+        "overlap-text-like",
+        "overlap-distance-heavy",
+    }
+    expected_kernels = {"current", "nonoverlap_first", "small_unrolled"}
+    expected_classes = {"rle", "small_distance", "non_overlapping", "overlapping"}
+    expected_pairs = {(case, kernel) for case in expected_cases for kernel in expected_kernels}
+    for artifact in artifacts:
+        if artifact.name != "vort-deflate-match-copy-bench.csv":
+            continue
+        try:
+            with artifact.open(newline="") as f:
+                rows = list(csv.DictReader(f))
+        except Exception:
+            rows = []
+
+        seen: set[tuple[str, str]] = set()
+        positive_rows = 0
+        expected_class_rows = 0
+        for row in rows:
+            case = str(row.get("case") or "")
+            kernel = str(row.get("kernel") or "")
+            class_name = str(row.get("class") or "")
+            pair = (case, kernel)
+            if pair in expected_pairs:
+                seen.add(pair)
+            if class_name in expected_classes:
+                expected_class_rows += 1
+            try:
+                length = int(row.get("length") or "0")
+                distance = int(row.get("distance") or "0")
+                ops_per_iter = int(row.get("ops_per_iter") or "0")
+                iterations = int(row.get("iterations") or "0")
+                output_bytes = int(row.get("output_bytes") or "0")
+                elapsed_ns = int(row.get("elapsed_ns") or "0")
+                checksum = int(row.get("checksum") or "0")
+                output_mib_s = float(row.get("output_mib_per_s") or "0")
+            except ValueError:
+                continue
+            if all(value > 0 for value in (length, distance, ops_per_iter, iterations, output_bytes, elapsed_ns, checksum)) and output_mib_s > 0.0:
+                positive_rows += 1
+
+        missing_pairs = sorted(f"{case}:{kernel}" for case, kernel in expected_pairs - seen)
+        row_count = len(rows)
+        healthy = (
+            row_count == len(expected_pairs)
+            and not missing_pairs
+            and positive_rows == row_count
+            and expected_class_rows == row_count
+        )
+        return {
+            "present": True,
+            "healthy": healthy,
+            "row_count": row_count,
+            "expected_rows": len(expected_pairs),
+            "positive_rows": positive_rows,
+            "expected_class_rows": expected_class_rows,
+            "missing_pairs": missing_pairs,
+        }
+    return {
+        "present": False,
+        "healthy": False,
+        "row_count": 0,
+        "expected_rows": len(expected_pairs),
+        "positive_rows": 0,
+        "expected_class_rows": 0,
+        "missing_pairs": [],
+    }
+
+
 def zstd_compare_health(artifacts: list[Path]) -> dict:
     compare = None
     standard = None
@@ -1958,6 +2034,7 @@ def main() -> int:
     snappy_report = snappy_report_health(artifacts)
     checksum_bench = checksum_bench_health(artifacts)
     chunk_cursor_bench = chunk_cursor_bench_health(artifacts)
+    deflate_match_copy_bench = deflate_match_copy_bench_health(artifacts)
     zstd_compare = zstd_compare_health(artifacts)
     native_allocation = native_allocation_health(artifacts)
     python_zlib_health = python_zlib_diff_health(artifacts)
@@ -2005,6 +2082,7 @@ def main() -> int:
     snappy_report_healthy = snappy_report["healthy"]
     checksum_bench_healthy = checksum_bench["healthy"]
     chunk_cursor_bench_healthy = chunk_cursor_bench["healthy"]
+    deflate_match_copy_bench_healthy = deflate_match_copy_bench["healthy"]
     native_allocation_healthy = native_allocation["healthy"]
     native_summary_error_healthy = native_summary_error_health["healthy"]
     native_summary_error_negative_healthy = native_summary_error_negative["healthy"]
@@ -2033,6 +2111,7 @@ def main() -> int:
         and snappy_report_healthy
         and checksum_bench_healthy
         and chunk_cursor_bench_healthy
+        and deflate_match_copy_bench_healthy
         and br_static_dictionary["healthy"]
         and native_summary_error_healthy
         and native_summary_error_negative_healthy
@@ -2133,6 +2212,10 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_chunk_cursor_bench_artifact")
     elif not chunk_cursor_bench_healthy:
         validation_unhealthy_reasons.append("chunk_cursor_bench_failed")
+    if not deflate_match_copy_bench["present"]:
+        validation_unhealthy_reasons.append("missing_deflate_match_copy_bench_artifact")
+    elif not deflate_match_copy_bench_healthy:
+        validation_unhealthy_reasons.append("deflate_match_copy_bench_failed")
     native_allocation_present = (
         native_allocation["present"]
         and native_allocation["smoke_present"]
@@ -2222,6 +2305,7 @@ def main() -> int:
         f"- Snappy report: {snappy_report['row_count']}/{snappy_report['expected_rows']} rows, positive timing {snappy_report['positive_timing_rows']}, repetitive shrunk {snappy_report['repetitive_shrunk_rows']}, reusable size matches {snappy_report['reusable_size_matched_cases']}, healthy `{snappy_report_healthy}`",
         f"- checksum bench: {checksum_bench['row_count']}/{checksum_bench['expected_rows']} rows, workload {checksum_bench['workload_rows']}, positive {checksum_bench['positive_rows']}, mix groups crc32/crc32c {checksum_bench['crc32_mix_groups']}/{checksum_bench['crc32c_mix_groups']}, healthy `{checksum_bench_healthy}`",
         f"- chunk cursor bench: {chunk_cursor_bench['row_count']}/{chunk_cursor_bench['expected_rows']} rows, shape {chunk_cursor_bench['shape_rows']}, positive {chunk_cursor_bench['positive_rows']}, healthy `{chunk_cursor_bench_healthy}`",
+        f"- deflate match-copy bench: {deflate_match_copy_bench['row_count']}/{deflate_match_copy_bench['expected_rows']} rows, classes {deflate_match_copy_bench['expected_class_rows']}, positive {deflate_match_copy_bench['positive_rows']}, healthy `{deflate_match_copy_bench_healthy}`",
         f"- native tier range bench: {native_tier_health['ok_count']}/{native_tier_health['summary_count']} summaries ok across {native_tier_health['rows']} rows ({native_tier_health['enforced_count']} throughput-enforced), sources built-in/project/standard/custom/legacy {native_tier_health['built_in_summary_count']}/{native_tier_health['project_files_summary_count']}/{native_tier_health['standard_corpus_summary_count']}/{native_tier_health['custom_summary_count']}/{native_tier_health['legacy_summary_count']} missing {','.join(native_tier_health['missing_sources']) or 'none'}, min range MiB/s seek_fast/balanced/ratio {native_tier_health['seek_fast_min_range_mib_s']:.2f}/{native_tier_health['balanced_min_range_mib_s']:.2f}/{native_tier_health['ratio_min_range_mib_s']:.2f}, healthy `{native_tier_health['healthy']}`",
         f"- native tier corpus discovery: source mode `{native_tier_discovery_health['source_mode']}`, sources {native_tier_discovery_health['source_count']}/{native_tier_discovery_health['candidate_count']}, selected cases {native_tier_discovery_health['selected_case_count']}, missing reason `{native_tier_discovery_health['missing_reason'] or 'none'}`, healthy `{native_tier_discovery_health['healthy']}`",
         "",
@@ -2416,6 +2500,18 @@ def main() -> int:
             f"| rows | {chunk_cursor_bench['row_count']} | expected {chunk_cursor_bench['expected_rows']}, present `{chunk_cursor_bench['present']}` |",
             f"| shape rows | {chunk_cursor_bench['shape_rows']} | positive rows {chunk_cursor_bench['positive_rows']} |",
             f"| missing pairs | {len(chunk_cursor_bench['missing_pairs'])} | healthy `{chunk_cursor_bench['healthy']}` |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
+            "## Deflate match-copy benchmark coverage",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| rows | {deflate_match_copy_bench['row_count']} | expected {deflate_match_copy_bench['expected_rows']}, present `{deflate_match_copy_bench['present']}` |",
+            f"| class rows | {deflate_match_copy_bench['expected_class_rows']} | positive rows {deflate_match_copy_bench['positive_rows']} |",
+            f"| missing pairs | {len(deflate_match_copy_bench['missing_pairs'])} | healthy `{deflate_match_copy_bench['healthy']}` |",
             "",
         ]
     )
@@ -2893,6 +2989,13 @@ def main() -> int:
                 "chunk_cursor_bench_positive_rows": chunk_cursor_bench["positive_rows"],
                 "chunk_cursor_bench_shape_rows": chunk_cursor_bench["shape_rows"],
                 "chunk_cursor_bench_missing_pairs": chunk_cursor_bench["missing_pairs"],
+                "deflate_match_copy_bench_present": deflate_match_copy_bench["present"],
+                "deflate_match_copy_bench_healthy": deflate_match_copy_bench["healthy"],
+                "deflate_match_copy_bench_rows": deflate_match_copy_bench["row_count"],
+                "deflate_match_copy_bench_expected_rows": deflate_match_copy_bench["expected_rows"],
+                "deflate_match_copy_bench_positive_rows": deflate_match_copy_bench["positive_rows"],
+                "deflate_match_copy_bench_expected_class_rows": deflate_match_copy_bench["expected_class_rows"],
+                "deflate_match_copy_bench_missing_pairs": deflate_match_copy_bench["missing_pairs"],
                 "zstd_compare_present": zstd_compare["present"],
                 "zstd_compare_standard_present": zstd_compare["standard_present"],
                 "zstd_compare_block_sweep_present": zstd_compare["block_sweep_present"],

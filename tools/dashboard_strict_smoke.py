@@ -27,6 +27,7 @@ SIDECAR_CORRUPT_ARTIFACT = "vort-sidecar-corrupt-smoke.json"
 HUFFMAN_LENGTH_ARTIFACT = "vort-huffman-length-report.csv"
 CHECKSUM_BENCH_ARTIFACT = "vort-checksum-bench.csv"
 CHUNK_CURSOR_BENCH_ARTIFACT = "vort-chunk-cursor-bench.csv"
+DEFLATE_MATCH_COPY_BENCH_ARTIFACT = "vort-deflate-match-copy-bench.csv"
 FUZZ_CORPUS_ARTIFACT = "vort-deflate-wrapper-fuzz-corpus.json"
 FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
 DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
@@ -93,6 +94,8 @@ def write_producer_map(
     include_checksum_bench_smoke: bool = True,
     include_chunk_cursor_bench_exact: bool = True,
     include_chunk_cursor_bench_smoke: bool = True,
+    include_deflate_match_copy_bench_exact: bool = True,
+    include_deflate_match_copy_bench_smoke: bool = True,
     include_fuzz_corpus_exact: bool = True,
     include_fuzz_corpus_smoke: bool = True,
     include_fuzz_coverage_exact: bool = True,
@@ -177,6 +180,11 @@ def write_producer_map(
         artifact_metadata[CHUNK_CURSOR_BENCH_ARTIFACT] = {
             "expected_format": "csv",
             "smoke_gate": "zig build run-chunk-cursor-bench-gate",
+        }
+    if include_deflate_match_copy_bench_smoke:
+        artifact_metadata[DEFLATE_MATCH_COPY_BENCH_ARTIFACT] = {
+            "expected_format": "csv",
+            "smoke_gate": "zig build run-deflate-match-copy-bench-gate",
         }
     if include_fuzz_corpus_smoke:
         artifact_metadata[FUZZ_CORPUS_ARTIFACT] = {
@@ -298,6 +306,8 @@ def write_producer_map(
         exact[CHECKSUM_BENCH_ARTIFACT] = "zig build -Doptimize=ReleaseFast run-checksum-bench-gate"
     if include_chunk_cursor_bench_exact:
         exact[CHUNK_CURSOR_BENCH_ARTIFACT] = "zig build run-chunk-cursor-bench-gate"
+    if include_deflate_match_copy_bench_exact:
+        exact[DEFLATE_MATCH_COPY_BENCH_ARTIFACT] = "zig build run-deflate-match-copy-bench-gate"
     if include_fuzz_corpus_exact:
         exact[FUZZ_CORPUS_ARTIFACT] = "zig build run-deflate-wrapper-fuzz-corpus-dashboard"
     if include_fuzz_coverage_exact:
@@ -828,6 +838,39 @@ def write_chunk_cursor_bench_csv(path: Path, *, healthy: bool = True) -> None:
                     ]
                 )
             )
+    path.write_text("\n".join(lines) + "\n")
+
+
+def write_deflate_match_copy_bench_csv(path: Path, *, healthy: bool = True) -> None:
+    columns = [
+        "case",
+        "class",
+        "kernel",
+        "length",
+        "distance",
+        "ops_per_iter",
+        "iterations",
+        "output_bytes",
+        "elapsed_ns",
+        "output_mib_per_s",
+        "checksum",
+    ]
+    cases = {
+        "rle-long": "rle",
+        "small-distance-long": "small_distance",
+        "nonoverlap-len3": "non_overlapping",
+        "nonoverlap-len6": "non_overlapping",
+        "nonoverlap-len32": "non_overlapping",
+        "overlap-text-like": "overlapping",
+        "overlap-distance-heavy": "overlapping",
+    }
+    kernels = ("current", "nonoverlap_first", "small_unrolled")
+    lines = [",".join(columns)]
+    for case, class_name in cases.items():
+        for kernel in kernels:
+            if not healthy and case == "overlap-distance-heavy" and kernel == "small_unrolled":
+                continue
+            lines.append(",".join([case, class_name, kernel, "258", "16", "1024", "64", "16777216", "1000", "1000.0", "12345"]))
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -1693,6 +1736,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_huffman_length_csv(root / HUFFMAN_LENGTH_ARTIFACT)
     write_checksum_bench_csv(root / CHECKSUM_BENCH_ARTIFACT)
     write_chunk_cursor_bench_csv(root / CHUNK_CURSOR_BENCH_ARTIFACT)
+    write_deflate_match_copy_bench_csv(root / DEFLATE_MATCH_COPY_BENCH_ARTIFACT)
     write_fuzz_corpus_report(root / FUZZ_CORPUS_ARTIFACT)
     write_fuzz_coverage_report(root / FUZZ_COVERAGE_ARTIFACT)
     write_decode_stage_report(root / DECODE_STAGE_ARTIFACT)
@@ -2094,8 +2138,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 42/42 | 0 | allowed missing 0 |",
-                    "| smoke gates | 42/42 | 0 | required missing 0 |",
+                    "| producer steps | 43/43 | 0 | allowed missing 0 |",
+                    "| smoke gates | 43/43 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -2295,6 +2339,20 @@ def main() -> int:
                     "| category | count | detail |",
                     "| rows | 8 | expected 8, present `True` |",
                     "| shape rows | 8 | positive rows 8 |",
+                    "| missing pairs | 0 | healthy `True` |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
+                "deflate_match_copy_bench_markdown_table",
+                "deflate match-copy benchmark Markdown table",
+                dashboard_markdown,
+                [
+                    "## Deflate match-copy benchmark coverage",
+                    "| category | count | detail |",
+                    "| rows | 21 | expected 21, present `True` |",
+                    "| class rows | 21 | positive rows 21 |",
                     "| missing pairs | 0 | healthy `True` |",
                 ],
             )
@@ -2660,6 +2718,12 @@ def main() -> int:
                 write_producer_map(producer_map)
             elif fixture == "chunk_cursor_bench_failed":
                 write_chunk_cursor_bench_csv(fixture_root / CHUNK_CURSOR_BENCH_ARTIFACT, healthy=False)
+                write_producer_map(producer_map)
+            elif fixture == "missing_deflate_match_copy_bench_artifact":
+                (fixture_root / DEFLATE_MATCH_COPY_BENCH_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "deflate_match_copy_bench_failed":
+                write_deflate_match_copy_bench_csv(fixture_root / DEFLATE_MATCH_COPY_BENCH_ARTIFACT, healthy=False)
                 write_producer_map(producer_map)
             elif fixture == "missing_fuzz_corpus_artifact":
                 (fixture_root / FUZZ_CORPUS_ARTIFACT).unlink()
