@@ -49,6 +49,7 @@ FUZZ_CORPUS_MARKDOWN_ARTIFACT = "vort-deflate-wrapper-fuzz-corpus.md"
 FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
 DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
 DECODE_STAGE_CSV_ARTIFACT = "vort-deflate-decode-stage-report.csv"
+DECODE_STAGE_MARKDOWN_ARTIFACT = "vort-deflate-decode-stage-report.md"
 PYTHON_ZLIB_DIFF_ARTIFACT = "vort-python-zlib-diff-smoke.json"
 ZLIB_RELAXED_ARTIFACT = "vort-zlib-relaxed-report.json"
 ZLIB_RELAXED_MARKDOWN_ARTIFACT = "vort-zlib-relaxed-report.md"
@@ -349,6 +350,10 @@ def write_producer_map(
             "expected_format": "csv",
             "smoke_gate": "zig build run-deflate-decode-stage-report-dashboard",
         }
+        artifact_metadata[DECODE_STAGE_MARKDOWN_ARTIFACT] = {
+            "expected_format": "md",
+            "smoke_gate": "zig build run-deflate-decode-stage-report-dashboard",
+        }
     if include_python_zlib_smoke:
         artifact_metadata[PYTHON_ZLIB_DIFF_ARTIFACT] = {
             "expected_format": "json",
@@ -517,6 +522,7 @@ def write_producer_map(
     if include_decode_stage_exact:
         exact[DECODE_STAGE_ARTIFACT] = "zig build run-deflate-decode-stage-report-dashboard"
         exact[DECODE_STAGE_CSV_ARTIFACT] = "zig build run-deflate-decode-stage-report-dashboard"
+        exact[DECODE_STAGE_MARKDOWN_ARTIFACT] = "zig build run-deflate-decode-stage-report-dashboard"
     if include_python_zlib_exact:
         exact[PYTHON_ZLIB_DIFF_ARTIFACT] = "zig build run-python-zlib-diff-dashboard"
     if include_zlib_relaxed_exact:
@@ -2364,6 +2370,18 @@ def write_decode_stage_report(path: Path, *, ok: bool = True) -> None:
                 "zlib_bytes": 11,
                 "gzip_bytes": 23,
                 "raw_bytes": 5,
+                "raw_block_type": "fixed",
+                "raw_header_bits": 3,
+                "raw_header_bytes": 1,
+                "dynamic_hlit": 0,
+                "dynamic_hdist": 0,
+                "dynamic_hclen": 0,
+                "dynamic_literal_nonzero": 0,
+                "dynamic_literal_zero": 0,
+                "dynamic_literal_max_bits": 0,
+                "dynamic_distance_nonzero": 0,
+                "dynamic_distance_zero": 0,
+                "dynamic_distance_max_bits": 0,
                 "iterations": 1,
                 "repeat": 1,
                 "raw_mib_s": 1.0,
@@ -2449,6 +2467,29 @@ def write_decode_stage_report(path: Path, *, ok: bool = True) -> None:
         ],
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def write_decode_stage_markdown(path: Path, *, ok: bool = True) -> None:
+    actual_zlib_error = "ChecksumMismatch" if ok else "TrailingData"
+    zlib_matched = "true" if ok else "false"
+    lines = [
+        "# Deflate decode stage report",
+        "",
+        "| case | input bytes | raw bytes | block | header bits/bytes | HLIT/HDIST/HCLEN | lit nz/zero/max | dist nz/zero/max | iterations | repeat | raw alloc MiB/s |",
+        "| --- | ---: | ---: | --- | ---: | --- | --- | --- | ---: | ---: | ---: |",
+        "| strict-smoke | 3 | 5 | fixed | 3/1 | 0/0/0 | 0/0/0 | 0/0/0 | 1 | 1 | 1.00 |",
+        "",
+        "## Error path smoke",
+        "",
+        "These rows keep representative malformed/truncated/checksum wrapper inputs visible in the decode-stage dashboard without mixing them into throughput timings.",
+        "",
+        "| case | wrapper | input bytes | expected error | actual error | matched |",
+        "| --- | --- | ---: | --- | --- | --- |",
+        "| raw-empty | raw | 0 | `TruncatedFrame` | `TruncatedFrame` | `true` |",
+        f"| zlib-bad-adler | zlib | 11 | `ChecksumMismatch` | `{actual_zlib_error}` | `{zlib_matched}` |",
+        "| gzip-bad-crc | gzip | 23 | `ChecksumMismatch` | `ChecksumMismatch` | `true` |",
+    ]
+    path.write_text("\n".join(lines) + "\n")
 
 
 def write_decode_stage_csv(path: Path, *, healthy: bool = True) -> None:
@@ -3708,6 +3749,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_fuzz_coverage_report(root / FUZZ_COVERAGE_ARTIFACT)
     write_decode_stage_report(root / DECODE_STAGE_ARTIFACT)
     write_decode_stage_csv(root / DECODE_STAGE_CSV_ARTIFACT)
+    write_decode_stage_markdown(root / DECODE_STAGE_MARKDOWN_ARTIFACT)
     write_python_zlib_diff_report(root / PYTHON_ZLIB_DIFF_ARTIFACT)
     write_zlib_relaxed_report(root / ZLIB_RELAXED_ARTIFACT)
     write_zlib_relaxed_gate(root / ZLIB_RELAXED_GATE_ARTIFACT)
@@ -4128,8 +4170,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 81/81 | 0 | allowed missing 0 |",
-                    "| smoke gates | 81/81 | 0 | required missing 0 |",
+                    "| producer steps | 82/82 | 0 | allowed missing 0 |",
+                    "| smoke gates | 82/82 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -4657,6 +4699,9 @@ def main() -> int:
                     "| category | count | detail |",
                     "| timing rows | 1 | ok `True` |",
                     "| error rows | 3 | matched/unmatched 3/0 |",
+                    "| report rows | 1/1 | error items 3/3, count mismatch 0 |",
+                    "| csv rows | 10 | positive/header 10/10 |",
+                    "| Markdown rows | 8/8 | present `True`, unmatched 0 |",
                 ],
             )
         )
@@ -5048,6 +5093,7 @@ def main() -> int:
             elif fixture == "decode_stage_failed":
                 write_decode_stage_report(fixture_root / DECODE_STAGE_ARTIFACT, ok=False)
                 write_decode_stage_csv(fixture_root / DECODE_STAGE_CSV_ARTIFACT, healthy=False)
+                write_decode_stage_markdown(fixture_root / DECODE_STAGE_MARKDOWN_ARTIFACT, ok=False)
                 write_producer_map(producer_map)
             elif fixture == "missing_python_zlib_diff_artifact":
                 (fixture_root / PYTHON_ZLIB_DIFF_ARTIFACT).unlink()

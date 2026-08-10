@@ -2592,3 +2592,8 @@ architecture blindly.
   health now cross-checks JSON row totals for successes, negatives, command and
   workflow coverage, required/help workflows, and Markdown format/command/
   workflow/success/failure rows before header-inspect coverage can pass.
+- Tightened decode-stage dashboard health by requiring the retained
+  `vort-deflate-decode-stage-report.md` companion beside the JSON and CSV
+  reports. Aggregate health now cross-checks timing/error item counts,
+  malformed/error-path Markdown rows, and the retained Markdown table snippets
+  before decode-stage coverage can pass.

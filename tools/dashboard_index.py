@@ -1043,13 +1043,16 @@ def fuzz_corpus_health(artifacts: list[Path]) -> dict:
 def decode_stage_health(artifacts: list[Path]) -> dict:
     expected_cases = {"tiny", "repetitive", "overlap-rle", "distance-heavy", "text", "dynamic-literal-only", "dynamic-match", "binary", "stored-binary", "structured"}
     report = None
+    markdown = None
     csv_rows: list[dict[str, str]] = []
     csv_present = False
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
         if data.get("schema") == "vort.deflate_decode_stage_report":
             report = data
-        if artifact.name == "vort-deflate-decode-stage-report.csv":
+        elif artifact.name == "vort-deflate-decode-stage-report.md":
+            markdown = artifact
+        elif artifact.name == "vort-deflate-decode-stage-report.csv":
             csv_present = True
             try:
                 with artifact.open(newline="") as f:
@@ -1062,6 +1065,71 @@ def decode_stage_health(artifacts: list[Path]) -> dict:
 
     def float_value(row: dict[str, str], key: str) -> float:
         return float(row.get(key) or "0")
+
+    def report_int(data: dict, key: str) -> int:
+        value = data.get(key)
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    def item_int(row: dict, key: str) -> int:
+        value = row.get(key)
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    def markdown_checks(data: dict | None) -> tuple[bool, int, int, int]:
+        if markdown is None:
+            return (False, 0, 0, 1)
+        if not isinstance(data, dict):
+            return (True, 0, 0, 1)
+        try:
+            text = markdown.read_text(errors="replace")
+        except Exception:
+            return (True, 0, 0, 1)
+        items = data.get("items") if isinstance(data.get("items"), list) else []
+        error_items = data.get("error_items") if isinstance(data.get("error_items"), list) else []
+        expected = [
+            "# Deflate decode stage report",
+            "| case | input bytes | raw bytes | block | header bits/bytes |",
+            "## Error path smoke",
+            "| case | wrapper | input bytes | expected error | actual error | matched |",
+        ]
+        for row in items:
+            if not isinstance(row, dict):
+                continue
+            expected.append(
+                "| {case} | {input_bytes} | {raw_bytes} | {block} | {header_bits}/{header_bytes} | {hlit}/{hdist}/{hclen} | {lit_nonzero}/{lit_zero}/{lit_max} | {dist_nonzero}/{dist_zero}/{dist_max} | {iterations} | {repeat} |".format(
+                    case=str(row.get("case") or ""),
+                    input_bytes=item_int(row, "input_bytes"),
+                    raw_bytes=item_int(row, "raw_bytes"),
+                    block=str(row.get("raw_block_type") or ""),
+                    header_bits=item_int(row, "raw_header_bits"),
+                    header_bytes=item_int(row, "raw_header_bytes"),
+                    hlit=item_int(row, "dynamic_hlit"),
+                    hdist=item_int(row, "dynamic_hdist"),
+                    hclen=item_int(row, "dynamic_hclen"),
+                    lit_nonzero=item_int(row, "dynamic_literal_nonzero"),
+                    lit_zero=item_int(row, "dynamic_literal_zero"),
+                    lit_max=item_int(row, "dynamic_literal_max_bits"),
+                    dist_nonzero=item_int(row, "dynamic_distance_nonzero"),
+                    dist_zero=item_int(row, "dynamic_distance_zero"),
+                    dist_max=item_int(row, "dynamic_distance_max_bits"),
+                    iterations=item_int(row, "iterations"),
+                    repeat=item_int(row, "repeat"),
+                )
+            )
+        for row in error_items:
+            if not isinstance(row, dict):
+                continue
+            expected.append(
+                "| {case} | {wrapper} | {input_bytes} | `{expected_error}` | `{actual_error}` | `{matched}` |".format(
+                    case=str(row.get("case") or ""),
+                    wrapper=str(row.get("wrapper") or ""),
+                    input_bytes=item_int(row, "input_bytes"),
+                    expected_error=str(row.get("expected_error") or ""),
+                    actual_error=str(row.get("actual_error") or ""),
+                    matched="true" if row.get("matched") is True else "false",
+                )
+            )
+        matched = sum(1 for needle in expected if needle in text)
+        return (True, len(expected), matched, len(expected) - matched)
 
     csv_seen: set[str] = set()
     csv_positive_rows = 0
@@ -1121,16 +1189,33 @@ def decode_stage_health(artifacts: list[Path]) -> dict:
     csv_healthy = csv_present and len(csv_rows) == len(expected_cases) and not csv_missing_cases and csv_positive_rows == len(csv_rows) and csv_header_rows == len(csv_rows) and csv_dynamic_rows > 0 and csv_fixed_rows > 0 and csv_stored_rows > 0
 
     if isinstance(report, dict):
-        rows = int(report.get("rows") or 0)
-        error_rows = int(report.get("error_rows") or 0)
-        matched_error_rows = int(report.get("matched_error_rows") or 0)
-        unmatched_error_rows = int(report.get("unmatched_error_rows") or 0)
-        report_healthy = bool(report.get("ok")) and rows > 0 and error_rows > 0 and matched_error_rows == error_rows and unmatched_error_rows == 0
+        rows = report_int(report, "rows")
+        error_rows = report_int(report, "error_rows")
+        matched_error_rows = report_int(report, "matched_error_rows")
+        unmatched_error_rows = report_int(report, "unmatched_error_rows")
+        items = report.get("items") if isinstance(report.get("items"), list) else []
+        error_items = report.get("error_items") if isinstance(report.get("error_items"), list) else []
+        matched_from_items = sum(1 for row in error_items if isinstance(row, dict) and row.get("matched") is True)
+        unmatched_from_items = sum(1 for row in error_items if isinstance(row, dict) and row.get("matched") is False)
+        report_rows = len(items)
+        error_item_rows = len(error_items)
+        report_count_mismatch = (
+            abs(rows - report_rows)
+            + abs(error_rows - error_item_rows)
+            + abs(matched_error_rows - matched_from_items)
+            + abs(unmatched_error_rows - unmatched_from_items)
+        )
+        markdown_present, markdown_rows, markdown_matched, markdown_unmatched = markdown_checks(report)
+        report_healthy = bool(report.get("ok")) and rows > 0 and error_rows > 0 and report_count_mismatch == 0 and matched_error_rows == error_rows and unmatched_error_rows == 0
+        markdown_healthy = markdown_present and markdown_rows > 0 and markdown_unmatched == 0
         return {
             "present": True,
             "ok": bool(report.get("ok")),
             "rows": rows,
             "error_rows": error_rows,
+            "report_rows": report_rows,
+            "error_item_rows": error_item_rows,
+            "report_count_mismatch": report_count_mismatch,
             "matched_error_rows": matched_error_rows,
             "unmatched_error_rows": unmatched_error_rows,
             "csv_present": csv_present,
@@ -1141,13 +1226,20 @@ def decode_stage_health(artifacts: list[Path]) -> dict:
             "csv_fixed_rows": csv_fixed_rows,
             "csv_stored_rows": csv_stored_rows,
             "csv_missing_cases": csv_missing_cases,
-            "healthy": report_healthy and csv_healthy,
+            "markdown_present": markdown_present,
+            "markdown_rows": markdown_rows,
+            "markdown_matched": markdown_matched,
+            "markdown_unmatched": markdown_unmatched,
+            "healthy": report_healthy and csv_healthy and markdown_healthy,
         }
     return {
         "present": False,
         "ok": False,
         "rows": 0,
         "error_rows": 0,
+        "report_rows": 0,
+        "error_item_rows": 0,
+        "report_count_mismatch": 0,
         "matched_error_rows": 0,
         "unmatched_error_rows": 0,
         "csv_present": csv_present,
@@ -1158,6 +1250,10 @@ def decode_stage_health(artifacts: list[Path]) -> dict:
         "csv_fixed_rows": csv_fixed_rows,
         "csv_stored_rows": csv_stored_rows,
         "csv_missing_cases": csv_missing_cases,
+        "markdown_present": False,
+        "markdown_rows": 0,
+        "markdown_matched": 0,
+        "markdown_unmatched": 0,
         "healthy": False,
     }
 
@@ -5452,7 +5548,7 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_native_allocation_artifact")
     elif not native_allocation_healthy:
         validation_unhealthy_reasons.append("native_allocation_failed")
-    if not decode_stage_health_summary["present"]:
+    if not (decode_stage_health_summary["present"] and decode_stage_health_summary["markdown_present"]):
         validation_unhealthy_reasons.append("missing_decode_stage_artifact")
     elif not decode_stage_healthy:
         validation_unhealthy_reasons.append("decode_stage_failed")
@@ -5993,8 +6089,10 @@ def main() -> int:
             "| --- | ---: | --- |",
             f"| timing rows | {decode_stage_health_summary['rows']} | ok `{decode_stage_health_summary['ok']}` |",
             f"| error rows | {decode_stage_health_summary['error_rows']} | matched/unmatched {decode_stage_health_summary['matched_error_rows']}/{decode_stage_health_summary['unmatched_error_rows']} |",
+            f"| report rows | {decode_stage_health_summary['report_rows']}/{decode_stage_health_summary['rows']} | error items {decode_stage_health_summary['error_item_rows']}/{decode_stage_health_summary['error_rows']}, count mismatch {decode_stage_health_summary['report_count_mismatch']} |",
             f"| csv rows | {decode_stage_health_summary['csv_rows']} | positive/header {decode_stage_health_summary['csv_positive_rows']}/{decode_stage_health_summary['csv_header_rows']} |",
             f"| csv block types | {decode_stage_health_summary['csv_dynamic_rows']} | fixed/stored {decode_stage_health_summary['csv_fixed_rows']}/{decode_stage_health_summary['csv_stored_rows']}, missing cases {len(decode_stage_health_summary['csv_missing_cases'])} |",
+            f"| Markdown rows | {decode_stage_health_summary['markdown_matched']}/{decode_stage_health_summary['markdown_rows']} | present `{decode_stage_health_summary['markdown_present']}`, unmatched {decode_stage_health_summary['markdown_unmatched']} |",
             "",
         ]
     )
@@ -6397,6 +6495,9 @@ def main() -> int:
                 "decode_stage_healthy": decode_stage_healthy,
                 "decode_stage_rows": decode_stage_health_summary["rows"],
                 "decode_stage_error_rows": decode_stage_health_summary["error_rows"],
+                "decode_stage_report_rows": decode_stage_health_summary["report_rows"],
+                "decode_stage_error_item_rows": decode_stage_health_summary["error_item_rows"],
+                "decode_stage_report_count_mismatch": decode_stage_health_summary["report_count_mismatch"],
                 "decode_stage_matched_error_rows": decode_stage_health_summary["matched_error_rows"],
                 "decode_stage_unmatched_error_rows": decode_stage_health_summary["unmatched_error_rows"],
                 "decode_stage_csv_present": decode_stage_health_summary["csv_present"],
@@ -6407,6 +6508,10 @@ def main() -> int:
                 "decode_stage_csv_fixed_rows": decode_stage_health_summary["csv_fixed_rows"],
                 "decode_stage_csv_stored_rows": decode_stage_health_summary["csv_stored_rows"],
                 "decode_stage_csv_missing_cases": decode_stage_health_summary["csv_missing_cases"],
+                "decode_stage_markdown_present": decode_stage_health_summary["markdown_present"],
+                "decode_stage_markdown_rows": decode_stage_health_summary["markdown_rows"],
+                "decode_stage_markdown_matched": decode_stage_health_summary["markdown_matched"],
+                "decode_stage_markdown_unmatched": decode_stage_health_summary["markdown_unmatched"],
                 "native_fuzz_corpus_present": native_fuzz["present"],
                 "native_fuzz_corpus_coverage_present": native_fuzz["coverage_present"],
                 "native_fuzz_corpus_markdown_present": native_fuzz["markdown_present"],

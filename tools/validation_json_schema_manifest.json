@@ -641,22 +641,29 @@
           "all": [
             "decode_stage_present",
             "decode_stage_ok",
-            "decode_stage_csv_present"
+            "decode_stage_csv_present",
+            "decode_stage_markdown_present"
           ],
           "positive": [
             "decode_stage_rows",
             "decode_stage_error_rows",
+            "decode_stage_report_rows",
+            "decode_stage_error_item_rows",
             "decode_stage_matched_error_rows",
             "decode_stage_csv_rows",
             "decode_stage_csv_positive_rows",
             "decode_stage_csv_header_rows",
             "decode_stage_csv_dynamic_rows",
             "decode_stage_csv_fixed_rows",
-            "decode_stage_csv_stored_rows"
+            "decode_stage_csv_stored_rows",
+            "decode_stage_markdown_rows",
+            "decode_stage_markdown_matched"
           ],
           "zero": [
+            "decode_stage_report_count_mismatch",
             "decode_stage_unmatched_error_rows",
-            "decode_stage_csv_missing_cases"
+            "decode_stage_csv_missing_cases",
+            "decode_stage_markdown_unmatched"
           ]
         },
         "fuzz_corpus_healthy": {
@@ -1540,10 +1547,17 @@
         "validation_json_docs_negative_matched": "int",
         "validation_json_docs_negative_unmatched": "int",
         "decode_stage_error_rows": "int",
+        "decode_stage_error_item_rows": "int",
         "decode_stage_healthy": "bool",
         "decode_stage_matched_error_rows": "int",
+        "decode_stage_markdown_matched": "int",
+        "decode_stage_markdown_present": "bool",
+        "decode_stage_markdown_rows": "int",
+        "decode_stage_markdown_unmatched": "int",
         "decode_stage_ok": "bool",
         "decode_stage_present": "bool",
+        "decode_stage_report_count_mismatch": "int",
+        "decode_stage_report_rows": "int",
         "decode_stage_rows": "int",
         "decode_stage_unmatched_error_rows": "int",
         "decode_stage_csv_present": "bool",
@@ -2389,6 +2403,26 @@
           "left": "native_codec_probes_markdown_matched",
           "op": "eq",
           "right": "native_codec_probes_markdown_rows"
+        },
+        {
+          "left": "decode_stage_report_rows",
+          "op": "eq",
+          "right": "decode_stage_rows"
+        },
+        {
+          "left": "decode_stage_error_item_rows",
+          "op": "eq",
+          "right": "decode_stage_error_rows"
+        },
+        {
+          "left": "decode_stage_matched_error_rows",
+          "op": "eq",
+          "right": "decode_stage_error_rows"
+        },
+        {
+          "left": "decode_stage_markdown_matched",
+          "op": "eq",
+          "right": "decode_stage_markdown_rows"
         },
         {
           "left": "header_inspect_report_rows",

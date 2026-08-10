@@ -130,6 +130,7 @@ def main() -> int:
         native_fuzz_coverage_smoke_path = ROOT / "zig-out" / "vort-native-fuzz-corpus-coverage-smoke.json"
         decode_stage_path = ROOT / "zig-out" / "vort-deflate-decode-stage-report.json"
         decode_stage_csv_path = ROOT / "zig-out" / "vort-deflate-decode-stage-report.csv"
+        decode_stage_markdown_path = ROOT / "zig-out" / "vort-deflate-decode-stage-report.md"
         checksum_bench_path = ROOT / "zig-out" / "vort-checksum-bench.csv"
         chunk_cursor_bench_path = ROOT / "zig-out" / "vort-chunk-cursor-bench.csv"
         deflate_match_copy_bench_path = ROOT / "zig-out" / "vort-deflate-match-copy-bench.csv"
@@ -328,6 +329,7 @@ def main() -> int:
             decode_stage_csv_rows = list(csv.DictReader(f))
         assert len(decode_stage_csv_rows) == 10
         decode_stage = json.loads(decode_stage_path.read_text())
+        decode_stage_markdown = decode_stage_markdown_path.read_text()
         assert decode_stage["schema"] == "vort.deflate_decode_stage_report"
         assert decode_stage["schema_version"] == 1
         assert decode_stage["ok"] is True
@@ -335,6 +337,7 @@ def main() -> int:
         assert decode_stage["error_rows"] >= 1
         assert decode_stage["matched_error_rows"] == decode_stage["error_rows"]
         assert decode_stage["unmatched_error_rows"] == 0
+        assert "## Error path smoke" in decode_stage_markdown
         validate_value_against_manifest(decode_stage, schemas_def)
         python_zlib_diff = json.loads(python_zlib_diff_path.read_text())
         assert python_zlib_diff["schema"] == "vort.python_zlib_diff_smoke"
@@ -985,6 +988,7 @@ def main() -> int:
         shutil.copyfile(fuzz_coverage_smoke_path, root / "vort-fuzz-corpus-coverage-smoke.json")
         shutil.copyfile(decode_stage_path, root / "vort-deflate-decode-stage-report.json")
         shutil.copyfile(decode_stage_csv_path, root / "vort-deflate-decode-stage-report.csv")
+        shutil.copyfile(decode_stage_markdown_path, root / "vort-deflate-decode-stage-report.md")
         for artifact_name in (
             "vort-zstd-compare-gate.json",
             "vort-zstd-compare.csv",
@@ -1224,8 +1228,15 @@ def main() -> int:
         assert dashboard["decode_stage_healthy"] is True
         assert dashboard["decode_stage_rows"] == decode_stage["rows"]
         assert dashboard["decode_stage_error_rows"] == decode_stage["error_rows"]
+        assert dashboard["decode_stage_report_rows"] == len(decode_stage["items"])
+        assert dashboard["decode_stage_error_item_rows"] == len(decode_stage["error_items"])
+        assert dashboard["decode_stage_report_count_mismatch"] == 0
         assert dashboard["decode_stage_matched_error_rows"] == decode_stage["matched_error_rows"]
         assert dashboard["decode_stage_unmatched_error_rows"] == decode_stage["unmatched_error_rows"]
+        assert dashboard["decode_stage_markdown_present"] is True
+        assert dashboard["decode_stage_markdown_rows"] == 4 + len(decode_stage["items"]) + len(decode_stage["error_items"])
+        assert dashboard["decode_stage_markdown_matched"] == dashboard["decode_stage_markdown_rows"]
+        assert dashboard["decode_stage_markdown_unmatched"] == 0
         assert dashboard["zstd_compare_present"] is True
         assert dashboard["zstd_compare_standard_present"] is True
         assert dashboard["zstd_compare_block_sweep_present"] is True
