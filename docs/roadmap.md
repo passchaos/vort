@@ -2479,3 +2479,11 @@ architecture blindly.
   strict-validation-health. `run-validation-json-dashboard` and
   `run-dashboard-index` now depend on `run-snappy-report-gate` so clean
   dashboards retain the CSV before enforcing aggregate health.
+
+- Promoted the existing checksum benchmark CSV into aggregate dashboard
+  validation health. The dashboard now parses `vort-checksum-bench.csv`, checks
+  the 21 expected Adler/CRC32/CRC32C algorithm rows, workload size/iteration
+  consistency, positive throughput rows, and CRC32/CRC32C digest-mix agreement;
+  strict-validation-health now includes missing/failed checksum benchmark
+  reasons, and validation/dashboard steps depend on the checksum bench gate so
+  clean dashboards retain the CSV before enforcing aggregate health.

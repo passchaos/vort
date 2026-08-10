@@ -903,6 +903,101 @@ def snappy_report_health(artifacts: list[Path]) -> dict:
     }
 
 
+def checksum_bench_health(artifacts: list[Path]) -> dict:
+    expected_algorithms = {
+        "adler32",
+        "crc32-scalar",
+        "crc32-slice4",
+        "crc32-slice8",
+        "crc32-slice16",
+        "crc32-slice32",
+        "crc32-slice32-seg64",
+        "crc32-slice32-seg256",
+        "crc32-slice32-seg1024",
+        "crc32-slice32-seg4096",
+        "crc32-slice32-span-threshold256",
+        "crc32-slice32-span-threshold1024",
+        "crc32-slice32-span-threshold2048",
+        "crc32-slice32-span-threshold4096",
+        "crc32-slice32-selective4096",
+        "crc32-best",
+        "crc32c-scalar",
+        "crc32c-slice8",
+        "crc32c-slice16",
+        "crc32c-slice32",
+        "crc32c-best",
+    }
+    expected_bytes = 1 << 20
+    expected_iterations = 128
+    for artifact in artifacts:
+        if artifact.name != "vort-checksum-bench.csv":
+            continue
+        try:
+            with artifact.open(newline="") as f:
+                rows = list(csv.DictReader(f))
+        except Exception:
+            rows = []
+
+        seen: set[str] = set()
+        positive_rows = 0
+        workload_rows = 0
+        crc32_mixes: set[str] = set()
+        crc32c_mixes: set[str] = set()
+        for row in rows:
+            algorithm = str(row.get("algorithm") or "")
+            if algorithm in expected_algorithms:
+                seen.add(algorithm)
+            try:
+                bytes_value = int(row.get("bytes") or "0")
+                iterations = int(row.get("iterations") or "0")
+                elapsed_s = float(row.get("elapsed_s") or "0")
+                throughput = float(row.get("throughput_mib_s") or "0")
+                mix = int(row.get("mix") or "0")
+            except ValueError:
+                continue
+            if elapsed_s > 0.0 and throughput > 0.0 and mix > 0:
+                positive_rows += 1
+            if bytes_value == expected_bytes and iterations == expected_iterations:
+                workload_rows += 1
+            if algorithm.startswith("crc32-"):
+                crc32_mixes.add(str(mix))
+            elif algorithm.startswith("crc32c-"):
+                crc32c_mixes.add(str(mix))
+
+        missing_algorithms = sorted(expected_algorithms - seen)
+        row_count = len(rows)
+        healthy = (
+            row_count == len(expected_algorithms)
+            and not missing_algorithms
+            and positive_rows == row_count
+            and workload_rows == row_count
+            and len(crc32_mixes) == 1
+            and len(crc32c_mixes) == 1
+        )
+        return {
+            "present": True,
+            "healthy": healthy,
+            "row_count": row_count,
+            "expected_rows": len(expected_algorithms),
+            "positive_rows": positive_rows,
+            "workload_rows": workload_rows,
+            "crc32_mix_groups": len(crc32_mixes),
+            "crc32c_mix_groups": len(crc32c_mixes),
+            "missing_algorithms": missing_algorithms,
+        }
+    return {
+        "present": False,
+        "healthy": False,
+        "row_count": 0,
+        "expected_rows": len(expected_algorithms),
+        "positive_rows": 0,
+        "workload_rows": 0,
+        "crc32_mix_groups": 0,
+        "crc32c_mix_groups": 0,
+        "missing_algorithms": [],
+    }
+
+
 def zstd_compare_health(artifacts: list[Path]) -> dict:
     compare = None
     standard = None
@@ -1775,6 +1870,7 @@ def main() -> int:
     png_scratch = png_scratch_health(artifacts)
     zlib_relaxed = zlib_relaxed_health(artifacts)
     snappy_report = snappy_report_health(artifacts)
+    checksum_bench = checksum_bench_health(artifacts)
     zstd_compare = zstd_compare_health(artifacts)
     native_allocation = native_allocation_health(artifacts)
     python_zlib_health = python_zlib_diff_health(artifacts)
@@ -1820,6 +1916,7 @@ def main() -> int:
     png_scratch_healthy = png_scratch["healthy"]
     zlib_relaxed_healthy = zlib_relaxed["healthy"]
     snappy_report_healthy = snappy_report["healthy"]
+    checksum_bench_healthy = checksum_bench["healthy"]
     native_allocation_healthy = native_allocation["healthy"]
     native_summary_error_healthy = native_summary_error_health["healthy"]
     native_summary_error_negative_healthy = native_summary_error_negative["healthy"]
@@ -1846,6 +1943,7 @@ def main() -> int:
         and native_codec_health["healthy"]
         and zstd_compare["healthy"]
         and snappy_report_healthy
+        and checksum_bench_healthy
         and br_static_dictionary["healthy"]
         and native_summary_error_healthy
         and native_summary_error_negative_healthy
@@ -1938,6 +2036,10 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_snappy_report_artifact")
     elif not snappy_report_healthy:
         validation_unhealthy_reasons.append("snappy_report_failed")
+    if not checksum_bench["present"]:
+        validation_unhealthy_reasons.append("missing_checksum_bench_artifact")
+    elif not checksum_bench_healthy:
+        validation_unhealthy_reasons.append("checksum_bench_failed")
     native_allocation_present = (
         native_allocation["present"]
         and native_allocation["smoke_present"]
@@ -2025,6 +2127,7 @@ def main() -> int:
         f"- lz4 native summary: frames/skippable/checksum/block-checksum/dictionary/content-size/blocks raw/compressed {lz4_native_summary['frame_count']}/{lz4_native_summary['skippable_frame_count']}/{lz4_native_summary['checksum_frame_count']}/{lz4_native_summary['block_checksum_frame_count']}/{lz4_native_summary['dictionary_id_frame_count']}/{lz4_native_summary['content_size_frame_count']}/{lz4_native_summary['block_count']} {lz4_native_summary['raw_block_count']}/{lz4_native_summary['compressed_block_count']}, declared/payload/skippable bytes {lz4_native_summary['declared_content_bytes']}/{lz4_native_summary['payload_bytes']}/{lz4_native_summary['skippable_payload_bytes']}, healthy `{lz4_native_summary_healthy}`",
         f"- zstd native summary: frames/skippable/checksum/dictionary/content-size/blocks raw/rle/compressed {zstd_native_summary['frame_count']}/{zstd_native_summary['skippable_frame_count']}/{zstd_native_summary['checksum_frame_count']}/{zstd_native_summary['dictionary_id_frame_count']}/{zstd_native_summary['content_size_frame_count']}/{zstd_native_summary['block_count']} {zstd_native_summary['raw_block_count']}/{zstd_native_summary['rle_block_count']}/{zstd_native_summary['compressed_block_count']}, declared/payload/skippable bytes {zstd_native_summary['declared_content_bytes']}/{zstd_native_summary['payload_bytes']}/{zstd_native_summary['skippable_payload_bytes']}, healthy `{zstd_native_summary_healthy}`",
         f"- Snappy report: {snappy_report['row_count']}/{snappy_report['expected_rows']} rows, positive timing {snappy_report['positive_timing_rows']}, repetitive shrunk {snappy_report['repetitive_shrunk_rows']}, reusable size matches {snappy_report['reusable_size_matched_cases']}, healthy `{snappy_report_healthy}`",
+        f"- checksum bench: {checksum_bench['row_count']}/{checksum_bench['expected_rows']} rows, workload {checksum_bench['workload_rows']}, positive {checksum_bench['positive_rows']}, mix groups crc32/crc32c {checksum_bench['crc32_mix_groups']}/{checksum_bench['crc32c_mix_groups']}, healthy `{checksum_bench_healthy}`",
         f"- native tier range bench: {native_tier_health['ok_count']}/{native_tier_health['summary_count']} summaries ok across {native_tier_health['rows']} rows ({native_tier_health['enforced_count']} throughput-enforced), sources built-in/project/standard/custom/legacy {native_tier_health['built_in_summary_count']}/{native_tier_health['project_files_summary_count']}/{native_tier_health['standard_corpus_summary_count']}/{native_tier_health['custom_summary_count']}/{native_tier_health['legacy_summary_count']} missing {','.join(native_tier_health['missing_sources']) or 'none'}, min range MiB/s seek_fast/balanced/ratio {native_tier_health['seek_fast_min_range_mib_s']:.2f}/{native_tier_health['balanced_min_range_mib_s']:.2f}/{native_tier_health['ratio_min_range_mib_s']:.2f}, healthy `{native_tier_health['healthy']}`",
         f"- native tier corpus discovery: source mode `{native_tier_discovery_health['source_mode']}`, sources {native_tier_discovery_health['source_count']}/{native_tier_discovery_health['candidate_count']}, selected cases {native_tier_discovery_health['selected_case_count']}, missing reason `{native_tier_discovery_health['missing_reason'] or 'none'}`, healthy `{native_tier_discovery_health['healthy']}`",
         "",
@@ -2195,6 +2298,18 @@ def main() -> int:
             f"| rows | {snappy_report['row_count']} | expected {snappy_report['expected_rows']}, present `{snappy_report['present']}` |",
             f"| positive timing rows | {snappy_report['positive_timing_rows']} | repetitive shrunk {snappy_report['repetitive_shrunk_rows']} |",
             f"| reusable size matches | {snappy_report['reusable_size_matched_cases']} | missing pairs {len(snappy_report['missing_pairs'])}, healthy `{snappy_report['healthy']}` |",
+            "",
+        ]
+    )
+    lines.extend(
+        [
+            "## Checksum benchmark coverage",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| rows | {checksum_bench['row_count']} | expected {checksum_bench['expected_rows']}, present `{checksum_bench['present']}` |",
+            f"| workload rows | {checksum_bench['workload_rows']} | positive rows {checksum_bench['positive_rows']} |",
+            f"| digest mix groups | {checksum_bench['crc32_mix_groups'] + checksum_bench['crc32c_mix_groups']} | crc32/crc32c {checksum_bench['crc32_mix_groups']}/{checksum_bench['crc32c_mix_groups']}, missing algorithms {len(checksum_bench['missing_algorithms'])}, healthy `{checksum_bench['healthy']}` |",
             "",
         ]
     )
@@ -2656,6 +2771,15 @@ def main() -> int:
                 "snappy_report_repetitive_shrunk_rows": snappy_report["repetitive_shrunk_rows"],
                 "snappy_report_reusable_size_matched_cases": snappy_report["reusable_size_matched_cases"],
                 "snappy_report_missing_pairs": snappy_report["missing_pairs"],
+                "checksum_bench_present": checksum_bench["present"],
+                "checksum_bench_healthy": checksum_bench["healthy"],
+                "checksum_bench_rows": checksum_bench["row_count"],
+                "checksum_bench_expected_rows": checksum_bench["expected_rows"],
+                "checksum_bench_positive_rows": checksum_bench["positive_rows"],
+                "checksum_bench_workload_rows": checksum_bench["workload_rows"],
+                "checksum_bench_crc32_mix_groups": checksum_bench["crc32_mix_groups"],
+                "checksum_bench_crc32c_mix_groups": checksum_bench["crc32c_mix_groups"],
+                "checksum_bench_missing_algorithms": checksum_bench["missing_algorithms"],
                 "zstd_compare_present": zstd_compare["present"],
                 "zstd_compare_standard_present": zstd_compare["standard_present"],
                 "zstd_compare_block_sweep_present": zstd_compare["block_sweep_present"],

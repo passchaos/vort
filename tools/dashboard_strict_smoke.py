@@ -25,6 +25,7 @@ VALIDATION_JSON_SMOKE_ARTIFACT = "vort-validation-json-smoke.json"
 VALIDATION_JSON_DOCS_NEGATIVE_ARTIFACT = "vort-validation-json-docs-negative-smoke.json"
 SIDECAR_CORRUPT_ARTIFACT = "vort-sidecar-corrupt-smoke.json"
 HUFFMAN_LENGTH_ARTIFACT = "vort-huffman-length-report.csv"
+CHECKSUM_BENCH_ARTIFACT = "vort-checksum-bench.csv"
 FUZZ_CORPUS_ARTIFACT = "vort-deflate-wrapper-fuzz-corpus.json"
 FUZZ_COVERAGE_ARTIFACT = "vort-fuzz-corpus-coverage-smoke.json"
 DECODE_STAGE_ARTIFACT = "vort-deflate-decode-stage-report.json"
@@ -87,6 +88,8 @@ def write_producer_map(
     include_sidecar_corrupt_smoke: bool = True,
     include_huffman_exact: bool = True,
     include_huffman_smoke: bool = True,
+    include_checksum_bench_exact: bool = True,
+    include_checksum_bench_smoke: bool = True,
     include_fuzz_corpus_exact: bool = True,
     include_fuzz_corpus_smoke: bool = True,
     include_fuzz_coverage_exact: bool = True,
@@ -161,6 +164,11 @@ def write_producer_map(
         artifact_metadata[HUFFMAN_LENGTH_ARTIFACT] = {
             "expected_format": "csv",
             "smoke_gate": "zig build run-huffman-length-report-dashboard",
+        }
+    if include_checksum_bench_smoke:
+        artifact_metadata[CHECKSUM_BENCH_ARTIFACT] = {
+            "expected_format": "csv",
+            "smoke_gate": "zig build -Doptimize=ReleaseFast run-checksum-bench-gate",
         }
     if include_fuzz_corpus_smoke:
         artifact_metadata[FUZZ_CORPUS_ARTIFACT] = {
@@ -278,6 +286,8 @@ def write_producer_map(
         exact[SIDECAR_CORRUPT_ARTIFACT] = "zig build run-sidecar-corrupt-dashboard"
     if include_huffman_exact:
         exact[HUFFMAN_LENGTH_ARTIFACT] = "zig build run-huffman-length-report-dashboard"
+    if include_checksum_bench_exact:
+        exact[CHECKSUM_BENCH_ARTIFACT] = "zig build -Doptimize=ReleaseFast run-checksum-bench-gate"
     if include_fuzz_corpus_exact:
         exact[FUZZ_CORPUS_ARTIFACT] = "zig build run-deflate-wrapper-fuzz-corpus-dashboard"
     if include_fuzz_coverage_exact:
@@ -720,6 +730,42 @@ def write_huffman_length_csv(path: Path, *, optimal: bool = True) -> None:
     }
     columns = list(row)
     path.write_text(",".join(columns) + "\n" + ",".join(row[column] for column in columns) + "\n")
+
+
+def write_checksum_bench_csv(path: Path, *, healthy: bool = True) -> None:
+    algorithms = [
+        "adler32",
+        "crc32-scalar",
+        "crc32-slice4",
+        "crc32-slice8",
+        "crc32-slice16",
+        "crc32-slice32",
+        "crc32-slice32-seg64",
+        "crc32-slice32-seg256",
+        "crc32-slice32-seg1024",
+        "crc32-slice32-seg4096",
+        "crc32-slice32-span-threshold256",
+        "crc32-slice32-span-threshold1024",
+        "crc32-slice32-span-threshold2048",
+        "crc32-slice32-span-threshold4096",
+        "crc32-slice32-selective4096",
+        "crc32-best",
+        "crc32c-scalar",
+        "crc32c-slice8",
+        "crc32c-slice16",
+        "crc32c-slice32",
+        "crc32c-best",
+    ]
+    columns = ["algorithm", "bytes", "iterations", "elapsed_s", "throughput_mib_s", "mix"]
+    lines = [",".join(columns)]
+    for algorithm in algorithms:
+        if not healthy and algorithm == "crc32c-best":
+            continue
+        mix = "287916550677" if algorithm.startswith("crc32c-") else "267872580117"
+        if algorithm == "adler32":
+            mix = "255981175488"
+        lines.append(",".join([algorithm, str(1 << 20), "128", "0.1", "1000.0", mix]))
+    path.write_text("\n".join(lines) + "\n")
 
 
 def write_fuzz_corpus_report(path: Path, *, ok: bool = True) -> None:
@@ -1582,6 +1628,7 @@ def write_healthy_artifacts(root: Path) -> None:
     write_validation_json_artifacts(root)
     write_sidecar_corrupt_report(root / SIDECAR_CORRUPT_ARTIFACT)
     write_huffman_length_csv(root / HUFFMAN_LENGTH_ARTIFACT)
+    write_checksum_bench_csv(root / CHECKSUM_BENCH_ARTIFACT)
     write_fuzz_corpus_report(root / FUZZ_CORPUS_ARTIFACT)
     write_fuzz_coverage_report(root / FUZZ_COVERAGE_ARTIFACT)
     write_decode_stage_report(root / DECODE_STAGE_ARTIFACT)
@@ -1983,8 +2030,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 40/40 | 0 | allowed missing 0 |",
-                    "| smoke gates | 40/40 | 0 | required missing 0 |",
+                    "| producer steps | 41/41 | 0 | allowed missing 0 |",
+                    "| smoke gates | 41/41 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -2157,6 +2204,20 @@ def main() -> int:
                     "| package-merge | 1/1 | 0 | 0 |",
                     "| validation | count | detail |",
                     "| malformed rows | 0 | healthy `True` |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
+                "checksum_bench_markdown_table",
+                "checksum benchmark Markdown table",
+                dashboard_markdown,
+                [
+                    "## Checksum benchmark coverage",
+                    "| category | count | detail |",
+                    "| rows | 21 | expected 21, present `True` |",
+                    "| workload rows | 21 | positive rows 21 |",
+                    "| digest mix groups | 2 | crc32/crc32c 1/1, missing algorithms 0, healthy `True` |",
                 ],
             )
         )
@@ -2509,6 +2570,12 @@ def main() -> int:
                 write_producer_map(producer_map)
             elif fixture == "huffman_length_failed":
                 write_huffman_length_csv(fixture_root / HUFFMAN_LENGTH_ARTIFACT, optimal=False)
+                write_producer_map(producer_map)
+            elif fixture == "missing_checksum_bench_artifact":
+                (fixture_root / CHECKSUM_BENCH_ARTIFACT).unlink()
+                write_producer_map(producer_map)
+            elif fixture == "checksum_bench_failed":
+                write_checksum_bench_csv(fixture_root / CHECKSUM_BENCH_ARTIFACT, healthy=False)
                 write_producer_map(producer_map)
             elif fixture == "missing_fuzz_corpus_artifact":
                 (fixture_root / FUZZ_CORPUS_ARTIFACT).unlink()

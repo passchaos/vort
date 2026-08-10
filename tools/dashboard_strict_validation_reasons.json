@@ -198,6 +198,16 @@
       "fixture": "native_codec_probes_failed"
     },
     {
+      "reason": "missing_checksum_bench_artifact",
+      "check": "validation_missing_checksum_bench_artifact",
+      "fixture": "missing_checksum_bench_artifact"
+    },
+    {
+      "reason": "checksum_bench_failed",
+      "check": "validation_checksum_bench_failed",
+      "fixture": "checksum_bench_failed"
+    },
+    {
       "reason": "missing_snappy_report_artifact",
       "check": "validation_missing_snappy_report_artifact",
       "fixture": "missing_snappy_report_artifact"
