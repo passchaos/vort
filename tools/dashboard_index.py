@@ -2683,6 +2683,21 @@ def zlib_relaxed_health(artifacts: list[Path]) -> dict:
         ("gzip_limited_rejections", "gzip limited rejections"),
     )
     metric_fields = {field for field, _ in metric_rows}
+    exact_gate_rules = {
+        "strict_rejections": 2,
+        "dictionary_successes": 2,
+        "limited_rejections": 1,
+        "gzip_strict_rejections": 3,
+        "gzip_decoder_successes": 4,
+        "gzip_limited_rejections": 1,
+    }
+    floor_gate_rules = {
+        "relaxed_successes": 5,
+        "zlib_concatenated_successes": 3,
+        "zlib_decoder_successes": 8,
+        "gzip_relaxed_successes": 9,
+        "gzip_concatenated_successes": 4,
+    }
 
     def int_field(field: str) -> int:
         if not isinstance(report, dict):
@@ -2710,27 +2725,54 @@ def zlib_relaxed_health(artifacts: list[Path]) -> dict:
     gate_present = isinstance(gate, dict)
     gate_ok = bool(gate.get("ok")) if isinstance(gate, dict) else False
     gate_keys = {str(name) for name in gate_checks}
-    gate_report_matched = sum(1 for field in metric_fields if gate_checks.get(field) is True and int_field(field) > 0)
-    gate_report_unmatched = len(metric_fields ^ gate_keys) + sum(1 for field in metric_fields & gate_keys if gate_checks.get(field) is not True or int_field(field) <= 0)
+    recomputed_gate_checks = {
+        field: int_field(field) == expected
+        for field, expected in exact_gate_rules.items()
+    }
+    recomputed_gate_checks.update({
+        field: int_field(field) >= floor
+        for field, floor in floor_gate_rules.items()
+    })
+    gate_missing_checks = len(metric_fields - gate_keys)
+    gate_extra_checks = len(gate_keys - metric_fields)
+    gate_recomputed_passed_count = sum(1 for value in recomputed_gate_checks.values() if value is True)
+    gate_recomputed_failed_count = gate_expected_checks - gate_recomputed_passed_count
+    gate_check_rule_mismatch = sum(
+        1
+        for field, expected in recomputed_gate_checks.items()
+        if gate_checks.get(field) is not expected
+    ) + gate_extra_checks
+    gate_exact_mismatch_count = sum(
+        1 for field, expected in exact_gate_rules.items()
+        if int_field(field) != expected
+    )
+    gate_floor_shortfall_count = sum(
+        1 for field, floor in floor_gate_rules.items()
+        if int_field(field) < floor
+    )
+    gate_report_matched = sum(
+        1
+        for field in metric_fields
+        if gate_checks.get(field) is True and recomputed_gate_checks.get(field) is True
+    )
+    gate_report_unmatched = gate_extra_checks + (gate_expected_checks - gate_report_matched)
     markdown_present, markdown_rows, markdown_matched, markdown_unmatched = markdown_checks()
     zlib_total = int_field("strict_rejections") + int_field("relaxed_successes") + int_field("dictionary_successes") + int_field("zlib_concatenated_successes") + int_field("zlib_decoder_successes") + int_field("limited_rejections")
     gzip_total = int_field("gzip_strict_rejections") + int_field("gzip_relaxed_successes") + int_field("gzip_concatenated_successes") + int_field("gzip_decoder_successes") + int_field("gzip_limited_rejections")
     report_present = isinstance(report, dict)
-    report_healthy = (
-        int_field("strict_rejections") >= 2
-        and int_field("relaxed_successes") >= 5
-        and int_field("dictionary_successes") >= 2
-        and int_field("zlib_concatenated_successes") >= 3
-        and int_field("zlib_decoder_successes") >= 8
-        and int_field("limited_rejections") >= 1
-        and int_field("gzip_strict_rejections") >= 3
-        and int_field("gzip_relaxed_successes") >= 9
-        and int_field("gzip_concatenated_successes") >= 4
-        and int_field("gzip_decoder_successes") >= 4
-        and int_field("gzip_limited_rejections") >= 1
-    )
+    report_healthy = gate_exact_mismatch_count == 0 and gate_floor_shortfall_count == 0
     markdown_healthy = markdown_present and markdown_rows == gate_expected_checks and markdown_unmatched == 0
-    gate_healthy = gate_present and gate_ok and gate_check_count == gate_expected_checks and gate_report_unmatched == 0 and gate_passed_count == gate_check_count
+    gate_healthy = (
+        gate_present
+        and gate_ok
+        and gate_check_count == gate_expected_checks
+        and gate_missing_checks == 0
+        and gate_extra_checks == 0
+        and gate_recomputed_failed_count == 0
+        and gate_check_rule_mismatch == 0
+        and gate_report_unmatched == 0
+        and gate_passed_count == gate_check_count
+    )
     healthy = report_present and report_healthy and gate_healthy and markdown_healthy
     return {
         "present": report_present,
@@ -2744,6 +2786,13 @@ def zlib_relaxed_health(artifacts: list[Path]) -> dict:
         "gate_failed_checks": gate_failed_checks,
         "gate_report_matched": gate_report_matched,
         "gate_report_unmatched": gate_report_unmatched,
+        "gate_missing_checks": gate_missing_checks,
+        "gate_extra_checks": gate_extra_checks,
+        "gate_recomputed_passed_count": gate_recomputed_passed_count,
+        "gate_recomputed_failed_count": gate_recomputed_failed_count,
+        "gate_check_rule_mismatch": gate_check_rule_mismatch,
+        "gate_exact_mismatch_count": gate_exact_mismatch_count,
+        "gate_floor_shortfall_count": gate_floor_shortfall_count,
         "strict_rejections": int_field("strict_rejections"),
         "relaxed_successes": int_field("relaxed_successes"),
         "dictionary_successes": int_field("dictionary_successes"),
@@ -7417,6 +7466,7 @@ def main() -> int:
             f"| gzip | {zlib_relaxed['gzip_strict_rejections']} | {zlib_relaxed['gzip_relaxed_successes']} | {zlib_relaxed['gzip_concatenated_successes']} | {zlib_relaxed['gzip_decoder_successes']} | {zlib_relaxed['gzip_limited_rejections']} | total {zlib_relaxed['gzip_total']} |",
             f"| gate | {zlib_relaxed['gate_check_count']} | {zlib_relaxed['gate_passed_count']} | 0 | 0 | {len(zlib_relaxed['gate_failed_checks'])} | ok `{zlib_relaxed['gate_ok']}` |",
             f"| gate/report drift | {zlib_relaxed['gate_report_matched']} | {zlib_relaxed['gate_expected_checks']} | 0 | 0 | {zlib_relaxed['gate_report_unmatched']} | expected checks |",
+            f"| gate recompute | {zlib_relaxed['gate_recomputed_passed_count']} | {zlib_relaxed['gate_expected_checks']} | {zlib_relaxed['gate_missing_checks']} | {zlib_relaxed['gate_extra_checks']} | {zlib_relaxed['gate_recomputed_failed_count']} | rule/exact/floor {zlib_relaxed['gate_check_rule_mismatch']}/{zlib_relaxed['gate_exact_mismatch_count']}/{zlib_relaxed['gate_floor_shortfall_count']} |",
             f"| Markdown rows | {zlib_relaxed['markdown_matched']} | {zlib_relaxed['markdown_rows']} | 0 | 0 | {zlib_relaxed['markdown_unmatched']} | present `{zlib_relaxed['markdown_present']}` |",
             "",
         ]
@@ -8319,6 +8369,13 @@ def main() -> int:
                 "zlib_relaxed_gate_failed_checks": zlib_relaxed["gate_failed_checks"],
                 "zlib_relaxed_gate_report_matched": zlib_relaxed["gate_report_matched"],
                 "zlib_relaxed_gate_report_unmatched": zlib_relaxed["gate_report_unmatched"],
+                "zlib_relaxed_gate_missing_checks": zlib_relaxed["gate_missing_checks"],
+                "zlib_relaxed_gate_extra_checks": zlib_relaxed["gate_extra_checks"],
+                "zlib_relaxed_gate_recomputed_passed_count": zlib_relaxed["gate_recomputed_passed_count"],
+                "zlib_relaxed_gate_recomputed_failed_count": zlib_relaxed["gate_recomputed_failed_count"],
+                "zlib_relaxed_gate_check_rule_mismatch": zlib_relaxed["gate_check_rule_mismatch"],
+                "zlib_relaxed_gate_exact_mismatch_count": zlib_relaxed["gate_exact_mismatch_count"],
+                "zlib_relaxed_gate_floor_shortfall_count": zlib_relaxed["gate_floor_shortfall_count"],
                 "zlib_relaxed_strict_rejections": zlib_relaxed["strict_rejections"],
                 "zlib_relaxed_successes": zlib_relaxed["relaxed_successes"],
                 "zlib_relaxed_dictionary_successes": zlib_relaxed["dictionary_successes"],

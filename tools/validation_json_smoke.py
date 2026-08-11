@@ -1476,6 +1476,13 @@ def main() -> int:
         assert dashboard["zlib_relaxed_gate_failed_checks"] == []
         assert dashboard["zlib_relaxed_gate_report_matched"] == len(zlib_relaxed_gate["checks"])
         assert dashboard["zlib_relaxed_gate_report_unmatched"] == 0
+        assert dashboard["zlib_relaxed_gate_missing_checks"] == 0
+        assert dashboard["zlib_relaxed_gate_extra_checks"] == 0
+        assert dashboard["zlib_relaxed_gate_recomputed_passed_count"] == len(zlib_relaxed_gate["checks"])
+        assert dashboard["zlib_relaxed_gate_recomputed_failed_count"] == 0
+        assert dashboard["zlib_relaxed_gate_check_rule_mismatch"] == 0
+        assert dashboard["zlib_relaxed_gate_exact_mismatch_count"] == 0
+        assert dashboard["zlib_relaxed_gate_floor_shortfall_count"] == 0
         assert dashboard["zlib_relaxed_strict_rejections"] == zlib_relaxed["strict_rejections"]
         assert dashboard["zlib_relaxed_successes"] == zlib_relaxed["relaxed_successes"]
         assert dashboard["zlib_relaxed_dictionary_successes"] == zlib_relaxed["dictionary_successes"]

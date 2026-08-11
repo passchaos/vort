@@ -1158,12 +1158,19 @@
             "zlib_relaxed_gate_expected_checks",
             "zlib_relaxed_gate_passed_count",
             "zlib_relaxed_gate_report_matched",
+            "zlib_relaxed_gate_recomputed_passed_count",
             "zlib_relaxed_markdown_rows",
             "zlib_relaxed_markdown_matched"
           ],
           "zero": [
             "zlib_relaxed_gate_failed_checks",
             "zlib_relaxed_gate_report_unmatched",
+            "zlib_relaxed_gate_missing_checks",
+            "zlib_relaxed_gate_extra_checks",
+            "zlib_relaxed_gate_recomputed_failed_count",
+            "zlib_relaxed_gate_check_rule_mismatch",
+            "zlib_relaxed_gate_exact_mismatch_count",
+            "zlib_relaxed_gate_floor_shortfall_count",
             "zlib_relaxed_markdown_unmatched"
           ]
         },
@@ -1926,6 +1933,13 @@
         "zlib_relaxed_gate_failed_checks": "list",
         "zlib_relaxed_gate_report_matched": "int",
         "zlib_relaxed_gate_report_unmatched": "int",
+        "zlib_relaxed_gate_missing_checks": "int",
+        "zlib_relaxed_gate_extra_checks": "int",
+        "zlib_relaxed_gate_recomputed_passed_count": "int",
+        "zlib_relaxed_gate_recomputed_failed_count": "int",
+        "zlib_relaxed_gate_check_rule_mismatch": "int",
+        "zlib_relaxed_gate_exact_mismatch_count": "int",
+        "zlib_relaxed_gate_floor_shortfall_count": "int",
         "zlib_relaxed_strict_rejections": "int",
         "zlib_relaxed_successes": "int",
         "zlib_relaxed_dictionary_successes": "int",
@@ -3047,6 +3061,11 @@
         },
         {
           "left": "zlib_relaxed_gate_report_matched",
+          "op": "eq",
+          "right": "zlib_relaxed_gate_expected_checks"
+        },
+        {
+          "left": "zlib_relaxed_gate_recomputed_passed_count",
           "op": "eq",
           "right": "zlib_relaxed_gate_expected_checks"
         },

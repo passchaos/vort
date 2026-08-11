@@ -2754,3 +2754,8 @@ architecture blindly.
   payload, file-transport, dictionary, dynamic, and malformed coverage counters.
   Dashboard health now exposes exact outcome mismatch counters before zlib
   differential coverage can pass.
+- Tightened zlib/gzip relaxed-wrapper dashboard health by recomputing the
+  retained gate's exact and floor rules from report counters instead of trusting
+  gate booleans alone. Dashboard health now exposes missing/extra gate checks,
+  recomputed pass/fail counts, rule drift, exact mismatch, and floor shortfall
+  counters before relaxed-wrapper compatibility coverage can pass.
