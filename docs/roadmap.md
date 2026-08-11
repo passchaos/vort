@@ -2859,3 +2859,8 @@ architecture blindly.
   recomputing command coverage, negative error counts, missing workflows, and
   help-vs-required workflow drift. Dashboard health now rejects stale or
   duplicated header inspect aggregates before Markdown coverage can pass.
+
+- Tightened PNG scratch dashboard health by pinning the expected scratch case
+  matrix and exposing missing, duplicate, and unknown case rows. Dashboard health
+  now rejects stale or drifted PNG scratch report cases before scratch accounting
+  and Markdown coverage can pass.

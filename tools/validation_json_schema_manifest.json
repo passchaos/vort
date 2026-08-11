@@ -1219,6 +1219,9 @@
           ],
           "zero": [
             "png_scratch_report_count_mismatch",
+            "png_scratch_missing_cases",
+            "png_scratch_duplicate_cases",
+            "png_scratch_unknown_cases",
             "png_scratch_row_inconsistent_count",
             "png_scratch_markdown_unmatched"
           ]
@@ -1982,6 +1985,9 @@
         "png_scratch_case_count": "int",
         "png_scratch_report_rows": "int",
         "png_scratch_report_count_mismatch": "int",
+        "png_scratch_missing_cases": "list",
+        "png_scratch_duplicate_cases": "list",
+        "png_scratch_unknown_cases": "list",
         "png_scratch_row_consistent_count": "int",
         "png_scratch_row_inconsistent_count": "int",
         "png_scratch_adam7_cases": "int",

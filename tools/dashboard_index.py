@@ -2730,6 +2730,14 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
 
 def png_scratch_health(artifacts: list[Path]) -> dict:
     markdown = next((artifact for artifact in artifacts if artifact.name == "vort-png-scratch-report.md"), None)
+    expected_cases = {
+        "png_rgb8_noninterlaced",
+        "png_indexed1_noninterlaced",
+        "png_rgba16_noninterlaced",
+        "png_rgb8_adam7",
+        "png_indexed2_adam7",
+        "png_rgba16_adam7",
+    }
 
     def int_case(row: dict, field: str) -> int:
         value = row.get(field)
@@ -2809,6 +2817,24 @@ def png_scratch_health(artifacts: list[Path]) -> dict:
         case_count = int(data.get("case_count") or 0)
         report_rows = len(cases)
         report_count_mismatch = abs(case_count - report_rows)
+        seen_cases: set[str] = set()
+        duplicate_cases: set[str] = set()
+        unknown_cases: set[str] = set()
+        for row in cases:
+            if not isinstance(row, dict):
+                continue
+            case_name = str_case(row, "case")
+            if not case_name:
+                continue
+            if case_name in expected_cases:
+                if case_name in seen_cases:
+                    duplicate_cases.add(case_name)
+                seen_cases.add(case_name)
+            else:
+                unknown_cases.add(case_name)
+        missing_cases = sorted(expected_cases - seen_cases)
+        duplicate_case_names = sorted(duplicate_cases)
+        unknown_case_names = sorted(unknown_cases)
         row_consistent_count = sum(1 for row in cases if isinstance(row, dict) and row_consistent(row))
         row_inconsistent_count = report_rows - row_consistent_count
         adam7_cases = sum(1 for row in cases if isinstance(row, dict) and row.get("interlace") == "adam7")
@@ -2823,6 +2849,9 @@ def png_scratch_health(artifacts: list[Path]) -> dict:
         markdown_present, markdown_rows, markdown_matched, markdown_unmatched = markdown_checks(cases)
         healthy = (
             case_count > 0
+            and not missing_cases
+            and not duplicate_case_names
+            and not unknown_case_names
             and report_count_mismatch == 0
             and row_inconsistent_count == 0
             and adam7_cases > 0
@@ -2842,6 +2871,9 @@ def png_scratch_health(artifacts: list[Path]) -> dict:
             "case_count": case_count,
             "report_rows": report_rows,
             "report_count_mismatch": report_count_mismatch,
+            "missing_cases": missing_cases,
+            "duplicate_cases": duplicate_case_names,
+            "unknown_cases": unknown_case_names,
             "row_consistent_count": row_consistent_count,
             "row_inconsistent_count": row_inconsistent_count,
             "adam7_cases": adam7_cases,
@@ -2864,6 +2896,9 @@ def png_scratch_health(artifacts: list[Path]) -> dict:
         "case_count": 0,
         "report_rows": 0,
         "report_count_mismatch": 0,
+        "missing_cases": [],
+        "duplicate_cases": [],
+        "unknown_cases": [],
         "row_consistent_count": 0,
         "row_inconsistent_count": 0,
         "adam7_cases": 0,
@@ -7995,6 +8030,7 @@ def main() -> int:
             "| --- | ---: | --- |",
             f"| cases | {png_scratch['case_count']} | Adam7 {png_scratch['adam7_cases']}, healthy `{png_scratch['healthy']}` |",
             f"| report rows | {png_scratch['report_rows']}/{png_scratch['case_count']} | consistent {png_scratch['row_consistent_count']}, count mismatch {png_scratch['report_count_mismatch']}, inconsistent {png_scratch['row_inconsistent_count']} |",
+            f"| case drift | {len(png_scratch['missing_cases'])} | duplicate/unknown {len(png_scratch['duplicate_cases'])}/{len(png_scratch['unknown_cases'])} |",
             f"| streaming achieved | {png_scratch['stored_achieved']}/{png_scratch['case_count']} | fixed/dynamic {png_scratch['fixed_achieved']}/{png_scratch['case_count']} |",
             f"| zlib scratch savings | {png_scratch['total_streaming_savings']} | zlib scratch {png_scratch['total_zlib_scratch']} |",
             f"| max working scratch | {png_scratch['max_working_scratch']} | streaming/fixed-dynamic {png_scratch['max_streaming_working_scratch']}/{png_scratch['max_fixed_dynamic_streaming_working_scratch']} |",
@@ -8928,6 +8964,9 @@ def main() -> int:
                 "png_scratch_case_count": png_scratch["case_count"],
                 "png_scratch_report_rows": png_scratch["report_rows"],
                 "png_scratch_report_count_mismatch": png_scratch["report_count_mismatch"],
+                "png_scratch_missing_cases": png_scratch["missing_cases"],
+                "png_scratch_duplicate_cases": png_scratch["duplicate_cases"],
+                "png_scratch_unknown_cases": png_scratch["unknown_cases"],
                 "png_scratch_row_consistent_count": png_scratch["row_consistent_count"],
                 "png_scratch_row_inconsistent_count": png_scratch["row_inconsistent_count"],
                 "png_scratch_adam7_cases": png_scratch["adam7_cases"],

@@ -1494,6 +1494,9 @@ def main() -> int:
         assert dashboard["png_scratch_case_count"] == png_scratch["case_count"]
         assert dashboard["png_scratch_report_rows"] == len(png_scratch["cases"])
         assert dashboard["png_scratch_report_count_mismatch"] == 0
+        assert dashboard["png_scratch_missing_cases"] == []
+        assert dashboard["png_scratch_duplicate_cases"] == []
+        assert dashboard["png_scratch_unknown_cases"] == []
         assert dashboard["png_scratch_row_consistent_count"] == len(png_scratch["cases"])
         assert dashboard["png_scratch_row_inconsistent_count"] == 0
         assert dashboard["png_scratch_adam7_cases"] >= 1
