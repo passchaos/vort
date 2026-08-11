@@ -2879,6 +2879,13 @@ architecture blindly.
 
 
 
+
+- Reduced the validation JSON artifact manifest backlog by making the shared
+  schema checker understand optional top-level and item fields, then marking
+  older Brotli static-dictionary candidate/probe metadata fields as optional.
+  Current artifact audit failures are limited to the two derived dashboard-index
+  JSON snapshots.
+
 - Added validation JSON artifact-level manifest audit fields. The smoke now
   records retained `zig-out` JSON artifact parse/schema/manifest validation
   counts plus failure name lists, and the dashboard exposes the current manifest

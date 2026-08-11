@@ -67,7 +67,12 @@
         "raw_word": "str",
         "transformed_word": "str",
         "transform_kind": "str"
-      }
+      },
+      "optional_fields": [
+        "anchor_raw_word_count",
+        "source_limit",
+        "upstream_raw_word_count"
+      ]
     },
     "vort.br_static_dictionary_candidate_upstream_smoke": {
       "fields": {
@@ -187,7 +192,8 @@
               "equal",
               "larger"
             ]
-          }
+          },
+          "allow_empty": true
         },
         "kind_rows": {
           "fields": {
@@ -204,7 +210,8 @@
               "omit_last_1",
               "uppercase_first"
             ]
-          }
+          },
+          "allow_empty": true
         }
       },
       "enums": {
@@ -251,7 +258,26 @@
         "vort_ok": "bool",
         "classification": "str",
         "error": "str"
-      }
+      },
+      "optional_fields": [
+        "all_candidates",
+        "candidate_anchor_raw_word_count",
+        "candidate_raw_word_count",
+        "candidate_source_entry_count",
+        "candidate_source_limit",
+        "candidate_source_mode",
+        "candidate_upstream_raw_word_count",
+        "kind_rows",
+        "size_rows",
+        "size_winner_count",
+        "size_winner_rows",
+        "start_index"
+      ],
+      "item_optional_fields": [
+        "payload_bytes",
+        "size_class",
+        "size_delta_bytes"
+      ]
     },
     "vort.br_static_dictionary_required_coverage": {
       "fields": {

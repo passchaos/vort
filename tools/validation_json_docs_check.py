@@ -55,14 +55,17 @@ def load_manifest() -> dict[str, Any]:
     return schemas
 
 
-def require_fields(value: dict[str, Any], fields: set[str], label: str) -> None:
-    missing = fields - value.keys()
+def require_fields(value: dict[str, Any], fields: set[str], label: str, optional_fields: set[str] | None = None) -> None:
+    optional = optional_fields or set()
+    missing = fields - optional - value.keys()
     if missing:
         raise AssertionError(f"{label} missing fields: {sorted(missing)}")
 
 
 def require_types(value: dict[str, Any], field_types: dict[str, str], label: str) -> None:
     for field, type_name in field_types.items():
+        if field not in value:
+            continue
         expected = TYPE_MAP.get(type_name)
         if expected is None:
             raise AssertionError(f"{label}.{field} has unknown type spec {type_name!r}")
@@ -76,6 +79,8 @@ def require_types(value: dict[str, Any], field_types: dict[str, str], label: str
 
 def require_enums(value: dict[str, Any], enums: dict[str, list[str]], label: str) -> None:
     for field, allowed_values in enums.items():
+        if field not in value:
+            continue
         allowed = set(allowed_values)
         if value[field] not in allowed:
             raise AssertionError(f"{label}.{field} has unexpected value {value[field]!r}; allowed={sorted(allowed)}")
@@ -605,7 +610,8 @@ def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str
     fields = schema_def.get("fields")
     if not isinstance(fields, dict):
         raise AssertionError(f"schema {schema!r} must define fields")
-    require_fields(value, set(fields), schema)
+    optional_fields = set(schema_def.get("optional_fields", []))
+    require_fields(value, set(fields), schema, optional_fields)
     require_types(value, fields, schema)
     require_enums(value, schema_def.get("enums", {}), schema)
     require_field_pairs(value, schema_def.get("field_pairs", {}), schema)
@@ -635,6 +641,8 @@ def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str
             schema_def.get("item_field_pairs", {}),
             schema_def.get("item_list_field_pairs", {}),
             schema,
+            False,
+            set(schema_def.get("item_optional_fields", [])),
         )
 
     collections = schema_def.get("collections", {})
@@ -642,6 +650,8 @@ def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str
         if not isinstance(collections, dict):
             raise AssertionError(f"schema {schema!r} collections must be an object")
         for collection_name, collection_def in collections.items():
+            if collection_name in optional_fields and collection_name not in value:
+                continue
             if not isinstance(collection_def, dict):
                 raise AssertionError(f"schema {schema!r} collection {collection_name!r} must be an object")
             item_fields = collection_def.get("fields")
@@ -656,6 +666,7 @@ def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str
                 collection_def.get("list_field_pairs", {}),
                 schema,
                 bool(collection_def.get("allow_empty", False)),
+                set(collection_def.get("optional_fields", [])),
             )
 
 
@@ -668,6 +679,7 @@ def validate_item_collection(
     item_list_field_pairs: dict[str, Any],
     schema: str,
     allow_empty: bool = False,
+    optional_fields: set[str] | None = None,
 ) -> None:
     items = value.get(collection_name)
     if not isinstance(items, list):
@@ -678,7 +690,7 @@ def validate_item_collection(
         if not isinstance(item, dict):
             raise AssertionError(f"{schema}.{collection_name}[{index}] must be an object")
         label = f"{schema}.{collection_name}[{index}]"
-        require_fields(item, set(item_fields), label)
+        require_fields(item, set(item_fields), label, optional_fields)
         require_types(item, item_fields, label)
         require_enums(item, item_enums, label)
         require_field_pairs(item, item_field_pairs, label)
