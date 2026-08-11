@@ -2908,6 +2908,11 @@ architecture blindly.
 
 
 
+
+- Promoted CSV header signatures to a hard layout gate by adding
+  `tools/dashboard_csv_header_manifest.json` and comparing every retained CSV
+  artifact against its expected column count and header hash.
+
 - Added CSV header signature inventory to the non-JSON artifact audit. The
   dashboard now records per-artifact CSV column counts and stable header hashes,
   establishing the baseline needed for future per-artifact expected-header gates.

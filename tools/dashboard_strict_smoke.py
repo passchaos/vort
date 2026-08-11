@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import subprocess
 import sys
@@ -141,6 +142,27 @@ NATIVE_TIER_RANGE_FULL_INPUT_MIB_S = ((NATIVE_TIER_RANGE_INPUT_BYTES * NATIVE_TI
 
 def run(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(args, check=check, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+
+def write_csv_header_manifest(root: Path) -> Path:
+    rows: list[dict[str, object]] = []
+    for path in sorted(root.glob("vort-*.csv")):
+        with path.open(newline="") as f:
+            header = next(csv.reader(f), [])
+        rows.append({
+            "name": path.name,
+            "column_count": len(header),
+            "signature": hashlib.sha256("\x1f".join(header).encode("utf-8")).hexdigest()[:16],
+        })
+    payload = {
+        "schema": "vort.dashboard_csv_header_manifest",
+        "schema_version": 1,
+        "artifact_count": len(rows),
+        "artifacts": rows,
+    }
+    path = root / "dashboard-csv-header-manifest.json"
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    return path
 
 
 def write_producer_map(
@@ -4313,6 +4335,7 @@ def write_healthy_artifacts(root: Path) -> None:
 
 
 def dashboard_args(root: Path, producer_map: Path, *extra: str) -> list[str]:
+    csv_header_manifest = write_csv_header_manifest(root)
     return [
         "python3",
         str(DASHBOARD_INDEX),
@@ -4324,6 +4347,8 @@ def dashboard_args(root: Path, producer_map: Path, *extra: str) -> list[str]:
         str(root / "vort-dashboard-index.json"),
         "--producer-map",
         str(producer_map),
+        "--csv-header-manifest",
+        str(csv_header_manifest),
         *extra,
     ]
 
@@ -4769,7 +4794,7 @@ def main() -> int:
                     "| category | covered | missing | detail |",
                     "| producer steps | 88/88 | 0 | allowed missing 0 |",
                     "| smoke gates | 88/88 | 0 | required missing 0 |",
-                    "| CSV artifacts | 26/26 | data rows 554, header cells 645, header signatures 22, parse failed 0, empty 0, blank headers 0, duplicate headers 0, no-data 0, ragged 0 |",
+                    "| CSV artifacts | 26/26 | data rows 554, header cells 645, header signatures 22, manifest 26/26, parse failed 0, empty 0, blank headers 0, duplicate headers 0, no-data 0, ragged 0, header drift 0/0/0/0 |",
                     "| Markdown artifacts | 20/20 | read failed 0, empty 0, marker missing 0, heading missing 0, heading not first 0, table missing 0, separator missing 0, healthy `True` |",
                 ],
             )

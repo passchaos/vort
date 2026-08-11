@@ -1792,6 +1792,8 @@
             "csv_artifact_count",
             "csv_artifact_parsed_count",
             "csv_artifact_data_rows",
+            "csv_header_manifest_count",
+            "csv_header_manifest_matched",
             "markdown_artifact_count",
             "markdown_artifact_read_count"
           ],
@@ -1802,6 +1804,10 @@
             "csv_artifact_duplicate_headers",
             "csv_artifact_no_data_rows",
             "csv_artifact_ragged_rows",
+            "csv_header_missing",
+            "csv_header_unknown",
+            "csv_header_column_mismatch",
+            "csv_header_signature_mismatch",
             "markdown_artifact_read_failed",
             "markdown_artifact_empty",
             "markdown_artifact_marker_missing",
@@ -2542,6 +2548,12 @@
         "csv_artifact_header_cell_count": "int",
         "csv_artifact_header_signature_count": "int",
         "csv_artifact_header_signatures": "list",
+        "csv_header_manifest_count": "int",
+        "csv_header_manifest_matched": "int",
+        "csv_header_missing": "list",
+        "csv_header_unknown": "list",
+        "csv_header_column_mismatch": "list",
+        "csv_header_signature_mismatch": "list",
         "csv_artifact_parse_failed": "list",
         "csv_artifact_empty": "list",
         "csv_artifact_blank_headers": "list",
@@ -7251,6 +7263,25 @@
         "total_vort_native_decode_vs_zstd": "float",
         "total_vort_raw_fixed_decode_mib_s": "float",
         "total_zstd_decode_mib_s": "float"
+      }
+    },
+    "vort.dashboard_csv_header_manifest": {
+      "count_rules": {
+        "artifact_count": {
+          "collection": "artifacts"
+        }
+      },
+      "fields": {
+        "schema": "str",
+        "schema_version": "int",
+        "artifact_count": "int",
+        "artifacts": "list"
+      },
+      "item_collection": "artifacts",
+      "item_fields": {
+        "name": "str",
+        "column_count": "int",
+        "signature": "str"
       }
     }
   }

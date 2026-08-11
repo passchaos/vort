@@ -51,6 +51,19 @@ def load_producer_map(path: Path) -> dict:
     return data
 
 
+def load_csv_header_manifest(path: Path) -> dict:
+    try:
+        data = json.loads(path.read_text())
+    except FileNotFoundError:
+        return {"schema": "vort.dashboard_csv_header_manifest", "schema_version": 1, "artifact_count": 0, "artifacts": []}
+    if data.get("schema") != "vort.dashboard_csv_header_manifest":
+        raise ValueError(f"unexpected CSV header manifest schema in {path}: {data.get('schema')!r}")
+    artifacts = data.get("artifacts")
+    if not isinstance(artifacts, list):
+        raise ValueError(f"CSV header manifest {path} must contain artifacts list")
+    return data
+
+
 def producer_step_for(path: Path, producer_map: dict) -> str:
     name = path.name
     exact = producer_map.get("exact")
@@ -7654,13 +7667,29 @@ def artifact_record(path: Path, output_dir: Path, producer_map: dict) -> dict:
     }
 
 
-def non_json_artifact_audit(records: list[dict], output_dir: Path) -> dict:
+def non_json_artifact_audit(records: list[dict], output_dir: Path, csv_header_manifest: dict) -> dict:
     csv_count = 0
     markdown_count = 0
     csv_parsed = 0
     csv_data_rows = 0
     csv_header_cell_count = 0
     csv_header_signatures: list[dict[str, int | str]] = []
+    csv_header_manifest_rows = csv_header_manifest.get("artifacts")
+    csv_header_manifest_rows = csv_header_manifest_rows if isinstance(csv_header_manifest_rows, list) else []
+    expected_headers: dict[str, tuple[int, str]] = {}
+    for row in csv_header_manifest_rows:
+        if not isinstance(row, dict):
+            continue
+        name = row.get("name")
+        column_count = row.get("column_count")
+        signature = row.get("signature")
+        if isinstance(name, str) and isinstance(column_count, int) and not isinstance(column_count, bool) and isinstance(signature, str):
+            expected_headers[name] = (column_count, signature)
+    seen_csv_names: set[str] = set()
+    csv_header_missing: list[str] = []
+    csv_header_unknown: list[str] = []
+    csv_header_column_mismatch: list[str] = []
+    csv_header_signature_mismatch: list[str] = []
     markdown_read = 0
     csv_parse_failed: list[str] = []
     csv_empty: list[str] = []
@@ -7706,6 +7735,16 @@ def non_json_artifact_audit(records: list[dict], output_dir: Path) -> dict:
                 "column_count": len(header),
                 "signature": signature,
             })
+            seen_csv_names.add(name)
+            expected = expected_headers.get(name)
+            if expected is None:
+                csv_header_unknown.append(name)
+            else:
+                expected_column_count, expected_signature = expected
+                if len(header) != expected_column_count:
+                    csv_header_column_mismatch.append(name)
+                if signature != expected_signature:
+                    csv_header_signature_mismatch.append(name)
             data_row_count = max(0, len(rows) - 1)
             if data_row_count == 0:
                 csv_no_data_rows.append(name)
@@ -7744,6 +7783,12 @@ def non_json_artifact_audit(records: list[dict], output_dir: Path) -> dict:
         "csv_artifact_header_cell_count": csv_header_cell_count,
         "csv_artifact_header_signature_count": len({row["signature"] for row in csv_header_signatures}),
         "csv_artifact_header_signatures": csv_header_signatures,
+        "csv_header_manifest_count": len(expected_headers),
+        "csv_header_manifest_matched": len(seen_csv_names & set(expected_headers)),
+        "csv_header_missing": sorted(set(expected_headers) - seen_csv_names),
+        "csv_header_unknown": sorted(csv_header_unknown),
+        "csv_header_column_mismatch": sorted(csv_header_column_mismatch),
+        "csv_header_signature_mismatch": sorted(csv_header_signature_mismatch),
         "csv_artifact_parse_failed": csv_parse_failed,
         "csv_artifact_empty": csv_empty,
         "csv_artifact_blank_headers": csv_blank_headers,
@@ -7768,6 +7813,7 @@ def main() -> int:
     parser.add_argument("--output", default="zig-out/vort-dashboard-index.md", help="Markdown index path")
     parser.add_argument("--manifest", default="zig-out/vort-dashboard-index.json", help="JSON artifact manifest path")
     parser.add_argument("--producer-map", default="tools/dashboard_producers.json", help="JSON producer-step mapping path")
+    parser.add_argument("--csv-header-manifest", default="tools/dashboard_csv_header_manifest.json", help="CSV header signature manifest path")
     parser.add_argument("--strict-producers", action="store_true", help="fail if any artifact lacks a producer_step")
     parser.add_argument("--strict-smoke-gates", action="store_true", help="fail if required artifacts lack a smoke_gate")
     parser.add_argument("--strict-header-inspect", action="store_true", help="fail if header inspect artifact is missing, failed, or has missing workflows")
@@ -7778,6 +7824,7 @@ def main() -> int:
     output = Path(args.output)
     manifest = Path(args.manifest)
     producer_map = load_producer_map(Path(args.producer_map))
+    csv_header_manifest = load_csv_header_manifest(Path(args.csv_header_manifest))
     artifacts = sorted(
         path
         for path in root.glob("vort-*")
@@ -7794,7 +7841,7 @@ def main() -> int:
     smoke_gate_missing = [record["name"] for record in records if not record["smoke_gate"]]
     smoke_gate_covered = len(records) - len(smoke_gate_missing)
     records_by_name = {record["name"]: record for record in records}
-    non_json_audit = non_json_artifact_audit(records, output.parent)
+    non_json_audit = non_json_artifact_audit(records, output.parent, csv_header_manifest)
     smoke_gate_required_missing = [
         name
         for name in required_smoke_gates(producer_map)
@@ -7847,6 +7894,10 @@ def main() -> int:
         and not non_json_audit["csv_artifact_duplicate_headers"]
         and not non_json_audit["csv_artifact_no_data_rows"]
         and not non_json_audit["csv_artifact_ragged_rows"]
+        and not non_json_audit["csv_header_missing"]
+        and not non_json_audit["csv_header_unknown"]
+        and not non_json_audit["csv_header_column_mismatch"]
+        and not non_json_audit["csv_header_signature_mismatch"]
         and not non_json_audit["markdown_artifact_read_failed"]
         and not non_json_audit["markdown_artifact_empty"]
         and not non_json_audit["markdown_artifact_marker_missing"]
@@ -8293,7 +8344,7 @@ def main() -> int:
             "| --- | ---: | ---: | --- |",
             f"| producer steps | {producer_step_covered}/{len(records)} | {len(producer_step_missing)} | allowed missing {len(producer_step_allowed_missing)} |",
             f"| smoke gates | {smoke_gate_covered}/{len(records)} | {len(smoke_gate_missing)} | required missing {len(smoke_gate_required_missing)} |",
-            f"| CSV artifacts | {non_json_audit['csv_artifact_parsed_count']}/{non_json_audit['csv_artifact_count']} | data rows {non_json_audit['csv_artifact_data_rows']}, header cells {non_json_audit['csv_artifact_header_cell_count']}, header signatures {non_json_audit['csv_artifact_header_signature_count']}, parse failed {len(non_json_audit['csv_artifact_parse_failed'])}, empty {len(non_json_audit['csv_artifact_empty'])}, blank headers {len(non_json_audit['csv_artifact_blank_headers'])}, duplicate headers {len(non_json_audit['csv_artifact_duplicate_headers'])}, no-data {len(non_json_audit['csv_artifact_no_data_rows'])}, ragged {len(non_json_audit['csv_artifact_ragged_rows'])} |",
+            f"| CSV artifacts | {non_json_audit['csv_artifact_parsed_count']}/{non_json_audit['csv_artifact_count']} | data rows {non_json_audit['csv_artifact_data_rows']}, header cells {non_json_audit['csv_artifact_header_cell_count']}, header signatures {non_json_audit['csv_artifact_header_signature_count']}, manifest {non_json_audit['csv_header_manifest_matched']}/{non_json_audit['csv_header_manifest_count']}, parse failed {len(non_json_audit['csv_artifact_parse_failed'])}, empty {len(non_json_audit['csv_artifact_empty'])}, blank headers {len(non_json_audit['csv_artifact_blank_headers'])}, duplicate headers {len(non_json_audit['csv_artifact_duplicate_headers'])}, no-data {len(non_json_audit['csv_artifact_no_data_rows'])}, ragged {len(non_json_audit['csv_artifact_ragged_rows'])}, header drift {len(non_json_audit['csv_header_missing'])}/{len(non_json_audit['csv_header_unknown'])}/{len(non_json_audit['csv_header_column_mismatch'])}/{len(non_json_audit['csv_header_signature_mismatch'])} |",
             f"| Markdown artifacts | {non_json_audit['markdown_artifact_read_count']}/{non_json_audit['markdown_artifact_count']} | read failed {len(non_json_audit['markdown_artifact_read_failed'])}, empty {len(non_json_audit['markdown_artifact_empty'])}, marker missing {len(non_json_audit['markdown_artifact_marker_missing'])}, heading missing {len(non_json_audit['markdown_artifact_heading_missing'])}, heading not first {len(non_json_audit['markdown_artifact_heading_not_first'])}, table missing {len(non_json_audit['markdown_artifact_table_missing'])}, separator missing {len(non_json_audit['markdown_artifact_table_separator_missing'])}, healthy `{non_json_artifact_healthy}` |",
             "",
         ]
@@ -8976,6 +9027,12 @@ def main() -> int:
                 "csv_artifact_header_cell_count": non_json_audit["csv_artifact_header_cell_count"],
                 "csv_artifact_header_signature_count": non_json_audit["csv_artifact_header_signature_count"],
                 "csv_artifact_header_signatures": non_json_audit["csv_artifact_header_signatures"],
+                "csv_header_manifest_count": non_json_audit["csv_header_manifest_count"],
+                "csv_header_manifest_matched": non_json_audit["csv_header_manifest_matched"],
+                "csv_header_missing": non_json_audit["csv_header_missing"],
+                "csv_header_unknown": non_json_audit["csv_header_unknown"],
+                "csv_header_column_mismatch": non_json_audit["csv_header_column_mismatch"],
+                "csv_header_signature_mismatch": non_json_audit["csv_header_signature_mismatch"],
                 "csv_artifact_parse_failed": non_json_audit["csv_artifact_parse_failed"],
                 "csv_artifact_empty": non_json_audit["csv_artifact_empty"],
                 "csv_artifact_blank_headers": non_json_audit["csv_artifact_blank_headers"],

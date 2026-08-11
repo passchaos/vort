@@ -719,6 +719,37 @@ Example:
 }
 ```
 
+## `vort.dashboard_csv_header_manifest`
+
+Consumed by:
+
+```sh
+python3 tools/dashboard_index.py --csv-header-manifest tools/dashboard_csv_header_manifest.json
+```
+
+This schema pins expected CSV artifact header layouts. Each row records the
+artifact name, expected column count, and a stable hash of the ordered header
+columns. Dashboard health compares retained CSV artifacts against this manifest
+so column additions, removals, reordering, or unknown CSV artifacts become
+visible layout drift.
+
+Example:
+
+```json
+{
+  "schema": "vort.dashboard_csv_header_manifest",
+  "schema_version": 1,
+  "artifact_count": 1,
+  "artifacts": [
+    {
+      "name": "vort-example.csv",
+      "column_count": 2,
+      "signature": "0123456789abcdef"
+    }
+  ]
+}
+```
+
 ## `vort.dashboard_config_index`
 
 Consumed by:
@@ -2686,7 +2717,10 @@ Top-level fields:
 - `non_json_artifact_healthy`, `csv_artifact_count`,
   `csv_artifact_parsed_count`, `csv_artifact_data_rows`,
   `csv_artifact_header_cell_count`, `csv_artifact_header_signature_count`,
-  `csv_artifact_header_signatures`, `csv_artifact_parse_failed`,
+  `csv_artifact_header_signatures`, `csv_header_manifest_count`,
+  `csv_header_manifest_matched`, `csv_header_missing`, `csv_header_unknown`,
+  `csv_header_column_mismatch`, `csv_header_signature_mismatch`,
+  `csv_artifact_parse_failed`,
   `csv_artifact_empty`, `csv_artifact_blank_headers`,
   `csv_artifact_duplicate_headers`, `csv_artifact_no_data_rows`,
   `csv_artifact_ragged_rows`,
@@ -3476,6 +3510,12 @@ Example:
   "csv_artifact_header_cell_count": 0,
   "csv_artifact_header_signature_count": 0,
   "csv_artifact_header_signatures": [],
+  "csv_header_manifest_count": 0,
+  "csv_header_manifest_matched": 0,
+  "csv_header_missing": [],
+  "csv_header_unknown": [],
+  "csv_header_column_mismatch": [],
+  "csv_header_signature_mismatch": [],
   "csv_artifact_parse_failed": [],
   "csv_artifact_empty": [],
   "csv_artifact_blank_headers": [],
