@@ -2542,8 +2542,10 @@ Top-level fields:
   (`case`, metadata/full booleans, error name, stream bytes, and sidecar bytes)
   before aggregate validation health can pass.
 - `native_tier_range_*` fields summarize direct-API seekability tier range benchmark summaries,
-  including the gate JSON summaries and the required CSV row/shape/throughput
-  coverage fields (`native_tier_range_csv_*`).
+  including the gate JSON summaries, required CSV row/shape/throughput
+  coverage fields (`native_tier_range_csv_*`), and summary-vs-CSV drift
+  counters for rows, fixtures, tiers, CSV paths, per-tier stream/index totals,
+  and per-tier minimum throughput floors.
 - `native_tier_corpus_discovery_*` fields summarize standard-corpus discovery
   inputs for the native tier range benchmark and now participate in aggregate
   `validation_healthy`.
@@ -3803,6 +3805,16 @@ Example:
   "native_tier_range_custom_rows": 0,
   "native_tier_range_legacy_rows": 0,
   "native_tier_range_missing_sources": [],
+  "native_tier_range_source_count_mismatch": 0,
+  "native_tier_range_summary_csv_row_mismatch": 0,
+  "native_tier_range_summary_csv_fixture_mismatch": 0,
+  "native_tier_range_summary_csv_tier_mismatch": 0,
+  "native_tier_range_summary_csv_path_mismatch": 0,
+  "native_tier_range_summary_csv_stream_bytes_mismatch": 0,
+  "native_tier_range_summary_csv_index_entries_mismatch": 0,
+  "native_tier_range_summary_csv_min_range_mismatch": 0,
+  "native_tier_range_summary_csv_min_full_mismatch": 0,
+  "native_tier_range_summary_csv_mismatch_total": 0,
   "native_tier_corpus_discovery_present": false,
   "native_tier_corpus_discovery_ok": false,
   "native_tier_corpus_discovery_healthy": false,
@@ -3978,9 +3990,9 @@ Example:
     },
     {
       "mode": "native-tier-range-health",
-      "min_checks": 3,
+      "min_checks": 4,
       "min_expected_failures": 0,
-      "min_matched": 3
+      "min_matched": 4
     }
   ]
 }
@@ -4116,9 +4128,9 @@ Example:
     },
     {
       "mode": "native-tier-range-health",
-      "min_checks": 3,
+      "min_checks": 4,
       "min_expected_failures": 0,
-      "min_matched": 3
+      "min_matched": 4
     }
   ],
   "missing_modes": [],
@@ -4162,14 +4174,14 @@ Example:
     {
       "mode": "native-tier-range-health",
       "checks": 1,
-      "min_checks": 3,
-      "missing_checks": 2,
+      "min_checks": 4,
+      "missing_checks": 3,
       "expected_failures": 0,
       "min_expected_failures": 0,
       "missing_expected_failures": 0,
       "matched": 1,
-      "min_matched": 3,
-      "missing_matched": 2
+      "min_matched": 4,
+      "missing_matched": 3
     }
   ],
   "mode_counts": [

@@ -1199,6 +1199,16 @@
           ],
           "zero": [
             "native_tier_range_missing_sources",
+            "native_tier_range_source_count_mismatch",
+            "native_tier_range_summary_csv_row_mismatch",
+            "native_tier_range_summary_csv_fixture_mismatch",
+            "native_tier_range_summary_csv_tier_mismatch",
+            "native_tier_range_summary_csv_path_mismatch",
+            "native_tier_range_summary_csv_stream_bytes_mismatch",
+            "native_tier_range_summary_csv_index_entries_mismatch",
+            "native_tier_range_summary_csv_min_range_mismatch",
+            "native_tier_range_summary_csv_min_full_mismatch",
+            "native_tier_range_summary_csv_mismatch_total",
             "native_tier_range_csv_missing_sources",
             "native_tier_range_csv_missing_pairs"
           ]
@@ -2179,6 +2189,16 @@
         "native_tier_range_custom_rows": "int",
         "native_tier_range_legacy_rows": "int",
         "native_tier_range_missing_sources": "list",
+        "native_tier_range_source_count_mismatch": "int",
+        "native_tier_range_summary_csv_row_mismatch": "int",
+        "native_tier_range_summary_csv_fixture_mismatch": "int",
+        "native_tier_range_summary_csv_tier_mismatch": "int",
+        "native_tier_range_summary_csv_path_mismatch": "int",
+        "native_tier_range_summary_csv_stream_bytes_mismatch": "int",
+        "native_tier_range_summary_csv_index_entries_mismatch": "int",
+        "native_tier_range_summary_csv_min_range_mismatch": "int",
+        "native_tier_range_summary_csv_min_full_mismatch": "int",
+        "native_tier_range_summary_csv_mismatch_total": "int",
         "native_tier_range_source_details": "list",
         "native_tier_corpus_discovery_present": "bool",
         "native_tier_corpus_discovery_ok": "bool",
@@ -3046,6 +3066,51 @@
           "left": "br_static_dictionary_report_markdown_entry_matched",
           "op": "eq",
           "right": "br_static_dictionary_report_markdown_entry_rows"
+        },
+        {
+          "left": "native_tier_range_ok_count",
+          "op": "eq",
+          "right": "native_tier_range_summary_count",
+          "when": {
+            "field": "native_tier_range_healthy",
+            "equals": true
+          }
+        },
+        {
+          "left": "native_tier_range_csv_rows",
+          "op": "eq",
+          "right": "native_tier_range_rows",
+          "when": {
+            "field": "native_tier_range_healthy",
+            "equals": true
+          }
+        },
+        {
+          "left": "native_tier_range_csv_positive_rows",
+          "op": "eq",
+          "right": "native_tier_range_csv_rows",
+          "when": {
+            "field": "native_tier_range_healthy",
+            "equals": true
+          }
+        },
+        {
+          "left": "native_tier_range_csv_shape_rows",
+          "op": "eq",
+          "right": "native_tier_range_csv_rows",
+          "when": {
+            "field": "native_tier_range_healthy",
+            "equals": true
+          }
+        },
+        {
+          "left": "native_tier_range_csv_throughput_rows",
+          "op": "eq",
+          "right": "native_tier_range_csv_rows",
+          "when": {
+            "field": "native_tier_range_healthy",
+            "equals": true
+          }
         }
       ]
     },
@@ -3733,7 +3798,8 @@
           "truncated_output",
           "missing_native_tier_range_summary",
           "missing_native_tier_range_source",
-          "failed_native_tier_range_summary"
+          "failed_native_tier_range_summary",
+          "mismatched_native_tier_range_summary_csv"
         ]
       },
       "item_fields": {

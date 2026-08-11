@@ -2658,3 +2658,8 @@ architecture blindly.
   file-hex, dictionary, malformed, and CLI outcome floors from the retained
   summary. Dashboard health now exposes mismatch and shortfall counters before
   the differential smoke can pass.
+- Tightened native tier range dashboard health by cross-checking each retained
+  summary JSON against its CSV companion for source cardinality, row/fixture/tier
+  coverage, CSV path, per-tier stream/index totals, and per-tier minimum range
+  and full-input throughput. Dashboard health now exposes summary-vs-CSV mismatch
+  counters before native tier range coverage can pass.

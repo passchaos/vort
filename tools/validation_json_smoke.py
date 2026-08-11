@@ -1049,8 +1049,11 @@ def main() -> int:
             "vort-br-static-dictionary-report.json",
             "vort-br-static-dictionary-report.md",
             "vort-br-static-dictionary-report-negative-smoke.json",
+            "vort-native-tier-range-bench-gate.json",
             "vort-native-tier-range-bench.csv",
+            "vort-native-tier-range-files-bench-gate.json",
             "vort-native-tier-range-files-bench.csv",
+            "vort-native-tier-range-corpus-bench-gate.json",
             "vort-native-tier-range-corpus-bench.csv",
         ):
             shutil.copyfile(ROOT / "zig-out" / artifact_name, root / artifact_name)
@@ -1766,6 +1769,16 @@ def main() -> int:
         assert dashboard["native_tier_range_csv_throughput_rows"] == 24
         assert dashboard["native_tier_range_csv_missing_sources"] == []
         assert dashboard["native_tier_range_csv_missing_pairs"] == []
+        assert dashboard["native_tier_range_source_count_mismatch"] == 0
+        assert dashboard["native_tier_range_summary_csv_row_mismatch"] == 0
+        assert dashboard["native_tier_range_summary_csv_fixture_mismatch"] == 0
+        assert dashboard["native_tier_range_summary_csv_tier_mismatch"] == 0
+        assert dashboard["native_tier_range_summary_csv_path_mismatch"] == 0
+        assert dashboard["native_tier_range_summary_csv_stream_bytes_mismatch"] == 0
+        assert dashboard["native_tier_range_summary_csv_index_entries_mismatch"] == 0
+        assert dashboard["native_tier_range_summary_csv_min_range_mismatch"] == 0
+        assert dashboard["native_tier_range_summary_csv_min_full_mismatch"] == 0
+        assert dashboard["native_tier_range_summary_csv_mismatch_total"] == 0
         assert dashboard["native_tier_corpus_discovery_present"] is True
         assert dashboard["native_tier_corpus_discovery_ok"] is True
         assert dashboard["native_tier_corpus_discovery_healthy"] is True

@@ -40,9 +40,9 @@
     },
     {
       "mode": "native-tier-range-health",
-      "min_checks": 3,
+      "min_checks": 4,
       "min_expected_failures": 0,
-      "min_matched": 3
+      "min_matched": 4
     },
     {
       "mode": "strict-validation-health",

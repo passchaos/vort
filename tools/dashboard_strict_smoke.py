@@ -117,6 +117,26 @@ NATIVE_TIER_RANGE_FLOORS = {
     "standard_corpus": {"seek_fast": 30.0, "balanced": 6.5, "ratio": 3.5},
     "custom": {"seek_fast": 20.0, "balanced": 6.0, "ratio": 3.0},
 }
+NATIVE_TIER_RANGE_TIERS = {"seek_fast": 8192, "balanced": 32768, "ratio": 65536}
+NATIVE_TIER_RANGE_FIXTURES = {
+    "built_in": ["text", "structured", "repetitive"],
+    "project_files": ["README.md", "roadmap.md"],
+    "standard_corpus": ["ooffice-128k", "nci-128k", "mozilla-128k"],
+}
+NATIVE_TIER_RANGE_CSV_BY_SOURCE = {
+    "built_in": NATIVE_TIER_RANGE_CSV_ARTIFACT,
+    "project_files": NATIVE_TIER_RANGE_FILES_CSV_ARTIFACT,
+    "standard_corpus": NATIVE_TIER_RANGE_CORPUS_CSV_ARTIFACT,
+}
+NATIVE_TIER_RANGE_INPUT_BYTES = 131072
+NATIVE_TIER_RANGE_STREAM_BYTES = 4096
+NATIVE_TIER_RANGE_RANGE_OFFSET = 1024
+NATIVE_TIER_RANGE_RANGE_LEN = 4096
+NATIVE_TIER_RANGE_ITERATIONS = 400
+NATIVE_TIER_RANGE_REPEAT = 3
+NATIVE_TIER_RANGE_ELAPSED_NS = 19_000_000
+NATIVE_TIER_RANGE_RANGE_MIB_S = ((NATIVE_TIER_RANGE_RANGE_LEN * NATIVE_TIER_RANGE_ITERATIONS) / (1024.0 * 1024.0)) / (NATIVE_TIER_RANGE_ELAPSED_NS / 1_000_000_000.0)
+NATIVE_TIER_RANGE_FULL_INPUT_MIB_S = ((NATIVE_TIER_RANGE_INPUT_BYTES * NATIVE_TIER_RANGE_ITERATIONS) / (1024.0 * 1024.0)) / (NATIVE_TIER_RANGE_ELAPSED_NS / 1_000_000_000.0)
 
 
 def run(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -3848,32 +3868,25 @@ def write_native_library_bench_csv(path: Path, *, healthy: bool = True) -> None:
 
 def write_native_tier_range_csv(path: Path, fixtures: list[str]) -> None:
     columns = ["fixture", "tier", "block_len", "input_bytes", "stream_bytes", "index_entries", "range_offset", "range_len", "iterations", "repeat", "elapsed_ns", "range_mib_s", "full_input_mib_s", "checksum"]
-    tiers = {"seek_fast": 8192, "balanced": 32768, "ratio": 65536}
-    input_bytes = 131072
-    range_len = 4096
-    iterations = 400
-    elapsed_ns = 20_000_000
-    range_mib_s = ((range_len * iterations) / (1024.0 * 1024.0)) / (elapsed_ns / 1_000_000_000.0)
-    full_mib_s = ((input_bytes * iterations) / (1024.0 * 1024.0)) / (elapsed_ns / 1_000_000_000.0)
     lines = [",".join(columns)]
     for fixture in fixtures:
-        for tier, block_len in tiers.items():
+        for tier, block_len in NATIVE_TIER_RANGE_TIERS.items():
             lines.append(
                 ",".join(
                     [
                         fixture,
                         tier,
                         str(block_len),
-                        str(input_bytes),
-                        "4096",
-                        str((input_bytes + block_len - 1) // block_len),
-                        "1024",
-                        str(range_len),
-                        str(iterations),
-                        "3",
-                        str(elapsed_ns),
-                        f"{range_mib_s:.6f}",
-                        f"{full_mib_s:.6f}",
+                        str(NATIVE_TIER_RANGE_INPUT_BYTES),
+                        str(NATIVE_TIER_RANGE_STREAM_BYTES),
+                        str((NATIVE_TIER_RANGE_INPUT_BYTES + block_len - 1) // block_len),
+                        str(NATIVE_TIER_RANGE_RANGE_OFFSET),
+                        str(NATIVE_TIER_RANGE_RANGE_LEN),
+                        str(NATIVE_TIER_RANGE_ITERATIONS),
+                        str(NATIVE_TIER_RANGE_REPEAT),
+                        str(NATIVE_TIER_RANGE_ELAPSED_NS),
+                        f"{NATIVE_TIER_RANGE_RANGE_MIB_S:.6f}",
+                        f"{NATIVE_TIER_RANGE_FULL_INPUT_MIB_S:.6f}",
                         "12345",
                     ]
                 )
@@ -3883,6 +3896,21 @@ def write_native_tier_range_csv(path: Path, fixtures: list[str]) -> None:
 
 def write_native_tier_range_summary(path: Path, *, ok: bool = True, source: str = "built_in", rows: int = 9, fixture_count: int = 3) -> None:
     floors = NATIVE_TIER_RANGE_FLOORS.get(source, NATIVE_TIER_RANGE_FLOORS["custom"])
+    fixtures = NATIVE_TIER_RANGE_FIXTURES.get(source, NATIVE_TIER_RANGE_FIXTURES["built_in"])
+    csv_name = NATIVE_TIER_RANGE_CSV_BY_SOURCE.get(source, NATIVE_TIER_RANGE_CSV_ARTIFACT)
+    total_stream_bytes_by_tier = {
+        tier: NATIVE_TIER_RANGE_STREAM_BYTES * fixture_count if ok else 0
+        for tier in NATIVE_TIER_RANGE_TIERS
+    }
+    total_index_entries_by_tier = {
+        tier: ((NATIVE_TIER_RANGE_INPUT_BYTES + block_len - 1) // block_len) * fixture_count if ok else 0
+        for tier, block_len in NATIVE_TIER_RANGE_TIERS.items()
+    }
+    # The dashboard strict smoke fixtures intentionally derive their summary
+    # aggregates from the CSV constants so summary-vs-CSV drift checks exercise
+    # the same contract real benchmark producers must satisfy.
+    min_range_mib_s_by_tier = {tier: round(NATIVE_TIER_RANGE_RANGE_MIB_S, 6) if ok else 0.0 for tier in NATIVE_TIER_RANGE_TIERS}
+    min_full_input_mib_s_by_tier = {tier: round(NATIVE_TIER_RANGE_FULL_INPUT_MIB_S, 6) if ok else 0.0 for tier in NATIVE_TIER_RANGE_TIERS}
     payload = {
         "schema": "vort.native_tier_range_bench_gate",
         "schema_version": 1,
@@ -3891,15 +3919,15 @@ def write_native_tier_range_summary(path: Path, *, ok: bool = True, source: str 
         "rows": rows if ok else 0,
         "fixture_count": fixture_count if ok else 0,
         "tier_count": 3,
-        "fixtures": ["repetitive", "structured", "text"],
-        "tiers": ["seek_fast", "balanced", "ratio"],
+        "fixtures": sorted(fixtures) if ok else [],
+        "tiers": list(NATIVE_TIER_RANGE_TIERS) if ok else [],
         "enforce_throughput": False,
-        "min_range_mib_s_by_tier": {"seek_fast": 80.0, "balanced": 25.0, "ratio": 20.0},
-        "min_full_input_mib_s_by_tier": {"seek_fast": 700.0, "balanced": 250.0, "ratio": 180.0},
+        "min_range_mib_s_by_tier": min_range_mib_s_by_tier,
+        "min_full_input_mib_s_by_tier": min_full_input_mib_s_by_tier,
         "range_mib_s_floor_by_tier": floors,
-        "total_stream_bytes_by_tier": {"seek_fast": 9000, "balanced": 5000, "ratio": 4000},
-        "total_index_entries_by_tier": {"seek_fast": 32, "balanced": 12, "ratio": 8},
-        "csv": "zig-out/vort-native-tier-range-bench.csv",
+        "total_stream_bytes_by_tier": total_stream_bytes_by_tier,
+        "total_index_entries_by_tier": total_index_entries_by_tier,
+        "csv": f"zig-out/{csv_name}",
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
@@ -4336,6 +4364,16 @@ def main() -> int:
         assert manifest["native_tier_range_csv_throughput_rows"] == 24
         assert manifest["native_tier_range_csv_missing_sources"] == []
         assert manifest["native_tier_range_csv_missing_pairs"] == []
+        assert manifest["native_tier_range_source_count_mismatch"] == 0
+        assert manifest["native_tier_range_summary_csv_row_mismatch"] == 0
+        assert manifest["native_tier_range_summary_csv_fixture_mismatch"] == 0
+        assert manifest["native_tier_range_summary_csv_tier_mismatch"] == 0
+        assert manifest["native_tier_range_summary_csv_path_mismatch"] == 0
+        assert manifest["native_tier_range_summary_csv_stream_bytes_mismatch"] == 0
+        assert manifest["native_tier_range_summary_csv_index_entries_mismatch"] == 0
+        assert manifest["native_tier_range_summary_csv_min_range_mismatch"] == 0
+        assert manifest["native_tier_range_summary_csv_min_full_mismatch"] == 0
+        assert manifest["native_tier_range_summary_csv_mismatch_total"] == 0
         assert manifest["native_tier_range_built_in_summary_count"] == 1
         assert manifest["native_tier_range_project_files_summary_count"] == 1
         assert manifest["native_tier_range_standard_corpus_summary_count"] == 1
@@ -4499,6 +4537,7 @@ def main() -> int:
                     "| csv artifacts | 3 | healthy 3, missing sources 0 |",
                     "| csv rows | 24 | positive/shape 24/24 |",
                     "| throughput rows | 24 | missing pairs 0 |",
+                    "| summary/CSV mismatches | 0 | source count 0, rows/fixtures/tiers/path 0/0/0/0, stream/index/min range/min full 0/0/0/0 |",
                     "60.00/16.00/12.00",
                     "40.00/8.00/4.00",
                     "30.00/6.50/3.50",
@@ -5024,6 +5063,27 @@ def main() -> int:
         )
         checks.append(check_row("failed_native_tier_range_summary", "native-tier-range-health", True, native_tier_failed_matched, failed_native_tier_result.returncode, "dashboard_index_validation_unhealthy=native_tier_range_failed", failed_native_tier_result.stdout))
 
+        mismatched_native_tier_root = root / "mismatched-native-tier-csv"
+        mismatched_native_tier_root.mkdir()
+        write_healthy_artifacts(mismatched_native_tier_root)
+        mismatched_native_tier_payload = json.loads((mismatched_native_tier_root / NATIVE_TIER_RANGE_ARTIFACT).read_text())
+        mismatched_native_tier_payload["total_stream_bytes_by_tier"]["seek_fast"] += 1
+        (mismatched_native_tier_root / NATIVE_TIER_RANGE_ARTIFACT).write_text(json.dumps(mismatched_native_tier_payload, indent=2, sort_keys=True) + "\n")
+        mismatched_native_tier_producer = mismatched_native_tier_root / "producers.json"
+        write_producer_map(mismatched_native_tier_producer)
+        mismatched_native_tier_result = run(dashboard_args(mismatched_native_tier_root, mismatched_native_tier_producer, "--strict-validation-health"), check=False)
+        mismatched_native_tier_manifest = json.loads((mismatched_native_tier_root / "vort-dashboard-index.json").read_text())
+        native_tier_mismatched_matched = (
+            mismatched_native_tier_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_tier_range_failed" in mismatched_native_tier_result.stdout
+            and mismatched_native_tier_manifest["validation_healthy"] is False
+            and mismatched_native_tier_manifest["native_tier_range_present"] is True
+            and mismatched_native_tier_manifest["native_tier_range_healthy"] is False
+            and mismatched_native_tier_manifest["native_tier_range_summary_csv_stream_bytes_mismatch"] == 1
+            and mismatched_native_tier_manifest["native_tier_range_summary_csv_mismatch_total"] == 1
+        )
+        checks.append(check_row("mismatched_native_tier_range_summary_csv", "native-tier-range-health", True, native_tier_mismatched_matched, mismatched_native_tier_result.returncode, "dashboard_index_validation_unhealthy=native_tier_range_failed", mismatched_native_tier_result.stdout))
+
         no_producer = root / "no-producer.json"
         write_producer_map(no_producer, include_header_exact=False, required_names=[HEADER_INSPECT_ARTIFACT, DASHBOARD_STRICT_ARTIFACT])
         no_producer_result = expect_failure(dashboard_args(root, no_producer, "--strict-producers"), f"dashboard_index_missing_producers={HEADER_INSPECT_ARTIFACT}")
@@ -5410,7 +5470,7 @@ def main() -> int:
             elif fixture == "native_tier_range_failed":
                 write_native_tier_range_summaries(fixture_root)
                 payload = json.loads((fixture_root / NATIVE_TIER_RANGE_ARTIFACT).read_text())
-                payload["ok"] = False
+                payload["total_stream_bytes_by_tier"]["seek_fast"] += 1
                 (fixture_root / NATIVE_TIER_RANGE_ARTIFACT).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
                 write_producer_map(producer_map)
             elif fixture == "missing_native_tier_corpus_discovery_artifact":
