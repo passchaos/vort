@@ -4816,6 +4816,7 @@ def main() -> int:
                     "| workflows | 3 | successes 3, required/missing 1/0 |",
                     "| dictionary cases | 1 | optional/FHCRC 1/1 |",
                     "| JSON row checks | 3/3 | negatives 3/3, count mismatch 0 |",
+                    "| drift checks | 0 | duplicates cases/negatives/commands/workflows/required/help 0/0/0/0/0/0, command missing/unknown 0/0 |",
                     "| Markdown rows | 36/36 | present `True`, unmatched 0 |",
                 ],
             )

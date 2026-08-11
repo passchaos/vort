@@ -1112,6 +1112,18 @@ def main() -> int:
         assert dashboard["header_inspect_required_workflow_rows"] == len(header_summary["required_workflows"])
         assert dashboard["header_inspect_help_workflow_rows"] == len(header_summary["help_workflows"])
         assert dashboard["header_inspect_report_count_mismatch"] == 0
+        assert dashboard["header_inspect_duplicate_case_names"] == []
+        assert dashboard["header_inspect_duplicate_negative_names"] == []
+        assert dashboard["header_inspect_duplicate_command_coverage_rows"] == []
+        assert dashboard["header_inspect_duplicate_workflow_coverage_rows"] == []
+        assert dashboard["header_inspect_duplicate_required_workflow_rows"] == []
+        assert dashboard["header_inspect_duplicate_help_workflow_rows"] == []
+        assert dashboard["header_inspect_command_coverage_missing_rows"] == []
+        assert dashboard["header_inspect_command_coverage_unknown_rows"] == []
+        assert dashboard["header_inspect_command_coverage_mismatch"] == 0
+        assert dashboard["header_inspect_negative_error_count_mismatch"] == 0
+        assert dashboard["header_inspect_missing_workflow_drift"] == 0
+        assert dashboard["header_inspect_help_required_workflow_mismatch"] == 0
         assert dashboard["header_inspect_markdown_rows"] > 0
         assert dashboard["header_inspect_markdown_matched"] == dashboard["header_inspect_markdown_rows"]
         assert dashboard["header_inspect_markdown_unmatched"] == 0

@@ -7040,6 +7040,25 @@ def validation_json_health(artifacts: list[Path]) -> dict:
 def header_inspect_health(artifacts: list[Path]) -> dict:
     markdown = next((artifact for artifact in artifacts if artifact.name == "vort-header-inspect-smoke.md"), None)
 
+    def row_key(row: dict, fields: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(str(row.get(field) or "") for field in fields)
+
+    def key_text(key: tuple[str, ...]) -> str:
+        return ":".join(key)
+
+    def duplicate_keys(rows: list, fields: tuple[str, ...]) -> list[str]:
+        seen: set[tuple[str, ...]] = set()
+        duplicates: set[tuple[str, ...]] = set()
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            key = row_key(row, fields)
+            if any(key):
+                if key in seen:
+                    duplicates.add(key)
+                seen.add(key)
+        return sorted(key_text(key) for key in duplicates)
+
     def markdown_cell(value: object) -> str:
         return str(value).replace("|", "\\|")
 
@@ -7146,6 +7165,67 @@ def header_inspect_health(artifacts: list[Path]) -> dict:
             workflow_coverage_rows = len(workflow_coverage)
             required_workflow_rows = len(required_workflows)
             help_workflow_rows = len(help_workflows)
+            duplicate_case_names = duplicate_keys(cases, ("name",))
+            duplicate_negative_names = duplicate_keys(negative_items, ("name",))
+            duplicate_command_coverage_rows = duplicate_keys(command_coverage, ("command", "format"))
+            duplicate_workflow_coverage_rows = duplicate_keys(workflow_coverage, ("command", "workflow", "format"))
+            duplicate_required_workflow_rows = duplicate_keys(required_workflows, ("command", "workflow", "format"))
+            duplicate_help_workflow_rows = duplicate_keys(help_workflows, ("command", "workflow", "format"))
+
+            command_success_by_key: dict[tuple[str, str], int] = {}
+            for row in workflow_coverage:
+                if not isinstance(row, dict):
+                    continue
+                key = (str(row.get("command") or ""), str(row.get("format") or ""))
+                if any(key):
+                    command_success_by_key[key] = command_success_by_key.get(key, 0) + as_row_int(row, "successes")
+            command_failure_by_key: dict[tuple[str, str], int] = {}
+            for row in negative_items:
+                if not isinstance(row, dict):
+                    continue
+                key = (str(row.get("command") or ""), str(row.get("format") or ""))
+                if any(key):
+                    command_failure_by_key[key] = command_failure_by_key.get(key, 0) + 1
+            reported_command_by_key = {
+                (str(row.get("command") or ""), str(row.get("format") or "")): row
+                for row in command_coverage
+                if isinstance(row, dict) and (row.get("command") or row.get("format"))
+            }
+            expected_command_keys = set(command_success_by_key) | set(command_failure_by_key)
+            reported_command_keys = set(reported_command_by_key)
+            command_coverage_missing_rows = sorted(key_text(key) for key in expected_command_keys - reported_command_keys)
+            command_coverage_unknown_rows = sorted(key_text(key) for key in reported_command_keys - expected_command_keys)
+            command_coverage_mismatch = 0
+            for key in expected_command_keys & reported_command_keys:
+                row = reported_command_by_key[key]
+                if as_row_int(row, "successes") != command_success_by_key.get(key, 0) or as_row_int(row, "failures") != command_failure_by_key.get(key, 0):
+                    command_coverage_mismatch += 1
+
+            computed_negative_error_counts: dict[str, int] = {}
+            for row in negative_items:
+                if not isinstance(row, dict):
+                    continue
+                error_name = str(row.get("expected_error") or "")
+                if error_name:
+                    computed_negative_error_counts[error_name] = computed_negative_error_counts.get(error_name, 0) + 1
+            negative_error_count_mismatch = sum(
+                1
+                for error_name in set(computed_negative_error_counts) | {str(key) for key in negative_error_counts}
+                if (negative_error_counts.get(error_name) if isinstance(negative_error_counts.get(error_name), int) and not isinstance(negative_error_counts.get(error_name), bool) else 0)
+                != computed_negative_error_counts.get(error_name, 0)
+            )
+
+            required_workflow_keys = {row_key(row, ("command", "workflow", "format")) for row in required_workflows if isinstance(row, dict)}
+            help_workflow_keys = {row_key(row, ("command", "workflow", "format")) for row in help_workflows if isinstance(row, dict)}
+            covered_workflow_keys = {
+                row_key(row, ("command", "workflow", "format"))
+                for row in workflow_coverage
+                if isinstance(row, dict) and as_row_int(row, "successes") > 0
+            }
+            reported_missing_workflow_keys = {row_key(row, ("command", "workflow", "format")) for row in missing_workflows if isinstance(row, dict)}
+            computed_missing_workflow_keys = required_workflow_keys - covered_workflow_keys
+            missing_workflow_drift = len(reported_missing_workflow_keys ^ computed_missing_workflow_keys)
+            help_required_workflow_mismatch = len(help_workflow_keys ^ required_workflow_keys)
             report_count_mismatch = (
                 abs(as_int("case_count") - report_rows)
                 + abs(as_int("raw_cases") - sum(1 for row in cases if isinstance(row, dict) and row.get("format") == "raw"))
@@ -7179,6 +7259,18 @@ def header_inspect_health(artifacts: list[Path]) -> dict:
                 "required_workflow_rows": required_workflow_rows,
                 "help_workflow_rows": help_workflow_rows,
                 "report_count_mismatch": report_count_mismatch,
+                "duplicate_case_names": duplicate_case_names,
+                "duplicate_negative_names": duplicate_negative_names,
+                "duplicate_command_coverage_rows": duplicate_command_coverage_rows,
+                "duplicate_workflow_coverage_rows": duplicate_workflow_coverage_rows,
+                "duplicate_required_workflow_rows": duplicate_required_workflow_rows,
+                "duplicate_help_workflow_rows": duplicate_help_workflow_rows,
+                "command_coverage_missing_rows": command_coverage_missing_rows,
+                "command_coverage_unknown_rows": command_coverage_unknown_rows,
+                "command_coverage_mismatch": command_coverage_mismatch,
+                "negative_error_count_mismatch": negative_error_count_mismatch,
+                "missing_workflow_drift": missing_workflow_drift,
+                "help_required_workflow_mismatch": help_required_workflow_mismatch,
                 "markdown_present": markdown_present,
                 "markdown_rows": markdown_rows,
                 "markdown_matched": markdown_matched,
@@ -7213,6 +7305,18 @@ def header_inspect_health(artifacts: list[Path]) -> dict:
         "required_workflow_rows": 0,
         "help_workflow_rows": 0,
         "report_count_mismatch": 0,
+        "duplicate_case_names": [],
+        "duplicate_negative_names": [],
+        "duplicate_command_coverage_rows": [],
+        "duplicate_workflow_coverage_rows": [],
+        "duplicate_required_workflow_rows": [],
+        "duplicate_help_workflow_rows": [],
+        "command_coverage_missing_rows": [],
+        "command_coverage_unknown_rows": [],
+        "command_coverage_mismatch": 0,
+        "negative_error_count_mismatch": 0,
+        "missing_workflow_drift": 0,
+        "help_required_workflow_mismatch": 0,
         "markdown_present": False,
         "markdown_rows": 0,
         "markdown_matched": 0,
@@ -7354,6 +7458,18 @@ def main() -> int:
         and header_health["markdown_present"]
         and header_health["missing_workflow_count"] == 0
         and header_health["report_count_mismatch"] == 0
+        and not header_health["duplicate_case_names"]
+        and not header_health["duplicate_negative_names"]
+        and not header_health["duplicate_command_coverage_rows"]
+        and not header_health["duplicate_workflow_coverage_rows"]
+        and not header_health["duplicate_required_workflow_rows"]
+        and not header_health["duplicate_help_workflow_rows"]
+        and not header_health["command_coverage_missing_rows"]
+        and not header_health["command_coverage_unknown_rows"]
+        and header_health["command_coverage_mismatch"] == 0
+        and header_health["negative_error_count_mismatch"] == 0
+        and header_health["missing_workflow_drift"] == 0
+        and header_health["help_required_workflow_mismatch"] == 0
         and header_health["case_count"] > 0
         and header_health["report_rows"] == header_health["case_count"]
         and header_health["raw_cases"] > 0
@@ -7829,6 +7945,7 @@ def main() -> int:
             f"| workflows | {header_health['workflow_count']} | successes {header_health['workflow_successes']}, required/missing {header_health['required_workflow_count']}/{header_health['missing_workflow_count']} |",
             f"| dictionary cases | {header_health['dictionary_cases']} | optional/FHCRC {header_health['optional_header_cases']}/{header_health['fhcrc_cases']} |",
             f"| JSON row checks | {header_health['report_rows']}/{header_health['case_count']} | negatives {header_health['negative_item_rows']}/{header_health['negative_cases']}, count mismatch {header_health['report_count_mismatch']} |",
+            f"| drift checks | {header_health['command_coverage_mismatch'] + header_health['negative_error_count_mismatch'] + header_health['missing_workflow_drift'] + header_health['help_required_workflow_mismatch']} | duplicates cases/negatives/commands/workflows/required/help {len(header_health['duplicate_case_names'])}/{len(header_health['duplicate_negative_names'])}/{len(header_health['duplicate_command_coverage_rows'])}/{len(header_health['duplicate_workflow_coverage_rows'])}/{len(header_health['duplicate_required_workflow_rows'])}/{len(header_health['duplicate_help_workflow_rows'])}, command missing/unknown {len(header_health['command_coverage_missing_rows'])}/{len(header_health['command_coverage_unknown_rows'])} |",
             f"| Markdown rows | {header_health['markdown_matched']}/{header_health['markdown_rows']} | present `{header_health['markdown_present']}`, unmatched {header_health['markdown_unmatched']} |",
             "",
         ]
@@ -8454,6 +8571,18 @@ def main() -> int:
                 "header_inspect_required_workflow_rows": header_health["required_workflow_rows"],
                 "header_inspect_help_workflow_rows": header_health["help_workflow_rows"],
                 "header_inspect_report_count_mismatch": header_health["report_count_mismatch"],
+                "header_inspect_duplicate_case_names": header_health["duplicate_case_names"],
+                "header_inspect_duplicate_negative_names": header_health["duplicate_negative_names"],
+                "header_inspect_duplicate_command_coverage_rows": header_health["duplicate_command_coverage_rows"],
+                "header_inspect_duplicate_workflow_coverage_rows": header_health["duplicate_workflow_coverage_rows"],
+                "header_inspect_duplicate_required_workflow_rows": header_health["duplicate_required_workflow_rows"],
+                "header_inspect_duplicate_help_workflow_rows": header_health["duplicate_help_workflow_rows"],
+                "header_inspect_command_coverage_missing_rows": header_health["command_coverage_missing_rows"],
+                "header_inspect_command_coverage_unknown_rows": header_health["command_coverage_unknown_rows"],
+                "header_inspect_command_coverage_mismatch": header_health["command_coverage_mismatch"],
+                "header_inspect_negative_error_count_mismatch": header_health["negative_error_count_mismatch"],
+                "header_inspect_missing_workflow_drift": header_health["missing_workflow_drift"],
+                "header_inspect_help_required_workflow_mismatch": header_health["help_required_workflow_mismatch"],
                 "header_inspect_markdown_rows": header_health["markdown_rows"],
                 "header_inspect_markdown_matched": header_health["markdown_matched"],
                 "header_inspect_markdown_unmatched": header_health["markdown_unmatched"],

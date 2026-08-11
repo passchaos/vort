@@ -2853,3 +2853,9 @@ architecture blindly.
   duplicate, unknown, and mismatched summary rows. Dashboard health now rejects
   stale native fuzz summary aggregates before coverage and Markdown checks can
   pass.
+
+- Tightened header inspect dashboard health by exposing duplicate successful,
+  negative, command, workflow, required-workflow, and help-workflow rows, and by
+  recomputing command coverage, negative error counts, missing workflows, and
+  help-vs-required workflow drift. Dashboard health now rejects stale or
+  duplicated header inspect aggregates before Markdown coverage can pass.
