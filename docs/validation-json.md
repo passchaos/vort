@@ -2995,7 +2995,11 @@ Top-level fields:
   `gzip_relaxed_strict_rejections`, `gzip_relaxed_successes`,
   `gzip_relaxed_concatenated_successes`, `gzip_relaxed_decoder_successes`,
   `gzip_relaxed_limited_rejections`, `zlib_relaxed_markdown_rows`,
-  `zlib_relaxed_markdown_matched`, `zlib_relaxed_markdown_unmatched`
+  `zlib_relaxed_markdown_matched`, `zlib_relaxed_markdown_unmatched`,
+  `zlib_relaxed_markdown_malformed_rows`,
+  `zlib_relaxed_markdown_duplicate_metrics`,
+  `zlib_relaxed_markdown_unknown_metrics`,
+  `zlib_relaxed_markdown_value_mismatches`
 - `snappy_report_present`, `snappy_report_healthy`, `snappy_report_rows`,
   `snappy_report_expected_rows`, `snappy_report_positive_timing_rows`,
   `snappy_report_ratio_rows`, `snappy_report_throughput_rows`,
@@ -3847,6 +3851,10 @@ Example:
   "zlib_relaxed_markdown_rows": 0,
   "zlib_relaxed_markdown_matched": 0,
   "zlib_relaxed_markdown_unmatched": 0,
+  "zlib_relaxed_markdown_malformed_rows": 0,
+  "zlib_relaxed_markdown_duplicate_metrics": [],
+  "zlib_relaxed_markdown_unknown_metrics": [],
+  "zlib_relaxed_markdown_value_mismatches": [],
   "snappy_report_present": false,
   "snappy_report_healthy": false,
   "snappy_report_rows": 0,
@@ -5112,7 +5120,9 @@ zig build run-zlib-relaxed-report-gate
 This schema records direct public-API coverage for relaxed zlib and gzip decode
 options. Dashboard aggregate health cross-checks the retained Markdown metric
 table and the gate checks against the JSON report before relaxed wrapper
-coverage can pass. The report includes strict rejection, relaxed success, dictionary-aware zlib
+coverage can pass. Dashboard health rejects missing, malformed, duplicate,
+unknown, and value-mismatched Markdown metric rows instead of treating the table
+as broad textual evidence. The report includes strict rejection, relaxed success, dictionary-aware zlib
 decode, zlib/gzip concatenated decode, caller-owned `ZlibDecoder` and
 `GzipDecoder` options coverage, and output-limit rejection behavior.
 

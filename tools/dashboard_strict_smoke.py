@@ -5280,7 +5280,7 @@ def main() -> int:
                     "| gate | 11 | 11 | 0 | 0 | 0 | ok `True` |",
                     "| gate/report drift | 11 | 11 | 0 | 0 | 0 | expected checks |",
                     "| gate recompute | 11 | 11 | 0 | 0 | 0 | rule/exact/floor 0/0/0 |",
-                    "| Markdown rows | 11 | 11 | 0 | 0 | 0 | present `True` |",
+                    "| Markdown rows | 11 | 11 | 0 | 0 | 0 | present `True`, unknown/value 0/0 |",
                 ],
             )
         )

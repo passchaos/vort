@@ -1208,7 +1208,11 @@
             "zlib_relaxed_gate_check_rule_mismatch",
             "zlib_relaxed_gate_exact_mismatch_count",
             "zlib_relaxed_gate_floor_shortfall_count",
-            "zlib_relaxed_markdown_unmatched"
+            "zlib_relaxed_markdown_unmatched",
+            "zlib_relaxed_markdown_malformed_rows",
+            "zlib_relaxed_markdown_duplicate_metrics",
+            "zlib_relaxed_markdown_unknown_metrics",
+            "zlib_relaxed_markdown_value_mismatches"
           ]
         },
         "png_scratch_healthy": {
@@ -2049,6 +2053,10 @@
         "zlib_relaxed_markdown_rows": "int",
         "zlib_relaxed_markdown_matched": "int",
         "zlib_relaxed_markdown_unmatched": "int",
+        "zlib_relaxed_markdown_malformed_rows": "int",
+        "zlib_relaxed_markdown_duplicate_metrics": "list",
+        "zlib_relaxed_markdown_unknown_metrics": "list",
+        "zlib_relaxed_markdown_value_mismatches": "list",
         "zstd_compare_present": "bool",
         "zstd_compare_standard_present": "bool",
         "zstd_compare_block_sweep_present": "bool",

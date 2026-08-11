@@ -1565,6 +1565,10 @@ def main() -> int:
         assert dashboard["zlib_relaxed_markdown_rows"] == len(zlib_relaxed_gate["checks"])
         assert dashboard["zlib_relaxed_markdown_matched"] == len(zlib_relaxed_gate["checks"])
         assert dashboard["zlib_relaxed_markdown_unmatched"] == 0
+        assert dashboard["zlib_relaxed_markdown_malformed_rows"] == 0
+        assert dashboard["zlib_relaxed_markdown_duplicate_metrics"] == []
+        assert dashboard["zlib_relaxed_markdown_unknown_metrics"] == []
+        assert dashboard["zlib_relaxed_markdown_value_mismatches"] == []
         assert "| zlib strict rejections |" in zlib_relaxed_markdown
         assert dashboard["snappy_report_present"] is True
         assert dashboard["snappy_report_healthy"] is True

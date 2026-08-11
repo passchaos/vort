@@ -3014,16 +3014,69 @@ def zlib_relaxed_health(artifacts: list[Path]) -> dict:
         value = report.get(field)
         return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
-    def markdown_checks() -> tuple[bool, int, int, int]:
+    def markdown_checks() -> tuple[bool, int, int, int, int, list[str], list[str], list[str]]:
         if markdown is None:
-            return (False, 0, 0, 1)
+            return (False, 0, 0, 1, 0, [], [], [])
         try:
             text = markdown.read_text(errors="replace")
         except Exception:
-            return (True, 0, 0, 1)
-        expected = [f"| {label} | {int_field(field)} |" for field, label in metric_rows]
-        matched = sum(1 for needle in expected if needle in text)
-        return (True, len(expected), matched, len(expected) - matched)
+            return (True, 0, 0, 1, 0, [], [], [])
+        expected_by_label = {label: field for field, label in metric_rows}
+        rows: list[dict[str, int | str | bool]] = []
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped.startswith("|"):
+                continue
+            cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+            if not cells or cells[0] in {"metric", "---"} or set(cells[0]) == {"-"}:
+                continue
+            if len(cells) != 2:
+                rows.append({"metric": cells[0] if cells else "", "malformed": True})
+                continue
+            try:
+                rows.append({"metric": cells[0], "value": int(cells[1])})
+            except ValueError:
+                rows.append({"metric": cells[0], "malformed": True})
+        matched_metrics: set[str] = set()
+        seen_metrics: set[str] = set()
+        duplicate_metrics: set[str] = set()
+        unknown_metrics: set[str] = set()
+        value_mismatches: set[str] = set()
+        malformed_rows = 0
+        for row in rows:
+            metric = str(row.get("metric") or "")
+            if metric in seen_metrics:
+                duplicate_metrics.add(metric)
+            if metric:
+                seen_metrics.add(metric)
+            field = expected_by_label.get(metric)
+            if field is None:
+                if metric:
+                    unknown_metrics.add(metric)
+                else:
+                    malformed_rows += 1
+                continue
+            if row.get("malformed") is True:
+                malformed_rows += 1
+                continue
+            if row.get("value") == int_field(field):
+                if metric not in matched_metrics:
+                    matched_metrics.add(metric)
+            else:
+                value_mismatches.add(metric)
+        matched = len(matched_metrics)
+        rows_count = len(rows)
+        unmatched = max(rows_count, len(metric_rows)) - matched + malformed_rows
+        return (
+            True,
+            rows_count,
+            matched,
+            unmatched,
+            malformed_rows,
+            sorted(duplicate_metrics),
+            sorted(unknown_metrics),
+            sorted(value_mismatches),
+        )
 
     gate_checks = gate.get("checks") if isinstance(gate, dict) else {}
     gate_checks = gate_checks if isinstance(gate_checks, dict) else {}
@@ -3065,12 +3118,29 @@ def zlib_relaxed_health(artifacts: list[Path]) -> dict:
         if gate_checks.get(field) is True and recomputed_gate_checks.get(field) is True
     )
     gate_report_unmatched = gate_extra_checks + (gate_expected_checks - gate_report_matched)
-    markdown_present, markdown_rows, markdown_matched, markdown_unmatched = markdown_checks()
+    (
+        markdown_present,
+        markdown_rows,
+        markdown_matched,
+        markdown_unmatched,
+        markdown_malformed_rows,
+        markdown_duplicate_metrics,
+        markdown_unknown_metrics,
+        markdown_value_mismatches,
+    ) = markdown_checks()
     zlib_total = int_field("strict_rejections") + int_field("relaxed_successes") + int_field("dictionary_successes") + int_field("zlib_concatenated_successes") + int_field("zlib_decoder_successes") + int_field("limited_rejections")
     gzip_total = int_field("gzip_strict_rejections") + int_field("gzip_relaxed_successes") + int_field("gzip_concatenated_successes") + int_field("gzip_decoder_successes") + int_field("gzip_limited_rejections")
     report_present = isinstance(report, dict)
     report_healthy = gate_exact_mismatch_count == 0 and gate_floor_shortfall_count == 0
-    markdown_healthy = markdown_present and markdown_rows == gate_expected_checks and markdown_unmatched == 0
+    markdown_healthy = (
+        markdown_present
+        and markdown_rows == gate_expected_checks
+        and markdown_unmatched == 0
+        and markdown_malformed_rows == 0
+        and not markdown_duplicate_metrics
+        and not markdown_unknown_metrics
+        and not markdown_value_mismatches
+    )
     gate_healthy = (
         gate_present
         and gate_ok
@@ -3118,6 +3188,10 @@ def zlib_relaxed_health(artifacts: list[Path]) -> dict:
         "markdown_rows": markdown_rows,
         "markdown_matched": markdown_matched,
         "markdown_unmatched": markdown_unmatched,
+        "markdown_malformed_rows": markdown_malformed_rows,
+        "markdown_duplicate_metrics": markdown_duplicate_metrics,
+        "markdown_unknown_metrics": markdown_unknown_metrics,
+        "markdown_value_mismatches": markdown_value_mismatches,
     }
 
 def snappy_report_health(artifacts: list[Path]) -> dict:
@@ -8174,7 +8248,7 @@ def main() -> int:
             f"| gate | {zlib_relaxed['gate_check_count']} | {zlib_relaxed['gate_passed_count']} | 0 | 0 | {len(zlib_relaxed['gate_failed_checks'])} | ok `{zlib_relaxed['gate_ok']}` |",
             f"| gate/report drift | {zlib_relaxed['gate_report_matched']} | {zlib_relaxed['gate_expected_checks']} | 0 | 0 | {zlib_relaxed['gate_report_unmatched']} | expected checks |",
             f"| gate recompute | {zlib_relaxed['gate_recomputed_passed_count']} | {zlib_relaxed['gate_expected_checks']} | {zlib_relaxed['gate_missing_checks']} | {zlib_relaxed['gate_extra_checks']} | {zlib_relaxed['gate_recomputed_failed_count']} | rule/exact/floor {zlib_relaxed['gate_check_rule_mismatch']}/{zlib_relaxed['gate_exact_mismatch_count']}/{zlib_relaxed['gate_floor_shortfall_count']} |",
-            f"| Markdown rows | {zlib_relaxed['markdown_matched']} | {zlib_relaxed['markdown_rows']} | 0 | 0 | {zlib_relaxed['markdown_unmatched']} | present `{zlib_relaxed['markdown_present']}` |",
+            f"| Markdown rows | {zlib_relaxed['markdown_matched']} | {zlib_relaxed['markdown_rows']} | {zlib_relaxed['markdown_malformed_rows']} | {len(zlib_relaxed['markdown_duplicate_metrics'])} | {zlib_relaxed['markdown_unmatched']} | present `{zlib_relaxed['markdown_present']}`, unknown/value {len(zlib_relaxed['markdown_unknown_metrics'])}/{len(zlib_relaxed['markdown_value_mismatches'])} |",
             "",
         ]
     )
@@ -9144,6 +9218,10 @@ def main() -> int:
                 "zlib_relaxed_markdown_rows": zlib_relaxed["markdown_rows"],
                 "zlib_relaxed_markdown_matched": zlib_relaxed["markdown_matched"],
                 "zlib_relaxed_markdown_unmatched": zlib_relaxed["markdown_unmatched"],
+                "zlib_relaxed_markdown_malformed_rows": zlib_relaxed["markdown_malformed_rows"],
+                "zlib_relaxed_markdown_duplicate_metrics": zlib_relaxed["markdown_duplicate_metrics"],
+                "zlib_relaxed_markdown_unknown_metrics": zlib_relaxed["markdown_unknown_metrics"],
+                "zlib_relaxed_markdown_value_mismatches": zlib_relaxed["markdown_value_mismatches"],
                 "snappy_report_present": snappy_report["present"],
                 "snappy_report_healthy": snappy_report["healthy"],
                 "snappy_report_rows": snappy_report["row_count"],

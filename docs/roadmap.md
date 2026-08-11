@@ -2875,6 +2875,12 @@ architecture blindly.
   rejects duplicated Huffman oracle case rows before Markdown coverage can pass.
 
 
+
+- Tightened zlib relaxed dashboard health by parsing retained Markdown metric rows
+  as structured evidence and exposing malformed, duplicate, unknown, and
+  value-mismatched metrics. Dashboard health now rejects relaxed wrapper
+  Markdown drift before gate/report coverage can pass.
+
 - Tightened native allocation dashboard health by exposing duplicate report,
   zero-allocation smoke, budget smoke, and negative smoke identities plus
   malformed, duplicate, and unknown Markdown rows. Dashboard health now rejects
