@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime as dt
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -7658,6 +7659,8 @@ def non_json_artifact_audit(records: list[dict], output_dir: Path) -> dict:
     markdown_count = 0
     csv_parsed = 0
     csv_data_rows = 0
+    csv_header_cell_count = 0
+    csv_header_signatures: list[dict[str, int | str]] = []
     markdown_read = 0
     csv_parse_failed: list[str] = []
     csv_empty: list[str] = []
@@ -7696,6 +7699,13 @@ def non_json_artifact_audit(records: list[dict], output_dir: Path) -> dict:
             if len(set(header)) != len(header):
                 csv_duplicate_headers.append(name)
                 continue
+            signature = hashlib.sha256("\x1f".join(header).encode("utf-8")).hexdigest()[:16]
+            csv_header_cell_count += len(header)
+            csv_header_signatures.append({
+                "name": name,
+                "column_count": len(header),
+                "signature": signature,
+            })
             data_row_count = max(0, len(rows) - 1)
             if data_row_count == 0:
                 csv_no_data_rows.append(name)
@@ -7731,6 +7741,9 @@ def non_json_artifact_audit(records: list[dict], output_dir: Path) -> dict:
         "csv_artifact_count": csv_count,
         "csv_artifact_parsed_count": csv_parsed,
         "csv_artifact_data_rows": csv_data_rows,
+        "csv_artifact_header_cell_count": csv_header_cell_count,
+        "csv_artifact_header_signature_count": len({row["signature"] for row in csv_header_signatures}),
+        "csv_artifact_header_signatures": csv_header_signatures,
         "csv_artifact_parse_failed": csv_parse_failed,
         "csv_artifact_empty": csv_empty,
         "csv_artifact_blank_headers": csv_blank_headers,
@@ -8280,7 +8293,7 @@ def main() -> int:
             "| --- | ---: | ---: | --- |",
             f"| producer steps | {producer_step_covered}/{len(records)} | {len(producer_step_missing)} | allowed missing {len(producer_step_allowed_missing)} |",
             f"| smoke gates | {smoke_gate_covered}/{len(records)} | {len(smoke_gate_missing)} | required missing {len(smoke_gate_required_missing)} |",
-            f"| CSV artifacts | {non_json_audit['csv_artifact_parsed_count']}/{non_json_audit['csv_artifact_count']} | data rows {non_json_audit['csv_artifact_data_rows']}, parse failed {len(non_json_audit['csv_artifact_parse_failed'])}, empty {len(non_json_audit['csv_artifact_empty'])}, blank headers {len(non_json_audit['csv_artifact_blank_headers'])}, duplicate headers {len(non_json_audit['csv_artifact_duplicate_headers'])}, no-data {len(non_json_audit['csv_artifact_no_data_rows'])}, ragged {len(non_json_audit['csv_artifact_ragged_rows'])} |",
+            f"| CSV artifacts | {non_json_audit['csv_artifact_parsed_count']}/{non_json_audit['csv_artifact_count']} | data rows {non_json_audit['csv_artifact_data_rows']}, header cells {non_json_audit['csv_artifact_header_cell_count']}, header signatures {non_json_audit['csv_artifact_header_signature_count']}, parse failed {len(non_json_audit['csv_artifact_parse_failed'])}, empty {len(non_json_audit['csv_artifact_empty'])}, blank headers {len(non_json_audit['csv_artifact_blank_headers'])}, duplicate headers {len(non_json_audit['csv_artifact_duplicate_headers'])}, no-data {len(non_json_audit['csv_artifact_no_data_rows'])}, ragged {len(non_json_audit['csv_artifact_ragged_rows'])} |",
             f"| Markdown artifacts | {non_json_audit['markdown_artifact_read_count']}/{non_json_audit['markdown_artifact_count']} | read failed {len(non_json_audit['markdown_artifact_read_failed'])}, empty {len(non_json_audit['markdown_artifact_empty'])}, marker missing {len(non_json_audit['markdown_artifact_marker_missing'])}, heading missing {len(non_json_audit['markdown_artifact_heading_missing'])}, heading not first {len(non_json_audit['markdown_artifact_heading_not_first'])}, table missing {len(non_json_audit['markdown_artifact_table_missing'])}, separator missing {len(non_json_audit['markdown_artifact_table_separator_missing'])}, healthy `{non_json_artifact_healthy}` |",
             "",
         ]
@@ -8960,6 +8973,9 @@ def main() -> int:
                 "csv_artifact_count": non_json_audit["csv_artifact_count"],
                 "csv_artifact_parsed_count": non_json_audit["csv_artifact_parsed_count"],
                 "csv_artifact_data_rows": non_json_audit["csv_artifact_data_rows"],
+                "csv_artifact_header_cell_count": non_json_audit["csv_artifact_header_cell_count"],
+                "csv_artifact_header_signature_count": non_json_audit["csv_artifact_header_signature_count"],
+                "csv_artifact_header_signatures": non_json_audit["csv_artifact_header_signatures"],
                 "csv_artifact_parse_failed": non_json_audit["csv_artifact_parse_failed"],
                 "csv_artifact_empty": non_json_audit["csv_artifact_empty"],
                 "csv_artifact_blank_headers": non_json_audit["csv_artifact_blank_headers"],

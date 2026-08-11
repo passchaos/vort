@@ -2907,6 +2907,11 @@ architecture blindly.
   Markdown even when the file is readable, non-empty, and contains table markers.
 
 
+
+- Added CSV header signature inventory to the non-JSON artifact audit. The
+  dashboard now records per-artifact CSV column counts and stable header hashes,
+  establishing the baseline needed for future per-artifact expected-header gates.
+
 - Tightened CSV artifact auditing by rejecting ragged rows whose column count
   differs from the header. Dashboard health now catches truncated or over-wide
   CSV data rows across retained CSV artifacts.
