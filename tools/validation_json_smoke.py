@@ -1501,6 +1501,7 @@ def main() -> int:
         assert dashboard["checksum_bench_expected_rows"] == 21
         assert dashboard["checksum_bench_positive_rows"] == len(checksum_bench_rows)
         assert dashboard["checksum_bench_workload_rows"] == len(checksum_bench_rows)
+        assert dashboard["checksum_bench_throughput_rows"] == len(checksum_bench_rows)
         assert dashboard["checksum_bench_crc32_mix_groups"] == 1
         assert dashboard["checksum_bench_crc32c_mix_groups"] == 1
         assert dashboard["checksum_bench_missing_algorithms"] == []

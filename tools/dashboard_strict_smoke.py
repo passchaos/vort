@@ -1659,13 +1659,17 @@ def write_checksum_bench_csv(path: Path, *, healthy: bool = True) -> None:
     ]
     columns = ["algorithm", "bytes", "iterations", "elapsed_s", "throughput_mib_s", "mix"]
     lines = [",".join(columns)]
+    bytes_value = 1 << 20
+    iterations = 128
+    elapsed_s = 0.1
+    throughput_mib_s = ((bytes_value * iterations) / (1024.0 * 1024.0)) / elapsed_s
     for algorithm in algorithms:
         if not healthy and algorithm == "crc32c-best":
             continue
         mix = "287916550677" if algorithm.startswith("crc32c-") else "267872580117"
         if algorithm == "adler32":
             mix = "255981175488"
-        lines.append(",".join([algorithm, str(1 << 20), "128", "0.1", "1000.0", mix]))
+        lines.append(",".join([algorithm, str(bytes_value), str(iterations), f"{elapsed_s:.1f}", f"{throughput_mib_s:.2f}", mix]))
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -4688,7 +4692,7 @@ def main() -> int:
                     "## Checksum benchmark coverage",
                     "| category | count | detail |",
                     "| rows | 21 | expected 21, present `True` |",
-                    "| workload rows | 21 | positive rows 21 |",
+                    "| workload rows | 21 | positive/throughput rows 21/21 |",
                     "| digest mix groups | 2 | crc32/crc32c 1/1, missing algorithms 0, healthy `True` |",
                 ],
             )

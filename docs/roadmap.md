@@ -2672,3 +2672,7 @@ architecture blindly.
   outputs to preserve both size and checksum per fixture. Dashboard health now
   exposes ratio, throughput, and reusable-checksum counters before Snappy coverage
   can pass.
+- Tightened checksum benchmark dashboard health by recomputing throughput from
+  bytes, iterations, and elapsed time for every retained CSV row. Dashboard
+  health now exposes throughput-row counters before checksum benchmark coverage
+  can pass.

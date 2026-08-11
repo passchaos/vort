@@ -2670,8 +2670,8 @@ Top-level fields:
 - `checksum_bench_present`, `checksum_bench_healthy`,
   `checksum_bench_rows`, `checksum_bench_expected_rows`,
   `checksum_bench_positive_rows`, `checksum_bench_workload_rows`,
-  `checksum_bench_crc32_mix_groups`, `checksum_bench_crc32c_mix_groups`,
-  `checksum_bench_missing_algorithms`
+  `checksum_bench_throughput_rows`, `checksum_bench_crc32_mix_groups`,
+  `checksum_bench_crc32c_mix_groups`, `checksum_bench_missing_algorithms`
 - `chunk_cursor_bench_present`, `chunk_cursor_bench_healthy`,
   `chunk_cursor_bench_rows`, `chunk_cursor_bench_expected_rows`,
   `chunk_cursor_bench_positive_rows`, `chunk_cursor_bench_shape_rows`,
@@ -3302,6 +3302,7 @@ Example:
   "checksum_bench_expected_rows": 0,
   "checksum_bench_positive_rows": 0,
   "checksum_bench_workload_rows": 0,
+  "checksum_bench_throughput_rows": 0,
   "checksum_bench_crc32_mix_groups": 0,
   "checksum_bench_crc32c_mix_groups": 0,
   "checksum_bench_missing_algorithms": [],

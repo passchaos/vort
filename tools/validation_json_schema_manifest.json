@@ -1248,6 +1248,7 @@
             "checksum_bench_expected_rows",
             "checksum_bench_positive_rows",
             "checksum_bench_workload_rows",
+            "checksum_bench_throughput_rows",
             "checksum_bench_crc32_mix_groups",
             "checksum_bench_crc32c_mix_groups"
           ],
@@ -2253,6 +2254,7 @@
         "checksum_bench_expected_rows": "int",
         "checksum_bench_positive_rows": "int",
         "checksum_bench_workload_rows": "int",
+        "checksum_bench_throughput_rows": "int",
         "checksum_bench_crc32_mix_groups": "int",
         "checksum_bench_crc32c_mix_groups": "int",
         "checksum_bench_missing_algorithms": "list",
@@ -3156,6 +3158,15 @@
           "right": "snappy_report_rows",
           "when": {
             "field": "snappy_report_healthy",
+            "equals": true
+          }
+        },
+        {
+          "left": "checksum_bench_throughput_rows",
+          "op": "eq",
+          "right": "checksum_bench_rows",
+          "when": {
+            "field": "checksum_bench_healthy",
             "equals": true
           }
         }

@@ -383,6 +383,7 @@ def main() -> int:
                 "checksum_bench_expected_rows": 21,
                 "checksum_bench_positive_rows": 21,
                 "checksum_bench_workload_rows": 21,
+                "checksum_bench_throughput_rows": 21,
                 "checksum_bench_crc32_mix_groups": 1,
                 "checksum_bench_crc32c_mix_groups": 1,
                 "checksum_bench_missing_algorithms": [],
