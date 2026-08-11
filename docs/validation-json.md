@@ -626,9 +626,8 @@ Important fields:
   exclusions such as stale self-output snapshots that are inventoried but not
   part of the current validation smoke contract
 - `json_artifact_parse_failed`, `json_artifact_missing_schema`,
-  `json_artifact_manifest_failed_names`: artifact-level audit drift lists; parse
-  and missing-schema lists are hard health gates, while manifest failures are
-  exposed as the current cleanup backlog
+  `json_artifact_manifest_failed_names`: artifact-level audit drift lists; parse,
+  missing-schema, and manifest-validation failures are hard health gates
 - `cli_success_ok`, `cli_failure_ok`, `cli_failure_hint`
 - `report_rows`, `corrupt_rows`
 

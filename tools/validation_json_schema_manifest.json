@@ -711,6 +711,8 @@
             "validation_json_json_artifact_parse_failed",
             "validation_json_json_artifact_missing_schema_count",
             "validation_json_json_artifact_missing_schema",
+            "validation_json_json_artifact_manifest_failed_count",
+            "validation_json_json_artifact_manifest_failed_names",
             "validation_json_json_artifact_manifest_accounting_mismatch",
             "validation_json_docs_negative_unmatched",
             "validation_json_docs_negative_count_mismatch",
@@ -6389,6 +6391,7 @@
           "validation_smoke_checked_schema_enum",
           "zlib_relaxed_gate_check_value_type",
           "zlib_relaxed_gate_boolean_formula",
+          "validation_json_manifest_failure_formula",
           "native_summary_error_phase_enum",
           "boolean_formula_positive_field",
           "boolean_formula_empty_string_field"

@@ -1310,6 +1310,25 @@ def main() -> int:
             )
         )
 
+        def validation_json_manifest_failure_formula() -> None:
+            payload = dashboard_index_doc_example()
+            payload.update(
+                {
+                    "validation_json_healthy": True,
+                    "validation_json_json_artifact_manifest_failed_count": 1,
+                    "validation_json_json_artifact_manifest_failed_names": ["stale-artifact.json"],
+                }
+            )
+            docs_check.validate_value_against_manifest(payload, schemas_def)
+
+        cases.append(
+            negative_case(
+                "validation_json_manifest_failure_formula",
+                "validation_json_healthy=True does not match boolean formula",
+                validation_json_manifest_failure_formula,
+            )
+        )
+
     summary = {
         "schema": "vort.validation_json_docs_negative_smoke",
         "schema_version": 1,

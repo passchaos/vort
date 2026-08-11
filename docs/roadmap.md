@@ -2881,6 +2881,12 @@ architecture blindly.
 
 
 
+
+- Promoted validation JSON artifact manifest failures to a hard dashboard health
+  gate now that the retained artifact backlog is zero. The audit excludes only
+  current-run self outputs and stale dashboard self-snapshots, and any remaining
+  manifest validation failure now makes validation JSON health fail.
+
 - Closed the validation JSON artifact manifest backlog by excluding known
   dashboard/validation self-output snapshots from the current-run audit and
   validating every remaining retained `zig-out` JSON artifact against the shared
