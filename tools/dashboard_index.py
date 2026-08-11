@@ -5246,6 +5246,13 @@ def native_allocation_health(artifacts: list[Path]) -> dict:
     zero_report_unmatched += abs(required_zero_cases - len(cases))
     budget_report_matched, budget_report_unmatched = smoke_rows_match_report(budget_cases, require_zero=False, require_budget=True)
     budget_report_unmatched += abs(required_budget_cases - len(budget_cases))
+    zero_case_names = {str(row.get("case") or "") for row in cases if isinstance(row, dict)}
+    budget_case_names = {str(row.get("case") or "") for row in budget_cases if isinstance(row, dict)}
+    report_case_names = set(report_by_case)
+    smoke_classified_cases = len((zero_case_names | budget_case_names) & report_case_names)
+    smoke_classification_overlap = len(zero_case_names & budget_case_names)
+    smoke_classification_missing = len(report_case_names - (zero_case_names | budget_case_names))
+    smoke_classification_extra = len((zero_case_names | budget_case_names) - report_case_names)
     negative_unmatched = max(negative_case_count, len(negative_cases)) - negative_matched
     markdown_present = isinstance(markdown, Path)
     markdown_rows_data = parse_markdown_rows(markdown if markdown_present else None)
@@ -5290,6 +5297,10 @@ def native_allocation_health(artifacts: list[Path]) -> dict:
         and budget_matched == required_budget_cases
         and budget_report_matched == required_budget_cases
         and budget_report_unmatched == 0
+        and smoke_classified_cases == report_rows
+        and smoke_classification_overlap == 0
+        and smoke_classification_missing == 0
+        and smoke_classification_extra == 0
         and negative_case_count > 0
         and negative_matched == negative_case_count
         and negative_unmatched == 0
@@ -5317,6 +5328,10 @@ def native_allocation_health(artifacts: list[Path]) -> dict:
         "budget_matched": budget_matched,
         "budget_report_matched": budget_report_matched,
         "budget_report_unmatched": budget_report_unmatched,
+        "smoke_classified_cases": smoke_classified_cases,
+        "smoke_classification_overlap": smoke_classification_overlap,
+        "smoke_classification_missing": smoke_classification_missing,
+        "smoke_classification_extra": smoke_classification_extra,
         "negative_case_count": negative_case_count,
         "negative_matched": negative_matched,
         "negative_unmatched": negative_unmatched,
@@ -7325,6 +7340,7 @@ def main() -> int:
             f"| zero/report drift | {native_allocation['zero_report_matched']}/{native_allocation['required_zero_allocation_cases']} | unmatched {native_allocation['zero_report_unmatched']} |",
             f"| budget cases | {native_allocation['budget_matched']}/{native_allocation['required_budget_cases']} | healthy `{native_allocation['healthy']}` |",
             f"| budget/report drift | {native_allocation['budget_report_matched']}/{native_allocation['required_budget_cases']} | unmatched {native_allocation['budget_report_unmatched']} |",
+            f"| smoke classification | {native_allocation['smoke_classified_cases']}/{native_allocation['report_rows']} | overlap {native_allocation['smoke_classification_overlap']}, missing {native_allocation['smoke_classification_missing']}, extra {native_allocation['smoke_classification_extra']} |",
             f"| negative smoke cases | {native_allocation['negative_matched']}/{native_allocation['negative_case_count']} | present `{native_allocation['negative_present']}`, unmatched {native_allocation['negative_unmatched']} |",
             f"| Markdown rows | {native_allocation['markdown_matched']}/{native_allocation['markdown_rows']} | present `{native_allocation['markdown_present']}`, unmatched {native_allocation['markdown_unmatched']} |",
             "",
@@ -8205,6 +8221,10 @@ def main() -> int:
                 "native_allocation_budget_matched": native_allocation["budget_matched"],
                 "native_allocation_budget_report_matched": native_allocation["budget_report_matched"],
                 "native_allocation_budget_report_unmatched": native_allocation["budget_report_unmatched"],
+                "native_allocation_smoke_classified_cases": native_allocation["smoke_classified_cases"],
+                "native_allocation_smoke_classification_overlap": native_allocation["smoke_classification_overlap"],
+                "native_allocation_smoke_classification_missing": native_allocation["smoke_classification_missing"],
+                "native_allocation_smoke_classification_extra": native_allocation["smoke_classification_extra"],
                 "native_allocation_negative_case_count": native_allocation["negative_case_count"],
                 "native_allocation_negative_matched": native_allocation["negative_matched"],
                 "native_allocation_negative_unmatched": native_allocation["negative_unmatched"],

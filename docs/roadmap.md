@@ -2724,3 +2724,7 @@ architecture blindly.
   coverage, fast-miss, match-class byte, and per-match/per-byte extra-bit ratios
   from the CSV counters. Dashboard health now exposes a ratio-row counter before
   dynamic decode profile coverage can pass.
+- Tightened native allocation dashboard health by requiring zero-allocation and
+  budget smoke rows to classify every report case exactly once, with no overlap,
+  missing report cases, or extra smoke-only cases. Dashboard health now exposes
+  smoke-classification counters before native allocation coverage can pass.

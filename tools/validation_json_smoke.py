@@ -1637,6 +1637,10 @@ def main() -> int:
         assert dashboard["native_allocation_budget_matched"] == len(native_allocation_smoke["budget_cases"])
         assert dashboard["native_allocation_budget_report_matched"] == native_allocation_smoke["required_budget_cases"]
         assert dashboard["native_allocation_budget_report_unmatched"] == 0
+        assert dashboard["native_allocation_smoke_classified_cases"] == len(native_allocation["cases"])
+        assert dashboard["native_allocation_smoke_classification_overlap"] == 0
+        assert dashboard["native_allocation_smoke_classification_missing"] == 0
+        assert dashboard["native_allocation_smoke_classification_extra"] == 0
         assert dashboard["native_allocation_negative_case_count"] == native_allocation_negative_smoke["case_count"]
         assert dashboard["native_allocation_negative_matched"] == native_allocation_negative_smoke["case_count"]
         assert dashboard["native_allocation_negative_unmatched"] == 0

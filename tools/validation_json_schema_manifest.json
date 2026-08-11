@@ -1047,6 +1047,7 @@
             "native_allocation_required_budget_cases",
             "native_allocation_budget_matched",
             "native_allocation_budget_report_matched",
+            "native_allocation_smoke_classified_cases",
             "native_allocation_negative_case_count",
             "native_allocation_negative_matched",
             "native_allocation_markdown_rows",
@@ -1058,6 +1059,9 @@
             "native_allocation_report_unbalanced_rows",
             "native_allocation_zero_report_unmatched",
             "native_allocation_budget_report_unmatched",
+            "native_allocation_smoke_classification_overlap",
+            "native_allocation_smoke_classification_missing",
+            "native_allocation_smoke_classification_extra",
             "native_allocation_negative_unmatched",
             "native_allocation_markdown_unmatched"
           ]
@@ -1937,6 +1941,10 @@
         "native_allocation_zero_report_unmatched": "int",
         "native_allocation_budget_report_matched": "int",
         "native_allocation_budget_report_unmatched": "int",
+        "native_allocation_smoke_classified_cases": "int",
+        "native_allocation_smoke_classification_overlap": "int",
+        "native_allocation_smoke_classification_missing": "int",
+        "native_allocation_smoke_classification_extra": "int",
         "native_allocation_negative_unmatched": "int",
         "native_allocation_markdown_rows": "int",
         "native_allocation_markdown_matched": "int",
@@ -2643,6 +2651,11 @@
           "left": "native_allocation_budget_report_matched",
           "op": "eq",
           "right": "native_allocation_required_budget_cases"
+        },
+        {
+          "left": "native_allocation_smoke_classified_cases",
+          "op": "eq",
+          "right": "native_allocation_report_rows"
         },
         {
           "left": "native_allocation_negative_matched",

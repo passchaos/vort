@@ -5015,6 +5015,7 @@ def main() -> int:
                     "| zero/report drift | 2/2 | unmatched 0 |",
                     "| budget cases | 1/1 | healthy `True` |",
                     "| budget/report drift | 1/1 | unmatched 0 |",
+                    "| smoke classification | 3/3 | overlap 0, missing 0, extra 0 |",
                     "| negative smoke cases | 1/1 | present `True`, unmatched 0 |",
                     "| Markdown rows | 3/3 | present `True`, unmatched 0 |",
                 ],
