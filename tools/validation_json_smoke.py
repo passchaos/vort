@@ -1571,6 +1571,8 @@ def main() -> int:
         assert dashboard["dictionary_decode_bench_positive_rows"] == len(dictionary_decode_bench_rows)
         assert dashboard["dictionary_decode_bench_shape_rows"] == len(dictionary_decode_bench_rows)
         assert dashboard["dictionary_decode_bench_output_size_rows"] == len(dictionary_decode_bench_rows)
+        assert dashboard["dictionary_decode_bench_throughput_rows"] == len(dictionary_decode_bench_rows)
+        assert dashboard["dictionary_decode_bench_checksum_matched_payloads"] == 3
         assert dashboard["dictionary_decode_bench_missing_pairs"] == []
         assert dashboard["png_scanline_bench_present"] is True
         assert dashboard["png_scanline_bench_healthy"] is True

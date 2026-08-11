@@ -2005,6 +2005,15 @@ def write_dictionary_decode_bench_csv(path: Path, *, healthy: bool = True) -> No
             continue
         input_bytes = 1024
         iterations = 16
+        output_bytes = input_bytes * iterations
+        elapsed_ns = 1_000_000
+        decode_mib_s = (output_bytes / (1024.0 * 1024.0)) / (elapsed_ns / 1_000_000_000.0)
+        payload = case
+        for marker in ("-raw-", "-zlib-"):
+            if marker in payload:
+                payload = payload.split(marker, 1)[0]
+                break
+        checksum = len(payload) * 1_000_000 + input_bytes
         lines.append(
             ",".join(
                 [
@@ -2017,10 +2026,10 @@ def write_dictionary_decode_bench_csv(path: Path, *, healthy: bool = True) -> No
                     "64",
                     str(iterations),
                     "3",
-                    str(input_bytes * iterations),
-                    "1000",
-                    "1000.0",
-                    "12345",
+                    str(output_bytes),
+                    str(elapsed_ns),
+                    f"{decode_mib_s:.2f}",
+                    str(checksum),
                 ]
             )
         )
@@ -4888,8 +4897,9 @@ def main() -> int:
                     "## Dictionary decode benchmark coverage",
                     "| category | count | detail |",
                     "| rows | 18 | expected 18, present `True` |",
-                    "| shape rows | 18 | positive rows 18 |",
-                    "| output-size rows | 18 | missing pairs 0, healthy `True` |",
+                    "| shape rows | 18 | positive/throughput rows 18/18 |",
+                    "| output-size rows | 18 | checksum payloads 3 |",
+                    "| missing pairs | 0 | healthy `True` |",
                 ],
             )
         )

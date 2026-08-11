@@ -3659,6 +3659,8 @@ def dictionary_decode_bench_health(artifacts: list[Path]) -> dict:
         positive_rows = 0
         shape_rows = 0
         output_size_rows = 0
+        throughput_rows = 0
+        rows_by_payload: dict[str, list[dict[str, str]]] = {}
         for row in rows:
             key = (
                 str(row.get("case") or ""),
@@ -3669,6 +3671,11 @@ def dictionary_decode_bench_health(artifacts: list[Path]) -> dict:
             if key in expected_rows:
                 seen.add(key)
                 shape_rows += 1
+                case = key[0]
+                for marker in ("-raw-", "-zlib-"):
+                    if marker in case:
+                        rows_by_payload.setdefault(case.split(marker, 1)[0], []).append(row)
+                        break
             try:
                 input_bytes = int(row.get("input_bytes") or "0")
                 dict_bytes = int(row.get("dict_bytes") or "0")
@@ -3685,6 +3692,21 @@ def dictionary_decode_bench_health(artifacts: list[Path]) -> dict:
                 positive_rows += 1
             if input_bytes > 0 and iterations > 0 and output_bytes == input_bytes * iterations:
                 output_size_rows += 1
+            expected_decode_mib_s = (output_bytes / (1024.0 * 1024.0)) / (elapsed_ns / 1_000_000_000.0) if elapsed_ns > 0 else 0.0
+            if abs(decode_mib_s - expected_decode_mib_s) <= 0.01:
+                throughput_rows += 1
+        expected_payload_counts = {"history-replay": 10, "json-prefix": 4, "log-prefix": 4}
+        checksum_matched_payloads = 0
+        for payload, expected_count in expected_payload_counts.items():
+            payload_rows = rows_by_payload.get(payload, [])
+            checksums = set()
+            for row in payload_rows:
+                try:
+                    checksums.add(int(row.get("checksum") or "0"))
+                except ValueError:
+                    checksums.add(0)
+            if len(payload_rows) == expected_count and len(checksums) == 1 and next(iter(checksums), 0) > 0:
+                checksum_matched_payloads += 1
         missing_pairs = sorted(":".join(key) for key in expected_rows - seen)
         row_count = len(rows)
         healthy = (
@@ -3693,6 +3715,8 @@ def dictionary_decode_bench_health(artifacts: list[Path]) -> dict:
             and positive_rows == row_count
             and shape_rows == row_count
             and output_size_rows == row_count
+            and throughput_rows == row_count
+            and checksum_matched_payloads == len(expected_payload_counts)
         )
         return {
             "present": True,
@@ -3702,6 +3726,8 @@ def dictionary_decode_bench_health(artifacts: list[Path]) -> dict:
             "positive_rows": positive_rows,
             "shape_rows": shape_rows,
             "output_size_rows": output_size_rows,
+            "throughput_rows": throughput_rows,
+            "checksum_matched_payloads": checksum_matched_payloads,
             "missing_pairs": missing_pairs,
         }
     return {
@@ -3712,6 +3738,8 @@ def dictionary_decode_bench_health(artifacts: list[Path]) -> dict:
         "positive_rows": 0,
         "shape_rows": 0,
         "output_size_rows": 0,
+        "throughput_rows": 0,
+        "checksum_matched_payloads": 0,
         "missing_pairs": [],
     }
 
@@ -7121,8 +7149,9 @@ def main() -> int:
             "| category | count | detail |",
             "| --- | ---: | --- |",
             f"| rows | {dictionary_decode_bench['row_count']} | expected {dictionary_decode_bench['expected_rows']}, present `{dictionary_decode_bench['present']}` |",
-            f"| shape rows | {dictionary_decode_bench['shape_rows']} | positive rows {dictionary_decode_bench['positive_rows']} |",
-            f"| output-size rows | {dictionary_decode_bench['output_size_rows']} | missing pairs {len(dictionary_decode_bench['missing_pairs'])}, healthy `{dictionary_decode_bench['healthy']}` |",
+            f"| shape rows | {dictionary_decode_bench['shape_rows']} | positive/throughput rows {dictionary_decode_bench['positive_rows']}/{dictionary_decode_bench['throughput_rows']} |",
+            f"| output-size rows | {dictionary_decode_bench['output_size_rows']} | checksum payloads {dictionary_decode_bench['checksum_matched_payloads']} |",
+            f"| missing pairs | {len(dictionary_decode_bench['missing_pairs'])} | healthy `{dictionary_decode_bench['healthy']}` |",
             "",
         ]
     )
@@ -7989,6 +8018,8 @@ def main() -> int:
                 "dictionary_decode_bench_positive_rows": dictionary_decode_bench["positive_rows"],
                 "dictionary_decode_bench_shape_rows": dictionary_decode_bench["shape_rows"],
                 "dictionary_decode_bench_output_size_rows": dictionary_decode_bench["output_size_rows"],
+                "dictionary_decode_bench_throughput_rows": dictionary_decode_bench["throughput_rows"],
+                "dictionary_decode_bench_checksum_matched_payloads": dictionary_decode_bench["checksum_matched_payloads"],
                 "dictionary_decode_bench_missing_pairs": dictionary_decode_bench["missing_pairs"],
                 "png_scanline_bench_present": png_scanline_bench["present"],
                 "png_scanline_bench_healthy": png_scanline_bench["healthy"],

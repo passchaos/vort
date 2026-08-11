@@ -2706,3 +2706,8 @@ architecture blindly.
   and MiB/s from each CSV row and by requiring every case's reader/kernel rows to
   preserve a shared non-zero checksum. Dashboard health now exposes
   throughput-row and checksum-match counters before extra-bit coverage can pass.
+- Tightened dictionary decode benchmark dashboard health by recomputing decode
+  MiB/s from output bytes and elapsed time and by requiring each payload family
+  to keep a shared non-zero checksum across raw/zlib, encoder, and allocation
+  modes. Dashboard health now exposes throughput-row and checksum-payload
+  counters before dictionary decode coverage can pass.
