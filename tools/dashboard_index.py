@@ -3061,16 +3061,15 @@ def chunk_cursor_bench_health(artifacts: list[Path]) -> dict:
 
 def deflate_match_copy_bench_health(artifacts: list[Path]) -> dict:
     expected_cases = {
-        "rle-long",
-        "small-distance-long",
-        "nonoverlap-len3",
-        "nonoverlap-len6",
-        "nonoverlap-len32",
-        "overlap-text-like",
-        "overlap-distance-heavy",
+        "rle-long": "rle",
+        "small-distance-long": "small_distance",
+        "nonoverlap-len3": "non_overlapping",
+        "nonoverlap-len6": "non_overlapping",
+        "nonoverlap-len32": "non_overlapping",
+        "overlap-text-like": "overlapping",
+        "overlap-distance-heavy": "overlapping",
     }
     expected_kernels = {"current", "nonoverlap_first", "small_unrolled"}
-    expected_classes = {"rle", "small_distance", "non_overlapping", "overlapping"}
     expected_pairs = {(case, kernel) for case in expected_cases for kernel in expected_kernels}
     for artifact in artifacts:
         if artifact.name != "vort-deflate-match-copy-bench.csv":
@@ -3084,6 +3083,9 @@ def deflate_match_copy_bench_health(artifacts: list[Path]) -> dict:
         seen: set[tuple[str, str]] = set()
         positive_rows = 0
         expected_class_rows = 0
+        output_bytes_rows = 0
+        throughput_rows = 0
+        rows_by_case: dict[str, list[dict[str, str]]] = {}
         for row in rows:
             case = str(row.get("case") or "")
             kernel = str(row.get("kernel") or "")
@@ -3091,7 +3093,8 @@ def deflate_match_copy_bench_health(artifacts: list[Path]) -> dict:
             pair = (case, kernel)
             if pair in expected_pairs:
                 seen.add(pair)
-            if class_name in expected_classes:
+                rows_by_case.setdefault(case, []).append(row)
+            if expected_cases.get(case) == class_name:
                 expected_class_rows += 1
             try:
                 length = int(row.get("length") or "0")
@@ -3106,6 +3109,23 @@ def deflate_match_copy_bench_health(artifacts: list[Path]) -> dict:
                 continue
             if all(value > 0 for value in (length, distance, ops_per_iter, iterations, output_bytes, elapsed_ns, checksum)) and output_mib_s > 0.0:
                 positive_rows += 1
+            if output_bytes == length * ops_per_iter * iterations:
+                output_bytes_rows += 1
+            expected_mib_s = (output_bytes / (1024.0 * 1024.0)) / (elapsed_ns / 1_000_000_000.0) if elapsed_ns > 0 else 0.0
+            if abs(output_mib_s - expected_mib_s) <= 0.05:
+                throughput_rows += 1
+
+        checksum_matched_cases = 0
+        for case in expected_cases:
+            case_rows = rows_by_case.get(case, [])
+            checksums = set()
+            for row in case_rows:
+                try:
+                    checksums.add(int(row.get("checksum") or "0"))
+                except ValueError:
+                    checksums.add(0)
+            if len(case_rows) == len(expected_kernels) and len(checksums) == 1 and next(iter(checksums), 0) > 0:
+                checksum_matched_cases += 1
 
         missing_pairs = sorted(f"{case}:{kernel}" for case, kernel in expected_pairs - seen)
         row_count = len(rows)
@@ -3114,6 +3134,9 @@ def deflate_match_copy_bench_health(artifacts: list[Path]) -> dict:
             and not missing_pairs
             and positive_rows == row_count
             and expected_class_rows == row_count
+            and output_bytes_rows == row_count
+            and throughput_rows == row_count
+            and checksum_matched_cases == len(expected_cases)
         )
         return {
             "present": True,
@@ -3122,6 +3145,9 @@ def deflate_match_copy_bench_health(artifacts: list[Path]) -> dict:
             "expected_rows": len(expected_pairs),
             "positive_rows": positive_rows,
             "expected_class_rows": expected_class_rows,
+            "output_bytes_rows": output_bytes_rows,
+            "throughput_rows": throughput_rows,
+            "checksum_matched_cases": checksum_matched_cases,
             "missing_pairs": missing_pairs,
         }
     return {
@@ -3131,6 +3157,9 @@ def deflate_match_copy_bench_health(artifacts: list[Path]) -> dict:
         "expected_rows": len(expected_pairs),
         "positive_rows": 0,
         "expected_class_rows": 0,
+        "output_bytes_rows": 0,
+        "throughput_rows": 0,
+        "checksum_matched_cases": 0,
         "missing_pairs": [],
     }
 
@@ -6662,7 +6691,7 @@ def main() -> int:
         f"- Snappy report: {snappy_report['row_count']}/{snappy_report['expected_rows']} rows, positive/ratio/throughput {snappy_report['positive_timing_rows']}/{snappy_report['ratio_rows']}/{snappy_report['throughput_rows']}, repetitive shrunk {snappy_report['repetitive_shrunk_rows']}, reusable size/checksum matches {snappy_report['reusable_size_matched_cases']}/{snappy_report['reusable_checksum_matched_cases']}, healthy `{snappy_report_healthy}`",
         f"- checksum bench: {checksum_bench['row_count']}/{checksum_bench['expected_rows']} rows, workload {checksum_bench['workload_rows']}, positive/throughput {checksum_bench['positive_rows']}/{checksum_bench['throughput_rows']}, mix groups crc32/crc32c {checksum_bench['crc32_mix_groups']}/{checksum_bench['crc32c_mix_groups']}, healthy `{checksum_bench_healthy}`",
         f"- chunk cursor bench: {chunk_cursor_bench['row_count']}/{chunk_cursor_bench['expected_rows']} rows, shape {chunk_cursor_bench['shape_rows']}, positive/throughput {chunk_cursor_bench['positive_rows']}/{chunk_cursor_bench['throughput_rows']}, checksum matches {chunk_cursor_bench['checksum_matched_cases']}, healthy `{chunk_cursor_bench_healthy}`",
-        f"- deflate match-copy bench: {deflate_match_copy_bench['row_count']}/{deflate_match_copy_bench['expected_rows']} rows, classes {deflate_match_copy_bench['expected_class_rows']}, positive {deflate_match_copy_bench['positive_rows']}, healthy `{deflate_match_copy_bench_healthy}`",
+        f"- deflate match-copy bench: {deflate_match_copy_bench['row_count']}/{deflate_match_copy_bench['expected_rows']} rows, classes {deflate_match_copy_bench['expected_class_rows']}, positive/output/throughput {deflate_match_copy_bench['positive_rows']}/{deflate_match_copy_bench['output_bytes_rows']}/{deflate_match_copy_bench['throughput_rows']}, checksum matches {deflate_match_copy_bench['checksum_matched_cases']}, healthy `{deflate_match_copy_bench_healthy}`",
         f"- deflate Huffman build bench: {deflate_huffman_build_bench['row_count']}/{deflate_huffman_build_bench['expected_rows']} rows, lookup {deflate_huffman_build_bench['lookup_rows']}, positive {deflate_huffman_build_bench['positive_rows']}, healthy `{deflate_huffman_build_bench_healthy}`",
         f"- deflate Huffman lookup bench: {deflate_huffman_lookup_bench['row_count']}/{deflate_huffman_lookup_bench['expected_rows']} rows, lookup {deflate_huffman_lookup_bench['lookup_rows']}, positive {deflate_huffman_lookup_bench['positive_rows']}, healthy `{deflate_huffman_lookup_bench_healthy}`",
         f"- deflate chunked Huffman bench: {deflate_chunked_huffman_bench['row_count']}/{deflate_chunked_huffman_bench['expected_rows']} rows, shape {deflate_chunked_huffman_bench['shape_rows']}, positive {deflate_chunked_huffman_bench['positive_rows']}, healthy `{deflate_chunked_huffman_bench_healthy}`",
@@ -6890,7 +6919,8 @@ def main() -> int:
             "| category | count | detail |",
             "| --- | ---: | --- |",
             f"| rows | {deflate_match_copy_bench['row_count']} | expected {deflate_match_copy_bench['expected_rows']}, present `{deflate_match_copy_bench['present']}` |",
-            f"| class rows | {deflate_match_copy_bench['expected_class_rows']} | positive rows {deflate_match_copy_bench['positive_rows']} |",
+            f"| class rows | {deflate_match_copy_bench['expected_class_rows']} | positive/output/throughput rows {deflate_match_copy_bench['positive_rows']}/{deflate_match_copy_bench['output_bytes_rows']}/{deflate_match_copy_bench['throughput_rows']} |",
+            f"| checksum matches | {deflate_match_copy_bench['checksum_matched_cases']} | expected cases 7 |",
             f"| missing pairs | {len(deflate_match_copy_bench['missing_pairs'])} | healthy `{deflate_match_copy_bench['healthy']}` |",
             "",
         ]
@@ -7767,6 +7797,9 @@ def main() -> int:
                 "deflate_match_copy_bench_expected_rows": deflate_match_copy_bench["expected_rows"],
                 "deflate_match_copy_bench_positive_rows": deflate_match_copy_bench["positive_rows"],
                 "deflate_match_copy_bench_expected_class_rows": deflate_match_copy_bench["expected_class_rows"],
+                "deflate_match_copy_bench_output_bytes_rows": deflate_match_copy_bench["output_bytes_rows"],
+                "deflate_match_copy_bench_throughput_rows": deflate_match_copy_bench["throughput_rows"],
+                "deflate_match_copy_bench_checksum_matched_cases": deflate_match_copy_bench["checksum_matched_cases"],
                 "deflate_match_copy_bench_missing_pairs": deflate_match_copy_bench["missing_pairs"],
                 "deflate_huffman_build_bench_present": deflate_huffman_build_bench["present"],
                 "deflate_huffman_build_bench_healthy": deflate_huffman_build_bench["healthy"],

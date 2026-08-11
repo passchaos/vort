@@ -1759,7 +1759,29 @@ def write_deflate_match_copy_bench_csv(path: Path, *, healthy: bool = True) -> N
         for kernel in kernels:
             if not healthy and case == "overlap-distance-heavy" and kernel == "small_unrolled":
                 continue
-            lines.append(",".join([case, class_name, kernel, "258", "16", "1024", "64", "16777216", "1000", "1000.0", "12345"]))
+            length = 258
+            ops_per_iter = 1024
+            iterations = 64
+            output_bytes = length * ops_per_iter * iterations
+            elapsed_ns = 1_000_000
+            output_mib_s = (output_bytes / (1024.0 * 1024.0)) / (elapsed_ns / 1_000_000_000.0)
+            lines.append(
+                ",".join(
+                    [
+                        case,
+                        class_name,
+                        kernel,
+                        str(length),
+                        "16",
+                        str(ops_per_iter),
+                        str(iterations),
+                        str(output_bytes),
+                        str(elapsed_ns),
+                        f"{output_mib_s:.2f}",
+                        "12345",
+                    ]
+                )
+            )
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -4725,7 +4747,8 @@ def main() -> int:
                     "## Deflate match-copy benchmark coverage",
                     "| category | count | detail |",
                     "| rows | 21 | expected 21, present `True` |",
-                    "| class rows | 21 | positive rows 21 |",
+                    "| class rows | 21 | positive/output/throughput rows 21/21/21 |",
+                    "| checksum matches | 7 | expected cases 7 |",
                     "| missing pairs | 0 | healthy `True` |",
                 ],
             )

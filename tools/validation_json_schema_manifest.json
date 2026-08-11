@@ -1280,7 +1280,10 @@
             "deflate_match_copy_bench_rows",
             "deflate_match_copy_bench_expected_rows",
             "deflate_match_copy_bench_positive_rows",
-            "deflate_match_copy_bench_expected_class_rows"
+            "deflate_match_copy_bench_expected_class_rows",
+            "deflate_match_copy_bench_output_bytes_rows",
+            "deflate_match_copy_bench_throughput_rows",
+            "deflate_match_copy_bench_checksum_matched_cases"
           ],
           "zero": [
             "deflate_match_copy_bench_missing_pairs"
@@ -2275,6 +2278,9 @@
         "deflate_match_copy_bench_expected_rows": "int",
         "deflate_match_copy_bench_positive_rows": "int",
         "deflate_match_copy_bench_expected_class_rows": "int",
+        "deflate_match_copy_bench_output_bytes_rows": "int",
+        "deflate_match_copy_bench_throughput_rows": "int",
+        "deflate_match_copy_bench_checksum_matched_cases": "int",
         "deflate_match_copy_bench_missing_pairs": "list",
         "deflate_huffman_build_bench_present": "bool",
         "deflate_huffman_build_bench_healthy": "bool",
@@ -3180,6 +3186,24 @@
           "right": "chunk_cursor_bench_rows",
           "when": {
             "field": "chunk_cursor_bench_healthy",
+            "equals": true
+          }
+        },
+        {
+          "left": "deflate_match_copy_bench_output_bytes_rows",
+          "op": "eq",
+          "right": "deflate_match_copy_bench_rows",
+          "when": {
+            "field": "deflate_match_copy_bench_healthy",
+            "equals": true
+          }
+        },
+        {
+          "left": "deflate_match_copy_bench_throughput_rows",
+          "op": "eq",
+          "right": "deflate_match_copy_bench_rows",
+          "when": {
+            "field": "deflate_match_copy_bench_healthy",
             "equals": true
           }
         }

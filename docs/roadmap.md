@@ -2681,3 +2681,8 @@ architecture blindly.
   current and skip-empty kernels to preserve per-case checksums. Dashboard health
   now exposes throughput-row and checksum-match counters before chunk cursor
   coverage can pass.
+- Tightened deflate match-copy benchmark dashboard health by validating expected
+  class labels, recomputing output bytes and throughput from each CSV row, and
+  requiring all kernels for each case to preserve checksums. Dashboard health now
+  exposes output-byte, throughput, and checksum-match counters before match-copy
+  coverage can pass.
