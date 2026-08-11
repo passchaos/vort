@@ -1384,6 +1384,14 @@ def main() -> int:
         assert dashboard["native_fuzz_corpus_coverage_mode_matched"] == native_fuzz_coverage_smoke["mode_requirement_count"]
         assert dashboard["native_fuzz_corpus_coverage_error_matched"] == native_fuzz_coverage_smoke["error_requirement_count"]
         assert dashboard["native_fuzz_corpus_coverage_unmatched"] == 0
+        assert dashboard["native_fuzz_corpus_mode_summary_mismatch"] == 0
+        assert dashboard["native_fuzz_corpus_mode_summary_missing_modes"] == []
+        assert dashboard["native_fuzz_corpus_mode_summary_duplicate_modes"] == []
+        assert dashboard["native_fuzz_corpus_mode_summary_unknown_modes"] == []
+        assert dashboard["native_fuzz_corpus_error_summary_mismatch"] == 0
+        assert dashboard["native_fuzz_corpus_error_summary_missing_pairs"] == []
+        assert dashboard["native_fuzz_corpus_error_summary_duplicate_pairs"] == []
+        assert dashboard["native_fuzz_corpus_error_summary_unknown_pairs"] == []
         assert dashboard["native_fuzz_corpus_markdown_rows"] > 0
         assert dashboard["native_fuzz_corpus_markdown_matched"] == dashboard["native_fuzz_corpus_markdown_rows"]
         assert dashboard["native_fuzz_corpus_markdown_unmatched"] == 0

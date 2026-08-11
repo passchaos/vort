@@ -2847,3 +2847,9 @@ architecture blindly.
   `mode_counts` and `error_counts` from row-level `items`, exposing missing,
   duplicate, unknown, and mismatched summary rows. Dashboard health now rejects
   stale fuzz summary aggregates before coverage and Markdown checks can pass.
+
+- Tightened native fuzz corpus dashboard health by applying the same row-level
+  recomputation to native `mode_counts` and `error_counts`, exposing missing,
+  duplicate, unknown, and mismatched summary rows. Dashboard health now rejects
+  stale native fuzz summary aggregates before coverage and Markdown checks can
+  pass.

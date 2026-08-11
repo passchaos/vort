@@ -5125,6 +5125,7 @@ def main() -> int:
                     "| native cases | 3 | accepted/rejected 1/2 |",
                     "| report rows | 3/3 | matched 3, count mismatch 0, unmatched 0 |",
                     "| exact error expectations | 2 | mode/error rows 1/2 |",
+                    "| summary drift | 0 | mode missing/duplicate/unknown 0/0/0, error missing/duplicate/unknown 0/0/0 |",
                     "| coverage requirements | 3 | matched modes/errors 1/2, unmatched 0 |",
                     "| Markdown rows | 15/15 | present `True`, unmatched 0 |",
                 ],
