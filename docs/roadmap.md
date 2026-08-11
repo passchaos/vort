@@ -2882,6 +2882,12 @@ architecture blindly.
 
 
 
+
+- Locked the validation JSON artifact audit exclusion list behind shared manifest
+  enums and a negative smoke case. Future attempts to exclude an unapproved JSON
+  artifact name now fail schema validation instead of silently shrinking the
+  audit surface.
+
 - Promoted validation JSON artifact manifest failures to a hard dashboard health
   gate now that the retained artifact backlog is zero. The audit excludes only
   current-run self outputs and stale dashboard self-snapshots, and any remaining

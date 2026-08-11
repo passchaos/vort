@@ -180,6 +180,45 @@ def main() -> int:
             )
         )
 
+        def validation_smoke_excluded_artifact_enum() -> None:
+            payload = {
+                "schema": "vort.validation_json_smoke",
+                "schema_version": 1,
+                "ok": True,
+                "checked_schemas": ["vort.validation_report"],
+                "observed_schema_count": 1,
+                "observed_schemas": ["vort.validation_report"],
+                "unchecked_observed_schema_count": 0,
+                "unchecked_observed_schemas": [],
+                "json_artifact_count": 1,
+                "json_artifact_excluded_count": 1,
+                "json_artifact_excluded_names": ["unexpected-self-output.json"],
+                "json_artifact_parsed_count": 1,
+                "json_artifact_schema_count": 1,
+                "json_artifact_parse_failed_count": 0,
+                "json_artifact_parse_failed": [],
+                "json_artifact_missing_schema_count": 0,
+                "json_artifact_missing_schema": [],
+                "json_artifact_manifest_validated_count": 1,
+                "json_artifact_manifest_failed_count": 0,
+                "json_artifact_manifest_failed_names": [],
+                "json_artifact_manifest_accounting_mismatch": 0,
+                "cli_success_ok": True,
+                "cli_failure_ok": False,
+                "cli_failure_hint": "payload_corrupt",
+                "report_rows": 1,
+                "corrupt_rows": 1,
+            }
+            docs_check.validate_value_against_manifest(payload, schemas_def)
+
+        cases.append(
+            negative_case(
+                "validation_smoke_excluded_artifact_enum",
+                "json_artifact_excluded_names has unexpected items",
+                validation_smoke_excluded_artifact_enum,
+            )
+        )
+
         def zlib_relaxed_gate_check_value_type() -> None:
             payload = {
                 "schema": "vort.zlib_relaxed_report_gate",

@@ -2904,6 +2904,12 @@
           "built_in",
           "project_files",
           "standard_corpus"
+        ],
+        "validation_json_json_artifact_excluded_names": [
+          "vort-dashboard-index-lz4-summary.json",
+          "vort-dashboard-index-summary-fields.json",
+          "vort-dashboard-index.json",
+          "vort-validation-json-smoke.json"
         ]
       },
       "dict_key_enums": {
@@ -6389,6 +6395,7 @@
           "reason_check_pair_mismatch",
           "reason_fixture_pair_mismatch",
           "validation_smoke_checked_schema_enum",
+          "validation_smoke_excluded_artifact_enum",
           "zlib_relaxed_gate_check_value_type",
           "zlib_relaxed_gate_boolean_formula",
           "validation_json_manifest_failure_formula",
@@ -6634,6 +6641,12 @@
           "vort.zlib_header_info",
           "vort.zlib_relaxed_report_gate",
           "vort.zlib_relaxed_report"
+        ],
+        "json_artifact_excluded_names": [
+          "vort-dashboard-index-lz4-summary.json",
+          "vort-dashboard-index-summary-fields.json",
+          "vort-dashboard-index.json",
+          "vort-validation-json-smoke.json"
         ]
       }
     },

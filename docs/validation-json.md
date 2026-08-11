@@ -624,7 +624,8 @@ Important fields:
   artifact-level manifest audit counts for retained `zig-out` JSON files
 - `json_artifact_excluded_count`, `json_artifact_excluded_names`: intentional
   exclusions such as stale self-output snapshots that are inventoried but not
-  part of the current validation smoke contract
+  part of the current validation smoke contract; the shared manifest fixes the
+  allowed exclusion names
 - `json_artifact_parse_failed`, `json_artifact_missing_schema`,
   `json_artifact_manifest_failed_names`: artifact-level audit drift lists; parse,
   missing-schema, and manifest-validation failures are hard health gates
