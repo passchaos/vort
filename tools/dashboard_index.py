@@ -4836,6 +4836,8 @@ def native_library_bench_health(artifacts: list[Path]) -> dict:
         except Exception:
             rows = []
         seen: set[tuple[str, str, str]] = set()
+        duplicate_pairs: set[tuple[str, str, str]] = set()
+        unknown_pairs: set[tuple[str, str, str]] = set()
         rows_by_id: dict[tuple[str, str, str], dict[str, str]] = {}
         positive_rows = 0
         throughput_rows = 0
@@ -4843,9 +4845,14 @@ def native_library_bench_health(artifacts: list[Path]) -> dict:
         first_iterations: int | None = None
         for row in rows:
             identity = (str(row.get("codec") or ""), str(row.get("mode") or ""), str(row.get("case") or ""))
-            if identity in expected_rows and identity not in seen:
+            if identity in expected_rows:
+                if identity in seen:
+                    duplicate_pairs.add(identity)
+                else:
+                    rows_by_id[identity] = row
                 seen.add(identity)
-                rows_by_id[identity] = row
+            else:
+                unknown_pairs.add(identity)
             try:
                 input_bytes = row_int(row, "input_bytes")
                 encoded_bytes = row_int(row, "encoded_bytes")
@@ -4866,6 +4873,8 @@ def native_library_bench_health(artifacts: list[Path]) -> dict:
             if iterations == first_iterations:
                 iteration_rows += 1
         missing_pairs = sorted(":".join(identity) for identity in expected_rows - seen)
+        duplicate_pair_names = sorted(":".join(identity) for identity in duplicate_pairs)
+        unknown_pair_names = sorted(":".join(identity) for identity in unknown_pairs)
         shape_rows = len(seen)
         improvement_checks = 0
         for lhs, rhs in improvement_pairs:
@@ -4880,6 +4889,8 @@ def native_library_bench_health(artifacts: list[Path]) -> dict:
             row_count == len(expected_rows)
             and shape_rows == len(expected_rows)
             and not missing_pairs
+            and not duplicate_pair_names
+            and not unknown_pair_names
             and positive_rows == row_count
             and throughput_rows == row_count
             and iteration_rows == row_count
@@ -4896,6 +4907,8 @@ def native_library_bench_health(artifacts: list[Path]) -> dict:
             "improvement_checks": improvement_checks,
             "expected_improvement_checks": expected_improvement_checks,
             "missing_pairs": missing_pairs,
+            "duplicate_pairs": duplicate_pair_names,
+            "unknown_pairs": unknown_pair_names,
         }
     return {
         "present": False,
@@ -4908,6 +4921,8 @@ def native_library_bench_health(artifacts: list[Path]) -> dict:
         "improvement_checks": 0,
         "expected_improvement_checks": expected_improvement_checks,
         "missing_pairs": [],
+        "duplicate_pairs": [],
+        "unknown_pairs": [],
     }
 
 
@@ -7797,7 +7812,7 @@ def main() -> int:
             "| --- | ---: | --- |",
             f"| rows | {native_library_bench['row_count']} | expected {native_library_bench['expected_rows']}, present `{native_library_bench['present']}` |",
             f"| positive rows | {native_library_bench['positive_rows']} | throughput/iteration {native_library_bench['throughput_rows']}/{native_library_bench['iteration_rows']} |",
-            f"| improvement checks | {native_library_bench['improvement_checks']}/{native_library_bench['expected_improvement_checks']} | missing pairs {len(native_library_bench['missing_pairs'])}, healthy `{native_library_bench['healthy']}` |",
+            f"| improvement checks | {native_library_bench['improvement_checks']}/{native_library_bench['expected_improvement_checks']} | pair drift {len(native_library_bench['missing_pairs'])}, duplicate/unknown {len(native_library_bench['duplicate_pairs'])}/{len(native_library_bench['unknown_pairs'])}, healthy `{native_library_bench['healthy']}` |",
             "",
         ]
     )
@@ -8704,6 +8719,8 @@ def main() -> int:
                 "native_library_bench_improvement_checks": native_library_bench["improvement_checks"],
                 "native_library_bench_expected_improvement_checks": native_library_bench["expected_improvement_checks"],
                 "native_library_bench_missing_pairs": native_library_bench["missing_pairs"],
+                "native_library_bench_duplicate_pairs": native_library_bench["duplicate_pairs"],
+                "native_library_bench_unknown_pairs": native_library_bench["unknown_pairs"],
                 "zstd_compare_present": zstd_compare["present"],
                 "zstd_compare_standard_present": zstd_compare["standard_present"],
                 "zstd_compare_block_sweep_present": zstd_compare["block_sweep_present"],

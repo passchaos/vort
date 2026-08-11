@@ -528,6 +528,8 @@ def main() -> int:
                 "native_library_bench_improvement_checks": 46,
                 "native_library_bench_expected_improvement_checks": 46,
                 "native_library_bench_missing_pairs": [],
+                "native_library_bench_duplicate_pairs": [],
+                "native_library_bench_unknown_pairs": [],
                 "fuzz_corpus_present": True,
                 "fuzz_corpus_ok": True,
                 "fuzz_corpus_coverage_present": True,

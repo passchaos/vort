@@ -5062,6 +5062,20 @@ def main() -> int:
         )
         checks.append(
             markdown_check_row(
+                "native_library_bench_markdown_table",
+                "native library benchmark Markdown table",
+                dashboard_markdown,
+                [
+                    "## Native library benchmark coverage",
+                    "| category | count | detail |",
+                    "| rows | 93 | expected 93, present `True` |",
+                    "| positive rows | 93 | throughput/iteration 93/93 |",
+                    "| improvement checks | 46/46 | pair drift 0, duplicate/unknown 0/0, healthy `True` |",
+                ],
+            )
+        )
+        checks.append(
+            markdown_check_row(
                 "zstd_compare_markdown_table",
                 "zstd compare Markdown table",
                 dashboard_markdown,

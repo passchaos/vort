@@ -1653,6 +1653,18 @@ def main() -> int:
         assert dashboard["deflate_dynamic_decode_profile_ratio_rows"] == 3
         assert dashboard["deflate_dynamic_decode_profile_chunked_window_rows"] == 1
         assert dashboard["deflate_dynamic_decode_profile_missing_cases"] == []
+        assert dashboard["native_library_bench_present"] is True
+        assert dashboard["native_library_bench_healthy"] is True
+        assert dashboard["native_library_bench_rows"] == len(native_library_bench_rows)
+        assert dashboard["native_library_bench_expected_rows"] == 93
+        assert dashboard["native_library_bench_positive_rows"] == len(native_library_bench_rows)
+        assert dashboard["native_library_bench_throughput_rows"] == len(native_library_bench_rows)
+        assert dashboard["native_library_bench_iteration_rows"] == len(native_library_bench_rows)
+        assert dashboard["native_library_bench_improvement_checks"] == 46
+        assert dashboard["native_library_bench_expected_improvement_checks"] == 46
+        assert dashboard["native_library_bench_missing_pairs"] == []
+        assert dashboard["native_library_bench_duplicate_pairs"] == []
+        assert dashboard["native_library_bench_unknown_pairs"] == []
         assert dashboard["native_allocation_present"] is True
         assert dashboard["native_allocation_smoke_present"] is True
         assert dashboard["native_allocation_negative_present"] is True

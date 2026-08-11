@@ -2793,7 +2793,9 @@ Top-level fields:
   `native_library_bench_iteration_rows`,
   `native_library_bench_improvement_checks`,
   `native_library_bench_expected_improvement_checks`,
-  `native_library_bench_missing_pairs`
+  `native_library_bench_missing_pairs`,
+  `native_library_bench_duplicate_pairs`,
+  `native_library_bench_unknown_pairs`
 - `fuzz_corpus_present`, `fuzz_corpus_ok`,
   `fuzz_corpus_coverage_present`, `fuzz_corpus_coverage_ok`,
   `fuzz_corpus_markdown_present`, `fuzz_corpus_healthy`,
@@ -3536,6 +3538,8 @@ Example:
   "native_library_bench_improvement_checks": 0,
   "native_library_bench_expected_improvement_checks": 0,
   "native_library_bench_missing_pairs": [],
+  "native_library_bench_duplicate_pairs": [],
+  "native_library_bench_unknown_pairs": [],
   "fuzz_corpus_present": false,
   "fuzz_corpus_ok": false,
   "fuzz_corpus_coverage_present": false,

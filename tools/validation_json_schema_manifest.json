@@ -1532,7 +1532,9 @@
             "native_library_bench_expected_improvement_checks"
           ],
           "zero": [
-            "native_library_bench_missing_pairs"
+            "native_library_bench_missing_pairs",
+            "native_library_bench_duplicate_pairs",
+            "native_library_bench_unknown_pairs"
           ]
         },
         "level_report_healthy": {
@@ -2550,7 +2552,9 @@
         "native_library_bench_iteration_rows": "int",
         "native_library_bench_improvement_checks": "int",
         "native_library_bench_expected_improvement_checks": "int",
-        "native_library_bench_missing_pairs": "list"
+        "native_library_bench_missing_pairs": "list",
+        "native_library_bench_duplicate_pairs": "list",
+        "native_library_bench_unknown_pairs": "list"
       },
       "item_collection": "artifacts",
       "item_enums": {

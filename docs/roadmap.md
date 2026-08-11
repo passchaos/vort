@@ -2805,3 +2805,7 @@ architecture blindly.
 - Tightened PNG scanline benchmark dashboard health by exposing duplicate and
   unknown `(stage, bpp)` rows alongside missing pairs. Dashboard health now
   rejects PNG scanline CSV pair drift before benchmark coverage can pass.
+
+- Tightened native library benchmark dashboard health by exposing duplicate and
+  unknown `(codec, mode, case)` rows alongside missing pairs. Dashboard health
+  now rejects native library CSV pair drift before benchmark coverage can pass.
