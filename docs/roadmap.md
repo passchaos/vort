@@ -2720,3 +2720,7 @@ architecture blindly.
   chunk counts to match the zlib payload length and chunk size. Dashboard health
   now exposes a chunk-count counter before streaming zlib benchmark coverage can
   pass.
+- Tightened deflate dynamic decode profile dashboard health by recomputing lookup
+  coverage, fast-miss, match-class byte, and per-match/per-byte extra-bit ratios
+  from the CSV counters. Dashboard health now exposes a ratio-row counter before
+  dynamic decode profile coverage can pass.

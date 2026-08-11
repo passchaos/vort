@@ -1615,6 +1615,7 @@ def main() -> int:
         assert dashboard["deflate_dynamic_decode_profile_histogram_rows"] == 3
         assert dashboard["deflate_dynamic_decode_profile_lookup_rows"] == 3
         assert dashboard["deflate_dynamic_decode_profile_match_class_rows"] == 3
+        assert dashboard["deflate_dynamic_decode_profile_ratio_rows"] == 3
         assert dashboard["deflate_dynamic_decode_profile_chunked_window_rows"] == 1
         assert dashboard["deflate_dynamic_decode_profile_missing_cases"] == []
         assert dashboard["native_allocation_present"] is True

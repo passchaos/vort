@@ -497,6 +497,7 @@ def main() -> int:
                 "deflate_dynamic_decode_profile_histogram_rows": 3,
                 "deflate_dynamic_decode_profile_lookup_rows": 3,
                 "deflate_dynamic_decode_profile_match_class_rows": 3,
+                "deflate_dynamic_decode_profile_ratio_rows": 3,
                 "deflate_dynamic_decode_profile_chunked_window_rows": 1,
                 "deflate_dynamic_decode_profile_missing_cases": [],
                 "native_library_bench_present": True,

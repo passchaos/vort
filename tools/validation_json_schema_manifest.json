@@ -1439,6 +1439,7 @@
             "deflate_dynamic_decode_profile_histogram_rows",
             "deflate_dynamic_decode_profile_lookup_rows",
             "deflate_dynamic_decode_profile_match_class_rows",
+            "deflate_dynamic_decode_profile_ratio_rows",
             "deflate_dynamic_decode_profile_chunked_window_rows"
           ],
           "zero": [
@@ -2387,6 +2388,7 @@
         "deflate_dynamic_decode_profile_histogram_rows": "int",
         "deflate_dynamic_decode_profile_lookup_rows": "int",
         "deflate_dynamic_decode_profile_match_class_rows": "int",
+        "deflate_dynamic_decode_profile_ratio_rows": "int",
         "deflate_dynamic_decode_profile_chunked_window_rows": "int",
         "deflate_dynamic_decode_profile_missing_cases": "list",
         "native_library_bench_present": "bool",

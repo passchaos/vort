@@ -2767,6 +2767,7 @@ Top-level fields:
   `deflate_dynamic_decode_profile_histogram_rows`,
   `deflate_dynamic_decode_profile_lookup_rows`,
   `deflate_dynamic_decode_profile_match_class_rows`,
+  `deflate_dynamic_decode_profile_ratio_rows`,
   `deflate_dynamic_decode_profile_chunked_window_rows`,
   `deflate_dynamic_decode_profile_missing_cases`
 - `native_library_bench_present`, `native_library_bench_healthy`,
@@ -3436,6 +3437,7 @@ Example:
   "deflate_dynamic_decode_profile_histogram_rows": 0,
   "deflate_dynamic_decode_profile_lookup_rows": 0,
   "deflate_dynamic_decode_profile_match_class_rows": 0,
+  "deflate_dynamic_decode_profile_ratio_rows": 0,
   "deflate_dynamic_decode_profile_chunked_window_rows": 0,
   "deflate_dynamic_decode_profile_missing_cases": [],
   "native_library_bench_present": false,

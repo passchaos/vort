@@ -4979,7 +4979,8 @@ def main() -> int:
                     "| category | count | detail |",
                     "| rows | 3 | required 3, present `True` |",
                     "| required row checks | 3 | histograms/lookups 3/3 |",
-                    "| match class rows | 3 | chunked-window 1, missing cases 0, healthy `True` |",
+                    "| match class rows | 3 | ratio rows 3 |",
+                    "| chunked-window rows | 1 | missing cases 0, healthy `True` |",
                 ],
             )
         )

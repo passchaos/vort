@@ -4359,6 +4359,49 @@ def deflate_dynamic_decode_profile_health(artifacts: list[Path]) -> dict:
             and all(0.0 <= parse_float(row, field) <= 1.0 for field in ratio_fields)
         )
 
+    def ratio_accounting_ok(row: dict[str, str]) -> bool:
+        def ratio_close(field: str, numerator: int, denominator: int) -> bool:
+            expected = (float(numerator) / float(denominator)) if denominator else 0.0
+            return abs(parse_float(row, field) - expected) <= 0.000001
+
+        class_order = ("rle", "small_distance", "non_overlapping", "overlapping")
+        class_counts = [parse_int(row, f"match_{name}_count") for name in class_order]
+        class_bytes = [parse_int(row, f"match_{name}_bytes") for name in class_order]
+        match_bytes = parse_int(row, "match_bytes")
+        distance_symbols = parse_int(row, "distance_symbols")
+        literal_reads = parse_int(row, "literal_fast_hits") + parse_int(row, "literal_fast_misses")
+        distance_reads = parse_int(row, "distance_fast_hits") + parse_int(row, "distance_fast_misses")
+        length_class_extra_bits = parse_hist(row, "match_class_length_extra_bits", 4)
+        distance_class_extra_bits = parse_hist(row, "match_class_distance_extra_bits", 4)
+        distance_class_code_bits = parse_hist(row, "match_class_distance_code_bits", 4)
+        distance_code_plus_fields = (
+            "match_rle_distance_code_plus_extra_bits_per_match",
+            "match_small_distance_code_plus_extra_bits_per_match",
+            "match_non_overlapping_distance_code_plus_extra_bits_per_match",
+            "match_overlapping_distance_code_plus_extra_bits_per_match",
+        )
+
+        checks = [
+            ratio_close("literal_lookup_coverage_ratio", parse_int(row, "literal_lookup_covered"), parse_int(row, "literal_lookup_size")),
+            ratio_close("distance_lookup_coverage_ratio", parse_int(row, "distance_lookup_covered"), parse_int(row, "distance_lookup_size")),
+            ratio_close("literal_fast_miss_ratio", parse_int(row, "literal_fast_misses"), literal_reads),
+            ratio_close("distance_fast_miss_ratio", parse_int(row, "distance_fast_misses"), distance_reads),
+            ratio_close("extra_bits_per_match", parse_int(row, "length_extra_bits") + parse_int(row, "distance_extra_bits"), distance_symbols),
+            ratio_close("distance_code_plus_extra_bits_per_match", parse_int(row, "distance_code_plus_extra_bits"), distance_symbols),
+            ratio_close("dominant_match_byte_ratio", max(class_bytes), match_bytes),
+        ]
+        for index, class_name in enumerate(class_order):
+            extra_bits = length_class_extra_bits[index] + distance_class_extra_bits[index]
+            checks.extend(
+                [
+                    ratio_close(f"match_{class_name}_byte_ratio", class_bytes[index], match_bytes),
+                    ratio_close(f"match_{class_name}_extra_bits_per_match", extra_bits, class_counts[index]),
+                    ratio_close(f"match_{class_name}_extra_bits_per_byte", extra_bits, class_bytes[index]),
+                    ratio_close(distance_code_plus_fields[index], distance_class_code_bits[index] + distance_class_extra_bits[index], class_counts[index]),
+                ]
+            )
+        return all(checks)
+
     for artifact in artifacts:
         if artifact.name != "vort-deflate-dynamic-decode-profile.csv":
             continue
@@ -4374,6 +4417,7 @@ def deflate_dynamic_decode_profile_health(artifacts: list[Path]) -> dict:
         histogram_rows = 0
         lookup_rows = 0
         match_class_rows = 0
+        ratio_rows = 0
         for row in required_rows:
             try:
                 if basic_positive(row):
@@ -4384,6 +4428,8 @@ def deflate_dynamic_decode_profile_health(artifacts: list[Path]) -> dict:
                     lookup_rows += 1
                 if match_class_ok(row):
                     match_class_rows += 1
+                if ratio_accounting_ok(row):
+                    ratio_rows += 1
             except (ValueError, OverflowError):
                 continue
         chunked = by_case.get("chunked-window-match")
@@ -4407,6 +4453,7 @@ def deflate_dynamic_decode_profile_health(artifacts: list[Path]) -> dict:
             and histogram_rows == required_count
             and lookup_rows == required_count
             and match_class_rows == required_count
+            and ratio_rows == required_count
             and chunked_window_rows == 1
         )
         return {
@@ -4418,6 +4465,7 @@ def deflate_dynamic_decode_profile_health(artifacts: list[Path]) -> dict:
             "histogram_rows": histogram_rows,
             "lookup_rows": lookup_rows,
             "match_class_rows": match_class_rows,
+            "ratio_rows": ratio_rows,
             "chunked_window_rows": chunked_window_rows,
             "missing_cases": missing_cases,
         }
@@ -4430,6 +4478,7 @@ def deflate_dynamic_decode_profile_health(artifacts: list[Path]) -> dict:
         "histogram_rows": 0,
         "lookup_rows": 0,
         "match_class_rows": 0,
+        "ratio_rows": 0,
         "chunked_window_rows": 0,
         "missing_cases": [],
     }
@@ -7231,7 +7280,8 @@ def main() -> int:
             "| --- | ---: | --- |",
             f"| rows | {deflate_dynamic_decode_profile['row_count']} | required {deflate_dynamic_decode_profile['required_rows']}, present `{deflate_dynamic_decode_profile['present']}` |",
             f"| required row checks | {deflate_dynamic_decode_profile['positive_rows']} | histograms/lookups {deflate_dynamic_decode_profile['histogram_rows']}/{deflate_dynamic_decode_profile['lookup_rows']} |",
-            f"| match class rows | {deflate_dynamic_decode_profile['match_class_rows']} | chunked-window {deflate_dynamic_decode_profile['chunked_window_rows']}, missing cases {len(deflate_dynamic_decode_profile['missing_cases'])}, healthy `{deflate_dynamic_decode_profile['healthy']}` |",
+            f"| match class rows | {deflate_dynamic_decode_profile['match_class_rows']} | ratio rows {deflate_dynamic_decode_profile['ratio_rows']} |",
+            f"| chunked-window rows | {deflate_dynamic_decode_profile['chunked_window_rows']} | missing cases {len(deflate_dynamic_decode_profile['missing_cases'])}, healthy `{deflate_dynamic_decode_profile['healthy']}` |",
             "",
         ]
     )
@@ -8093,6 +8143,7 @@ def main() -> int:
                 "deflate_dynamic_decode_profile_histogram_rows": deflate_dynamic_decode_profile["histogram_rows"],
                 "deflate_dynamic_decode_profile_lookup_rows": deflate_dynamic_decode_profile["lookup_rows"],
                 "deflate_dynamic_decode_profile_match_class_rows": deflate_dynamic_decode_profile["match_class_rows"],
+                "deflate_dynamic_decode_profile_ratio_rows": deflate_dynamic_decode_profile["ratio_rows"],
                 "deflate_dynamic_decode_profile_chunked_window_rows": deflate_dynamic_decode_profile["chunked_window_rows"],
                 "deflate_dynamic_decode_profile_missing_cases": deflate_dynamic_decode_profile["missing_cases"],
                 "native_library_bench_present": native_library_bench["present"],
