@@ -4769,6 +4769,8 @@ def main() -> int:
                     "| category | covered | missing | detail |",
                     "| producer steps | 88/88 | 0 | allowed missing 0 |",
                     "| smoke gates | 88/88 | 0 | required missing 0 |",
+                    "| CSV artifacts | 26/26 | parse failed 0, empty 0 |",
+                    "| Markdown artifacts | 20/20 | read failed 0, empty 0, marker missing 0, healthy `True` |",
                 ],
             )
         )
@@ -5546,6 +5548,17 @@ def main() -> int:
                 write_producer_map(producer_map, include_header_exact=False)
             elif fixture == "missing_required_smoke_gates":
                 write_producer_map(producer_map, include_header_smoke=False, required_names=[HEADER_INSPECT_ARTIFACT])
+            elif fixture == "non_json_artifact_failed":
+                audit_probe = fixture_root / "vort-non-json-audit-probe.md"
+                audit_probe.write_text("\n")
+                write_producer_map(producer_map)
+                payload = json.loads(producer_map.read_text())
+                payload.setdefault("exact", {})[audit_probe.name] = "synthetic non-json artifact audit fixture"
+                payload.setdefault("artifact_metadata", {})[audit_probe.name] = {
+                    "expected_format": "md",
+                    "smoke_gate": "synthetic non-json artifact audit fixture",
+                }
+                producer_map.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
             elif fixture == "missing_header_inspect_artifact":
                 (fixture_root / HEADER_INSPECT_ARTIFACT).unlink()
                 write_producer_map(producer_map)

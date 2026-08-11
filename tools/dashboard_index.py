@@ -7652,6 +7652,60 @@ def artifact_record(path: Path, output_dir: Path, producer_map: dict) -> dict:
     }
 
 
+def non_json_artifact_audit(records: list[dict], output_dir: Path) -> dict:
+    csv_count = 0
+    markdown_count = 0
+    csv_parsed = 0
+    markdown_read = 0
+    csv_parse_failed: list[str] = []
+    csv_empty: list[str] = []
+    markdown_read_failed: list[str] = []
+    markdown_empty: list[str] = []
+    markdown_marker_missing: list[str] = []
+    for record in records:
+        fmt = record.get("format")
+        if fmt not in {"csv", "md"}:
+            continue
+        name = str(record.get("name") or "")
+        path = output_dir / str(record.get("path") or name)
+        if fmt == "csv":
+            csv_count += 1
+            try:
+                with path.open(newline="") as f:
+                    rows = list(csv.reader(f))
+            except Exception:
+                csv_parse_failed.append(name)
+                continue
+            if not rows or not rows[0]:
+                csv_empty.append(name)
+                continue
+            csv_parsed += 1
+            continue
+        markdown_count += 1
+        try:
+            text = path.read_text(errors="replace")
+        except Exception:
+            markdown_read_failed.append(name)
+            continue
+        if not text.strip():
+            markdown_empty.append(name)
+            continue
+        markdown_read += 1
+        if "|" not in text and "#" not in text:
+            markdown_marker_missing.append(name)
+    return {
+        "csv_artifact_count": csv_count,
+        "csv_artifact_parsed_count": csv_parsed,
+        "csv_artifact_parse_failed": csv_parse_failed,
+        "csv_artifact_empty": csv_empty,
+        "markdown_artifact_count": markdown_count,
+        "markdown_artifact_read_count": markdown_read,
+        "markdown_artifact_read_failed": markdown_read_failed,
+        "markdown_artifact_empty": markdown_empty,
+        "markdown_artifact_marker_missing": markdown_marker_missing,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dir", default="zig-out", help="dashboard artifact directory")
@@ -7684,6 +7738,7 @@ def main() -> int:
     smoke_gate_missing = [record["name"] for record in records if not record["smoke_gate"]]
     smoke_gate_covered = len(records) - len(smoke_gate_missing)
     records_by_name = {record["name"]: record for record in records}
+    non_json_audit = non_json_artifact_audit(records, output.parent)
     smoke_gate_required_missing = [
         name
         for name in required_smoke_gates(producer_map)
@@ -7729,6 +7784,13 @@ def main() -> int:
     native_tier_discovery_health = native_tier_corpus_discovery_health(artifacts)
     producer_healthy = len(producer_step_missing) == 0
     smoke_gate_healthy = len(smoke_gate_required_missing) == 0
+    non_json_artifact_healthy = (
+        not non_json_audit["csv_artifact_parse_failed"]
+        and not non_json_audit["csv_artifact_empty"]
+        and not non_json_audit["markdown_artifact_read_failed"]
+        and not non_json_audit["markdown_artifact_empty"]
+        and not non_json_audit["markdown_artifact_marker_missing"]
+    )
     header_healthy = (
         header_health["present"]
         and header_health["ok"]
@@ -7821,6 +7883,7 @@ def main() -> int:
     validation_healthy = (
         producer_healthy
         and smoke_gate_healthy
+        and non_json_artifact_healthy
         and header_healthy
         and strict_healthy
         and dashboard_configuration_healthy
@@ -7865,6 +7928,8 @@ def main() -> int:
         validation_unhealthy_reasons.append("missing_producer_steps")
     if not smoke_gate_healthy:
         validation_unhealthy_reasons.append("missing_required_smoke_gates")
+    if not non_json_artifact_healthy:
+        validation_unhealthy_reasons.append("non_json_artifact_failed")
     if not (header_health["present"] and header_health["markdown_present"]):
         validation_unhealthy_reasons.append("missing_header_inspect_artifact")
     elif not header_health["ok"]:
@@ -8164,6 +8229,8 @@ def main() -> int:
             "| --- | ---: | ---: | --- |",
             f"| producer steps | {producer_step_covered}/{len(records)} | {len(producer_step_missing)} | allowed missing {len(producer_step_allowed_missing)} |",
             f"| smoke gates | {smoke_gate_covered}/{len(records)} | {len(smoke_gate_missing)} | required missing {len(smoke_gate_required_missing)} |",
+            f"| CSV artifacts | {non_json_audit['csv_artifact_parsed_count']}/{non_json_audit['csv_artifact_count']} | parse failed {len(non_json_audit['csv_artifact_parse_failed'])}, empty {len(non_json_audit['csv_artifact_empty'])} |",
+            f"| Markdown artifacts | {non_json_audit['markdown_artifact_read_count']}/{non_json_audit['markdown_artifact_count']} | read failed {len(non_json_audit['markdown_artifact_read_failed'])}, empty {len(non_json_audit['markdown_artifact_empty'])}, marker missing {len(non_json_audit['markdown_artifact_marker_missing'])}, healthy `{non_json_artifact_healthy}` |",
             "",
         ]
     )
@@ -8838,6 +8905,16 @@ def main() -> int:
                 "smoke_gate_missing": smoke_gate_missing,
                 "smoke_gate_required_missing": smoke_gate_required_missing,
                 "smoke_gate_healthy": smoke_gate_healthy,
+                "non_json_artifact_healthy": non_json_artifact_healthy,
+                "csv_artifact_count": non_json_audit["csv_artifact_count"],
+                "csv_artifact_parsed_count": non_json_audit["csv_artifact_parsed_count"],
+                "csv_artifact_parse_failed": non_json_audit["csv_artifact_parse_failed"],
+                "csv_artifact_empty": non_json_audit["csv_artifact_empty"],
+                "markdown_artifact_count": non_json_audit["markdown_artifact_count"],
+                "markdown_artifact_read_count": non_json_audit["markdown_artifact_read_count"],
+                "markdown_artifact_read_failed": non_json_audit["markdown_artifact_read_failed"],
+                "markdown_artifact_empty": non_json_audit["markdown_artifact_empty"],
+                "markdown_artifact_marker_missing": non_json_audit["markdown_artifact_marker_missing"],
                 "validation_healthy": validation_healthy,
                 "validation_unhealthy_reasons": validation_unhealthy_reasons,
                 "header_inspect_present": header_health["present"],

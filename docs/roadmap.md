@@ -2883,6 +2883,12 @@ architecture blindly.
 
 
 
+
+- Added a hard dashboard health gate for non-JSON retained artifacts. The
+  dashboard now audits indexed CSV and Markdown artifacts for parse/read failures,
+  empty content, and missing Markdown markers, and strict-validation smoke covers
+  the new `non_json_artifact_failed` reason.
+
 - Locked the validation JSON artifact audit exclusion list behind shared manifest
   enums and a negative smoke case. Future attempts to exclude an unapproved JSON
   artifact name now fail schema validation instead of silently shrinking the

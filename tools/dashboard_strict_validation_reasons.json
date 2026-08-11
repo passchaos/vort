@@ -13,6 +13,11 @@
       "fixture": "missing_required_smoke_gates"
     },
     {
+      "reason": "non_json_artifact_failed",
+      "check": "validation_non_json_artifact_failed",
+      "fixture": "non_json_artifact_failed"
+    },
+    {
       "reason": "missing_header_inspect_artifact",
       "check": "validation_missing_header_inspect_artifact",
       "fixture": "missing_header_inspect_artifact"
