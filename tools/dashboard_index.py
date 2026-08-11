@@ -4734,8 +4734,18 @@ def deflate_dynamic_decode_profile_health(artifacts: list[Path]) -> dict:
                 rows = list(csv.DictReader(f))
         except Exception:
             rows = []
-        by_case = {str(row.get("case") or ""): row for row in rows}
+        by_case: dict[str, dict[str, str]] = {}
+        duplicate_cases: set[str] = set()
+        for row in rows:
+            case = str(row.get("case") or "")
+            if not case:
+                continue
+            if case in by_case:
+                duplicate_cases.add(case)
+            else:
+                by_case[case] = row
         missing_cases = sorted(required_cases - set(by_case))
+        duplicate_case_names = sorted(duplicate_cases)
         required_rows = [by_case[case] for case in sorted(required_cases) if case in by_case]
         positive_rows = 0
         histogram_rows = 0
@@ -4773,6 +4783,7 @@ def deflate_dynamic_decode_profile_health(artifacts: list[Path]) -> dict:
         healthy = (
             len(rows) >= required_count
             and not missing_cases
+            and not duplicate_case_names
             and positive_rows == required_count
             and histogram_rows == required_count
             and lookup_rows == required_count
@@ -4792,6 +4803,7 @@ def deflate_dynamic_decode_profile_health(artifacts: list[Path]) -> dict:
             "ratio_rows": ratio_rows,
             "chunked_window_rows": chunked_window_rows,
             "missing_cases": missing_cases,
+            "duplicate_cases": duplicate_case_names,
         }
     return {
         "present": False,
@@ -4805,6 +4817,7 @@ def deflate_dynamic_decode_profile_health(artifacts: list[Path]) -> dict:
         "ratio_rows": 0,
         "chunked_window_rows": 0,
         "missing_cases": [],
+        "duplicate_cases": [],
     }
 
 
@@ -7896,7 +7909,7 @@ def main() -> int:
             f"| rows | {deflate_dynamic_decode_profile['row_count']} | required {deflate_dynamic_decode_profile['required_rows']}, present `{deflate_dynamic_decode_profile['present']}` |",
             f"| required row checks | {deflate_dynamic_decode_profile['positive_rows']} | histograms/lookups {deflate_dynamic_decode_profile['histogram_rows']}/{deflate_dynamic_decode_profile['lookup_rows']} |",
             f"| match class rows | {deflate_dynamic_decode_profile['match_class_rows']} | ratio rows {deflate_dynamic_decode_profile['ratio_rows']} |",
-            f"| chunked-window rows | {deflate_dynamic_decode_profile['chunked_window_rows']} | missing cases {len(deflate_dynamic_decode_profile['missing_cases'])}, healthy `{deflate_dynamic_decode_profile['healthy']}` |",
+            f"| chunked-window rows | {deflate_dynamic_decode_profile['chunked_window_rows']} | missing required/duplicate cases {len(deflate_dynamic_decode_profile['missing_cases'])}/{len(deflate_dynamic_decode_profile['duplicate_cases'])}, healthy `{deflate_dynamic_decode_profile['healthy']}` |",
             "",
         ]
     )
@@ -8811,6 +8824,7 @@ def main() -> int:
                 "deflate_dynamic_decode_profile_ratio_rows": deflate_dynamic_decode_profile["ratio_rows"],
                 "deflate_dynamic_decode_profile_chunked_window_rows": deflate_dynamic_decode_profile["chunked_window_rows"],
                 "deflate_dynamic_decode_profile_missing_cases": deflate_dynamic_decode_profile["missing_cases"],
+                "deflate_dynamic_decode_profile_duplicate_cases": deflate_dynamic_decode_profile["duplicate_cases"],
                 "native_library_bench_present": native_library_bench["present"],
                 "native_library_bench_healthy": native_library_bench["healthy"],
                 "native_library_bench_rows": native_library_bench["row_count"],

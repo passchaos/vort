@@ -2827,3 +2827,8 @@ architecture blindly.
 - Tightened PNG streaming zlib benchmark dashboard health by exposing duplicate
   and unknown `case` rows alongside missing cases. Dashboard health now rejects
   PNG streaming CSV case drift before benchmark coverage can pass.
+
+- Tightened deflate dynamic decode profile dashboard health by exposing duplicate
+  required `case` rows alongside missing cases while still allowing additional
+  profiling rows. Dashboard health now rejects required profile case drift before
+  decode-profile coverage can pass.

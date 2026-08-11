@@ -522,6 +522,7 @@ def main() -> int:
                 "deflate_dynamic_decode_profile_ratio_rows": 3,
                 "deflate_dynamic_decode_profile_chunked_window_rows": 1,
                 "deflate_dynamic_decode_profile_missing_cases": [],
+                "deflate_dynamic_decode_profile_duplicate_cases": [],
                 "native_library_bench_present": True,
                 "native_library_bench_healthy": True,
                 "native_library_bench_rows": 93,

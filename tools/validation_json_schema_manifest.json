@@ -1523,7 +1523,8 @@
             "deflate_dynamic_decode_profile_chunked_window_rows"
           ],
           "zero": [
-            "deflate_dynamic_decode_profile_missing_cases"
+            "deflate_dynamic_decode_profile_missing_cases",
+            "deflate_dynamic_decode_profile_duplicate_cases"
           ]
         },
         "native_library_bench_healthy": {
@@ -2559,6 +2560,7 @@
         "deflate_dynamic_decode_profile_ratio_rows": "int",
         "deflate_dynamic_decode_profile_chunked_window_rows": "int",
         "deflate_dynamic_decode_profile_missing_cases": "list",
+        "deflate_dynamic_decode_profile_duplicate_cases": "list",
         "native_library_bench_present": "bool",
         "native_library_bench_healthy": "bool",
         "native_library_bench_rows": "int",

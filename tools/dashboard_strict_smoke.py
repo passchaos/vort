@@ -5058,7 +5058,7 @@ def main() -> int:
                     "| rows | 3 | required 3, present `True` |",
                     "| required row checks | 3 | histograms/lookups 3/3 |",
                     "| match class rows | 3 | ratio rows 3 |",
-                    "| chunked-window rows | 1 | missing cases 0, healthy `True` |",
+                    "| chunked-window rows | 1 | missing required/duplicate cases 0/0, healthy `True` |",
                 ],
             )
         )
