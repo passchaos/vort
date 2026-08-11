@@ -1503,7 +1503,9 @@
             "png_streaming_zlib_bench_ratio_rows"
           ],
           "zero": [
-            "png_streaming_zlib_bench_missing_cases"
+            "png_streaming_zlib_bench_missing_cases",
+            "png_streaming_zlib_bench_duplicate_cases",
+            "png_streaming_zlib_bench_unknown_cases"
           ]
         },
         "deflate_dynamic_decode_profile_healthy": {
@@ -2544,6 +2546,8 @@
         "png_streaming_zlib_bench_chunk_count_rows": "int",
         "png_streaming_zlib_bench_ratio_rows": "int",
         "png_streaming_zlib_bench_missing_cases": "list",
+        "png_streaming_zlib_bench_duplicate_cases": "list",
+        "png_streaming_zlib_bench_unknown_cases": "list",
         "deflate_dynamic_decode_profile_present": "bool",
         "deflate_dynamic_decode_profile_healthy": "bool",
         "deflate_dynamic_decode_profile_rows": "int",

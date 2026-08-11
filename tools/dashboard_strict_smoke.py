@@ -5043,7 +5043,7 @@ def main() -> int:
                     "| rows | 10 | expected 10, present `True` |",
                     "| shape rows | 10 | positive rows 10 |",
                     "| ratio rows | 10 | image-size rows 10 |",
-                    "| chunk counts | 10 | missing cases 0, healthy `True` |",
+                    "| chunk counts | 10 | missing/duplicate/unknown cases 0/0/0, healthy `True` |",
                 ],
             )
         )

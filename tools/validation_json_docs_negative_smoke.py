@@ -509,6 +509,8 @@ def main() -> int:
                 "png_streaming_zlib_bench_chunk_count_rows": 10,
                 "png_streaming_zlib_bench_ratio_rows": 10,
                 "png_streaming_zlib_bench_missing_cases": [],
+                "png_streaming_zlib_bench_duplicate_cases": [],
+                "png_streaming_zlib_bench_unknown_cases": [],
                 "deflate_dynamic_decode_profile_present": True,
                 "deflate_dynamic_decode_profile_healthy": True,
                 "deflate_dynamic_decode_profile_rows": 3,

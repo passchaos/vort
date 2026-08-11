@@ -4499,6 +4499,8 @@ def png_streaming_zlib_bench_health(artifacts: list[Path]) -> dict:
         except Exception:
             rows = []
         seen: set[str] = set()
+        duplicate_cases: set[str] = set()
+        unknown_cases: set[str] = set()
         positive_rows = 0
         shape_rows = 0
         image_size_rows = 0
@@ -4508,7 +4510,11 @@ def png_streaming_zlib_bench_health(artifacts: list[Path]) -> dict:
             case = str(row.get("case") or "")
             expected = expected_cases.get(case)
             if expected is not None:
+                if case in seen:
+                    duplicate_cases.add(case)
                 seen.add(case)
+            elif case:
+                unknown_cases.add(case)
             try:
                 width = int(row.get("width") or "0")
                 height = int(row.get("height") or "0")
@@ -4547,10 +4553,14 @@ def png_streaming_zlib_bench_health(artifacts: list[Path]) -> dict:
             if ratio_ok(row):
                 ratio_rows += 1
         missing_cases = sorted(set(expected_cases) - seen)
+        duplicate_case_names = sorted(duplicate_cases)
+        unknown_case_names = sorted(unknown_cases)
         row_count = len(rows)
         healthy = (
             row_count == len(expected_cases)
             and not missing_cases
+            and not duplicate_case_names
+            and not unknown_case_names
             and positive_rows == row_count
             and shape_rows == row_count
             and image_size_rows == row_count
@@ -4568,6 +4578,8 @@ def png_streaming_zlib_bench_health(artifacts: list[Path]) -> dict:
             "chunk_count_rows": chunk_count_rows,
             "ratio_rows": ratio_rows,
             "missing_cases": missing_cases,
+            "duplicate_cases": duplicate_case_names,
+            "unknown_cases": unknown_case_names,
         }
     return {
         "present": False,
@@ -4580,6 +4592,8 @@ def png_streaming_zlib_bench_health(artifacts: list[Path]) -> dict:
         "chunk_count_rows": 0,
         "ratio_rows": 0,
         "missing_cases": [],
+        "duplicate_cases": [],
+        "unknown_cases": [],
     }
 
 
@@ -7869,7 +7883,7 @@ def main() -> int:
             f"| rows | {png_streaming_zlib_bench['row_count']} | expected {png_streaming_zlib_bench['expected_rows']}, present `{png_streaming_zlib_bench['present']}` |",
             f"| shape rows | {png_streaming_zlib_bench['shape_rows']} | positive rows {png_streaming_zlib_bench['positive_rows']} |",
             f"| ratio rows | {png_streaming_zlib_bench['ratio_rows']} | image-size rows {png_streaming_zlib_bench['image_size_rows']} |",
-            f"| chunk counts | {png_streaming_zlib_bench['chunk_count_rows']} | missing cases {len(png_streaming_zlib_bench['missing_cases'])}, healthy `{png_streaming_zlib_bench['healthy']}` |",
+            f"| chunk counts | {png_streaming_zlib_bench['chunk_count_rows']} | missing/duplicate/unknown cases {len(png_streaming_zlib_bench['missing_cases'])}/{len(png_streaming_zlib_bench['duplicate_cases'])}/{len(png_streaming_zlib_bench['unknown_cases'])}, healthy `{png_streaming_zlib_bench['healthy']}` |",
             "",
         ]
     )
@@ -8784,6 +8798,8 @@ def main() -> int:
                 "png_streaming_zlib_bench_chunk_count_rows": png_streaming_zlib_bench["chunk_count_rows"],
                 "png_streaming_zlib_bench_ratio_rows": png_streaming_zlib_bench["ratio_rows"],
                 "png_streaming_zlib_bench_missing_cases": png_streaming_zlib_bench["missing_cases"],
+                "png_streaming_zlib_bench_duplicate_cases": png_streaming_zlib_bench["duplicate_cases"],
+                "png_streaming_zlib_bench_unknown_cases": png_streaming_zlib_bench["unknown_cases"],
                 "deflate_dynamic_decode_profile_present": deflate_dynamic_decode_profile["present"],
                 "deflate_dynamic_decode_profile_healthy": deflate_dynamic_decode_profile["healthy"],
                 "deflate_dynamic_decode_profile_rows": deflate_dynamic_decode_profile["row_count"],

@@ -2823,3 +2823,7 @@ architecture blindly.
 - Tightened chunked zlib benchmark dashboard health by exposing duplicate and
   unknown `case` rows alongside missing cases. Dashboard health now rejects
   chunked zlib CSV case drift before benchmark and Markdown coverage can pass.
+
+- Tightened PNG streaming zlib benchmark dashboard health by exposing duplicate
+  and unknown `case` rows alongside missing cases. Dashboard health now rejects
+  PNG streaming CSV case drift before benchmark coverage can pass.
