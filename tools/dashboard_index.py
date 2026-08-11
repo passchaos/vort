@@ -346,7 +346,7 @@ def sidecar_corrupt_health(artifacts: list[Path]) -> dict:
         item_metadata_ok_rows = sum(1 for row in items if isinstance(row, dict) and row.get("metadata_ok") is True)
         item_full_rejected_rows = sum(1 for row in items if isinstance(row, dict) and row.get("full_rejected") is True)
         item_malformed_rows = 0
-        item_duplicate_rows = 0
+        item_duplicate_cases: set[str] = set()
         expected_by_case: dict[str, dict[str, bool | int | str]] = {}
         for row in items:
             if not isinstance(row, dict):
@@ -365,28 +365,44 @@ def sidecar_corrupt_health(artifacts: list[Path]) -> dict:
                 item_malformed_rows += 1
                 continue
             if case in expected_by_case:
-                item_duplicate_rows += 1
+                item_duplicate_cases.add(case)
                 continue
             expected_by_case[case] = expected
+        item_duplicate_case_names = sorted(item_duplicate_cases)
         item_count_mismatch = (
             abs(rows - item_rows)
             + abs(metadata_ok_rows - item_metadata_ok_rows)
             + abs(full_rejected_rows - item_full_rejected_rows)
             + item_malformed_rows
-            + item_duplicate_rows
+            + len(item_duplicate_case_names)
         )
 
         markdown_present = markdown is not None
         markdown_rows_data = parse_markdown_rows(markdown if markdown_present else None)
         markdown_rows = len(markdown_rows_data)
         markdown_matched_cases: set[str] = set()
+        markdown_seen_cases: set[str] = set()
+        markdown_duplicate_cases: set[str] = set()
+        markdown_unknown_cases: set[str] = set()
+        markdown_malformed_rows = 0
         for row in markdown_rows_data:
             case = str(row.get("case") or "")
+            if not case or any(row.get(field) is None for field in ("metadata_ok", "full_rejected", "stream_bytes", "sidecar_bytes")):
+                markdown_malformed_rows += 1
+                continue
+            if case in markdown_seen_cases:
+                markdown_duplicate_cases.add(case)
+            markdown_seen_cases.add(case)
             expected = expected_by_case.get(case)
-            if expected is None or case in markdown_matched_cases:
+            if expected is None:
+                markdown_unknown_cases.add(case)
+                continue
+            if case in markdown_matched_cases:
                 continue
             if all(row.get(field) == expected[field] for field in ("case", "metadata_ok", "full_rejected", "full_error", "stream_bytes", "sidecar_bytes")):
                 markdown_matched_cases.add(case)
+        markdown_duplicate_case_names = sorted(markdown_duplicate_cases)
+        markdown_unknown_case_names = sorted(markdown_unknown_cases)
         markdown_matched = len(markdown_matched_cases)
         markdown_unmatched = max(markdown_rows, len(expected_by_case)) - markdown_matched
         healthy = (
@@ -395,10 +411,15 @@ def sidecar_corrupt_health(artifacts: list[Path]) -> dict:
             and full_not_rejected_rows == 0
             and item_rows == rows
             and item_count_mismatch == 0
+            and item_malformed_rows == 0
+            and not item_duplicate_case_names
             and markdown_present
             and markdown_rows == item_rows
             and markdown_matched == item_rows
             and markdown_unmatched == 0
+            and markdown_malformed_rows == 0
+            and not markdown_duplicate_case_names
+            and not markdown_unknown_case_names
         )
         return {
             "present": True,
@@ -409,10 +430,15 @@ def sidecar_corrupt_health(artifacts: list[Path]) -> dict:
             "full_not_rejected_rows": full_not_rejected_rows,
             "item_rows": item_rows,
             "item_count_mismatch": item_count_mismatch,
+            "item_malformed_rows": item_malformed_rows,
+            "item_duplicate_cases": item_duplicate_case_names,
             "markdown_present": markdown_present,
             "markdown_rows": markdown_rows,
             "markdown_matched": markdown_matched,
             "markdown_unmatched": markdown_unmatched,
+            "markdown_malformed_rows": markdown_malformed_rows,
+            "markdown_duplicate_cases": markdown_duplicate_case_names,
+            "markdown_unknown_cases": markdown_unknown_case_names,
             "healthy": healthy,
         }
     return {
@@ -424,10 +450,15 @@ def sidecar_corrupt_health(artifacts: list[Path]) -> dict:
         "full_not_rejected_rows": 0,
         "item_rows": 0,
         "item_count_mismatch": 0,
+        "item_malformed_rows": 0,
+        "item_duplicate_cases": [],
         "markdown_present": False,
         "markdown_rows": 0,
         "markdown_matched": 0,
         "markdown_unmatched": 0,
+        "markdown_malformed_rows": 0,
+        "markdown_duplicate_cases": [],
+        "markdown_unknown_cases": [],
         "healthy": False,
     }
 
@@ -8279,8 +8310,8 @@ def main() -> int:
             f"| corrupt rows | {sidecar_corrupt_health_summary['rows']} | healthy `{sidecar_corrupt_healthy}` |",
             f"| metadata checks | {sidecar_corrupt_health_summary['metadata_ok_rows']} | failed {sidecar_corrupt_health_summary['metadata_failed_rows']} |",
             f"| full decode rejection | {sidecar_corrupt_health_summary['full_rejected_rows']} | not rejected {sidecar_corrupt_health_summary['full_not_rejected_rows']} |",
-            f"| JSON item rows | {sidecar_corrupt_health_summary['item_rows']} | count mismatch {sidecar_corrupt_health_summary['item_count_mismatch']} |",
-            f"| Markdown rows | {sidecar_corrupt_health_summary['markdown_matched']}/{sidecar_corrupt_health_summary['markdown_rows']} | present `{sidecar_corrupt_health_summary['markdown_present']}`, unmatched {sidecar_corrupt_health_summary['markdown_unmatched']} |",
+            f"| JSON item rows | {sidecar_corrupt_health_summary['item_rows']} | count/malformed/duplicate {sidecar_corrupt_health_summary['item_count_mismatch']}/{sidecar_corrupt_health_summary['item_malformed_rows']}/{len(sidecar_corrupt_health_summary['item_duplicate_cases'])} |",
+            f"| Markdown rows | {sidecar_corrupt_health_summary['markdown_matched']}/{sidecar_corrupt_health_summary['markdown_rows']} | present `{sidecar_corrupt_health_summary['markdown_present']}`, unmatched/malformed/duplicate/unknown {sidecar_corrupt_health_summary['markdown_unmatched']}/{sidecar_corrupt_health_summary['markdown_malformed_rows']}/{len(sidecar_corrupt_health_summary['markdown_duplicate_cases'])}/{len(sidecar_corrupt_health_summary['markdown_unknown_cases'])} |",
             "",
         ]
     )
@@ -8734,10 +8765,15 @@ def main() -> int:
                 "sidecar_corrupt_full_not_rejected_rows": sidecar_corrupt_health_summary["full_not_rejected_rows"],
                 "sidecar_corrupt_item_rows": sidecar_corrupt_health_summary["item_rows"],
                 "sidecar_corrupt_item_count_mismatch": sidecar_corrupt_health_summary["item_count_mismatch"],
+                "sidecar_corrupt_item_malformed_rows": sidecar_corrupt_health_summary["item_malformed_rows"],
+                "sidecar_corrupt_item_duplicate_cases": sidecar_corrupt_health_summary["item_duplicate_cases"],
                 "sidecar_corrupt_markdown_present": sidecar_corrupt_health_summary["markdown_present"],
                 "sidecar_corrupt_markdown_rows": sidecar_corrupt_health_summary["markdown_rows"],
                 "sidecar_corrupt_markdown_matched": sidecar_corrupt_health_summary["markdown_matched"],
                 "sidecar_corrupt_markdown_unmatched": sidecar_corrupt_health_summary["markdown_unmatched"],
+                "sidecar_corrupt_markdown_malformed_rows": sidecar_corrupt_health_summary["markdown_malformed_rows"],
+                "sidecar_corrupt_markdown_duplicate_cases": sidecar_corrupt_health_summary["markdown_duplicate_cases"],
+                "sidecar_corrupt_markdown_unknown_cases": sidecar_corrupt_health_summary["markdown_unknown_cases"],
                 "huffman_length_present": huffman_health["present"],
                 "huffman_length_healthy": huffman_healthy,
                 "huffman_length_row_count": huffman_health["row_count"],

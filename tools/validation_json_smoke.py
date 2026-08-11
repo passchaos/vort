@@ -1239,10 +1239,15 @@ def main() -> int:
         assert dashboard["sidecar_corrupt_full_not_rejected_rows"] == 0
         assert dashboard["sidecar_corrupt_item_rows"] == len(corrupt["items"])
         assert dashboard["sidecar_corrupt_item_count_mismatch"] == 0
+        assert dashboard["sidecar_corrupt_item_malformed_rows"] == 0
+        assert dashboard["sidecar_corrupt_item_duplicate_cases"] == []
         assert dashboard["sidecar_corrupt_markdown_present"] is True
         assert dashboard["sidecar_corrupt_markdown_rows"] == len(corrupt["items"])
         assert dashboard["sidecar_corrupt_markdown_matched"] == len(corrupt["items"])
         assert dashboard["sidecar_corrupt_markdown_unmatched"] == 0
+        assert dashboard["sidecar_corrupt_markdown_malformed_rows"] == 0
+        assert dashboard["sidecar_corrupt_markdown_duplicate_cases"] == []
+        assert dashboard["sidecar_corrupt_markdown_unknown_cases"] == []
         assert dashboard["huffman_length_present"] is True
         assert dashboard["huffman_length_healthy"] is True
         assert dashboard["huffman_length_row_count"] == 1

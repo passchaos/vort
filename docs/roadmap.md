@@ -2864,3 +2864,8 @@ architecture blindly.
   matrix and exposing missing, duplicate, and unknown case rows. Dashboard health
   now rejects stale or drifted PNG scratch report cases before scratch accounting
   and Markdown coverage can pass.
+
+- Tightened sidecar corrupt smoke dashboard health by exposing malformed and
+  duplicate JSON item rows plus malformed, duplicate, and unknown Markdown rows.
+  Dashboard health now rejects sidecar row drift before corrupt-payload coverage
+  can pass.

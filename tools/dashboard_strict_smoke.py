@@ -4924,8 +4924,8 @@ def main() -> int:
                     "| corrupt rows | 2 | healthy `True` |",
                     "| metadata checks | 2 | failed 0 |",
                     "| full decode rejection | 2 | not rejected 0 |",
-                    "| JSON item rows | 2 | count mismatch 0 |",
-                    "| Markdown rows | 2/2 | present `True`, unmatched 0 |",
+                    "| JSON item rows | 2 | count/malformed/duplicate 0/0/0 |",
+                    "| Markdown rows | 2/2 | present `True`, unmatched/malformed/duplicate/unknown 0/0/0/0 |",
                 ],
             )
         )

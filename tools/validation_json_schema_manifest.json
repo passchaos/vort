@@ -996,7 +996,12 @@
             "sidecar_corrupt_metadata_failed_rows",
             "sidecar_corrupt_full_not_rejected_rows",
             "sidecar_corrupt_item_count_mismatch",
-            "sidecar_corrupt_markdown_unmatched"
+            "sidecar_corrupt_item_malformed_rows",
+            "sidecar_corrupt_item_duplicate_cases",
+            "sidecar_corrupt_markdown_unmatched",
+            "sidecar_corrupt_markdown_malformed_rows",
+            "sidecar_corrupt_markdown_duplicate_cases",
+            "sidecar_corrupt_markdown_unknown_cases"
           ]
         },
         "smoke_gate_healthy": {
@@ -2392,11 +2397,16 @@
         "sidecar_corrupt_full_rejected_rows": "int",
         "sidecar_corrupt_healthy": "bool",
         "sidecar_corrupt_item_count_mismatch": "int",
+        "sidecar_corrupt_item_malformed_rows": "int",
+        "sidecar_corrupt_item_duplicate_cases": "list",
         "sidecar_corrupt_item_rows": "int",
         "sidecar_corrupt_markdown_matched": "int",
         "sidecar_corrupt_markdown_present": "bool",
         "sidecar_corrupt_markdown_rows": "int",
         "sidecar_corrupt_markdown_unmatched": "int",
+        "sidecar_corrupt_markdown_malformed_rows": "int",
+        "sidecar_corrupt_markdown_duplicate_cases": "list",
+        "sidecar_corrupt_markdown_unknown_cases": "list",
         "sidecar_corrupt_metadata_failed_rows": "int",
         "sidecar_corrupt_metadata_ok_rows": "int",
         "sidecar_corrupt_present": "bool",
