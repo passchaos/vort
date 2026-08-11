@@ -2880,6 +2880,12 @@ architecture blindly.
 
 
 
+
+- Closed the validation JSON artifact manifest backlog by excluding known
+  dashboard/validation self-output snapshots from the current-run audit and
+  validating every remaining retained `zig-out` JSON artifact against the shared
+  manifest. The dashboard now reports zero artifact manifest failures.
+
 - Reduced the validation JSON artifact manifest backlog by making the shared
   schema checker understand optional top-level and item fields, then marking
   older Brotli static-dictionary candidate/probe metadata fields as optional.

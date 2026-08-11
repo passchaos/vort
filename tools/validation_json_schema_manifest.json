@@ -688,6 +688,8 @@
             "validation_json_observed_schema_count",
             "validation_json_observed_schema_rows",
             "validation_json_json_artifact_count",
+            "validation_json_json_artifact_excluded_count",
+            "validation_json_json_artifact_excluded_rows",
             "validation_json_json_artifact_parsed_count",
             "validation_json_json_artifact_schema_count",
             "validation_json_json_artifact_manifest_validated_count",
@@ -704,6 +706,7 @@
             "validation_json_unchecked_observed_schema_rows",
             "validation_json_unchecked_observed_schema_count_mismatch",
             "validation_json_unchecked_observed_schemas",
+            "validation_json_json_artifact_excluded_count_mismatch",
             "validation_json_json_artifact_parse_failed_count",
             "validation_json_json_artifact_parse_failed",
             "validation_json_json_artifact_missing_schema_count",
@@ -1903,6 +1906,10 @@
         "validation_json_unchecked_observed_schema_count_mismatch": "int",
         "validation_json_unchecked_observed_schemas": "list",
         "validation_json_json_artifact_count": "int",
+        "validation_json_json_artifact_excluded_count": "int",
+        "validation_json_json_artifact_excluded_rows": "int",
+        "validation_json_json_artifact_excluded_count_mismatch": "int",
+        "validation_json_json_artifact_excluded_names": "list",
         "validation_json_json_artifact_parsed_count": "int",
         "validation_json_json_artifact_schema_count": "int",
         "validation_json_json_artifact_parse_failed_count": "int",
@@ -6420,6 +6427,9 @@
         },
         "json_artifact_manifest_failed_count": {
           "collection": "json_artifact_manifest_failed_names"
+        },
+        "json_artifact_excluded_count": {
+          "collection": "json_artifact_excluded_names"
         }
       },
       "fields": {
@@ -6446,7 +6456,9 @@
         "json_artifact_manifest_validated_count": "int",
         "json_artifact_manifest_failed_count": "int",
         "json_artifact_manifest_failed_names": "list",
-        "json_artifact_manifest_accounting_mismatch": "int"
+        "json_artifact_manifest_accounting_mismatch": "int",
+        "json_artifact_excluded_count": "int",
+        "json_artifact_excluded_names": "list"
       },
       "list_item_enums": {
         "checked_schemas": [

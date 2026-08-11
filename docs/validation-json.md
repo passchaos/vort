@@ -622,6 +622,9 @@ Important fields:
 - `json_artifact_count`, `json_artifact_parsed_count`,
   `json_artifact_schema_count`, `json_artifact_manifest_validated_count`: JSON
   artifact-level manifest audit counts for retained `zig-out` JSON files
+- `json_artifact_excluded_count`, `json_artifact_excluded_names`: intentional
+  exclusions such as stale self-output snapshots that are inventoried but not
+  part of the current validation smoke contract
 - `json_artifact_parse_failed`, `json_artifact_missing_schema`,
   `json_artifact_manifest_failed_names`: artifact-level audit drift lists; parse
   and missing-schema lists are hard health gates, while manifest failures are
@@ -691,6 +694,11 @@ Example:
   "unchecked_observed_schema_count": 0,
   "unchecked_observed_schemas": [],
   "json_artifact_count": 10,
+  "json_artifact_excluded_count": 2,
+  "json_artifact_excluded_names": [
+    "vort-dashboard-index.json",
+    "vort-validation-json-smoke.json"
+  ],
   "json_artifact_parsed_count": 10,
   "json_artifact_schema_count": 10,
   "json_artifact_parse_failed_count": 0,
@@ -2687,6 +2695,10 @@ Top-level fields:
   `validation_json_unchecked_observed_schema_count_mismatch`,
   `validation_json_unchecked_observed_schemas`,
   `validation_json_json_artifact_count`,
+  `validation_json_json_artifact_excluded_count`,
+  `validation_json_json_artifact_excluded_rows`,
+  `validation_json_json_artifact_excluded_count_mismatch`,
+  `validation_json_json_artifact_excluded_names`,
   `validation_json_json_artifact_parsed_count`,
   `validation_json_json_artifact_schema_count`,
   `validation_json_json_artifact_parse_failed_count`,
@@ -3457,6 +3469,10 @@ Example:
   "validation_json_unchecked_observed_schema_count_mismatch": 0,
   "validation_json_unchecked_observed_schemas": [],
   "validation_json_json_artifact_count": 0,
+  "validation_json_json_artifact_excluded_count": 0,
+  "validation_json_json_artifact_excluded_rows": 0,
+  "validation_json_json_artifact_excluded_count_mismatch": 0,
+  "validation_json_json_artifact_excluded_names": [],
   "validation_json_json_artifact_parsed_count": 0,
   "validation_json_json_artifact_schema_count": 0,
   "validation_json_json_artifact_parse_failed_count": 0,
