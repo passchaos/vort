@@ -463,6 +463,8 @@ def main() -> int:
                 "png_scanline_bench_positive_rows": 30,
                 "png_scanline_bench_shape_rows": 30,
                 "png_scanline_bench_io_match_rows": 30,
+                "png_scanline_bench_throughput_rows": 30,
+                "png_scanline_bench_checksum_matched_bpps": 6,
                 "png_scanline_bench_missing_pairs": [],
                 "chunked_zlib_bench_present": True,
                 "chunked_zlib_bench_healthy": True,

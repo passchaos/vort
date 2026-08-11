@@ -2711,3 +2711,8 @@ architecture blindly.
   to keep a shared non-zero checksum across raw/zlib, encoder, and allocation
   modes. Dashboard health now exposes throughput-row and checksum-payload
   counters before dictionary decode coverage can pass.
+- Tightened PNG scanline benchmark dashboard health by recomputing output MiB/s
+  from output bytes and elapsed time and by requiring each byte-per-pixel group
+  to keep a shared non-zero checksum across all filter stages. Dashboard health
+  now exposes throughput-row and checksum-bpp counters before scanline coverage
+  can pass.

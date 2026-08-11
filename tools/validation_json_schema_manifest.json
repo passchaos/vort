@@ -1383,7 +1383,9 @@
             "png_scanline_bench_expected_rows",
             "png_scanline_bench_positive_rows",
             "png_scanline_bench_shape_rows",
-            "png_scanline_bench_io_match_rows"
+            "png_scanline_bench_io_match_rows",
+            "png_scanline_bench_throughput_rows",
+            "png_scanline_bench_checksum_matched_bpps"
           ],
           "zero": [
             "png_scanline_bench_missing_pairs"
@@ -2350,6 +2352,8 @@
         "png_scanline_bench_positive_rows": "int",
         "png_scanline_bench_shape_rows": "int",
         "png_scanline_bench_io_match_rows": "int",
+        "png_scanline_bench_throughput_rows": "int",
+        "png_scanline_bench_checksum_matched_bpps": "int",
         "png_scanline_bench_missing_pairs": "list",
         "chunked_zlib_bench_present": "bool",
         "chunked_zlib_bench_healthy": "bool",
@@ -3280,6 +3284,15 @@
           "right": "dictionary_decode_bench_rows",
           "when": {
             "field": "dictionary_decode_bench_healthy",
+            "equals": true
+          }
+        },
+        {
+          "left": "png_scanline_bench_throughput_rows",
+          "op": "eq",
+          "right": "png_scanline_bench_rows",
+          "when": {
+            "field": "png_scanline_bench_healthy",
             "equals": true
           }
         }

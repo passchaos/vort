@@ -2737,7 +2737,10 @@ Top-level fields:
 - `png_scanline_bench_present`, `png_scanline_bench_healthy`,
   `png_scanline_bench_rows`, `png_scanline_bench_expected_rows`,
   `png_scanline_bench_positive_rows`, `png_scanline_bench_shape_rows`,
-  `png_scanline_bench_io_match_rows`, `png_scanline_bench_missing_pairs`
+  `png_scanline_bench_io_match_rows`,
+  `png_scanline_bench_throughput_rows`,
+  `png_scanline_bench_checksum_matched_bpps`,
+  `png_scanline_bench_missing_pairs`
 - `chunked_zlib_bench_present`, `chunked_zlib_bench_healthy`,
   `chunked_zlib_bench_rows`, `chunked_zlib_bench_expected_rows`,
   `chunked_zlib_bench_positive_rows`, `chunked_zlib_bench_shape_rows`,
@@ -3398,6 +3401,8 @@ Example:
   "png_scanline_bench_positive_rows": 0,
   "png_scanline_bench_shape_rows": 0,
   "png_scanline_bench_io_match_rows": 0,
+  "png_scanline_bench_throughput_rows": 0,
+  "png_scanline_bench_checksum_matched_bpps": 0,
   "png_scanline_bench_missing_pairs": [],
   "chunked_zlib_bench_present": false,
   "chunked_zlib_bench_healthy": false,

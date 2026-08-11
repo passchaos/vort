@@ -2045,7 +2045,28 @@ def write_png_scanline_bench_csv(path: Path, *, healthy: bool = True) -> None:
         for bpp in bpps:
             if not healthy and stage == "paeth" and bpp == "8":
                 continue
-            lines.append(",".join([stage, bpp, "64", "1", "8192", "8192", "1000", "1000.0", "12345"]))
+            iterations = 64
+            repeat = 1
+            input_bytes = 8192
+            output_bytes = 8192
+            elapsed_ns = 1_000_000
+            output_mib_per_s = (output_bytes / (1024.0 * 1024.0)) / (elapsed_ns / 1_000_000_000.0)
+            checksum = int(bpp) * 1_000_000 + output_bytes
+            lines.append(
+                ",".join(
+                    [
+                        stage,
+                        bpp,
+                        str(iterations),
+                        str(repeat),
+                        str(input_bytes),
+                        str(output_bytes),
+                        str(elapsed_ns),
+                        f"{output_mib_per_s:.2f}",
+                        str(checksum),
+                    ]
+                )
+            )
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -4912,8 +4933,9 @@ def main() -> int:
                     "## PNG scanline benchmark coverage",
                     "| category | count | detail |",
                     "| rows | 30 | expected 30, present `True` |",
-                    "| shape rows | 30 | positive rows 30 |",
-                    "| input/output rows | 30 | missing pairs 0, healthy `True` |",
+                    "| shape rows | 30 | positive/throughput rows 30/30 |",
+                    "| input/output rows | 30 | checksum bpp groups 6 |",
+                    "| missing pairs | 0 | healthy `True` |",
                 ],
             )
         )
