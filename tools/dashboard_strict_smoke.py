@@ -4966,7 +4966,7 @@ def main() -> int:
                     "| shape rows | 57 | positive/throughput rows 57/57 |",
                     "| chunk counts | 57 | buffered rows 3 |",
                     "| checksum matches | 3 | expected cases 3 |",
-                    "| missing pairs | 0 | healthy `True` |",
+                    "| pair drift | 0 | duplicate/unknown 0/0, healthy `True` |",
                 ],
             )
         )

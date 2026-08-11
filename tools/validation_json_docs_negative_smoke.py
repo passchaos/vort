@@ -445,6 +445,8 @@ def main() -> int:
                 "deflate_chunked_huffman_bench_throughput_rows": 57,
                 "deflate_chunked_huffman_bench_checksum_matched_cases": 3,
                 "deflate_chunked_huffman_bench_missing_pairs": [],
+                "deflate_chunked_huffman_bench_duplicate_pairs": [],
+                "deflate_chunked_huffman_bench_unknown_pairs": [],
                 "deflate_extra_bits_bench_present": True,
                 "deflate_extra_bits_bench_healthy": True,
                 "deflate_extra_bits_bench_rows": 105,
