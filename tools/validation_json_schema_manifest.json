@@ -661,6 +661,10 @@
             "validation_json_checked_schema_unique_count",
             "validation_json_observed_schema_count",
             "validation_json_observed_schema_rows",
+            "validation_json_json_artifact_count",
+            "validation_json_json_artifact_parsed_count",
+            "validation_json_json_artifact_schema_count",
+            "validation_json_json_artifact_manifest_validated_count",
             "validation_json_report_rows",
             "validation_json_corrupt_rows",
             "validation_json_docs_negative_case_count",
@@ -674,6 +678,11 @@
             "validation_json_unchecked_observed_schema_rows",
             "validation_json_unchecked_observed_schema_count_mismatch",
             "validation_json_unchecked_observed_schemas",
+            "validation_json_json_artifact_parse_failed_count",
+            "validation_json_json_artifact_parse_failed",
+            "validation_json_json_artifact_missing_schema_count",
+            "validation_json_json_artifact_missing_schema",
+            "validation_json_json_artifact_manifest_accounting_mismatch",
             "validation_json_docs_negative_unmatched",
             "validation_json_docs_negative_count_mismatch",
             "validation_json_docs_negative_row_unmatched"
@@ -1867,6 +1876,17 @@
         "validation_json_unchecked_observed_schema_rows": "int",
         "validation_json_unchecked_observed_schema_count_mismatch": "int",
         "validation_json_unchecked_observed_schemas": "list",
+        "validation_json_json_artifact_count": "int",
+        "validation_json_json_artifact_parsed_count": "int",
+        "validation_json_json_artifact_schema_count": "int",
+        "validation_json_json_artifact_parse_failed_count": "int",
+        "validation_json_json_artifact_parse_failed": "list",
+        "validation_json_json_artifact_missing_schema_count": "int",
+        "validation_json_json_artifact_missing_schema": "list",
+        "validation_json_json_artifact_manifest_validated_count": "int",
+        "validation_json_json_artifact_manifest_failed_count": "int",
+        "validation_json_json_artifact_manifest_failed_names": "list",
+        "validation_json_json_artifact_manifest_accounting_mismatch": "int",
         "validation_json_cli_success_ok": "bool",
         "validation_json_cli_failure_ok": "bool",
         "validation_json_cli_failure_hint": "str",
@@ -6365,6 +6385,15 @@
         },
         "unchecked_observed_schema_count": {
           "collection": "unchecked_observed_schemas"
+        },
+        "json_artifact_parse_failed_count": {
+          "collection": "json_artifact_parse_failed"
+        },
+        "json_artifact_missing_schema_count": {
+          "collection": "json_artifact_missing_schema"
+        },
+        "json_artifact_manifest_failed_count": {
+          "collection": "json_artifact_manifest_failed_names"
         }
       },
       "fields": {
@@ -6380,7 +6409,18 @@
         "schema": "str",
         "schema_version": "int",
         "unchecked_observed_schema_count": "int",
-        "unchecked_observed_schemas": "list"
+        "unchecked_observed_schemas": "list",
+        "json_artifact_count": "int",
+        "json_artifact_parsed_count": "int",
+        "json_artifact_schema_count": "int",
+        "json_artifact_parse_failed_count": "int",
+        "json_artifact_parse_failed": "list",
+        "json_artifact_missing_schema_count": "int",
+        "json_artifact_missing_schema": "list",
+        "json_artifact_manifest_validated_count": "int",
+        "json_artifact_manifest_failed_count": "int",
+        "json_artifact_manifest_failed_names": "list",
+        "json_artifact_manifest_accounting_mismatch": "int"
       },
       "list_item_enums": {
         "checked_schemas": [

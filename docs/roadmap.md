@@ -2878,6 +2878,12 @@ architecture blindly.
 
 
 
+
+- Added validation JSON artifact-level manifest audit fields. The smoke now
+  records retained `zig-out` JSON artifact parse/schema/manifest validation
+  counts plus failure name lists, and the dashboard exposes the current manifest
+  cleanup backlog instead of relying only on schema-set coverage.
+
 - Tightened validation JSON schema coverage by recording schemas observed in
   retained `zig-out` JSON artifacts, exposing unchecked observed schemas in the
   dashboard, and failing validation health when any produced schema is not listed

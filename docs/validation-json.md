@@ -619,6 +619,13 @@ Important fields:
 - `unchecked_observed_schemas`, `unchecked_observed_schema_count`: observed
   schemas not present in `checked_schemas`; dashboard health requires this to be
   empty
+- `json_artifact_count`, `json_artifact_parsed_count`,
+  `json_artifact_schema_count`, `json_artifact_manifest_validated_count`: JSON
+  artifact-level manifest audit counts for retained `zig-out` JSON files
+- `json_artifact_parse_failed`, `json_artifact_missing_schema`,
+  `json_artifact_manifest_failed_names`: artifact-level audit drift lists; parse
+  and missing-schema lists are hard health gates, while manifest failures are
+  exposed as the current cleanup backlog
 - `cli_success_ok`, `cli_failure_ok`, `cli_failure_hint`
 - `report_rows`, `corrupt_rows`
 
@@ -683,6 +690,19 @@ Example:
   ],
   "unchecked_observed_schema_count": 0,
   "unchecked_observed_schemas": [],
+  "json_artifact_count": 10,
+  "json_artifact_parsed_count": 10,
+  "json_artifact_schema_count": 10,
+  "json_artifact_parse_failed_count": 0,
+  "json_artifact_parse_failed": [],
+  "json_artifact_missing_schema_count": 0,
+  "json_artifact_missing_schema": [],
+  "json_artifact_manifest_validated_count": 9,
+  "json_artifact_manifest_failed_count": 1,
+  "json_artifact_manifest_failed_names": [
+    "legacy-probe.json"
+  ],
+  "json_artifact_manifest_accounting_mismatch": 0,
   "cli_success_ok": true,
   "cli_failure_ok": false,
   "cli_failure_hint": "payload_corrupt",
@@ -2666,6 +2686,17 @@ Top-level fields:
   `validation_json_unchecked_observed_schema_rows`,
   `validation_json_unchecked_observed_schema_count_mismatch`,
   `validation_json_unchecked_observed_schemas`,
+  `validation_json_json_artifact_count`,
+  `validation_json_json_artifact_parsed_count`,
+  `validation_json_json_artifact_schema_count`,
+  `validation_json_json_artifact_parse_failed_count`,
+  `validation_json_json_artifact_parse_failed`,
+  `validation_json_json_artifact_missing_schema_count`,
+  `validation_json_json_artifact_missing_schema`,
+  `validation_json_json_artifact_manifest_validated_count`,
+  `validation_json_json_artifact_manifest_failed_count`,
+  `validation_json_json_artifact_manifest_failed_names`,
+  `validation_json_json_artifact_manifest_accounting_mismatch`,
   `validation_json_cli_success_ok`,
   `validation_json_cli_failure_ok`, `validation_json_cli_failure_hint`,
   `validation_json_report_rows`, `validation_json_corrupt_rows`,
@@ -3425,6 +3456,17 @@ Example:
   "validation_json_unchecked_observed_schema_rows": 0,
   "validation_json_unchecked_observed_schema_count_mismatch": 0,
   "validation_json_unchecked_observed_schemas": [],
+  "validation_json_json_artifact_count": 0,
+  "validation_json_json_artifact_parsed_count": 0,
+  "validation_json_json_artifact_schema_count": 0,
+  "validation_json_json_artifact_parse_failed_count": 0,
+  "validation_json_json_artifact_parse_failed": [],
+  "validation_json_json_artifact_missing_schema_count": 0,
+  "validation_json_json_artifact_missing_schema": [],
+  "validation_json_json_artifact_manifest_validated_count": 0,
+  "validation_json_json_artifact_manifest_failed_count": 0,
+  "validation_json_json_artifact_manifest_failed_names": [],
+  "validation_json_json_artifact_manifest_accounting_mismatch": 0,
   "validation_json_cli_success_ok": false,
   "validation_json_cli_failure_ok": false,
   "validation_json_cli_failure_hint": "",

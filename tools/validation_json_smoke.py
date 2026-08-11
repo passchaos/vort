@@ -63,6 +63,48 @@ def produced_json_schemas(root: Path) -> list[str]:
     return sorted(schemas)
 
 
+def json_artifact_manifest_audit(root: Path, schemas_def: dict, *, exclude: set[str] | None = None) -> dict[str, object]:
+    excluded_names = exclude or set()
+    artifact_paths = sorted(path for path in root.glob("*.json") if path.name not in excluded_names)
+    parsed_count = 0
+    schema_count = 0
+    manifest_validated_count = 0
+    parse_failed: list[str] = []
+    missing_schema: list[str] = []
+    manifest_failed: list[str] = []
+    for path in artifact_paths:
+        try:
+            payload = json.loads(path.read_text())
+        except Exception:
+            parse_failed.append(path.name)
+            continue
+        parsed_count += 1
+        if not isinstance(payload, dict) or not isinstance(payload.get("schema"), str):
+            missing_schema.append(path.name)
+            continue
+        schema_count += 1
+        try:
+            validate_value_against_manifest(payload, schemas_def)
+        except AssertionError:
+            manifest_failed.append(path.name)
+            continue
+        manifest_validated_count += 1
+    manifest_failed_count = len(manifest_failed)
+    return {
+        "json_artifact_count": len(artifact_paths),
+        "json_artifact_parsed_count": parsed_count,
+        "json_artifact_schema_count": schema_count,
+        "json_artifact_parse_failed_count": len(parse_failed),
+        "json_artifact_parse_failed": parse_failed,
+        "json_artifact_missing_schema_count": len(missing_schema),
+        "json_artifact_missing_schema": missing_schema,
+        "json_artifact_manifest_validated_count": manifest_validated_count,
+        "json_artifact_manifest_failed_count": manifest_failed_count,
+        "json_artifact_manifest_failed_names": manifest_failed,
+        "json_artifact_manifest_accounting_mismatch": abs(schema_count - manifest_validated_count - manifest_failed_count),
+    }
+
+
 def write_huffman_length_csv(path: Path) -> None:
     row = {
         "case": "validation-json-smoke",
@@ -907,6 +949,11 @@ def main() -> int:
         assert docs_negative["case_count"] >= 1
         assert all(row["matched"] is True for row in docs_negative["cases"])
         validate_value_against_manifest(docs_negative, schemas_def)
+        artifact_audit = json_artifact_manifest_audit(
+            ROOT / "zig-out",
+            schemas_def,
+            exclude={"vort-validation-json-smoke.json"},
+        )
         observed_schemas = sorted(set(produced_json_schemas(ROOT / "zig-out")) | {"vort.validation_json_smoke"})
         validation_json_dashboard_smoke = {
             "schema": "vort.validation_json_smoke",
@@ -917,6 +964,7 @@ def main() -> int:
             "observed_schemas": observed_schemas,
             "unchecked_observed_schemas": [],
             "unchecked_observed_schema_count": 0,
+            **artifact_audit,
             "cli_success_ok": ok["ok"],
             "cli_failure_ok": failure["ok"],
             "cli_failure_hint": failure["recoverability_hint"],
@@ -1292,6 +1340,24 @@ def main() -> int:
         assert dashboard["validation_json_checked_schema_count"] == len(validation_json_dashboard_smoke["checked_schemas"])
         assert dashboard["validation_json_checked_schema_unique_count"] == len(set(validation_json_dashboard_smoke["checked_schemas"]))
         assert dashboard["validation_json_checked_schema_duplicate_count"] == 0
+        assert dashboard["validation_json_observed_schema_count"] == validation_json_dashboard_smoke["observed_schema_count"]
+        assert dashboard["validation_json_observed_schema_rows"] == len(validation_json_dashboard_smoke["observed_schemas"])
+        assert dashboard["validation_json_observed_schema_count_mismatch"] == 0
+        assert dashboard["validation_json_unchecked_observed_schema_count"] == validation_json_dashboard_smoke["unchecked_observed_schema_count"]
+        assert dashboard["validation_json_unchecked_observed_schema_rows"] == len(validation_json_dashboard_smoke["unchecked_observed_schemas"])
+        assert dashboard["validation_json_unchecked_observed_schema_count_mismatch"] == 0
+        assert dashboard["validation_json_unchecked_observed_schemas"] == validation_json_dashboard_smoke["unchecked_observed_schemas"]
+        assert dashboard["validation_json_json_artifact_count"] == validation_json_dashboard_smoke["json_artifact_count"]
+        assert dashboard["validation_json_json_artifact_parsed_count"] == validation_json_dashboard_smoke["json_artifact_parsed_count"]
+        assert dashboard["validation_json_json_artifact_schema_count"] == validation_json_dashboard_smoke["json_artifact_schema_count"]
+        assert dashboard["validation_json_json_artifact_parse_failed_count"] == validation_json_dashboard_smoke["json_artifact_parse_failed_count"]
+        assert dashboard["validation_json_json_artifact_parse_failed"] == validation_json_dashboard_smoke["json_artifact_parse_failed"]
+        assert dashboard["validation_json_json_artifact_missing_schema_count"] == validation_json_dashboard_smoke["json_artifact_missing_schema_count"]
+        assert dashboard["validation_json_json_artifact_missing_schema"] == validation_json_dashboard_smoke["json_artifact_missing_schema"]
+        assert dashboard["validation_json_json_artifact_manifest_validated_count"] == validation_json_dashboard_smoke["json_artifact_manifest_validated_count"]
+        assert dashboard["validation_json_json_artifact_manifest_failed_count"] == validation_json_dashboard_smoke["json_artifact_manifest_failed_count"]
+        assert dashboard["validation_json_json_artifact_manifest_failed_names"] == validation_json_dashboard_smoke["json_artifact_manifest_failed_names"]
+        assert dashboard["validation_json_json_artifact_manifest_accounting_mismatch"] == validation_json_dashboard_smoke["json_artifact_manifest_accounting_mismatch"]
         assert dashboard["validation_json_cli_success_ok"] == validation_json_dashboard_smoke["cli_success_ok"]
         assert dashboard["validation_json_cli_failure_ok"] == validation_json_dashboard_smoke["cli_failure_ok"]
         assert dashboard["validation_json_cli_failure_hint"] == validation_json_dashboard_smoke["cli_failure_hint"]
@@ -2116,6 +2182,11 @@ def main() -> int:
         )
         assert strict_missing.returncode != 0
         assert "dashboard_index_missing_header_inspect=1" in strict_missing.stdout
+        artifact_audit = json_artifact_manifest_audit(
+            ROOT / "zig-out",
+            schemas_def,
+            exclude={"vort-validation-json-smoke.json"},
+        )
         observed_schemas = sorted(set(produced_json_schemas(ROOT / "zig-out")) | {"vort.validation_json_smoke"})
         summary = {
             "schema": "vort.validation_json_smoke",
@@ -2182,6 +2253,7 @@ def main() -> int:
             "observed_schemas": observed_schemas,
             "unchecked_observed_schemas": [],
             "unchecked_observed_schema_count": 0,
+            **artifact_audit,
             "cli_success_ok": ok["ok"],
             "cli_failure_ok": failure["ok"],
             "cli_failure_hint": failure["recoverability_hint"],

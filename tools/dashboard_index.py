@@ -7229,6 +7229,12 @@ def validation_json_health(artifacts: list[Path]) -> dict:
     unchecked_observed_schemas = unchecked_observed_schemas if isinstance(unchecked_observed_schemas, list) else []
     unchecked_observed_schema_count = int_field(smoke, "unchecked_observed_schema_count")
     unchecked_observed_schema_count_mismatch = abs(unchecked_observed_schema_count - len(unchecked_observed_schemas))
+    artifact_manifest_failed = smoke.get("json_artifact_manifest_failed_names") if isinstance(smoke, dict) else []
+    artifact_manifest_failed = artifact_manifest_failed if isinstance(artifact_manifest_failed, list) else []
+    artifact_parse_failed = smoke.get("json_artifact_parse_failed") if isinstance(smoke, dict) else []
+    artifact_parse_failed = artifact_parse_failed if isinstance(artifact_parse_failed, list) else []
+    artifact_missing_schema = smoke.get("json_artifact_missing_schema") if isinstance(smoke, dict) else []
+    artifact_missing_schema = artifact_missing_schema if isinstance(artifact_missing_schema, list) else []
     docs_case_count = int_field(docs_negative, "case_count")
     docs_cases = docs_negative.get("cases") if isinstance(docs_negative, dict) else []
     docs_cases = docs_cases if isinstance(docs_cases, list) else []
@@ -7273,6 +7279,17 @@ def validation_json_health(artifacts: list[Path]) -> dict:
         "unchecked_observed_schema_rows": len(unchecked_observed_schemas),
         "unchecked_observed_schema_count_mismatch": unchecked_observed_schema_count_mismatch,
         "unchecked_observed_schemas": unchecked_observed_schemas,
+        "json_artifact_count": int_field(smoke, "json_artifact_count"),
+        "json_artifact_parsed_count": int_field(smoke, "json_artifact_parsed_count"),
+        "json_artifact_schema_count": int_field(smoke, "json_artifact_schema_count"),
+        "json_artifact_parse_failed_count": int_field(smoke, "json_artifact_parse_failed_count"),
+        "json_artifact_parse_failed": artifact_parse_failed,
+        "json_artifact_missing_schema_count": int_field(smoke, "json_artifact_missing_schema_count"),
+        "json_artifact_missing_schema": artifact_missing_schema,
+        "json_artifact_manifest_validated_count": int_field(smoke, "json_artifact_manifest_validated_count"),
+        "json_artifact_manifest_failed_count": int_field(smoke, "json_artifact_manifest_failed_count"),
+        "json_artifact_manifest_failed_names": artifact_manifest_failed,
+        "json_artifact_manifest_accounting_mismatch": int_field(smoke, "json_artifact_manifest_accounting_mismatch"),
         "cli_success_ok": bool(smoke.get("cli_success_ok")) if isinstance(smoke, dict) else False,
         "cli_failure_ok": cli_failure_ok,
         "cli_failure_hint": cli_failure_hint,
@@ -8178,6 +8195,7 @@ def main() -> int:
             "| --- | ---: | --- |",
             f"| checked schemas | {validation_json['checked_schema_count']} | unique {validation_json['checked_schema_unique_count']}, duplicates {validation_json['checked_schema_duplicate_count']}, smoke present `{validation_json['present']}`, ok `{validation_json['ok']}` |",
             f"| observed schemas | {validation_json['observed_schema_count']} | rows {validation_json['observed_schema_rows']}, mismatch {validation_json['observed_schema_count_mismatch']}, unchecked {validation_json['unchecked_observed_schema_count']}, unchecked rows {validation_json['unchecked_observed_schema_rows']}, unchecked mismatch {validation_json['unchecked_observed_schema_count_mismatch']} |",
+            f"| JSON artifact manifest audit | {validation_json['json_artifact_manifest_validated_count']}/{validation_json['json_artifact_count']} | parsed {validation_json['json_artifact_parsed_count']}, schema {validation_json['json_artifact_schema_count']}, parse/missing/manifest failures {validation_json['json_artifact_parse_failed_count']}/{validation_json['json_artifact_missing_schema_count']}/{validation_json['json_artifact_manifest_failed_count']}, accounting mismatch {validation_json['json_artifact_manifest_accounting_mismatch']} |",
             f"| CLI validation | {1 if validation_json['cli_success_ok'] else 0} | failure-ok `{validation_json['cli_failure_ok']}`, hint `{validation_json['cli_failure_hint'] or 'none'}` |",
             f"| report rows | {validation_json['report_rows']} | corrupt rows {validation_json['corrupt_rows']} |",
             f"| docs negative cases | {validation_json['docs_negative_matched']}/{validation_json['docs_negative_case_count']} | rows {validation_json['docs_negative_rows']}, mismatch {validation_json['docs_negative_count_mismatch']}, row-unmatched {validation_json['docs_negative_row_unmatched']}, present `{validation_json['docs_negative_present']}`, healthy `{validation_json['healthy']}` |",
@@ -8938,6 +8956,17 @@ def main() -> int:
                 "validation_json_unchecked_observed_schema_rows": validation_json["unchecked_observed_schema_rows"],
                 "validation_json_unchecked_observed_schema_count_mismatch": validation_json["unchecked_observed_schema_count_mismatch"],
                 "validation_json_unchecked_observed_schemas": validation_json["unchecked_observed_schemas"],
+                "validation_json_json_artifact_count": validation_json["json_artifact_count"],
+                "validation_json_json_artifact_parsed_count": validation_json["json_artifact_parsed_count"],
+                "validation_json_json_artifact_schema_count": validation_json["json_artifact_schema_count"],
+                "validation_json_json_artifact_parse_failed_count": validation_json["json_artifact_parse_failed_count"],
+                "validation_json_json_artifact_parse_failed": validation_json["json_artifact_parse_failed"],
+                "validation_json_json_artifact_missing_schema_count": validation_json["json_artifact_missing_schema_count"],
+                "validation_json_json_artifact_missing_schema": validation_json["json_artifact_missing_schema"],
+                "validation_json_json_artifact_manifest_validated_count": validation_json["json_artifact_manifest_validated_count"],
+                "validation_json_json_artifact_manifest_failed_count": validation_json["json_artifact_manifest_failed_count"],
+                "validation_json_json_artifact_manifest_failed_names": validation_json["json_artifact_manifest_failed_names"],
+                "validation_json_json_artifact_manifest_accounting_mismatch": validation_json["json_artifact_manifest_accounting_mismatch"],
                 "validation_json_cli_success_ok": validation_json["cli_success_ok"],
                 "validation_json_cli_failure_ok": validation_json["cli_failure_ok"],
                 "validation_json_cli_failure_hint": validation_json["cli_failure_hint"],
