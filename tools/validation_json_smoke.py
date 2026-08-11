@@ -1147,29 +1147,44 @@ def main() -> int:
         assert dashboard["dashboard_config_index_present"] is True
         assert dashboard["dashboard_config_index_ok"] is True
         assert dashboard["dashboard_config_index_config_count"] == dashboard_config_index_smoke["config_count"]
+        assert dashboard["dashboard_config_index_config_rows"] == len(dashboard_config_index_smoke["configs"])
         assert dashboard["dashboard_config_index_matched"] == dashboard_config_index_smoke["config_count"]
         assert dashboard["dashboard_config_index_unmatched"] == 0
+        assert dashboard["dashboard_config_index_count_mismatch"] == 0
+        assert dashboard["dashboard_config_index_row_unmatched"] == 0
         assert dashboard["dashboard_config_index_negative_present"] is True
         assert dashboard["dashboard_config_index_negative_ok"] is True
         assert dashboard["dashboard_config_index_negative_case_count"] == dashboard_config_index_negative["case_count"]
+        assert dashboard["dashboard_config_index_negative_rows"] == len(dashboard_config_index_negative["cases"])
         assert dashboard["dashboard_config_index_negative_matched"] == dashboard_config_index_negative["case_count"]
         assert dashboard["dashboard_config_index_negative_unmatched"] == 0
+        assert dashboard["dashboard_config_index_negative_count_mismatch"] == 0
+        assert dashboard["dashboard_config_index_negative_row_unmatched"] == 0
         assert dashboard["dashboard_category_negative_present"] is True
         assert dashboard["dashboard_category_negative_ok"] is True
         assert dashboard["dashboard_category_negative_case_count"] == dashboard_category_negative["case_count"]
+        assert dashboard["dashboard_category_negative_rows"] == len(dashboard_category_negative["cases"])
         assert dashboard["dashboard_category_negative_matched"] == dashboard_category_negative["case_count"]
         assert dashboard["dashboard_category_negative_unmatched"] == 0
+        assert dashboard["dashboard_category_negative_count_mismatch"] == 0
+        assert dashboard["dashboard_category_negative_row_unmatched"] == 0
         assert dashboard["dashboard_producers_required_present"] is True
         assert dashboard["dashboard_producers_required_ok"] is True
         assert dashboard["dashboard_producers_required_artifact_count"] == dashboard_producers_required_smoke["artifact_count"]
+        assert dashboard["dashboard_producers_required_rows"] == len(dashboard_producers_required_smoke["cases"])
         assert dashboard["dashboard_producers_required_matched"] == dashboard_producers_required_smoke["artifact_count"]
         assert dashboard["dashboard_producers_required_unmatched"] == 0
+        assert dashboard["dashboard_producers_required_count_mismatch"] == 0
+        assert dashboard["dashboard_producers_required_row_unmatched"] == 0
         assert dashboard["dashboard_producers_required_smoke_gate_count"] == dashboard_producers_required_smoke["required_smoke_gate_count"]
         assert dashboard["dashboard_producers_negative_present"] is True
         assert dashboard["dashboard_producers_negative_ok"] is True
         assert dashboard["dashboard_producers_negative_case_count"] == dashboard_producers_negative["case_count"]
+        assert dashboard["dashboard_producers_negative_rows"] == len(dashboard_producers_negative["cases"])
         assert dashboard["dashboard_producers_negative_matched"] == dashboard_producers_negative["case_count"]
         assert dashboard["dashboard_producers_negative_unmatched"] == 0
+        assert dashboard["dashboard_producers_negative_count_mismatch"] == 0
+        assert dashboard["dashboard_producers_negative_row_unmatched"] == 0
         assert dashboard["validation_json_present"] is True
         assert dashboard["validation_json_ok"] is True
         assert dashboard["validation_json_healthy"] is True

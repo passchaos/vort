@@ -5485,67 +5485,113 @@ def dashboard_configuration_health(artifacts: list[Path]) -> dict:
             return 0
         return sum(1 for item in items if isinstance(item, dict) and item.get("matched") is True)
 
+    def item_rows(data: dict | None, field: str) -> int:
+        if not isinstance(data, dict):
+            return 0
+        items = data.get(field)
+        return len(items) if isinstance(items, list) else 0
+
     config_count = int_field(config_smoke, "config_count")
+    config_rows = item_rows(config_smoke, "configs")
     config_matched = matched_items(config_smoke, "configs")
+    config_count_mismatch = abs(config_count - config_rows)
+    config_row_unmatched = max(0, config_rows - config_matched)
     config_negative_count = int_field(config_negative, "case_count")
+    config_negative_rows = item_rows(config_negative, "cases")
     config_negative_matched = matched_items(config_negative, "cases")
+    config_negative_count_mismatch = abs(config_negative_count - config_negative_rows)
+    config_negative_row_unmatched = max(0, config_negative_rows - config_negative_matched)
     category_negative_count = int_field(category_negative, "case_count")
+    category_negative_rows = item_rows(category_negative, "cases")
     category_negative_matched = matched_items(category_negative, "cases")
+    category_negative_count_mismatch = abs(category_negative_count - category_negative_rows)
+    category_negative_row_unmatched = max(0, category_negative_rows - category_negative_matched)
     producers_required_count = int_field(producers_required, "artifact_count")
+    producers_required_rows = item_rows(producers_required, "cases")
     producers_required_matched = matched_items(producers_required, "cases")
+    producers_required_count_mismatch = abs(producers_required_count - producers_required_rows)
+    producers_required_row_unmatched = max(0, producers_required_rows - producers_required_matched)
     producers_required_smoke_gate_count = int_field(producers_required, "required_smoke_gate_count")
     producers_negative_count = int_field(producers_negative, "case_count")
+    producers_negative_rows = item_rows(producers_negative, "cases")
     producers_negative_matched = matched_items(producers_negative, "cases")
+    producers_negative_count_mismatch = abs(producers_negative_count - producers_negative_rows)
+    producers_negative_row_unmatched = max(0, producers_negative_rows - producers_negative_matched)
     healthy = (
         isinstance(config_smoke, dict)
         and bool(config_smoke.get("ok"))
         and config_count > 0
         and config_matched == config_count
+        and config_count_mismatch == 0
+        and config_row_unmatched == 0
         and isinstance(config_negative, dict)
         and bool(config_negative.get("ok"))
         and config_negative_count > 0
         and config_negative_matched == config_negative_count
+        and config_negative_count_mismatch == 0
+        and config_negative_row_unmatched == 0
         and isinstance(category_negative, dict)
         and bool(category_negative.get("ok"))
         and category_negative_count > 0
         and category_negative_matched == category_negative_count
+        and category_negative_count_mismatch == 0
+        and category_negative_row_unmatched == 0
         and isinstance(producers_required, dict)
         and bool(producers_required.get("ok"))
         and producers_required_count > 0
         and producers_required_matched == producers_required_count
+        and producers_required_count_mismatch == 0
+        and producers_required_row_unmatched == 0
         and producers_required_smoke_gate_count > 0
         and isinstance(producers_negative, dict)
         and bool(producers_negative.get("ok"))
         and producers_negative_count > 0
         and producers_negative_matched == producers_negative_count
+        and producers_negative_count_mismatch == 0
+        and producers_negative_row_unmatched == 0
     )
     return {
         "config_index_present": isinstance(config_smoke, dict),
         "config_index_ok": bool(config_smoke.get("ok")) if isinstance(config_smoke, dict) else False,
         "config_index_config_count": config_count,
+        "config_index_config_rows": config_rows,
         "config_index_matched": config_matched,
         "config_index_unmatched": config_count - config_matched,
+        "config_index_count_mismatch": config_count_mismatch,
+        "config_index_row_unmatched": config_row_unmatched,
         "config_index_negative_present": isinstance(config_negative, dict),
         "config_index_negative_ok": bool(config_negative.get("ok")) if isinstance(config_negative, dict) else False,
         "config_index_negative_case_count": config_negative_count,
+        "config_index_negative_rows": config_negative_rows,
         "config_index_negative_matched": config_negative_matched,
         "config_index_negative_unmatched": config_negative_count - config_negative_matched,
+        "config_index_negative_count_mismatch": config_negative_count_mismatch,
+        "config_index_negative_row_unmatched": config_negative_row_unmatched,
         "category_negative_present": isinstance(category_negative, dict),
         "category_negative_ok": bool(category_negative.get("ok")) if isinstance(category_negative, dict) else False,
         "category_negative_case_count": category_negative_count,
+        "category_negative_rows": category_negative_rows,
         "category_negative_matched": category_negative_matched,
         "category_negative_unmatched": category_negative_count - category_negative_matched,
+        "category_negative_count_mismatch": category_negative_count_mismatch,
+        "category_negative_row_unmatched": category_negative_row_unmatched,
         "producers_required_present": isinstance(producers_required, dict),
         "producers_required_ok": bool(producers_required.get("ok")) if isinstance(producers_required, dict) else False,
         "producers_required_artifact_count": producers_required_count,
+        "producers_required_rows": producers_required_rows,
         "producers_required_matched": producers_required_matched,
         "producers_required_unmatched": producers_required_count - producers_required_matched,
+        "producers_required_count_mismatch": producers_required_count_mismatch,
+        "producers_required_row_unmatched": producers_required_row_unmatched,
         "producers_required_smoke_gate_count": producers_required_smoke_gate_count,
         "producers_negative_present": isinstance(producers_negative, dict),
         "producers_negative_ok": bool(producers_negative.get("ok")) if isinstance(producers_negative, dict) else False,
         "producers_negative_case_count": producers_negative_count,
+        "producers_negative_rows": producers_negative_rows,
         "producers_negative_matched": producers_negative_matched,
         "producers_negative_unmatched": producers_negative_count - producers_negative_matched,
+        "producers_negative_count_mismatch": producers_negative_count_mismatch,
+        "producers_negative_row_unmatched": producers_negative_row_unmatched,
         "healthy": healthy,
     }
 
@@ -6357,10 +6403,11 @@ def main() -> int:
             "",
             "| category | count | detail |",
             "| --- | ---: | --- |",
-            f"| config index | {dashboard_configuration['config_index_config_count']} | matched {dashboard_configuration['config_index_matched']}, negative {dashboard_configuration['config_index_negative_matched']}/{dashboard_configuration['config_index_negative_case_count']} |",
-            f"| category guardrails | {dashboard_configuration['category_negative_case_count']} | matched {dashboard_configuration['category_negative_matched']}, present `{dashboard_configuration['category_negative_present']}` |",
-            f"| required producers | {dashboard_configuration['producers_required_artifact_count']} | matched {dashboard_configuration['producers_required_matched']}, required smoke gates {dashboard_configuration['producers_required_smoke_gate_count']} |",
-            f"| producer guardrails | {dashboard_configuration['producers_negative_case_count']} | matched {dashboard_configuration['producers_negative_matched']}, healthy `{dashboard_configuration['healthy']}` |",
+            f"| config index | {dashboard_configuration['config_index_config_count']} | rows {dashboard_configuration['config_index_config_rows']}, matched {dashboard_configuration['config_index_matched']}, mismatch {dashboard_configuration['config_index_count_mismatch']}, row-unmatched {dashboard_configuration['config_index_row_unmatched']} |",
+            f"| config negative | {dashboard_configuration['config_index_negative_case_count']} | rows {dashboard_configuration['config_index_negative_rows']}, matched {dashboard_configuration['config_index_negative_matched']}, mismatch {dashboard_configuration['config_index_negative_count_mismatch']}, row-unmatched {dashboard_configuration['config_index_negative_row_unmatched']} |",
+            f"| category guardrails | {dashboard_configuration['category_negative_case_count']} | rows {dashboard_configuration['category_negative_rows']}, matched {dashboard_configuration['category_negative_matched']}, mismatch {dashboard_configuration['category_negative_count_mismatch']}, row-unmatched {dashboard_configuration['category_negative_row_unmatched']} |",
+            f"| required producers | {dashboard_configuration['producers_required_artifact_count']} | rows {dashboard_configuration['producers_required_rows']}, matched {dashboard_configuration['producers_required_matched']}, mismatch {dashboard_configuration['producers_required_count_mismatch']}, row-unmatched {dashboard_configuration['producers_required_row_unmatched']}, required smoke gates {dashboard_configuration['producers_required_smoke_gate_count']} |",
+            f"| producer guardrails | {dashboard_configuration['producers_negative_case_count']} | rows {dashboard_configuration['producers_negative_rows']}, matched {dashboard_configuration['producers_negative_matched']}, mismatch {dashboard_configuration['producers_negative_count_mismatch']}, row-unmatched {dashboard_configuration['producers_negative_row_unmatched']}, healthy `{dashboard_configuration['healthy']}` |",
             "",
         ]
     )
@@ -7036,29 +7083,44 @@ def main() -> int:
                 "dashboard_config_index_present": dashboard_configuration["config_index_present"],
                 "dashboard_config_index_ok": dashboard_configuration["config_index_ok"],
                 "dashboard_config_index_config_count": dashboard_configuration["config_index_config_count"],
+                "dashboard_config_index_config_rows": dashboard_configuration["config_index_config_rows"],
                 "dashboard_config_index_matched": dashboard_configuration["config_index_matched"],
                 "dashboard_config_index_unmatched": dashboard_configuration["config_index_unmatched"],
+                "dashboard_config_index_count_mismatch": dashboard_configuration["config_index_count_mismatch"],
+                "dashboard_config_index_row_unmatched": dashboard_configuration["config_index_row_unmatched"],
                 "dashboard_config_index_negative_present": dashboard_configuration["config_index_negative_present"],
                 "dashboard_config_index_negative_ok": dashboard_configuration["config_index_negative_ok"],
                 "dashboard_config_index_negative_case_count": dashboard_configuration["config_index_negative_case_count"],
+                "dashboard_config_index_negative_rows": dashboard_configuration["config_index_negative_rows"],
                 "dashboard_config_index_negative_matched": dashboard_configuration["config_index_negative_matched"],
                 "dashboard_config_index_negative_unmatched": dashboard_configuration["config_index_negative_unmatched"],
+                "dashboard_config_index_negative_count_mismatch": dashboard_configuration["config_index_negative_count_mismatch"],
+                "dashboard_config_index_negative_row_unmatched": dashboard_configuration["config_index_negative_row_unmatched"],
                 "dashboard_category_negative_present": dashboard_configuration["category_negative_present"],
                 "dashboard_category_negative_ok": dashboard_configuration["category_negative_ok"],
                 "dashboard_category_negative_case_count": dashboard_configuration["category_negative_case_count"],
+                "dashboard_category_negative_rows": dashboard_configuration["category_negative_rows"],
                 "dashboard_category_negative_matched": dashboard_configuration["category_negative_matched"],
                 "dashboard_category_negative_unmatched": dashboard_configuration["category_negative_unmatched"],
+                "dashboard_category_negative_count_mismatch": dashboard_configuration["category_negative_count_mismatch"],
+                "dashboard_category_negative_row_unmatched": dashboard_configuration["category_negative_row_unmatched"],
                 "dashboard_producers_required_present": dashboard_configuration["producers_required_present"],
                 "dashboard_producers_required_ok": dashboard_configuration["producers_required_ok"],
                 "dashboard_producers_required_artifact_count": dashboard_configuration["producers_required_artifact_count"],
+                "dashboard_producers_required_rows": dashboard_configuration["producers_required_rows"],
                 "dashboard_producers_required_matched": dashboard_configuration["producers_required_matched"],
                 "dashboard_producers_required_unmatched": dashboard_configuration["producers_required_unmatched"],
+                "dashboard_producers_required_count_mismatch": dashboard_configuration["producers_required_count_mismatch"],
+                "dashboard_producers_required_row_unmatched": dashboard_configuration["producers_required_row_unmatched"],
                 "dashboard_producers_required_smoke_gate_count": dashboard_configuration["producers_required_smoke_gate_count"],
                 "dashboard_producers_negative_present": dashboard_configuration["producers_negative_present"],
                 "dashboard_producers_negative_ok": dashboard_configuration["producers_negative_ok"],
                 "dashboard_producers_negative_case_count": dashboard_configuration["producers_negative_case_count"],
+                "dashboard_producers_negative_rows": dashboard_configuration["producers_negative_rows"],
                 "dashboard_producers_negative_matched": dashboard_configuration["producers_negative_matched"],
                 "dashboard_producers_negative_unmatched": dashboard_configuration["producers_negative_unmatched"],
+                "dashboard_producers_negative_count_mismatch": dashboard_configuration["producers_negative_count_mismatch"],
+                "dashboard_producers_negative_row_unmatched": dashboard_configuration["producers_negative_row_unmatched"],
                 "validation_json_present": validation_json["present"],
                 "validation_json_ok": validation_json["ok"],
                 "validation_json_healthy": validation_json["healthy"],

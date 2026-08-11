@@ -4432,10 +4432,11 @@ def main() -> int:
                 [
                     "## Dashboard configuration coverage",
                     "| category | count | detail |",
-                    "| config index | 3 | matched 3, negative 2/2 |",
-                    "| category guardrails | 3 | matched 3, present `True` |",
-                    "| required producers | 4 | matched 4, required smoke gates 2 |",
-                    "| producer guardrails | 2 | matched 2, healthy `True` |",
+                    "| config index | 3 | rows 3, matched 3, mismatch 0, row-unmatched 0 |",
+                    "| config negative | 2 | rows 2, matched 2, mismatch 0, row-unmatched 0 |",
+                    "| category guardrails | 3 | rows 3, matched 3, mismatch 0, row-unmatched 0 |",
+                    "| required producers | 4 | rows 4, matched 4, mismatch 0, row-unmatched 0, required smoke gates 2 |",
+                    "| producer guardrails | 2 | rows 2, matched 2, mismatch 0, row-unmatched 0, healthy `True` |",
                 ],
             )
         )

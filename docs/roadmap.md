@@ -2646,3 +2646,7 @@ architecture blindly.
   and Zstd summary JSON for block-count consistency, declared-content slack,
   and impossible metadata/checksum frame overflows. Dashboard health now exposes
   mismatch/slack/overflow counters before native summary coverage can pass.
+- Tightened dashboard configuration health by requiring config, category,
+  required-producer, and producer-negative smoke row counts to match their
+  declared counts and by exposing count-mismatch/row-unmatched counters in the
+  dashboard manifest and Markdown summary.
