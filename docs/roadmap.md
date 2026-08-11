@@ -2654,3 +2654,7 @@ architecture blindly.
   be unique, CLI failure smoke to retain a recoverability hint, and docs-negative
   smoke rows to match their declared case count. Dashboard health now exposes
   schema duplicate and docs-negative row/count mismatch counters.
+- Tightened Python zlib differential dashboard health by deriving expected
+  file-hex, dictionary, malformed, and CLI outcome floors from the retained
+  summary. Dashboard health now exposes mismatch and shortfall counters before
+  the differential smoke can pass.

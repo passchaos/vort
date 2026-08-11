@@ -4927,10 +4927,10 @@ def main() -> int:
                     "## Python zlib differential coverage",
                     "| category | count | detail |",
                     "| payloads | 3 | large-file/match-heavy/dynamic 1/1/1 |",
-                    "| file hex encodes | 3 | dictionary cases 1 |",
-                    "| dictionary encodes | 2 | zlib/raw 1/1 |",
-                    "| malformed cases | 2 | wrapper/deflate 1/1 |",
-                    "| CLI outcomes | 10 | successes/expected-failures 8/2 |",
+                    "| file hex encodes | 3 | expected 3, mismatch 0 |",
+                    "| dictionary encodes | 2 | zlib/raw 1/1, dictionary cases 1 |",
+                    "| malformed cases | 2 | wrapper/deflate 1/1, expected floor 2 |",
+                    "| CLI outcomes | 10 | successes/expected-failures 8/2, shortfalls 0/0/0 |",
                 ],
             )
         )

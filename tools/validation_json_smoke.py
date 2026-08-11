@@ -365,6 +365,11 @@ def main() -> int:
         assert python_zlib_diff["dictionary_cases"] >= 1
         assert python_zlib_diff["zlib_dict_encode_cases"] >= 1
         assert python_zlib_diff["raw_dict_encode_cases"] >= 1
+        assert python_zlib_diff["zlib_dict_encode_cases"] >= python_zlib_diff["dictionary_cases"]
+        assert python_zlib_diff["raw_dict_encode_cases"] >= python_zlib_diff["dictionary_cases"]
+        assert python_zlib_diff["file_hex_encode_cases"] == python_zlib_diff["large_file_payloads"] * 3
+        assert python_zlib_diff["malformed_wrapper_cases"] >= 1
+        assert python_zlib_diff["malformed_deflate_cases"] >= 1
         assert python_zlib_diff["cli_successes"] >= 1
         assert python_zlib_diff["expected_failures"] >= 1
         validate_value_against_manifest(python_zlib_diff, schemas_def)
@@ -1619,10 +1624,23 @@ def main() -> int:
         assert dashboard["python_zlib_diff_dictionary_cases"] == python_zlib_diff["dictionary_cases"]
         assert dashboard["python_zlib_diff_zlib_dict_encode_cases"] == python_zlib_diff["zlib_dict_encode_cases"]
         assert dashboard["python_zlib_diff_raw_dict_encode_cases"] == python_zlib_diff["raw_dict_encode_cases"]
+        assert dashboard["python_zlib_diff_dictionary_encode_cases"] == python_zlib_diff["zlib_dict_encode_cases"] + python_zlib_diff["raw_dict_encode_cases"]
         assert dashboard["python_zlib_diff_malformed_wrapper_cases"] == python_zlib_diff["malformed_wrapper_cases"]
         assert dashboard["python_zlib_diff_malformed_deflate_cases"] == python_zlib_diff["malformed_deflate_cases"]
+        assert dashboard["python_zlib_diff_malformed_cases"] == python_zlib_diff["malformed_wrapper_cases"] + python_zlib_diff["malformed_deflate_cases"]
         assert dashboard["python_zlib_diff_cli_successes"] == python_zlib_diff["cli_successes"]
         assert dashboard["python_zlib_diff_expected_failures"] == python_zlib_diff["expected_failures"]
+        assert dashboard["python_zlib_diff_cli_total_outcomes"] == python_zlib_diff["cli_successes"] + python_zlib_diff["expected_failures"]
+        assert dashboard["python_zlib_diff_file_hex_expected_cases"] == python_zlib_diff["large_file_payloads"] * 3
+        assert dashboard["python_zlib_diff_file_hex_case_mismatch"] == 0
+        assert dashboard["python_zlib_diff_cli_success_floor"] == (
+            python_zlib_diff["payloads"] + python_zlib_diff["file_hex_encode_cases"] + dashboard["python_zlib_diff_dictionary_encode_cases"]
+        )
+        assert dashboard["python_zlib_diff_cli_success_shortfall"] == 0
+        assert dashboard["python_zlib_diff_expected_failure_floor"] == dashboard["python_zlib_diff_malformed_cases"]
+        assert dashboard["python_zlib_diff_expected_failure_shortfall"] == 0
+        assert dashboard["python_zlib_diff_cli_outcome_floor"] == dashboard["python_zlib_diff_cli_success_floor"] + dashboard["python_zlib_diff_expected_failure_floor"]
+        assert dashboard["python_zlib_diff_cli_outcome_shortfall"] == 0
         dashboard_markdown = dashboard_path.read_text()
         assert dashboard["native_codec_probes_present"] is True
         assert dashboard["native_codec_probes_ok"] is True

@@ -4795,6 +4795,17 @@ def python_zlib_diff_health(artifacts: list[Path]) -> dict:
         malformed_deflate_cases = int(data.get("malformed_deflate_cases") or 0)
         cli_successes = int(data.get("cli_successes") or 0)
         expected_failures = int(data.get("expected_failures") or 0)
+        dictionary_encode_cases = zlib_dict_encode_cases + raw_dict_encode_cases
+        malformed_cases = malformed_wrapper_cases + malformed_deflate_cases
+        cli_total_outcomes = cli_successes + expected_failures
+        file_hex_expected_cases = large_file_payloads * 3
+        file_hex_case_mismatch = abs(file_hex_encode_cases - file_hex_expected_cases)
+        cli_success_floor = payloads + file_hex_encode_cases + dictionary_encode_cases
+        expected_failure_floor = malformed_cases
+        cli_outcome_floor = cli_success_floor + expected_failure_floor
+        cli_success_shortfall = max(0, cli_success_floor - cli_successes)
+        expected_failure_shortfall = max(0, expected_failure_floor - expected_failures)
+        cli_outcome_shortfall = max(0, cli_outcome_floor - cli_total_outcomes)
         return {
             "present": True,
             "ok": bool(data.get("ok")),
@@ -4806,10 +4817,21 @@ def python_zlib_diff_health(artifacts: list[Path]) -> dict:
             "dictionary_cases": dictionary_cases,
             "zlib_dict_encode_cases": zlib_dict_encode_cases,
             "raw_dict_encode_cases": raw_dict_encode_cases,
+            "dictionary_encode_cases": dictionary_encode_cases,
             "malformed_wrapper_cases": malformed_wrapper_cases,
             "malformed_deflate_cases": malformed_deflate_cases,
+            "malformed_cases": malformed_cases,
             "cli_successes": cli_successes,
             "expected_failures": expected_failures,
+            "cli_total_outcomes": cli_total_outcomes,
+            "file_hex_expected_cases": file_hex_expected_cases,
+            "file_hex_case_mismatch": file_hex_case_mismatch,
+            "cli_success_floor": cli_success_floor,
+            "cli_success_shortfall": cli_success_shortfall,
+            "expected_failure_floor": expected_failure_floor,
+            "expected_failure_shortfall": expected_failure_shortfall,
+            "cli_outcome_floor": cli_outcome_floor,
+            "cli_outcome_shortfall": cli_outcome_shortfall,
             "healthy": bool(data.get("ok"))
             and payloads > 0
             and large_file_payloads > 0
@@ -4817,12 +4839,19 @@ def python_zlib_diff_health(artifacts: list[Path]) -> dict:
             and match_heavy_payloads > 0
             and dynamic_payloads > 0
             and dictionary_cases > 0
-            and zlib_dict_encode_cases > 0
-            and raw_dict_encode_cases > 0
+            and zlib_dict_encode_cases >= dictionary_cases
+            and raw_dict_encode_cases >= dictionary_cases
+            and dictionary_encode_cases > 0
             and malformed_wrapper_cases > 0
             and malformed_deflate_cases > 0
+            and malformed_cases > 0
             and cli_successes > 0
-            and expected_failures > 0,
+            and expected_failures > 0
+            and cli_total_outcomes > 0
+            and file_hex_case_mismatch == 0
+            and cli_success_shortfall == 0
+            and expected_failure_shortfall == 0
+            and cli_outcome_shortfall == 0,
         }
     return {
         "present": False,
@@ -4835,10 +4864,21 @@ def python_zlib_diff_health(artifacts: list[Path]) -> dict:
         "dictionary_cases": 0,
         "zlib_dict_encode_cases": 0,
         "raw_dict_encode_cases": 0,
+        "dictionary_encode_cases": 0,
         "malformed_wrapper_cases": 0,
         "malformed_deflate_cases": 0,
+        "malformed_cases": 0,
         "cli_successes": 0,
         "expected_failures": 0,
+        "cli_total_outcomes": 0,
+        "file_hex_expected_cases": 0,
+        "file_hex_case_mismatch": 0,
+        "cli_success_floor": 0,
+        "cli_success_shortfall": 0,
+        "expected_failure_floor": 0,
+        "expected_failure_shortfall": 0,
+        "cli_outcome_floor": 0,
+        "cli_outcome_shortfall": 0,
         "healthy": False,
     }
 
@@ -6793,10 +6833,10 @@ def main() -> int:
             "| category | count | detail |",
             "| --- | ---: | --- |",
             f"| payloads | {python_zlib_health['payloads']} | large-file/match-heavy/dynamic {python_zlib_health['large_file_payloads']}/{python_zlib_health['match_heavy_payloads']}/{python_zlib_health['dynamic_payloads']} |",
-            f"| file hex encodes | {python_zlib_health['file_hex_encode_cases']} | dictionary cases {python_zlib_health['dictionary_cases']} |",
-            f"| dictionary encodes | {python_zlib_health['zlib_dict_encode_cases'] + python_zlib_health['raw_dict_encode_cases']} | zlib/raw {python_zlib_health['zlib_dict_encode_cases']}/{python_zlib_health['raw_dict_encode_cases']} |",
-            f"| malformed cases | {python_zlib_health['malformed_wrapper_cases'] + python_zlib_health['malformed_deflate_cases']} | wrapper/deflate {python_zlib_health['malformed_wrapper_cases']}/{python_zlib_health['malformed_deflate_cases']} |",
-            f"| CLI outcomes | {python_zlib_health['cli_successes'] + python_zlib_health['expected_failures']} | successes/expected-failures {python_zlib_health['cli_successes']}/{python_zlib_health['expected_failures']} |",
+            f"| file hex encodes | {python_zlib_health['file_hex_encode_cases']} | expected {python_zlib_health['file_hex_expected_cases']}, mismatch {python_zlib_health['file_hex_case_mismatch']} |",
+            f"| dictionary encodes | {python_zlib_health['dictionary_encode_cases']} | zlib/raw {python_zlib_health['zlib_dict_encode_cases']}/{python_zlib_health['raw_dict_encode_cases']}, dictionary cases {python_zlib_health['dictionary_cases']} |",
+            f"| malformed cases | {python_zlib_health['malformed_cases']} | wrapper/deflate {python_zlib_health['malformed_wrapper_cases']}/{python_zlib_health['malformed_deflate_cases']}, expected floor {python_zlib_health['expected_failure_floor']} |",
+            f"| CLI outcomes | {python_zlib_health['cli_total_outcomes']} | successes/expected-failures {python_zlib_health['cli_successes']}/{python_zlib_health['expected_failures']}, shortfalls {python_zlib_health['cli_success_shortfall']}/{python_zlib_health['expected_failure_shortfall']}/{python_zlib_health['cli_outcome_shortfall']} |",
             "",
         ]
     )
@@ -7596,10 +7636,21 @@ def main() -> int:
                 "python_zlib_diff_dictionary_cases": python_zlib_health["dictionary_cases"],
                 "python_zlib_diff_zlib_dict_encode_cases": python_zlib_health["zlib_dict_encode_cases"],
                 "python_zlib_diff_raw_dict_encode_cases": python_zlib_health["raw_dict_encode_cases"],
+                "python_zlib_diff_dictionary_encode_cases": python_zlib_health["dictionary_encode_cases"],
                 "python_zlib_diff_malformed_wrapper_cases": python_zlib_health["malformed_wrapper_cases"],
                 "python_zlib_diff_malformed_deflate_cases": python_zlib_health["malformed_deflate_cases"],
+                "python_zlib_diff_malformed_cases": python_zlib_health["malformed_cases"],
                 "python_zlib_diff_cli_successes": python_zlib_health["cli_successes"],
                 "python_zlib_diff_expected_failures": python_zlib_health["expected_failures"],
+                "python_zlib_diff_cli_total_outcomes": python_zlib_health["cli_total_outcomes"],
+                "python_zlib_diff_file_hex_expected_cases": python_zlib_health["file_hex_expected_cases"],
+                "python_zlib_diff_file_hex_case_mismatch": python_zlib_health["file_hex_case_mismatch"],
+                "python_zlib_diff_cli_success_floor": python_zlib_health["cli_success_floor"],
+                "python_zlib_diff_cli_success_shortfall": python_zlib_health["cli_success_shortfall"],
+                "python_zlib_diff_expected_failure_floor": python_zlib_health["expected_failure_floor"],
+                "python_zlib_diff_expected_failure_shortfall": python_zlib_health["expected_failure_shortfall"],
+                "python_zlib_diff_cli_outcome_floor": python_zlib_health["cli_outcome_floor"],
+                "python_zlib_diff_cli_outcome_shortfall": python_zlib_health["cli_outcome_shortfall"],
                 "native_codec_probes_present": native_codec_health["present"],
                 "native_codec_probes_ok": native_codec_health["ok"],
                 "native_codec_probes_markdown_present": native_codec_health["markdown_present"],

@@ -906,10 +906,23 @@
             "python_zlib_diff_dictionary_cases",
             "python_zlib_diff_zlib_dict_encode_cases",
             "python_zlib_diff_raw_dict_encode_cases",
+            "python_zlib_diff_dictionary_encode_cases",
             "python_zlib_diff_malformed_wrapper_cases",
             "python_zlib_diff_malformed_deflate_cases",
+            "python_zlib_diff_malformed_cases",
             "python_zlib_diff_cli_successes",
-            "python_zlib_diff_expected_failures"
+            "python_zlib_diff_expected_failures",
+            "python_zlib_diff_cli_total_outcomes",
+            "python_zlib_diff_file_hex_expected_cases",
+            "python_zlib_diff_cli_success_floor",
+            "python_zlib_diff_expected_failure_floor",
+            "python_zlib_diff_cli_outcome_floor"
+          ],
+          "zero": [
+            "python_zlib_diff_file_hex_case_mismatch",
+            "python_zlib_diff_cli_success_shortfall",
+            "python_zlib_diff_expected_failure_shortfall",
+            "python_zlib_diff_cli_outcome_shortfall"
           ]
         },
         "sidecar_corrupt_healthy": {
@@ -2108,6 +2121,17 @@
         "python_zlib_diff_present": "bool",
         "python_zlib_diff_raw_dict_encode_cases": "int",
         "python_zlib_diff_zlib_dict_encode_cases": "int",
+        "python_zlib_diff_dictionary_encode_cases": "int",
+        "python_zlib_diff_malformed_cases": "int",
+        "python_zlib_diff_cli_total_outcomes": "int",
+        "python_zlib_diff_file_hex_expected_cases": "int",
+        "python_zlib_diff_file_hex_case_mismatch": "int",
+        "python_zlib_diff_cli_success_floor": "int",
+        "python_zlib_diff_cli_success_shortfall": "int",
+        "python_zlib_diff_expected_failure_floor": "int",
+        "python_zlib_diff_expected_failure_shortfall": "int",
+        "python_zlib_diff_cli_outcome_floor": "int",
+        "python_zlib_diff_cli_outcome_shortfall": "int",
         "schema": "str",
         "schema_version": "int",
         "sidecar_corrupt_full_not_rejected_rows": "int",
@@ -2817,6 +2841,56 @@
           "left": "chunked_zlib_bench_markdown_matched",
           "op": "eq",
           "right": "chunked_zlib_bench_markdown_rows"
+        },
+        {
+          "left": "python_zlib_diff_file_hex_encode_cases",
+          "op": "eq",
+          "right": "python_zlib_diff_file_hex_expected_cases"
+        },
+        {
+          "left": "python_zlib_diff_dictionary_encode_cases",
+          "op": "ge",
+          "right": "python_zlib_diff_zlib_dict_encode_cases"
+        },
+        {
+          "left": "python_zlib_diff_dictionary_encode_cases",
+          "op": "ge",
+          "right": "python_zlib_diff_raw_dict_encode_cases"
+        },
+        {
+          "left": "python_zlib_diff_zlib_dict_encode_cases",
+          "op": "ge",
+          "right": "python_zlib_diff_dictionary_cases"
+        },
+        {
+          "left": "python_zlib_diff_raw_dict_encode_cases",
+          "op": "ge",
+          "right": "python_zlib_diff_dictionary_cases"
+        },
+        {
+          "left": "python_zlib_diff_malformed_cases",
+          "op": "ge",
+          "right": "python_zlib_diff_malformed_wrapper_cases"
+        },
+        {
+          "left": "python_zlib_diff_malformed_cases",
+          "op": "ge",
+          "right": "python_zlib_diff_malformed_deflate_cases"
+        },
+        {
+          "left": "python_zlib_diff_cli_successes",
+          "op": "ge",
+          "right": "python_zlib_diff_cli_success_floor"
+        },
+        {
+          "left": "python_zlib_diff_expected_failures",
+          "op": "ge",
+          "right": "python_zlib_diff_expected_failure_floor"
+        },
+        {
+          "left": "python_zlib_diff_cli_total_outcomes",
+          "op": "ge",
+          "right": "python_zlib_diff_cli_outcome_floor"
         },
         {
           "left": "validation_json_checked_schema_unique_count",
