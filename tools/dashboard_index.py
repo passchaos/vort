@@ -2283,15 +2283,37 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
     report_markdown_matrix_unmatched = report_markdown_matrix_rows - report_markdown_matrix_matched
     report_markdown_entry_unmatched = report_markdown_entry_rows - report_markdown_entry_matched
 
-    report_negative_cases = report_negative.get("cases") if isinstance(report_negative, dict) else []
-    report_negative_cases = report_negative_cases if isinstance(report_negative_cases, list) else []
-    report_negative_matched = sum(1 for row in report_negative_cases if isinstance(row, dict) and row.get("matched") is True)
-    report_negative_case_count = int_field(report_negative, "case_count")
-    report_negative_unmatched = max(report_negative_case_count, len(report_negative_cases)) - report_negative_matched
+    def negative_smoke_case_stats(data: dict | None) -> dict[str, int]:
+        cases = data.get("cases") if isinstance(data, dict) else []
+        cases = cases if isinstance(cases, list) else []
+        case_count = int_field(data, "case_count")
+        matched = sum(1 for row in cases if isinstance(row, dict) and row.get("matched") is True)
+        rows = len(cases)
+        return {
+            "case_count": case_count,
+            "rows": rows,
+            "matched": matched,
+            # Count drift and unmatched rows are tracked separately so a
+            # dashboard cannot pass when an extra matched row hides behind a
+            # lower declared case_count, or when an extra unmatched row hides
+            # behind a matched count equal to case_count.
+            "count_mismatch": abs(case_count - rows),
+            "unmatched": max(case_count, rows) - matched,
+        }
 
-    negative_cases = negative.get("cases") if isinstance(negative, dict) else []
-    negative_cases = negative_cases if isinstance(negative_cases, list) else []
-    negative_matched = sum(1 for row in negative_cases if isinstance(row, dict) and row.get("matched") is True)
+    report_negative_stats = negative_smoke_case_stats(report_negative)
+    report_negative_case_count = report_negative_stats["case_count"]
+    report_negative_rows = report_negative_stats["rows"]
+    report_negative_matched = report_negative_stats["matched"]
+    report_negative_count_mismatch = report_negative_stats["count_mismatch"]
+    report_negative_unmatched = report_negative_stats["unmatched"]
+
+    negative_stats = negative_smoke_case_stats(negative)
+    negative_case_count = negative_stats["case_count"]
+    negative_rows = negative_stats["rows"]
+    negative_matched = negative_stats["matched"]
+    negative_count_mismatch = negative_stats["count_mismatch"]
+    negative_unmatched = negative_stats["unmatched"]
     candidate_present = isinstance(candidate, dict)
     candidate_markdown = candidate_markdown_health(candidate, candidate_markdown)
     upstream_report_present = isinstance(upstream_report, dict)
@@ -2317,7 +2339,6 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
     audit_entry_count = int_field(audit, "entry_count")
     audit_anchor_count = int_field(audit, "anchor_count")
     audit_generated_zig_bytes = int_field(audit, "generated_zig_bytes")
-    negative_case_count = int_field(negative, "case_count")
     core_healthy = (
         candidate_present
         and bool(candidate_markdown["present"])
@@ -2360,7 +2381,9 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
         and audit_generated_zig_bytes > 0
         and bool(negative.get("ok"))
         and negative_case_count > 0
+        and negative_count_mismatch == 0
         and negative_matched == negative_case_count
+        and negative_unmatched == 0
     )
     report_healthy = (
         report_present
@@ -2389,6 +2412,9 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
         and report_markdown_entry_unmatched == 0
         and bool(report_negative.get("ok"))
         and report_negative_case_count > 0
+        and report_negative_rows == report_negative_case_count
+        and report_negative_matched == report_negative_case_count
+        and report_negative_count_mismatch == 0
         and report_negative_unmatched == 0
     )
     healthy = core_healthy and report_healthy
@@ -2441,7 +2467,10 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
         "audit_anchor_count": audit_anchor_count,
         "audit_generated_zig_bytes": audit_generated_zig_bytes,
         "negative_case_count": negative_case_count,
+        "negative_rows": negative_rows,
         "negative_matched": negative_matched,
+        "negative_count_mismatch": negative_count_mismatch,
+        "negative_unmatched": negative_unmatched,
         "report_entry_count": report_entry_count,
         "report_json_entries": report_json_entries,
         "report_transform_count": report_transform_count,
@@ -2467,7 +2496,9 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
         "report_markdown_entry_matched": report_markdown_entry_matched,
         "report_markdown_entry_unmatched": report_markdown_entry_unmatched,
         "report_negative_case_count": report_negative_case_count,
+        "report_negative_rows": report_negative_rows,
         "report_negative_matched": report_negative_matched,
+        "report_negative_count_mismatch": report_negative_count_mismatch,
         "report_negative_unmatched": report_negative_unmatched,
     }
 
@@ -7194,11 +7225,11 @@ def main() -> int:
             f"| node probe | {br_static_dictionary['node_decode_successes']}/{br_static_dictionary['node_probed_count']} | size winners {br_static_dictionary['node_size_winner_count']}, Markdown {br_static_dictionary['node_markdown_matched']}/{br_static_dictionary['node_markdown_summary_rows']} |",
             f"| node rows | {br_static_dictionary['node_markdown_matched_rows']}/{br_static_dictionary['node_markdown_rows']} | unmatched {br_static_dictionary['node_markdown_unmatched_rows']}, present `{br_static_dictionary['node_markdown_present']}` |",
             f"| source audit | {br_static_dictionary['audit_entry_count']} | anchors {br_static_dictionary['audit_anchor_count']}, generated bytes {br_static_dictionary['audit_generated_zig_bytes']} |",
-            f"| negative smoke | {br_static_dictionary['negative_matched']}/{br_static_dictionary['negative_case_count']} | healthy `{br_static_dictionary['healthy']}` |",
+            f"| negative smoke | {br_static_dictionary['negative_matched']}/{br_static_dictionary['negative_case_count']} | rows {br_static_dictionary['negative_rows']}, mismatch {br_static_dictionary['negative_count_mismatch']}, unmatched {br_static_dictionary['negative_unmatched']}, healthy `{br_static_dictionary['healthy']}` |",
             f"| report entries | {br_static_dictionary['report_entry_count']} | csv {br_static_dictionary['report_csv_matched']}/{br_static_dictionary['report_csv_rows']}, Markdown {br_static_dictionary['report_markdown_matched']}/{br_static_dictionary['report_markdown_summary_rows']} |",
             f"| report matrix rows | {br_static_dictionary['report_markdown_matrix_matched']}/{br_static_dictionary['report_markdown_matrix_rows']} | unmatched {br_static_dictionary['report_markdown_matrix_unmatched']}, present `{br_static_dictionary['report_markdown_present']}` |",
             f"| report entry rows | {br_static_dictionary['report_markdown_entry_matched']}/{br_static_dictionary['report_markdown_entry_rows']} | unmatched {br_static_dictionary['report_markdown_entry_unmatched']}, present `{br_static_dictionary['report_markdown_present']}` |",
-            f"| report negative smoke | {br_static_dictionary['report_negative_matched']}/{br_static_dictionary['report_negative_case_count']} | report healthy `{br_static_dictionary['report_healthy']}` |",
+            f"| report negative smoke | {br_static_dictionary['report_negative_matched']}/{br_static_dictionary['report_negative_case_count']} | rows {br_static_dictionary['report_negative_rows']}, mismatch {br_static_dictionary['report_negative_count_mismatch']}, unmatched {br_static_dictionary['report_negative_unmatched']}, report healthy `{br_static_dictionary['report_healthy']}` |",
             "",
         ]
     )
@@ -8066,7 +8097,10 @@ def main() -> int:
                 "br_static_dictionary_audit_anchor_count": br_static_dictionary["audit_anchor_count"],
                 "br_static_dictionary_audit_generated_zig_bytes": br_static_dictionary["audit_generated_zig_bytes"],
                 "br_static_dictionary_negative_case_count": br_static_dictionary["negative_case_count"],
+                "br_static_dictionary_negative_rows": br_static_dictionary["negative_rows"],
                 "br_static_dictionary_negative_matched": br_static_dictionary["negative_matched"],
+                "br_static_dictionary_negative_count_mismatch": br_static_dictionary["negative_count_mismatch"],
+                "br_static_dictionary_negative_unmatched": br_static_dictionary["negative_unmatched"],
                 "br_static_dictionary_report_entry_count": br_static_dictionary["report_entry_count"],
                 "br_static_dictionary_report_json_entries": br_static_dictionary["report_json_entries"],
                 "br_static_dictionary_report_transform_count": br_static_dictionary["report_transform_count"],
@@ -8092,7 +8126,9 @@ def main() -> int:
                 "br_static_dictionary_report_markdown_entry_matched": br_static_dictionary["report_markdown_entry_matched"],
                 "br_static_dictionary_report_markdown_entry_unmatched": br_static_dictionary["report_markdown_entry_unmatched"],
                 "br_static_dictionary_report_negative_case_count": br_static_dictionary["report_negative_case_count"],
+                "br_static_dictionary_report_negative_rows": br_static_dictionary["report_negative_rows"],
                 "br_static_dictionary_report_negative_matched": br_static_dictionary["report_negative_matched"],
+                "br_static_dictionary_report_negative_count_mismatch": br_static_dictionary["report_negative_count_mismatch"],
                 "br_static_dictionary_report_negative_unmatched": br_static_dictionary["report_negative_unmatched"],
                 "png_scratch_present": png_scratch["present"],
                 "png_scratch_markdown_present": png_scratch["markdown_present"],

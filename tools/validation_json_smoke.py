@@ -279,6 +279,7 @@ def main() -> int:
         assert br_static_dictionary_source_audit_negative["schema"] == "vort.br_static_dictionary_source_audit_negative_smoke"
         assert br_static_dictionary_source_audit_negative["ok"] is True
         assert br_static_dictionary_source_audit_negative["case_count"] >= 1
+        assert br_static_dictionary_source_audit_negative["case_count"] == len(br_static_dictionary_source_audit_negative["cases"])
         assert all(row["matched"] is True for row in br_static_dictionary_source_audit_negative["cases"])
         validate_value_against_manifest(br_static_dictionary_source_audit_negative, schemas_def)
         br_static_dictionary_report = json.loads((ROOT / "zig-out" / "vort-br-static-dictionary-report.json").read_text())
@@ -297,6 +298,7 @@ def main() -> int:
         assert br_static_dictionary_report_negative["schema"] == "vort.br_static_dictionary_report_negative_smoke"
         assert br_static_dictionary_report_negative["ok"] is True
         assert br_static_dictionary_report_negative["case_count"] >= 1
+        assert br_static_dictionary_report_negative["case_count"] == len(br_static_dictionary_report_negative["cases"])
         assert all(row["matched"] is True for row in br_static_dictionary_report_negative["cases"])
         validate_value_against_manifest(br_static_dictionary_report_negative, schemas_def)
         dashboard_producers = json.loads((ROOT / "tools" / "dashboard_producers.json").read_text())
@@ -1411,7 +1413,10 @@ def main() -> int:
         assert dashboard["br_static_dictionary_audit_anchor_count"] == br_static_dictionary_source_audit["anchor_count"]
         assert dashboard["br_static_dictionary_audit_generated_zig_bytes"] == br_static_dictionary_source_audit["generated_zig_bytes"]
         assert dashboard["br_static_dictionary_negative_case_count"] == br_static_dictionary_source_audit_negative["case_count"]
+        assert dashboard["br_static_dictionary_negative_rows"] == len(br_static_dictionary_source_audit_negative["cases"])
         assert dashboard["br_static_dictionary_negative_matched"] == br_static_dictionary_source_audit_negative["case_count"]
+        assert dashboard["br_static_dictionary_negative_count_mismatch"] == 0
+        assert dashboard["br_static_dictionary_negative_unmatched"] == 0
         assert dashboard["br_static_dictionary_report_entry_count"] == br_static_dictionary_report["entry_count"]
         assert dashboard["br_static_dictionary_report_json_entries"] == len(br_static_dictionary_report["entries"])
         assert dashboard["br_static_dictionary_report_transform_count"] == br_static_dictionary_report["transform_count"]
@@ -1437,7 +1442,9 @@ def main() -> int:
         assert dashboard["br_static_dictionary_report_markdown_entry_matched"] == br_static_dictionary_report["entry_count"]
         assert dashboard["br_static_dictionary_report_markdown_entry_unmatched"] == 0
         assert dashboard["br_static_dictionary_report_negative_case_count"] == br_static_dictionary_report_negative["case_count"]
+        assert dashboard["br_static_dictionary_report_negative_rows"] == len(br_static_dictionary_report_negative["cases"])
         assert dashboard["br_static_dictionary_report_negative_matched"] == br_static_dictionary_report_negative["case_count"]
+        assert dashboard["br_static_dictionary_report_negative_count_mismatch"] == 0
         assert dashboard["br_static_dictionary_report_negative_unmatched"] == 0
         assert dashboard["png_scratch_present"] is True
         assert dashboard["png_scratch_markdown_present"] is True

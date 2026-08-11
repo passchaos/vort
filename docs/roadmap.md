@@ -2740,3 +2740,7 @@ architecture blindly.
   retained negative rows to match the declared case count and to be both matched
   and expected-failure rows. Dashboard health now exposes negative row/count
   drift counters before malformed-summary guardrail coverage can pass.
+- Tightened Brotli static-dictionary negative-smoke dashboard health by requiring
+  both source-audit and report guardrail rows to match declared case counts with
+  no unmatched rows. Dashboard health now exposes row/count drift counters before
+  static-dictionary guardrail coverage can pass.

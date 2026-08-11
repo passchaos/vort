@@ -1537,6 +1537,7 @@
             "br_static_dictionary_audit_anchor_count",
             "br_static_dictionary_audit_generated_zig_bytes",
             "br_static_dictionary_negative_case_count",
+            "br_static_dictionary_negative_rows",
             "br_static_dictionary_negative_matched",
             "br_static_dictionary_candidate_markdown_summary_rows",
             "br_static_dictionary_candidate_markdown_matched",
@@ -1553,7 +1554,9 @@
             "br_static_dictionary_upstream_markdown_unmatched",
             "br_static_dictionary_upstream_markdown_sample_unmatched",
             "br_static_dictionary_node_markdown_unmatched",
-            "br_static_dictionary_node_markdown_unmatched_rows"
+            "br_static_dictionary_node_markdown_unmatched_rows",
+            "br_static_dictionary_negative_count_mismatch",
+            "br_static_dictionary_negative_unmatched"
           ]
         },
         "br_static_dictionary_report_healthy": {
@@ -1583,6 +1586,7 @@
             "br_static_dictionary_report_markdown_entry_rows",
             "br_static_dictionary_report_markdown_entry_matched",
             "br_static_dictionary_report_negative_case_count",
+            "br_static_dictionary_report_negative_rows",
             "br_static_dictionary_report_negative_matched"
           ],
           "zero": [
@@ -1592,6 +1596,7 @@
             "br_static_dictionary_report_markdown_unmatched",
             "br_static_dictionary_report_markdown_matrix_unmatched",
             "br_static_dictionary_report_markdown_entry_unmatched",
+            "br_static_dictionary_report_negative_count_mismatch",
             "br_static_dictionary_report_negative_unmatched"
           ]
         },
@@ -1827,7 +1832,10 @@
         "br_static_dictionary_audit_anchor_count": "int",
         "br_static_dictionary_audit_generated_zig_bytes": "int",
         "br_static_dictionary_negative_case_count": "int",
+        "br_static_dictionary_negative_rows": "int",
         "br_static_dictionary_negative_matched": "int",
+        "br_static_dictionary_negative_count_mismatch": "int",
+        "br_static_dictionary_negative_unmatched": "int",
         "br_static_dictionary_report_present": "bool",
         "br_static_dictionary_report_csv_present": "bool",
         "br_static_dictionary_report_markdown_present": "bool",
@@ -1859,7 +1867,9 @@
         "br_static_dictionary_report_markdown_entry_matched": "int",
         "br_static_dictionary_report_markdown_entry_unmatched": "int",
         "br_static_dictionary_report_negative_case_count": "int",
+        "br_static_dictionary_report_negative_rows": "int",
         "br_static_dictionary_report_negative_matched": "int",
+        "br_static_dictionary_report_negative_count_mismatch": "int",
         "br_static_dictionary_report_negative_unmatched": "int",
         "png_scratch_present": "bool",
         "png_scratch_markdown_present": "bool",
@@ -2650,6 +2660,26 @@
         ]
       },
       "numeric_relations": [
+        {
+          "left": "br_static_dictionary_negative_rows",
+          "op": "eq",
+          "right": "br_static_dictionary_negative_case_count"
+        },
+        {
+          "left": "br_static_dictionary_negative_matched",
+          "op": "eq",
+          "right": "br_static_dictionary_negative_case_count"
+        },
+        {
+          "left": "br_static_dictionary_report_negative_rows",
+          "op": "eq",
+          "right": "br_static_dictionary_report_negative_case_count"
+        },
+        {
+          "left": "br_static_dictionary_report_negative_matched",
+          "op": "eq",
+          "right": "br_static_dictionary_report_negative_case_count"
+        },
         {
           "left": "native_allocation_report_rows",
           "op": "eq",
