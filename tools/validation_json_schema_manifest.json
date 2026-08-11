@@ -1420,7 +1420,9 @@
             "deflate_extra_bits_bench_expected_paired_checksum_rows"
           ],
           "zero": [
-            "deflate_extra_bits_bench_missing_pairs"
+            "deflate_extra_bits_bench_missing_pairs",
+            "deflate_extra_bits_bench_duplicate_pairs",
+            "deflate_extra_bits_bench_unknown_pairs"
           ]
         },
         "dictionary_decode_bench_healthy": {
@@ -2475,6 +2477,8 @@
         "deflate_extra_bits_bench_paired_checksum_rows": "int",
         "deflate_extra_bits_bench_expected_paired_checksum_rows": "int",
         "deflate_extra_bits_bench_missing_pairs": "list",
+        "deflate_extra_bits_bench_duplicate_pairs": "list",
+        "deflate_extra_bits_bench_unknown_pairs": "list",
         "dictionary_decode_bench_present": "bool",
         "dictionary_decode_bench_healthy": "bool",
         "dictionary_decode_bench_rows": "int",

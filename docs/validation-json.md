@@ -2734,7 +2734,9 @@ Top-level fields:
   `deflate_extra_bits_bench_checksum_matched_cases`,
   `deflate_extra_bits_bench_paired_checksum_rows`,
   `deflate_extra_bits_bench_expected_paired_checksum_rows`,
-  `deflate_extra_bits_bench_missing_pairs`
+  `deflate_extra_bits_bench_missing_pairs`,
+  `deflate_extra_bits_bench_duplicate_pairs`,
+  `deflate_extra_bits_bench_unknown_pairs`
 - `dictionary_decode_bench_present`,
   `dictionary_decode_bench_healthy`, `dictionary_decode_bench_rows`,
   `dictionary_decode_bench_expected_rows`,
@@ -3460,6 +3462,8 @@ Example:
   "deflate_extra_bits_bench_paired_checksum_rows": 0,
   "deflate_extra_bits_bench_expected_paired_checksum_rows": 0,
   "deflate_extra_bits_bench_missing_pairs": [],
+  "deflate_extra_bits_bench_duplicate_pairs": [],
+  "deflate_extra_bits_bench_unknown_pairs": [],
   "dictionary_decode_bench_present": false,
   "dictionary_decode_bench_healthy": false,
   "dictionary_decode_bench_rows": 0,

@@ -458,6 +458,8 @@ def main() -> int:
                 "deflate_extra_bits_bench_paired_checksum_rows": 28,
                 "deflate_extra_bits_bench_expected_paired_checksum_rows": 28,
                 "deflate_extra_bits_bench_missing_pairs": [],
+                "deflate_extra_bits_bench_duplicate_pairs": [],
+                "deflate_extra_bits_bench_unknown_pairs": [],
                 "dictionary_decode_bench_present": True,
                 "dictionary_decode_bench_healthy": True,
                 "dictionary_decode_bench_rows": 18,

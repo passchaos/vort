@@ -1593,6 +1593,8 @@ def main() -> int:
         assert dashboard["deflate_extra_bits_bench_paired_checksum_rows"] == 28
         assert dashboard["deflate_extra_bits_bench_expected_paired_checksum_rows"] == 28
         assert dashboard["deflate_extra_bits_bench_missing_pairs"] == []
+        assert dashboard["deflate_extra_bits_bench_duplicate_pairs"] == []
+        assert dashboard["deflate_extra_bits_bench_unknown_pairs"] == []
         assert dashboard["dictionary_decode_bench_present"] is True
         assert dashboard["dictionary_decode_bench_healthy"] is True
         assert dashboard["dictionary_decode_bench_rows"] == len(dictionary_decode_bench_rows)

@@ -4981,7 +4981,7 @@ def main() -> int:
                     "| rows | 105 | expected 105, present `True` |",
                     "| shape rows | 105 | positive/throughput rows 105/105 |",
                     "| checksum matches | 11 | paired checksums 28/28 |",
-                    "| missing pairs | 0 | healthy `True` |",
+                    "| pair drift | 0 | duplicate/unknown 0/0, healthy `True` |",
                 ],
             )
         )

@@ -3718,6 +3718,8 @@ def deflate_extra_bits_bench_health(artifacts: list[Path]) -> dict:
         except Exception:
             rows = []
         seen: set[tuple[str, str, str]] = set()
+        duplicate_pairs: set[tuple[str, str, str]] = set()
+        unknown_pairs: set[tuple[str, str, str]] = set()
         by_key: dict[tuple[str, str, str], dict[str, str]] = {}
         positive_rows = 0
         shape_rows = 0
@@ -3730,9 +3732,13 @@ def deflate_extra_bits_bench_health(artifacts: list[Path]) -> dict:
             kernel = str(row.get("kernel") or "")
             key = (case, reader, kernel)
             if key in expected_pairs:
+                if key in seen:
+                    duplicate_pairs.add(key)
                 seen.add(key)
                 by_key[key] = row
                 rows_by_case.setdefault(case, []).append(row)
+            else:
+                unknown_pairs.add(key)
             try:
                 bits = int(row.get("bits") or "-1")
                 reads_per_iter = int(row.get("reads_per_iter") or "0")
@@ -3774,10 +3780,14 @@ def deflate_extra_bits_bench_health(artifacts: list[Path]) -> dict:
                 if lhs_row is not None and rhs_row is not None and lhs_row.get("checksum") == rhs_row.get("checksum"):
                     paired_checksum_rows += 1
         missing_pairs = sorted(f"{case}:{reader}:{kernel}" for case, reader, kernel in expected_pairs - seen)
+        duplicate_pair_names = sorted(f"{case}:{reader}:{kernel}" for case, reader, kernel in duplicate_pairs)
+        unknown_pair_names = sorted(f"{case}:{reader}:{kernel}" for case, reader, kernel in unknown_pairs)
         row_count = len(rows)
         healthy = (
             row_count == len(expected_pairs)
             and not missing_pairs
+            and not duplicate_pair_names
+            and not unknown_pair_names
             and positive_rows == row_count
             and shape_rows == row_count
             and throughput_rows == row_count
@@ -3796,6 +3806,8 @@ def deflate_extra_bits_bench_health(artifacts: list[Path]) -> dict:
             "paired_checksum_rows": paired_checksum_rows,
             "expected_paired_checksum_rows": len(paired_kernels) * len(expected_readers),
             "missing_pairs": missing_pairs,
+            "duplicate_pairs": duplicate_pair_names,
+            "unknown_pairs": unknown_pair_names,
         }
     return {
         "present": False,
@@ -3809,6 +3821,8 @@ def deflate_extra_bits_bench_health(artifacts: list[Path]) -> dict:
         "paired_checksum_rows": 0,
         "expected_paired_checksum_rows": len(paired_kernels) * len(expected_readers),
         "missing_pairs": [],
+        "duplicate_pairs": [],
+        "unknown_pairs": [],
     }
 
 
@@ -7678,7 +7692,7 @@ def main() -> int:
             f"| rows | {deflate_extra_bits_bench['row_count']} | expected {deflate_extra_bits_bench['expected_rows']}, present `{deflate_extra_bits_bench['present']}` |",
             f"| shape rows | {deflate_extra_bits_bench['shape_rows']} | positive/throughput rows {deflate_extra_bits_bench['positive_rows']}/{deflate_extra_bits_bench['throughput_rows']} |",
             f"| checksum matches | {deflate_extra_bits_bench['checksum_matched_cases']} | paired checksums {deflate_extra_bits_bench['paired_checksum_rows']}/{deflate_extra_bits_bench['expected_paired_checksum_rows']} |",
-            f"| missing pairs | {len(deflate_extra_bits_bench['missing_pairs'])} | healthy `{deflate_extra_bits_bench['healthy']}` |",
+            f"| pair drift | {len(deflate_extra_bits_bench['missing_pairs'])} | duplicate/unknown {len(deflate_extra_bits_bench['duplicate_pairs'])}/{len(deflate_extra_bits_bench['unknown_pairs'])}, healthy `{deflate_extra_bits_bench['healthy']}` |",
             "",
         ]
     )
@@ -8592,6 +8606,8 @@ def main() -> int:
                 "deflate_extra_bits_bench_paired_checksum_rows": deflate_extra_bits_bench["paired_checksum_rows"],
                 "deflate_extra_bits_bench_expected_paired_checksum_rows": deflate_extra_bits_bench["expected_paired_checksum_rows"],
                 "deflate_extra_bits_bench_missing_pairs": deflate_extra_bits_bench["missing_pairs"],
+                "deflate_extra_bits_bench_duplicate_pairs": deflate_extra_bits_bench["duplicate_pairs"],
+                "deflate_extra_bits_bench_unknown_pairs": deflate_extra_bits_bench["unknown_pairs"],
                 "dictionary_decode_bench_present": dictionary_decode_bench["present"],
                 "dictionary_decode_bench_healthy": dictionary_decode_bench["healthy"],
                 "dictionary_decode_bench_rows": dictionary_decode_bench["row_count"],
