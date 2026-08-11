@@ -4996,7 +4996,7 @@ def main() -> int:
                     "| rows | 18 | expected 18, present `True` |",
                     "| shape rows | 18 | positive/throughput rows 18/18 |",
                     "| output-size rows | 18 | checksum payloads 3 |",
-                    "| missing pairs | 0 | healthy `True` |",
+                    "| pair drift | 0 | duplicate/unknown 0/0, healthy `True` |",
                 ],
             )
         )

@@ -2796,3 +2796,8 @@ architecture blindly.
 - Tightened deflate extra-bit benchmark dashboard health by exposing duplicate
   and unknown `(case, reader, kernel)` rows alongside missing pairs. Dashboard
   health now rejects extra-bit CSV pair drift before benchmark coverage can pass.
+
+- Tightened dictionary decode benchmark dashboard health by exposing duplicate
+  and unknown `(case, format, encoder, mode)` rows alongside missing pairs.
+  Dashboard health now rejects dictionary decode CSV pair drift before benchmark
+  coverage can pass.

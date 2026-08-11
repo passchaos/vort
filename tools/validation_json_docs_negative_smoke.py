@@ -470,6 +470,8 @@ def main() -> int:
                 "dictionary_decode_bench_throughput_rows": 18,
                 "dictionary_decode_bench_checksum_matched_payloads": 3,
                 "dictionary_decode_bench_missing_pairs": [],
+                "dictionary_decode_bench_duplicate_pairs": [],
+                "dictionary_decode_bench_unknown_pairs": [],
                 "png_scanline_bench_present": True,
                 "png_scanline_bench_healthy": True,
                 "png_scanline_bench_rows": 30,

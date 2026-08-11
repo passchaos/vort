@@ -2745,7 +2745,9 @@ Top-level fields:
   `dictionary_decode_bench_output_size_rows`,
   `dictionary_decode_bench_throughput_rows`,
   `dictionary_decode_bench_checksum_matched_payloads`,
-  `dictionary_decode_bench_missing_pairs`
+  `dictionary_decode_bench_missing_pairs`,
+  `dictionary_decode_bench_duplicate_pairs`,
+  `dictionary_decode_bench_unknown_pairs`
 - `png_scanline_bench_present`, `png_scanline_bench_healthy`,
   `png_scanline_bench_rows`, `png_scanline_bench_expected_rows`,
   `png_scanline_bench_positive_rows`, `png_scanline_bench_shape_rows`,
@@ -3474,6 +3476,8 @@ Example:
   "dictionary_decode_bench_throughput_rows": 0,
   "dictionary_decode_bench_checksum_matched_payloads": 0,
   "dictionary_decode_bench_missing_pairs": [],
+  "dictionary_decode_bench_duplicate_pairs": [],
+  "dictionary_decode_bench_unknown_pairs": [],
   "png_scanline_bench_present": false,
   "png_scanline_bench_healthy": false,
   "png_scanline_bench_rows": 0,

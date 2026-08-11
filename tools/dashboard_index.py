@@ -3856,6 +3856,8 @@ def dictionary_decode_bench_health(artifacts: list[Path]) -> dict:
         except Exception:
             rows = []
         seen: set[tuple[str, str, str, str]] = set()
+        duplicate_pairs: set[tuple[str, str, str, str]] = set()
+        unknown_pairs: set[tuple[str, str, str, str]] = set()
         positive_rows = 0
         shape_rows = 0
         output_size_rows = 0
@@ -3869,6 +3871,8 @@ def dictionary_decode_bench_health(artifacts: list[Path]) -> dict:
                 str(row.get("mode") or ""),
             )
             if key in expected_rows:
+                if key in seen:
+                    duplicate_pairs.add(key)
                 seen.add(key)
                 shape_rows += 1
                 case = key[0]
@@ -3876,6 +3880,8 @@ def dictionary_decode_bench_health(artifacts: list[Path]) -> dict:
                     if marker in case:
                         rows_by_payload.setdefault(case.split(marker, 1)[0], []).append(row)
                         break
+            else:
+                unknown_pairs.add(key)
             try:
                 input_bytes = int(row.get("input_bytes") or "0")
                 dict_bytes = int(row.get("dict_bytes") or "0")
@@ -3908,10 +3914,14 @@ def dictionary_decode_bench_health(artifacts: list[Path]) -> dict:
             if len(payload_rows) == expected_count and len(checksums) == 1 and next(iter(checksums), 0) > 0:
                 checksum_matched_payloads += 1
         missing_pairs = sorted(":".join(key) for key in expected_rows - seen)
+        duplicate_pair_names = sorted(":".join(key) for key in duplicate_pairs)
+        unknown_pair_names = sorted(":".join(key) for key in unknown_pairs)
         row_count = len(rows)
         healthy = (
             row_count == len(expected_rows)
             and not missing_pairs
+            and not duplicate_pair_names
+            and not unknown_pair_names
             and positive_rows == row_count
             and shape_rows == row_count
             and output_size_rows == row_count
@@ -3929,6 +3939,8 @@ def dictionary_decode_bench_health(artifacts: list[Path]) -> dict:
             "throughput_rows": throughput_rows,
             "checksum_matched_payloads": checksum_matched_payloads,
             "missing_pairs": missing_pairs,
+            "duplicate_pairs": duplicate_pair_names,
+            "unknown_pairs": unknown_pair_names,
         }
     return {
         "present": False,
@@ -3941,6 +3953,8 @@ def dictionary_decode_bench_health(artifacts: list[Path]) -> dict:
         "throughput_rows": 0,
         "checksum_matched_payloads": 0,
         "missing_pairs": [],
+        "duplicate_pairs": [],
+        "unknown_pairs": [],
     }
 
 
@@ -7705,7 +7719,7 @@ def main() -> int:
             f"| rows | {dictionary_decode_bench['row_count']} | expected {dictionary_decode_bench['expected_rows']}, present `{dictionary_decode_bench['present']}` |",
             f"| shape rows | {dictionary_decode_bench['shape_rows']} | positive/throughput rows {dictionary_decode_bench['positive_rows']}/{dictionary_decode_bench['throughput_rows']} |",
             f"| output-size rows | {dictionary_decode_bench['output_size_rows']} | checksum payloads {dictionary_decode_bench['checksum_matched_payloads']} |",
-            f"| missing pairs | {len(dictionary_decode_bench['missing_pairs'])} | healthy `{dictionary_decode_bench['healthy']}` |",
+            f"| pair drift | {len(dictionary_decode_bench['missing_pairs'])} | duplicate/unknown {len(dictionary_decode_bench['duplicate_pairs'])}/{len(dictionary_decode_bench['unknown_pairs'])}, healthy `{dictionary_decode_bench['healthy']}` |",
             "",
         ]
     )
@@ -8618,6 +8632,8 @@ def main() -> int:
                 "dictionary_decode_bench_throughput_rows": dictionary_decode_bench["throughput_rows"],
                 "dictionary_decode_bench_checksum_matched_payloads": dictionary_decode_bench["checksum_matched_payloads"],
                 "dictionary_decode_bench_missing_pairs": dictionary_decode_bench["missing_pairs"],
+                "dictionary_decode_bench_duplicate_pairs": dictionary_decode_bench["duplicate_pairs"],
+                "dictionary_decode_bench_unknown_pairs": dictionary_decode_bench["unknown_pairs"],
                 "png_scanline_bench_present": png_scanline_bench["present"],
                 "png_scanline_bench_healthy": png_scanline_bench["healthy"],
                 "png_scanline_bench_rows": png_scanline_bench["row_count"],

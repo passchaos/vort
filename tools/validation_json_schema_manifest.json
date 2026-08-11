@@ -1439,7 +1439,9 @@
             "dictionary_decode_bench_checksum_matched_payloads"
           ],
           "zero": [
-            "dictionary_decode_bench_missing_pairs"
+            "dictionary_decode_bench_missing_pairs",
+            "dictionary_decode_bench_duplicate_pairs",
+            "dictionary_decode_bench_unknown_pairs"
           ]
         },
         "png_scanline_bench_healthy": {
@@ -2489,6 +2491,8 @@
         "dictionary_decode_bench_throughput_rows": "int",
         "dictionary_decode_bench_checksum_matched_payloads": "int",
         "dictionary_decode_bench_missing_pairs": "list",
+        "dictionary_decode_bench_duplicate_pairs": "list",
+        "dictionary_decode_bench_unknown_pairs": "list",
         "png_scanline_bench_present": "bool",
         "png_scanline_bench_healthy": "bool",
         "png_scanline_bench_rows": "int",
