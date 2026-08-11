@@ -1458,7 +1458,9 @@
             "png_scanline_bench_checksum_matched_bpps"
           ],
           "zero": [
-            "png_scanline_bench_missing_pairs"
+            "png_scanline_bench_missing_pairs",
+            "png_scanline_bench_duplicate_pairs",
+            "png_scanline_bench_unknown_pairs"
           ]
         },
         "chunked_zlib_bench_healthy": {
@@ -2503,6 +2505,8 @@
         "png_scanline_bench_throughput_rows": "int",
         "png_scanline_bench_checksum_matched_bpps": "int",
         "png_scanline_bench_missing_pairs": "list",
+        "png_scanline_bench_duplicate_pairs": "list",
+        "png_scanline_bench_unknown_pairs": "list",
         "chunked_zlib_bench_present": "bool",
         "chunked_zlib_bench_healthy": "bool",
         "chunked_zlib_bench_rows": "int",

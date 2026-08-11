@@ -3971,6 +3971,8 @@ def png_scanline_bench_health(artifacts: list[Path]) -> dict:
         except Exception:
             rows = []
         seen: set[tuple[str, str]] = set()
+        duplicate_pairs: set[tuple[str, str]] = set()
+        unknown_pairs: set[tuple[str, str]] = set()
         positive_rows = 0
         shape_rows = 0
         io_match_rows = 0
@@ -3981,9 +3983,13 @@ def png_scanline_bench_health(artifacts: list[Path]) -> dict:
             bpp = str(row.get("bpp") or "")
             pair = (stage, bpp)
             if pair in expected_pairs:
+                if pair in seen:
+                    duplicate_pairs.add(pair)
                 seen.add(pair)
                 shape_rows += 1
                 rows_by_bpp.setdefault(bpp, []).append(row)
+            else:
+                unknown_pairs.add(pair)
             try:
                 iterations = int(row.get("iterations") or "0")
                 repeat = int(row.get("repeat") or "0")
@@ -4013,10 +4019,14 @@ def png_scanline_bench_health(artifacts: list[Path]) -> dict:
             if len(bpp_rows) == len(expected_stages) and len(checksums) == 1 and next(iter(checksums), 0) > 0:
                 checksum_matched_bpps += 1
         missing_pairs = sorted(f"{stage}:{bpp}" for stage, bpp in expected_pairs - seen)
+        duplicate_pair_names = sorted(f"{stage}:{bpp}" for stage, bpp in duplicate_pairs)
+        unknown_pair_names = sorted(f"{stage}:{bpp}" for stage, bpp in unknown_pairs)
         row_count = len(rows)
         healthy = (
             row_count == len(expected_pairs)
             and not missing_pairs
+            and not duplicate_pair_names
+            and not unknown_pair_names
             and positive_rows == row_count
             and shape_rows == row_count
             and io_match_rows == row_count
@@ -4034,6 +4044,8 @@ def png_scanline_bench_health(artifacts: list[Path]) -> dict:
             "throughput_rows": throughput_rows,
             "checksum_matched_bpps": checksum_matched_bpps,
             "missing_pairs": missing_pairs,
+            "duplicate_pairs": duplicate_pair_names,
+            "unknown_pairs": unknown_pair_names,
         }
     return {
         "present": False,
@@ -4046,6 +4058,8 @@ def png_scanline_bench_health(artifacts: list[Path]) -> dict:
         "throughput_rows": 0,
         "checksum_matched_bpps": 0,
         "missing_pairs": [],
+        "duplicate_pairs": [],
+        "unknown_pairs": [],
     }
 
 
@@ -7732,7 +7746,7 @@ def main() -> int:
             f"| rows | {png_scanline_bench['row_count']} | expected {png_scanline_bench['expected_rows']}, present `{png_scanline_bench['present']}` |",
             f"| shape rows | {png_scanline_bench['shape_rows']} | positive/throughput rows {png_scanline_bench['positive_rows']}/{png_scanline_bench['throughput_rows']} |",
             f"| input/output rows | {png_scanline_bench['io_match_rows']} | checksum bpp groups {png_scanline_bench['checksum_matched_bpps']} |",
-            f"| missing pairs | {len(png_scanline_bench['missing_pairs'])} | healthy `{png_scanline_bench['healthy']}` |",
+            f"| pair drift | {len(png_scanline_bench['missing_pairs'])} | duplicate/unknown {len(png_scanline_bench['duplicate_pairs'])}/{len(png_scanline_bench['unknown_pairs'])}, healthy `{png_scanline_bench['healthy']}` |",
             "",
         ]
     )
@@ -8644,6 +8658,8 @@ def main() -> int:
                 "png_scanline_bench_throughput_rows": png_scanline_bench["throughput_rows"],
                 "png_scanline_bench_checksum_matched_bpps": png_scanline_bench["checksum_matched_bpps"],
                 "png_scanline_bench_missing_pairs": png_scanline_bench["missing_pairs"],
+                "png_scanline_bench_duplicate_pairs": png_scanline_bench["duplicate_pairs"],
+                "png_scanline_bench_unknown_pairs": png_scanline_bench["unknown_pairs"],
                 "chunked_zlib_bench_present": chunked_zlib_bench["present"],
                 "chunked_zlib_bench_healthy": chunked_zlib_bench["healthy"],
                 "chunked_zlib_bench_rows": chunked_zlib_bench["row_count"],

@@ -1617,6 +1617,8 @@ def main() -> int:
         assert dashboard["png_scanline_bench_throughput_rows"] == len(png_scanline_bench_rows)
         assert dashboard["png_scanline_bench_checksum_matched_bpps"] == 6
         assert dashboard["png_scanline_bench_missing_pairs"] == []
+        assert dashboard["png_scanline_bench_duplicate_pairs"] == []
+        assert dashboard["png_scanline_bench_unknown_pairs"] == []
         assert dashboard["chunked_zlib_bench_present"] is True
         assert dashboard["chunked_zlib_bench_healthy"] is True
         assert dashboard["chunked_zlib_bench_rows"] == len(chunked_zlib_bench_rows)

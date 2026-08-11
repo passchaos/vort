@@ -5011,7 +5011,7 @@ def main() -> int:
                     "| rows | 30 | expected 30, present `True` |",
                     "| shape rows | 30 | positive/throughput rows 30/30 |",
                     "| input/output rows | 30 | checksum bpp groups 6 |",
-                    "| missing pairs | 0 | healthy `True` |",
+                    "| pair drift | 0 | duplicate/unknown 0/0, healthy `True` |",
                 ],
             )
         )
