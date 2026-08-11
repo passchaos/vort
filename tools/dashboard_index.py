@@ -1331,6 +1331,16 @@ def native_tier_range_health(artifacts: list[Path]) -> dict:
         if data.get("schema") == "vort.native_tier_range_bench_gate":
             summaries.append(data)
 
+    def summary_fixture_names_for_source(source: str) -> list[str]:
+        names: set[str] = set()
+        for data in summaries:
+            if data.get("source") != source:
+                continue
+            fixtures = data.get("fixtures")
+            if isinstance(fixtures, list):
+                names.update(str(item) for item in fixtures if str(item))
+        return sorted(names)
+
     def csv_health(source: str, artifact_name: str) -> dict:
         for artifact in artifacts:
             if artifact.name != artifact_name:
@@ -1345,8 +1355,11 @@ def native_tier_range_health(artifacts: list[Path]) -> dict:
             throughput_rows = 0
             fixtures = {str(row.get("fixture") or "") for row in rows}
             fixture_names = sorted(fixtures - {""})
-            expected_pairs = {(fixture, tier) for fixture in fixtures if fixture for tier in tiers}
+            expected_fixture_names = summary_fixture_names_for_source(source) or fixture_names
+            expected_pairs = {(fixture, tier) for fixture in expected_fixture_names for tier in tiers}
             seen: set[tuple[str, str]] = set()
+            duplicate_pairs: set[tuple[str, str]] = set()
+            unknown_pairs: set[tuple[str, str]] = set()
             seen_tiers: set[str] = set()
             total_stream_bytes_by_tier = {tier: 0 for tier in tiers}
             total_index_entries_by_tier = {tier: 0 for tier in tiers}
@@ -1355,9 +1368,14 @@ def native_tier_range_health(artifacts: list[Path]) -> dict:
             for row in rows:
                 fixture = str(row.get("fixture") or "")
                 tier = str(row.get("tier") or "")
-                if fixture and tier in tiers:
+                pair = (fixture, tier)
+                if pair in expected_pairs:
+                    if pair in seen:
+                        duplicate_pairs.add(pair)
                     seen.add((fixture, tier))
                     seen_tiers.add(tier)
+                elif fixture or tier:
+                    unknown_pairs.add(pair)
                 try:
                     block_len = int(row.get("block_len") or "0")
                     input_bytes = int(row.get("input_bytes") or "0")
@@ -1389,7 +1407,18 @@ def native_tier_range_health(artifacts: list[Path]) -> dict:
                 if abs(range_mib_s - expected_range) <= 0.0001 and abs(full_input_mib_s - expected_full) <= 0.0001:
                     throughput_rows += 1
             missing_pairs = sorted(f"{fixture}:{tier}" for fixture, tier in expected_pairs - seen)
-            healthy = bool(rows) and len(seen) == len(expected_pairs) and not missing_pairs and positive_rows == len(rows) and shape_rows == len(rows) and throughput_rows == len(rows)
+            duplicate_pair_names = sorted(f"{fixture}:{tier}" for fixture, tier in duplicate_pairs)
+            unknown_pair_names = sorted(f"{fixture}:{tier}" for fixture, tier in unknown_pairs)
+            healthy = (
+                bool(rows)
+                and len(seen) == len(expected_pairs)
+                and not missing_pairs
+                and not duplicate_pair_names
+                and not unknown_pair_names
+                and positive_rows == len(rows)
+                and shape_rows == len(rows)
+                and throughput_rows == len(rows)
+            )
             for by_tier in (min_range_mib_s_by_tier, min_full_input_mib_s_by_tier):
                 for tier in tiers:
                     if by_tier[tier] == float("inf"):
@@ -1406,6 +1435,8 @@ def native_tier_range_health(artifacts: list[Path]) -> dict:
                 "shape_rows": shape_rows,
                 "throughput_rows": throughput_rows,
                 "missing_pairs": missing_pairs,
+                "duplicate_pairs": duplicate_pair_names,
+                "unknown_pairs": unknown_pair_names,
                 "total_stream_bytes_by_tier": total_stream_bytes_by_tier,
                 "total_index_entries_by_tier": total_index_entries_by_tier,
                 "min_range_mib_s_by_tier": min_range_mib_s_by_tier,
@@ -1423,6 +1454,8 @@ def native_tier_range_health(artifacts: list[Path]) -> dict:
             "shape_rows": 0,
             "throughput_rows": 0,
             "missing_pairs": [],
+            "duplicate_pairs": [],
+            "unknown_pairs": [],
             "total_stream_bytes_by_tier": {tier: 0 for tier in tiers},
             "total_index_entries_by_tier": {tier: 0 for tier in tiers},
             "min_range_mib_s_by_tier": {tier: 0.0 for tier in tiers},
@@ -1437,7 +1470,9 @@ def native_tier_range_health(artifacts: list[Path]) -> dict:
     csv_shape_rows = sum(int(item["shape_rows"]) for item in csv_summaries.values())
     csv_throughput_rows = sum(int(item["throughput_rows"]) for item in csv_summaries.values())
     csv_missing_sources = [source for source, item in csv_summaries.items() if not item["present"]]
-    csv_missing_pairs = [pair for item in csv_summaries.values() for pair in item["missing_pairs"]]
+    csv_missing_pairs = [f"{source}:{pair}" for source, item in csv_summaries.items() for pair in item["missing_pairs"]]
+    csv_duplicate_pairs = [f"{source}:{pair}" for source, item in csv_summaries.items() for pair in item["duplicate_pairs"]]
+    csv_unknown_pairs = [f"{source}:{pair}" for source, item in csv_summaries.items() for pair in item["unknown_pairs"]]
     present = len(summaries) > 0
     ok_count = sum(1 for data in summaries if bool(data.get("ok")))
     row_count = sum(int(data.get("rows") or 0) for data in summaries)
@@ -1562,7 +1597,15 @@ def native_tier_range_health(artifacts: list[Path]) -> dict:
                     values.append(float(value))
         return min(values) if values else 0.0
 
-    csv_healthy = csv_present_count == len(csv_artifacts) and csv_healthy_count == len(csv_artifacts) and csv_rows > 0 and not csv_missing_sources and not csv_missing_pairs
+    csv_healthy = (
+        csv_present_count == len(csv_artifacts)
+        and csv_healthy_count == len(csv_artifacts)
+        and csv_rows > 0
+        and not csv_missing_sources
+        and not csv_missing_pairs
+        and not csv_duplicate_pairs
+        and not csv_unknown_pairs
+    )
     summary_csv_mismatch_total = (
         summary_csv_row_mismatch
         + summary_csv_fixture_mismatch
@@ -1600,6 +1643,8 @@ def native_tier_range_health(artifacts: list[Path]) -> dict:
         "csv_throughput_rows": csv_throughput_rows,
         "csv_missing_sources": csv_missing_sources,
         "csv_missing_pairs": csv_missing_pairs,
+        "csv_duplicate_pairs": csv_duplicate_pairs,
+        "csv_unknown_pairs": csv_unknown_pairs,
         "built_in_summary_count": source_counts["built_in"],
         "project_files_summary_count": source_counts["project_files"],
         "standard_corpus_summary_count": source_counts["standard_corpus"],
@@ -8116,7 +8161,7 @@ def main() -> int:
                 "| --- | ---: | --- |",
                 f"| csv artifacts | {native_tier_health['csv_present_count']} | healthy {native_tier_health['csv_healthy_count']}, missing sources {len(native_tier_health['csv_missing_sources'])} |",
                 f"| csv rows | {native_tier_health['csv_rows']} | positive/shape {native_tier_health['csv_positive_rows']}/{native_tier_health['csv_shape_rows']} |",
-                f"| throughput rows | {native_tier_health['csv_throughput_rows']} | missing pairs {len(native_tier_health['csv_missing_pairs'])} |",
+                f"| throughput rows | {native_tier_health['csv_throughput_rows']} | pair drift {len(native_tier_health['csv_missing_pairs'])}, duplicate/unknown {len(native_tier_health['csv_duplicate_pairs'])}/{len(native_tier_health['csv_unknown_pairs'])} |",
                 f"| summary/CSV mismatches | {native_tier_health['summary_csv_mismatch_total']} | source count {native_tier_health['source_count_mismatch']}, rows/fixtures/tiers/path {native_tier_health['summary_csv_row_mismatch']}/{native_tier_health['summary_csv_fixture_mismatch']}/{native_tier_health['summary_csv_tier_mismatch']}/{native_tier_health['summary_csv_path_mismatch']}, stream/index/min range/min full {native_tier_health['summary_csv_stream_bytes_mismatch']}/{native_tier_health['summary_csv_index_entries_mismatch']}/{native_tier_health['summary_csv_min_range_mismatch']}/{native_tier_health['summary_csv_min_full_mismatch']} |",
                 "",
             ]
@@ -8954,6 +8999,8 @@ def main() -> int:
                 "native_tier_range_csv_throughput_rows": native_tier_health["csv_throughput_rows"],
                 "native_tier_range_csv_missing_sources": native_tier_health["csv_missing_sources"],
                 "native_tier_range_csv_missing_pairs": native_tier_health["csv_missing_pairs"],
+                "native_tier_range_csv_duplicate_pairs": native_tier_health["csv_duplicate_pairs"],
+                "native_tier_range_csv_unknown_pairs": native_tier_health["csv_unknown_pairs"],
                 "native_tier_range_built_in_summary_count": native_tier_health["built_in_summary_count"],
                 "native_tier_range_project_files_summary_count": native_tier_health["project_files_summary_count"],
                 "native_tier_range_standard_corpus_summary_count": native_tier_health["standard_corpus_summary_count"],

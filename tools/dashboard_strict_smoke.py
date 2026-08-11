@@ -4566,6 +4566,8 @@ def main() -> int:
         assert manifest["native_tier_range_csv_throughput_rows"] == 24
         assert manifest["native_tier_range_csv_missing_sources"] == []
         assert manifest["native_tier_range_csv_missing_pairs"] == []
+        assert manifest["native_tier_range_csv_duplicate_pairs"] == []
+        assert manifest["native_tier_range_csv_unknown_pairs"] == []
         assert manifest["native_tier_range_source_count_mismatch"] == 0
         assert manifest["native_tier_range_summary_csv_row_mismatch"] == 0
         assert manifest["native_tier_range_summary_csv_fixture_mismatch"] == 0
@@ -4751,7 +4753,7 @@ def main() -> int:
                     "## Native tier range CSV coverage",
                     "| csv artifacts | 3 | healthy 3, missing sources 0 |",
                     "| csv rows | 24 | positive/shape 24/24 |",
-                    "| throughput rows | 24 | missing pairs 0 |",
+                    "| throughput rows | 24 | pair drift 0, duplicate/unknown 0/0 |",
                     "| summary/CSV mismatches | 0 | source count 0, rows/fixtures/tiers/path 0/0/0/0, stream/index/min range/min full 0/0/0/0 |",
                     "60.00/16.00/12.00",
                     "40.00/8.00/4.00",

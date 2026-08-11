@@ -1269,7 +1269,9 @@
             "native_tier_range_summary_csv_min_full_mismatch",
             "native_tier_range_summary_csv_mismatch_total",
             "native_tier_range_csv_missing_sources",
-            "native_tier_range_csv_missing_pairs"
+            "native_tier_range_csv_missing_pairs",
+            "native_tier_range_csv_duplicate_pairs",
+            "native_tier_range_csv_unknown_pairs"
           ]
         },
         "snappy_report_healthy": {
@@ -2341,6 +2343,8 @@
         "native_tier_range_csv_throughput_rows": "int",
         "native_tier_range_csv_missing_sources": "list",
         "native_tier_range_csv_missing_pairs": "list",
+        "native_tier_range_csv_duplicate_pairs": "list",
+        "native_tier_range_csv_unknown_pairs": "list",
         "native_tier_range_built_in_summary_count": "int",
         "native_tier_range_project_files_summary_count": "int",
         "native_tier_range_standard_corpus_summary_count": "int",

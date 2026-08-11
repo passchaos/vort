@@ -1885,6 +1885,8 @@ def main() -> int:
         assert dashboard["native_tier_range_csv_throughput_rows"] == 24
         assert dashboard["native_tier_range_csv_missing_sources"] == []
         assert dashboard["native_tier_range_csv_missing_pairs"] == []
+        assert dashboard["native_tier_range_csv_duplicate_pairs"] == []
+        assert dashboard["native_tier_range_csv_unknown_pairs"] == []
         assert dashboard["native_tier_range_source_count_mismatch"] == 0
         assert dashboard["native_tier_range_summary_csv_row_mismatch"] == 0
         assert dashboard["native_tier_range_summary_csv_fixture_mismatch"] == 0

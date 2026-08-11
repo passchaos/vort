@@ -2809,3 +2809,9 @@ architecture blindly.
 - Tightened native library benchmark dashboard health by exposing duplicate and
   unknown `(codec, mode, case)` rows alongside missing pairs. Dashboard health
   now rejects native library CSV pair drift before benchmark coverage can pass.
+
+- Tightened native tier range CSV dashboard health by deriving expected
+  `(fixture, tier)` rows from each source's JSON summary and exposing duplicate
+  and unknown source-qualified pairs alongside missing pairs. Dashboard health
+  now rejects row-level native tier CSV drift before summary/CSV aggregate
+  coverage can pass.

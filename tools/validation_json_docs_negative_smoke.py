@@ -978,6 +978,8 @@ def main() -> int:
                 "native_tier_range_csv_throughput_rows": 24,
                 "native_tier_range_csv_missing_sources": [],
                 "native_tier_range_csv_missing_pairs": [],
+                "native_tier_range_csv_duplicate_pairs": [],
+                "native_tier_range_csv_unknown_pairs": [],
                 "native_tier_range_built_in_summary_count": 1,
                 "native_tier_range_project_files_summary_count": 1,
                 "native_tier_range_standard_corpus_summary_count": 1,

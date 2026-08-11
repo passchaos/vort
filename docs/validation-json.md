@@ -2544,8 +2544,9 @@ Top-level fields:
 - `native_tier_range_*` fields summarize direct-API seekability tier range benchmark summaries,
   including the gate JSON summaries, required CSV row/shape/throughput
   coverage fields (`native_tier_range_csv_*`), and summary-vs-CSV drift
-  counters for rows, fixtures, tiers, CSV paths, per-tier stream/index totals,
-  and per-tier minimum throughput floors.
+  counters for duplicate/unknown `(source, fixture, tier)` CSV pairs, rows,
+  fixtures, tiers, CSV paths, per-tier stream/index totals, and per-tier
+  minimum throughput floors.
 - `native_tier_corpus_discovery_*` fields summarize standard-corpus discovery
   inputs for the native tier range benchmark, including drift counters that
   cross-check selected cases and byte sizes against the standard-corpus summary
@@ -3988,6 +3989,8 @@ Example:
   "native_tier_range_csv_throughput_rows": 24,
   "native_tier_range_csv_missing_sources": [],
   "native_tier_range_csv_missing_pairs": [],
+  "native_tier_range_csv_duplicate_pairs": [],
+  "native_tier_range_csv_unknown_pairs": [],
   "native_tier_range_built_in_summary_count": 1,
   "native_tier_range_project_files_summary_count": 1,
   "native_tier_range_standard_corpus_summary_count": 1,
