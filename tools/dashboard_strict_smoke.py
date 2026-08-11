@@ -1929,19 +1929,19 @@ def write_deflate_extra_bits_bench_csv(path: Path, *, healthy: bool = True) -> N
         "distance-roadmap-symbol-extra": (0, ("current", "fused18")),
     }
     readers = ("buffered", "chunked_4096", "span_4096", "chunked_64", "span_64", "chunked_1", "span_1")
-    paired_cases = {
-        "mixed-readme-length",
-        "mixed-roadmap-length",
-        "distance-readme-symbol-extra",
-        "distance-roadmap-symbol-extra",
-    }
     lines = [",".join(columns)]
     for case, (bits, kernels) in cases.items():
         for reader in readers:
-            checksum = "67890" if case in paired_cases else "12345"
+            checksum = len(case) * 1_000_000 + 131072
             for kernel in kernels:
                 if not healthy and case == "distance-roadmap-symbol-extra" and reader == "span_1" and kernel == "fused18":
                     continue
+                reads_per_iter = 131072
+                iterations = 32
+                input_bytes = 1048576
+                elapsed_ns = 1_000_000
+                reads_per_s = (reads_per_iter * iterations) / (elapsed_ns / 1_000_000_000.0)
+                mib_per_s = (input_bytes / (1024.0 * 1024.0)) / (elapsed_ns / 1_000_000_000.0)
                 lines.append(
                     ",".join(
                         [
@@ -1949,14 +1949,14 @@ def write_deflate_extra_bits_bench_csv(path: Path, *, healthy: bool = True) -> N
                             reader,
                             kernel,
                             str(bits),
-                            "131072",
-                            "32",
+                            str(reads_per_iter),
+                            str(iterations),
                             "3",
-                            "1048576",
-                            "1000",
-                            "1000.0",
-                            "1.0",
-                            checksum,
+                            str(input_bytes),
+                            str(elapsed_ns),
+                            f"{reads_per_s:.2f}",
+                            f"{mib_per_s:.2f}",
+                            str(checksum),
                         ]
                     )
                 )
@@ -4873,8 +4873,9 @@ def main() -> int:
                     "## Deflate extra-bit benchmark coverage",
                     "| category | count | detail |",
                     "| rows | 105 | expected 105, present `True` |",
-                    "| shape rows | 105 | positive rows 105 |",
-                    "| paired checksums | 28/28 | missing pairs 0, healthy `True` |",
+                    "| shape rows | 105 | positive/throughput rows 105/105 |",
+                    "| checksum matches | 11 | paired checksums 28/28 |",
+                    "| missing pairs | 0 | healthy `True` |",
                 ],
             )
         )

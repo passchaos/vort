@@ -1559,6 +1559,8 @@ def main() -> int:
         assert dashboard["deflate_extra_bits_bench_expected_rows"] == 105
         assert dashboard["deflate_extra_bits_bench_positive_rows"] == len(deflate_extra_bits_bench_rows)
         assert dashboard["deflate_extra_bits_bench_shape_rows"] == len(deflate_extra_bits_bench_rows)
+        assert dashboard["deflate_extra_bits_bench_throughput_rows"] == len(deflate_extra_bits_bench_rows)
+        assert dashboard["deflate_extra_bits_bench_checksum_matched_cases"] == 11
         assert dashboard["deflate_extra_bits_bench_paired_checksum_rows"] == 28
         assert dashboard["deflate_extra_bits_bench_expected_paired_checksum_rows"] == 28
         assert dashboard["deflate_extra_bits_bench_missing_pairs"] == []

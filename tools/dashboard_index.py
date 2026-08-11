@@ -3535,7 +3535,9 @@ def deflate_extra_bits_bench_health(artifacts: list[Path]) -> dict:
         by_key: dict[tuple[str, str, str], dict[str, str]] = {}
         positive_rows = 0
         shape_rows = 0
+        throughput_rows = 0
         paired_checksum_rows = 0
+        rows_by_case: dict[str, list[dict[str, str]]] = {}
         for row in rows:
             case = str(row.get("case") or "")
             reader = str(row.get("reader") or "")
@@ -3544,6 +3546,7 @@ def deflate_extra_bits_bench_health(artifacts: list[Path]) -> dict:
             if key in expected_pairs:
                 seen.add(key)
                 by_key[key] = row
+                rows_by_case.setdefault(case, []).append(row)
             try:
                 bits = int(row.get("bits") or "-1")
                 reads_per_iter = int(row.get("reads_per_iter") or "0")
@@ -3558,9 +3561,25 @@ def deflate_extra_bits_bench_health(artifacts: list[Path]) -> dict:
                 continue
             if all(value > 0 for value in (reads_per_iter, iterations, repeat, input_bytes, elapsed_ns, checksum)) and reads_per_s > 0.0 and mib_per_s > 0.0:
                 positive_rows += 1
+            expected_reads_per_s = (reads_per_iter * iterations) / (elapsed_ns / 1_000_000_000.0) if elapsed_ns > 0 else 0.0
+            expected_mib_per_s = (input_bytes / (1024.0 * 1024.0)) / (elapsed_ns / 1_000_000_000.0) if elapsed_ns > 0 else 0.0
+            if abs(reads_per_s - expected_reads_per_s) <= 0.05 and abs(mib_per_s - expected_mib_per_s) <= 0.01:
+                throughput_rows += 1
             case_info = expected_cases.get(case)
             if case_info is not None and reader in expected_readers and kernel in case_info["kernels"] and bits == case_info["bits"]:
                 shape_rows += 1
+        checksum_matched_cases = 0
+        for case, case_info in expected_cases.items():
+            case_rows = rows_by_case.get(case, [])
+            checksums = set()
+            for row in case_rows:
+                try:
+                    checksums.add(int(row.get("checksum") or "0"))
+                except ValueError:
+                    checksums.add(0)
+            expected_case_rows = len(expected_readers) * len(case_info["kernels"])
+            if len(case_rows) == expected_case_rows and len(checksums) == 1 and next(iter(checksums), 0) > 0:
+                checksum_matched_cases += 1
         for case, kernels in paired_kernels.items():
             lhs, rhs = kernels
             for reader in expected_readers:
@@ -3575,6 +3594,8 @@ def deflate_extra_bits_bench_health(artifacts: list[Path]) -> dict:
             and not missing_pairs
             and positive_rows == row_count
             and shape_rows == row_count
+            and throughput_rows == row_count
+            and checksum_matched_cases == len(expected_cases)
             and paired_checksum_rows == len(paired_kernels) * len(expected_readers)
         )
         return {
@@ -3584,6 +3605,8 @@ def deflate_extra_bits_bench_health(artifacts: list[Path]) -> dict:
             "expected_rows": len(expected_pairs),
             "positive_rows": positive_rows,
             "shape_rows": shape_rows,
+            "throughput_rows": throughput_rows,
+            "checksum_matched_cases": checksum_matched_cases,
             "paired_checksum_rows": paired_checksum_rows,
             "expected_paired_checksum_rows": len(paired_kernels) * len(expected_readers),
             "missing_pairs": missing_pairs,
@@ -3595,6 +3618,8 @@ def deflate_extra_bits_bench_health(artifacts: list[Path]) -> dict:
         "expected_rows": len(expected_pairs),
         "positive_rows": 0,
         "shape_rows": 0,
+        "throughput_rows": 0,
+        "checksum_matched_cases": 0,
         "paired_checksum_rows": 0,
         "expected_paired_checksum_rows": len(paired_kernels) * len(expected_readers),
         "missing_pairs": [],
@@ -7083,8 +7108,9 @@ def main() -> int:
             "| category | count | detail |",
             "| --- | ---: | --- |",
             f"| rows | {deflate_extra_bits_bench['row_count']} | expected {deflate_extra_bits_bench['expected_rows']}, present `{deflate_extra_bits_bench['present']}` |",
-            f"| shape rows | {deflate_extra_bits_bench['shape_rows']} | positive rows {deflate_extra_bits_bench['positive_rows']} |",
-            f"| paired checksums | {deflate_extra_bits_bench['paired_checksum_rows']}/{deflate_extra_bits_bench['expected_paired_checksum_rows']} | missing pairs {len(deflate_extra_bits_bench['missing_pairs'])}, healthy `{deflate_extra_bits_bench['healthy']}` |",
+            f"| shape rows | {deflate_extra_bits_bench['shape_rows']} | positive/throughput rows {deflate_extra_bits_bench['positive_rows']}/{deflate_extra_bits_bench['throughput_rows']} |",
+            f"| checksum matches | {deflate_extra_bits_bench['checksum_matched_cases']} | paired checksums {deflate_extra_bits_bench['paired_checksum_rows']}/{deflate_extra_bits_bench['expected_paired_checksum_rows']} |",
+            f"| missing pairs | {len(deflate_extra_bits_bench['missing_pairs'])} | healthy `{deflate_extra_bits_bench['healthy']}` |",
             "",
         ]
     )
@@ -7951,6 +7977,8 @@ def main() -> int:
                 "deflate_extra_bits_bench_expected_rows": deflate_extra_bits_bench["expected_rows"],
                 "deflate_extra_bits_bench_positive_rows": deflate_extra_bits_bench["positive_rows"],
                 "deflate_extra_bits_bench_shape_rows": deflate_extra_bits_bench["shape_rows"],
+                "deflate_extra_bits_bench_throughput_rows": deflate_extra_bits_bench["throughput_rows"],
+                "deflate_extra_bits_bench_checksum_matched_cases": deflate_extra_bits_bench["checksum_matched_cases"],
                 "deflate_extra_bits_bench_paired_checksum_rows": deflate_extra_bits_bench["paired_checksum_rows"],
                 "deflate_extra_bits_bench_expected_paired_checksum_rows": deflate_extra_bits_bench["expected_paired_checksum_rows"],
                 "deflate_extra_bits_bench_missing_pairs": deflate_extra_bits_bench["missing_pairs"],

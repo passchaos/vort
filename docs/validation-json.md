@@ -2720,6 +2720,8 @@ Top-level fields:
   `deflate_extra_bits_bench_expected_rows`,
   `deflate_extra_bits_bench_positive_rows`,
   `deflate_extra_bits_bench_shape_rows`,
+  `deflate_extra_bits_bench_throughput_rows`,
+  `deflate_extra_bits_bench_checksum_matched_cases`,
   `deflate_extra_bits_bench_paired_checksum_rows`,
   `deflate_extra_bits_bench_expected_paired_checksum_rows`,
   `deflate_extra_bits_bench_missing_pairs`
@@ -3372,6 +3374,8 @@ Example:
   "deflate_extra_bits_bench_expected_rows": 0,
   "deflate_extra_bits_bench_positive_rows": 0,
   "deflate_extra_bits_bench_shape_rows": 0,
+  "deflate_extra_bits_bench_throughput_rows": 0,
+  "deflate_extra_bits_bench_checksum_matched_cases": 0,
   "deflate_extra_bits_bench_paired_checksum_rows": 0,
   "deflate_extra_bits_bench_expected_paired_checksum_rows": 0,
   "deflate_extra_bits_bench_missing_pairs": [],

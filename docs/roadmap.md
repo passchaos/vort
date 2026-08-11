@@ -2702,3 +2702,7 @@ architecture blindly.
   case to preserve the same non-zero checksum. Dashboard health now exposes
   chunk-count, throughput-row, and checksum-match counters before chunked Huffman
   coverage can pass.
+- Tightened deflate extra-bit benchmark dashboard health by recomputing reads/s
+  and MiB/s from each CSV row and by requiring every case's reader/kernel rows to
+  preserve a shared non-zero checksum. Dashboard health now exposes
+  throughput-row and checksum-match counters before extra-bit coverage can pass.

@@ -441,6 +441,8 @@ def main() -> int:
                 "deflate_extra_bits_bench_expected_rows": 105,
                 "deflate_extra_bits_bench_positive_rows": 105,
                 "deflate_extra_bits_bench_shape_rows": 105,
+                "deflate_extra_bits_bench_throughput_rows": 105,
+                "deflate_extra_bits_bench_checksum_matched_cases": 11,
                 "deflate_extra_bits_bench_paired_checksum_rows": 28,
                 "deflate_extra_bits_bench_expected_paired_checksum_rows": 28,
                 "deflate_extra_bits_bench_missing_pairs": [],
