@@ -2685,7 +2685,8 @@ Top-level fields:
   `dashboard_producers_negative_row_unmatched`
 - `non_json_artifact_healthy`, `csv_artifact_count`,
   `csv_artifact_parsed_count`, `csv_artifact_parse_failed`,
-  `csv_artifact_empty`, `markdown_artifact_count`,
+  `csv_artifact_empty`, `csv_artifact_blank_headers`,
+  `csv_artifact_duplicate_headers`, `markdown_artifact_count`,
   `markdown_artifact_read_count`, `markdown_artifact_read_failed`,
   `markdown_artifact_empty`, `markdown_artifact_marker_missing`
 - `validation_json_present`, `validation_json_ok`, `validation_json_healthy`,
@@ -3465,6 +3466,8 @@ Example:
   "csv_artifact_parsed_count": 0,
   "csv_artifact_parse_failed": [],
   "csv_artifact_empty": [],
+  "csv_artifact_blank_headers": [],
+  "csv_artifact_duplicate_headers": [],
   "markdown_artifact_count": 0,
   "markdown_artifact_read_count": 0,
   "markdown_artifact_read_failed": [],

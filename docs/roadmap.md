@@ -2884,6 +2884,11 @@ architecture blindly.
 
 
 
+
+- Tightened non-JSON artifact auditing by rejecting CSV artifacts with blank or
+  duplicate headers, and fixed the deflate decode-stage CSV header so wrapper
+  timing columns are uniquely named.
+
 - Added a hard dashboard health gate for non-JSON retained artifacts. The
   dashboard now audits indexed CSV and Markdown artifacts for parse/read failures,
   empty content, and missing Markdown markers, and strict-validation smoke covers

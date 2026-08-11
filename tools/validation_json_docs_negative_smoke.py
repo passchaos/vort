@@ -429,6 +429,8 @@ def main() -> int:
                 "csv_artifact_parsed_count": 1,
                 "csv_artifact_parse_failed": [],
                 "csv_artifact_empty": [],
+                "csv_artifact_blank_headers": [],
+                "csv_artifact_duplicate_headers": [],
                 "markdown_artifact_count": 1,
                 "markdown_artifact_read_count": 1,
                 "markdown_artifact_read_failed": [],

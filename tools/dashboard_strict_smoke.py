@@ -4769,7 +4769,7 @@ def main() -> int:
                     "| category | covered | missing | detail |",
                     "| producer steps | 88/88 | 0 | allowed missing 0 |",
                     "| smoke gates | 88/88 | 0 | required missing 0 |",
-                    "| CSV artifacts | 26/26 | parse failed 0, empty 0 |",
+                    "| CSV artifacts | 26/26 | parse failed 0, empty 0, blank headers 0, duplicate headers 0 |",
                     "| Markdown artifacts | 20/20 | read failed 0, empty 0, marker missing 0, healthy `True` |",
                 ],
             )
