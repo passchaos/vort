@@ -2982,6 +2982,8 @@ def checksum_bench_health(artifacts: list[Path]) -> dict:
             rows = []
 
         seen: set[str] = set()
+        duplicate_algorithms: set[str] = set()
+        unknown_algorithms: set[str] = set()
         positive_rows = 0
         workload_rows = 0
         throughput_rows = 0
@@ -2990,7 +2992,11 @@ def checksum_bench_health(artifacts: list[Path]) -> dict:
         for row in rows:
             algorithm = str(row.get("algorithm") or "")
             if algorithm in expected_algorithms:
+                if algorithm in seen:
+                    duplicate_algorithms.add(algorithm)
                 seen.add(algorithm)
+            else:
+                unknown_algorithms.add(algorithm)
             try:
                 bytes_value = int(row.get("bytes") or "0")
                 iterations = int(row.get("iterations") or "0")
@@ -3012,10 +3018,14 @@ def checksum_bench_health(artifacts: list[Path]) -> dict:
                 crc32c_mixes.add(str(mix))
 
         missing_algorithms = sorted(expected_algorithms - seen)
+        duplicate_algorithm_names = sorted(duplicate_algorithms)
+        unknown_algorithm_names = sorted(unknown_algorithms)
         row_count = len(rows)
         healthy = (
             row_count == len(expected_algorithms)
             and not missing_algorithms
+            and not duplicate_algorithm_names
+            and not unknown_algorithm_names
             and positive_rows == row_count
             and workload_rows == row_count
             and throughput_rows == row_count
@@ -3033,6 +3043,8 @@ def checksum_bench_health(artifacts: list[Path]) -> dict:
             "crc32_mix_groups": len(crc32_mixes),
             "crc32c_mix_groups": len(crc32c_mixes),
             "missing_algorithms": missing_algorithms,
+            "duplicate_algorithms": duplicate_algorithm_names,
+            "unknown_algorithms": unknown_algorithm_names,
         }
     return {
         "present": False,
@@ -3045,6 +3057,8 @@ def checksum_bench_health(artifacts: list[Path]) -> dict:
         "crc32_mix_groups": 0,
         "crc32c_mix_groups": 0,
         "missing_algorithms": [],
+        "duplicate_algorithms": [],
+        "unknown_algorithms": [],
     }
 
 
@@ -7307,7 +7321,7 @@ def main() -> int:
         f"- lz4 native summary: frames/skippable/checksum/block-checksum/dictionary/content-size/blocks raw/compressed {lz4_native_summary['frame_count']}/{lz4_native_summary['skippable_frame_count']}/{lz4_native_summary['checksum_frame_count']}/{lz4_native_summary['block_checksum_frame_count']}/{lz4_native_summary['dictionary_id_frame_count']}/{lz4_native_summary['content_size_frame_count']}/{lz4_native_summary['block_count']} {lz4_native_summary['raw_block_count']}/{lz4_native_summary['compressed_block_count']}, declared/payload/skippable bytes {lz4_native_summary['declared_content_bytes']}/{lz4_native_summary['payload_bytes']}/{lz4_native_summary['skippable_payload_bytes']}, slack/mismatch {lz4_native_summary['declared_payload_slack_bytes']}/{lz4_native_summary['block_count_mismatch']}, healthy `{lz4_native_summary_healthy}`",
         f"- zstd native summary: frames/skippable/checksum/dictionary/content-size/blocks raw/rle/compressed {zstd_native_summary['frame_count']}/{zstd_native_summary['skippable_frame_count']}/{zstd_native_summary['checksum_frame_count']}/{zstd_native_summary['dictionary_id_frame_count']}/{zstd_native_summary['content_size_frame_count']}/{zstd_native_summary['block_count']} {zstd_native_summary['raw_block_count']}/{zstd_native_summary['rle_block_count']}/{zstd_native_summary['compressed_block_count']}, declared/payload/skippable bytes {zstd_native_summary['declared_content_bytes']}/{zstd_native_summary['payload_bytes']}/{zstd_native_summary['skippable_payload_bytes']}, slack/mismatch {zstd_native_summary['declared_payload_slack_bytes']}/{zstd_native_summary['block_count_mismatch']}, healthy `{zstd_native_summary_healthy}`",
         f"- Snappy report: {snappy_report['row_count']}/{snappy_report['expected_rows']} rows, positive/ratio/throughput {snappy_report['positive_timing_rows']}/{snappy_report['ratio_rows']}/{snappy_report['throughput_rows']}, repetitive shrunk {snappy_report['repetitive_shrunk_rows']}, framed overhead/reusable size/checksum matches {snappy_report['framed_overhead_matched_cases']}/{snappy_report['reusable_size_matched_cases']}/{snappy_report['reusable_checksum_matched_cases']}, missing/duplicate/unknown pairs {len(snappy_report['missing_pairs'])}/{len(snappy_report['duplicate_pairs'])}/{len(snappy_report['unknown_pairs'])}, healthy `{snappy_report_healthy}`",
-        f"- checksum bench: {checksum_bench['row_count']}/{checksum_bench['expected_rows']} rows, workload {checksum_bench['workload_rows']}, positive/throughput {checksum_bench['positive_rows']}/{checksum_bench['throughput_rows']}, mix groups crc32/crc32c {checksum_bench['crc32_mix_groups']}/{checksum_bench['crc32c_mix_groups']}, healthy `{checksum_bench_healthy}`",
+        f"- checksum bench: {checksum_bench['row_count']}/{checksum_bench['expected_rows']} rows, workload {checksum_bench['workload_rows']}, positive/throughput {checksum_bench['positive_rows']}/{checksum_bench['throughput_rows']}, mix groups crc32/crc32c {checksum_bench['crc32_mix_groups']}/{checksum_bench['crc32c_mix_groups']}, missing/duplicate/unknown algorithms {len(checksum_bench['missing_algorithms'])}/{len(checksum_bench['duplicate_algorithms'])}/{len(checksum_bench['unknown_algorithms'])}, healthy `{checksum_bench_healthy}`",
         f"- chunk cursor bench: {chunk_cursor_bench['row_count']}/{chunk_cursor_bench['expected_rows']} rows, shape {chunk_cursor_bench['shape_rows']}, positive/throughput {chunk_cursor_bench['positive_rows']}/{chunk_cursor_bench['throughput_rows']}, checksum matches {chunk_cursor_bench['checksum_matched_cases']}, healthy `{chunk_cursor_bench_healthy}`",
         f"- deflate match-copy bench: {deflate_match_copy_bench['row_count']}/{deflate_match_copy_bench['expected_rows']} rows, classes {deflate_match_copy_bench['expected_class_rows']}, positive/output/throughput {deflate_match_copy_bench['positive_rows']}/{deflate_match_copy_bench['output_bytes_rows']}/{deflate_match_copy_bench['throughput_rows']}, checksum matches {deflate_match_copy_bench['checksum_matched_cases']}, healthy `{deflate_match_copy_bench_healthy}`",
         f"- deflate Huffman build bench: {deflate_huffman_build_bench['row_count']}/{deflate_huffman_build_bench['expected_rows']} rows, lookup {deflate_huffman_build_bench['lookup_rows']}, positive/throughput {deflate_huffman_build_bench['positive_rows']}/{deflate_huffman_build_bench['throughput_rows']}, checksum variant cases {deflate_huffman_build_bench['checksum_variant_cases']}, healthy `{deflate_huffman_build_bench_healthy}`",
@@ -7515,7 +7529,7 @@ def main() -> int:
             "| --- | ---: | --- |",
             f"| rows | {checksum_bench['row_count']} | expected {checksum_bench['expected_rows']}, present `{checksum_bench['present']}` |",
             f"| workload rows | {checksum_bench['workload_rows']} | positive/throughput rows {checksum_bench['positive_rows']}/{checksum_bench['throughput_rows']} |",
-            f"| digest mix groups | {checksum_bench['crc32_mix_groups'] + checksum_bench['crc32c_mix_groups']} | crc32/crc32c {checksum_bench['crc32_mix_groups']}/{checksum_bench['crc32c_mix_groups']}, missing algorithms {len(checksum_bench['missing_algorithms'])}, healthy `{checksum_bench['healthy']}` |",
+            f"| digest mix groups | {checksum_bench['crc32_mix_groups'] + checksum_bench['crc32c_mix_groups']} | crc32/crc32c {checksum_bench['crc32_mix_groups']}/{checksum_bench['crc32c_mix_groups']}, missing/duplicate/unknown algorithms {len(checksum_bench['missing_algorithms'])}/{len(checksum_bench['duplicate_algorithms'])}/{len(checksum_bench['unknown_algorithms'])}, healthy `{checksum_bench['healthy']}` |",
             "",
         ]
     )
@@ -8437,6 +8451,8 @@ def main() -> int:
                 "checksum_bench_crc32_mix_groups": checksum_bench["crc32_mix_groups"],
                 "checksum_bench_crc32c_mix_groups": checksum_bench["crc32c_mix_groups"],
                 "checksum_bench_missing_algorithms": checksum_bench["missing_algorithms"],
+                "checksum_bench_duplicate_algorithms": checksum_bench["duplicate_algorithms"],
+                "checksum_bench_unknown_algorithms": checksum_bench["unknown_algorithms"],
                 "chunk_cursor_bench_present": chunk_cursor_bench["present"],
                 "chunk_cursor_bench_healthy": chunk_cursor_bench["healthy"],
                 "chunk_cursor_bench_rows": chunk_cursor_bench["row_count"],

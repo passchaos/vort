@@ -2764,3 +2764,8 @@ architecture blindly.
   mode/case pairs plus framed-overhead parity across one-shot and reusable
   paths. Dashboard health now rejects pair drift and framed/raw size drift before
   Snappy CSV coverage can pass.
+
+- Tightened checksum benchmark dashboard health by exposing duplicate and
+  unknown algorithm rows alongside missing algorithms. Dashboard health now
+  rejects checksum CSV algorithm drift before checksum benchmark coverage can
+  pass.

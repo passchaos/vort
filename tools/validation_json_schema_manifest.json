@@ -1307,7 +1307,9 @@
             "checksum_bench_crc32c_mix_groups"
           ],
           "zero": [
-            "checksum_bench_missing_algorithms"
+            "checksum_bench_missing_algorithms",
+            "checksum_bench_duplicate_algorithms",
+            "checksum_bench_unknown_algorithms"
           ]
         },
         "chunk_cursor_bench_healthy": {
@@ -2392,6 +2394,8 @@
         "checksum_bench_crc32_mix_groups": "int",
         "checksum_bench_crc32c_mix_groups": "int",
         "checksum_bench_missing_algorithms": "list",
+        "checksum_bench_duplicate_algorithms": "list",
+        "checksum_bench_unknown_algorithms": "list",
         "chunk_cursor_bench_present": "bool",
         "chunk_cursor_bench_healthy": "bool",
         "chunk_cursor_bench_rows": "int",

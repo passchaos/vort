@@ -4890,7 +4890,7 @@ def main() -> int:
                     "| category | count | detail |",
                     "| rows | 21 | expected 21, present `True` |",
                     "| workload rows | 21 | positive/throughput rows 21/21 |",
-                    "| digest mix groups | 2 | crc32/crc32c 1/1, missing algorithms 0, healthy `True` |",
+                    "| digest mix groups | 2 | crc32/crc32c 1/1, missing/duplicate/unknown algorithms 0/0/0, healthy `True` |",
                 ],
             )
         )

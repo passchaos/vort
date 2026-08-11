@@ -1522,6 +1522,8 @@ def main() -> int:
         assert dashboard["checksum_bench_crc32_mix_groups"] == 1
         assert dashboard["checksum_bench_crc32c_mix_groups"] == 1
         assert dashboard["checksum_bench_missing_algorithms"] == []
+        assert dashboard["checksum_bench_duplicate_algorithms"] == []
+        assert dashboard["checksum_bench_unknown_algorithms"] == []
         assert dashboard["chunk_cursor_bench_present"] is True
         assert dashboard["chunk_cursor_bench_healthy"] is True
         assert dashboard["chunk_cursor_bench_rows"] == len(chunk_cursor_bench_rows)

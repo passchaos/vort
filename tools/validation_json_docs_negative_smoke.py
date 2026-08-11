@@ -387,6 +387,8 @@ def main() -> int:
                 "checksum_bench_crc32_mix_groups": 1,
                 "checksum_bench_crc32c_mix_groups": 1,
                 "checksum_bench_missing_algorithms": [],
+                "checksum_bench_duplicate_algorithms": [],
+                "checksum_bench_unknown_algorithms": [],
                 "chunk_cursor_bench_present": True,
                 "chunk_cursor_bench_healthy": True,
                 "chunk_cursor_bench_rows": 8,
