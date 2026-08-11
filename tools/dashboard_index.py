@@ -5766,10 +5766,53 @@ def lz4_native_summary_health(artifacts: list[Path]) -> dict:
 
 
 def native_summary_error_dashboard_health(artifacts: list[Path]) -> dict:
+    def count_cases(cases: list[dict], field: str, *, codec: str | None = None) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for case in cases:
+            if codec is not None and str(case.get("codec") or "") != codec:
+                continue
+            key = str(case.get(field) or "")
+            if not key:
+                continue
+            counts[key] = counts.get(key, 0) + 1
+        return counts
+
+    def dict_count_mismatch(reported: dict, computed: dict[str, int]) -> int:
+        mismatch = 0
+        keys = set(str(key) for key in reported) | set(computed)
+        for key in keys:
+            try:
+                reported_value = int(reported.get(key) or 0)
+            except (TypeError, ValueError):
+                reported_value = -1
+            mismatch += abs(reported_value - int(computed.get(key, 0)))
+        return mismatch
+
+    def int_offsets(cases: list[dict], *, codec: str | None = None, phase: str | None = None) -> list[int]:
+        offsets: list[int] = []
+        for case in cases:
+            if codec is not None and str(case.get("codec") or "") != codec:
+                continue
+            if phase is not None and str(case.get("phase") or "") != phase:
+                continue
+            value = case.get("offset")
+            if isinstance(value, int) and not isinstance(value, bool):
+                offsets.append(value)
+        return offsets
+
+    def range_tuple(offsets: list[int]) -> tuple[int, int]:
+        return (min(offsets), max(offsets)) if offsets else (0, 0)
+
+    def range_mismatch(reported_min: int, reported_max: int, offsets: list[int]) -> int:
+        expected_min, expected_max = range_tuple(offsets)
+        return 0 if reported_min == expected_min and reported_max == expected_max else 1
+
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
         if data.get("schema") != "vort.native_summary_error_dashboard":
             continue
+        cases_raw = data.get("cases") if isinstance(data.get("cases"), list) else []
+        cases = [case for case in cases_raw if isinstance(case, dict)]
         case_count = int(data.get("case_count") or 0)
         lz4_case_count = int(data.get("lz4_case_count") or 0)
         zstd_case_count = int(data.get("zstd_case_count") or 0)
@@ -5799,25 +5842,61 @@ def native_summary_error_dashboard_health(artifacts: list[Path]) -> dict:
         zstd_required_phases = required_codec_phases.get("zstd") if isinstance(required_codec_phases.get("zstd"), list) else []
         lz4_missing_phases = sorted(str(phase) for phase in lz4_required_phases if int(lz4_phase_counts.get(str(phase)) or 0) == 0)
         zstd_missing_phases = sorted(str(phase) for phase in zstd_required_phases if int(zstd_phase_counts.get(str(phase)) or 0) == 0)
+        computed_error_counts = count_cases(cases, "error")
+        computed_phase_counts = count_cases(cases, "phase")
+        computed_lz4_error_counts = count_cases(cases, "error", codec="lz4")
+        computed_zstd_error_counts = count_cases(cases, "error", codec="zstd")
+        computed_lz4_phase_counts = count_cases(cases, "phase", codec="lz4")
+        computed_zstd_phase_counts = count_cases(cases, "phase", codec="zstd")
+        case_count_mismatch = abs(case_count - len(cases))
+        codec_case_count_mismatch = abs(lz4_case_count - sum(1 for case in cases if str(case.get("codec") or "") == "lz4")) + abs(zstd_case_count - sum(1 for case in cases if str(case.get("codec") or "") == "zstd"))
+        error_count_mismatch = dict_count_mismatch(error_counts, computed_error_counts)
+        phase_count_mismatch = dict_count_mismatch(phase_counts, computed_phase_counts)
+        codec_error_count_mismatch = dict_count_mismatch(lz4_error_counts, computed_lz4_error_counts) + dict_count_mismatch(zstd_error_counts, computed_zstd_error_counts)
+        codec_phase_count_mismatch = dict_count_mismatch(lz4_phase_counts, computed_lz4_phase_counts) + dict_count_mismatch(zstd_phase_counts, computed_zstd_phase_counts)
+        offset_range_mismatch = (
+            range_mismatch(offset_min, offset_max, int_offsets(cases))
+            + range_mismatch(lz4_offset_min, lz4_offset_max, int_offsets(cases, codec="lz4"))
+            + range_mismatch(zstd_offset_min, zstd_offset_max, int_offsets(cases, codec="zstd"))
+        )
+        for phase in set(phase_offset_ranges) | set(computed_phase_counts):
+            reported_range = phase_offset_ranges.get(phase) if isinstance(phase_offset_ranges.get(phase), dict) else {}
+            try:
+                reported_min = int(reported_range.get("min") or 0)
+                reported_max = int(reported_range.get("max") or 0)
+            except (TypeError, ValueError):
+                reported_min = -1
+                reported_max = -1
+            offset_range_mismatch += range_mismatch(reported_min, reported_max, int_offsets(cases, phase=str(phase)))
         return {
             "present": True,
             "healthy": data.get("ok") is True
             and case_count >= 14
+            and case_count_mismatch == 0
             and lz4_case_count >= 7
             and zstd_case_count >= 7
+            and codec_case_count_mismatch == 0
             and checksum_mismatch_count >= 1
             and corrupt_frame_count >= 4
             and truncated_frame_count >= 8
+            and error_count_mismatch == 0
             and magic_phase_count >= 2
             and skippable_payload_phase_count >= 2
             and frame_body_phase_count >= 2
             and frame_checksum_phase_count >= 2
             and frame_phase_count >= 2
+            and phase_count_mismatch == 0
+            and codec_error_count_mismatch == 0
+            and codec_phase_count_mismatch == 0
+            and offset_range_mismatch == 0
             and len(lz4_missing_phases) == 0
             and len(zstd_missing_phases) == 0,
             "case_count": case_count,
+            "case_rows": len(cases),
+            "case_count_mismatch": case_count_mismatch,
             "lz4_case_count": lz4_case_count,
             "zstd_case_count": zstd_case_count,
+            "codec_case_count_mismatch": codec_case_count_mismatch,
             "checksum_mismatch_count": checksum_mismatch_count,
             "corrupt_frame_count": corrupt_frame_count,
             "truncated_frame_count": truncated_frame_count,
@@ -5838,6 +5917,11 @@ def native_summary_error_dashboard_health(artifacts: list[Path]) -> dict:
             "lz4_offset_max": lz4_offset_max,
             "zstd_offset_min": zstd_offset_min,
             "zstd_offset_max": zstd_offset_max,
+            "error_count_mismatch": error_count_mismatch,
+            "phase_count_mismatch": phase_count_mismatch,
+            "codec_error_count_mismatch": codec_error_count_mismatch,
+            "codec_phase_count_mismatch": codec_phase_count_mismatch,
+            "offset_range_mismatch": offset_range_mismatch,
             "phase_offset_ranges": phase_offset_ranges,
             "required_codec_phases": required_codec_phases,
             "lz4_missing_phases": lz4_missing_phases,
@@ -5847,8 +5931,11 @@ def native_summary_error_dashboard_health(artifacts: list[Path]) -> dict:
         "present": False,
         "healthy": False,
         "case_count": 0,
+        "case_rows": 0,
+        "case_count_mismatch": 0,
         "lz4_case_count": 0,
         "zstd_case_count": 0,
+        "codec_case_count_mismatch": 0,
         "checksum_mismatch_count": 0,
         "corrupt_frame_count": 0,
         "truncated_frame_count": 0,
@@ -5869,6 +5956,11 @@ def native_summary_error_dashboard_health(artifacts: list[Path]) -> dict:
         "lz4_offset_max": 0,
         "zstd_offset_min": 0,
         "zstd_offset_max": 0,
+        "error_count_mismatch": 0,
+        "phase_count_mismatch": 0,
+        "codec_error_count_mismatch": 0,
+        "codec_phase_count_mismatch": 0,
+        "offset_range_mismatch": 0,
         "phase_offset_ranges": {},
         "required_codec_phases": {},
         "lz4_missing_phases": [],
@@ -6941,7 +7033,7 @@ def main() -> int:
         f"- Python zlib differential: payloads {python_zlib_health['payloads']} (large-file {python_zlib_health['large_file_payloads']}, file-hex encodes {python_zlib_health['file_hex_encode_cases']}), dynamic {python_zlib_health['dynamic_payloads']}, dictionary encode raw/zlib {python_zlib_health['raw_dict_encode_cases']}/{python_zlib_health['zlib_dict_encode_cases']}, CLI successes/failures {python_zlib_health['cli_successes']}/{python_zlib_health['expected_failures']}, healthy `{python_zlib_healthy}`",
         f"- native codec probes: {native_codec_health['ok_probe_count']}/{native_codec_health['probe_count']} probes ok, capabilities {native_codec_health['ok_capability_count']}/{native_codec_health['capability_count']} ok, cases total/lib/incremental/chunked/reusable-chunked/fse-repeat {native_codec_health['total_cases']}/{native_codec_health['lib_generated_cases']}/{native_codec_health['incremental_cases']}/{native_codec_health['chunked_cases']}/{native_codec_health['reusable_chunked_cases']}/{native_codec_health['fse_repeat_cases']}, healthy `{native_codec_health['healthy']}`",
         f"- native codec probe Markdown: {native_codec_health['markdown_matched']}/{native_codec_health['markdown_rows']} checks matched, unmatched {native_codec_health['markdown_unmatched']}",
-        f"- native summary errors: cases total/lz4/zstd/checksum/corrupt/truncated/magic/skippable/body/checksum-phase/frame {native_summary_error_health['case_count']}/{native_summary_error_health['lz4_case_count']}/{native_summary_error_health['zstd_case_count']}/{native_summary_error_health['checksum_mismatch_count']}/{native_summary_error_health['corrupt_frame_count']}/{native_summary_error_health['truncated_frame_count']}/{native_summary_error_health['magic_phase_count']}/{native_summary_error_health['skippable_payload_phase_count']}/{native_summary_error_health['frame_body_phase_count']}/{native_summary_error_health['frame_checksum_phase_count']}/{native_summary_error_health['frame_phase_count']}, healthy `{native_summary_error_healthy}`",
+        f"- native summary errors: cases total/lz4/zstd/checksum/corrupt/truncated/magic/skippable/body/checksum-phase/frame {native_summary_error_health['case_count']}/{native_summary_error_health['lz4_case_count']}/{native_summary_error_health['zstd_case_count']}/{native_summary_error_health['checksum_mismatch_count']}/{native_summary_error_health['corrupt_frame_count']}/{native_summary_error_health['truncated_frame_count']}/{native_summary_error_health['magic_phase_count']}/{native_summary_error_health['skippable_payload_phase_count']}/{native_summary_error_health['frame_body_phase_count']}/{native_summary_error_health['frame_checksum_phase_count']}/{native_summary_error_health['frame_phase_count']}, drift case/codec/error/phase/codec-error/codec-phase/offset {native_summary_error_health['case_count_mismatch']}/{native_summary_error_health['codec_case_count_mismatch']}/{native_summary_error_health['error_count_mismatch']}/{native_summary_error_health['phase_count_mismatch']}/{native_summary_error_health['codec_error_count_mismatch']}/{native_summary_error_health['codec_phase_count_mismatch']}/{native_summary_error_health['offset_range_mismatch']}, healthy `{native_summary_error_healthy}`",
         f"- native summary error negative smoke: cases {native_summary_error_negative['case_count']}, healthy `{native_summary_error_negative_healthy}`",
         f"- lz4 native summary: frames/skippable/checksum/block-checksum/dictionary/content-size/blocks raw/compressed {lz4_native_summary['frame_count']}/{lz4_native_summary['skippable_frame_count']}/{lz4_native_summary['checksum_frame_count']}/{lz4_native_summary['block_checksum_frame_count']}/{lz4_native_summary['dictionary_id_frame_count']}/{lz4_native_summary['content_size_frame_count']}/{lz4_native_summary['block_count']} {lz4_native_summary['raw_block_count']}/{lz4_native_summary['compressed_block_count']}, declared/payload/skippable bytes {lz4_native_summary['declared_content_bytes']}/{lz4_native_summary['payload_bytes']}/{lz4_native_summary['skippable_payload_bytes']}, slack/mismatch {lz4_native_summary['declared_payload_slack_bytes']}/{lz4_native_summary['block_count_mismatch']}, healthy `{lz4_native_summary_healthy}`",
         f"- zstd native summary: frames/skippable/checksum/dictionary/content-size/blocks raw/rle/compressed {zstd_native_summary['frame_count']}/{zstd_native_summary['skippable_frame_count']}/{zstd_native_summary['checksum_frame_count']}/{zstd_native_summary['dictionary_id_frame_count']}/{zstd_native_summary['content_size_frame_count']}/{zstd_native_summary['block_count']} {zstd_native_summary['raw_block_count']}/{zstd_native_summary['rle_block_count']}/{zstd_native_summary['compressed_block_count']}, declared/payload/skippable bytes {zstd_native_summary['declared_content_bytes']}/{zstd_native_summary['payload_bytes']}/{zstd_native_summary['skippable_payload_bytes']}, slack/mismatch {zstd_native_summary['declared_payload_slack_bytes']}/{zstd_native_summary['block_count_mismatch']}, healthy `{zstd_native_summary_healthy}`",
@@ -7514,6 +7606,16 @@ def main() -> int:
     )
     lines.extend(
         [
+            "## Native summary error aggregate drift",
+            "",
+            "| category | count | detail |",
+            "| --- | ---: | --- |",
+            f"| case rows | {native_summary_error_health['case_rows']} | declared {native_summary_error_health['case_count']}, mismatch {native_summary_error_health['case_count_mismatch']} |",
+            f"| codec case drift | {native_summary_error_health['codec_case_count_mismatch']} | lz4/zstd {native_summary_error_health['lz4_case_count']}/{native_summary_error_health['zstd_case_count']} |",
+            f"| count drift | {native_summary_error_health['error_count_mismatch'] + native_summary_error_health['phase_count_mismatch']} | errors {native_summary_error_health['error_count_mismatch']}, phases {native_summary_error_health['phase_count_mismatch']} |",
+            f"| codec count drift | {native_summary_error_health['codec_error_count_mismatch'] + native_summary_error_health['codec_phase_count_mismatch']} | errors {native_summary_error_health['codec_error_count_mismatch']}, phases {native_summary_error_health['codec_phase_count_mismatch']} |",
+            f"| offset drift | {native_summary_error_health['offset_range_mismatch']} | healthy `{native_summary_error_health['healthy']}` |",
+            "",
             "## Native summary error codec coverage",
             "",
             "| codec | cases | errors | phases | required phases | missing phases |",
@@ -8285,8 +8387,11 @@ def main() -> int:
                 "native_summary_error_present": native_summary_error_health["present"],
                 "native_summary_error_healthy": native_summary_error_healthy,
                 "native_summary_error_case_count": native_summary_error_health["case_count"],
+                "native_summary_error_case_rows": native_summary_error_health["case_rows"],
+                "native_summary_error_case_count_mismatch": native_summary_error_health["case_count_mismatch"],
                 "native_summary_error_lz4_case_count": native_summary_error_health["lz4_case_count"],
                 "native_summary_error_zstd_case_count": native_summary_error_health["zstd_case_count"],
+                "native_summary_error_codec_case_count_mismatch": native_summary_error_health["codec_case_count_mismatch"],
                 "native_summary_error_checksum_mismatch_count": native_summary_error_health["checksum_mismatch_count"],
                 "native_summary_error_corrupt_frame_count": native_summary_error_health["corrupt_frame_count"],
                 "native_summary_error_truncated_frame_count": native_summary_error_health["truncated_frame_count"],
@@ -8307,6 +8412,11 @@ def main() -> int:
                 "native_summary_error_lz4_offset_max": native_summary_error_health["lz4_offset_max"],
                 "native_summary_error_zstd_offset_min": native_summary_error_health["zstd_offset_min"],
                 "native_summary_error_zstd_offset_max": native_summary_error_health["zstd_offset_max"],
+                "native_summary_error_error_count_mismatch": native_summary_error_health["error_count_mismatch"],
+                "native_summary_error_phase_count_mismatch": native_summary_error_health["phase_count_mismatch"],
+                "native_summary_error_codec_error_count_mismatch": native_summary_error_health["codec_error_count_mismatch"],
+                "native_summary_error_codec_phase_count_mismatch": native_summary_error_health["codec_phase_count_mismatch"],
+                "native_summary_error_offset_range_mismatch": native_summary_error_health["offset_range_mismatch"],
                 "native_summary_error_phase_offset_ranges": native_summary_error_health["phase_offset_ranges"],
                 "native_summary_error_required_codec_phases": native_summary_error_health["required_codec_phases"],
                 "native_summary_error_lz4_missing_phases": native_summary_error_health["lz4_missing_phases"],

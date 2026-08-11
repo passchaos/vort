@@ -2728,3 +2728,7 @@ architecture blindly.
   budget smoke rows to classify every report case exactly once, with no overlap,
   missing report cases, or extra smoke-only cases. Dashboard health now exposes
   smoke-classification counters before native allocation coverage can pass.
+- Tightened native summary error dashboard health by recomputing aggregate error,
+  phase, per-codec count, and offset-range summaries from the retained case rows.
+  Dashboard health now exposes aggregate-drift counters before native summary
+  malformed-stream coverage can pass.

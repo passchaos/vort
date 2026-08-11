@@ -1006,6 +1006,7 @@
           ],
           "positive": [
             "native_summary_error_case_count",
+            "native_summary_error_case_rows",
             "native_summary_error_lz4_case_count",
             "native_summary_error_zstd_case_count",
             "native_summary_error_truncated_frame_count",
@@ -1018,6 +1019,13 @@
             "native_summary_error_corrupt_frame_count"
           ],
           "zero": [
+            "native_summary_error_case_count_mismatch",
+            "native_summary_error_codec_case_count_mismatch",
+            "native_summary_error_error_count_mismatch",
+            "native_summary_error_phase_count_mismatch",
+            "native_summary_error_codec_error_count_mismatch",
+            "native_summary_error_codec_phase_count_mismatch",
+            "native_summary_error_offset_range_mismatch",
             "native_summary_error_lz4_missing_phases",
             "native_summary_error_zstd_missing_phases"
           ]
@@ -2083,8 +2091,11 @@
         "native_summary_error_present": "bool",
         "native_summary_error_healthy": "bool",
         "native_summary_error_case_count": "int",
+        "native_summary_error_case_rows": "int",
+        "native_summary_error_case_count_mismatch": "int",
         "native_summary_error_lz4_case_count": "int",
         "native_summary_error_zstd_case_count": "int",
+        "native_summary_error_codec_case_count_mismatch": "int",
         "native_summary_error_checksum_mismatch_count": "int",
         "native_summary_error_corrupt_frame_count": "int",
         "native_summary_error_truncated_frame_count": "int",
@@ -2105,6 +2116,11 @@
         "native_summary_error_lz4_offset_max": "int",
         "native_summary_error_zstd_offset_min": "int",
         "native_summary_error_zstd_offset_max": "int",
+        "native_summary_error_error_count_mismatch": "int",
+        "native_summary_error_phase_count_mismatch": "int",
+        "native_summary_error_codec_error_count_mismatch": "int",
+        "native_summary_error_codec_phase_count_mismatch": "int",
+        "native_summary_error_offset_range_mismatch": "int",
         "native_summary_error_phase_offset_ranges": "dict",
         "native_summary_error_required_codec_phases": "dict",
         "native_summary_error_lz4_missing_phases": "list",
@@ -2671,6 +2687,11 @@
           "left": "native_allocation_markdown_matched",
           "op": "eq",
           "right": "native_allocation_report_rows"
+        },
+        {
+          "left": "native_summary_error_case_rows",
+          "op": "eq",
+          "right": "native_summary_error_case_count"
         },
         {
           "left": "native_codec_probes_ok_probe_count",

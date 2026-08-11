@@ -1711,8 +1711,11 @@ def main() -> int:
         assert dashboard["native_summary_error_present"] is True
         assert dashboard["native_summary_error_healthy"] is True
         assert dashboard["native_summary_error_case_count"] == native_summary_error_dashboard["case_count"]
+        assert dashboard["native_summary_error_case_rows"] == len(native_summary_error_dashboard["cases"])
+        assert dashboard["native_summary_error_case_count_mismatch"] == 0
         assert dashboard["native_summary_error_lz4_case_count"] == native_summary_error_dashboard["lz4_case_count"]
         assert dashboard["native_summary_error_zstd_case_count"] == native_summary_error_dashboard["zstd_case_count"]
+        assert dashboard["native_summary_error_codec_case_count_mismatch"] == 0
         assert dashboard["native_summary_error_checksum_mismatch_count"] == native_summary_error_dashboard["error_counts"]["ChecksumMismatch"]
         assert dashboard["native_summary_error_corrupt_frame_count"] == native_summary_error_dashboard["error_counts"]["CorruptFrame"]
         assert dashboard["native_summary_error_truncated_frame_count"] == native_summary_error_dashboard["error_counts"]["TruncatedFrame"]
@@ -1733,6 +1736,11 @@ def main() -> int:
         assert dashboard["native_summary_error_lz4_offset_max"] == native_summary_error_dashboard["lz4_offset_max"]
         assert dashboard["native_summary_error_zstd_offset_min"] == native_summary_error_dashboard["zstd_offset_min"]
         assert dashboard["native_summary_error_zstd_offset_max"] == native_summary_error_dashboard["zstd_offset_max"]
+        assert dashboard["native_summary_error_error_count_mismatch"] == 0
+        assert dashboard["native_summary_error_phase_count_mismatch"] == 0
+        assert dashboard["native_summary_error_codec_error_count_mismatch"] == 0
+        assert dashboard["native_summary_error_codec_phase_count_mismatch"] == 0
+        assert dashboard["native_summary_error_offset_range_mismatch"] == 0
         assert dashboard["native_summary_error_phase_offset_ranges"] == native_summary_error_dashboard["phase_offset_ranges"]
         assert dashboard["native_summary_error_required_codec_phases"] == native_summary_error_dashboard["required_codec_phases"]
         assert dashboard["native_summary_error_lz4_missing_phases"] == []

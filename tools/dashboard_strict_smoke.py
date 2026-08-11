@@ -3695,49 +3695,78 @@ def write_zstd_compare_artifacts(root: Path) -> None:
 
 def write_native_summary_error_dashboard(path: Path, *, healthy: bool = True) -> None:
     required_phases = ["magic", "frame_header", "skippable_payload", "frame_body", "frame_checksum", "frame"]
+    def case(codec: str, name: str, error: str, phase: str, offset: int, compressed_bytes: int) -> dict[str, object]:
+        return {
+            "name": name,
+            "codec": codec,
+            "schema": f"vort.{codec}_native_stream_summary_error",
+            "schema_version": 1,
+            "ok": False,
+            "compressed_bytes": compressed_bytes,
+            "error": error,
+            "phase": phase,
+            "offset": offset,
+        }
+
+    healthy_cases = [
+        case("lz4", "lz4_bad_magic", "CorruptFrame", "magic", 0, 7),
+        case("lz4", "lz4_truncated_header", "TruncatedFrame", "frame_header", 5, 5),
+        case("lz4", "lz4_truncated_skippable", "TruncatedFrame", "skippable_payload", 13, 13),
+        case("lz4", "lz4_header_checksum", "ChecksumMismatch", "frame_header", 11, 11),
+        case("lz4", "lz4_truncated_body", "TruncatedFrame", "frame_body", 13, 13),
+        case("lz4", "lz4_truncated_checksum", "TruncatedFrame", "frame_checksum", 20, 20),
+        case("lz4", "lz4_invalid_block_header", "CorruptFrame", "frame", 7, 11),
+        case("zstd", "zstd_bad_magic", "InvalidMagic", "magic", 0, 8),
+        case("zstd", "zstd_truncated_header", "TruncatedFrame", "magic", 3, 3),
+        case("zstd", "zstd_truncated_skippable", "TruncatedFrame", "skippable_payload", 13, 13),
+        case("zstd", "zstd_reserved_descriptor", "CorruptFrame", "frame_header", 5, 5),
+        case("zstd", "zstd_truncated_body", "TruncatedFrame", "frame_body", 11, 11),
+        case("zstd", "zstd_truncated_checksum", "TruncatedFrame", "frame_checksum", 14, 14),
+        case("zstd", "zstd_invalid_block_header", "CorruptFrame", "frame", 6, 9),
+    ]
+    cases = healthy_cases if healthy else healthy_cases[:1]
+
+    def counts(field: str, *, codec: str | None = None) -> dict[str, int]:
+        result: dict[str, int] = {}
+        for row in cases:
+            if codec is not None and row["codec"] != codec:
+                continue
+            key = str(row[field])
+            result[key] = result.get(key, 0) + 1
+        return result
+
+    def offsets(*, codec: str | None = None, phase: str | None = None) -> list[int]:
+        return [
+            int(row["offset"])
+            for row in cases
+            if (codec is None or row["codec"] == codec) and (phase is None or row["phase"] == phase)
+        ]
+
+    def offset_range(values: list[int]) -> dict[str, int]:
+        return {"min": min(values), "max": max(values)} if values else {"min": 0, "max": 0}
+
     payload = {
         "schema": "vort.native_summary_error_dashboard",
         "schema_version": 1,
         "ok": healthy,
-        "case_count": 14 if healthy else 1,
-        "lz4_case_count": 7 if healthy else 1,
-        "zstd_case_count": 7 if healthy else 0,
-        "error_counts": {"ChecksumMismatch": 1 if healthy else 0, "CorruptFrame": 4 if healthy else 1, "InvalidMagic": 1, "TruncatedFrame": 8 if healthy else 0},
-        "phase_counts": {"magic": 2 if healthy else 1, "skippable_payload": 2 if healthy else 0, "frame_header": 3 if healthy else 0, "frame_body": 2 if healthy else 0, "frame_checksum": 2 if healthy else 0, "frame": 2 if healthy else 0},
-        "lz4_error_counts": {"ChecksumMismatch": 1 if healthy else 0, "CorruptFrame": 2 if healthy else 1, "TruncatedFrame": 4 if healthy else 0},
-        "zstd_error_counts": {"CorruptFrame": 2 if healthy else 0, "InvalidMagic": 1 if healthy else 0, "TruncatedFrame": 4 if healthy else 0},
-        "lz4_phase_counts": {"magic": 1 if healthy else 1, "skippable_payload": 1 if healthy else 0, "frame_header": 2 if healthy else 0, "frame_body": 1 if healthy else 0, "frame_checksum": 1 if healthy else 0, "frame": 1 if healthy else 0},
-        "zstd_phase_counts": {"magic": 1 if healthy else 0, "skippable_payload": 1 if healthy else 0, "frame_header": 1 if healthy else 0, "frame_body": 1 if healthy else 0, "frame_checksum": 1 if healthy else 0, "frame": 1 if healthy else 0},
+        "case_count": len(cases),
+        "lz4_case_count": len([row for row in cases if row["codec"] == "lz4"]),
+        "zstd_case_count": len([row for row in cases if row["codec"] == "zstd"]),
+        "error_counts": counts("error"),
+        "phase_counts": counts("phase"),
+        "lz4_error_counts": counts("error", codec="lz4"),
+        "zstd_error_counts": counts("error", codec="zstd"),
+        "lz4_phase_counts": counts("phase", codec="lz4"),
+        "zstd_phase_counts": counts("phase", codec="zstd"),
         "required_codec_phases": {"lz4": required_phases, "zstd": required_phases},
-        "offset_min": 0,
-        "offset_max": 20 if healthy else 0,
-        "lz4_offset_min": 0,
-        "lz4_offset_max": 20 if healthy else 0,
-        "zstd_offset_min": 0,
-        "zstd_offset_max": 14 if healthy else 0,
-        "phase_offset_ranges": {
-            "frame": {"min": 6, "max": 7},
-            "frame_body": {"min": 11, "max": 13},
-            "frame_checksum": {"min": 14, "max": 20},
-            "frame_header": {"min": 5, "max": 11},
-            "magic": {"min": 0, "max": 3},
-            "skippable_payload": {"min": 13, "max": 13},
-        }
-        if healthy
-        else {"magic": {"min": 0, "max": 0}},
-        "cases": [
-            {
-                "name": "lz4_bad_magic",
-                "codec": "lz4",
-                "schema": "vort.lz4_native_stream_summary_error",
-                "schema_version": 1,
-                "ok": False,
-                "compressed_bytes": 7,
-                "error": "CorruptFrame",
-                "phase": "magic",
-                "offset": 0,
-            }
-        ],
+        "offset_min": offset_range(offsets())["min"],
+        "offset_max": offset_range(offsets())["max"],
+        "lz4_offset_min": offset_range(offsets(codec="lz4"))["min"],
+        "lz4_offset_max": offset_range(offsets(codec="lz4"))["max"],
+        "zstd_offset_min": offset_range(offsets(codec="zstd"))["min"],
+        "zstd_offset_max": offset_range(offsets(codec="zstd"))["max"],
+        "phase_offset_ranges": {phase: offset_range(offsets(phase=phase)) for phase in sorted(counts("phase"))},
+        "cases": cases,
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
@@ -4651,6 +4680,13 @@ def main() -> int:
                 "native summary error Markdown tables",
                 dashboard_markdown,
                 [
+                    "## Native summary error aggregate drift",
+                    "| category | count | detail |",
+                    "| case rows | 14 | declared 14, mismatch 0 |",
+                    "| codec case drift | 0 | lz4/zstd 7/7 |",
+                    "| count drift | 0 | errors 0, phases 0 |",
+                    "| codec count drift | 0 | errors 0, phases 0 |",
+                    "| offset drift | 0 | healthy `True` |",
                     "## Native summary error codec coverage",
                     "| codec | cases | errors | phases | required phases | missing phases |",
                     "| `lz4` | 7 | `ChecksumMismatch`=1<br>`CorruptFrame`=2<br>`TruncatedFrame`=4 |",
