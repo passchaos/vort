@@ -2769,3 +2769,7 @@ architecture blindly.
   unknown algorithm rows alongside missing algorithms. Dashboard health now
   rejects checksum CSV algorithm drift before checksum benchmark coverage can
   pass.
+
+- Tightened chunk cursor benchmark dashboard health by exposing duplicate and
+  unknown `(case, kernel)` rows alongside missing pairs. Dashboard health now
+  rejects chunk cursor CSV pair drift before cursor benchmark coverage can pass.

@@ -3086,6 +3086,8 @@ def chunk_cursor_bench_health(artifacts: list[Path]) -> dict:
             rows = []
 
         seen: set[tuple[str, str]] = set()
+        duplicate_pairs: set[tuple[str, str]] = set()
+        unknown_pairs: set[tuple[str, str]] = set()
         positive_rows = 0
         shape_rows = 0
         throughput_rows = 0
@@ -3095,8 +3097,12 @@ def chunk_cursor_bench_health(artifacts: list[Path]) -> dict:
             kernel = str(row.get("kernel") or "")
             pair = (case, kernel)
             if pair in expected_pairs:
+                if pair in seen:
+                    duplicate_pairs.add(pair)
                 seen.add(pair)
                 rows_by_pair[pair] = row
+            else:
+                unknown_pairs.add(pair)
             expected = expected_cases.get(case)
             try:
                 payload_bytes = int(row.get("payload_bytes") or "0")
@@ -3141,10 +3147,14 @@ def chunk_cursor_bench_health(artifacts: list[Path]) -> dict:
                 checksum_matched_cases += 1
 
         missing_pairs = sorted(f"{case}:{kernel}" for case, kernel in expected_pairs - seen)
+        duplicate_pair_names = sorted(f"{case}:{kernel}" for case, kernel in duplicate_pairs)
+        unknown_pair_names = sorted(f"{case}:{kernel}" for case, kernel in unknown_pairs)
         row_count = len(rows)
         healthy = (
             row_count == len(expected_pairs)
             and not missing_pairs
+            and not duplicate_pair_names
+            and not unknown_pair_names
             and positive_rows == row_count
             and shape_rows == row_count
             and throughput_rows == row_count
@@ -3160,6 +3170,8 @@ def chunk_cursor_bench_health(artifacts: list[Path]) -> dict:
             "throughput_rows": throughput_rows,
             "checksum_matched_cases": checksum_matched_cases,
             "missing_pairs": missing_pairs,
+            "duplicate_pairs": duplicate_pair_names,
+            "unknown_pairs": unknown_pair_names,
         }
 
     return {
@@ -3172,6 +3184,8 @@ def chunk_cursor_bench_health(artifacts: list[Path]) -> dict:
         "throughput_rows": 0,
         "checksum_matched_cases": 0,
         "missing_pairs": [],
+        "duplicate_pairs": [],
+        "unknown_pairs": [],
     }
 
 
@@ -7322,7 +7336,7 @@ def main() -> int:
         f"- zstd native summary: frames/skippable/checksum/dictionary/content-size/blocks raw/rle/compressed {zstd_native_summary['frame_count']}/{zstd_native_summary['skippable_frame_count']}/{zstd_native_summary['checksum_frame_count']}/{zstd_native_summary['dictionary_id_frame_count']}/{zstd_native_summary['content_size_frame_count']}/{zstd_native_summary['block_count']} {zstd_native_summary['raw_block_count']}/{zstd_native_summary['rle_block_count']}/{zstd_native_summary['compressed_block_count']}, declared/payload/skippable bytes {zstd_native_summary['declared_content_bytes']}/{zstd_native_summary['payload_bytes']}/{zstd_native_summary['skippable_payload_bytes']}, slack/mismatch {zstd_native_summary['declared_payload_slack_bytes']}/{zstd_native_summary['block_count_mismatch']}, healthy `{zstd_native_summary_healthy}`",
         f"- Snappy report: {snappy_report['row_count']}/{snappy_report['expected_rows']} rows, positive/ratio/throughput {snappy_report['positive_timing_rows']}/{snappy_report['ratio_rows']}/{snappy_report['throughput_rows']}, repetitive shrunk {snappy_report['repetitive_shrunk_rows']}, framed overhead/reusable size/checksum matches {snappy_report['framed_overhead_matched_cases']}/{snappy_report['reusable_size_matched_cases']}/{snappy_report['reusable_checksum_matched_cases']}, missing/duplicate/unknown pairs {len(snappy_report['missing_pairs'])}/{len(snappy_report['duplicate_pairs'])}/{len(snappy_report['unknown_pairs'])}, healthy `{snappy_report_healthy}`",
         f"- checksum bench: {checksum_bench['row_count']}/{checksum_bench['expected_rows']} rows, workload {checksum_bench['workload_rows']}, positive/throughput {checksum_bench['positive_rows']}/{checksum_bench['throughput_rows']}, mix groups crc32/crc32c {checksum_bench['crc32_mix_groups']}/{checksum_bench['crc32c_mix_groups']}, missing/duplicate/unknown algorithms {len(checksum_bench['missing_algorithms'])}/{len(checksum_bench['duplicate_algorithms'])}/{len(checksum_bench['unknown_algorithms'])}, healthy `{checksum_bench_healthy}`",
-        f"- chunk cursor bench: {chunk_cursor_bench['row_count']}/{chunk_cursor_bench['expected_rows']} rows, shape {chunk_cursor_bench['shape_rows']}, positive/throughput {chunk_cursor_bench['positive_rows']}/{chunk_cursor_bench['throughput_rows']}, checksum matches {chunk_cursor_bench['checksum_matched_cases']}, healthy `{chunk_cursor_bench_healthy}`",
+        f"- chunk cursor bench: {chunk_cursor_bench['row_count']}/{chunk_cursor_bench['expected_rows']} rows, shape {chunk_cursor_bench['shape_rows']}, positive/throughput {chunk_cursor_bench['positive_rows']}/{chunk_cursor_bench['throughput_rows']}, checksum matches {chunk_cursor_bench['checksum_matched_cases']}, missing/duplicate/unknown pairs {len(chunk_cursor_bench['missing_pairs'])}/{len(chunk_cursor_bench['duplicate_pairs'])}/{len(chunk_cursor_bench['unknown_pairs'])}, healthy `{chunk_cursor_bench_healthy}`",
         f"- deflate match-copy bench: {deflate_match_copy_bench['row_count']}/{deflate_match_copy_bench['expected_rows']} rows, classes {deflate_match_copy_bench['expected_class_rows']}, positive/output/throughput {deflate_match_copy_bench['positive_rows']}/{deflate_match_copy_bench['output_bytes_rows']}/{deflate_match_copy_bench['throughput_rows']}, checksum matches {deflate_match_copy_bench['checksum_matched_cases']}, healthy `{deflate_match_copy_bench_healthy}`",
         f"- deflate Huffman build bench: {deflate_huffman_build_bench['row_count']}/{deflate_huffman_build_bench['expected_rows']} rows, lookup {deflate_huffman_build_bench['lookup_rows']}, positive/throughput {deflate_huffman_build_bench['positive_rows']}/{deflate_huffman_build_bench['throughput_rows']}, checksum variant cases {deflate_huffman_build_bench['checksum_variant_cases']}, healthy `{deflate_huffman_build_bench_healthy}`",
         f"- deflate Huffman lookup bench: {deflate_huffman_lookup_bench['row_count']}/{deflate_huffman_lookup_bench['expected_rows']} rows, lookup {deflate_huffman_lookup_bench['lookup_rows']}, positive/throughput {deflate_huffman_lookup_bench['positive_rows']}/{deflate_huffman_lookup_bench['throughput_rows']}, checksum matches {deflate_huffman_lookup_bench['checksum_matched_cases']}, healthy `{deflate_huffman_lookup_bench_healthy}`",
@@ -7542,7 +7556,7 @@ def main() -> int:
             f"| rows | {chunk_cursor_bench['row_count']} | expected {chunk_cursor_bench['expected_rows']}, present `{chunk_cursor_bench['present']}` |",
             f"| shape rows | {chunk_cursor_bench['shape_rows']} | positive/throughput rows {chunk_cursor_bench['positive_rows']}/{chunk_cursor_bench['throughput_rows']} |",
             f"| checksum matches | {chunk_cursor_bench['checksum_matched_cases']} | expected cases 4 |",
-            f"| missing pairs | {len(chunk_cursor_bench['missing_pairs'])} | healthy `{chunk_cursor_bench['healthy']}` |",
+            f"| pair drift | {len(chunk_cursor_bench['missing_pairs'])} | duplicate/unknown {len(chunk_cursor_bench['duplicate_pairs'])}/{len(chunk_cursor_bench['unknown_pairs'])}, healthy `{chunk_cursor_bench['healthy']}` |",
             "",
         ]
     )
@@ -8462,6 +8476,8 @@ def main() -> int:
                 "chunk_cursor_bench_throughput_rows": chunk_cursor_bench["throughput_rows"],
                 "chunk_cursor_bench_checksum_matched_cases": chunk_cursor_bench["checksum_matched_cases"],
                 "chunk_cursor_bench_missing_pairs": chunk_cursor_bench["missing_pairs"],
+                "chunk_cursor_bench_duplicate_pairs": chunk_cursor_bench["duplicate_pairs"],
+                "chunk_cursor_bench_unknown_pairs": chunk_cursor_bench["unknown_pairs"],
                 "deflate_match_copy_bench_present": deflate_match_copy_bench["present"],
                 "deflate_match_copy_bench_healthy": deflate_match_copy_bench["healthy"],
                 "deflate_match_copy_bench_rows": deflate_match_copy_bench["row_count"],

@@ -398,6 +398,8 @@ def main() -> int:
                 "chunk_cursor_bench_throughput_rows": 8,
                 "chunk_cursor_bench_checksum_matched_cases": 4,
                 "chunk_cursor_bench_missing_pairs": [],
+                "chunk_cursor_bench_duplicate_pairs": [],
+                "chunk_cursor_bench_unknown_pairs": [],
                 "deflate_match_copy_bench_present": True,
                 "deflate_match_copy_bench_healthy": True,
                 "deflate_match_copy_bench_rows": 21,
