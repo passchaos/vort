@@ -2686,3 +2686,8 @@ architecture blindly.
   requiring all kernels for each case to preserve checksums. Dashboard health now
   exposes output-byte, throughput, and checksum-match counters before match-copy
   coverage can pass.
+- Tightened deflate Huffman build benchmark dashboard health by recomputing
+  builds/s from iterations and elapsed time and by requiring each case's table
+  builder variants to retain distinct non-zero checksums. Dashboard health now
+  exposes throughput-row and checksum-variant counters before Huffman build
+  coverage can pass.

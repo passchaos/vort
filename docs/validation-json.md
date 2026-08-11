@@ -2691,6 +2691,8 @@ Top-level fields:
   `deflate_huffman_build_bench_expected_rows`,
   `deflate_huffman_build_bench_positive_rows`,
   `deflate_huffman_build_bench_lookup_rows`,
+  `deflate_huffman_build_bench_throughput_rows`,
+  `deflate_huffman_build_bench_checksum_variant_cases`,
   `deflate_huffman_build_bench_missing_pairs`
 - `deflate_huffman_lookup_bench_present`,
   `deflate_huffman_lookup_bench_healthy`,
@@ -3336,6 +3338,8 @@ Example:
   "deflate_huffman_build_bench_expected_rows": 0,
   "deflate_huffman_build_bench_positive_rows": 0,
   "deflate_huffman_build_bench_lookup_rows": 0,
+  "deflate_huffman_build_bench_throughput_rows": 0,
+  "deflate_huffman_build_bench_checksum_variant_cases": 0,
   "deflate_huffman_build_bench_missing_pairs": [],
   "deflate_huffman_lookup_bench_present": false,
   "deflate_huffman_lookup_bench_healthy": false,

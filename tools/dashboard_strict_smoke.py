@@ -1798,7 +1798,24 @@ def write_deflate_huffman_build_bench_csv(path: Path, *, healthy: bool = True) -
         for build, lookup_bits, symbols in rows:
             if not healthy and case == "code-length" and build == "fast7":
                 continue
-            lines.append(",".join([case, build, str(lookup_bits), str(symbols), "4096", "1000", "1000.0", "12345"]))
+            iterations = 4096
+            elapsed_ns = 1_000_000
+            builds_per_s = iterations / (elapsed_ns / 1_000_000_000.0)
+            checksum = symbols + lookup_bits * 100_000 + len(build) * 1_000 + len(case)
+            lines.append(
+                ",".join(
+                    [
+                        case,
+                        build,
+                        str(lookup_bits),
+                        str(symbols),
+                        str(iterations),
+                        str(elapsed_ns),
+                        f"{builds_per_s:.2f}",
+                        str(checksum),
+                    ]
+                )
+            )
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -4762,7 +4779,8 @@ def main() -> int:
                     "## Deflate Huffman build benchmark coverage",
                     "| category | count | detail |",
                     "| rows | 14 | expected 14, present `True` |",
-                    "| lookup rows | 14 | positive rows 14 |",
+                    "| lookup rows | 14 | positive/throughput rows 14/14 |",
+                    "| checksum variant cases | 4 | expected cases 4 |",
                     "| missing pairs | 0 | healthy `True` |",
                 ],
             )
