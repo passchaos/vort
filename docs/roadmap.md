@@ -2842,3 +2842,8 @@ architecture blindly.
   `(source, path)` rows alongside missing sources/paths. Dashboard health now
   rejects dynamic-plan CSV path drift before token, histogram, ratio, and wrapper
   accounting coverage can pass.
+
+- Tightened deflate wrapper fuzz corpus dashboard health by recomputing
+  `mode_counts` and `error_counts` from row-level `items`, exposing missing,
+  duplicate, unknown, and mismatched summary rows. Dashboard health now rejects
+  stale fuzz summary aggregates before coverage and Markdown checks can pass.

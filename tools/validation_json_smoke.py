@@ -1305,6 +1305,14 @@ def main() -> int:
         assert dashboard["fuzz_corpus_coverage_mode_matched"] == fuzz_coverage_smoke["mode_requirement_count"]
         assert dashboard["fuzz_corpus_coverage_error_matched"] == fuzz_coverage_smoke["error_requirement_count"]
         assert dashboard["fuzz_corpus_coverage_unmatched"] == 0
+        assert dashboard["fuzz_corpus_mode_summary_mismatch"] == 0
+        assert dashboard["fuzz_corpus_mode_summary_missing_modes"] == []
+        assert dashboard["fuzz_corpus_mode_summary_duplicate_modes"] == []
+        assert dashboard["fuzz_corpus_mode_summary_unknown_modes"] == []
+        assert dashboard["fuzz_corpus_error_summary_mismatch"] == 0
+        assert dashboard["fuzz_corpus_error_summary_missing_pairs"] == []
+        assert dashboard["fuzz_corpus_error_summary_duplicate_pairs"] == []
+        assert dashboard["fuzz_corpus_error_summary_unknown_pairs"] == []
         assert dashboard["fuzz_corpus_markdown_rows"] == (
             9 + len(fuzz_report["mode_counts"]) + len(fuzz_report["error_counts"]) + len(fuzz_report["items"])
         )

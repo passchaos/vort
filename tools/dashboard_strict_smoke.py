@@ -5249,6 +5249,7 @@ def main() -> int:
                     "| corpus cases | 3 | matched/unmatched 3/0 |",
                     "| report rows | 3/3 | accepted/rejected 1/2, count mismatch 0 |",
                     "| exact error expectations | 2 | mode/error rows 3/2 |",
+                    "| summary drift | 0 | mode missing/duplicate/unknown 0/0/0, error missing/duplicate/unknown 0/0/0 |",
                     "| coverage requirements | 5 | matched modes/errors 3/2, unmatched 0 |",
                     "| Markdown rows | 17/17 | present `True`, unmatched 0 |",
                 ],

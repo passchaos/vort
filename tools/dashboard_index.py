@@ -1050,6 +1050,85 @@ def fuzz_corpus_health(artifacts: list[Path]) -> dict:
     rejected_from_items = sum(1 for row in items if isinstance(row, dict) and row.get("outcome") == "rejected")
     matched_from_items = sum(1 for row in items if isinstance(row, dict) and row.get("matched") is True)
     exact_from_items = sum(1 for row in items if isinstance(row, dict) and str(row.get("expected_error") or "") != "")
+
+    # The report stores pre-aggregated mode/error summaries next to the raw
+    # sample rows. Recompute those summaries from `items` so a stale or edited
+    # aggregate cannot satisfy coverage gates while row-level evidence drifts.
+    computed_mode_counts: dict[str, dict[str, int]] = {}
+    computed_error_counts: dict[tuple[str, str], int] = {}
+    for row in items:
+        if not isinstance(row, dict):
+            continue
+        mode = str(row.get("mode") or "")
+        if not mode:
+            continue
+        mode_row = computed_mode_counts.setdefault(
+            mode,
+            {"cases": 0, "accepted": 0, "rejected": 0, "exact_error_expectations": 0, "matched_rows": 0},
+        )
+        mode_row["cases"] += 1
+        outcome = str(row.get("outcome") or "")
+        if outcome == "accepted":
+            mode_row["accepted"] += 1
+        elif outcome == "rejected":
+            mode_row["rejected"] += 1
+            actual_error = str(row.get("actual_error") or "")
+            if actual_error:
+                key = (mode, actual_error)
+                computed_error_counts[key] = computed_error_counts.get(key, 0) + 1
+        if str(row.get("expected_error") or ""):
+            mode_row["exact_error_expectations"] += 1
+        if row.get("matched") is True:
+            mode_row["matched_rows"] += 1
+
+    reported_mode_counts: dict[str, dict] = {}
+    duplicate_mode_summary: set[str] = set()
+    for row in mode_counts:
+        if not isinstance(row, dict):
+            continue
+        mode = str(row.get("mode") or "")
+        if not mode:
+            continue
+        if mode in reported_mode_counts:
+            duplicate_mode_summary.add(mode)
+        else:
+            reported_mode_counts[mode] = row
+    expected_modes = set(computed_mode_counts)
+    reported_modes = set(reported_mode_counts)
+    mode_summary_missing_modes = sorted(expected_modes - reported_modes)
+    mode_summary_unknown_modes = sorted(reported_modes - expected_modes)
+    mode_summary_duplicate_modes = sorted(duplicate_mode_summary)
+    mode_summary_mismatch = 0
+    for mode in expected_modes & reported_modes:
+        reported = reported_mode_counts[mode]
+        computed = computed_mode_counts[mode]
+        if any(row_int(reported, field) != computed[field] for field in ("cases", "accepted", "rejected", "exact_error_expectations", "matched_rows")):
+            mode_summary_mismatch += 1
+
+    reported_error_counts: dict[tuple[str, str], dict] = {}
+    duplicate_error_summary: set[tuple[str, str]] = set()
+    for row in error_counts:
+        if not isinstance(row, dict):
+            continue
+        mode = str(row.get("mode") or "")
+        error_name = str(row.get("error") or "")
+        if not mode or not error_name:
+            continue
+        key = (mode, error_name)
+        if key in reported_error_counts:
+            duplicate_error_summary.add(key)
+        else:
+            reported_error_counts[key] = row
+    expected_errors = set(computed_error_counts)
+    reported_errors = set(reported_error_counts)
+    error_summary_missing_pairs = sorted(f"{mode}:{error}" for mode, error in expected_errors - reported_errors)
+    error_summary_unknown_pairs = sorted(f"{mode}:{error}" for mode, error in reported_errors - expected_errors)
+    error_summary_duplicate_pairs = sorted(f"{mode}:{error}" for mode, error in duplicate_error_summary)
+    error_summary_mismatch = 0
+    for key in expected_errors & reported_errors:
+        if row_int(reported_error_counts[key], "count") != computed_error_counts[key]:
+            error_summary_mismatch += 1
+
     report_count_mismatch = (
         abs(cases - report_rows)
         + abs(as_int(report, "accepted") - accepted_from_items)
@@ -1083,6 +1162,14 @@ def fuzz_corpus_health(artifacts: list[Path]) -> dict:
         and exact_error_expectations > 0
         and mode_count_rows > 0
         and error_count_rows > 0
+        and mode_summary_mismatch == 0
+        and error_summary_mismatch == 0
+        and not mode_summary_missing_modes
+        and not mode_summary_duplicate_modes
+        and not mode_summary_unknown_modes
+        and not error_summary_missing_pairs
+        and not error_summary_duplicate_pairs
+        and not error_summary_unknown_pairs
     )
     coverage_healthy = (
         coverage_present
@@ -1113,6 +1200,14 @@ def fuzz_corpus_health(artifacts: list[Path]) -> dict:
         "coverage_mode_matched": coverage_mode_matched,
         "coverage_error_matched": coverage_error_matched,
         "coverage_unmatched": coverage_unmatched,
+        "mode_summary_mismatch": mode_summary_mismatch,
+        "mode_summary_missing_modes": mode_summary_missing_modes,
+        "mode_summary_duplicate_modes": mode_summary_duplicate_modes,
+        "mode_summary_unknown_modes": mode_summary_unknown_modes,
+        "error_summary_mismatch": error_summary_mismatch,
+        "error_summary_missing_pairs": error_summary_missing_pairs,
+        "error_summary_duplicate_pairs": error_summary_duplicate_pairs,
+        "error_summary_unknown_pairs": error_summary_unknown_pairs,
         "markdown_rows": markdown_rows,
         "markdown_matched": markdown_matched,
         "markdown_unmatched": markdown_unmatched,
@@ -8080,6 +8175,7 @@ def main() -> int:
             f"| corpus cases | {fuzz_health['cases']} | matched/unmatched {fuzz_health['matched_rows']}/{fuzz_health['unmatched_rows']} |",
             f"| report rows | {fuzz_health['report_rows']}/{fuzz_health['cases']} | accepted/rejected {fuzz_health['accepted']}/{fuzz_health['rejected']}, count mismatch {fuzz_health['report_count_mismatch']} |",
             f"| exact error expectations | {fuzz_health['exact_error_expectations']} | mode/error rows {fuzz_health['mode_count_rows']}/{fuzz_health['error_count_rows']} |",
+            f"| summary drift | {fuzz_health['mode_summary_mismatch'] + fuzz_health['error_summary_mismatch']} | mode missing/duplicate/unknown {len(fuzz_health['mode_summary_missing_modes'])}/{len(fuzz_health['mode_summary_duplicate_modes'])}/{len(fuzz_health['mode_summary_unknown_modes'])}, error missing/duplicate/unknown {len(fuzz_health['error_summary_missing_pairs'])}/{len(fuzz_health['error_summary_duplicate_pairs'])}/{len(fuzz_health['error_summary_unknown_pairs'])} |",
             f"| coverage requirements | {fuzz_health['coverage_mode_requirements'] + fuzz_health['coverage_error_requirements']} | matched modes/errors {fuzz_health['coverage_mode_matched']}/{fuzz_health['coverage_error_matched']}, unmatched {fuzz_health['coverage_unmatched']} |",
             f"| Markdown rows | {fuzz_health['markdown_matched']}/{fuzz_health['markdown_rows']} | present `{fuzz_health['markdown_present']}`, unmatched {fuzz_health['markdown_unmatched']} |",
             "",
@@ -8514,6 +8610,14 @@ def main() -> int:
                 "fuzz_corpus_coverage_mode_matched": fuzz_health["coverage_mode_matched"],
                 "fuzz_corpus_coverage_error_matched": fuzz_health["coverage_error_matched"],
                 "fuzz_corpus_coverage_unmatched": fuzz_health["coverage_unmatched"],
+                "fuzz_corpus_mode_summary_mismatch": fuzz_health["mode_summary_mismatch"],
+                "fuzz_corpus_mode_summary_missing_modes": fuzz_health["mode_summary_missing_modes"],
+                "fuzz_corpus_mode_summary_duplicate_modes": fuzz_health["mode_summary_duplicate_modes"],
+                "fuzz_corpus_mode_summary_unknown_modes": fuzz_health["mode_summary_unknown_modes"],
+                "fuzz_corpus_error_summary_mismatch": fuzz_health["error_summary_mismatch"],
+                "fuzz_corpus_error_summary_missing_pairs": fuzz_health["error_summary_missing_pairs"],
+                "fuzz_corpus_error_summary_duplicate_pairs": fuzz_health["error_summary_duplicate_pairs"],
+                "fuzz_corpus_error_summary_unknown_pairs": fuzz_health["error_summary_unknown_pairs"],
                 "fuzz_corpus_markdown_rows": fuzz_health["markdown_rows"],
                 "fuzz_corpus_markdown_matched": fuzz_health["markdown_matched"],
                 "fuzz_corpus_markdown_unmatched": fuzz_health["markdown_unmatched"],
