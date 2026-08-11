@@ -2676,3 +2676,8 @@ architecture blindly.
   bytes, iterations, and elapsed time for every retained CSV row. Dashboard
   health now exposes throughput-row counters before checksum benchmark coverage
   can pass.
+- Tightened chunk cursor benchmark dashboard health by recomputing bytes/s and
+  MiB/s from payload bytes, iterations, and elapsed time, and by requiring the
+  current and skip-empty kernels to preserve per-case checksums. Dashboard health
+  now exposes throughput-row and checksum-match counters before chunk cursor
+  coverage can pass.

@@ -1511,6 +1511,8 @@ def main() -> int:
         assert dashboard["chunk_cursor_bench_expected_rows"] == 8
         assert dashboard["chunk_cursor_bench_positive_rows"] == len(chunk_cursor_bench_rows)
         assert dashboard["chunk_cursor_bench_shape_rows"] == len(chunk_cursor_bench_rows)
+        assert dashboard["chunk_cursor_bench_throughput_rows"] == len(chunk_cursor_bench_rows)
+        assert dashboard["chunk_cursor_bench_checksum_matched_cases"] == 4
         assert dashboard["chunk_cursor_bench_missing_pairs"] == []
         assert dashboard["deflate_match_copy_bench_present"] is True
         assert dashboard["deflate_match_copy_bench_healthy"] is True

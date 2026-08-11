@@ -393,6 +393,8 @@ def main() -> int:
                 "chunk_cursor_bench_expected_rows": 8,
                 "chunk_cursor_bench_positive_rows": 8,
                 "chunk_cursor_bench_shape_rows": 8,
+                "chunk_cursor_bench_throughput_rows": 8,
+                "chunk_cursor_bench_checksum_matched_cases": 4,
                 "chunk_cursor_bench_missing_pairs": [],
                 "deflate_match_copy_bench_present": True,
                 "deflate_match_copy_bench_healthy": True,

@@ -1705,6 +1705,10 @@ def write_chunk_cursor_bench_csv(path: Path, *, healthy: bool = True) -> None:
         for kernel in kernels:
             if not healthy and case == "copy-256b" and kernel == "skip_empty_advance":
                 continue
+            iterations = 128
+            elapsed_ns = 1_000
+            bytes_per_s = (payload_bytes * iterations) / (elapsed_ns / 1_000_000_000.0)
+            mib_per_s = bytes_per_s / (1024.0 * 1024.0)
             lines.append(
                 ",".join(
                     [
@@ -1715,10 +1719,10 @@ def write_chunk_cursor_bench_csv(path: Path, *, healthy: bool = True) -> None:
                         str(chunk_bytes),
                         str(chunk_count(payload_bytes, chunk_bytes, include_empty)),
                         include_empty,
-                        "128",
-                        "1000",
-                        "1000000.0",
-                        "1.0",
+                        str(iterations),
+                        str(elapsed_ns),
+                        f"{bytes_per_s:.2f}",
+                        f"{mib_per_s:.2f}",
                         "12345",
                     ]
                 )
@@ -4706,7 +4710,8 @@ def main() -> int:
                     "## Chunk cursor benchmark coverage",
                     "| category | count | detail |",
                     "| rows | 8 | expected 8, present `True` |",
-                    "| shape rows | 8 | positive rows 8 |",
+                    "| shape rows | 8 | positive/throughput rows 8/8 |",
+                    "| checksum matches | 4 | expected cases 4 |",
                     "| missing pairs | 0 | healthy `True` |",
                 ],
             )

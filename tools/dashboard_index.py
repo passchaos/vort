@@ -2972,12 +2972,15 @@ def chunk_cursor_bench_health(artifacts: list[Path]) -> dict:
         seen: set[tuple[str, str]] = set()
         positive_rows = 0
         shape_rows = 0
+        throughput_rows = 0
+        rows_by_pair: dict[tuple[str, str], dict[str, str]] = {}
         for row in rows:
             case = str(row.get("case") or "")
             kernel = str(row.get("kernel") or "")
             pair = (case, kernel)
             if pair in expected_pairs:
                 seen.add(pair)
+                rows_by_pair[pair] = row
             expected = expected_cases.get(case)
             try:
                 payload_bytes = int(row.get("payload_bytes") or "0")
@@ -2992,6 +2995,10 @@ def chunk_cursor_bench_health(artifacts: list[Path]) -> dict:
                 continue
             if iterations > 0 and elapsed_ns > 0 and checksum > 0 and bytes_per_s > 0.0 and mib_per_s > 0.0:
                 positive_rows += 1
+            expected_bytes_per_s = (payload_bytes * iterations) / (elapsed_ns / 1_000_000_000.0) if elapsed_ns > 0 else 0.0
+            expected_mib_per_s = expected_bytes_per_s / (1024.0 * 1024.0)
+            if abs(bytes_per_s - expected_bytes_per_s) <= 0.01 and abs(mib_per_s - expected_mib_per_s) <= 0.01:
+                throughput_rows += 1
             if expected is not None:
                 expected_chunks = expected_chunk_count(expected["payload_bytes"], expected["chunk_bytes"], expected["include_empty_chunks"] == "true")
                 if (
@@ -3003,6 +3010,20 @@ def chunk_cursor_bench_health(artifacts: list[Path]) -> dict:
                 ):
                     shape_rows += 1
 
+        checksum_matched_cases = 0
+        for case in expected_cases:
+            current = rows_by_pair.get((case, "current"))
+            optimized = rows_by_pair.get((case, "skip_empty_advance"))
+            if not (current and optimized):
+                continue
+            try:
+                current_checksum = int(current.get("checksum") or "0")
+                optimized_checksum = int(optimized.get("checksum") or "0")
+            except ValueError:
+                continue
+            if current_checksum == optimized_checksum and current_checksum > 0:
+                checksum_matched_cases += 1
+
         missing_pairs = sorted(f"{case}:{kernel}" for case, kernel in expected_pairs - seen)
         row_count = len(rows)
         healthy = (
@@ -3010,6 +3031,8 @@ def chunk_cursor_bench_health(artifacts: list[Path]) -> dict:
             and not missing_pairs
             and positive_rows == row_count
             and shape_rows == row_count
+            and throughput_rows == row_count
+            and checksum_matched_cases == len(expected_cases)
         )
         return {
             "present": True,
@@ -3018,6 +3041,8 @@ def chunk_cursor_bench_health(artifacts: list[Path]) -> dict:
             "expected_rows": len(expected_pairs),
             "positive_rows": positive_rows,
             "shape_rows": shape_rows,
+            "throughput_rows": throughput_rows,
+            "checksum_matched_cases": checksum_matched_cases,
             "missing_pairs": missing_pairs,
         }
 
@@ -3028,6 +3053,8 @@ def chunk_cursor_bench_health(artifacts: list[Path]) -> dict:
         "expected_rows": len(expected_pairs),
         "positive_rows": 0,
         "shape_rows": 0,
+        "throughput_rows": 0,
+        "checksum_matched_cases": 0,
         "missing_pairs": [],
     }
 
@@ -6634,7 +6661,7 @@ def main() -> int:
         f"- zstd native summary: frames/skippable/checksum/dictionary/content-size/blocks raw/rle/compressed {zstd_native_summary['frame_count']}/{zstd_native_summary['skippable_frame_count']}/{zstd_native_summary['checksum_frame_count']}/{zstd_native_summary['dictionary_id_frame_count']}/{zstd_native_summary['content_size_frame_count']}/{zstd_native_summary['block_count']} {zstd_native_summary['raw_block_count']}/{zstd_native_summary['rle_block_count']}/{zstd_native_summary['compressed_block_count']}, declared/payload/skippable bytes {zstd_native_summary['declared_content_bytes']}/{zstd_native_summary['payload_bytes']}/{zstd_native_summary['skippable_payload_bytes']}, slack/mismatch {zstd_native_summary['declared_payload_slack_bytes']}/{zstd_native_summary['block_count_mismatch']}, healthy `{zstd_native_summary_healthy}`",
         f"- Snappy report: {snappy_report['row_count']}/{snappy_report['expected_rows']} rows, positive/ratio/throughput {snappy_report['positive_timing_rows']}/{snappy_report['ratio_rows']}/{snappy_report['throughput_rows']}, repetitive shrunk {snappy_report['repetitive_shrunk_rows']}, reusable size/checksum matches {snappy_report['reusable_size_matched_cases']}/{snappy_report['reusable_checksum_matched_cases']}, healthy `{snappy_report_healthy}`",
         f"- checksum bench: {checksum_bench['row_count']}/{checksum_bench['expected_rows']} rows, workload {checksum_bench['workload_rows']}, positive/throughput {checksum_bench['positive_rows']}/{checksum_bench['throughput_rows']}, mix groups crc32/crc32c {checksum_bench['crc32_mix_groups']}/{checksum_bench['crc32c_mix_groups']}, healthy `{checksum_bench_healthy}`",
-        f"- chunk cursor bench: {chunk_cursor_bench['row_count']}/{chunk_cursor_bench['expected_rows']} rows, shape {chunk_cursor_bench['shape_rows']}, positive {chunk_cursor_bench['positive_rows']}, healthy `{chunk_cursor_bench_healthy}`",
+        f"- chunk cursor bench: {chunk_cursor_bench['row_count']}/{chunk_cursor_bench['expected_rows']} rows, shape {chunk_cursor_bench['shape_rows']}, positive/throughput {chunk_cursor_bench['positive_rows']}/{chunk_cursor_bench['throughput_rows']}, checksum matches {chunk_cursor_bench['checksum_matched_cases']}, healthy `{chunk_cursor_bench_healthy}`",
         f"- deflate match-copy bench: {deflate_match_copy_bench['row_count']}/{deflate_match_copy_bench['expected_rows']} rows, classes {deflate_match_copy_bench['expected_class_rows']}, positive {deflate_match_copy_bench['positive_rows']}, healthy `{deflate_match_copy_bench_healthy}`",
         f"- deflate Huffman build bench: {deflate_huffman_build_bench['row_count']}/{deflate_huffman_build_bench['expected_rows']} rows, lookup {deflate_huffman_build_bench['lookup_rows']}, positive {deflate_huffman_build_bench['positive_rows']}, healthy `{deflate_huffman_build_bench_healthy}`",
         f"- deflate Huffman lookup bench: {deflate_huffman_lookup_bench['row_count']}/{deflate_huffman_lookup_bench['expected_rows']} rows, lookup {deflate_huffman_lookup_bench['lookup_rows']}, positive {deflate_huffman_lookup_bench['positive_rows']}, healthy `{deflate_huffman_lookup_bench_healthy}`",
@@ -6850,7 +6877,8 @@ def main() -> int:
             "| category | count | detail |",
             "| --- | ---: | --- |",
             f"| rows | {chunk_cursor_bench['row_count']} | expected {chunk_cursor_bench['expected_rows']}, present `{chunk_cursor_bench['present']}` |",
-            f"| shape rows | {chunk_cursor_bench['shape_rows']} | positive rows {chunk_cursor_bench['positive_rows']} |",
+            f"| shape rows | {chunk_cursor_bench['shape_rows']} | positive/throughput rows {chunk_cursor_bench['positive_rows']}/{chunk_cursor_bench['throughput_rows']} |",
+            f"| checksum matches | {chunk_cursor_bench['checksum_matched_cases']} | expected cases 4 |",
             f"| missing pairs | {len(chunk_cursor_bench['missing_pairs'])} | healthy `{chunk_cursor_bench['healthy']}` |",
             "",
         ]
@@ -7730,6 +7758,8 @@ def main() -> int:
                 "chunk_cursor_bench_expected_rows": chunk_cursor_bench["expected_rows"],
                 "chunk_cursor_bench_positive_rows": chunk_cursor_bench["positive_rows"],
                 "chunk_cursor_bench_shape_rows": chunk_cursor_bench["shape_rows"],
+                "chunk_cursor_bench_throughput_rows": chunk_cursor_bench["throughput_rows"],
+                "chunk_cursor_bench_checksum_matched_cases": chunk_cursor_bench["checksum_matched_cases"],
                 "chunk_cursor_bench_missing_pairs": chunk_cursor_bench["missing_pairs"],
                 "deflate_match_copy_bench_present": deflate_match_copy_bench["present"],
                 "deflate_match_copy_bench_healthy": deflate_match_copy_bench["healthy"],

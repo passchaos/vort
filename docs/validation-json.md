@@ -2675,6 +2675,8 @@ Top-level fields:
 - `chunk_cursor_bench_present`, `chunk_cursor_bench_healthy`,
   `chunk_cursor_bench_rows`, `chunk_cursor_bench_expected_rows`,
   `chunk_cursor_bench_positive_rows`, `chunk_cursor_bench_shape_rows`,
+  `chunk_cursor_bench_throughput_rows`,
+  `chunk_cursor_bench_checksum_matched_cases`,
   `chunk_cursor_bench_missing_pairs`
 - `deflate_match_copy_bench_present`, `deflate_match_copy_bench_healthy`,
   `deflate_match_copy_bench_rows`, `deflate_match_copy_bench_expected_rows`,
@@ -3312,6 +3314,8 @@ Example:
   "chunk_cursor_bench_expected_rows": 0,
   "chunk_cursor_bench_positive_rows": 0,
   "chunk_cursor_bench_shape_rows": 0,
+  "chunk_cursor_bench_throughput_rows": 0,
+  "chunk_cursor_bench_checksum_matched_cases": 0,
   "chunk_cursor_bench_missing_pairs": [],
   "deflate_match_copy_bench_present": false,
   "deflate_match_copy_bench_healthy": false,
