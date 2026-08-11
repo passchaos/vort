@@ -1484,6 +1484,8 @@
           ],
           "zero": [
             "chunked_zlib_bench_missing_cases",
+            "chunked_zlib_bench_duplicate_cases",
+            "chunked_zlib_bench_unknown_cases",
             "chunked_zlib_bench_markdown_unmatched"
           ]
         },
@@ -2526,6 +2528,8 @@
         "chunked_zlib_bench_chunk_count_rows": "int",
         "chunked_zlib_bench_ratio_rows": "int",
         "chunked_zlib_bench_missing_cases": "list",
+        "chunked_zlib_bench_duplicate_cases": "list",
+        "chunked_zlib_bench_unknown_cases": "list",
         "chunked_zlib_bench_markdown_present": "bool",
         "chunked_zlib_bench_markdown_rows": "int",
         "chunked_zlib_bench_markdown_matched": "int",

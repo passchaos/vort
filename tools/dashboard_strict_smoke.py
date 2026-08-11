@@ -5027,7 +5027,7 @@ def main() -> int:
                     "| category | count | detail |",
                     "| rows | 8 | expected 8, present `True` |",
                     "| shape rows | 8 | positive rows 8 |",
-                    "| ratio rows | 8 | chunk-count rows 8, missing cases 0, healthy `True` |",
+                    "| ratio rows | 8 | chunk-count rows 8, missing/duplicate/unknown cases 0/0/0, healthy `True` |",
                     "| Markdown rows | 8/8 | present `True`, unmatched 0 |",
                 ],
             )

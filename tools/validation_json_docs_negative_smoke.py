@@ -493,6 +493,8 @@ def main() -> int:
                 "chunked_zlib_bench_chunk_count_rows": 8,
                 "chunked_zlib_bench_ratio_rows": 8,
                 "chunked_zlib_bench_missing_cases": [],
+                "chunked_zlib_bench_duplicate_cases": [],
+                "chunked_zlib_bench_unknown_cases": [],
                 "chunked_zlib_bench_markdown_present": True,
                 "chunked_zlib_bench_markdown_rows": 8,
                 "chunked_zlib_bench_markdown_matched": 8,

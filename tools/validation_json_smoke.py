@@ -1638,6 +1638,8 @@ def main() -> int:
         assert dashboard["chunked_zlib_bench_chunk_count_rows"] == len(chunked_zlib_bench_rows)
         assert dashboard["chunked_zlib_bench_ratio_rows"] == len(chunked_zlib_bench_rows)
         assert dashboard["chunked_zlib_bench_missing_cases"] == []
+        assert dashboard["chunked_zlib_bench_duplicate_cases"] == []
+        assert dashboard["chunked_zlib_bench_unknown_cases"] == []
         assert dashboard["chunked_zlib_bench_markdown_present"] is True
         assert dashboard["chunked_zlib_bench_markdown_rows"] == len(chunked_zlib_bench_rows)
         assert dashboard["chunked_zlib_bench_markdown_matched"] == len(chunked_zlib_bench_rows)

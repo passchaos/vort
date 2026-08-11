@@ -2819,3 +2819,7 @@ architecture blindly.
 - Tightened deflate decode-stage CSV dashboard health by exposing duplicate and
   unknown `case` rows alongside missing cases. Dashboard health now rejects
   decode-stage CSV case drift before timing/header coverage can pass.
+
+- Tightened chunked zlib benchmark dashboard health by exposing duplicate and
+  unknown `case` rows alongside missing cases. Dashboard health now rejects
+  chunked zlib CSV case drift before benchmark and Markdown coverage can pass.
