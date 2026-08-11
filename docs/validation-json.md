@@ -758,11 +758,12 @@ Consumed by:
 python3 tools/dashboard_index.py --markdown-heading-manifest tools/dashboard_markdown_heading_manifest.json
 ```
 
-This schema pins expected Markdown artifact heading layouts. Each row records the
-artifact name, heading count, first heading, and a stable hash of the ordered
-heading lines. Dashboard health compares retained Markdown artifacts against
-this manifest so missing, renamed, reordered, or unknown Markdown layouts become
-visible drift.
+This schema pins expected Markdown artifact layouts. Each row records the
+artifact name, heading count, first heading, a stable hash of the ordered
+heading lines, and table/separator row counts. Dashboard health compares
+retained Markdown artifacts against this manifest so missing, renamed,
+reordered, table-count-drifted, or unknown Markdown layouts become visible
+drift.
 
 Example:
 
@@ -776,7 +777,9 @@ Example:
       "name": "vort-example.md",
       "heading_count": 1,
       "first_heading": "# Example",
-      "signature": "0123456789abcdef"
+      "signature": "0123456789abcdef",
+      "table_row_count": 2,
+      "table_separator_count": 1
     }
   ]
 }
@@ -2766,7 +2769,8 @@ Top-level fields:
   `markdown_heading_manifest_count`, `markdown_heading_manifest_matched`,
   `markdown_heading_manifest_missing`, `markdown_heading_manifest_unknown`,
   `markdown_heading_count_mismatch`, `markdown_first_heading_mismatch`,
-  `markdown_heading_signature_mismatch`
+  `markdown_heading_signature_mismatch`,
+  `markdown_table_count_mismatch`, `markdown_table_separator_count_mismatch`
 - `validation_json_present`, `validation_json_ok`, `validation_json_healthy`,
   `validation_json_checked_schema_count`,
   `validation_json_checked_schema_unique_count`,
@@ -3574,6 +3578,8 @@ Example:
   "markdown_heading_count_mismatch": [],
   "markdown_first_heading_mismatch": [],
   "markdown_heading_signature_mismatch": [],
+  "markdown_table_count_mismatch": [],
+  "markdown_table_separator_count_mismatch": [],
   "validation_json_present": false,
   "validation_json_ok": false,
   "validation_json_healthy": false,

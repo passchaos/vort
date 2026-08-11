@@ -7706,7 +7706,7 @@ def non_json_artifact_audit(records: list[dict], output_dir: Path, csv_header_ma
     markdown_read = 0
     markdown_heading_manifest_rows = markdown_heading_manifest.get("artifacts")
     markdown_heading_manifest_rows = markdown_heading_manifest_rows if isinstance(markdown_heading_manifest_rows, list) else []
-    expected_markdown_headings: dict[str, tuple[int, str, str]] = {}
+    expected_markdown_headings: dict[str, tuple[int, str, str, int, int]] = {}
     for row in markdown_heading_manifest_rows:
         if not isinstance(row, dict):
             continue
@@ -7714,20 +7714,28 @@ def non_json_artifact_audit(records: list[dict], output_dir: Path, csv_header_ma
         heading_count = row.get("heading_count")
         first_heading = row.get("first_heading")
         signature = row.get("signature")
+        table_row_count = row.get("table_row_count")
+        table_separator_count = row.get("table_separator_count")
         if (
             isinstance(name, str)
             and isinstance(heading_count, int)
             and not isinstance(heading_count, bool)
             and isinstance(first_heading, str)
             and isinstance(signature, str)
+            and isinstance(table_row_count, int)
+            and not isinstance(table_row_count, bool)
+            and isinstance(table_separator_count, int)
+            and not isinstance(table_separator_count, bool)
         ):
-            expected_markdown_headings[name] = (heading_count, first_heading, signature)
+            expected_markdown_headings[name] = (heading_count, first_heading, signature, table_row_count, table_separator_count)
     seen_markdown_names: set[str] = set()
     markdown_heading_manifest_missing: list[str] = []
     markdown_heading_manifest_unknown: list[str] = []
     markdown_heading_count_mismatch: list[str] = []
     markdown_first_heading_mismatch: list[str] = []
     markdown_heading_signature_mismatch: list[str] = []
+    markdown_table_count_mismatch: list[str] = []
+    markdown_table_separator_count_mismatch: list[str] = []
     csv_parse_failed: list[str] = []
     csv_empty: list[str] = []
     csv_blank_headers: list[str] = []
@@ -7817,13 +7825,19 @@ def non_json_artifact_audit(records: list[dict], output_dir: Path, csv_header_ma
             if expected is None:
                 markdown_heading_manifest_unknown.append(name)
             else:
-                expected_heading_count, expected_first_heading, expected_signature = expected
+                expected_heading_count, expected_first_heading, expected_signature, expected_table_row_count, expected_table_separator_count = expected
                 if len(headings) != expected_heading_count:
                     markdown_heading_count_mismatch.append(name)
                 if headings[0] != expected_first_heading:
                     markdown_first_heading_mismatch.append(name)
                 if signature != expected_signature:
                     markdown_heading_signature_mismatch.append(name)
+                table_row_count = sum(1 for line in text.splitlines() if line.strip().startswith("|"))
+                table_separator_count = sum(1 for line in text.splitlines() if re.match(r"^\s*\|\s*:?-{3,}:?", line))
+                if table_row_count != expected_table_row_count:
+                    markdown_table_count_mismatch.append(name)
+                if table_separator_count != expected_table_separator_count:
+                    markdown_table_separator_count_mismatch.append(name)
         if not any(line.strip().startswith("|") for line in text.splitlines()):
             markdown_table_missing.append(name)
         elif not any(re.match(r"^\s*\|\s*:?-{3,}:?", line) for line in text.splitlines()):
@@ -7863,6 +7877,8 @@ def non_json_artifact_audit(records: list[dict], output_dir: Path, csv_header_ma
         "markdown_heading_count_mismatch": sorted(markdown_heading_count_mismatch),
         "markdown_first_heading_mismatch": sorted(markdown_first_heading_mismatch),
         "markdown_heading_signature_mismatch": sorted(markdown_heading_signature_mismatch),
+        "markdown_table_count_mismatch": sorted(markdown_table_count_mismatch),
+        "markdown_table_separator_count_mismatch": sorted(markdown_table_separator_count_mismatch),
     }
 
 
@@ -7971,6 +7987,8 @@ def main() -> int:
         and not non_json_audit["markdown_heading_count_mismatch"]
         and not non_json_audit["markdown_first_heading_mismatch"]
         and not non_json_audit["markdown_heading_signature_mismatch"]
+        and not non_json_audit["markdown_table_count_mismatch"]
+        and not non_json_audit["markdown_table_separator_count_mismatch"]
     )
     header_healthy = (
         header_health["present"]
@@ -8411,7 +8429,7 @@ def main() -> int:
             f"| producer steps | {producer_step_covered}/{len(records)} | {len(producer_step_missing)} | allowed missing {len(producer_step_allowed_missing)} |",
             f"| smoke gates | {smoke_gate_covered}/{len(records)} | {len(smoke_gate_missing)} | required missing {len(smoke_gate_required_missing)} |",
             f"| CSV artifacts | {non_json_audit['csv_artifact_parsed_count']}/{non_json_audit['csv_artifact_count']} | data rows {non_json_audit['csv_artifact_data_rows']}, header cells {non_json_audit['csv_artifact_header_cell_count']}, header signatures {non_json_audit['csv_artifact_header_signature_count']}, manifest {non_json_audit['csv_header_manifest_matched']}/{non_json_audit['csv_header_manifest_count']}, parse failed {len(non_json_audit['csv_artifact_parse_failed'])}, empty {len(non_json_audit['csv_artifact_empty'])}, blank headers {len(non_json_audit['csv_artifact_blank_headers'])}, duplicate headers {len(non_json_audit['csv_artifact_duplicate_headers'])}, no-data {len(non_json_audit['csv_artifact_no_data_rows'])}, ragged {len(non_json_audit['csv_artifact_ragged_rows'])}, header drift {len(non_json_audit['csv_header_missing'])}/{len(non_json_audit['csv_header_unknown'])}/{len(non_json_audit['csv_header_column_mismatch'])}/{len(non_json_audit['csv_header_signature_mismatch'])} |",
-            f"| Markdown artifacts | {non_json_audit['markdown_artifact_read_count']}/{non_json_audit['markdown_artifact_count']} | manifest {non_json_audit['markdown_heading_manifest_matched']}/{non_json_audit['markdown_heading_manifest_count']}, read failed {len(non_json_audit['markdown_artifact_read_failed'])}, empty {len(non_json_audit['markdown_artifact_empty'])}, marker missing {len(non_json_audit['markdown_artifact_marker_missing'])}, heading missing {len(non_json_audit['markdown_artifact_heading_missing'])}, heading not first {len(non_json_audit['markdown_artifact_heading_not_first'])}, table missing {len(non_json_audit['markdown_artifact_table_missing'])}, separator missing {len(non_json_audit['markdown_artifact_table_separator_missing'])}, heading drift {len(non_json_audit['markdown_heading_manifest_missing'])}/{len(non_json_audit['markdown_heading_manifest_unknown'])}/{len(non_json_audit['markdown_heading_count_mismatch'])}/{len(non_json_audit['markdown_first_heading_mismatch'])}/{len(non_json_audit['markdown_heading_signature_mismatch'])}, healthy `{non_json_artifact_healthy}` |",
+            f"| Markdown artifacts | {non_json_audit['markdown_artifact_read_count']}/{non_json_audit['markdown_artifact_count']} | manifest {non_json_audit['markdown_heading_manifest_matched']}/{non_json_audit['markdown_heading_manifest_count']}, read failed {len(non_json_audit['markdown_artifact_read_failed'])}, empty {len(non_json_audit['markdown_artifact_empty'])}, marker missing {len(non_json_audit['markdown_artifact_marker_missing'])}, heading missing {len(non_json_audit['markdown_artifact_heading_missing'])}, heading not first {len(non_json_audit['markdown_artifact_heading_not_first'])}, table missing {len(non_json_audit['markdown_artifact_table_missing'])}, separator missing {len(non_json_audit['markdown_artifact_table_separator_missing'])}, heading drift {len(non_json_audit['markdown_heading_manifest_missing'])}/{len(non_json_audit['markdown_heading_manifest_unknown'])}/{len(non_json_audit['markdown_heading_count_mismatch'])}/{len(non_json_audit['markdown_first_heading_mismatch'])}/{len(non_json_audit['markdown_heading_signature_mismatch'])}, table drift {len(non_json_audit['markdown_table_count_mismatch'])}/{len(non_json_audit['markdown_table_separator_count_mismatch'])}, healthy `{non_json_artifact_healthy}` |",
             "",
         ]
     )
@@ -9121,6 +9139,8 @@ def main() -> int:
                 "markdown_heading_count_mismatch": non_json_audit["markdown_heading_count_mismatch"],
                 "markdown_first_heading_mismatch": non_json_audit["markdown_first_heading_mismatch"],
                 "markdown_heading_signature_mismatch": non_json_audit["markdown_heading_signature_mismatch"],
+                "markdown_table_count_mismatch": non_json_audit["markdown_table_count_mismatch"],
+                "markdown_table_separator_count_mismatch": non_json_audit["markdown_table_separator_count_mismatch"],
                 "validation_healthy": validation_healthy,
                 "validation_unhealthy_reasons": validation_unhealthy_reasons,
                 "header_inspect_present": header_health["present"],

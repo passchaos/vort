@@ -459,6 +459,8 @@ def main() -> int:
                 "markdown_heading_count_mismatch": [],
                 "markdown_first_heading_mismatch": [],
                 "markdown_heading_signature_mismatch": [],
+                "markdown_table_count_mismatch": [],
+                "markdown_table_separator_count_mismatch": [],
                 "validation_json_present": True,
                 "validation_json_ok": True,
                 "validation_json_healthy": True,

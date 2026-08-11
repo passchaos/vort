@@ -1821,7 +1821,9 @@
             "markdown_heading_manifest_unknown",
             "markdown_heading_count_mismatch",
             "markdown_first_heading_mismatch",
-            "markdown_heading_signature_mismatch"
+            "markdown_heading_signature_mismatch",
+            "markdown_table_count_mismatch",
+            "markdown_table_separator_count_mismatch"
           ]
         }
       },
@@ -2583,6 +2585,8 @@
         "markdown_heading_count_mismatch": "list",
         "markdown_first_heading_mismatch": "list",
         "markdown_heading_signature_mismatch": "list",
+        "markdown_table_count_mismatch": "list",
+        "markdown_table_separator_count_mismatch": "list",
         "smoke_gate_missing": "list",
         "smoke_gate_required_missing": "list",
         "validation_healthy": "bool",
@@ -7315,7 +7319,9 @@
         "name": "str",
         "heading_count": "int",
         "first_heading": "str",
-        "signature": "str"
+        "signature": "str",
+        "table_row_count": "int",
+        "table_separator_count": "int"
       }
     }
   }

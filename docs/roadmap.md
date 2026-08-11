@@ -2896,6 +2896,11 @@ architecture blindly.
   Markdown artifact against its expected heading count, first heading, and
   heading hash.
 
+- Extended the Markdown artifact layout manifest to also pin table-row and
+  separator-row counts, so dashboard health now catches retained Markdown
+  reports whose table bodies disappear, duplicate, or otherwise drift while
+  headings remain unchanged.
+
 - Tightened Markdown artifact table auditing by requiring a Markdown separator
   row in every retained Markdown artifact. Dashboard health now rejects files
   that contain pipe-delimited text without a real table layout.
