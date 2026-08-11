@@ -4950,7 +4950,7 @@ def main() -> int:
                     "| rows | 21 | expected 21, present `True` |",
                     "| lookup rows | 21 | positive/throughput rows 21/21 |",
                     "| checksum matches | 6 | expected cases 6 |",
-                    "| missing pairs | 0 | healthy `True` |",
+                    "| pair drift | 0 | duplicate/unknown 0/0, healthy `True` |",
                 ],
             )
         )

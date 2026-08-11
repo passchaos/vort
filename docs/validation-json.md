@@ -2708,7 +2708,9 @@ Top-level fields:
   `deflate_huffman_lookup_bench_lookup_rows`,
   `deflate_huffman_lookup_bench_throughput_rows`,
   `deflate_huffman_lookup_bench_checksum_matched_cases`,
-  `deflate_huffman_lookup_bench_missing_pairs`
+  `deflate_huffman_lookup_bench_missing_pairs`,
+  `deflate_huffman_lookup_bench_duplicate_pairs`,
+  `deflate_huffman_lookup_bench_unknown_pairs`
 - `deflate_chunked_huffman_bench_present`,
   `deflate_chunked_huffman_bench_healthy`,
   `deflate_chunked_huffman_bench_rows`,
@@ -3430,6 +3432,8 @@ Example:
   "deflate_huffman_lookup_bench_throughput_rows": 0,
   "deflate_huffman_lookup_bench_checksum_matched_cases": 0,
   "deflate_huffman_lookup_bench_missing_pairs": [],
+  "deflate_huffman_lookup_bench_duplicate_pairs": [],
+  "deflate_huffman_lookup_bench_unknown_pairs": [],
   "deflate_chunked_huffman_bench_present": false,
   "deflate_chunked_huffman_bench_healthy": false,
   "deflate_chunked_huffman_bench_rows": 0,

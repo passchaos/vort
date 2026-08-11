@@ -3438,6 +3438,8 @@ def deflate_huffman_lookup_bench_health(artifacts: list[Path]) -> dict:
         except Exception:
             rows = []
         seen: set[tuple[str, str]] = set()
+        duplicate_pairs: set[tuple[str, str]] = set()
+        unknown_pairs: set[tuple[str, str]] = set()
         positive_rows = 0
         lookup_rows = 0
         throughput_rows = 0
@@ -3447,8 +3449,12 @@ def deflate_huffman_lookup_bench_health(artifacts: list[Path]) -> dict:
             decoder = str(row.get("decoder") or "")
             pair = (case, decoder)
             if pair in expected_pairs:
+                if pair in seen:
+                    duplicate_pairs.add(pair)
                 seen.add(pair)
                 rows_by_case.setdefault(case, []).append(row)
+            else:
+                unknown_pairs.add(pair)
             try:
                 row_lookup_bits = int(row.get("lookup_bits") or "-1")
                 symbols_per_iter = int(row.get("symbols_per_iter") or "0")
@@ -3481,10 +3487,14 @@ def deflate_huffman_lookup_bench_health(artifacts: list[Path]) -> dict:
             if len(case_rows) == len(decoders) and len(checksums) == 1 and next(iter(checksums), 0) > 0:
                 checksum_matched_cases += 1
         missing_pairs = sorted(f"{case}:{decoder}" for case, decoder in expected_pairs - seen)
+        duplicate_pair_names = sorted(f"{case}:{decoder}" for case, decoder in duplicate_pairs)
+        unknown_pair_names = sorted(f"{case}:{decoder}" for case, decoder in unknown_pairs)
         row_count = len(rows)
         healthy = (
             row_count == len(expected_pairs)
             and not missing_pairs
+            and not duplicate_pair_names
+            and not unknown_pair_names
             and positive_rows == row_count
             and lookup_rows == row_count
             and throughput_rows == row_count
@@ -3500,6 +3510,8 @@ def deflate_huffman_lookup_bench_health(artifacts: list[Path]) -> dict:
             "throughput_rows": throughput_rows,
             "checksum_matched_cases": checksum_matched_cases,
             "missing_pairs": missing_pairs,
+            "duplicate_pairs": duplicate_pair_names,
+            "unknown_pairs": unknown_pair_names,
         }
     return {
         "present": False,
@@ -3511,6 +3523,8 @@ def deflate_huffman_lookup_bench_health(artifacts: list[Path]) -> dict:
         "throughput_rows": 0,
         "checksum_matched_cases": 0,
         "missing_pairs": [],
+        "duplicate_pairs": [],
+        "unknown_pairs": [],
     }
 
 
@@ -7367,7 +7381,7 @@ def main() -> int:
         f"- chunk cursor bench: {chunk_cursor_bench['row_count']}/{chunk_cursor_bench['expected_rows']} rows, shape {chunk_cursor_bench['shape_rows']}, positive/throughput {chunk_cursor_bench['positive_rows']}/{chunk_cursor_bench['throughput_rows']}, checksum matches {chunk_cursor_bench['checksum_matched_cases']}, missing/duplicate/unknown pairs {len(chunk_cursor_bench['missing_pairs'])}/{len(chunk_cursor_bench['duplicate_pairs'])}/{len(chunk_cursor_bench['unknown_pairs'])}, healthy `{chunk_cursor_bench_healthy}`",
         f"- deflate match-copy bench: {deflate_match_copy_bench['row_count']}/{deflate_match_copy_bench['expected_rows']} rows, classes {deflate_match_copy_bench['expected_class_rows']}, positive/output/throughput {deflate_match_copy_bench['positive_rows']}/{deflate_match_copy_bench['output_bytes_rows']}/{deflate_match_copy_bench['throughput_rows']}, checksum matches {deflate_match_copy_bench['checksum_matched_cases']}, missing/duplicate/unknown pairs {len(deflate_match_copy_bench['missing_pairs'])}/{len(deflate_match_copy_bench['duplicate_pairs'])}/{len(deflate_match_copy_bench['unknown_pairs'])}, healthy `{deflate_match_copy_bench_healthy}`",
         f"- deflate Huffman build bench: {deflate_huffman_build_bench['row_count']}/{deflate_huffman_build_bench['expected_rows']} rows, lookup {deflate_huffman_build_bench['lookup_rows']}, positive/throughput {deflate_huffman_build_bench['positive_rows']}/{deflate_huffman_build_bench['throughput_rows']}, checksum variant cases {deflate_huffman_build_bench['checksum_variant_cases']}, missing/duplicate/unknown pairs {len(deflate_huffman_build_bench['missing_pairs'])}/{len(deflate_huffman_build_bench['duplicate_pairs'])}/{len(deflate_huffman_build_bench['unknown_pairs'])}, healthy `{deflate_huffman_build_bench_healthy}`",
-        f"- deflate Huffman lookup bench: {deflate_huffman_lookup_bench['row_count']}/{deflate_huffman_lookup_bench['expected_rows']} rows, lookup {deflate_huffman_lookup_bench['lookup_rows']}, positive/throughput {deflate_huffman_lookup_bench['positive_rows']}/{deflate_huffman_lookup_bench['throughput_rows']}, checksum matches {deflate_huffman_lookup_bench['checksum_matched_cases']}, healthy `{deflate_huffman_lookup_bench_healthy}`",
+        f"- deflate Huffman lookup bench: {deflate_huffman_lookup_bench['row_count']}/{deflate_huffman_lookup_bench['expected_rows']} rows, lookup {deflate_huffman_lookup_bench['lookup_rows']}, positive/throughput {deflate_huffman_lookup_bench['positive_rows']}/{deflate_huffman_lookup_bench['throughput_rows']}, checksum matches {deflate_huffman_lookup_bench['checksum_matched_cases']}, missing/duplicate/unknown pairs {len(deflate_huffman_lookup_bench['missing_pairs'])}/{len(deflate_huffman_lookup_bench['duplicate_pairs'])}/{len(deflate_huffman_lookup_bench['unknown_pairs'])}, healthy `{deflate_huffman_lookup_bench_healthy}`",
         f"- deflate chunked Huffman bench: {deflate_chunked_huffman_bench['row_count']}/{deflate_chunked_huffman_bench['expected_rows']} rows, shape/chunks {deflate_chunked_huffman_bench['shape_rows']}/{deflate_chunked_huffman_bench['chunk_count_rows']}, positive/throughput {deflate_chunked_huffman_bench['positive_rows']}/{deflate_chunked_huffman_bench['throughput_rows']}, checksum matches {deflate_chunked_huffman_bench['checksum_matched_cases']}, healthy `{deflate_chunked_huffman_bench_healthy}`",
         f"- native tier range bench: {native_tier_health['ok_count']}/{native_tier_health['summary_count']} summaries ok across {native_tier_health['rows']} rows ({native_tier_health['enforced_count']} throughput-enforced), sources built-in/project/standard/custom/legacy {native_tier_health['built_in_summary_count']}/{native_tier_health['project_files_summary_count']}/{native_tier_health['standard_corpus_summary_count']}/{native_tier_health['custom_summary_count']}/{native_tier_health['legacy_summary_count']} missing {','.join(native_tier_health['missing_sources']) or 'none'}, min range MiB/s seek_fast/balanced/ratio {native_tier_health['seek_fast_min_range_mib_s']:.2f}/{native_tier_health['balanced_min_range_mib_s']:.2f}/{native_tier_health['ratio_min_range_mib_s']:.2f}, healthy `{native_tier_health['healthy']}`",
         f"- native tier corpus discovery: source mode `{native_tier_discovery_health['source_mode']}`, sources {native_tier_discovery_health['source_count']}/{native_tier_discovery_health['candidate_count']}, selected cases {native_tier_discovery_health['selected_case_count']}, missing reason `{native_tier_discovery_health['missing_reason'] or 'none'}`, healthy `{native_tier_discovery_health['healthy']}`",
@@ -7623,7 +7637,7 @@ def main() -> int:
             f"| rows | {deflate_huffman_lookup_bench['row_count']} | expected {deflate_huffman_lookup_bench['expected_rows']}, present `{deflate_huffman_lookup_bench['present']}` |",
             f"| lookup rows | {deflate_huffman_lookup_bench['lookup_rows']} | positive/throughput rows {deflate_huffman_lookup_bench['positive_rows']}/{deflate_huffman_lookup_bench['throughput_rows']} |",
             f"| checksum matches | {deflate_huffman_lookup_bench['checksum_matched_cases']} | expected cases 6 |",
-            f"| missing pairs | {len(deflate_huffman_lookup_bench['missing_pairs'])} | healthy `{deflate_huffman_lookup_bench['healthy']}` |",
+            f"| pair drift | {len(deflate_huffman_lookup_bench['missing_pairs'])} | duplicate/unknown {len(deflate_huffman_lookup_bench['duplicate_pairs'])}/{len(deflate_huffman_lookup_bench['unknown_pairs'])}, healthy `{deflate_huffman_lookup_bench['healthy']}` |",
             "",
         ]
     )
@@ -8538,6 +8552,8 @@ def main() -> int:
                 "deflate_huffman_lookup_bench_throughput_rows": deflate_huffman_lookup_bench["throughput_rows"],
                 "deflate_huffman_lookup_bench_checksum_matched_cases": deflate_huffman_lookup_bench["checksum_matched_cases"],
                 "deflate_huffman_lookup_bench_missing_pairs": deflate_huffman_lookup_bench["missing_pairs"],
+                "deflate_huffman_lookup_bench_duplicate_pairs": deflate_huffman_lookup_bench["duplicate_pairs"],
+                "deflate_huffman_lookup_bench_unknown_pairs": deflate_huffman_lookup_bench["unknown_pairs"],
                 "deflate_chunked_huffman_bench_present": deflate_chunked_huffman_bench["present"],
                 "deflate_chunked_huffman_bench_healthy": deflate_chunked_huffman_bench["healthy"],
                 "deflate_chunked_huffman_bench_rows": deflate_chunked_huffman_bench["row_count"],

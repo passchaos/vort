@@ -1380,7 +1380,9 @@
             "deflate_huffman_lookup_bench_checksum_matched_cases"
           ],
           "zero": [
-            "deflate_huffman_lookup_bench_missing_pairs"
+            "deflate_huffman_lookup_bench_missing_pairs",
+            "deflate_huffman_lookup_bench_duplicate_pairs",
+            "deflate_huffman_lookup_bench_unknown_pairs"
           ]
         },
         "deflate_chunked_huffman_bench_healthy": {
@@ -2445,6 +2447,8 @@
         "deflate_huffman_lookup_bench_throughput_rows": "int",
         "deflate_huffman_lookup_bench_checksum_matched_cases": "int",
         "deflate_huffman_lookup_bench_missing_pairs": "list",
+        "deflate_huffman_lookup_bench_duplicate_pairs": "list",
+        "deflate_huffman_lookup_bench_unknown_pairs": "list",
         "deflate_chunked_huffman_bench_present": "bool",
         "deflate_chunked_huffman_bench_healthy": "bool",
         "deflate_chunked_huffman_bench_rows": "int",

@@ -1567,6 +1567,8 @@ def main() -> int:
         assert dashboard["deflate_huffman_lookup_bench_throughput_rows"] == len(deflate_huffman_lookup_bench_rows)
         assert dashboard["deflate_huffman_lookup_bench_checksum_matched_cases"] == 6
         assert dashboard["deflate_huffman_lookup_bench_missing_pairs"] == []
+        assert dashboard["deflate_huffman_lookup_bench_duplicate_pairs"] == []
+        assert dashboard["deflate_huffman_lookup_bench_unknown_pairs"] == []
         assert dashboard["deflate_chunked_huffman_bench_present"] is True
         assert dashboard["deflate_chunked_huffman_bench_healthy"] is True
         assert dashboard["deflate_chunked_huffman_bench_rows"] == len(deflate_chunked_huffman_bench_rows)

@@ -2782,3 +2782,8 @@ architecture blindly.
   duplicate and unknown `(case, build)` rows alongside missing pairs. Dashboard
   health now rejects Huffman build CSV pair drift before benchmark coverage can
   pass.
+
+- Tightened deflate Huffman lookup benchmark dashboard health by exposing
+  duplicate and unknown `(case, decoder)` rows alongside missing pairs. Dashboard
+  health now rejects Huffman lookup CSV pair drift before benchmark coverage can
+  pass.
