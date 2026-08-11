@@ -1869,8 +1869,34 @@ def write_deflate_chunked_huffman_bench_csv(path: Path, *, healthy: bool = True)
         for reader, chunk_bytes in readers.items():
             if not healthy and case == "dynamic-long-tail" and reader == "span_1":
                 continue
-            chunk_count = 0 if reader == "buffered" else max(1, 8192 // max(1, chunk_bytes))
-            lines.append(",".join([case, reader, decoder, str(lookup_bits), str(chunk_bytes), str(chunk_count), str(128 * 1024), "64", "1048576", "1000", "1000.0", "1.0", "12345"]))
+            symbols_per_iter = 128 * 1024
+            iterations = 64
+            input_bytes_per_iteration = 8192
+            input_bytes = input_bytes_per_iteration * iterations
+            elapsed_ns = 1_000_000
+            chunk_count = 0 if reader == "buffered" else (input_bytes_per_iteration + max(1, chunk_bytes) - 1) // max(1, chunk_bytes)
+            symbols_per_s = (symbols_per_iter * iterations) / (elapsed_ns / 1_000_000_000.0)
+            mib_per_s = (input_bytes / (1024.0 * 1024.0)) / (elapsed_ns / 1_000_000_000.0)
+            checksum = len(case) * 1_000_000 + symbols_per_iter
+            lines.append(
+                ",".join(
+                    [
+                        case,
+                        reader,
+                        decoder,
+                        str(lookup_bits),
+                        str(chunk_bytes),
+                        str(chunk_count),
+                        str(symbols_per_iter),
+                        str(iterations),
+                        str(input_bytes),
+                        str(elapsed_ns),
+                        f"{symbols_per_s:.2f}",
+                        f"{mib_per_s:.2f}",
+                        str(checksum),
+                    ]
+                )
+            )
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -4831,8 +4857,10 @@ def main() -> int:
                     "## Deflate chunked Huffman benchmark coverage",
                     "| category | count | detail |",
                     "| rows | 57 | expected 57, present `True` |",
-                    "| shape rows | 57 | positive rows 57 |",
-                    "| buffered rows | 3 | missing pairs 0, healthy `True` |",
+                    "| shape rows | 57 | positive/throughput rows 57/57 |",
+                    "| chunk counts | 57 | buffered rows 3 |",
+                    "| checksum matches | 3 | expected cases 3 |",
+                    "| missing pairs | 0 | healthy `True` |",
                 ],
             )
         )

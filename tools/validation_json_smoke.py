@@ -1549,6 +1549,9 @@ def main() -> int:
         assert dashboard["deflate_chunked_huffman_bench_positive_rows"] == len(deflate_chunked_huffman_bench_rows)
         assert dashboard["deflate_chunked_huffman_bench_shape_rows"] == len(deflate_chunked_huffman_bench_rows)
         assert dashboard["deflate_chunked_huffman_bench_buffered_zero_chunk_rows"] == 3
+        assert dashboard["deflate_chunked_huffman_bench_chunk_count_rows"] == len(deflate_chunked_huffman_bench_rows)
+        assert dashboard["deflate_chunked_huffman_bench_throughput_rows"] == len(deflate_chunked_huffman_bench_rows)
+        assert dashboard["deflate_chunked_huffman_bench_checksum_matched_cases"] == 3
         assert dashboard["deflate_chunked_huffman_bench_missing_pairs"] == []
         assert dashboard["deflate_extra_bits_bench_present"] is True
         assert dashboard["deflate_extra_bits_bench_healthy"] is True
