@@ -4863,6 +4863,7 @@ def main() -> int:
                     "| category | count | detail |",
                     "| rows | 48 | expected 48, present `True` |",
                     "| row checks | 48 | positive/token/ratio/roundtrip 48/48/48/48 |",
+                    "| pair drift | 0 | duplicate/unknown 0/0 |",
                     "| Markdown summary | 4/4 | present `True`, healthy `True` |",
                     "| Markdown detail rows | 48/48 | unmatched 0 |",
                 ],

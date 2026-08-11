@@ -500,6 +500,8 @@ def level_report_health(artifacts: list[Path]) -> dict:
             rows = []
 
         seen: set[tuple[str, str, str]] = set()
+        duplicate_pairs: set[tuple[str, str, str]] = set()
+        unknown_pairs: set[tuple[str, str, str]] = set()
         rows_by_case: dict[str, list[dict[str, str]]] = {case: [] for case in expected_cases}
         positive_rows = 0
         shape_rows = 0
@@ -512,9 +514,13 @@ def level_report_health(artifacts: list[Path]) -> dict:
             strategy = str(row.get("strategy") or "")
             triple = (case, level, strategy)
             if triple in expected_pairs:
+                if triple in seen:
+                    duplicate_pairs.add(triple)
                 seen.add(triple)
                 rows_by_case.setdefault(case, []).append(row)
                 shape_rows += 1
+            elif case or level or strategy:
+                unknown_pairs.add(triple)
 
             input_bytes = parse_int(row.get("input_bytes"))
             tokens = parse_int(row.get("tokens"))
@@ -580,6 +586,8 @@ def level_report_health(artifacts: list[Path]) -> dict:
 
         row_count = len(rows)
         missing_pairs = sorted("/".join(pair) for pair in expected_pairs - seen)
+        duplicate_pair_names = sorted("/".join(pair) for pair in duplicate_pairs)
+        unknown_pair_names = sorted("/".join(pair) for pair in unknown_pairs)
         markdown_present = False
         markdown_summary_rows = 0
         markdown_matched = 0
@@ -647,6 +655,8 @@ def level_report_health(artifacts: list[Path]) -> dict:
         healthy = (
             row_count == expected_rows
             and not missing_pairs
+            and not duplicate_pair_names
+            and not unknown_pair_names
             and positive_rows == row_count
             and shape_rows == row_count
             and token_accounting_rows == row_count
@@ -669,6 +679,8 @@ def level_report_health(artifacts: list[Path]) -> dict:
             "ratio_rows": ratio_rows,
             "roundtrip_rows": roundtrip_rows,
             "missing_pairs": missing_pairs,
+            "duplicate_pairs": duplicate_pair_names,
+            "unknown_pairs": unknown_pair_names,
             "markdown_present": markdown_present,
             "markdown_summary_rows": markdown_summary_rows,
             "markdown_matched": markdown_matched,
@@ -688,6 +700,8 @@ def level_report_health(artifacts: list[Path]) -> dict:
         "ratio_rows": 0,
         "roundtrip_rows": 0,
         "missing_pairs": [],
+        "duplicate_pairs": [],
+        "unknown_pairs": [],
         "markdown_present": False,
         "markdown_summary_rows": 0,
         "markdown_matched": 0,
@@ -7998,6 +8012,7 @@ def main() -> int:
             "| --- | ---: | --- |",
             f"| rows | {level_report['rows']} | expected {level_report['expected_rows']}, present `{level_report['present']}` |",
             f"| row checks | {level_report['shape_rows']} | positive/token/ratio/roundtrip {level_report['positive_rows']}/{level_report['token_accounting_rows']}/{level_report['ratio_rows']}/{level_report['roundtrip_rows']} |",
+            f"| pair drift | {len(level_report['missing_pairs'])} | duplicate/unknown {len(level_report['duplicate_pairs'])}/{len(level_report['unknown_pairs'])} |",
             f"| Markdown summary | {level_report['markdown_matched']}/{level_report['markdown_summary_rows']} | present `{level_report['markdown_present']}`, healthy `{level_report_healthy}` |",
             f"| Markdown detail rows | {level_report['markdown_detail_matched']}/{level_report['markdown_detail_rows']} | unmatched {level_report['markdown_detail_unmatched']} |",
             "",
@@ -8440,6 +8455,8 @@ def main() -> int:
                 "level_report_ratio_rows": level_report["ratio_rows"],
                 "level_report_roundtrip_rows": level_report["roundtrip_rows"],
                 "level_report_missing_pairs": level_report["missing_pairs"],
+                "level_report_duplicate_pairs": level_report["duplicate_pairs"],
+                "level_report_unknown_pairs": level_report["unknown_pairs"],
                 "level_report_markdown_present": level_report["markdown_present"],
                 "level_report_markdown_summary_rows": level_report["markdown_summary_rows"],
                 "level_report_markdown_matched": level_report["markdown_matched"],

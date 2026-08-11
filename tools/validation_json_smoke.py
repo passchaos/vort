@@ -1258,6 +1258,8 @@ def main() -> int:
         assert dashboard["level_report_ratio_rows"] == 48
         assert dashboard["level_report_roundtrip_rows"] == 48
         assert dashboard["level_report_missing_pairs"] == []
+        assert dashboard["level_report_duplicate_pairs"] == []
+        assert dashboard["level_report_unknown_pairs"] == []
         assert dashboard["level_report_markdown_present"] is True
         assert dashboard["level_report_markdown_summary_rows"] == 4
         assert dashboard["level_report_markdown_matched"] == 4

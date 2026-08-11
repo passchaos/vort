@@ -1566,6 +1566,8 @@
           ],
           "zero": [
             "level_report_missing_pairs",
+            "level_report_duplicate_pairs",
+            "level_report_unknown_pairs",
             "level_report_markdown_unmatched",
             "level_report_markdown_detail_unmatched"
           ]
@@ -2131,6 +2133,8 @@
         "level_report_ratio_rows": "int",
         "level_report_roundtrip_rows": "int",
         "level_report_missing_pairs": "list",
+        "level_report_duplicate_pairs": "list",
+        "level_report_unknown_pairs": "list",
         "level_report_markdown_present": "bool",
         "level_report_markdown_summary_rows": "int",
         "level_report_markdown_matched": "int",

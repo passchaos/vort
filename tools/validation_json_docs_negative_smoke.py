@@ -355,6 +355,8 @@ def main() -> int:
                 "level_report_ratio_rows": 48,
                 "level_report_roundtrip_rows": 48,
                 "level_report_missing_pairs": [],
+                "level_report_duplicate_pairs": [],
+                "level_report_unknown_pairs": [],
                 "level_report_markdown_present": True,
                 "level_report_markdown_summary_rows": 4,
                 "level_report_markdown_matched": 4,

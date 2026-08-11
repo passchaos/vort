@@ -2832,3 +2832,8 @@ architecture blindly.
   required `case` rows alongside missing cases while still allowing additional
   profiling rows. Dashboard health now rejects required profile case drift before
   decode-profile coverage can pass.
+
+- Tightened compression level report dashboard health by exposing duplicate and
+  unknown `(case, level, strategy)` rows alongside missing pairs. Dashboard
+  health now rejects level report CSV pair drift before Markdown and row
+  accounting coverage can pass.
