@@ -2890,6 +2890,12 @@ architecture blindly.
 
 
 
+
+- Promoted Markdown heading layouts to a hard per-artifact gate by adding
+  `tools/dashboard_markdown_heading_manifest.json` and comparing every retained
+  Markdown artifact against its expected heading count, first heading, and
+  heading hash.
+
 - Tightened Markdown artifact table auditing by requiring a Markdown separator
   row in every retained Markdown artifact. Dashboard health now rejects files
   that contain pipe-delimited text without a real table layout.

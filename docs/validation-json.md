@@ -750,6 +750,38 @@ Example:
 }
 ```
 
+## `vort.dashboard_markdown_heading_manifest`
+
+Consumed by:
+
+```sh
+python3 tools/dashboard_index.py --markdown-heading-manifest tools/dashboard_markdown_heading_manifest.json
+```
+
+This schema pins expected Markdown artifact heading layouts. Each row records the
+artifact name, heading count, first heading, and a stable hash of the ordered
+heading lines. Dashboard health compares retained Markdown artifacts against
+this manifest so missing, renamed, reordered, or unknown Markdown layouts become
+visible drift.
+
+Example:
+
+```json
+{
+  "schema": "vort.dashboard_markdown_heading_manifest",
+  "schema_version": 1,
+  "artifact_count": 1,
+  "artifacts": [
+    {
+      "name": "vort-example.md",
+      "heading_count": 1,
+      "first_heading": "# Example",
+      "signature": "0123456789abcdef"
+    }
+  ]
+}
+```
+
 ## `vort.dashboard_config_index`
 
 Consumed by:
@@ -2730,7 +2762,11 @@ Top-level fields:
   `markdown_artifact_heading_missing`,
   `markdown_artifact_heading_not_first`,
   `markdown_artifact_table_missing`,
-  `markdown_artifact_table_separator_missing`
+  `markdown_artifact_table_separator_missing`,
+  `markdown_heading_manifest_count`, `markdown_heading_manifest_matched`,
+  `markdown_heading_manifest_missing`, `markdown_heading_manifest_unknown`,
+  `markdown_heading_count_mismatch`, `markdown_first_heading_mismatch`,
+  `markdown_heading_signature_mismatch`
 - `validation_json_present`, `validation_json_ok`, `validation_json_healthy`,
   `validation_json_checked_schema_count`,
   `validation_json_checked_schema_unique_count`,
@@ -3531,6 +3567,13 @@ Example:
   "markdown_artifact_heading_not_first": [],
   "markdown_artifact_table_missing": [],
   "markdown_artifact_table_separator_missing": [],
+  "markdown_heading_manifest_count": 0,
+  "markdown_heading_manifest_matched": 0,
+  "markdown_heading_manifest_missing": [],
+  "markdown_heading_manifest_unknown": [],
+  "markdown_heading_count_mismatch": [],
+  "markdown_first_heading_mismatch": [],
+  "markdown_heading_signature_mismatch": [],
   "validation_json_present": false,
   "validation_json_ok": false,
   "validation_json_healthy": false,

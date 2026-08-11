@@ -165,6 +165,27 @@ def write_csv_header_manifest(root: Path) -> Path:
     return path
 
 
+def write_markdown_heading_manifest(root: Path) -> Path:
+    rows: list[dict[str, object]] = []
+    for path in sorted(root.glob("vort-*.md")):
+        headings = [line.strip() for line in path.read_text(errors="replace").splitlines() if line.startswith("#")]
+        rows.append({
+            "name": path.name,
+            "heading_count": len(headings),
+            "first_heading": headings[0] if headings else "",
+            "signature": hashlib.sha256("\x1f".join(headings).encode("utf-8")).hexdigest()[:16],
+        })
+    payload = {
+        "schema": "vort.dashboard_markdown_heading_manifest",
+        "schema_version": 1,
+        "artifact_count": len(rows),
+        "artifacts": rows,
+    }
+    path = root / "dashboard-markdown-heading-manifest.json"
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    return path
+
+
 def write_producer_map(
     path: Path,
     *,
@@ -4336,6 +4357,7 @@ def write_healthy_artifacts(root: Path) -> None:
 
 def dashboard_args(root: Path, producer_map: Path, *extra: str) -> list[str]:
     csv_header_manifest = write_csv_header_manifest(root)
+    markdown_heading_manifest = write_markdown_heading_manifest(root)
     return [
         "python3",
         str(DASHBOARD_INDEX),
@@ -4349,6 +4371,8 @@ def dashboard_args(root: Path, producer_map: Path, *extra: str) -> list[str]:
         str(producer_map),
         "--csv-header-manifest",
         str(csv_header_manifest),
+        "--markdown-heading-manifest",
+        str(markdown_heading_manifest),
         *extra,
     ]
 
@@ -4795,7 +4819,7 @@ def main() -> int:
                     "| producer steps | 88/88 | 0 | allowed missing 0 |",
                     "| smoke gates | 88/88 | 0 | required missing 0 |",
                     "| CSV artifacts | 26/26 | data rows 554, header cells 645, header signatures 22, manifest 26/26, parse failed 0, empty 0, blank headers 0, duplicate headers 0, no-data 0, ragged 0, header drift 0/0/0/0 |",
-                    "| Markdown artifacts | 20/20 | read failed 0, empty 0, marker missing 0, heading missing 0, heading not first 0, table missing 0, separator missing 0, healthy `True` |",
+                    "| Markdown artifacts | 20/20 | manifest 20/20, read failed 0, empty 0, marker missing 0, heading missing 0, heading not first 0, table missing 0, separator missing 0, heading drift 0/0/0/0/0, healthy `True` |",
                 ],
             )
         )

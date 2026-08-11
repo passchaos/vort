@@ -64,6 +64,19 @@ def load_csv_header_manifest(path: Path) -> dict:
     return data
 
 
+def load_markdown_heading_manifest(path: Path) -> dict:
+    try:
+        data = json.loads(path.read_text())
+    except FileNotFoundError:
+        return {"schema": "vort.dashboard_markdown_heading_manifest", "schema_version": 1, "artifact_count": 0, "artifacts": []}
+    if data.get("schema") != "vort.dashboard_markdown_heading_manifest":
+        raise ValueError(f"unexpected Markdown heading manifest schema in {path}: {data.get('schema')!r}")
+    artifacts = data.get("artifacts")
+    if not isinstance(artifacts, list):
+        raise ValueError(f"Markdown heading manifest {path} must contain artifacts list")
+    return data
+
+
 def producer_step_for(path: Path, producer_map: dict) -> str:
     name = path.name
     exact = producer_map.get("exact")
@@ -7667,7 +7680,7 @@ def artifact_record(path: Path, output_dir: Path, producer_map: dict) -> dict:
     }
 
 
-def non_json_artifact_audit(records: list[dict], output_dir: Path, csv_header_manifest: dict) -> dict:
+def non_json_artifact_audit(records: list[dict], output_dir: Path, csv_header_manifest: dict, markdown_heading_manifest: dict) -> dict:
     csv_count = 0
     markdown_count = 0
     csv_parsed = 0
@@ -7691,6 +7704,30 @@ def non_json_artifact_audit(records: list[dict], output_dir: Path, csv_header_ma
     csv_header_column_mismatch: list[str] = []
     csv_header_signature_mismatch: list[str] = []
     markdown_read = 0
+    markdown_heading_manifest_rows = markdown_heading_manifest.get("artifacts")
+    markdown_heading_manifest_rows = markdown_heading_manifest_rows if isinstance(markdown_heading_manifest_rows, list) else []
+    expected_markdown_headings: dict[str, tuple[int, str, str]] = {}
+    for row in markdown_heading_manifest_rows:
+        if not isinstance(row, dict):
+            continue
+        name = row.get("name")
+        heading_count = row.get("heading_count")
+        first_heading = row.get("first_heading")
+        signature = row.get("signature")
+        if (
+            isinstance(name, str)
+            and isinstance(heading_count, int)
+            and not isinstance(heading_count, bool)
+            and isinstance(first_heading, str)
+            and isinstance(signature, str)
+        ):
+            expected_markdown_headings[name] = (heading_count, first_heading, signature)
+    seen_markdown_names: set[str] = set()
+    markdown_heading_manifest_missing: list[str] = []
+    markdown_heading_manifest_unknown: list[str] = []
+    markdown_heading_count_mismatch: list[str] = []
+    markdown_first_heading_mismatch: list[str] = []
+    markdown_heading_signature_mismatch: list[str] = []
     csv_parse_failed: list[str] = []
     csv_empty: list[str] = []
     csv_blank_headers: list[str] = []
@@ -7768,10 +7805,25 @@ def non_json_artifact_audit(records: list[dict], output_dir: Path, csv_header_ma
         if "|" not in text and "#" not in text:
             markdown_marker_missing.append(name)
         non_empty_lines = [line for line in text.splitlines() if line.strip()]
+        headings = [line.strip() for line in text.splitlines() if line.startswith("#")]
         if not any(line.startswith("#") for line in non_empty_lines):
             markdown_heading_missing.append(name)
         elif not non_empty_lines[0].startswith("#"):
             markdown_heading_not_first.append(name)
+        if headings:
+            signature = hashlib.sha256("\x1f".join(headings).encode("utf-8")).hexdigest()[:16]
+            seen_markdown_names.add(name)
+            expected = expected_markdown_headings.get(name)
+            if expected is None:
+                markdown_heading_manifest_unknown.append(name)
+            else:
+                expected_heading_count, expected_first_heading, expected_signature = expected
+                if len(headings) != expected_heading_count:
+                    markdown_heading_count_mismatch.append(name)
+                if headings[0] != expected_first_heading:
+                    markdown_first_heading_mismatch.append(name)
+                if signature != expected_signature:
+                    markdown_heading_signature_mismatch.append(name)
         if not any(line.strip().startswith("|") for line in text.splitlines()):
             markdown_table_missing.append(name)
         elif not any(re.match(r"^\s*\|\s*:?-{3,}:?", line) for line in text.splitlines()):
@@ -7804,6 +7856,13 @@ def non_json_artifact_audit(records: list[dict], output_dir: Path, csv_header_ma
         "markdown_artifact_heading_not_first": markdown_heading_not_first,
         "markdown_artifact_table_missing": markdown_table_missing,
         "markdown_artifact_table_separator_missing": markdown_table_separator_missing,
+        "markdown_heading_manifest_count": len(expected_markdown_headings),
+        "markdown_heading_manifest_matched": len(seen_markdown_names & set(expected_markdown_headings)),
+        "markdown_heading_manifest_missing": sorted(set(expected_markdown_headings) - seen_markdown_names),
+        "markdown_heading_manifest_unknown": sorted(markdown_heading_manifest_unknown),
+        "markdown_heading_count_mismatch": sorted(markdown_heading_count_mismatch),
+        "markdown_first_heading_mismatch": sorted(markdown_first_heading_mismatch),
+        "markdown_heading_signature_mismatch": sorted(markdown_heading_signature_mismatch),
     }
 
 
@@ -7814,6 +7873,7 @@ def main() -> int:
     parser.add_argument("--manifest", default="zig-out/vort-dashboard-index.json", help="JSON artifact manifest path")
     parser.add_argument("--producer-map", default="tools/dashboard_producers.json", help="JSON producer-step mapping path")
     parser.add_argument("--csv-header-manifest", default="tools/dashboard_csv_header_manifest.json", help="CSV header signature manifest path")
+    parser.add_argument("--markdown-heading-manifest", default="tools/dashboard_markdown_heading_manifest.json", help="Markdown heading signature manifest path")
     parser.add_argument("--strict-producers", action="store_true", help="fail if any artifact lacks a producer_step")
     parser.add_argument("--strict-smoke-gates", action="store_true", help="fail if required artifacts lack a smoke_gate")
     parser.add_argument("--strict-header-inspect", action="store_true", help="fail if header inspect artifact is missing, failed, or has missing workflows")
@@ -7825,6 +7885,7 @@ def main() -> int:
     manifest = Path(args.manifest)
     producer_map = load_producer_map(Path(args.producer_map))
     csv_header_manifest = load_csv_header_manifest(Path(args.csv_header_manifest))
+    markdown_heading_manifest = load_markdown_heading_manifest(Path(args.markdown_heading_manifest))
     artifacts = sorted(
         path
         for path in root.glob("vort-*")
@@ -7841,7 +7902,7 @@ def main() -> int:
     smoke_gate_missing = [record["name"] for record in records if not record["smoke_gate"]]
     smoke_gate_covered = len(records) - len(smoke_gate_missing)
     records_by_name = {record["name"]: record for record in records}
-    non_json_audit = non_json_artifact_audit(records, output.parent, csv_header_manifest)
+    non_json_audit = non_json_artifact_audit(records, output.parent, csv_header_manifest, markdown_heading_manifest)
     smoke_gate_required_missing = [
         name
         for name in required_smoke_gates(producer_map)
@@ -7905,6 +7966,11 @@ def main() -> int:
         and not non_json_audit["markdown_artifact_heading_not_first"]
         and not non_json_audit["markdown_artifact_table_missing"]
         and not non_json_audit["markdown_artifact_table_separator_missing"]
+        and not non_json_audit["markdown_heading_manifest_missing"]
+        and not non_json_audit["markdown_heading_manifest_unknown"]
+        and not non_json_audit["markdown_heading_count_mismatch"]
+        and not non_json_audit["markdown_first_heading_mismatch"]
+        and not non_json_audit["markdown_heading_signature_mismatch"]
     )
     header_healthy = (
         header_health["present"]
@@ -8345,7 +8411,7 @@ def main() -> int:
             f"| producer steps | {producer_step_covered}/{len(records)} | {len(producer_step_missing)} | allowed missing {len(producer_step_allowed_missing)} |",
             f"| smoke gates | {smoke_gate_covered}/{len(records)} | {len(smoke_gate_missing)} | required missing {len(smoke_gate_required_missing)} |",
             f"| CSV artifacts | {non_json_audit['csv_artifact_parsed_count']}/{non_json_audit['csv_artifact_count']} | data rows {non_json_audit['csv_artifact_data_rows']}, header cells {non_json_audit['csv_artifact_header_cell_count']}, header signatures {non_json_audit['csv_artifact_header_signature_count']}, manifest {non_json_audit['csv_header_manifest_matched']}/{non_json_audit['csv_header_manifest_count']}, parse failed {len(non_json_audit['csv_artifact_parse_failed'])}, empty {len(non_json_audit['csv_artifact_empty'])}, blank headers {len(non_json_audit['csv_artifact_blank_headers'])}, duplicate headers {len(non_json_audit['csv_artifact_duplicate_headers'])}, no-data {len(non_json_audit['csv_artifact_no_data_rows'])}, ragged {len(non_json_audit['csv_artifact_ragged_rows'])}, header drift {len(non_json_audit['csv_header_missing'])}/{len(non_json_audit['csv_header_unknown'])}/{len(non_json_audit['csv_header_column_mismatch'])}/{len(non_json_audit['csv_header_signature_mismatch'])} |",
-            f"| Markdown artifacts | {non_json_audit['markdown_artifact_read_count']}/{non_json_audit['markdown_artifact_count']} | read failed {len(non_json_audit['markdown_artifact_read_failed'])}, empty {len(non_json_audit['markdown_artifact_empty'])}, marker missing {len(non_json_audit['markdown_artifact_marker_missing'])}, heading missing {len(non_json_audit['markdown_artifact_heading_missing'])}, heading not first {len(non_json_audit['markdown_artifact_heading_not_first'])}, table missing {len(non_json_audit['markdown_artifact_table_missing'])}, separator missing {len(non_json_audit['markdown_artifact_table_separator_missing'])}, healthy `{non_json_artifact_healthy}` |",
+            f"| Markdown artifacts | {non_json_audit['markdown_artifact_read_count']}/{non_json_audit['markdown_artifact_count']} | manifest {non_json_audit['markdown_heading_manifest_matched']}/{non_json_audit['markdown_heading_manifest_count']}, read failed {len(non_json_audit['markdown_artifact_read_failed'])}, empty {len(non_json_audit['markdown_artifact_empty'])}, marker missing {len(non_json_audit['markdown_artifact_marker_missing'])}, heading missing {len(non_json_audit['markdown_artifact_heading_missing'])}, heading not first {len(non_json_audit['markdown_artifact_heading_not_first'])}, table missing {len(non_json_audit['markdown_artifact_table_missing'])}, separator missing {len(non_json_audit['markdown_artifact_table_separator_missing'])}, heading drift {len(non_json_audit['markdown_heading_manifest_missing'])}/{len(non_json_audit['markdown_heading_manifest_unknown'])}/{len(non_json_audit['markdown_heading_count_mismatch'])}/{len(non_json_audit['markdown_first_heading_mismatch'])}/{len(non_json_audit['markdown_heading_signature_mismatch'])}, healthy `{non_json_artifact_healthy}` |",
             "",
         ]
     )
@@ -9048,6 +9114,13 @@ def main() -> int:
                 "markdown_artifact_heading_not_first": non_json_audit["markdown_artifact_heading_not_first"],
                 "markdown_artifact_table_missing": non_json_audit["markdown_artifact_table_missing"],
                 "markdown_artifact_table_separator_missing": non_json_audit["markdown_artifact_table_separator_missing"],
+                "markdown_heading_manifest_count": non_json_audit["markdown_heading_manifest_count"],
+                "markdown_heading_manifest_matched": non_json_audit["markdown_heading_manifest_matched"],
+                "markdown_heading_manifest_missing": non_json_audit["markdown_heading_manifest_missing"],
+                "markdown_heading_manifest_unknown": non_json_audit["markdown_heading_manifest_unknown"],
+                "markdown_heading_count_mismatch": non_json_audit["markdown_heading_count_mismatch"],
+                "markdown_first_heading_mismatch": non_json_audit["markdown_first_heading_mismatch"],
+                "markdown_heading_signature_mismatch": non_json_audit["markdown_heading_signature_mismatch"],
                 "validation_healthy": validation_healthy,
                 "validation_unhealthy_reasons": validation_unhealthy_reasons,
                 "header_inspect_present": header_health["present"],
