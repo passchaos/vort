@@ -5183,7 +5183,8 @@ def main() -> int:
                     "| rows | 20 | expected 20, present `True` |",
                     "| positive timing rows | 20 | ratio/throughput 20/20 |",
                     "| repetitive shrunk | 4 | expected modes 4 |",
-                    "| reusable size/checksum matches | 5/5 | missing pairs 0, healthy `True` |",
+                    "| framed overhead matches | 5 | expected cases 5 |",
+                    "| reusable size/checksum matches | 5/5 | missing/duplicate/unknown pairs 0/0/0, healthy `True` |",
                 ],
             )
         )

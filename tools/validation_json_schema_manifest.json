@@ -1283,11 +1283,14 @@
             "snappy_report_ratio_rows",
             "snappy_report_throughput_rows",
             "snappy_report_repetitive_shrunk_rows",
+            "snappy_report_framed_overhead_matched_cases",
             "snappy_report_reusable_size_matched_cases",
             "snappy_report_reusable_checksum_matched_cases"
           ],
           "zero": [
-            "snappy_report_missing_pairs"
+            "snappy_report_missing_pairs",
+            "snappy_report_duplicate_pairs",
+            "snappy_report_unknown_pairs"
           ]
         },
         "checksum_bench_healthy": {
@@ -2373,9 +2376,12 @@
         "snappy_report_ratio_rows": "int",
         "snappy_report_throughput_rows": "int",
         "snappy_report_repetitive_shrunk_rows": "int",
+        "snappy_report_framed_overhead_matched_cases": "int",
         "snappy_report_reusable_size_matched_cases": "int",
         "snappy_report_reusable_checksum_matched_cases": "int",
         "snappy_report_missing_pairs": "list",
+        "snappy_report_duplicate_pairs": "list",
+        "snappy_report_unknown_pairs": "list",
         "checksum_bench_present": "bool",
         "checksum_bench_healthy": "bool",
         "checksum_bench_rows": "int",
@@ -3401,6 +3407,15 @@
           "left": "snappy_report_throughput_rows",
           "op": "eq",
           "right": "snappy_report_rows",
+          "when": {
+            "field": "snappy_report_healthy",
+            "equals": true
+          }
+        },
+        {
+          "left": "snappy_report_framed_overhead_matched_cases",
+          "op": "eq",
+          "right": "snappy_report_reusable_size_matched_cases",
           "when": {
             "field": "snappy_report_healthy",
             "equals": true

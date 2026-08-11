@@ -2759,3 +2759,8 @@ architecture blindly.
   gate booleans alone. Dashboard health now exposes missing/extra gate checks,
   recomputed pass/fail counts, rule drift, exact mismatch, and floor shortfall
   counters before relaxed-wrapper compatibility coverage can pass.
+
+- Tightened Snappy report dashboard health by exposing duplicate and unknown
+  mode/case pairs plus framed-overhead parity across one-shot and reusable
+  paths. Dashboard health now rejects pair drift and framed/raw size drift before
+  Snappy CSV coverage can pass.

@@ -1506,9 +1506,12 @@ def main() -> int:
         assert dashboard["snappy_report_ratio_rows"] == len(snappy_report_rows)
         assert dashboard["snappy_report_throughput_rows"] == len(snappy_report_rows)
         assert dashboard["snappy_report_repetitive_shrunk_rows"] == 4
+        assert dashboard["snappy_report_framed_overhead_matched_cases"] == 5
         assert dashboard["snappy_report_reusable_size_matched_cases"] == 5
         assert dashboard["snappy_report_reusable_checksum_matched_cases"] == 5
         assert dashboard["snappy_report_missing_pairs"] == []
+        assert dashboard["snappy_report_duplicate_pairs"] == []
+        assert dashboard["snappy_report_unknown_pairs"] == []
         assert dashboard["checksum_bench_present"] is True
         assert dashboard["checksum_bench_healthy"] is True
         assert dashboard["checksum_bench_rows"] == len(checksum_bench_rows)
