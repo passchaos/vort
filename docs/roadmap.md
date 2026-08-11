@@ -2887,6 +2887,11 @@ architecture blindly.
 
 
 
+
+- Tightened Markdown artifact layout auditing by requiring the first non-empty
+  line of every retained Markdown artifact to be a heading. Dashboard health now
+  rejects heading-late Markdown artifacts before inventory can pass.
+
 - Tightened Markdown artifact auditing by requiring each retained Markdown
   artifact to include a heading. Dashboard health now rejects heading-less
   Markdown even when the file is readable, non-empty, and contains table markers.

@@ -439,6 +439,7 @@ def main() -> int:
                 "markdown_artifact_empty": [],
                 "markdown_artifact_marker_missing": [],
                 "markdown_artifact_heading_missing": [],
+                "markdown_artifact_heading_not_first": [],
                 "validation_json_present": True,
                 "validation_json_ok": True,
                 "validation_json_healthy": True,
