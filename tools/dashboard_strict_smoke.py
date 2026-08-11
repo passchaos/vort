@@ -63,6 +63,7 @@ BR_STATIC_CANDIDATES_ARTIFACT = "vort-br-static-dictionary-candidates.json"
 BR_STATIC_CANDIDATES_MARKDOWN_ARTIFACT = "vort-br-static-dictionary-candidates.md"
 BR_STATIC_UPSTREAM_ARTIFACT = "vort-br-static-dictionary-candidate-upstream-smoke.json"
 BR_STATIC_NODE_ARTIFACT = "vort-br-static-dictionary-node-probe.json"
+BR_STATIC_NODE_MARKDOWN_ARTIFACT = "vort-br-static-dictionary-node-probe.md"
 BR_STATIC_AUDIT_ARTIFACT = "vort-br-static-dictionary-source-audit.json"
 BR_STATIC_AUDIT_NEGATIVE_ARTIFACT = "vort-br-static-dictionary-source-audit-negative-smoke.json"
 BR_STATIC_REPORT_CSV_ARTIFACT = "vort-br-static-dictionary-report.csv"
@@ -396,6 +397,7 @@ def write_producer_map(
             (BR_STATIC_CANDIDATES_MARKDOWN_ARTIFACT, "md", "zig build run-br-static-dictionary-candidate-report-smoke"),
             (BR_STATIC_UPSTREAM_ARTIFACT, "json", "zig build run-br-static-dictionary-candidate-upstream-smoke"),
             (BR_STATIC_NODE_ARTIFACT, "json", "zig build run-br-static-dictionary-node-probe"),
+            (BR_STATIC_NODE_MARKDOWN_ARTIFACT, "md", "zig build run-br-static-dictionary-node-probe"),
             (BR_STATIC_AUDIT_ARTIFACT, "json", "zig build run-br-static-dictionary-source-audit"),
             (BR_STATIC_AUDIT_NEGATIVE_ARTIFACT, "json", "zig build run-br-static-dictionary-source-audit-negative-smoke"),
             (BR_STATIC_REPORT_CSV_ARTIFACT, "csv", "zig build run-br-static-dictionary-report-smoke"),
@@ -553,6 +555,7 @@ def write_producer_map(
         exact[BR_STATIC_CANDIDATES_MARKDOWN_ARTIFACT] = "zig build run-br-static-dictionary-candidate-report-smoke"
         exact[BR_STATIC_UPSTREAM_ARTIFACT] = "zig build run-br-static-dictionary-candidate-upstream-smoke"
         exact[BR_STATIC_NODE_ARTIFACT] = "zig build run-br-static-dictionary-node-probe"
+        exact[BR_STATIC_NODE_MARKDOWN_ARTIFACT] = "zig build run-br-static-dictionary-node-probe"
         exact[BR_STATIC_AUDIT_ARTIFACT] = "zig build run-br-static-dictionary-source-audit"
         exact[BR_STATIC_AUDIT_NEGATIVE_ARTIFACT] = "zig build run-br-static-dictionary-source-audit-negative-smoke"
         exact[BR_STATIC_REPORT_CSV_ARTIFACT] = "zig build run-br-static-dictionary-report-dashboard"
@@ -2904,6 +2907,54 @@ def write_br_static_candidates_markdown(path: Path, payload: dict[str, object]) 
     path.write_text("\n".join(lines) + "\n")
 
 
+def write_br_static_node_markdown(path: Path, payload: dict[str, object]) -> None:
+    lines = [
+        "# Brotli static dictionary Node probe",
+        "",
+        f"- Candidate entries: {payload['candidate_count']}",
+        f"- Candidate source mode: {payload['candidate_source_mode']}",
+        f"- Candidate source limit: {payload['candidate_source_limit']}",
+        f"- Candidate raw words: {payload['candidate_raw_word_count']}",
+        f"- Probe start index: {payload['start_index']}",
+        f"- Probe limit: {payload['limit']}",
+        f"- Probed entries: {payload['probed_count']}",
+        f"- Node decode successes: {payload['node_decode_successes']}",
+        f"- Vort decode successes: {payload['vort_decode_successes']}",
+        f"- Vort decode failures: {payload['vort_decode_failures']}",
+        f"- Size winners: {payload['size_winner_count']}",
+        "",
+        "## Transform-kind summary",
+        "",
+        "| Transform kind | Probed | Node OK | Vort OK | Vort failures |",
+        "| --- | ---: | ---: | ---: | ---: |",
+    ]
+    for row in payload["kind_rows"]:
+        lines.append(
+            f"| `{row['transform_kind']}` | {row['probed_count']} | {row['node_decode_successes']} | {row['vort_decode_successes']} | {row['vort_decode_failures']} |"
+        )
+    lines.extend([
+        "",
+        "## Size summary",
+        "",
+        "| Size class | Probed |",
+        "| --- | ---: |",
+    ])
+    for row in payload["size_rows"]:
+        lines.append(f"| `{row['size_class']}` | {row['probed_count']} |")
+    lines.extend([
+        "",
+        "## Candidate rows",
+        "",
+        "| # | Transform | Copy length | Word index | Candidate | Payload bytes | Brotli bytes | Size class | Classification | Error |",
+        "| ---: | ---: | ---: | ---: | --- | ---: | ---: | --- | --- | --- |",
+    ])
+    for row in payload["rows"]:
+        lines.append(
+            f"| {row['index']} | {row['transform']} | {row['copy_len']} | {row['word_index']} | `{row['candidate_word']}` | {row['payload_bytes']} | {row['br_bytes']} | `{row['size_class']}` | `{row['classification']}` | `{row['error']}` |"
+        )
+    path.write_text("\n".join(lines) + "\n")
+
+
 def write_br_static_dictionary_artifacts(root: Path) -> None:
     candidates = {
         "schema": "vort.br_static_dictionary_candidate_report",
@@ -2943,11 +2994,17 @@ def write_br_static_dictionary_artifacts(root: Path) -> None:
         "all_candidates": False,
         "start_index": 0,
         "probed_count": 48,
+        "limit": 48,
+        "candidate_count": 775,
+        "candidate_raw_word_count": 143,
         "node_decode_successes": 48,
+        "vort_decode_successes": 48,
+        "vort_decode_failures": 0,
         "size_winner_count": 1,
-        "kind_rows": [{"transform_kind": "identity", "probed_count": 48}],
+        "kind_rows": [{"transform_kind": "identity", "probed_count": 48, "node_decode_successes": 48, "vort_decode_successes": 48, "vort_decode_failures": 0}],
         "size_rows": [{"size_class": "smaller", "probed_count": 48}],
         "size_winner_rows": [{"size_class": "smaller", "probed_count": 48}],
+        "rows": [{"index": index, "transform": 0, "copy_len": 4, "word_index": index, "candidate_word": f"test{index}", "payload_bytes": 5, "br_bytes": 4, "size_class": "smaller", "classification": "vort_accepts_node_frame", "error": ""} for index in range(48)],
     }
     audit = {
         "schema": "vort.br_static_dictionary_source_audit",
@@ -3004,6 +3061,7 @@ def write_br_static_dictionary_artifacts(root: Path) -> None:
         "cases": [{"name": "missing_required_tuple", "expected_output": "missing required coverage rows", "returncode": 1, "matched": True}],
     }
     write_br_static_candidates_markdown(root / BR_STATIC_CANDIDATES_MARKDOWN_ARTIFACT, candidates)
+    write_br_static_node_markdown(root / BR_STATIC_NODE_MARKDOWN_ARTIFACT, node)
     for artifact, payload in (
         (BR_STATIC_CANDIDATES_ARTIFACT, candidates),
         (BR_STATIC_UPSTREAM_ARTIFACT, upstream),
@@ -4323,8 +4381,8 @@ def main() -> int:
                 [
                     "## Producer and smoke-gate coverage",
                     "| category | covered | missing | detail |",
-                    "| producer steps | 85/85 | 0 | allowed missing 0 |",
-                    "| smoke gates | 85/85 | 0 | required missing 0 |",
+                    "| producer steps | 86/86 | 0 | allowed missing 0 |",
+                    "| smoke gates | 86/86 | 0 | required missing 0 |",
                 ],
             )
         )
@@ -4775,7 +4833,8 @@ def main() -> int:
                     "| candidates | 775 | raw words 143, Markdown 14/14 |",
                     "| candidate sample rows | 1/1 | unmatched 0, present `True` |",
                     "| upstream smoke | 775 | raw words 143, present `True` |",
-                    "| node probe | 48/48 | size winners 1 |",
+                    "| node probe | 48/48 | size winners 1, Markdown 13/13 |",
+                    "| node rows | 48/48 | unmatched 0, present `True` |",
                     "| source audit | 83 | anchors 83, generated bytes 4096 |",
                     "| negative smoke | 1/1 | healthy `True` |",
                     "| report entries | 6 | csv 6/6, Markdown 6/6 |",
@@ -5282,6 +5341,7 @@ def main() -> int:
             elif fixture == "missing_br_static_dictionary_artifact":
                 (fixture_root / BR_STATIC_REPORT_JSON_ARTIFACT).unlink()
                 (fixture_root / BR_STATIC_CANDIDATES_MARKDOWN_ARTIFACT).unlink()
+                (fixture_root / BR_STATIC_NODE_MARKDOWN_ARTIFACT).unlink()
                 write_producer_map(producer_map)
             elif fixture == "br_static_dictionary_failed":
                 write_br_static_dictionary_artifacts(fixture_root)

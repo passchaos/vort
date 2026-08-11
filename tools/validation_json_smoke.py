@@ -1017,6 +1017,7 @@ def main() -> int:
             "vort-br-static-dictionary-candidates.md",
             "vort-br-static-dictionary-candidate-upstream-smoke.json",
             "vort-br-static-dictionary-node-probe.json",
+            "vort-br-static-dictionary-node-probe.md",
             "vort-br-static-dictionary-source-audit.json",
             "vort-br-static-dictionary-source-audit-negative-smoke.json",
             "vort-br-static-dictionary-report.csv",
@@ -1320,6 +1321,13 @@ def main() -> int:
         assert dashboard["br_static_dictionary_candidate_markdown_sample_unmatched"] == 0
         assert dashboard["br_static_dictionary_upstream_present"] is True
         assert dashboard["br_static_dictionary_node_present"] is True
+        assert dashboard["br_static_dictionary_node_markdown_present"] is True
+        assert dashboard["br_static_dictionary_node_markdown_summary_rows"] > 0
+        assert dashboard["br_static_dictionary_node_markdown_matched"] == dashboard["br_static_dictionary_node_markdown_summary_rows"]
+        assert dashboard["br_static_dictionary_node_markdown_unmatched"] == 0
+        assert dashboard["br_static_dictionary_node_markdown_rows"] == br_static_dictionary_node_probe["probed_count"]
+        assert dashboard["br_static_dictionary_node_markdown_matched_rows"] == br_static_dictionary_node_probe["probed_count"]
+        assert dashboard["br_static_dictionary_node_markdown_unmatched_rows"] == 0
         assert dashboard["br_static_dictionary_audit_present"] is True
         assert dashboard["br_static_dictionary_negative_present"] is True
         assert dashboard["br_static_dictionary_report_present"] is True
