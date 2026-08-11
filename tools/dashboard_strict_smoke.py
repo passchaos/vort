@@ -4448,10 +4448,10 @@ def main() -> int:
                 [
                     "## Validation JSON schema coverage",
                     "| category | count | detail |",
-                    "| checked schemas | 5 | smoke present `True`, ok `True` |",
+                    "| checked schemas | 5 | unique 5, duplicates 0, smoke present `True`, ok `True` |",
                     "| CLI validation | 1 | failure-ok `False`, hint `payload_corrupt` |",
                     "| report rows | 1 | corrupt rows 2 |",
-                    "| docs negative cases | 2/2 | present `True`, healthy `True` |",
+                    "| docs negative cases | 2/2 | rows 2, mismatch 0, row-unmatched 0, present `True`, healthy `True` |",
                 ],
             )
         )

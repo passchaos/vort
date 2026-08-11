@@ -658,13 +658,18 @@
           ],
           "positive": [
             "validation_json_checked_schema_count",
+            "validation_json_checked_schema_unique_count",
             "validation_json_report_rows",
             "validation_json_corrupt_rows",
             "validation_json_docs_negative_case_count",
+            "validation_json_docs_negative_rows",
             "validation_json_docs_negative_matched"
           ],
           "zero": [
-            "validation_json_docs_negative_unmatched"
+            "validation_json_checked_schema_duplicate_count",
+            "validation_json_docs_negative_unmatched",
+            "validation_json_docs_negative_count_mismatch",
+            "validation_json_docs_negative_row_unmatched"
           ]
         },
         "decode_stage_healthy": {
@@ -1649,6 +1654,8 @@
         "validation_json_ok": "bool",
         "validation_json_healthy": "bool",
         "validation_json_checked_schema_count": "int",
+        "validation_json_checked_schema_unique_count": "int",
+        "validation_json_checked_schema_duplicate_count": "int",
         "validation_json_cli_success_ok": "bool",
         "validation_json_cli_failure_ok": "bool",
         "validation_json_cli_failure_hint": "str",
@@ -2810,6 +2817,21 @@
           "left": "chunked_zlib_bench_markdown_matched",
           "op": "eq",
           "right": "chunked_zlib_bench_markdown_rows"
+        },
+        {
+          "left": "validation_json_checked_schema_unique_count",
+          "op": "eq",
+          "right": "validation_json_checked_schema_count"
+        },
+        {
+          "left": "validation_json_docs_negative_rows",
+          "op": "eq",
+          "right": "validation_json_docs_negative_case_count"
+        },
+        {
+          "left": "validation_json_docs_negative_matched",
+          "op": "eq",
+          "right": "validation_json_docs_negative_rows"
         },
         {
           "left": "dashboard_config_index_config_rows",

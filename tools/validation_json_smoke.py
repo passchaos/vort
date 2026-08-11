@@ -1189,6 +1189,8 @@ def main() -> int:
         assert dashboard["validation_json_ok"] is True
         assert dashboard["validation_json_healthy"] is True
         assert dashboard["validation_json_checked_schema_count"] == len(validation_json_dashboard_smoke["checked_schemas"])
+        assert dashboard["validation_json_checked_schema_unique_count"] == len(set(validation_json_dashboard_smoke["checked_schemas"]))
+        assert dashboard["validation_json_checked_schema_duplicate_count"] == 0
         assert dashboard["validation_json_cli_success_ok"] == validation_json_dashboard_smoke["cli_success_ok"]
         assert dashboard["validation_json_cli_failure_ok"] == validation_json_dashboard_smoke["cli_failure_ok"]
         assert dashboard["validation_json_cli_failure_hint"] == validation_json_dashboard_smoke["cli_failure_hint"]
@@ -1197,8 +1199,11 @@ def main() -> int:
         assert dashboard["validation_json_docs_negative_present"] is True
         assert dashboard["validation_json_docs_negative_ok"] is True
         assert dashboard["validation_json_docs_negative_case_count"] == docs_negative["case_count"]
+        assert dashboard["validation_json_docs_negative_rows"] == len(docs_negative["cases"])
         assert dashboard["validation_json_docs_negative_matched"] == docs_negative["case_count"]
         assert dashboard["validation_json_docs_negative_unmatched"] == 0
+        assert dashboard["validation_json_docs_negative_count_mismatch"] == 0
+        assert dashboard["validation_json_docs_negative_row_unmatched"] == 0
         assert dashboard["sidecar_corrupt_present"] is True
         assert dashboard["sidecar_corrupt_healthy"] is True
         assert dashboard["sidecar_corrupt_rows"] == corrupt["rows"]

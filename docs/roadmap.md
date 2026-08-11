@@ -2650,3 +2650,7 @@ architecture blindly.
   required-producer, and producer-negative smoke row counts to match their
   declared counts and by exposing count-mismatch/row-unmatched counters in the
   dashboard manifest and Markdown summary.
+- Tightened validation-JSON dashboard health by requiring checked schemas to
+  be unique, CLI failure smoke to retain a recoverability hint, and docs-negative
+  smoke rows to match their declared case count. Dashboard health now exposes
+  schema duplicate and docs-negative row/count mismatch counters.
