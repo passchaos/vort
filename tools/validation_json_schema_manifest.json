@@ -1791,6 +1791,7 @@
           "positive": [
             "csv_artifact_count",
             "csv_artifact_parsed_count",
+            "csv_artifact_data_rows",
             "markdown_artifact_count",
             "markdown_artifact_read_count"
           ],
@@ -1799,6 +1800,7 @@
             "csv_artifact_empty",
             "csv_artifact_blank_headers",
             "csv_artifact_duplicate_headers",
+            "csv_artifact_no_data_rows",
             "markdown_artifact_read_failed",
             "markdown_artifact_empty",
             "markdown_artifact_marker_missing"
@@ -2531,10 +2533,12 @@
         "non_json_artifact_healthy": "bool",
         "csv_artifact_count": "int",
         "csv_artifact_parsed_count": "int",
+        "csv_artifact_data_rows": "int",
         "csv_artifact_parse_failed": "list",
         "csv_artifact_empty": "list",
         "csv_artifact_blank_headers": "list",
         "csv_artifact_duplicate_headers": "list",
+        "csv_artifact_no_data_rows": "list",
         "markdown_artifact_count": "int",
         "markdown_artifact_read_count": "int",
         "markdown_artifact_read_failed": "list",

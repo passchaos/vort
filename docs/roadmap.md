@@ -2885,6 +2885,11 @@ architecture blindly.
 
 
 
+
+- Tightened CSV artifact auditing by requiring at least one data row per retained
+  CSV artifact in addition to unique non-blank headers. Dashboard health now
+  rejects header-only CSV artifacts before artifact inventory can pass.
+
 - Tightened non-JSON artifact auditing by rejecting CSV artifacts with blank or
   duplicate headers, and fixed the deflate decode-stage CSV header so wrapper
   timing columns are uniquely named.
