@@ -1604,6 +1604,7 @@ def main() -> int:
         assert dashboard["png_streaming_zlib_bench_positive_rows"] == len(png_streaming_zlib_bench_rows)
         assert dashboard["png_streaming_zlib_bench_shape_rows"] == len(png_streaming_zlib_bench_rows)
         assert dashboard["png_streaming_zlib_bench_image_size_rows"] == len(png_streaming_zlib_bench_rows)
+        assert dashboard["png_streaming_zlib_bench_chunk_count_rows"] == len(png_streaming_zlib_bench_rows)
         assert dashboard["png_streaming_zlib_bench_ratio_rows"] == len(png_streaming_zlib_bench_rows)
         assert dashboard["png_streaming_zlib_bench_missing_cases"] == []
         assert dashboard["deflate_dynamic_decode_profile_present"] is True

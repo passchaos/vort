@@ -4964,7 +4964,8 @@ def main() -> int:
                     "| category | count | detail |",
                     "| rows | 10 | expected 10, present `True` |",
                     "| shape rows | 10 | positive rows 10 |",
-                    "| ratio rows | 10 | image-size rows 10, missing cases 0, healthy `True` |",
+                    "| ratio rows | 10 | image-size rows 10 |",
+                    "| chunk counts | 10 | missing cases 0, healthy `True` |",
                 ],
             )
         )

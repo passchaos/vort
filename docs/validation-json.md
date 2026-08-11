@@ -2756,6 +2756,7 @@ Top-level fields:
   `png_streaming_zlib_bench_positive_rows`,
   `png_streaming_zlib_bench_shape_rows`,
   `png_streaming_zlib_bench_image_size_rows`,
+  `png_streaming_zlib_bench_chunk_count_rows`,
   `png_streaming_zlib_bench_ratio_rows`,
   `png_streaming_zlib_bench_missing_cases`
 - `deflate_dynamic_decode_profile_present`,
@@ -3424,6 +3425,7 @@ Example:
   "png_streaming_zlib_bench_positive_rows": 0,
   "png_streaming_zlib_bench_shape_rows": 0,
   "png_streaming_zlib_bench_image_size_rows": 0,
+  "png_streaming_zlib_bench_chunk_count_rows": 0,
   "png_streaming_zlib_bench_ratio_rows": 0,
   "png_streaming_zlib_bench_missing_cases": [],
   "deflate_dynamic_decode_profile_present": false,

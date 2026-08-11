@@ -2716,3 +2716,7 @@ architecture blindly.
   to keep a shared non-zero checksum across all filter stages. Dashboard health
   now exposes throughput-row and checksum-bpp counters before scanline coverage
   can pass.
+- Tightened PNG streaming zlib benchmark dashboard health by requiring reported
+  chunk counts to match the zlib payload length and chunk size. Dashboard health
+  now exposes a chunk-count counter before streaming zlib benchmark coverage can
+  pass.

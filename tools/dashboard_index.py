@@ -4192,6 +4192,7 @@ def png_streaming_zlib_bench_health(artifacts: list[Path]) -> dict:
         positive_rows = 0
         shape_rows = 0
         image_size_rows = 0
+        chunk_count_rows = 0
         ratio_rows = 0
         for row in rows:
             case = str(row.get("case") or "")
@@ -4231,6 +4232,8 @@ def png_streaming_zlib_bench_health(artifacts: list[Path]) -> dict:
                 value > 0.0 for value in (contiguous_mib_s, chunked_mib_s, chunked_over_contiguous)
             ):
                 positive_rows += 1
+            if zlib_bytes > 0 and chunk_bytes > 0 and chunk_count == (zlib_bytes + chunk_bytes - 1) // chunk_bytes:
+                chunk_count_rows += 1
             if ratio_ok(row):
                 ratio_rows += 1
         missing_cases = sorted(set(expected_cases) - seen)
@@ -4241,6 +4244,7 @@ def png_streaming_zlib_bench_health(artifacts: list[Path]) -> dict:
             and positive_rows == row_count
             and shape_rows == row_count
             and image_size_rows == row_count
+            and chunk_count_rows == row_count
             and ratio_rows == row_count
         )
         return {
@@ -4251,6 +4255,7 @@ def png_streaming_zlib_bench_health(artifacts: list[Path]) -> dict:
             "positive_rows": positive_rows,
             "shape_rows": shape_rows,
             "image_size_rows": image_size_rows,
+            "chunk_count_rows": chunk_count_rows,
             "ratio_rows": ratio_rows,
             "missing_cases": missing_cases,
         }
@@ -4262,6 +4267,7 @@ def png_streaming_zlib_bench_health(artifacts: list[Path]) -> dict:
         "positive_rows": 0,
         "shape_rows": 0,
         "image_size_rows": 0,
+        "chunk_count_rows": 0,
         "ratio_rows": 0,
         "missing_cases": [],
     }
@@ -7212,7 +7218,8 @@ def main() -> int:
             "| --- | ---: | --- |",
             f"| rows | {png_streaming_zlib_bench['row_count']} | expected {png_streaming_zlib_bench['expected_rows']}, present `{png_streaming_zlib_bench['present']}` |",
             f"| shape rows | {png_streaming_zlib_bench['shape_rows']} | positive rows {png_streaming_zlib_bench['positive_rows']} |",
-            f"| ratio rows | {png_streaming_zlib_bench['ratio_rows']} | image-size rows {png_streaming_zlib_bench['image_size_rows']}, missing cases {len(png_streaming_zlib_bench['missing_cases'])}, healthy `{png_streaming_zlib_bench['healthy']}` |",
+            f"| ratio rows | {png_streaming_zlib_bench['ratio_rows']} | image-size rows {png_streaming_zlib_bench['image_size_rows']} |",
+            f"| chunk counts | {png_streaming_zlib_bench['chunk_count_rows']} | missing cases {len(png_streaming_zlib_bench['missing_cases'])}, healthy `{png_streaming_zlib_bench['healthy']}` |",
             "",
         ]
     )
@@ -8075,6 +8082,7 @@ def main() -> int:
                 "png_streaming_zlib_bench_positive_rows": png_streaming_zlib_bench["positive_rows"],
                 "png_streaming_zlib_bench_shape_rows": png_streaming_zlib_bench["shape_rows"],
                 "png_streaming_zlib_bench_image_size_rows": png_streaming_zlib_bench["image_size_rows"],
+                "png_streaming_zlib_bench_chunk_count_rows": png_streaming_zlib_bench["chunk_count_rows"],
                 "png_streaming_zlib_bench_ratio_rows": png_streaming_zlib_bench["ratio_rows"],
                 "png_streaming_zlib_bench_missing_cases": png_streaming_zlib_bench["missing_cases"],
                 "deflate_dynamic_decode_profile_present": deflate_dynamic_decode_profile["present"],

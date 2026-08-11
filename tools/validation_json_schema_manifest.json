@@ -1421,6 +1421,7 @@
             "png_streaming_zlib_bench_positive_rows",
             "png_streaming_zlib_bench_shape_rows",
             "png_streaming_zlib_bench_image_size_rows",
+            "png_streaming_zlib_bench_chunk_count_rows",
             "png_streaming_zlib_bench_ratio_rows"
           ],
           "zero": [
@@ -2375,6 +2376,7 @@
         "png_streaming_zlib_bench_positive_rows": "int",
         "png_streaming_zlib_bench_shape_rows": "int",
         "png_streaming_zlib_bench_image_size_rows": "int",
+        "png_streaming_zlib_bench_chunk_count_rows": "int",
         "png_streaming_zlib_bench_ratio_rows": "int",
         "png_streaming_zlib_bench_missing_cases": "list",
         "deflate_dynamic_decode_profile_present": "bool",
@@ -3293,6 +3295,15 @@
           "right": "png_scanline_bench_rows",
           "when": {
             "field": "png_scanline_bench_healthy",
+            "equals": true
+          }
+        },
+        {
+          "left": "png_streaming_zlib_bench_chunk_count_rows",
+          "op": "eq",
+          "right": "png_streaming_zlib_bench_rows",
+          "when": {
+            "field": "png_streaming_zlib_bench_healthy",
             "equals": true
           }
         }
