@@ -33,6 +33,21 @@ def first_json_line(text: str) -> dict:
     raise AssertionError(f"no JSON object found in output:\n{text}")
 
 
+def duplicate_values(rows: list[dict], field: str) -> list[str]:
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        value = row.get(field)
+        if not isinstance(value, str) or not value:
+            continue
+        if value in seen:
+            duplicates.add(value)
+        seen.add(value)
+    return sorted(duplicates)
+
+
 def write_huffman_length_csv(path: Path) -> None:
     row = {
         "case": "validation-json-smoke",
@@ -1733,13 +1748,16 @@ def main() -> int:
         assert dashboard["native_allocation_report_count_mismatch"] == 0
         assert dashboard["native_allocation_report_balanced_rows"] == len(native_allocation["cases"])
         assert dashboard["native_allocation_report_duplicate_cases"] == 0
+        assert dashboard["native_allocation_report_duplicate_case_names"] == duplicate_values(native_allocation["cases"], "case")
         assert dashboard["native_allocation_report_unbalanced_rows"] == 0
         assert dashboard["native_allocation_required_zero_allocation_cases"] == native_allocation_smoke["required_zero_allocation_cases"]
         assert dashboard["native_allocation_zero_allocation_matched"] == len(native_allocation_smoke["cases"])
+        assert dashboard["native_allocation_zero_duplicate_cases"] == duplicate_values(native_allocation_smoke["cases"], "case")
         assert dashboard["native_allocation_zero_report_matched"] == native_allocation_smoke["required_zero_allocation_cases"]
         assert dashboard["native_allocation_zero_report_unmatched"] == 0
         assert dashboard["native_allocation_required_budget_cases"] == native_allocation_smoke["required_budget_cases"]
         assert dashboard["native_allocation_budget_matched"] == len(native_allocation_smoke["budget_cases"])
+        assert dashboard["native_allocation_budget_duplicate_cases"] == duplicate_values(native_allocation_smoke["budget_cases"], "case")
         assert dashboard["native_allocation_budget_report_matched"] == native_allocation_smoke["required_budget_cases"]
         assert dashboard["native_allocation_budget_report_unmatched"] == 0
         assert dashboard["native_allocation_smoke_classified_cases"] == len(native_allocation["cases"])
@@ -1748,10 +1766,14 @@ def main() -> int:
         assert dashboard["native_allocation_smoke_classification_extra"] == 0
         assert dashboard["native_allocation_negative_case_count"] == native_allocation_negative_smoke["case_count"]
         assert dashboard["native_allocation_negative_matched"] == native_allocation_negative_smoke["case_count"]
+        assert dashboard["native_allocation_negative_duplicate_names"] == duplicate_values(native_allocation_negative_smoke["cases"], "name")
         assert dashboard["native_allocation_negative_unmatched"] == 0
         assert dashboard["native_allocation_markdown_rows"] == len(native_allocation["cases"])
         assert dashboard["native_allocation_markdown_matched"] == len(native_allocation["cases"])
         assert dashboard["native_allocation_markdown_unmatched"] == 0
+        assert dashboard["native_allocation_markdown_malformed_rows"] == 0
+        assert dashboard["native_allocation_markdown_duplicate_cases"] == []
+        assert dashboard["native_allocation_markdown_unknown_cases"] == []
         assert "| concat_alloc |" in native_allocation_markdown
         assert dashboard["python_zlib_diff_present"] is True
         assert dashboard["python_zlib_diff_ok"] is True

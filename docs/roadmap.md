@@ -2874,6 +2874,13 @@ architecture blindly.
   duplicate CSV case rows alongside malformed/cost checks. Dashboard health now
   rejects duplicated Huffman oracle case rows before Markdown coverage can pass.
 
+
+- Tightened native allocation dashboard health by exposing duplicate report,
+  zero-allocation smoke, budget smoke, and negative smoke identities plus
+  malformed, duplicate, and unknown Markdown rows. Dashboard health now rejects
+  native allocation row drift before allocation balance and smoke coverage can
+  pass.
+
 - Tightened zstd compare dashboard health by exposing duplicate CSV row
   identities across compare, standard, and block-sweep artifacts. Dashboard
   health now rejects duplicated zstd-compare CSV identities before aggregate
