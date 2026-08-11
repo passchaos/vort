@@ -458,6 +458,11 @@ def main() -> int:
         assert lz4_native_summary["block_checksum_frame_count"] >= 1
         assert lz4_native_summary["dictionary_id_frame_count"] >= 1
         assert lz4_native_summary["declared_content_bytes"] >= lz4_native_summary["payload_bytes"]
+        assert lz4_native_summary["block_count"] == lz4_native_summary["raw_block_count"] + lz4_native_summary["compressed_block_count"]
+        assert lz4_native_summary["dictionary_id_frame_count"] <= lz4_native_summary["frame_count"]
+        assert lz4_native_summary["content_size_frame_count"] <= lz4_native_summary["frame_count"]
+        assert lz4_native_summary["checksum_frame_count"] <= lz4_native_summary["frame_count"]
+        assert lz4_native_summary["block_checksum_frame_count"] <= lz4_native_summary["frame_count"]
         assert lz4_native_summary["block_count"] >= 2
         assert lz4_native_summary["raw_block_count"] >= 1
         assert lz4_native_summary["compressed_bytes"] > 0
@@ -494,6 +499,10 @@ def main() -> int:
         assert zstd_native_summary["dictionary_id_frame_count"] >= 1
         assert zstd_native_summary["content_size_frame_count"] >= 2
         assert zstd_native_summary["declared_content_bytes"] >= zstd_native_summary["payload_bytes"]
+        assert zstd_native_summary["block_count"] == zstd_native_summary["raw_block_count"] + zstd_native_summary["rle_block_count"] + zstd_native_summary["compressed_block_count"]
+        assert zstd_native_summary["dictionary_id_frame_count"] <= zstd_native_summary["frame_count"]
+        assert zstd_native_summary["content_size_frame_count"] <= zstd_native_summary["frame_count"]
+        assert zstd_native_summary["checksum_frame_count"] <= zstd_native_summary["frame_count"]
         assert zstd_native_summary["block_count"] >= 2
         assert zstd_native_summary["raw_block_count"] >= 1
         assert zstd_native_summary["compressed_bytes"] > 0
@@ -1686,6 +1695,11 @@ def main() -> int:
         assert dashboard["lz4_native_summary_compressed_bytes"] == lz4_native_summary["compressed_bytes"]
         assert dashboard["lz4_native_summary_payload_bytes"] == lz4_native_summary["payload_bytes"]
         assert dashboard["lz4_native_summary_skippable_payload_bytes"] == lz4_native_summary["skippable_payload_bytes"]
+        assert dashboard["lz4_native_summary_block_count_mismatch"] == 0
+        assert dashboard["lz4_native_summary_declared_payload_slack_bytes"] == lz4_native_summary["declared_content_bytes"] - lz4_native_summary["payload_bytes"]
+        assert dashboard["lz4_native_summary_metadata_frame_overflow"] == 0
+        assert dashboard["lz4_native_summary_checksum_frame_overflow"] == 0
+        assert dashboard["lz4_native_summary_block_checksum_frame_overflow"] == 0
         assert dashboard["zstd_native_summary_present"] is True
         assert dashboard["zstd_native_summary_healthy"] is True
         assert dashboard["zstd_native_summary_frame_count"] == zstd_native_summary["frame_count"]
@@ -1701,6 +1715,11 @@ def main() -> int:
         assert dashboard["zstd_native_summary_compressed_bytes"] == zstd_native_summary["compressed_bytes"]
         assert dashboard["zstd_native_summary_payload_bytes"] == zstd_native_summary["payload_bytes"]
         assert dashboard["zstd_native_summary_skippable_payload_bytes"] == zstd_native_summary["skippable_payload_bytes"]
+        assert dashboard["zstd_native_summary_block_count_mismatch"] == 0
+        assert dashboard["zstd_native_summary_declared_payload_slack_bytes"] == zstd_native_summary["declared_content_bytes"] - zstd_native_summary["payload_bytes"]
+        assert dashboard["zstd_native_summary_metadata_frame_overflow"] == 0
+        assert dashboard["zstd_native_summary_checksum_frame_overflow"] == 0
+        assert dashboard["zstd_native_summary_block_checksum_frame_overflow"] == 0
         assert dashboard["native_tier_range_csv_present_count"] == 3
         assert dashboard["native_tier_range_csv_healthy_count"] == 3
         assert dashboard["native_tier_range_csv_rows"] == 24

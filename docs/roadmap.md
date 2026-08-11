@@ -2642,3 +2642,7 @@ architecture blindly.
   and Markdown companion to match the upstream smoke summary. Core static
   dictionary health now exposes upstream report and Markdown matched-unmatched
   counters before coverage can pass.
+- Tightened native stream summary dashboard health by checking retained LZ4
+  and Zstd summary JSON for block-count consistency, declared-content slack,
+  and impossible metadata/checksum frame overflows. Dashboard health now exposes
+  mismatch/slack/overflow counters before native summary coverage can pass.

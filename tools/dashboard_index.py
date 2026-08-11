@@ -5078,6 +5078,11 @@ def native_stream_summary_health(artifacts: list[Path], schema: str, *, require_
         compressed_bytes = int(data.get("compressed_bytes") or 0)
         payload_bytes = int(data.get("payload_bytes") or 0)
         skippable_payload_bytes = int(data.get("skippable_payload_bytes") or 0)
+        block_count_mismatch = abs(block_count - (raw_block_count + rle_block_count + compressed_block_count))
+        declared_payload_slack_bytes = declared_content_bytes - payload_bytes
+        metadata_frame_overflow = max(0, dictionary_id_frame_count - frame_count) + max(0, content_size_frame_count - frame_count)
+        checksum_frame_overflow = max(0, checksum_frame_count - frame_count)
+        block_checksum_frame_overflow = max(0, block_checksum_frame_count - frame_count)
         # Dashboard summaries intentionally require retained fixtures to cover
         # ordinary data frames plus optional frame-level metadata. LZ4 opts into
         # block-checksum coverage because that flag has no Zstd analogue.
@@ -5094,6 +5099,11 @@ def native_stream_summary_health(artifacts: list[Path], schema: str, *, require_
             and compressed_bytes > 0
             and payload_bytes > 0
             and skippable_payload_bytes > 0
+            and block_count_mismatch == 0
+            and declared_payload_slack_bytes >= 0
+            and metadata_frame_overflow == 0
+            and checksum_frame_overflow == 0
+            and (not require_block_checksum or block_checksum_frame_overflow == 0)
         )
         return {
             "present": True,
@@ -5112,6 +5122,11 @@ def native_stream_summary_health(artifacts: list[Path], schema: str, *, require_
             "compressed_bytes": compressed_bytes,
             "payload_bytes": payload_bytes,
             "skippable_payload_bytes": skippable_payload_bytes,
+            "block_count_mismatch": block_count_mismatch,
+            "declared_payload_slack_bytes": declared_payload_slack_bytes,
+            "metadata_frame_overflow": metadata_frame_overflow,
+            "checksum_frame_overflow": checksum_frame_overflow,
+            "block_checksum_frame_overflow": block_checksum_frame_overflow,
         }
     return {
         "present": False,
@@ -5130,6 +5145,11 @@ def native_stream_summary_health(artifacts: list[Path], schema: str, *, require_
         "compressed_bytes": 0,
         "payload_bytes": 0,
         "skippable_payload_bytes": 0,
+        "block_count_mismatch": 0,
+        "declared_payload_slack_bytes": 0,
+        "metadata_frame_overflow": 0,
+        "checksum_frame_overflow": 0,
+        "block_checksum_frame_overflow": 0,
     }
 
 
@@ -6255,8 +6275,8 @@ def main() -> int:
         f"- native codec probe Markdown: {native_codec_health['markdown_matched']}/{native_codec_health['markdown_rows']} checks matched, unmatched {native_codec_health['markdown_unmatched']}",
         f"- native summary errors: cases total/lz4/zstd/checksum/corrupt/truncated/magic/skippable/body/checksum-phase/frame {native_summary_error_health['case_count']}/{native_summary_error_health['lz4_case_count']}/{native_summary_error_health['zstd_case_count']}/{native_summary_error_health['checksum_mismatch_count']}/{native_summary_error_health['corrupt_frame_count']}/{native_summary_error_health['truncated_frame_count']}/{native_summary_error_health['magic_phase_count']}/{native_summary_error_health['skippable_payload_phase_count']}/{native_summary_error_health['frame_body_phase_count']}/{native_summary_error_health['frame_checksum_phase_count']}/{native_summary_error_health['frame_phase_count']}, healthy `{native_summary_error_healthy}`",
         f"- native summary error negative smoke: cases {native_summary_error_negative['case_count']}, healthy `{native_summary_error_negative_healthy}`",
-        f"- lz4 native summary: frames/skippable/checksum/block-checksum/dictionary/content-size/blocks raw/compressed {lz4_native_summary['frame_count']}/{lz4_native_summary['skippable_frame_count']}/{lz4_native_summary['checksum_frame_count']}/{lz4_native_summary['block_checksum_frame_count']}/{lz4_native_summary['dictionary_id_frame_count']}/{lz4_native_summary['content_size_frame_count']}/{lz4_native_summary['block_count']} {lz4_native_summary['raw_block_count']}/{lz4_native_summary['compressed_block_count']}, declared/payload/skippable bytes {lz4_native_summary['declared_content_bytes']}/{lz4_native_summary['payload_bytes']}/{lz4_native_summary['skippable_payload_bytes']}, healthy `{lz4_native_summary_healthy}`",
-        f"- zstd native summary: frames/skippable/checksum/dictionary/content-size/blocks raw/rle/compressed {zstd_native_summary['frame_count']}/{zstd_native_summary['skippable_frame_count']}/{zstd_native_summary['checksum_frame_count']}/{zstd_native_summary['dictionary_id_frame_count']}/{zstd_native_summary['content_size_frame_count']}/{zstd_native_summary['block_count']} {zstd_native_summary['raw_block_count']}/{zstd_native_summary['rle_block_count']}/{zstd_native_summary['compressed_block_count']}, declared/payload/skippable bytes {zstd_native_summary['declared_content_bytes']}/{zstd_native_summary['payload_bytes']}/{zstd_native_summary['skippable_payload_bytes']}, healthy `{zstd_native_summary_healthy}`",
+        f"- lz4 native summary: frames/skippable/checksum/block-checksum/dictionary/content-size/blocks raw/compressed {lz4_native_summary['frame_count']}/{lz4_native_summary['skippable_frame_count']}/{lz4_native_summary['checksum_frame_count']}/{lz4_native_summary['block_checksum_frame_count']}/{lz4_native_summary['dictionary_id_frame_count']}/{lz4_native_summary['content_size_frame_count']}/{lz4_native_summary['block_count']} {lz4_native_summary['raw_block_count']}/{lz4_native_summary['compressed_block_count']}, declared/payload/skippable bytes {lz4_native_summary['declared_content_bytes']}/{lz4_native_summary['payload_bytes']}/{lz4_native_summary['skippable_payload_bytes']}, slack/mismatch {lz4_native_summary['declared_payload_slack_bytes']}/{lz4_native_summary['block_count_mismatch']}, healthy `{lz4_native_summary_healthy}`",
+        f"- zstd native summary: frames/skippable/checksum/dictionary/content-size/blocks raw/rle/compressed {zstd_native_summary['frame_count']}/{zstd_native_summary['skippable_frame_count']}/{zstd_native_summary['checksum_frame_count']}/{zstd_native_summary['dictionary_id_frame_count']}/{zstd_native_summary['content_size_frame_count']}/{zstd_native_summary['block_count']} {zstd_native_summary['raw_block_count']}/{zstd_native_summary['rle_block_count']}/{zstd_native_summary['compressed_block_count']}, declared/payload/skippable bytes {zstd_native_summary['declared_content_bytes']}/{zstd_native_summary['payload_bytes']}/{zstd_native_summary['skippable_payload_bytes']}, slack/mismatch {zstd_native_summary['declared_payload_slack_bytes']}/{zstd_native_summary['block_count_mismatch']}, healthy `{zstd_native_summary_healthy}`",
         f"- Snappy report: {snappy_report['row_count']}/{snappy_report['expected_rows']} rows, positive timing {snappy_report['positive_timing_rows']}, repetitive shrunk {snappy_report['repetitive_shrunk_rows']}, reusable size matches {snappy_report['reusable_size_matched_cases']}, healthy `{snappy_report_healthy}`",
         f"- checksum bench: {checksum_bench['row_count']}/{checksum_bench['expected_rows']} rows, workload {checksum_bench['workload_rows']}, positive {checksum_bench['positive_rows']}, mix groups crc32/crc32c {checksum_bench['crc32_mix_groups']}/{checksum_bench['crc32c_mix_groups']}, healthy `{checksum_bench_healthy}`",
         f"- chunk cursor bench: {chunk_cursor_bench['row_count']}/{chunk_cursor_bench['expected_rows']} rows, shape {chunk_cursor_bench['shape_rows']}, positive {chunk_cursor_bench['positive_rows']}, healthy `{chunk_cursor_bench_healthy}`",
@@ -6792,10 +6812,10 @@ def main() -> int:
         [
             "## Native stream summary coverage",
             "",
-            "| codec | frames | skippable | checksum | block checksum | dictionary | content size | blocks raw/rle/compressed | payload/skippable bytes |",
-            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
-            f"| `lz4` | {lz4_native_summary['frame_count']} | {lz4_native_summary['skippable_frame_count']} | {lz4_native_summary['checksum_frame_count']} | {lz4_native_summary['block_checksum_frame_count']} | {lz4_native_summary['dictionary_id_frame_count']} | {lz4_native_summary['content_size_frame_count']} | {lz4_native_summary['raw_block_count']}/{lz4_native_summary['rle_block_count']}/{lz4_native_summary['compressed_block_count']} | {lz4_native_summary['payload_bytes']}/{lz4_native_summary['skippable_payload_bytes']} |",
-            f"| `zstd` | {zstd_native_summary['frame_count']} | {zstd_native_summary['skippable_frame_count']} | {zstd_native_summary['checksum_frame_count']} | 0 | {zstd_native_summary['dictionary_id_frame_count']} | {zstd_native_summary['content_size_frame_count']} | {zstd_native_summary['raw_block_count']}/{zstd_native_summary['rle_block_count']}/{zstd_native_summary['compressed_block_count']} | {zstd_native_summary['payload_bytes']}/{zstd_native_summary['skippable_payload_bytes']} |",
+            "| codec | frames | skippable | checksum | block checksum | dictionary | content size | blocks raw/rle/compressed | payload/skippable bytes | declared slack | mismatches | overflow |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | ---: | ---: | ---: |",
+            f"| `lz4` | {lz4_native_summary['frame_count']} | {lz4_native_summary['skippable_frame_count']} | {lz4_native_summary['checksum_frame_count']} | {lz4_native_summary['block_checksum_frame_count']} | {lz4_native_summary['dictionary_id_frame_count']} | {lz4_native_summary['content_size_frame_count']} | {lz4_native_summary['raw_block_count']}/{lz4_native_summary['rle_block_count']}/{lz4_native_summary['compressed_block_count']} | {lz4_native_summary['payload_bytes']}/{lz4_native_summary['skippable_payload_bytes']} | {lz4_native_summary['declared_payload_slack_bytes']} | {lz4_native_summary['block_count_mismatch']} | {lz4_native_summary['metadata_frame_overflow'] + lz4_native_summary['checksum_frame_overflow'] + lz4_native_summary['block_checksum_frame_overflow']} |",
+            f"| `zstd` | {zstd_native_summary['frame_count']} | {zstd_native_summary['skippable_frame_count']} | {zstd_native_summary['checksum_frame_count']} | 0 | {zstd_native_summary['dictionary_id_frame_count']} | {zstd_native_summary['content_size_frame_count']} | {zstd_native_summary['raw_block_count']}/{zstd_native_summary['rle_block_count']}/{zstd_native_summary['compressed_block_count']} | {zstd_native_summary['payload_bytes']}/{zstd_native_summary['skippable_payload_bytes']} | {zstd_native_summary['declared_payload_slack_bytes']} | {zstd_native_summary['block_count_mismatch']} | {zstd_native_summary['metadata_frame_overflow'] + zstd_native_summary['checksum_frame_overflow'] + zstd_native_summary['block_checksum_frame_overflow']} |",
             "",
         ]
     )
@@ -7566,6 +7586,11 @@ def main() -> int:
                 "lz4_native_summary_compressed_bytes": lz4_native_summary["compressed_bytes"],
                 "lz4_native_summary_payload_bytes": lz4_native_summary["payload_bytes"],
                 "lz4_native_summary_skippable_payload_bytes": lz4_native_summary["skippable_payload_bytes"],
+                "lz4_native_summary_block_count_mismatch": lz4_native_summary["block_count_mismatch"],
+                "lz4_native_summary_declared_payload_slack_bytes": lz4_native_summary["declared_payload_slack_bytes"],
+                "lz4_native_summary_metadata_frame_overflow": lz4_native_summary["metadata_frame_overflow"],
+                "lz4_native_summary_checksum_frame_overflow": lz4_native_summary["checksum_frame_overflow"],
+                "lz4_native_summary_block_checksum_frame_overflow": lz4_native_summary["block_checksum_frame_overflow"],
                 "zstd_native_summary_present": zstd_native_summary["present"],
                 "zstd_native_summary_healthy": zstd_native_summary_healthy,
                 "zstd_native_summary_frame_count": zstd_native_summary["frame_count"],
@@ -7581,6 +7606,11 @@ def main() -> int:
                 "zstd_native_summary_compressed_bytes": zstd_native_summary["compressed_bytes"],
                 "zstd_native_summary_payload_bytes": zstd_native_summary["payload_bytes"],
                 "zstd_native_summary_skippable_payload_bytes": zstd_native_summary["skippable_payload_bytes"],
+                "zstd_native_summary_block_count_mismatch": zstd_native_summary["block_count_mismatch"],
+                "zstd_native_summary_declared_payload_slack_bytes": zstd_native_summary["declared_payload_slack_bytes"],
+                "zstd_native_summary_metadata_frame_overflow": zstd_native_summary["metadata_frame_overflow"],
+                "zstd_native_summary_checksum_frame_overflow": zstd_native_summary["checksum_frame_overflow"],
+                "zstd_native_summary_block_checksum_frame_overflow": zstd_native_summary["block_checksum_frame_overflow"],
                 "native_tier_range_present": native_tier_health["present"],
                 "native_tier_range_healthy": native_tier_health["healthy"],
                 "native_tier_range_summary_count": native_tier_health["summary_count"],

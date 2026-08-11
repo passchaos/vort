@@ -2989,7 +2989,12 @@ Top-level fields:
   `lz4_native_summary_compressed_block_count`,
   `lz4_native_summary_compressed_bytes`,
   `lz4_native_summary_payload_bytes`,
-  `lz4_native_summary_skippable_payload_bytes`
+  `lz4_native_summary_skippable_payload_bytes`,
+  `lz4_native_summary_block_count_mismatch`,
+  `lz4_native_summary_declared_payload_slack_bytes`,
+  `lz4_native_summary_metadata_frame_overflow`,
+  `lz4_native_summary_checksum_frame_overflow`,
+  `lz4_native_summary_block_checksum_frame_overflow`
 - `zstd_native_summary_present`, `zstd_native_summary_healthy`,
   `zstd_native_summary_frame_count`,
   `zstd_native_summary_skippable_frame_count`,
@@ -3002,7 +3007,12 @@ Top-level fields:
   `zstd_native_summary_compressed_block_count`,
   `zstd_native_summary_compressed_bytes`,
   `zstd_native_summary_payload_bytes`,
-  `zstd_native_summary_skippable_payload_bytes`
+  `zstd_native_summary_skippable_payload_bytes`,
+  `zstd_native_summary_block_count_mismatch`,
+  `zstd_native_summary_declared_payload_slack_bytes`,
+  `zstd_native_summary_metadata_frame_overflow`,
+  `zstd_native_summary_checksum_frame_overflow`,
+  `zstd_native_summary_block_checksum_frame_overflow`
 - `artifacts`
 
 Each artifact includes:
@@ -3684,6 +3694,11 @@ Example:
   "lz4_native_summary_compressed_bytes": 0,
   "lz4_native_summary_payload_bytes": 0,
   "lz4_native_summary_skippable_payload_bytes": 0,
+  "lz4_native_summary_block_count_mismatch": 0,
+  "lz4_native_summary_declared_payload_slack_bytes": 0,
+  "lz4_native_summary_metadata_frame_overflow": 0,
+  "lz4_native_summary_checksum_frame_overflow": 0,
+  "lz4_native_summary_block_checksum_frame_overflow": 0,
   "zstd_native_summary_present": false,
   "zstd_native_summary_healthy": false,
   "zstd_native_summary_frame_count": 0,
@@ -3699,6 +3714,11 @@ Example:
   "zstd_native_summary_compressed_bytes": 0,
   "zstd_native_summary_payload_bytes": 0,
   "zstd_native_summary_skippable_payload_bytes": 0,
+  "zstd_native_summary_block_count_mismatch": 0,
+  "zstd_native_summary_declared_payload_slack_bytes": 0,
+  "zstd_native_summary_metadata_frame_overflow": 0,
+  "zstd_native_summary_checksum_frame_overflow": 0,
+  "zstd_native_summary_block_checksum_frame_overflow": 0,
   "native_tier_range_present": true,
   "native_tier_range_healthy": true,
   "native_tier_range_summary_count": 3,
