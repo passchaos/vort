@@ -410,6 +410,8 @@ def main() -> int:
                 "deflate_match_copy_bench_throughput_rows": 21,
                 "deflate_match_copy_bench_checksum_matched_cases": 7,
                 "deflate_match_copy_bench_missing_pairs": [],
+                "deflate_match_copy_bench_duplicate_pairs": [],
+                "deflate_match_copy_bench_unknown_pairs": [],
                 "deflate_huffman_build_bench_present": True,
                 "deflate_huffman_build_bench_healthy": True,
                 "deflate_huffman_build_bench_rows": 14,

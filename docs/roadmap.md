@@ -2773,3 +2773,7 @@ architecture blindly.
 - Tightened chunk cursor benchmark dashboard health by exposing duplicate and
   unknown `(case, kernel)` rows alongside missing pairs. Dashboard health now
   rejects chunk cursor CSV pair drift before cursor benchmark coverage can pass.
+
+- Tightened deflate match-copy benchmark dashboard health by exposing duplicate
+  and unknown `(case, kernel)` rows alongside missing pairs. Dashboard health now
+  rejects match-copy CSV pair drift before benchmark coverage can pass.

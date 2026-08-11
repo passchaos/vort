@@ -1344,7 +1344,9 @@
             "deflate_match_copy_bench_checksum_matched_cases"
           ],
           "zero": [
-            "deflate_match_copy_bench_missing_pairs"
+            "deflate_match_copy_bench_missing_pairs",
+            "deflate_match_copy_bench_duplicate_pairs",
+            "deflate_match_copy_bench_unknown_pairs"
           ]
         },
         "deflate_huffman_build_bench_healthy": {
@@ -2419,6 +2421,8 @@
         "deflate_match_copy_bench_throughput_rows": "int",
         "deflate_match_copy_bench_checksum_matched_cases": "int",
         "deflate_match_copy_bench_missing_pairs": "list",
+        "deflate_match_copy_bench_duplicate_pairs": "list",
+        "deflate_match_copy_bench_unknown_pairs": "list",
         "deflate_huffman_build_bench_present": "bool",
         "deflate_huffman_build_bench_healthy": "bool",
         "deflate_huffman_build_bench_rows": "int",

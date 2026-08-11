@@ -2687,7 +2687,9 @@ Top-level fields:
   `deflate_match_copy_bench_output_bytes_rows`,
   `deflate_match_copy_bench_throughput_rows`,
   `deflate_match_copy_bench_checksum_matched_cases`,
-  `deflate_match_copy_bench_missing_pairs`
+  `deflate_match_copy_bench_missing_pairs`,
+  `deflate_match_copy_bench_duplicate_pairs`,
+  `deflate_match_copy_bench_unknown_pairs`
 - `deflate_huffman_build_bench_present`,
   `deflate_huffman_build_bench_healthy`, `deflate_huffman_build_bench_rows`,
   `deflate_huffman_build_bench_expected_rows`,
@@ -3404,6 +3406,8 @@ Example:
   "deflate_match_copy_bench_throughput_rows": 0,
   "deflate_match_copy_bench_checksum_matched_cases": 0,
   "deflate_match_copy_bench_missing_pairs": [],
+  "deflate_match_copy_bench_duplicate_pairs": [],
+  "deflate_match_copy_bench_unknown_pairs": [],
   "deflate_huffman_build_bench_present": false,
   "deflate_huffman_build_bench_healthy": false,
   "deflate_huffman_build_bench_rows": 0,

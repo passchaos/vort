@@ -1545,6 +1545,8 @@ def main() -> int:
         assert dashboard["deflate_match_copy_bench_throughput_rows"] == len(deflate_match_copy_bench_rows)
         assert dashboard["deflate_match_copy_bench_checksum_matched_cases"] == 7
         assert dashboard["deflate_match_copy_bench_missing_pairs"] == []
+        assert dashboard["deflate_match_copy_bench_duplicate_pairs"] == []
+        assert dashboard["deflate_match_copy_bench_unknown_pairs"] == []
         assert dashboard["deflate_huffman_build_bench_present"] is True
         assert dashboard["deflate_huffman_build_bench_healthy"] is True
         assert dashboard["deflate_huffman_build_bench_rows"] == len(deflate_huffman_build_bench_rows)
