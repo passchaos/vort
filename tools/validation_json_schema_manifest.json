@@ -1684,7 +1684,9 @@
           "zero": [
             "dynamic_plan_malformed_rows",
             "dynamic_plan_missing_sources",
-            "dynamic_plan_missing_paths"
+            "dynamic_plan_missing_paths",
+            "dynamic_plan_duplicate_paths",
+            "dynamic_plan_unknown_paths"
           ]
         }
       },
@@ -2157,6 +2159,8 @@
         "dynamic_plan_malformed_rows": "int",
         "dynamic_plan_missing_sources": "list",
         "dynamic_plan_missing_paths": "list",
+        "dynamic_plan_duplicate_paths": "list",
+        "dynamic_plan_unknown_paths": "list",
         "native_codec_probes_healthy": "bool",
         "native_codec_probes_capability_count": "int",
         "native_codec_probes_chunked_cases": "int",

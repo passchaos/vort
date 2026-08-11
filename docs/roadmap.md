@@ -2837,3 +2837,8 @@ architecture blindly.
   unknown `(case, level, strategy)` rows alongside missing pairs. Dashboard
   health now rejects level report CSV pair drift before Markdown and row
   accounting coverage can pass.
+
+- Tightened dynamic plan dashboard health by exposing duplicate and unknown
+  `(source, path)` rows alongside missing sources/paths. Dashboard health now
+  rejects dynamic-plan CSV path drift before token, histogram, ratio, and wrapper
+  accounting coverage can pass.

@@ -766,6 +766,8 @@ def dynamic_plan_health(artifacts: list[Path]) -> dict:
     expected_rows = sum(len(config["paths"]) for config in expected_sources.values())
     present_sources: set[str] = set()
     seen_paths: set[tuple[str, str]] = set()
+    duplicate_paths: set[tuple[str, str]] = set()
+    unknown_paths: set[tuple[str, str]] = set()
     positive_rows = 0
     token_accounting_rows = 0
     histogram_rows = 0
@@ -789,7 +791,11 @@ def dynamic_plan_health(artifacts: list[Path]) -> dict:
         for row in rows:
             path_name = str(row.get("path") or "")
             if path_name in config["paths"]:
+                if (source, path_name) in seen_paths:
+                    duplicate_paths.add((source, path_name))
                 seen_paths.add((source, path_name))
+            elif path_name:
+                unknown_paths.add((source, path_name))
 
             int_fields = {
                 field: parse_int(row, field)
@@ -897,11 +903,15 @@ def dynamic_plan_health(artifacts: list[Path]) -> dict:
     }
     missing_sources = sorted(source for source in expected_sources if source not in present_sources)
     missing_paths = sorted(f"{source}:{path}" for source, path in expected_path_pairs - seen_paths)
+    duplicate_path_names = sorted(f"{source}:{path}" for source, path in duplicate_paths)
+    unknown_path_names = sorted(f"{source}:{path}" for source, path in unknown_paths)
     healthy = (
         len(present_sources) == len(expected_sources)
         and total_rows == expected_rows
         and not missing_sources
         and not missing_paths
+        and not duplicate_path_names
+        and not unknown_path_names
         and malformed_rows == 0
         and positive_rows == total_rows
         and token_accounting_rows == total_rows
@@ -926,6 +936,8 @@ def dynamic_plan_health(artifacts: list[Path]) -> dict:
         "malformed_rows": malformed_rows,
         "missing_sources": missing_sources,
         "missing_paths": missing_paths,
+        "duplicate_paths": duplicate_path_names,
+        "unknown_paths": unknown_path_names,
     }
 
 
@@ -8026,7 +8038,7 @@ def main() -> int:
             "| --- | ---: | --- |",
             f"| rows | {dynamic_plan['rows']} | expected {dynamic_plan['expected_rows']}, sources {dynamic_plan['source_count']}/{dynamic_plan['expected_source_count']} |",
             f"| row checks | {dynamic_plan['positive_rows']} | token/histogram/ratio {dynamic_plan['token_accounting_rows']}/{dynamic_plan['histogram_rows']}/{dynamic_plan['ratio_rows']} |",
-            f"| bit/zlib checks | {dynamic_plan['slack_rows']}/{dynamic_plan['wrapper_rows']} | malformed {dynamic_plan['malformed_rows']}, missing paths {len(dynamic_plan['missing_paths'])}, healthy `{dynamic_plan_healthy}` |",
+            f"| bit/zlib checks | {dynamic_plan['slack_rows']}/{dynamic_plan['wrapper_rows']} | malformed {dynamic_plan['malformed_rows']}, missing/duplicate/unknown paths {len(dynamic_plan['missing_paths'])}/{len(dynamic_plan['duplicate_paths'])}/{len(dynamic_plan['unknown_paths'])}, healthy `{dynamic_plan_healthy}` |",
             "",
         ]
     )
@@ -8479,6 +8491,8 @@ def main() -> int:
                 "dynamic_plan_malformed_rows": dynamic_plan["malformed_rows"],
                 "dynamic_plan_missing_sources": dynamic_plan["missing_sources"],
                 "dynamic_plan_missing_paths": dynamic_plan["missing_paths"],
+                "dynamic_plan_duplicate_paths": dynamic_plan["duplicate_paths"],
+                "dynamic_plan_unknown_paths": dynamic_plan["unknown_paths"],
                 "fuzz_corpus_present": fuzz_health["present"],
                 "fuzz_corpus_ok": fuzz_health["ok"],
                 "fuzz_corpus_coverage_present": fuzz_health["coverage_present"],

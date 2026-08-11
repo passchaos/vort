@@ -4879,7 +4879,7 @@ def main() -> int:
                     "| category | count | detail |",
                     "| rows | 9 | expected 9, sources 2/2 |",
                     "| row checks | 9 | token/histogram/ratio 9/9/9 |",
-                    "| bit/zlib checks | 9/9 | malformed 0, missing paths 0, healthy `True` |",
+                    "| bit/zlib checks | 9/9 | malformed 0, missing/duplicate/unknown paths 0/0/0, healthy `True` |",
                 ],
             )
         )

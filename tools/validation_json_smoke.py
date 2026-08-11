@@ -1282,6 +1282,8 @@ def main() -> int:
         assert dashboard["dynamic_plan_malformed_rows"] == 0
         assert dashboard["dynamic_plan_missing_sources"] == []
         assert dashboard["dynamic_plan_missing_paths"] == []
+        assert dashboard["dynamic_plan_duplicate_paths"] == []
+        assert dashboard["dynamic_plan_unknown_paths"] == []
         assert dashboard["fuzz_corpus_present"] is True
         assert dashboard["fuzz_corpus_ok"] is True
         assert dashboard["fuzz_corpus_coverage_present"] is True

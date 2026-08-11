@@ -379,6 +379,8 @@ def main() -> int:
                 "dynamic_plan_malformed_rows": 0,
                 "dynamic_plan_missing_sources": [],
                 "dynamic_plan_missing_paths": [],
+                "dynamic_plan_duplicate_paths": [],
+                "dynamic_plan_unknown_paths": [],
                 "checksum_bench_present": True,
                 "checksum_bench_healthy": True,
                 "checksum_bench_rows": 21,

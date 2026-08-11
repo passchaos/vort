@@ -2668,7 +2668,8 @@ Top-level fields:
   `dynamic_plan_histogram_rows`, `dynamic_plan_ratio_rows`,
   `dynamic_plan_slack_rows`, `dynamic_plan_wrapper_rows`,
   `dynamic_plan_malformed_rows`, `dynamic_plan_missing_sources`,
-  `dynamic_plan_missing_paths`
+  `dynamic_plan_missing_paths`, `dynamic_plan_duplicate_paths`,
+  `dynamic_plan_unknown_paths`
 - `checksum_bench_present`, `checksum_bench_healthy`,
   `checksum_bench_rows`, `checksum_bench_expected_rows`,
   `checksum_bench_positive_rows`, `checksum_bench_workload_rows`,
@@ -3396,6 +3397,8 @@ Example:
   "dynamic_plan_malformed_rows": 0,
   "dynamic_plan_missing_sources": [],
   "dynamic_plan_missing_paths": [],
+  "dynamic_plan_duplicate_paths": [],
+  "dynamic_plan_unknown_paths": [],
   "checksum_bench_present": false,
   "checksum_bench_healthy": false,
   "checksum_bench_rows": 0,
