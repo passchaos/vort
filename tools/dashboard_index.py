@@ -1754,6 +1754,8 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
     candidate = None
     candidate_markdown = None
     upstream = None
+    upstream_report = None
+    upstream_markdown = None
     node = None
     node_markdown = None
     audit = None
@@ -1771,6 +1773,10 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
             candidate_markdown = artifact
         elif schema == "vort.br_static_dictionary_candidate_upstream_smoke" and artifact.name == "vort-br-static-dictionary-candidate-upstream-smoke.json":
             upstream = data
+        elif schema == "vort.br_static_dictionary_candidate_report" and artifact.name == "vort-br-static-dictionary-candidates-upstream.json":
+            upstream_report = data
+        elif artifact.name == "vort-br-static-dictionary-candidates-upstream.md":
+            upstream_markdown = artifact
         elif schema == "vort.br_static_dictionary_node_probe" and artifact.name == "vort-br-static-dictionary-node-probe.json":
             node = data
         elif artifact.name == "vort-br-static-dictionary-node-probe.md":
@@ -2072,6 +2078,8 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
     negative_matched = sum(1 for row in negative_cases if isinstance(row, dict) and row.get("matched") is True)
     candidate_present = isinstance(candidate, dict)
     candidate_markdown = candidate_markdown_health(candidate, candidate_markdown)
+    upstream_report_present = isinstance(upstream_report, dict)
+    upstream_markdown = candidate_markdown_health(upstream_report, upstream_markdown)
     node_markdown = node_markdown_health(node, node_markdown)
     upstream_present = isinstance(upstream, dict)
     node_present = isinstance(node, dict)
@@ -2085,6 +2093,9 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
     raw_word_count = int_field(candidate, "raw_word_count")
     upstream_candidate_count = int_field(upstream, "candidate_count")
     upstream_raw_word_count = int_field(upstream, "raw_word_count")
+    upstream_report_candidate_count = int_field(upstream_report, "candidate_count")
+    upstream_report_raw_word_count = int_field(upstream_report, "raw_word_count")
+    upstream_report_upstream_raw_word_count = int_field(upstream_report, "upstream_raw_word_count")
     node_probed_count = int_field(node, "probed_count")
     node_decode_successes = int_field(node, "node_decode_successes")
     audit_entry_count = int_field(audit, "entry_count")
@@ -2095,6 +2106,8 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
         candidate_present
         and bool(candidate_markdown["present"])
         and upstream_present
+        and upstream_report_present
+        and bool(upstream_markdown["present"])
         and node_present
         and bool(node_markdown["present"])
         and audit_present
@@ -2108,6 +2121,15 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
         and bool(upstream.get("ok"))
         and upstream_candidate_count > 0
         and upstream_raw_word_count > 0
+        and upstream_report_candidate_count == upstream_candidate_count
+        and upstream_report_raw_word_count == upstream_raw_word_count
+        and upstream_report_upstream_raw_word_count == int_field(upstream, "upstream_raw_word_count")
+        and upstream_report.get("source_mode") == upstream.get("source_mode") == "upstream"
+        and int_field(upstream_report, "source_limit") == int_field(upstream, "source_limit")
+        and upstream_markdown["summary_rows"] > 0
+        and upstream_markdown["summary_unmatched"] == 0
+        and upstream_markdown["sample_rows"] > 0
+        and upstream_markdown["sample_unmatched"] == 0
         and bool(node.get("ok"))
         and node_probed_count > 0
         and node_decode_successes == node_probed_count
@@ -2164,6 +2186,17 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
         "candidate_markdown_sample_matched": int(candidate_markdown["sample_matched"]),
         "candidate_markdown_sample_unmatched": int(candidate_markdown["sample_unmatched"]),
         "upstream_present": upstream_present,
+        "upstream_report_present": upstream_report_present,
+        "upstream_report_candidate_count": upstream_report_candidate_count,
+        "upstream_report_raw_word_count": upstream_report_raw_word_count,
+        "upstream_report_upstream_raw_word_count": upstream_report_upstream_raw_word_count,
+        "upstream_markdown_present": bool(upstream_markdown["present"]),
+        "upstream_markdown_summary_rows": int(upstream_markdown["summary_rows"]),
+        "upstream_markdown_matched": int(upstream_markdown["summary_matched"]),
+        "upstream_markdown_unmatched": int(upstream_markdown["summary_unmatched"]),
+        "upstream_markdown_sample_rows": int(upstream_markdown["sample_rows"]),
+        "upstream_markdown_sample_matched": int(upstream_markdown["sample_matched"]),
+        "upstream_markdown_sample_unmatched": int(upstream_markdown["sample_unmatched"]),
         "node_present": node_present,
         "node_markdown_present": bool(node_markdown["present"]),
         "node_markdown_summary_rows": int(node_markdown["summary_rows"]),
@@ -6155,6 +6188,8 @@ def main() -> int:
     br_static_dictionary_present = (
         br_static_dictionary["present"]
         and br_static_dictionary["upstream_present"]
+        and br_static_dictionary["upstream_report_present"]
+        and br_static_dictionary["upstream_markdown_present"]
         and br_static_dictionary["node_present"]
         and br_static_dictionary["audit_present"]
         and br_static_dictionary["negative_present"]
@@ -6364,6 +6399,8 @@ def main() -> int:
             f"| candidates | {br_static_dictionary['candidate_count']} | raw words {br_static_dictionary['raw_word_count']}, Markdown {br_static_dictionary['candidate_markdown_matched']}/{br_static_dictionary['candidate_markdown_summary_rows']} |",
             f"| candidate sample rows | {br_static_dictionary['candidate_markdown_sample_matched']}/{br_static_dictionary['candidate_markdown_sample_rows']} | unmatched {br_static_dictionary['candidate_markdown_sample_unmatched']}, present `{br_static_dictionary['candidate_markdown_present']}` |",
             f"| upstream smoke | {br_static_dictionary['upstream_candidate_count']} | raw words {br_static_dictionary['upstream_raw_word_count']}, present `{br_static_dictionary['upstream_present']}` |",
+            f"| upstream report | {br_static_dictionary['upstream_report_candidate_count']} | raw words {br_static_dictionary['upstream_report_raw_word_count']}, upstream words {br_static_dictionary['upstream_report_upstream_raw_word_count']}, present `{br_static_dictionary['upstream_report_present']}` |",
+            f"| upstream Markdown | {br_static_dictionary['upstream_markdown_matched']}/{br_static_dictionary['upstream_markdown_summary_rows']} | sample {br_static_dictionary['upstream_markdown_sample_matched']}/{br_static_dictionary['upstream_markdown_sample_rows']}, unmatched {br_static_dictionary['upstream_markdown_unmatched'] + br_static_dictionary['upstream_markdown_sample_unmatched']}, present `{br_static_dictionary['upstream_markdown_present']}` |",
             f"| node probe | {br_static_dictionary['node_decode_successes']}/{br_static_dictionary['node_probed_count']} | size winners {br_static_dictionary['node_size_winner_count']}, Markdown {br_static_dictionary['node_markdown_matched']}/{br_static_dictionary['node_markdown_summary_rows']} |",
             f"| node rows | {br_static_dictionary['node_markdown_matched_rows']}/{br_static_dictionary['node_markdown_rows']} | unmatched {br_static_dictionary['node_markdown_unmatched_rows']}, present `{br_static_dictionary['node_markdown_present']}` |",
             f"| source audit | {br_static_dictionary['audit_entry_count']} | anchors {br_static_dictionary['audit_anchor_count']}, generated bytes {br_static_dictionary['audit_generated_zig_bytes']} |",
@@ -7155,6 +7192,17 @@ def main() -> int:
                 "br_static_dictionary_candidate_markdown_sample_matched": br_static_dictionary["candidate_markdown_sample_matched"],
                 "br_static_dictionary_candidate_markdown_sample_unmatched": br_static_dictionary["candidate_markdown_sample_unmatched"],
                 "br_static_dictionary_upstream_present": br_static_dictionary["upstream_present"],
+                "br_static_dictionary_upstream_report_present": br_static_dictionary["upstream_report_present"],
+                "br_static_dictionary_upstream_report_candidate_count": br_static_dictionary["upstream_report_candidate_count"],
+                "br_static_dictionary_upstream_report_raw_word_count": br_static_dictionary["upstream_report_raw_word_count"],
+                "br_static_dictionary_upstream_report_upstream_raw_word_count": br_static_dictionary["upstream_report_upstream_raw_word_count"],
+                "br_static_dictionary_upstream_markdown_present": br_static_dictionary["upstream_markdown_present"],
+                "br_static_dictionary_upstream_markdown_summary_rows": br_static_dictionary["upstream_markdown_summary_rows"],
+                "br_static_dictionary_upstream_markdown_matched": br_static_dictionary["upstream_markdown_matched"],
+                "br_static_dictionary_upstream_markdown_unmatched": br_static_dictionary["upstream_markdown_unmatched"],
+                "br_static_dictionary_upstream_markdown_sample_rows": br_static_dictionary["upstream_markdown_sample_rows"],
+                "br_static_dictionary_upstream_markdown_sample_matched": br_static_dictionary["upstream_markdown_sample_matched"],
+                "br_static_dictionary_upstream_markdown_sample_unmatched": br_static_dictionary["upstream_markdown_sample_unmatched"],
                 "br_static_dictionary_node_present": br_static_dictionary["node_present"],
                 "br_static_dictionary_node_markdown_present": br_static_dictionary["node_markdown_present"],
                 "br_static_dictionary_node_markdown_summary_rows": br_static_dictionary["node_markdown_summary_rows"],

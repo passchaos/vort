@@ -231,6 +231,15 @@ def main() -> int:
         assert br_static_dictionary_candidate_upstream["source_limit"] == 8
         assert br_static_dictionary_candidate_upstream["upstream_raw_word_count"] == 8
         validate_value_against_manifest(br_static_dictionary_candidate_upstream, schemas_def)
+        br_static_dictionary_candidate_upstream_report = json.loads((ROOT / "zig-out" / "vort-br-static-dictionary-candidates-upstream.json").read_text())
+        assert br_static_dictionary_candidate_upstream_report["schema"] == "vort.br_static_dictionary_candidate_report"
+        assert br_static_dictionary_candidate_upstream_report["source_mode"] == "upstream"
+        assert br_static_dictionary_candidate_upstream_report["source_limit"] == br_static_dictionary_candidate_upstream["source_limit"]
+        assert br_static_dictionary_candidate_upstream_report["candidate_count"] == br_static_dictionary_candidate_upstream["candidate_count"]
+        assert br_static_dictionary_candidate_upstream_report["raw_word_count"] == br_static_dictionary_candidate_upstream["raw_word_count"]
+        assert br_static_dictionary_candidate_upstream_report["upstream_raw_word_count"] == br_static_dictionary_candidate_upstream["upstream_raw_word_count"]
+        assert br_static_dictionary_candidate_upstream_report["candidates"]
+        validate_value_against_manifest(br_static_dictionary_candidate_upstream_report, schemas_def)
         br_static_dictionary_node_probe = json.loads((ROOT / "zig-out" / "vort-br-static-dictionary-node-probe.json").read_text())
         assert br_static_dictionary_node_probe["schema"] == "vort.br_static_dictionary_node_probe"
         assert br_static_dictionary_node_probe["ok"] is True
@@ -1016,6 +1025,8 @@ def main() -> int:
             "vort-br-static-dictionary-candidates.json",
             "vort-br-static-dictionary-candidates.md",
             "vort-br-static-dictionary-candidate-upstream-smoke.json",
+            "vort-br-static-dictionary-candidates-upstream.json",
+            "vort-br-static-dictionary-candidates-upstream.md",
             "vort-br-static-dictionary-node-probe.json",
             "vort-br-static-dictionary-node-probe.md",
             "vort-br-static-dictionary-source-audit.json",
@@ -1320,6 +1331,17 @@ def main() -> int:
         assert dashboard["br_static_dictionary_candidate_markdown_sample_matched"] == dashboard["br_static_dictionary_candidate_markdown_sample_rows"]
         assert dashboard["br_static_dictionary_candidate_markdown_sample_unmatched"] == 0
         assert dashboard["br_static_dictionary_upstream_present"] is True
+        assert dashboard["br_static_dictionary_upstream_report_present"] is True
+        assert dashboard["br_static_dictionary_upstream_report_candidate_count"] == br_static_dictionary_candidate_upstream["candidate_count"]
+        assert dashboard["br_static_dictionary_upstream_report_raw_word_count"] == br_static_dictionary_candidate_upstream["raw_word_count"]
+        assert dashboard["br_static_dictionary_upstream_report_upstream_raw_word_count"] == br_static_dictionary_candidate_upstream["upstream_raw_word_count"]
+        assert dashboard["br_static_dictionary_upstream_markdown_present"] is True
+        assert dashboard["br_static_dictionary_upstream_markdown_summary_rows"] > 0
+        assert dashboard["br_static_dictionary_upstream_markdown_matched"] == dashboard["br_static_dictionary_upstream_markdown_summary_rows"]
+        assert dashboard["br_static_dictionary_upstream_markdown_unmatched"] == 0
+        assert dashboard["br_static_dictionary_upstream_markdown_sample_rows"] > 0
+        assert dashboard["br_static_dictionary_upstream_markdown_sample_matched"] == dashboard["br_static_dictionary_upstream_markdown_sample_rows"]
+        assert dashboard["br_static_dictionary_upstream_markdown_sample_unmatched"] == 0
         assert dashboard["br_static_dictionary_node_present"] is True
         assert dashboard["br_static_dictionary_node_markdown_present"] is True
         assert dashboard["br_static_dictionary_node_markdown_summary_rows"] > 0

@@ -2637,3 +2637,8 @@ architecture blindly.
   match the canonical JSON report. Aggregate health now exposes report
   Markdown matrix/entry matched-unmatched counters before report coverage can
   pass.
+- Tightened Brotli static-dictionary upstream candidate dashboard health by
+  requiring the retained `vort-br-static-dictionary-candidates-upstream.json`
+  and Markdown companion to match the upstream smoke summary. Core static
+  dictionary health now exposes upstream report and Markdown matched-unmatched
+  counters before coverage can pass.
