@@ -7663,6 +7663,7 @@ def non_json_artifact_audit(records: list[dict], output_dir: Path) -> dict:
     csv_blank_headers: list[str] = []
     csv_duplicate_headers: list[str] = []
     csv_no_data_rows: list[str] = []
+    csv_ragged_rows: list[str] = []
     markdown_read_failed: list[str] = []
     markdown_empty: list[str] = []
     markdown_marker_missing: list[str] = []
@@ -7696,6 +7697,9 @@ def non_json_artifact_audit(records: list[dict], output_dir: Path) -> dict:
             if data_row_count == 0:
                 csv_no_data_rows.append(name)
                 continue
+            if any(len(row) != len(header) for row in rows[1:]):
+                csv_ragged_rows.append(name)
+                continue
             csv_data_rows += data_row_count
             csv_parsed += 1
             continue
@@ -7725,6 +7729,7 @@ def non_json_artifact_audit(records: list[dict], output_dir: Path) -> dict:
         "csv_artifact_blank_headers": csv_blank_headers,
         "csv_artifact_duplicate_headers": csv_duplicate_headers,
         "csv_artifact_no_data_rows": csv_no_data_rows,
+        "csv_artifact_ragged_rows": csv_ragged_rows,
         "markdown_artifact_count": markdown_count,
         "markdown_artifact_read_count": markdown_read,
         "markdown_artifact_read_failed": markdown_read_failed,
@@ -7819,6 +7824,7 @@ def main() -> int:
         and not non_json_audit["csv_artifact_blank_headers"]
         and not non_json_audit["csv_artifact_duplicate_headers"]
         and not non_json_audit["csv_artifact_no_data_rows"]
+        and not non_json_audit["csv_artifact_ragged_rows"]
         and not non_json_audit["markdown_artifact_read_failed"]
         and not non_json_audit["markdown_artifact_empty"]
         and not non_json_audit["markdown_artifact_marker_missing"]
@@ -8263,7 +8269,7 @@ def main() -> int:
             "| --- | ---: | ---: | --- |",
             f"| producer steps | {producer_step_covered}/{len(records)} | {len(producer_step_missing)} | allowed missing {len(producer_step_allowed_missing)} |",
             f"| smoke gates | {smoke_gate_covered}/{len(records)} | {len(smoke_gate_missing)} | required missing {len(smoke_gate_required_missing)} |",
-            f"| CSV artifacts | {non_json_audit['csv_artifact_parsed_count']}/{non_json_audit['csv_artifact_count']} | data rows {non_json_audit['csv_artifact_data_rows']}, parse failed {len(non_json_audit['csv_artifact_parse_failed'])}, empty {len(non_json_audit['csv_artifact_empty'])}, blank headers {len(non_json_audit['csv_artifact_blank_headers'])}, duplicate headers {len(non_json_audit['csv_artifact_duplicate_headers'])}, no-data {len(non_json_audit['csv_artifact_no_data_rows'])} |",
+            f"| CSV artifacts | {non_json_audit['csv_artifact_parsed_count']}/{non_json_audit['csv_artifact_count']} | data rows {non_json_audit['csv_artifact_data_rows']}, parse failed {len(non_json_audit['csv_artifact_parse_failed'])}, empty {len(non_json_audit['csv_artifact_empty'])}, blank headers {len(non_json_audit['csv_artifact_blank_headers'])}, duplicate headers {len(non_json_audit['csv_artifact_duplicate_headers'])}, no-data {len(non_json_audit['csv_artifact_no_data_rows'])}, ragged {len(non_json_audit['csv_artifact_ragged_rows'])} |",
             f"| Markdown artifacts | {non_json_audit['markdown_artifact_read_count']}/{non_json_audit['markdown_artifact_count']} | read failed {len(non_json_audit['markdown_artifact_read_failed'])}, empty {len(non_json_audit['markdown_artifact_empty'])}, marker missing {len(non_json_audit['markdown_artifact_marker_missing'])}, heading missing {len(non_json_audit['markdown_artifact_heading_missing'])}, heading not first {len(non_json_audit['markdown_artifact_heading_not_first'])}, healthy `{non_json_artifact_healthy}` |",
             "",
         ]
@@ -8948,6 +8954,7 @@ def main() -> int:
                 "csv_artifact_blank_headers": non_json_audit["csv_artifact_blank_headers"],
                 "csv_artifact_duplicate_headers": non_json_audit["csv_artifact_duplicate_headers"],
                 "csv_artifact_no_data_rows": non_json_audit["csv_artifact_no_data_rows"],
+                "csv_artifact_ragged_rows": non_json_audit["csv_artifact_ragged_rows"],
                 "markdown_artifact_count": non_json_audit["markdown_artifact_count"],
                 "markdown_artifact_read_count": non_json_audit["markdown_artifact_read_count"],
                 "markdown_artifact_read_failed": non_json_audit["markdown_artifact_read_failed"],

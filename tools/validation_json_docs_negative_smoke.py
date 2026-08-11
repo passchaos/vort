@@ -433,6 +433,7 @@ def main() -> int:
                 "csv_artifact_blank_headers": [],
                 "csv_artifact_duplicate_headers": [],
                 "csv_artifact_no_data_rows": [],
+                "csv_artifact_ragged_rows": [],
                 "markdown_artifact_count": 1,
                 "markdown_artifact_read_count": 1,
                 "markdown_artifact_read_failed": [],
