@@ -1689,13 +1689,28 @@ def main() -> int:
         assert dashboard["native_codec_probes_markdown_present"] is True
         assert dashboard["native_codec_probes_healthy"] is True
         assert dashboard["native_codec_probes_probe_count"] == native_codec_probes["probe_count"]
+        assert dashboard["native_codec_probes_probe_rows"] == len(native_codec_probes["probes"])
         assert dashboard["native_codec_probes_ok_probe_count"] == native_codec_probes["probe_count"]
         assert dashboard["native_codec_probes_timed_out_probes"] == 0
+        assert dashboard["native_codec_probes_probe_case_sum"] == native_codec_probes["total_cases"]
+        assert dashboard["native_codec_probes_probe_count_mismatch"] == 0
+        assert dashboard["native_codec_probes_probe_case_sum_mismatch"] == 0
+        assert dashboard["native_codec_probes_missing_required_probes"] == 0
+        assert dashboard["native_codec_probes_duplicate_probe_rows"] == 0
+        assert dashboard["native_codec_probes_coverage_count"] == native_codec_probes["coverage_count"]
         assert dashboard["native_codec_probes_coverage_rows"] == native_codec_probes["coverage_count"]
         assert dashboard["native_codec_probes_coverage_ok_rows"] == native_codec_probes["coverage_count"]
         assert dashboard["native_codec_probes_coverage_case_sum"] == native_codec_probes["total_cases"]
+        assert dashboard["native_codec_probes_coverage_count_mismatch"] == 0
+        assert dashboard["native_codec_probes_missing_required_coverage"] == 0
+        assert dashboard["native_codec_probes_duplicate_coverage_rows"] == 0
         assert dashboard["native_codec_probes_capability_count"] == native_codec_probes["capability_count"]
+        assert dashboard["native_codec_probes_capability_rows"] == len(native_codec_probes["capabilities"])
         assert dashboard["native_codec_probes_ok_capability_count"] == native_codec_probes["capability_count"]
+        assert dashboard["native_codec_probes_capability_count_mismatch"] == 0
+        assert dashboard["native_codec_probes_capability_row_unhealthy"] == 0
+        assert dashboard["native_codec_probes_missing_required_capabilities"] == 0
+        assert dashboard["native_codec_probes_duplicate_capability_rows"] == 0
         assert dashboard["native_codec_probes_lib_generated_cases"] == capabilities_by_name["lib-generated"]["cases"]
         assert dashboard["native_codec_probes_incremental_cases"] == capabilities_by_name["incremental"]["cases"]
         assert dashboard["native_codec_probes_chunked_cases"] == capabilities_by_name["chunked"]["cases"]

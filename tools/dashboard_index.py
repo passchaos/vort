@@ -5478,6 +5478,37 @@ def python_zlib_diff_health(artifacts: list[Path]) -> dict:
 
 
 def native_codec_probes_health(artifacts: list[Path]) -> dict:
+    required_probe_labels = {
+        "lz4-native-probe",
+        "lz4-native-dictionary-probe",
+        "zstd-native-frame-probe",
+        "zstd-native-dictionary-probe",
+    }
+    required_coverage_pairs = {
+        ("lz4", "frame"),
+        ("lz4", "dictionary"),
+        ("zstd", "frame"),
+        ("zstd", "dictionary"),
+    }
+    required_capabilities = {
+        "lib-generated",
+        "native-generated",
+        "incremental",
+        "chunked",
+        "reusable-chunked",
+        "fse-repeat",
+        "dictionary",
+        "dictionary-training",
+        "dictionary-set",
+        "skippable",
+        "malformed",
+        "checksum",
+        "bounded-limits",
+        "huffman",
+        "sequence-tables",
+        "block",
+    }
+
     def int_field(row: dict, field: str) -> int:
         value = row.get(field)
         return value if isinstance(value, int) and not isinstance(value, bool) else 0
@@ -5550,8 +5581,18 @@ def native_codec_probes_health(artifacts: list[Path]) -> dict:
         probes = data.get("probes")
         if not isinstance(probes, list):
             probes = []
+        probe_count = int_field(data, "probe_count")
+        probe_rows = len(probes)
         ok_probes = sum(1 for probe in probes if isinstance(probe, dict) and probe.get("ok") is True)
         timed_out_probes = sum(1 for probe in probes if isinstance(probe, dict) and probe.get("timed_out") is True)
+        probe_labels = [
+            str(probe.get("label") or "")
+            for probe in probes
+            if isinstance(probe, dict)
+        ]
+        probe_label_set = {label for label in probe_labels if label}
+        missing_required_probes = len(required_probe_labels - probe_label_set)
+        duplicate_probe_rows = len(probe_labels) - len(probe_label_set)
         probe_cases = {
             str(probe.get("label")): int(probe.get("cases") or 0)
             for probe in probes
@@ -5572,7 +5613,17 @@ def native_codec_probes_health(artifacts: list[Path]) -> dict:
         capabilities = data.get("capabilities")
         if not isinstance(capabilities, list):
             capabilities = []
+        capability_count = int_field(data, "capability_count")
+        capability_rows = len(capabilities)
         ok_capabilities = sum(1 for row in capabilities if isinstance(row, dict) and row.get("ok") is True)
+        capability_names = [
+            str(row.get("capability") or "")
+            for row in capabilities
+            if isinstance(row, dict)
+        ]
+        capability_name_set = {name for name in capability_names if name}
+        missing_required_capabilities = len(required_capabilities - capability_name_set)
+        duplicate_capability_rows = len(capability_names) - len(capability_name_set)
         capability_cases = {
             str(row.get("capability")): int(row.get("cases") or 0)
             for row in capabilities
@@ -5593,6 +5644,8 @@ def native_codec_probes_health(artifacts: list[Path]) -> dict:
         coverage = data.get("coverage")
         if not isinstance(coverage, list):
             coverage = []
+        coverage_count = int_field(data, "coverage_count")
+        coverage_rows = len(coverage)
         coverage_details = [
             {
                 "codec": str(row.get("codec") or ""),
@@ -5606,24 +5659,46 @@ def native_codec_probes_health(artifacts: list[Path]) -> dict:
             for row in coverage
             if isinstance(row, dict)
         ]
-        total_cases = int(data.get("total_cases") or 0)
-        capability_count = int(data.get("capability_count") or len(capabilities))
-        coverage_rows = len(coverage)
+        coverage_pairs = [
+            (row["codec"], row["surface"])
+            for row in coverage_details
+        ]
+        coverage_pair_set = {pair for pair in coverage_pairs if pair[0] and pair[1]}
+        missing_required_coverage = len(required_coverage_pairs - coverage_pair_set)
+        duplicate_coverage_rows = len(coverage_pairs) - len(coverage_pair_set)
+        total_cases = int_field(data, "total_cases")
         coverage_ok_rows = sum(1 for row in coverage_details if row["present"] and row["ok"])
         coverage_case_sum = sum(row["cases"] for row in coverage_details)
+        probe_case_sum = sum(row["cases"] for row in probe_details)
+        probe_count_mismatch = abs(probe_count - probe_rows)
+        probe_case_sum_mismatch = abs(total_cases - probe_case_sum)
+        capability_count_mismatch = abs(capability_count - capability_rows)
+        capability_row_unhealthy = max(capability_count, capability_rows) - ok_capabilities
+        coverage_count_mismatch = abs(coverage_count - coverage_rows)
         markdown_present, markdown_rows, markdown_matched, markdown_unmatched = markdown_checks(data, coverage_details, capability_details, probe_details)
         return {
             "present": True,
             "ok": bool(data.get("ok")),
             "healthy": bool(data.get("ok"))
-            and ok_probes == int(data.get("probe_count") or 0)
+            and ok_probes == probe_count
             and ok_probes == 4
+            and probe_count_mismatch == 0
+            and probe_case_sum_mismatch == 0
+            and missing_required_probes == 0
+            and duplicate_probe_rows == 0
             and timed_out_probes == 0
             and coverage_rows == 4
+            and coverage_count_mismatch == 0
             and coverage_ok_rows == coverage_rows
             and coverage_case_sum == total_cases
+            and missing_required_coverage == 0
+            and duplicate_coverage_rows == 0
             and capability_count > 0
+            and capability_count_mismatch == 0
             and ok_capabilities == capability_count
+            and capability_row_unhealthy == 0
+            and missing_required_capabilities == 0
+            and duplicate_capability_rows == 0
             and total_cases > 0
             and capability_cases.get("lib-generated", 0) > 0
             and capability_cases.get("incremental", 0) > 0
@@ -5635,14 +5710,29 @@ def native_codec_probes_health(artifacts: list[Path]) -> dict:
             and markdown_present
             and markdown_rows > 0
             and markdown_unmatched == 0,
-            "probe_count": int(data.get("probe_count") or 0),
+            "probe_count": probe_count,
+            "probe_rows": probe_rows,
             "ok_probe_count": ok_probes,
             "timed_out_probes": timed_out_probes,
+            "probe_case_sum": probe_case_sum,
+            "probe_count_mismatch": probe_count_mismatch,
+            "probe_case_sum_mismatch": probe_case_sum_mismatch,
+            "missing_required_probes": missing_required_probes,
+            "duplicate_probe_rows": duplicate_probe_rows,
+            "coverage_count": coverage_count,
             "coverage_rows": coverage_rows,
             "coverage_ok_rows": coverage_ok_rows,
             "coverage_case_sum": coverage_case_sum,
+            "coverage_count_mismatch": coverage_count_mismatch,
+            "missing_required_coverage": missing_required_coverage,
+            "duplicate_coverage_rows": duplicate_coverage_rows,
             "capability_count": capability_count,
+            "capability_rows": capability_rows,
             "ok_capability_count": ok_capabilities,
+            "capability_count_mismatch": capability_count_mismatch,
+            "capability_row_unhealthy": capability_row_unhealthy,
+            "missing_required_capabilities": missing_required_capabilities,
+            "duplicate_capability_rows": duplicate_capability_rows,
             "lib_generated_cases": capability_cases.get("lib-generated", 0),
             "incremental_cases": capability_cases.get("incremental", 0),
             "chunked_cases": capability_cases.get("chunked", 0),
@@ -5666,13 +5756,28 @@ def native_codec_probes_health(artifacts: list[Path]) -> dict:
         "ok": False,
         "healthy": False,
         "probe_count": 0,
+        "probe_rows": 0,
         "ok_probe_count": 0,
         "timed_out_probes": 0,
+        "probe_case_sum": 0,
+        "probe_count_mismatch": 0,
+        "probe_case_sum_mismatch": 0,
+        "missing_required_probes": 0,
+        "duplicate_probe_rows": 0,
+        "coverage_count": 0,
         "coverage_rows": 0,
         "coverage_ok_rows": 0,
         "coverage_case_sum": 0,
+        "coverage_count_mismatch": 0,
+        "missing_required_coverage": 0,
+        "duplicate_coverage_rows": 0,
         "capability_count": 0,
+        "capability_rows": 0,
         "ok_capability_count": 0,
+        "capability_count_mismatch": 0,
+        "capability_row_unhealthy": 0,
+        "missing_required_capabilities": 0,
+        "duplicate_capability_rows": 0,
         "lib_generated_cases": 0,
         "incremental_cases": 0,
         "chunked_cases": 0,
@@ -7071,7 +7176,7 @@ def main() -> int:
         f"- native fuzz corpus: {native_fuzz['matched_rows']}/{native_fuzz['cases']} rows matched, Markdown {native_fuzz['markdown_matched']}/{native_fuzz['markdown_rows']}, coverage matched modes/errors {native_fuzz['coverage_mode_matched']}/{native_fuzz['coverage_error_matched']}, healthy `{native_fuzz['healthy']}`",
         f"- decode-stage smoke: {decode_stage_health_summary['matched_error_rows']}/{decode_stage_health_summary['error_rows']} error rows matched across {decode_stage_health_summary['rows']} timing rows, healthy `{decode_stage_healthy}`",
         f"- Python zlib differential: payloads {python_zlib_health['payloads']} (large-file {python_zlib_health['large_file_payloads']}, file-hex encodes {python_zlib_health['file_hex_encode_cases']}), dynamic {python_zlib_health['dynamic_payloads']}, dictionary encode raw/zlib {python_zlib_health['raw_dict_encode_cases']}/{python_zlib_health['zlib_dict_encode_cases']}, CLI successes/failures {python_zlib_health['cli_successes']}/{python_zlib_health['expected_failures']}, healthy `{python_zlib_healthy}`",
-        f"- native codec probes: {native_codec_health['ok_probe_count']}/{native_codec_health['probe_count']} probes ok, capabilities {native_codec_health['ok_capability_count']}/{native_codec_health['capability_count']} ok, cases total/lib/incremental/chunked/reusable-chunked/fse-repeat {native_codec_health['total_cases']}/{native_codec_health['lib_generated_cases']}/{native_codec_health['incremental_cases']}/{native_codec_health['chunked_cases']}/{native_codec_health['reusable_chunked_cases']}/{native_codec_health['fse_repeat_cases']}, healthy `{native_codec_health['healthy']}`",
+        f"- native codec probes: {native_codec_health['ok_probe_count']}/{native_codec_health['probe_count']} probes ok, rows/mismatch/case-sum {native_codec_health['probe_rows']}/{native_codec_health['probe_count_mismatch']}/{native_codec_health['probe_case_sum']}, capabilities {native_codec_health['ok_capability_count']}/{native_codec_health['capability_count']} ok, capability rows/mismatch/missing/duplicate {native_codec_health['capability_rows']}/{native_codec_health['capability_count_mismatch']}/{native_codec_health['missing_required_capabilities']}/{native_codec_health['duplicate_capability_rows']}, coverage rows/mismatch/missing/duplicate {native_codec_health['coverage_rows']}/{native_codec_health['coverage_count_mismatch']}/{native_codec_health['missing_required_coverage']}/{native_codec_health['duplicate_coverage_rows']}, cases total/lib/incremental/chunked/reusable-chunked/fse-repeat {native_codec_health['total_cases']}/{native_codec_health['lib_generated_cases']}/{native_codec_health['incremental_cases']}/{native_codec_health['chunked_cases']}/{native_codec_health['reusable_chunked_cases']}/{native_codec_health['fse_repeat_cases']}, healthy `{native_codec_health['healthy']}`",
         f"- native codec probe Markdown: {native_codec_health['markdown_matched']}/{native_codec_health['markdown_rows']} checks matched, unmatched {native_codec_health['markdown_unmatched']}",
         f"- native summary errors: cases total/lz4/zstd/checksum/corrupt/truncated/magic/skippable/body/checksum-phase/frame {native_summary_error_health['case_count']}/{native_summary_error_health['lz4_case_count']}/{native_summary_error_health['zstd_case_count']}/{native_summary_error_health['checksum_mismatch_count']}/{native_summary_error_health['corrupt_frame_count']}/{native_summary_error_health['truncated_frame_count']}/{native_summary_error_health['magic_phase_count']}/{native_summary_error_health['skippable_payload_phase_count']}/{native_summary_error_health['frame_body_phase_count']}/{native_summary_error_health['frame_checksum_phase_count']}/{native_summary_error_health['frame_phase_count']}, drift case/codec/error/phase/codec-error/codec-phase/offset {native_summary_error_health['case_count_mismatch']}/{native_summary_error_health['codec_case_count_mismatch']}/{native_summary_error_health['error_count_mismatch']}/{native_summary_error_health['phase_count_mismatch']}/{native_summary_error_health['codec_error_count_mismatch']}/{native_summary_error_health['codec_phase_count_mismatch']}/{native_summary_error_health['offset_range_mismatch']}, healthy `{native_summary_error_healthy}`",
         f"- native summary error negative smoke: cases {native_summary_error_negative['case_count']}, rows/matched/expected {native_summary_error_negative['rows']}/{native_summary_error_negative['matched']}/{native_summary_error_negative['expected_failures']}, mismatch {native_summary_error_negative['count_mismatch']}, healthy `{native_summary_error_negative_healthy}`",
@@ -8409,13 +8514,28 @@ def main() -> int:
                 "native_codec_probes_markdown_present": native_codec_health["markdown_present"],
                 "native_codec_probes_healthy": native_codec_health["healthy"],
                 "native_codec_probes_probe_count": native_codec_health["probe_count"],
+                "native_codec_probes_probe_rows": native_codec_health["probe_rows"],
                 "native_codec_probes_ok_probe_count": native_codec_health["ok_probe_count"],
                 "native_codec_probes_timed_out_probes": native_codec_health["timed_out_probes"],
+                "native_codec_probes_probe_case_sum": native_codec_health["probe_case_sum"],
+                "native_codec_probes_probe_count_mismatch": native_codec_health["probe_count_mismatch"],
+                "native_codec_probes_probe_case_sum_mismatch": native_codec_health["probe_case_sum_mismatch"],
+                "native_codec_probes_missing_required_probes": native_codec_health["missing_required_probes"],
+                "native_codec_probes_duplicate_probe_rows": native_codec_health["duplicate_probe_rows"],
+                "native_codec_probes_coverage_count": native_codec_health["coverage_count"],
                 "native_codec_probes_coverage_rows": native_codec_health["coverage_rows"],
                 "native_codec_probes_coverage_ok_rows": native_codec_health["coverage_ok_rows"],
                 "native_codec_probes_coverage_case_sum": native_codec_health["coverage_case_sum"],
+                "native_codec_probes_coverage_count_mismatch": native_codec_health["coverage_count_mismatch"],
+                "native_codec_probes_missing_required_coverage": native_codec_health["missing_required_coverage"],
+                "native_codec_probes_duplicate_coverage_rows": native_codec_health["duplicate_coverage_rows"],
                 "native_codec_probes_capability_count": native_codec_health["capability_count"],
+                "native_codec_probes_capability_rows": native_codec_health["capability_rows"],
                 "native_codec_probes_ok_capability_count": native_codec_health["ok_capability_count"],
+                "native_codec_probes_capability_count_mismatch": native_codec_health["capability_count_mismatch"],
+                "native_codec_probes_capability_row_unhealthy": native_codec_health["capability_row_unhealthy"],
+                "native_codec_probes_missing_required_capabilities": native_codec_health["missing_required_capabilities"],
+                "native_codec_probes_duplicate_capability_rows": native_codec_health["duplicate_capability_rows"],
                 "native_codec_probes_lib_generated_cases": native_codec_health["lib_generated_cases"],
                 "native_codec_probes_incremental_cases": native_codec_health["incremental_cases"],
                 "native_codec_probes_chunked_cases": native_codec_health["chunked_cases"],

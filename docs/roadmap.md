@@ -2744,3 +2744,8 @@ architecture blindly.
   both source-audit and report guardrail rows to match declared case counts with
   no unmatched rows. Dashboard health now exposes row/count drift counters before
   static-dictionary guardrail coverage can pass.
+- Tightened native codec probe dashboard health by requiring declared
+  probe/capability/coverage counts to match retained rows, probe case sums to
+  match total cases, and required probe labels, coverage pairs, and capability
+  keys to be present exactly once. Dashboard health now exposes row/count/key
+  drift counters before native codec probe coverage can pass.

@@ -4526,6 +4526,21 @@ def main() -> int:
         assert manifest["br_static_dictionary_report_negative_rows"] == 1
         assert manifest["br_static_dictionary_report_negative_count_mismatch"] == 0
         assert manifest["br_static_dictionary_report_negative_unmatched"] == 0
+        assert manifest["native_codec_probes_probe_rows"] == 4
+        assert manifest["native_codec_probes_probe_case_sum"] == 362
+        assert manifest["native_codec_probes_probe_count_mismatch"] == 0
+        assert manifest["native_codec_probes_probe_case_sum_mismatch"] == 0
+        assert manifest["native_codec_probes_missing_required_probes"] == 0
+        assert manifest["native_codec_probes_duplicate_probe_rows"] == 0
+        assert manifest["native_codec_probes_coverage_count"] == 4
+        assert manifest["native_codec_probes_coverage_count_mismatch"] == 0
+        assert manifest["native_codec_probes_missing_required_coverage"] == 0
+        assert manifest["native_codec_probes_duplicate_coverage_rows"] == 0
+        assert manifest["native_codec_probes_capability_rows"] == 16
+        assert manifest["native_codec_probes_capability_count_mismatch"] == 0
+        assert manifest["native_codec_probes_capability_row_unhealthy"] == 0
+        assert manifest["native_codec_probes_missing_required_capabilities"] == 0
+        assert manifest["native_codec_probes_duplicate_capability_rows"] == 0
         assert manifest["lz4_native_summary_present"] is True
         assert manifest["lz4_native_summary_healthy"] is True
         assert manifest["zstd_native_summary_present"] is True
