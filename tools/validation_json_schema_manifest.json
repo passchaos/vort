@@ -698,6 +698,8 @@
             "decode_stage_report_count_mismatch",
             "decode_stage_unmatched_error_rows",
             "decode_stage_csv_missing_cases",
+            "decode_stage_csv_duplicate_cases",
+            "decode_stage_csv_unknown_cases",
             "decode_stage_markdown_unmatched"
           ]
         },
@@ -1824,6 +1826,8 @@
         "decode_stage_csv_fixed_rows": "int",
         "decode_stage_csv_stored_rows": "int",
         "decode_stage_csv_missing_cases": "list",
+        "decode_stage_csv_duplicate_cases": "list",
+        "decode_stage_csv_unknown_cases": "list",
         "native_fuzz_corpus_present": "bool",
         "native_fuzz_corpus_coverage_present": "bool",
         "native_fuzz_corpus_markdown_present": "bool",

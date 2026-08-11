@@ -2820,6 +2820,7 @@ Top-level fields:
   `decode_stage_csv_positive_rows`, `decode_stage_csv_header_rows`,
   `decode_stage_csv_dynamic_rows`, `decode_stage_csv_fixed_rows`,
   `decode_stage_csv_stored_rows`, `decode_stage_csv_missing_cases`,
+  `decode_stage_csv_duplicate_cases`, `decode_stage_csv_unknown_cases`,
   `decode_stage_markdown_present`, `decode_stage_markdown_rows`,
   `decode_stage_markdown_matched`, `decode_stage_markdown_unmatched`
 - `native_fuzz_corpus_present`, `native_fuzz_corpus_coverage_present`,
@@ -3583,6 +3584,8 @@ Example:
   "decode_stage_csv_fixed_rows": 0,
   "decode_stage_csv_stored_rows": 0,
   "decode_stage_csv_missing_cases": [],
+  "decode_stage_csv_duplicate_cases": [],
+  "decode_stage_csv_unknown_cases": [],
   "decode_stage_markdown_present": false,
   "decode_stage_markdown_rows": 0,
   "decode_stage_markdown_matched": 0,

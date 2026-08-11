@@ -5232,6 +5232,7 @@ def main() -> int:
                     "| error rows | 3 | matched/unmatched 3/0 |",
                     "| report rows | 1/1 | error items 3/3, count mismatch 0 |",
                     "| csv rows | 10 | positive/header 10/10 |",
+                    "| csv block types | 8 | fixed/stored 1/1, missing/duplicate/unknown cases 0/0/0 |",
                     "| Markdown rows | 8/8 | present `True`, unmatched 0 |",
                 ],
             )

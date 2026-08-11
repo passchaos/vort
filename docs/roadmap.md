@@ -2815,3 +2815,7 @@ architecture blindly.
   and unknown source-qualified pairs alongside missing pairs. Dashboard health
   now rejects row-level native tier CSV drift before summary/CSV aggregate
   coverage can pass.
+
+- Tightened deflate decode-stage CSV dashboard health by exposing duplicate and
+  unknown `case` rows alongside missing cases. Dashboard health now rejects
+  decode-stage CSV case drift before timing/header coverage can pass.

@@ -1316,6 +1316,16 @@ def main() -> int:
         assert dashboard["decode_stage_report_count_mismatch"] == 0
         assert dashboard["decode_stage_matched_error_rows"] == decode_stage["matched_error_rows"]
         assert dashboard["decode_stage_unmatched_error_rows"] == decode_stage["unmatched_error_rows"]
+        assert dashboard["decode_stage_csv_present"] is True
+        assert dashboard["decode_stage_csv_rows"] == len(decode_stage_csv_rows)
+        assert dashboard["decode_stage_csv_positive_rows"] == len(decode_stage_csv_rows)
+        assert dashboard["decode_stage_csv_header_rows"] == len(decode_stage_csv_rows)
+        assert dashboard["decode_stage_csv_dynamic_rows"] == 8
+        assert dashboard["decode_stage_csv_fixed_rows"] == 1
+        assert dashboard["decode_stage_csv_stored_rows"] == 1
+        assert dashboard["decode_stage_csv_missing_cases"] == []
+        assert dashboard["decode_stage_csv_duplicate_cases"] == []
+        assert dashboard["decode_stage_csv_unknown_cases"] == []
         assert dashboard["decode_stage_markdown_present"] is True
         assert dashboard["decode_stage_markdown_rows"] == 4 + len(decode_stage["items"]) + len(decode_stage["error_items"])
         assert dashboard["decode_stage_markdown_matched"] == dashboard["decode_stage_markdown_rows"]

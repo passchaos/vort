@@ -1189,6 +1189,8 @@ def decode_stage_health(artifacts: list[Path]) -> dict:
         return (True, len(expected), matched, len(expected) - matched)
 
     csv_seen: set[str] = set()
+    csv_duplicate_cases: set[str] = set()
+    csv_unknown_cases: set[str] = set()
     csv_positive_rows = 0
     csv_header_rows = 0
     csv_dynamic_rows = 0
@@ -1210,7 +1212,11 @@ def decode_stage_health(artifacts: list[Path]) -> dict:
     for row in csv_rows:
         case = str(row.get("case") or "")
         if case in expected_cases:
+            if case in csv_seen:
+                csv_duplicate_cases.add(case)
             csv_seen.add(case)
+        elif case:
+            csv_unknown_cases.add(case)
         try:
             input_bytes = int_value(row, "input_bytes")
             zlib_bytes = int_value(row, "zlib_bytes")
@@ -1243,7 +1249,20 @@ def decode_stage_health(artifacts: list[Path]) -> dict:
                     if block_type == "stored":
                         csv_stored_rows += 1
     csv_missing_cases = sorted(expected_cases - csv_seen)
-    csv_healthy = csv_present and len(csv_rows) == len(expected_cases) and not csv_missing_cases and csv_positive_rows == len(csv_rows) and csv_header_rows == len(csv_rows) and csv_dynamic_rows > 0 and csv_fixed_rows > 0 and csv_stored_rows > 0
+    csv_duplicate_case_names = sorted(csv_duplicate_cases)
+    csv_unknown_case_names = sorted(csv_unknown_cases)
+    csv_healthy = (
+        csv_present
+        and len(csv_rows) == len(expected_cases)
+        and not csv_missing_cases
+        and not csv_duplicate_case_names
+        and not csv_unknown_case_names
+        and csv_positive_rows == len(csv_rows)
+        and csv_header_rows == len(csv_rows)
+        and csv_dynamic_rows > 0
+        and csv_fixed_rows > 0
+        and csv_stored_rows > 0
+    )
 
     if isinstance(report, dict):
         rows = report_int(report, "rows")
@@ -1283,6 +1302,8 @@ def decode_stage_health(artifacts: list[Path]) -> dict:
             "csv_fixed_rows": csv_fixed_rows,
             "csv_stored_rows": csv_stored_rows,
             "csv_missing_cases": csv_missing_cases,
+            "csv_duplicate_cases": csv_duplicate_case_names,
+            "csv_unknown_cases": csv_unknown_case_names,
             "markdown_present": markdown_present,
             "markdown_rows": markdown_rows,
             "markdown_matched": markdown_matched,
@@ -1307,6 +1328,8 @@ def decode_stage_health(artifacts: list[Path]) -> dict:
         "csv_fixed_rows": csv_fixed_rows,
         "csv_stored_rows": csv_stored_rows,
         "csv_missing_cases": csv_missing_cases,
+        "csv_duplicate_cases": csv_duplicate_case_names,
+        "csv_unknown_cases": csv_unknown_case_names,
         "markdown_present": False,
         "markdown_rows": 0,
         "markdown_matched": 0,
@@ -7975,7 +7998,7 @@ def main() -> int:
             f"| error rows | {decode_stage_health_summary['error_rows']} | matched/unmatched {decode_stage_health_summary['matched_error_rows']}/{decode_stage_health_summary['unmatched_error_rows']} |",
             f"| report rows | {decode_stage_health_summary['report_rows']}/{decode_stage_health_summary['rows']} | error items {decode_stage_health_summary['error_item_rows']}/{decode_stage_health_summary['error_rows']}, count mismatch {decode_stage_health_summary['report_count_mismatch']} |",
             f"| csv rows | {decode_stage_health_summary['csv_rows']} | positive/header {decode_stage_health_summary['csv_positive_rows']}/{decode_stage_health_summary['csv_header_rows']} |",
-            f"| csv block types | {decode_stage_health_summary['csv_dynamic_rows']} | fixed/stored {decode_stage_health_summary['csv_fixed_rows']}/{decode_stage_health_summary['csv_stored_rows']}, missing cases {len(decode_stage_health_summary['csv_missing_cases'])} |",
+            f"| csv block types | {decode_stage_health_summary['csv_dynamic_rows']} | fixed/stored {decode_stage_health_summary['csv_fixed_rows']}/{decode_stage_health_summary['csv_stored_rows']}, missing/duplicate/unknown cases {len(decode_stage_health_summary['csv_missing_cases'])}/{len(decode_stage_health_summary['csv_duplicate_cases'])}/{len(decode_stage_health_summary['csv_unknown_cases'])} |",
             f"| Markdown rows | {decode_stage_health_summary['markdown_matched']}/{decode_stage_health_summary['markdown_rows']} | present `{decode_stage_health_summary['markdown_present']}`, unmatched {decode_stage_health_summary['markdown_unmatched']} |",
             "",
         ]
@@ -8440,6 +8463,8 @@ def main() -> int:
                 "decode_stage_csv_fixed_rows": decode_stage_health_summary["csv_fixed_rows"],
                 "decode_stage_csv_stored_rows": decode_stage_health_summary["csv_stored_rows"],
                 "decode_stage_csv_missing_cases": decode_stage_health_summary["csv_missing_cases"],
+                "decode_stage_csv_duplicate_cases": decode_stage_health_summary["csv_duplicate_cases"],
+                "decode_stage_csv_unknown_cases": decode_stage_health_summary["csv_unknown_cases"],
                 "decode_stage_markdown_present": decode_stage_health_summary["markdown_present"],
                 "decode_stage_markdown_rows": decode_stage_health_summary["markdown_rows"],
                 "decode_stage_markdown_matched": decode_stage_health_summary["markdown_matched"],

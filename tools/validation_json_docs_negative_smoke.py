@@ -572,6 +572,8 @@ def main() -> int:
                 "decode_stage_csv_fixed_rows": 1,
                 "decode_stage_csv_stored_rows": 1,
                 "decode_stage_csv_missing_cases": [],
+                "decode_stage_csv_duplicate_cases": [],
+                "decode_stage_csv_unknown_cases": [],
                 "decode_stage_markdown_present": True,
                 "decode_stage_markdown_rows": 1,
                 "decode_stage_markdown_matched": 1,
