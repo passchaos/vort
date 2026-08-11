@@ -2886,6 +2886,11 @@ architecture blindly.
 
 
 
+
+- Tightened Markdown artifact auditing by requiring each retained Markdown
+  artifact to include a heading. Dashboard health now rejects heading-less
+  Markdown even when the file is readable, non-empty, and contains table markers.
+
 - Tightened CSV artifact auditing by requiring at least one data row per retained
   CSV artifact in addition to unique non-blank headers. Dashboard health now
   rejects header-only CSV artifacts before artifact inventory can pass.

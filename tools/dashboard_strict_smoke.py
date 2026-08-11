@@ -4770,7 +4770,7 @@ def main() -> int:
                     "| producer steps | 88/88 | 0 | allowed missing 0 |",
                     "| smoke gates | 88/88 | 0 | required missing 0 |",
                     "| CSV artifacts | 26/26 | data rows 554, parse failed 0, empty 0, blank headers 0, duplicate headers 0, no-data 0 |",
-                    "| Markdown artifacts | 20/20 | read failed 0, empty 0, marker missing 0, healthy `True` |",
+                    "| Markdown artifacts | 20/20 | read failed 0, empty 0, marker missing 0, heading missing 0, healthy `True` |",
                 ],
             )
         )

@@ -1803,7 +1803,8 @@
             "csv_artifact_no_data_rows",
             "markdown_artifact_read_failed",
             "markdown_artifact_empty",
-            "markdown_artifact_marker_missing"
+            "markdown_artifact_marker_missing",
+            "markdown_artifact_heading_missing"
           ]
         }
       },
@@ -2544,6 +2545,7 @@
         "markdown_artifact_read_failed": "list",
         "markdown_artifact_empty": "list",
         "markdown_artifact_marker_missing": "list",
+        "markdown_artifact_heading_missing": "list",
         "smoke_gate_missing": "list",
         "smoke_gate_required_missing": "list",
         "validation_healthy": "bool",
