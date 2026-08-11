@@ -2663,3 +2663,7 @@ architecture blindly.
   coverage, CSV path, per-tier stream/index totals, and per-tier minimum range
   and full-input throughput. Dashboard health now exposes summary-vs-CSV mismatch
   counters before native tier range coverage can pass.
+- Tightened native tier corpus discovery dashboard health by cross-checking the
+  retained discovery JSON selected labels and byte sizes against the standard
+  corpus range summary and CSV companion. Dashboard health now exposes discovery
+  mismatch counters before corpus-discovery coverage can pass.

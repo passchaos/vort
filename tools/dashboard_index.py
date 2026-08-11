@@ -1632,29 +1632,98 @@ def native_tier_range_health(artifacts: list[Path]) -> dict:
 
 
 def native_tier_corpus_discovery_health(artifacts: list[Path]) -> dict:
+    expected_csv_artifact = "vort-native-tier-range-corpus-bench.csv"
+    discovery = None
+    corpus_summary = None
+    corpus_csv = None
     for artifact in artifacts:
         data = read_json(artifact) if artifact.suffix == ".json" else {}
         if data.get("schema") != "vort.native_tier_range_corpus_discovery":
+            if data.get("schema") == "vort.native_tier_range_bench_gate" and data.get("source") == "standard_corpus":
+                corpus_summary = data
+            if artifact.name == expected_csv_artifact:
+                corpus_csv = artifact
             continue
+        discovery = data
+    if discovery is not None:
         def int_field(name: str) -> int:
-            value = data.get(name)
+            value = discovery.get(name)
             return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
-        selected_cases = data.get("selected_cases")
+        def csv_fixture_bytes(path: Path | None) -> dict[str, int] | None:
+            if path is None:
+                return None
+            try:
+                with path.open(newline="") as f:
+                    rows = list(csv.DictReader(f))
+            except Exception:
+                return {}
+            by_fixture: dict[str, int] = {}
+            for row in rows:
+                fixture = str(row.get("fixture") or "")
+                if not fixture:
+                    continue
+                try:
+                    input_bytes = int(row.get("input_bytes") or "0")
+                except ValueError:
+                    input_bytes = 0
+                if fixture not in by_fixture:
+                    by_fixture[fixture] = input_bytes
+                elif by_fixture[fixture] != input_bytes:
+                    by_fixture[fixture] = -1
+            return by_fixture
+
+        selected_cases = discovery.get("selected_cases")
         selected_cases = selected_cases if isinstance(selected_cases, list) else []
-        sources = data.get("sources")
+        sources = discovery.get("sources")
         sources = sources if isinstance(sources, list) else []
-        missing_reason = data.get("missing_reason")
-        limit = data.get("limit")
+        missing_reason = discovery.get("missing_reason")
+        limit = discovery.get("limit")
         limit = limit if isinstance(limit, int) and not isinstance(limit, bool) else None
         candidate_count = int_field("candidate_count")
         source_count = int_field("source_count")
         selected_case_count = int_field("selected_case_count")
-        csv_path = str(data.get("csv") or "")
+        csv_path = str(discovery.get("csv") or "")
         missing_reason_text = str(missing_reason) if isinstance(missing_reason, str) else ""
+        selected_labels: list[str] = []
+        selected_bytes: dict[str, int] = {}
+        selected_case_mismatch = 0
+        for case in selected_cases:
+            if not isinstance(case, dict):
+                selected_case_mismatch += 1
+                continue
+            label = str(case.get("label") or "")
+            byte_value = case.get("bytes")
+            if not label or not isinstance(byte_value, int) or isinstance(byte_value, bool) or byte_value <= 0:
+                selected_case_mismatch += 1
+                continue
+            if label in selected_bytes:
+                selected_case_mismatch += 1
+            selected_labels.append(label)
+            selected_bytes[label] = byte_value
+        selected_label_set = sorted(set(selected_labels))
+        csv_path_mismatch = 1 if csv_path and Path(csv_path).name != expected_csv_artifact else 0
+        summary_fixture_mismatch = 0
+        if isinstance(corpus_summary, dict):
+            summary_fixtures = corpus_summary.get("fixtures") if isinstance(corpus_summary.get("fixtures"), list) else []
+            summary_fixture_names = sorted(str(item) for item in summary_fixtures)
+            if int(corpus_summary.get("fixture_count") or 0) != selected_case_count or summary_fixture_names != selected_label_set:
+                summary_fixture_mismatch = 1
+        csv_fixture_mismatch = 0
+        csv_byte_mismatch = 0
+        csv_bytes = csv_fixture_bytes(corpus_csv)
+        if csv_bytes is not None:
+            csv_fixture_names = sorted(csv_bytes)
+            if selected_case_count != len(csv_fixture_names) or selected_label_set != csv_fixture_names:
+                csv_fixture_mismatch = 1
+            for label, byte_value in selected_bytes.items():
+                if csv_bytes.get(label) != byte_value:
+                    csv_byte_mismatch += 1
+            csv_byte_mismatch += sum(1 for value in csv_bytes.values() if value <= 0)
+        mismatch_total = selected_case_mismatch + csv_path_mismatch + summary_fixture_mismatch + csv_fixture_mismatch + csv_byte_mismatch
         healthy = (
-            bool(data.get("ok"))
-            and str(data.get("source_mode") or "") in {"discovered", "paths"}
+            bool(discovery.get("ok"))
+            and str(discovery.get("source_mode") or "") in {"discovered", "paths"}
             and candidate_count >= source_count
             and source_count > 0
             and source_count == len(sources)
@@ -1663,12 +1732,13 @@ def native_tier_corpus_discovery_health(artifacts: list[Path]) -> dict:
             and bool(csv_path)
             and isinstance(missing_reason, str)
             and missing_reason_text == ""
+            and mismatch_total == 0
         )
         return {
             "present": True,
-            "ok": bool(data.get("ok")),
-            "source_mode": str(data.get("source_mode") or ""),
-            "full": bool(data.get("full")),
+            "ok": bool(discovery.get("ok")),
+            "source_mode": str(discovery.get("source_mode") or ""),
+            "full": bool(discovery.get("full")),
             "limit": limit,
             "candidate_count": candidate_count,
             "source_count": source_count,
@@ -1677,6 +1747,12 @@ def native_tier_corpus_discovery_health(artifacts: list[Path]) -> dict:
             "selected_cases": selected_cases,
             "csv": csv_path,
             "missing_reason": missing_reason_text,
+            "selected_case_mismatch": selected_case_mismatch,
+            "csv_path_mismatch": csv_path_mismatch,
+            "summary_fixture_mismatch": summary_fixture_mismatch,
+            "csv_fixture_mismatch": csv_fixture_mismatch,
+            "csv_byte_mismatch": csv_byte_mismatch,
+            "mismatch_total": mismatch_total,
             "healthy": healthy,
         }
     return {
@@ -1692,6 +1768,12 @@ def native_tier_corpus_discovery_health(artifacts: list[Path]) -> dict:
         "selected_cases": [],
         "csv": "",
         "missing_reason": "missing_discovery_artifact",
+        "selected_case_mismatch": 0,
+        "csv_path_mismatch": 0,
+        "summary_fixture_mismatch": 0,
+        "csv_fixture_mismatch": 0,
+        "csv_byte_mismatch": 0,
+        "mismatch_total": 0,
         "healthy": False,
     }
 
@@ -7130,6 +7212,7 @@ def main() -> int:
             f"| selected cases | {native_tier_discovery_health['selected_case_count']} | {selected_labels} |",
             f"| corpus paths | {len(native_tier_discovery_health['sources'])} | {source_list} |",
             f"| output csv | {1 if native_tier_discovery_health['csv'] else 0} | `{native_tier_discovery_health['csv'] or 'none'}` |",
+            f"| discovery mismatches | {native_tier_discovery_health['mismatch_total']} | selected/csv path/summary fixtures/csv fixtures/csv bytes {native_tier_discovery_health['selected_case_mismatch']}/{native_tier_discovery_health['csv_path_mismatch']}/{native_tier_discovery_health['summary_fixture_mismatch']}/{native_tier_discovery_health['csv_fixture_mismatch']}/{native_tier_discovery_health['csv_byte_mismatch']} |",
             f"| missing reason | {1 if native_tier_discovery_health['missing_reason'] else 0} | `{native_tier_discovery_health['missing_reason'] or 'none'}` |",
             "",
         ]
@@ -7933,6 +8016,12 @@ def main() -> int:
                 "native_tier_corpus_discovery_selected_cases": native_tier_discovery_health["selected_cases"],
                 "native_tier_corpus_discovery_csv": native_tier_discovery_health["csv"],
                 "native_tier_corpus_discovery_missing_reason": native_tier_discovery_health["missing_reason"],
+                "native_tier_corpus_discovery_selected_case_mismatch": native_tier_discovery_health["selected_case_mismatch"],
+                "native_tier_corpus_discovery_csv_path_mismatch": native_tier_discovery_health["csv_path_mismatch"],
+                "native_tier_corpus_discovery_summary_fixture_mismatch": native_tier_discovery_health["summary_fixture_mismatch"],
+                "native_tier_corpus_discovery_csv_fixture_mismatch": native_tier_discovery_health["csv_fixture_mismatch"],
+                "native_tier_corpus_discovery_csv_byte_mismatch": native_tier_discovery_health["csv_byte_mismatch"],
+                "native_tier_corpus_discovery_mismatch_total": native_tier_discovery_health["mismatch_total"],
                 "native_tier_range_seek_fast_min_range_mib_s": native_tier_health["seek_fast_min_range_mib_s"],
                 "native_tier_range_balanced_min_range_mib_s": native_tier_health["balanced_min_range_mib_s"],
                 "native_tier_range_ratio_min_range_mib_s": native_tier_health["ratio_min_range_mib_s"],

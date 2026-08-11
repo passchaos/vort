@@ -4389,6 +4389,12 @@ def main() -> int:
             "nci-128k",
             "mozilla-128k",
         ]
+        assert manifest["native_tier_corpus_discovery_selected_case_mismatch"] == 0
+        assert manifest["native_tier_corpus_discovery_csv_path_mismatch"] == 0
+        assert manifest["native_tier_corpus_discovery_summary_fixture_mismatch"] == 0
+        assert manifest["native_tier_corpus_discovery_csv_fixture_mismatch"] == 0
+        assert manifest["native_tier_corpus_discovery_csv_byte_mismatch"] == 0
+        assert manifest["native_tier_corpus_discovery_mismatch_total"] == 0
         assert manifest["native_tier_corpus_discovery_missing_reason"] == ""
         assert any(
             artifact["name"] == NATIVE_TIER_RANGE_CORPUS_DISCOVERY_ARTIFACT
@@ -4556,6 +4562,7 @@ def main() -> int:
                     "| selected cases | 3 | `ooffice-128k`, `nci-128k`, `mozilla-128k` |",
                     "| corpus paths | 1 | `/tmp/silesia-small.tar` |",
                     "| output csv | 1 | `zig-out/vort-native-tier-range-corpus-bench.csv` |",
+                    "| discovery mismatches | 0 | selected/csv path/summary fixtures/csv fixtures/csv bytes 0/0/0/0/0 |",
                     "| missing reason | 0 | `none` |",
                 ],
             )
@@ -5083,6 +5090,27 @@ def main() -> int:
             and mismatched_native_tier_manifest["native_tier_range_summary_csv_mismatch_total"] == 1
         )
         checks.append(check_row("mismatched_native_tier_range_summary_csv", "native-tier-range-health", True, native_tier_mismatched_matched, mismatched_native_tier_result.returncode, "dashboard_index_validation_unhealthy=native_tier_range_failed", mismatched_native_tier_result.stdout))
+
+        mismatched_native_tier_discovery_root = root / "mismatched-native-tier-discovery"
+        mismatched_native_tier_discovery_root.mkdir()
+        write_healthy_artifacts(mismatched_native_tier_discovery_root)
+        mismatched_discovery_payload = json.loads((mismatched_native_tier_discovery_root / NATIVE_TIER_RANGE_CORPUS_DISCOVERY_ARTIFACT).read_text())
+        mismatched_discovery_payload["selected_cases"][0]["bytes"] += 1
+        (mismatched_native_tier_discovery_root / NATIVE_TIER_RANGE_CORPUS_DISCOVERY_ARTIFACT).write_text(json.dumps(mismatched_discovery_payload, indent=2, sort_keys=True) + "\n")
+        mismatched_native_tier_discovery_producer = mismatched_native_tier_discovery_root / "producers.json"
+        write_producer_map(mismatched_native_tier_discovery_producer)
+        mismatched_native_tier_discovery_result = run(dashboard_args(mismatched_native_tier_discovery_root, mismatched_native_tier_discovery_producer, "--strict-validation-health"), check=False)
+        mismatched_native_tier_discovery_manifest = json.loads((mismatched_native_tier_discovery_root / "vort-dashboard-index.json").read_text())
+        native_tier_discovery_mismatched_matched = (
+            mismatched_native_tier_discovery_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed" in mismatched_native_tier_discovery_result.stdout
+            and mismatched_native_tier_discovery_manifest["validation_healthy"] is False
+            and mismatched_native_tier_discovery_manifest["native_tier_corpus_discovery_present"] is True
+            and mismatched_native_tier_discovery_manifest["native_tier_corpus_discovery_healthy"] is False
+            and mismatched_native_tier_discovery_manifest["native_tier_corpus_discovery_csv_byte_mismatch"] == 1
+            and mismatched_native_tier_discovery_manifest["native_tier_corpus_discovery_mismatch_total"] == 1
+        )
+        checks.append(check_row("mismatched_native_tier_discovery_case", "native-tier-range-health", True, native_tier_discovery_mismatched_matched, mismatched_native_tier_discovery_result.returncode, "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed", mismatched_native_tier_discovery_result.stdout))
 
         no_producer = root / "no-producer.json"
         write_producer_map(no_producer, include_header_exact=False, required_names=[HEADER_INSPECT_ARTIFACT, DASHBOARD_STRICT_ARTIFACT])

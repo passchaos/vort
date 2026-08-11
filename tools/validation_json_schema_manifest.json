@@ -806,6 +806,14 @@
             "native_tier_corpus_discovery_candidate_count",
             "native_tier_corpus_discovery_source_count",
             "native_tier_corpus_discovery_selected_case_count"
+          ],
+          "zero": [
+            "native_tier_corpus_discovery_selected_case_mismatch",
+            "native_tier_corpus_discovery_csv_path_mismatch",
+            "native_tier_corpus_discovery_summary_fixture_mismatch",
+            "native_tier_corpus_discovery_csv_fixture_mismatch",
+            "native_tier_corpus_discovery_csv_byte_mismatch",
+            "native_tier_corpus_discovery_mismatch_total"
           ]
         },
         "native_codec_probes_healthy": {
@@ -2213,6 +2221,12 @@
         "native_tier_corpus_discovery_selected_cases": "list",
         "native_tier_corpus_discovery_csv": "str",
         "native_tier_corpus_discovery_missing_reason": "str",
+        "native_tier_corpus_discovery_selected_case_mismatch": "int",
+        "native_tier_corpus_discovery_csv_path_mismatch": "int",
+        "native_tier_corpus_discovery_summary_fixture_mismatch": "int",
+        "native_tier_corpus_discovery_csv_fixture_mismatch": "int",
+        "native_tier_corpus_discovery_csv_byte_mismatch": "int",
+        "native_tier_corpus_discovery_mismatch_total": "int",
         "native_tier_range_seek_fast_min_range_mib_s": "float",
         "native_tier_range_balanced_min_range_mib_s": "float",
         "native_tier_range_ratio_min_range_mib_s": "float",
@@ -3674,6 +3688,7 @@
           "native_summary_error_markdown_tables",
           "native_tier_range_markdown_table",
           "native_tier_discovery_markdown_table",
+          "mismatched_native_tier_discovery_case",
           "native_codec_probe_markdown_tables",
           "header_inspect_markdown_table",
           "sidecar_corrupt_markdown_table",

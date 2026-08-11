@@ -2547,8 +2547,9 @@ Top-level fields:
   counters for rows, fixtures, tiers, CSV paths, per-tier stream/index totals,
   and per-tier minimum throughput floors.
 - `native_tier_corpus_discovery_*` fields summarize standard-corpus discovery
-  inputs for the native tier range benchmark and now participate in aggregate
-  `validation_healthy`.
+  inputs for the native tier range benchmark, including drift counters that
+  cross-check selected cases and byte sizes against the standard-corpus summary
+  and CSV companion, and now participate in aggregate `validation_healthy`.
 - `header_inspect_present`, `header_inspect_ok`, `header_inspect_healthy`,
   `header_inspect_markdown_present`, `header_inspect_report_rows`,
   `header_inspect_negative_item_rows`, `header_inspect_command_coverage_rows`,
@@ -3828,6 +3829,12 @@ Example:
   "native_tier_corpus_discovery_selected_cases": [],
   "native_tier_corpus_discovery_csv": "",
   "native_tier_corpus_discovery_missing_reason": "missing_discovery_artifact",
+  "native_tier_corpus_discovery_selected_case_mismatch": 0,
+  "native_tier_corpus_discovery_csv_path_mismatch": 0,
+  "native_tier_corpus_discovery_summary_fixture_mismatch": 0,
+  "native_tier_corpus_discovery_csv_fixture_mismatch": 0,
+  "native_tier_corpus_discovery_csv_byte_mismatch": 0,
+  "native_tier_corpus_discovery_mismatch_total": 0,
   "native_tier_range_source_details": [
     {
       "source": "built_in",
@@ -3990,9 +3997,9 @@ Example:
     },
     {
       "mode": "native-tier-range-health",
-      "min_checks": 4,
+      "min_checks": 5,
       "min_expected_failures": 0,
-      "min_matched": 4
+      "min_matched": 5
     }
   ]
 }
@@ -4128,9 +4135,9 @@ Example:
     },
     {
       "mode": "native-tier-range-health",
-      "min_checks": 4,
+      "min_checks": 5,
       "min_expected_failures": 0,
-      "min_matched": 4
+      "min_matched": 5
     }
   ],
   "missing_modes": [],
@@ -4174,14 +4181,14 @@ Example:
     {
       "mode": "native-tier-range-health",
       "checks": 1,
-      "min_checks": 4,
-      "missing_checks": 3,
+      "min_checks": 5,
+      "missing_checks": 4,
       "expected_failures": 0,
       "min_expected_failures": 0,
       "missing_expected_failures": 0,
       "matched": 1,
-      "min_matched": 4,
-      "missing_matched": 3
+      "min_matched": 5,
+      "missing_matched": 4
     }
   ],
   "mode_counts": [
@@ -5016,9 +5023,12 @@ This schema records the corpus discovery side of the native tier range corpus
 benchmark. It is intentionally separate from `vort.native_tier_range_bench_gate`:
 the bench gate validates CSV shape and throughput, while this artifact explains
 which standard-corpus paths were discovered, which bounded rows were selected,
-and why the CSV was absent when no input cases were available. `source_mode` is
-`discovered` for automatic local standard-corpus discovery and `paths` when the
-caller supplies explicit `--paths`.
+and why the CSV was absent when no input cases were available. Dashboard health
+cross-checks the selected labels and byte sizes against the retained
+standard-corpus summary/CSV pair so stale discovery metadata cannot pass after
+the benchmark matrix changes. `source_mode` is `discovered` for automatic local
+standard-corpus discovery and `paths` when the caller supplies explicit
+`--paths`.
 
 Example:
 

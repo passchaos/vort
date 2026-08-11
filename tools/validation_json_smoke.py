@@ -656,14 +656,18 @@ def main() -> int:
             "schema": "vort.native_tier_range_corpus_discovery",
             "schema_version": 1,
             "ok": True,
-            "source_mode": "paths",
+            "source_mode": "discovered",
             "full": False,
-            "limit": 2,
-            "candidate_count": 1,
+            "limit": 3,
+            "candidate_count": 5,
             "source_count": 1,
-            "sources": ["README.md"],
-            "selected_case_count": 1,
-            "selected_cases": [{"label": "README.md-128k", "bytes": 1024}],
+            "sources": ["/tmp/silesia-small.tar"],
+            "selected_case_count": 3,
+            "selected_cases": [
+                {"label": "ooffice-128k", "bytes": 131072},
+                {"label": "nci-128k", "bytes": 131072},
+                {"label": "mozilla-128k", "bytes": 131072},
+            ],
             "csv": "zig-out/vort-native-tier-range-corpus-bench.csv",
             "missing_reason": "",
         }
@@ -1784,6 +1788,12 @@ def main() -> int:
         assert dashboard["native_tier_corpus_discovery_healthy"] is True
         assert dashboard["native_tier_corpus_discovery_source_count"] == len(native_tier_corpus_discovery["sources"])
         assert dashboard["native_tier_corpus_discovery_selected_case_count"] == len(native_tier_corpus_discovery["selected_cases"])
+        assert dashboard["native_tier_corpus_discovery_selected_case_mismatch"] == 0
+        assert dashboard["native_tier_corpus_discovery_csv_path_mismatch"] == 0
+        assert dashboard["native_tier_corpus_discovery_summary_fixture_mismatch"] == 0
+        assert dashboard["native_tier_corpus_discovery_csv_fixture_mismatch"] == 0
+        assert dashboard["native_tier_corpus_discovery_csv_byte_mismatch"] == 0
+        assert dashboard["native_tier_corpus_discovery_mismatch_total"] == 0
         assert dashboard["validation_healthy"] == (
             dashboard["producer_healthy"]
             and dashboard["smoke_gate_healthy"]

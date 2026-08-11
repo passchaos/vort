@@ -917,6 +917,12 @@ def main() -> int:
                 ],
                 "native_tier_corpus_discovery_csv": "zig-out/vort-native-tier-range-corpus-bench.csv",
                 "native_tier_corpus_discovery_missing_reason": "",
+                "native_tier_corpus_discovery_selected_case_mismatch": 0,
+                "native_tier_corpus_discovery_csv_path_mismatch": 0,
+                "native_tier_corpus_discovery_summary_fixture_mismatch": 0,
+                "native_tier_corpus_discovery_csv_fixture_mismatch": 0,
+                "native_tier_corpus_discovery_csv_byte_mismatch": 0,
+                "native_tier_corpus_discovery_mismatch_total": 0,
                 "native_tier_range_source_details": [
                     {
                         "source": "built_in",
@@ -1025,6 +1031,12 @@ def main() -> int:
                     "native_tier_corpus_discovery_selected_case_count": 1,
                     "native_tier_corpus_discovery_selected_cases": [{"label": "ooffice-128k", "bytes": 131072}],
                     "native_tier_corpus_discovery_missing_reason": "stale_summary",
+                    "native_tier_corpus_discovery_selected_case_mismatch": 0,
+                    "native_tier_corpus_discovery_csv_path_mismatch": 0,
+                    "native_tier_corpus_discovery_summary_fixture_mismatch": 0,
+                    "native_tier_corpus_discovery_csv_fixture_mismatch": 0,
+                    "native_tier_corpus_discovery_csv_byte_mismatch": 0,
+                    "native_tier_corpus_discovery_mismatch_total": 0,
                 }
             )
             docs_check.validate_value_against_manifest(payload, schemas_def)
