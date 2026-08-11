@@ -2694,7 +2694,8 @@ Top-level fields:
   `markdown_artifact_empty`, `markdown_artifact_marker_missing`,
   `markdown_artifact_heading_missing`,
   `markdown_artifact_heading_not_first`,
-  `markdown_artifact_table_missing`
+  `markdown_artifact_table_missing`,
+  `markdown_artifact_table_separator_missing`
 - `validation_json_present`, `validation_json_ok`, `validation_json_healthy`,
   `validation_json_checked_schema_count`,
   `validation_json_checked_schema_unique_count`,
@@ -3485,6 +3486,7 @@ Example:
   "markdown_artifact_heading_missing": [],
   "markdown_artifact_heading_not_first": [],
   "markdown_artifact_table_missing": [],
+  "markdown_artifact_table_separator_missing": [],
   "validation_json_present": false,
   "validation_json_ok": false,
   "validation_json_healthy": false,

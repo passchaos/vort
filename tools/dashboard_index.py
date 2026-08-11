@@ -7,6 +7,7 @@ import argparse
 import csv
 import datetime as dt
 import json
+import re
 from pathlib import Path
 
 
@@ -7670,6 +7671,7 @@ def non_json_artifact_audit(records: list[dict], output_dir: Path) -> dict:
     markdown_heading_missing: list[str] = []
     markdown_heading_not_first: list[str] = []
     markdown_table_missing: list[str] = []
+    markdown_table_separator_missing: list[str] = []
     for record in records:
         fmt = record.get("format")
         if fmt not in {"csv", "md"}:
@@ -7723,6 +7725,8 @@ def non_json_artifact_audit(records: list[dict], output_dir: Path) -> dict:
             markdown_heading_not_first.append(name)
         if not any(line.strip().startswith("|") for line in text.splitlines()):
             markdown_table_missing.append(name)
+        elif not any(re.match(r"^\s*\|\s*:?-{3,}:?", line) for line in text.splitlines()):
+            markdown_table_separator_missing.append(name)
     return {
         "csv_artifact_count": csv_count,
         "csv_artifact_parsed_count": csv_parsed,
@@ -7741,6 +7745,7 @@ def non_json_artifact_audit(records: list[dict], output_dir: Path) -> dict:
         "markdown_artifact_heading_missing": markdown_heading_missing,
         "markdown_artifact_heading_not_first": markdown_heading_not_first,
         "markdown_artifact_table_missing": markdown_table_missing,
+        "markdown_artifact_table_separator_missing": markdown_table_separator_missing,
     }
 
 
@@ -7835,6 +7840,7 @@ def main() -> int:
         and not non_json_audit["markdown_artifact_heading_missing"]
         and not non_json_audit["markdown_artifact_heading_not_first"]
         and not non_json_audit["markdown_artifact_table_missing"]
+        and not non_json_audit["markdown_artifact_table_separator_missing"]
     )
     header_healthy = (
         header_health["present"]
@@ -8275,7 +8281,7 @@ def main() -> int:
             f"| producer steps | {producer_step_covered}/{len(records)} | {len(producer_step_missing)} | allowed missing {len(producer_step_allowed_missing)} |",
             f"| smoke gates | {smoke_gate_covered}/{len(records)} | {len(smoke_gate_missing)} | required missing {len(smoke_gate_required_missing)} |",
             f"| CSV artifacts | {non_json_audit['csv_artifact_parsed_count']}/{non_json_audit['csv_artifact_count']} | data rows {non_json_audit['csv_artifact_data_rows']}, parse failed {len(non_json_audit['csv_artifact_parse_failed'])}, empty {len(non_json_audit['csv_artifact_empty'])}, blank headers {len(non_json_audit['csv_artifact_blank_headers'])}, duplicate headers {len(non_json_audit['csv_artifact_duplicate_headers'])}, no-data {len(non_json_audit['csv_artifact_no_data_rows'])}, ragged {len(non_json_audit['csv_artifact_ragged_rows'])} |",
-            f"| Markdown artifacts | {non_json_audit['markdown_artifact_read_count']}/{non_json_audit['markdown_artifact_count']} | read failed {len(non_json_audit['markdown_artifact_read_failed'])}, empty {len(non_json_audit['markdown_artifact_empty'])}, marker missing {len(non_json_audit['markdown_artifact_marker_missing'])}, heading missing {len(non_json_audit['markdown_artifact_heading_missing'])}, heading not first {len(non_json_audit['markdown_artifact_heading_not_first'])}, table missing {len(non_json_audit['markdown_artifact_table_missing'])}, healthy `{non_json_artifact_healthy}` |",
+            f"| Markdown artifacts | {non_json_audit['markdown_artifact_read_count']}/{non_json_audit['markdown_artifact_count']} | read failed {len(non_json_audit['markdown_artifact_read_failed'])}, empty {len(non_json_audit['markdown_artifact_empty'])}, marker missing {len(non_json_audit['markdown_artifact_marker_missing'])}, heading missing {len(non_json_audit['markdown_artifact_heading_missing'])}, heading not first {len(non_json_audit['markdown_artifact_heading_not_first'])}, table missing {len(non_json_audit['markdown_artifact_table_missing'])}, separator missing {len(non_json_audit['markdown_artifact_table_separator_missing'])}, healthy `{non_json_artifact_healthy}` |",
             "",
         ]
     )
@@ -8968,6 +8974,7 @@ def main() -> int:
                 "markdown_artifact_heading_missing": non_json_audit["markdown_artifact_heading_missing"],
                 "markdown_artifact_heading_not_first": non_json_audit["markdown_artifact_heading_not_first"],
                 "markdown_artifact_table_missing": non_json_audit["markdown_artifact_table_missing"],
+                "markdown_artifact_table_separator_missing": non_json_audit["markdown_artifact_table_separator_missing"],
                 "validation_healthy": validation_healthy,
                 "validation_unhealthy_reasons": validation_unhealthy_reasons,
                 "header_inspect_present": header_health["present"],

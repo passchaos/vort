@@ -2889,6 +2889,11 @@ architecture blindly.
 
 
 
+
+- Tightened Markdown artifact table auditing by requiring a Markdown separator
+  row in every retained Markdown artifact. Dashboard health now rejects files
+  that contain pipe-delimited text without a real table layout.
+
 - Tightened Markdown artifact layout auditing by requiring every retained
   Markdown artifact to contain at least one table row. Dashboard health now
   rejects heading-only or prose-only Markdown artifacts before inventory can pass.

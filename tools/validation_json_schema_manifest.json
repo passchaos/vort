@@ -1807,7 +1807,8 @@
             "markdown_artifact_marker_missing",
             "markdown_artifact_heading_missing",
             "markdown_artifact_heading_not_first",
-            "markdown_artifact_table_missing"
+            "markdown_artifact_table_missing",
+            "markdown_artifact_table_separator_missing"
           ]
         }
       },
@@ -2552,6 +2553,7 @@
         "markdown_artifact_heading_missing": "list",
         "markdown_artifact_heading_not_first": "list",
         "markdown_artifact_table_missing": "list",
+        "markdown_artifact_table_separator_missing": "list",
         "smoke_gate_missing": "list",
         "smoke_gate_required_missing": "list",
         "validation_healthy": "bool",
