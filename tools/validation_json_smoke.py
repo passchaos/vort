@@ -1254,6 +1254,8 @@ def main() -> int:
         assert dashboard["huffman_length_optimal_rows"] == 1
         assert dashboard["huffman_length_non_optimal_rows"] == 0
         assert dashboard["huffman_length_malformed_rows"] == 0
+        assert dashboard["huffman_length_blank_case_rows"] == 0
+        assert dashboard["huffman_length_duplicate_cases"] == []
         assert dashboard["huffman_length_worst_gap_bits"] == 0
         assert dashboard["huffman_length_package_merge_optimal_rows"] == 1
         assert dashboard["huffman_length_package_merge_non_optimal_rows"] == 0

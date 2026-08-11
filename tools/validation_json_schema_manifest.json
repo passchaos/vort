@@ -805,6 +805,8 @@
           "zero": [
             "huffman_length_non_optimal_rows",
             "huffman_length_malformed_rows",
+            "huffman_length_blank_case_rows",
+            "huffman_length_duplicate_cases",
             "huffman_length_worst_gap_bits",
             "huffman_length_package_merge_non_optimal_rows",
             "huffman_length_package_merge_worst_gap_bits",
@@ -2177,6 +2179,8 @@
         "header_inspect_zlib_negative_cases": "int",
         "huffman_length_healthy": "bool",
         "huffman_length_malformed_rows": "int",
+        "huffman_length_blank_case_rows": "int",
+        "huffman_length_duplicate_cases": "list",
         "huffman_length_non_optimal_rows": "int",
         "huffman_length_optimal_rows": "int",
         "huffman_length_package_merge_non_optimal_rows": "int",

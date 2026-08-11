@@ -2869,3 +2869,7 @@ architecture blindly.
   duplicate JSON item rows plus malformed, duplicate, and unknown Markdown rows.
   Dashboard health now rejects sidecar row drift before corrupt-payload coverage
   can pass.
+
+- Tightened Huffman length oracle dashboard health by exposing blank and
+  duplicate CSV case rows alongside malformed/cost checks. Dashboard health now
+  rejects duplicated Huffman oracle case rows before Markdown coverage can pass.

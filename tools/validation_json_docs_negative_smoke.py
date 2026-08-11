@@ -351,6 +351,8 @@ def main() -> int:
                 "huffman_length_optimal_rows": 0,
                 "huffman_length_non_optimal_rows": 0,
                 "huffman_length_malformed_rows": 0,
+                "huffman_length_blank_case_rows": 0,
+                "huffman_length_duplicate_cases": [],
                 "huffman_length_worst_gap_bits": 0,
                 "huffman_length_package_merge_optimal_rows": 0,
                 "huffman_length_package_merge_non_optimal_rows": 0,

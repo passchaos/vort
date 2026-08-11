@@ -4940,7 +4940,7 @@ def main() -> int:
                     "| production | 1/1 | 0 | 0 |",
                     "| package-merge | 1/1 | 0 | 0 |",
                     "| validation | count | detail |",
-                    "| malformed rows | 0 | healthy `True` |",
+                    "| malformed rows | 0 | blank/duplicate cases 0/0, healthy `True` |",
                     "| Markdown summary | 7/7 | present `True` |",
                     "| Markdown case rows | 1/1 | unmatched 0 |",
                 ],

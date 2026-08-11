@@ -479,6 +479,18 @@ def huffman_length_health(artifacts: list[Path]) -> dict:
         except Exception:
             rows = []
         row_count = len(rows)
+        seen_cases: set[str] = set()
+        duplicate_cases: set[str] = set()
+        blank_case_rows = 0
+        for row in rows:
+            case_name = str(row.get("case") or "")
+            if not case_name:
+                blank_case_rows += 1
+                continue
+            if case_name in seen_cases:
+                duplicate_cases.add(case_name)
+            seen_cases.add(case_name)
+        duplicate_case_names = sorted(duplicate_cases)
         optimal_rows = sum(1 for row in rows if row.get("optimal") == "true")
         package_merge_optimal_rows = sum(1 for row in rows if row.get("package_merge_optimal") == "true")
         gap_values = [parse_int(row.get("gap_bits")) for row in rows]
@@ -540,6 +552,8 @@ def huffman_length_health(artifacts: list[Path]) -> dict:
             "optimal_rows": optimal_rows,
             "non_optimal_rows": non_optimal_rows,
             "malformed_rows": malformed_rows,
+            "blank_case_rows": blank_case_rows,
+            "duplicate_cases": duplicate_case_names,
             "worst_gap_bits": worst_gap_bits,
             "package_merge_optimal_rows": package_merge_optimal_rows,
             "package_merge_non_optimal_rows": package_merge_non_optimal_rows,
@@ -553,6 +567,8 @@ def huffman_length_health(artifacts: list[Path]) -> dict:
             "markdown_case_unmatched": markdown_case_unmatched,
             "healthy": row_count > 0
             and malformed_rows == 0
+            and blank_case_rows == 0
+            and not duplicate_case_names
             and non_optimal_rows == 0
             and worst_gap_bits == 0
             and package_merge_non_optimal_rows == 0
@@ -565,6 +581,8 @@ def huffman_length_health(artifacts: list[Path]) -> dict:
         "optimal_rows": 0,
         "non_optimal_rows": 0,
         "malformed_rows": 0,
+        "blank_case_rows": 0,
+        "duplicate_cases": [],
         "worst_gap_bits": 0,
         "package_merge_optimal_rows": 0,
         "package_merge_non_optimal_rows": 0,
@@ -8326,7 +8344,7 @@ def main() -> int:
             "",
             "| validation | count | detail |",
             "| --- | ---: | --- |",
-            f"| malformed rows | {huffman_health['malformed_rows']} | healthy `{huffman_healthy}` |",
+            f"| malformed rows | {huffman_health['malformed_rows']} | blank/duplicate cases {huffman_health['blank_case_rows']}/{len(huffman_health['duplicate_cases'])}, healthy `{huffman_healthy}` |",
             f"| Markdown summary | {huffman_health['markdown_matched']}/{huffman_health['markdown_summary_rows']} | present `{huffman_health['markdown_present']}` |",
             f"| Markdown case rows | {huffman_health['markdown_case_matched']}/{huffman_health['markdown_case_rows']} | unmatched {huffman_health['markdown_case_unmatched']} |",
             "",
@@ -8780,6 +8798,8 @@ def main() -> int:
                 "huffman_length_optimal_rows": huffman_health["optimal_rows"],
                 "huffman_length_non_optimal_rows": huffman_health["non_optimal_rows"],
                 "huffman_length_malformed_rows": huffman_health["malformed_rows"],
+                "huffman_length_blank_case_rows": huffman_health["blank_case_rows"],
+                "huffman_length_duplicate_cases": huffman_health["duplicate_cases"],
                 "huffman_length_worst_gap_bits": huffman_health["worst_gap_bits"],
                 "huffman_length_package_merge_optimal_rows": huffman_health["package_merge_optimal_rows"],
                 "huffman_length_package_merge_non_optimal_rows": huffman_health["package_merge_non_optimal_rows"],
