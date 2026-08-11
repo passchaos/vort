@@ -5329,6 +5329,22 @@ def zstd_compare_health(artifacts: list[Path]) -> dict:
         except Exception:
             return []
 
+    def duplicate_csv_identities(kind: str, rows: list[dict[str, str]]) -> list[str]:
+        seen: set[str] = set()
+        duplicates: set[str] = set()
+        for row in rows:
+            path = str(row.get("path") or "")
+            if not path:
+                continue
+            if kind == "sweep":
+                identity = f"{path}:{row.get('block_len') or ''}"
+            else:
+                identity = path
+            if identity in seen:
+                duplicates.add(f"{kind}:{identity}")
+            seen.add(identity)
+        return sorted(duplicates)
+
     def compare_csv_mismatches(rows: list[dict[str, str]], gate: dict | None) -> int:
         if not isinstance(gate, dict):
             return 1
@@ -5606,6 +5622,11 @@ def zstd_compare_health(artifacts: list[Path]) -> dict:
     compare_rows = csv_rows_for("compare")
     standard_rows = csv_rows_for("standard")
     sweep_rows = csv_rows_for("sweep")
+    csv_duplicate_identities = (
+        duplicate_csv_identities("compare", compare_rows)
+        + duplicate_csv_identities("standard", standard_rows)
+        + duplicate_csv_identities("sweep", sweep_rows)
+    )
     csv_present_count = sum(1 for kind in ("compare", "standard", "sweep") if kind in csv_artifacts)
     csv_expected_present_count = 3
     csv_row_count = len(compare_rows) + len(standard_rows) + len(sweep_rows)
@@ -5645,6 +5666,7 @@ def zstd_compare_health(artifacts: list[Path]) -> dict:
         and csv_present_count == csv_expected_present_count
         and csv_row_count == csv_expected_rows
         and csv_unmatched_rows == 0
+        and not csv_duplicate_identities
         and markdown_present_count == markdown_expected_present_count
         and markdown_summary_rows > 0
         and markdown_unmatched == 0
@@ -5674,6 +5696,7 @@ def zstd_compare_health(artifacts: list[Path]) -> dict:
         "csv_expected_rows": csv_expected_rows,
         "csv_matched_rows": csv_matched_rows,
         "csv_unmatched_rows": csv_unmatched_rows,
+        "csv_duplicate_identities": csv_duplicate_identities,
         "markdown_present_count": markdown_present_count,
         "markdown_expected_present_count": markdown_expected_present_count,
         "markdown_summary_rows": markdown_summary_rows,
@@ -8294,7 +8317,7 @@ def main() -> int:
             f"| compare rows | {zstd_compare['compare_rows']} | native/native-stream ratios {zstd_compare['native_ratio']:.3f}/{zstd_compare['native_stream_ratio']:.3f}, decode-vs-zstd {zstd_compare['decode_vs_zstd']:.3f} |",
             f"| standard rows | {zstd_compare['standard_rows']} | native/native-stream ratios {zstd_compare['standard_native_ratio']:.3f}/{zstd_compare['standard_native_stream_ratio']:.3f}, decode-vs-zstd {zstd_compare['standard_decode_vs_zstd']:.3f} |",
             f"| block sweep rows | {zstd_compare['block_sweep_rows']} | best block {zstd_compare['best_block_len']} bytes, range/full MiB/s {zstd_compare['best_range_decode_mib_s']:.2f}/{zstd_compare['best_range_decode_full_input_mib_s']:.2f} |",
-            f"| CSV drift checks | {zstd_compare['csv_matched_rows']}/{zstd_compare['csv_rows']} | artifacts {zstd_compare['csv_present_count']}/{zstd_compare['csv_expected_present_count']}, unmatched {zstd_compare['csv_unmatched_rows']} |",
+            f"| CSV drift checks | {zstd_compare['csv_matched_rows']}/{zstd_compare['csv_rows']} | artifacts {zstd_compare['csv_present_count']}/{zstd_compare['csv_expected_present_count']}, unmatched {zstd_compare['csv_unmatched_rows']}, duplicate identities {len(zstd_compare['csv_duplicate_identities'])} |",
             f"| Markdown drift checks | {zstd_compare['markdown_matched']}/{zstd_compare['markdown_summary_rows']} | artifacts {zstd_compare['markdown_present_count']}/{zstd_compare['markdown_expected_present_count']}, unmatched {zstd_compare['markdown_unmatched']} |",
             f"| Markdown detail rows | {zstd_compare['markdown_detail_matched']}/{zstd_compare['markdown_detail_rows']} | unmatched {zstd_compare['markdown_detail_unmatched']} |",
             f"| gate health | {1 if zstd_compare['healthy'] else 0} | compare/standard/sweep present {zstd_compare['present']}/{zstd_compare['standard_present']}/{zstd_compare['block_sweep_present']} |",
@@ -9263,6 +9286,7 @@ def main() -> int:
                 "zstd_compare_csv_expected_rows": zstd_compare["csv_expected_rows"],
                 "zstd_compare_csv_matched_rows": zstd_compare["csv_matched_rows"],
                 "zstd_compare_csv_unmatched_rows": zstd_compare["csv_unmatched_rows"],
+                "zstd_compare_csv_duplicate_identities": zstd_compare["csv_duplicate_identities"],
                 "zstd_compare_markdown_present_count": zstd_compare["markdown_present_count"],
                 "zstd_compare_markdown_expected_present_count": zstd_compare["markdown_expected_present_count"],
                 "zstd_compare_markdown_summary_rows": zstd_compare["markdown_summary_rows"],

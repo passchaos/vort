@@ -1160,6 +1160,7 @@
           ],
           "zero": [
             "zstd_compare_csv_unmatched_rows",
+            "zstd_compare_csv_duplicate_identities",
             "zstd_compare_markdown_unmatched",
             "zstd_compare_markdown_detail_unmatched"
           ]
@@ -2063,6 +2064,7 @@
         "zstd_compare_csv_expected_rows": "int",
         "zstd_compare_csv_matched_rows": "int",
         "zstd_compare_csv_unmatched_rows": "int",
+        "zstd_compare_csv_duplicate_identities": "list",
         "zstd_compare_markdown_present_count": "int",
         "zstd_compare_markdown_expected_present_count": "int",
         "zstd_compare_markdown_summary_rows": "int",

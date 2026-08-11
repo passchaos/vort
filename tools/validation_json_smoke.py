@@ -1376,6 +1376,7 @@ def main() -> int:
         assert dashboard["zstd_compare_csv_rows"] == dashboard["zstd_compare_csv_expected_rows"]
         assert dashboard["zstd_compare_csv_matched_rows"] == dashboard["zstd_compare_csv_rows"]
         assert dashboard["zstd_compare_csv_unmatched_rows"] == 0
+        assert dashboard["zstd_compare_csv_duplicate_identities"] == []
         assert dashboard["zstd_compare_markdown_present_count"] == 3
         assert dashboard["zstd_compare_markdown_expected_present_count"] == 3
         assert dashboard["zstd_compare_markdown_summary_rows"] > 0

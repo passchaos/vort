@@ -2873,3 +2873,8 @@ architecture blindly.
 - Tightened Huffman length oracle dashboard health by exposing blank and
   duplicate CSV case rows alongside malformed/cost checks. Dashboard health now
   rejects duplicated Huffman oracle case rows before Markdown coverage can pass.
+
+- Tightened zstd compare dashboard health by exposing duplicate CSV row
+  identities across compare, standard, and block-sweep artifacts. Dashboard
+  health now rejects duplicated zstd-compare CSV identities before aggregate
+  CSV/Markdown drift checks can pass.

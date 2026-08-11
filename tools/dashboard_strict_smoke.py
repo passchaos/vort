@@ -5181,7 +5181,7 @@ def main() -> int:
                     "| compare rows | 2 | native/native-stream ratios 1.180/1.160, decode-vs-zstd 0.710 |",
                     "| standard rows | 3 | native/native-stream ratios 1.130/1.120, decode-vs-zstd 0.740 |",
                     "| block sweep rows | 15 | best block 65536 bytes, range/full MiB/s 3.47/111.00 |",
-                    "| CSV drift checks | 27/27 | artifacts 3/3, unmatched 0 |",
+                    "| CSV drift checks | 27/27 | artifacts 3/3, unmatched 0, duplicate identities 0 |",
                     "| Markdown drift checks | 26/26 | artifacts 3/3, unmatched 0 |",
                     "| gate health | 1 | compare/standard/sweep present True/True/True |",
                 ],

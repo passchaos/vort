@@ -636,6 +636,7 @@ def main() -> int:
                 "zstd_compare_csv_expected_rows": 3,
                 "zstd_compare_csv_matched_rows": 3,
                 "zstd_compare_csv_unmatched_rows": 0,
+                "zstd_compare_csv_duplicate_identities": [],
                 "zstd_compare_markdown_present_count": 3,
                 "zstd_compare_markdown_expected_present_count": 3,
                 "zstd_compare_markdown_summary_rows": 3,
