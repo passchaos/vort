@@ -2691,3 +2691,8 @@ architecture blindly.
   builder variants to retain distinct non-zero checksums. Dashboard health now
   exposes throughput-row and checksum-variant counters before Huffman build
   coverage can pass.
+- Tightened deflate Huffman lookup benchmark dashboard health by recomputing
+  symbols/s and MiB/s from each CSV row and by requiring all decoder variants for
+  each case to preserve the same non-zero checksum. Dashboard health now exposes
+  throughput-row and checksum-match counters before Huffman lookup coverage can
+  pass.

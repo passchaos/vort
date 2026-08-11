@@ -1834,7 +1834,29 @@ def write_deflate_huffman_lookup_bench_csv(path: Path, *, healthy: bool = True) 
         for decoder, lookup_bits in rows:
             if not healthy and case == "dynamic-distance" and decoder == "fast8":
                 continue
-            lines.append(",".join([case, decoder, str(lookup_bits), "131072", "96", "1048576", "1000", "1000.0", "1.0", "12345"]))
+            symbols_per_iter = 131072
+            iterations = 96
+            input_bytes = 1048576
+            elapsed_ns = 1_000_000
+            symbols_per_s = (symbols_per_iter * iterations) / (elapsed_ns / 1_000_000_000.0)
+            mib_per_s = (input_bytes / (1024.0 * 1024.0)) / (elapsed_ns / 1_000_000_000.0)
+            checksum = len(case) * 1_000_000 + symbols_per_iter
+            lines.append(
+                ",".join(
+                    [
+                        case,
+                        decoder,
+                        str(lookup_bits),
+                        str(symbols_per_iter),
+                        str(iterations),
+                        str(input_bytes),
+                        str(elapsed_ns),
+                        f"{symbols_per_s:.2f}",
+                        f"{mib_per_s:.2f}",
+                        str(checksum),
+                    ]
+                )
+            )
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -4794,7 +4816,8 @@ def main() -> int:
                     "## Deflate Huffman lookup benchmark coverage",
                     "| category | count | detail |",
                     "| rows | 21 | expected 21, present `True` |",
-                    "| lookup rows | 21 | positive rows 21 |",
+                    "| lookup rows | 21 | positive/throughput rows 21/21 |",
+                    "| checksum matches | 6 | expected cases 6 |",
                     "| missing pairs | 0 | healthy `True` |",
                 ],
             )
