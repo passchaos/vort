@@ -2877,6 +2877,12 @@ architecture blindly.
 
 
 
+
+- Tightened validation JSON schema coverage by recording schemas observed in
+  retained `zig-out` JSON artifacts, exposing unchecked observed schemas in the
+  dashboard, and failing validation health when any produced schema is not listed
+  in `vort.validation_json_smoke.checked_schemas`.
+
 - Added shared schema/docs/smoke coverage for the retained zlib relaxed report
   gate JSON. The manifest now fixes the gate check key set, enforces boolean
   check values, and recomputes `ok` from nested check values so stale or malformed

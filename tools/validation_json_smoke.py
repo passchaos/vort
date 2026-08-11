@@ -48,6 +48,21 @@ def duplicate_values(rows: list[dict], field: str) -> list[str]:
     return sorted(duplicates)
 
 
+def produced_json_schemas(root: Path) -> list[str]:
+    schemas: set[str] = set()
+    for path in root.glob("*.json"):
+        try:
+            payload = json.loads(path.read_text())
+        except Exception:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        schema = payload.get("schema")
+        if isinstance(schema, str) and schema:
+            schemas.add(schema)
+    return sorted(schemas)
+
+
 def write_huffman_length_csv(path: Path) -> None:
     row = {
         "case": "validation-json-smoke",
@@ -173,6 +188,12 @@ def main() -> int:
         zlib_relaxed_path = ROOT / "zig-out" / "vort-zlib-relaxed-report.json"
         zlib_relaxed_markdown_path = ROOT / "zig-out" / "vort-zlib-relaxed-report.md"
         zlib_relaxed_gate_path = ROOT / "zig-out" / "vort-zlib-relaxed-report-gate.json"
+        zstd_compare_gate_path = ROOT / "zig-out" / "vort-zstd-compare-gate.json"
+        zstd_compare_standard_gate_path = ROOT / "zig-out" / "vort-zstd-compare-standard-gate.json"
+        zstd_compare_block_sweep_gate_path = ROOT / "zig-out" / "vort-zstd-compare-block-sweep-gate.json"
+        native_tier_range_gate_path = ROOT / "zig-out" / "vort-native-tier-range-bench-gate.json"
+        native_tier_range_files_gate_path = ROOT / "zig-out" / "vort-native-tier-range-files-bench-gate.json"
+        native_tier_range_corpus_gate_path = ROOT / "zig-out" / "vort-native-tier-range-corpus-bench-gate.json"
         snappy_report_path = ROOT / "zig-out" / "vort-snappy-report.csv"
         native_allocation_path = ROOT / "zig-out" / "vort-native-allocation-report.json"
         native_allocation_markdown_path = ROOT / "zig-out" / "vort-native-allocation-report.md"
@@ -552,6 +573,41 @@ def main() -> int:
         assert zlib_relaxed_gate["ok"] is True
         assert all(zlib_relaxed_gate["checks"].values())
         validate_value_against_manifest(zlib_relaxed_gate, schemas_def)
+        zstd_compare_gate = json.loads(zstd_compare_gate_path.read_text())
+        assert zstd_compare_gate["schema"] == "vort.zstd_compare_gate"
+        assert zstd_compare_gate["ok"] is True
+        assert zstd_compare_gate["rows"] >= 1
+        assert zstd_compare_gate["data_rows"] >= 1
+        validate_value_against_manifest(zstd_compare_gate, schemas_def)
+        zstd_compare_standard_gate = json.loads(zstd_compare_standard_gate_path.read_text())
+        assert zstd_compare_standard_gate["schema"] == "vort.zstd_compare_gate"
+        assert zstd_compare_standard_gate["ok"] is True
+        assert zstd_compare_standard_gate["rows"] >= 1
+        assert zstd_compare_standard_gate["data_rows"] >= 1
+        validate_value_against_manifest(zstd_compare_standard_gate, schemas_def)
+        zstd_compare_block_sweep_gate = json.loads(zstd_compare_block_sweep_gate_path.read_text())
+        assert zstd_compare_block_sweep_gate["schema"] == "vort.zstd_compare_block_sweep_gate"
+        assert zstd_compare_block_sweep_gate["ok"] is True
+        assert zstd_compare_block_sweep_gate["rows"] >= 1
+        assert zstd_compare_block_sweep_gate["data_rows"] >= 1
+        assert zstd_compare_block_sweep_gate["block_len_count"] == len(zstd_compare_block_sweep_gate["block_lens"])
+        validate_value_against_manifest(zstd_compare_block_sweep_gate, schemas_def)
+        native_tier_range_gate = json.loads(native_tier_range_gate_path.read_text())
+        native_tier_range_files_gate = json.loads(native_tier_range_files_gate_path.read_text())
+        native_tier_range_corpus_gate = json.loads(native_tier_range_corpus_gate_path.read_text())
+        native_tier_range_gates = [
+            native_tier_range_gate,
+            native_tier_range_files_gate,
+            native_tier_range_corpus_gate,
+        ]
+        assert {gate["source"] for gate in native_tier_range_gates} == {"built_in", "project_files", "standard_corpus"}
+        for gate in native_tier_range_gates:
+            assert gate["schema"] == "vort.native_tier_range_bench_gate"
+            assert gate["ok"] is True
+            assert gate["rows"] >= 1
+            assert gate["fixture_count"] == len(gate["fixtures"])
+            assert gate["tier_count"] == len(gate["tiers"])
+            validate_value_against_manifest(gate, schemas_def)
         with checksum_bench_path.open(newline="") as f:
             checksum_bench_rows = list(csv.DictReader(f))
         assert len(checksum_bench_rows) == 21
@@ -851,26 +907,28 @@ def main() -> int:
         assert docs_negative["case_count"] >= 1
         assert all(row["matched"] is True for row in docs_negative["cases"])
         validate_value_against_manifest(docs_negative, schemas_def)
+        observed_schemas = sorted(set(produced_json_schemas(ROOT / "zig-out")) | {"vort.validation_json_smoke"})
         validation_json_dashboard_smoke = {
             "schema": "vort.validation_json_smoke",
             "schema_version": 1,
             "ok": True,
-            "checked_schemas": [
-                ok["schema"],
-                report["schema"],
-                corrupt["schema"],
-                dashboard_strict["schema"],
-                docs_negative["schema"],
-                "vort.dashboard_index",
-                "vort.header_inspect_smoke",
-                zlib_relaxed_gate["schema"],
-            ],
+            "checked_schemas": observed_schemas,
+            "observed_schema_count": len(observed_schemas),
+            "observed_schemas": observed_schemas,
+            "unchecked_observed_schemas": [],
+            "unchecked_observed_schema_count": 0,
             "cli_success_ok": ok["ok"],
             "cli_failure_ok": failure["ok"],
             "cli_failure_hint": failure["recoverability_hint"],
             "report_rows": report["rows"],
             "corrupt_rows": corrupt["rows"],
         }
+        validation_json_dashboard_smoke["unchecked_observed_schemas"] = sorted(
+            set(observed_schemas) - set(validation_json_dashboard_smoke["checked_schemas"])
+        )
+        validation_json_dashboard_smoke["unchecked_observed_schema_count"] = len(
+            validation_json_dashboard_smoke["unchecked_observed_schemas"]
+        )
         (root / "vort-validation-json-smoke.json").write_text(json.dumps(validation_json_dashboard_smoke, indent=2, sort_keys=True) + "\n")
         validate_value_against_manifest(validation_json_dashboard_smoke, schemas_def)
 
@@ -2058,6 +2116,7 @@ def main() -> int:
         )
         assert strict_missing.returncode != 0
         assert "dashboard_index_missing_header_inspect=1" in strict_missing.stdout
+        observed_schemas = sorted(set(produced_json_schemas(ROOT / "zig-out")) | {"vort.validation_json_smoke"})
         summary = {
             "schema": "vort.validation_json_smoke",
             "schema_version": 1,
@@ -2093,6 +2152,9 @@ def main() -> int:
                 native_summary_error_payloads[1]["schema"],
                 zlib_relaxed["schema"],
                 zlib_relaxed_gate["schema"],
+                zstd_compare_gate["schema"],
+                zstd_compare_block_sweep_gate["schema"],
+                native_tier_range_gate["schema"],
                 png_scratch["schema"],
                 fuzz_report["schema"],
                 fuzz_coverage["schema"],
@@ -2103,6 +2165,10 @@ def main() -> int:
                 dashboard_config_index_negative["schema"],
                 dashboard_config_index_smoke["schema"],
                 dashboard["schema"],
+                validation_json_dashboard_smoke["schema"],
+                native_allocation["schema"],
+                native_allocation_smoke["schema"],
+                native_allocation_negative_smoke["schema"],
                 native_tier_corpus_discovery["schema"],
                 header_summary["schema"],
                 required_workflows["schema"],
@@ -2112,12 +2178,18 @@ def main() -> int:
                 zlib_header["schema"],
                 gzip_header["schema"],
             ],
+            "observed_schema_count": len(observed_schemas),
+            "observed_schemas": observed_schemas,
+            "unchecked_observed_schemas": [],
+            "unchecked_observed_schema_count": 0,
             "cli_success_ok": ok["ok"],
             "cli_failure_ok": failure["ok"],
             "cli_failure_hint": failure["recoverability_hint"],
             "report_rows": report["rows"],
             "corrupt_rows": corrupt["rows"],
         }
+        summary["unchecked_observed_schemas"] = sorted(set(observed_schemas) - set(summary["checked_schemas"]))
+        summary["unchecked_observed_schema_count"] = len(summary["unchecked_observed_schemas"])
         validate_value_against_manifest(summary, schemas_def)
 
     if summary_path is not None:

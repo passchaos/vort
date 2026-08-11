@@ -614,6 +614,11 @@ Important fields:
 - `schema_version`: `1`
 - `ok`: whether the smoke passed
 - `checked_schemas`: schemas successfully parsed
+- `observed_schemas`, `observed_schema_count`: schemas observed in retained
+  validation JSON artifacts during the smoke
+- `unchecked_observed_schemas`, `unchecked_observed_schema_count`: observed
+  schemas not present in `checked_schemas`; dashboard health requires this to be
+  empty
 - `cli_success_ok`, `cli_failure_ok`, `cli_failure_hint`
 - `report_rows`, `corrupt_rows`
 
@@ -657,8 +662,27 @@ Example:
     "vort.zlib_header_info",
     "vort.zlib_relaxed_report",
     "vort.zlib_relaxed_report_gate",
+    "vort.zstd_compare_gate",
+    "vort.zstd_compare_block_sweep_gate",
+    "vort.native_allocation_report",
+    "vort.native_allocation_smoke",
+    "vort.native_allocation_negative_smoke",
+    "vort.native_tier_range_bench_gate",
+    "vort.validation_json_smoke",
     "vort.gzip_header_info"
   ],
+  "observed_schema_count": 7,
+  "observed_schemas": [
+    "vort.validation_report",
+    "vort.sidecar_verify_report",
+    "vort.sidecar_corrupt_smoke_report",
+    "vort.zlib_relaxed_report",
+    "vort.zlib_relaxed_report_gate",
+    "vort.zstd_compare_gate",
+    "vort.validation_json_smoke"
+  ],
+  "unchecked_observed_schema_count": 0,
+  "unchecked_observed_schemas": [],
   "cli_success_ok": true,
   "cli_failure_ok": false,
   "cli_failure_hint": "payload_corrupt",
@@ -2635,6 +2659,13 @@ Top-level fields:
   `validation_json_checked_schema_count`,
   `validation_json_checked_schema_unique_count`,
   `validation_json_checked_schema_duplicate_count`,
+  `validation_json_observed_schema_count`,
+  `validation_json_observed_schema_rows`,
+  `validation_json_observed_schema_count_mismatch`,
+  `validation_json_unchecked_observed_schema_count`,
+  `validation_json_unchecked_observed_schema_rows`,
+  `validation_json_unchecked_observed_schema_count_mismatch`,
+  `validation_json_unchecked_observed_schemas`,
   `validation_json_cli_success_ok`,
   `validation_json_cli_failure_ok`, `validation_json_cli_failure_hint`,
   `validation_json_report_rows`, `validation_json_corrupt_rows`,
@@ -3387,6 +3418,13 @@ Example:
   "validation_json_checked_schema_count": 0,
   "validation_json_checked_schema_unique_count": 0,
   "validation_json_checked_schema_duplicate_count": 0,
+  "validation_json_observed_schema_count": 0,
+  "validation_json_observed_schema_rows": 0,
+  "validation_json_observed_schema_count_mismatch": 0,
+  "validation_json_unchecked_observed_schema_count": 0,
+  "validation_json_unchecked_observed_schema_rows": 0,
+  "validation_json_unchecked_observed_schema_count_mismatch": 0,
+  "validation_json_unchecked_observed_schemas": [],
   "validation_json_cli_success_ok": false,
   "validation_json_cli_failure_ok": false,
   "validation_json_cli_failure_hint": "",
