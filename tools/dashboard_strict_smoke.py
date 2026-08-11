@@ -2730,6 +2730,14 @@ def write_snappy_report_csv(path: Path, *, healthy: bool = True) -> None:
     }
     modes = ("raw_block", "framed", "raw_block_reusable", "framed_reusable")
     lines = [",".join(columns)]
+    iterations = 25
+    encode_ns = 1_000_000
+    decode_ns = 1_000_000
+
+    def throughput_mib_s(input_bytes: int, elapsed_ns: int) -> str:
+        mib = (input_bytes * iterations) / (1024.0 * 1024.0)
+        return f"{mib / (elapsed_ns / 1_000_000_000.0):.4f}"
+
     for mode in modes:
         for case, (input_bytes, raw_bytes, framed_bytes) in cases.items():
             encoded_bytes = raw_bytes if "raw_block" in mode else framed_bytes
@@ -2744,11 +2752,11 @@ def write_snappy_report_csv(path: Path, *, healthy: bool = True) -> None:
                         str(input_bytes),
                         str(encoded_bytes),
                         f"{ratio:.6f}",
-                        "25",
-                        "1000",
-                        "1000",
-                        "1.0",
-                        "1.0",
+                        str(iterations),
+                        str(encode_ns),
+                        str(decode_ns),
+                        throughput_mib_s(input_bytes, encode_ns),
+                        throughput_mib_s(input_bytes, decode_ns),
                         "12345",
                     ]
                 )
@@ -4959,8 +4967,9 @@ def main() -> int:
                     "## Snappy report coverage",
                     "| category | count | detail |",
                     "| rows | 20 | expected 20, present `True` |",
-                    "| positive timing rows | 20 | repetitive shrunk 4 |",
-                    "| reusable size matches | 5 | missing pairs 0, healthy `True` |",
+                    "| positive timing rows | 20 | ratio/throughput 20/20 |",
+                    "| repetitive shrunk | 4 | expected modes 4 |",
+                    "| reusable size/checksum matches | 5/5 | missing pairs 0, healthy `True` |",
                 ],
             )
         )

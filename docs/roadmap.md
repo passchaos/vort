@@ -2667,3 +2667,8 @@ architecture blindly.
   retained discovery JSON selected labels and byte sizes against the standard
   corpus range summary and CSV companion. Dashboard health now exposes discovery
   mismatch counters before corpus-discovery coverage can pass.
+- Tightened Snappy benchmark dashboard health by recomputing ratio and encode/decode
+  throughput from the retained CSV rows and by requiring reusable raw/framed
+  outputs to preserve both size and checksum per fixture. Dashboard health now
+  exposes ratio, throughput, and reusable-checksum counters before Snappy coverage
+  can pass.

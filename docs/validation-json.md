@@ -2900,8 +2900,11 @@ Top-level fields:
   `zlib_relaxed_markdown_matched`, `zlib_relaxed_markdown_unmatched`
 - `snappy_report_present`, `snappy_report_healthy`, `snappy_report_rows`,
   `snappy_report_expected_rows`, `snappy_report_positive_timing_rows`,
+  `snappy_report_ratio_rows`, `snappy_report_throughput_rows`,
   `snappy_report_repetitive_shrunk_rows`,
-  `snappy_report_reusable_size_matched_cases`, `snappy_report_missing_pairs`
+  `snappy_report_reusable_size_matched_cases`,
+  `snappy_report_reusable_checksum_matched_cases`,
+  `snappy_report_missing_pairs`
 - `zstd_compare_present`, `zstd_compare_standard_present`,
   `zstd_compare_block_sweep_present`, `zstd_compare_healthy`,
   `zstd_compare_rows`, `zstd_compare_standard_rows`,
@@ -3599,8 +3602,11 @@ Example:
   "snappy_report_rows": 0,
   "snappy_report_expected_rows": 0,
   "snappy_report_positive_timing_rows": 0,
+  "snappy_report_ratio_rows": 0,
+  "snappy_report_throughput_rows": 0,
   "snappy_report_repetitive_shrunk_rows": 0,
   "snappy_report_reusable_size_matched_cases": 0,
+  "snappy_report_reusable_checksum_matched_cases": 0,
   "snappy_report_missing_pairs": [],
   "zstd_compare_present": false,
   "zstd_compare_standard_present": false,

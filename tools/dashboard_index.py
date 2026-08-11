@@ -2746,8 +2746,11 @@ def snappy_report_health(artifacts: list[Path]) -> dict:
 
         seen: set[tuple[str, str]] = set()
         positive_timing_rows = 0
+        ratio_rows = 0
+        throughput_rows = 0
         repetitive_shrunk_rows = 0
         reusable_size_matched_cases = 0
+        reusable_checksum_matched_cases = 0
         rows_by_pair: dict[tuple[str, str], dict[str, str]] = {}
         for row in rows:
             mode = str(row.get("mode") or "")
@@ -2760,12 +2763,21 @@ def snappy_report_health(artifacts: list[Path]) -> dict:
                 input_bytes = int(row.get("input_bytes") or "0")
                 encoded_bytes = int(row.get("encoded_bytes") or "0")
                 ratio = float(row.get("ratio") or "0")
+                iterations = int(row.get("iterations") or "0")
+                encode_ns = int(row.get("encode_ns") or "0")
+                decode_ns = int(row.get("decode_ns") or "0")
                 encode_mib_s = float(row.get("encode_mib_s") or "0")
                 decode_mib_s = float(row.get("decode_mib_s") or "0")
             except ValueError:
                 continue
             if input_bytes > 0 and encoded_bytes > 0 and ratio > 0.0 and encode_mib_s > 0.0 and decode_mib_s > 0.0:
                 positive_timing_rows += 1
+            if input_bytes > 0 and abs(ratio - (encoded_bytes / input_bytes)) <= 0.000001:
+                ratio_rows += 1
+            expected_encode_mib_s = ((input_bytes * iterations) / (1024.0 * 1024.0)) / (encode_ns / 1_000_000_000.0) if encode_ns > 0 else 0.0
+            expected_decode_mib_s = ((input_bytes * iterations) / (1024.0 * 1024.0)) / (decode_ns / 1_000_000_000.0) if decode_ns > 0 else 0.0
+            if abs(encode_mib_s - expected_encode_mib_s) <= 0.0001 and abs(decode_mib_s - expected_decode_mib_s) <= 0.0001:
+                throughput_rows += 1
             if case == "repetitive" and pair in expected_pairs and ratio < 0.35:
                 repetitive_shrunk_rows += 1
 
@@ -2781,10 +2793,16 @@ def snappy_report_health(artifacts: list[Path]) -> dict:
                 framed_size = int(framed.get("encoded_bytes") or "0")
                 raw_reusable_size = int(raw_reusable.get("encoded_bytes") or "0")
                 framed_reusable_size = int(framed_reusable.get("encoded_bytes") or "0")
+                raw_checksum = int(raw.get("checksum") or "0")
+                framed_checksum = int(framed.get("checksum") or "0")
+                raw_reusable_checksum = int(raw_reusable.get("checksum") or "0")
+                framed_reusable_checksum = int(framed_reusable.get("checksum") or "0")
             except ValueError:
                 continue
             if raw_size == raw_reusable_size and framed_size == framed_reusable_size and framed_size >= raw_size:
                 reusable_size_matched_cases += 1
+            if raw_checksum == raw_reusable_checksum and framed_checksum == framed_reusable_checksum and raw_checksum > 0 and framed_checksum > 0:
+                reusable_checksum_matched_cases += 1
 
         missing_pairs = sorted(f"{mode}:{case}" for mode, case in expected_pairs - seen)
         row_count = len(rows)
@@ -2792,8 +2810,11 @@ def snappy_report_health(artifacts: list[Path]) -> dict:
             row_count == len(expected_pairs)
             and not missing_pairs
             and positive_timing_rows == row_count
+            and ratio_rows == row_count
+            and throughput_rows == row_count
             and repetitive_shrunk_rows == len(expected_modes)
             and reusable_size_matched_cases == len(expected_cases)
+            and reusable_checksum_matched_cases == len(expected_cases)
         )
         return {
             "present": True,
@@ -2801,8 +2822,11 @@ def snappy_report_health(artifacts: list[Path]) -> dict:
             "row_count": row_count,
             "expected_rows": len(expected_pairs),
             "positive_timing_rows": positive_timing_rows,
+            "ratio_rows": ratio_rows,
+            "throughput_rows": throughput_rows,
             "repetitive_shrunk_rows": repetitive_shrunk_rows,
             "reusable_size_matched_cases": reusable_size_matched_cases,
+            "reusable_checksum_matched_cases": reusable_checksum_matched_cases,
             "missing_pairs": missing_pairs,
         }
     return {
@@ -2811,8 +2835,11 @@ def snappy_report_health(artifacts: list[Path]) -> dict:
         "row_count": 0,
         "expected_rows": len(expected_pairs),
         "positive_timing_rows": 0,
+        "ratio_rows": 0,
+        "throughput_rows": 0,
         "repetitive_shrunk_rows": 0,
         "reusable_size_matched_cases": 0,
+        "reusable_checksum_matched_cases": 0,
         "missing_pairs": [],
     }
 
@@ -6598,7 +6625,7 @@ def main() -> int:
         f"- native summary error negative smoke: cases {native_summary_error_negative['case_count']}, healthy `{native_summary_error_negative_healthy}`",
         f"- lz4 native summary: frames/skippable/checksum/block-checksum/dictionary/content-size/blocks raw/compressed {lz4_native_summary['frame_count']}/{lz4_native_summary['skippable_frame_count']}/{lz4_native_summary['checksum_frame_count']}/{lz4_native_summary['block_checksum_frame_count']}/{lz4_native_summary['dictionary_id_frame_count']}/{lz4_native_summary['content_size_frame_count']}/{lz4_native_summary['block_count']} {lz4_native_summary['raw_block_count']}/{lz4_native_summary['compressed_block_count']}, declared/payload/skippable bytes {lz4_native_summary['declared_content_bytes']}/{lz4_native_summary['payload_bytes']}/{lz4_native_summary['skippable_payload_bytes']}, slack/mismatch {lz4_native_summary['declared_payload_slack_bytes']}/{lz4_native_summary['block_count_mismatch']}, healthy `{lz4_native_summary_healthy}`",
         f"- zstd native summary: frames/skippable/checksum/dictionary/content-size/blocks raw/rle/compressed {zstd_native_summary['frame_count']}/{zstd_native_summary['skippable_frame_count']}/{zstd_native_summary['checksum_frame_count']}/{zstd_native_summary['dictionary_id_frame_count']}/{zstd_native_summary['content_size_frame_count']}/{zstd_native_summary['block_count']} {zstd_native_summary['raw_block_count']}/{zstd_native_summary['rle_block_count']}/{zstd_native_summary['compressed_block_count']}, declared/payload/skippable bytes {zstd_native_summary['declared_content_bytes']}/{zstd_native_summary['payload_bytes']}/{zstd_native_summary['skippable_payload_bytes']}, slack/mismatch {zstd_native_summary['declared_payload_slack_bytes']}/{zstd_native_summary['block_count_mismatch']}, healthy `{zstd_native_summary_healthy}`",
-        f"- Snappy report: {snappy_report['row_count']}/{snappy_report['expected_rows']} rows, positive timing {snappy_report['positive_timing_rows']}, repetitive shrunk {snappy_report['repetitive_shrunk_rows']}, reusable size matches {snappy_report['reusable_size_matched_cases']}, healthy `{snappy_report_healthy}`",
+        f"- Snappy report: {snappy_report['row_count']}/{snappy_report['expected_rows']} rows, positive/ratio/throughput {snappy_report['positive_timing_rows']}/{snappy_report['ratio_rows']}/{snappy_report['throughput_rows']}, repetitive shrunk {snappy_report['repetitive_shrunk_rows']}, reusable size/checksum matches {snappy_report['reusable_size_matched_cases']}/{snappy_report['reusable_checksum_matched_cases']}, healthy `{snappy_report_healthy}`",
         f"- checksum bench: {checksum_bench['row_count']}/{checksum_bench['expected_rows']} rows, workload {checksum_bench['workload_rows']}, positive {checksum_bench['positive_rows']}, mix groups crc32/crc32c {checksum_bench['crc32_mix_groups']}/{checksum_bench['crc32c_mix_groups']}, healthy `{checksum_bench_healthy}`",
         f"- chunk cursor bench: {chunk_cursor_bench['row_count']}/{chunk_cursor_bench['expected_rows']} rows, shape {chunk_cursor_bench['shape_rows']}, positive {chunk_cursor_bench['positive_rows']}, healthy `{chunk_cursor_bench_healthy}`",
         f"- deflate match-copy bench: {deflate_match_copy_bench['row_count']}/{deflate_match_copy_bench['expected_rows']} rows, classes {deflate_match_copy_bench['expected_class_rows']}, positive {deflate_match_copy_bench['positive_rows']}, healthy `{deflate_match_copy_bench_healthy}`",
@@ -6791,8 +6818,9 @@ def main() -> int:
             "| category | count | detail |",
             "| --- | ---: | --- |",
             f"| rows | {snappy_report['row_count']} | expected {snappy_report['expected_rows']}, present `{snappy_report['present']}` |",
-            f"| positive timing rows | {snappy_report['positive_timing_rows']} | repetitive shrunk {snappy_report['repetitive_shrunk_rows']} |",
-            f"| reusable size matches | {snappy_report['reusable_size_matched_cases']} | missing pairs {len(snappy_report['missing_pairs'])}, healthy `{snappy_report['healthy']}` |",
+            f"| positive timing rows | {snappy_report['positive_timing_rows']} | ratio/throughput {snappy_report['ratio_rows']}/{snappy_report['throughput_rows']} |",
+            f"| repetitive shrunk | {snappy_report['repetitive_shrunk_rows']} | expected modes 4 |",
+            f"| reusable size/checksum matches | {snappy_report['reusable_size_matched_cases']}/{snappy_report['reusable_checksum_matched_cases']} | missing pairs {len(snappy_report['missing_pairs'])}, healthy `{snappy_report['healthy']}` |",
             "",
         ]
     )
@@ -7673,8 +7701,11 @@ def main() -> int:
                 "snappy_report_rows": snappy_report["row_count"],
                 "snappy_report_expected_rows": snappy_report["expected_rows"],
                 "snappy_report_positive_timing_rows": snappy_report["positive_timing_rows"],
+                "snappy_report_ratio_rows": snappy_report["ratio_rows"],
+                "snappy_report_throughput_rows": snappy_report["throughput_rows"],
                 "snappy_report_repetitive_shrunk_rows": snappy_report["repetitive_shrunk_rows"],
                 "snappy_report_reusable_size_matched_cases": snappy_report["reusable_size_matched_cases"],
+                "snappy_report_reusable_checksum_matched_cases": snappy_report["reusable_checksum_matched_cases"],
                 "snappy_report_missing_pairs": snappy_report["missing_pairs"],
                 "checksum_bench_present": checksum_bench["present"],
                 "checksum_bench_healthy": checksum_bench["healthy"],
