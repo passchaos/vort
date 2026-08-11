@@ -5974,12 +5974,21 @@ def native_summary_error_negative_health(artifacts: list[Path]) -> dict:
         if data.get("schema") != "vort.native_summary_error_negative_smoke":
             continue
         case_count = int(data.get("case_count") or 0)
+        cases = data.get("cases") if isinstance(data.get("cases"), list) else []
+        row_count = len(cases)
+        matched = sum(1 for row in cases if isinstance(row, dict) and row.get("matched") is True)
+        expected_failures = sum(1 for row in cases if isinstance(row, dict) and row.get("expected_failure") is True)
+        count_mismatch = abs(case_count - row_count)
         return {
             "present": True,
-            "healthy": data.get("ok") is True and case_count >= 3,
+            "healthy": data.get("ok") is True and case_count >= 3 and count_mismatch == 0 and matched == case_count and expected_failures == case_count,
             "case_count": case_count,
+            "rows": row_count,
+            "count_mismatch": count_mismatch,
+            "matched": matched,
+            "expected_failures": expected_failures,
         }
-    return {"present": False, "healthy": False, "case_count": 0}
+    return {"present": False, "healthy": False, "case_count": 0, "rows": 0, "count_mismatch": 0, "matched": 0, "expected_failures": 0}
 
 def artifact_metadata(path: Path) -> str:
     stat = path.stat()
@@ -7034,7 +7043,7 @@ def main() -> int:
         f"- native codec probes: {native_codec_health['ok_probe_count']}/{native_codec_health['probe_count']} probes ok, capabilities {native_codec_health['ok_capability_count']}/{native_codec_health['capability_count']} ok, cases total/lib/incremental/chunked/reusable-chunked/fse-repeat {native_codec_health['total_cases']}/{native_codec_health['lib_generated_cases']}/{native_codec_health['incremental_cases']}/{native_codec_health['chunked_cases']}/{native_codec_health['reusable_chunked_cases']}/{native_codec_health['fse_repeat_cases']}, healthy `{native_codec_health['healthy']}`",
         f"- native codec probe Markdown: {native_codec_health['markdown_matched']}/{native_codec_health['markdown_rows']} checks matched, unmatched {native_codec_health['markdown_unmatched']}",
         f"- native summary errors: cases total/lz4/zstd/checksum/corrupt/truncated/magic/skippable/body/checksum-phase/frame {native_summary_error_health['case_count']}/{native_summary_error_health['lz4_case_count']}/{native_summary_error_health['zstd_case_count']}/{native_summary_error_health['checksum_mismatch_count']}/{native_summary_error_health['corrupt_frame_count']}/{native_summary_error_health['truncated_frame_count']}/{native_summary_error_health['magic_phase_count']}/{native_summary_error_health['skippable_payload_phase_count']}/{native_summary_error_health['frame_body_phase_count']}/{native_summary_error_health['frame_checksum_phase_count']}/{native_summary_error_health['frame_phase_count']}, drift case/codec/error/phase/codec-error/codec-phase/offset {native_summary_error_health['case_count_mismatch']}/{native_summary_error_health['codec_case_count_mismatch']}/{native_summary_error_health['error_count_mismatch']}/{native_summary_error_health['phase_count_mismatch']}/{native_summary_error_health['codec_error_count_mismatch']}/{native_summary_error_health['codec_phase_count_mismatch']}/{native_summary_error_health['offset_range_mismatch']}, healthy `{native_summary_error_healthy}`",
-        f"- native summary error negative smoke: cases {native_summary_error_negative['case_count']}, healthy `{native_summary_error_negative_healthy}`",
+        f"- native summary error negative smoke: cases {native_summary_error_negative['case_count']}, rows/matched/expected {native_summary_error_negative['rows']}/{native_summary_error_negative['matched']}/{native_summary_error_negative['expected_failures']}, mismatch {native_summary_error_negative['count_mismatch']}, healthy `{native_summary_error_negative_healthy}`",
         f"- lz4 native summary: frames/skippable/checksum/block-checksum/dictionary/content-size/blocks raw/compressed {lz4_native_summary['frame_count']}/{lz4_native_summary['skippable_frame_count']}/{lz4_native_summary['checksum_frame_count']}/{lz4_native_summary['block_checksum_frame_count']}/{lz4_native_summary['dictionary_id_frame_count']}/{lz4_native_summary['content_size_frame_count']}/{lz4_native_summary['block_count']} {lz4_native_summary['raw_block_count']}/{lz4_native_summary['compressed_block_count']}, declared/payload/skippable bytes {lz4_native_summary['declared_content_bytes']}/{lz4_native_summary['payload_bytes']}/{lz4_native_summary['skippable_payload_bytes']}, slack/mismatch {lz4_native_summary['declared_payload_slack_bytes']}/{lz4_native_summary['block_count_mismatch']}, healthy `{lz4_native_summary_healthy}`",
         f"- zstd native summary: frames/skippable/checksum/dictionary/content-size/blocks raw/rle/compressed {zstd_native_summary['frame_count']}/{zstd_native_summary['skippable_frame_count']}/{zstd_native_summary['checksum_frame_count']}/{zstd_native_summary['dictionary_id_frame_count']}/{zstd_native_summary['content_size_frame_count']}/{zstd_native_summary['block_count']} {zstd_native_summary['raw_block_count']}/{zstd_native_summary['rle_block_count']}/{zstd_native_summary['compressed_block_count']}, declared/payload/skippable bytes {zstd_native_summary['declared_content_bytes']}/{zstd_native_summary['payload_bytes']}/{zstd_native_summary['skippable_payload_bytes']}, slack/mismatch {zstd_native_summary['declared_payload_slack_bytes']}/{zstd_native_summary['block_count_mismatch']}, healthy `{zstd_native_summary_healthy}`",
         f"- Snappy report: {snappy_report['row_count']}/{snappy_report['expected_rows']} rows, positive/ratio/throughput {snappy_report['positive_timing_rows']}/{snappy_report['ratio_rows']}/{snappy_report['throughput_rows']}, repetitive shrunk {snappy_report['repetitive_shrunk_rows']}, reusable size/checksum matches {snappy_report['reusable_size_matched_cases']}/{snappy_report['reusable_checksum_matched_cases']}, healthy `{snappy_report_healthy}`",
@@ -8424,6 +8433,10 @@ def main() -> int:
                 "native_summary_error_negative_present": native_summary_error_negative["present"],
                 "native_summary_error_negative_healthy": native_summary_error_negative_healthy,
                 "native_summary_error_negative_case_count": native_summary_error_negative["case_count"],
+                "native_summary_error_negative_rows": native_summary_error_negative["rows"],
+                "native_summary_error_negative_count_mismatch": native_summary_error_negative["count_mismatch"],
+                "native_summary_error_negative_matched": native_summary_error_negative["matched"],
+                "native_summary_error_negative_expected_failures": native_summary_error_negative["expected_failures"],
                 "lz4_native_summary_present": lz4_native_summary["present"],
                 "lz4_native_summary_healthy": lz4_native_summary_healthy,
                 "lz4_native_summary_frame_count": lz4_native_summary["frame_count"],

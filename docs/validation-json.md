@@ -3042,7 +3042,11 @@ Top-level fields:
   `native_summary_error_zstd_missing_phases`
 - `native_summary_error_negative_present`,
   `native_summary_error_negative_healthy`,
-  `native_summary_error_negative_case_count`
+  `native_summary_error_negative_case_count`,
+  `native_summary_error_negative_rows`,
+  `native_summary_error_negative_count_mismatch`,
+  `native_summary_error_negative_matched`,
+  `native_summary_error_negative_expected_failures`
 - `lz4_native_summary_present`, `lz4_native_summary_healthy`,
   `lz4_native_summary_frame_count`,
   `lz4_native_summary_skippable_frame_count`,
@@ -3812,6 +3816,10 @@ Example:
   "native_summary_error_negative_present": false,
   "native_summary_error_negative_healthy": false,
   "native_summary_error_negative_case_count": 0,
+  "native_summary_error_negative_rows": 0,
+  "native_summary_error_negative_count_mismatch": 0,
+  "native_summary_error_negative_matched": 0,
+  "native_summary_error_negative_expected_failures": 0,
   "lz4_native_summary_present": false,
   "lz4_native_summary_healthy": false,
   "lz4_native_summary_frame_count": 0,

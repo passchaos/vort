@@ -1748,6 +1748,10 @@ def main() -> int:
         assert dashboard["native_summary_error_negative_present"] is True
         assert dashboard["native_summary_error_negative_healthy"] is True
         assert dashboard["native_summary_error_negative_case_count"] == native_summary_error_negative["case_count"]
+        assert dashboard["native_summary_error_negative_rows"] == len(native_summary_error_negative["cases"])
+        assert dashboard["native_summary_error_negative_count_mismatch"] == 0
+        assert dashboard["native_summary_error_negative_matched"] == native_summary_error_negative["case_count"]
+        assert dashboard["native_summary_error_negative_expected_failures"] == native_summary_error_negative["case_count"]
         assert "## Native summary error codec coverage" in dashboard_markdown
         assert "| codec | cases | errors | phases | required phases | missing phases |" in dashboard_markdown
         for codec in ("lz4", "zstd"):

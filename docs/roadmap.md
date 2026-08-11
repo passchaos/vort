@@ -2736,3 +2736,7 @@ architecture blindly.
   bytes to match decoded payload bytes exactly for retained LZ4 and Zstd
   summaries. Schema relations now reject declared/payload slack before native
   stream summary coverage can pass.
+- Tightened native summary error negative-smoke dashboard health by requiring
+  retained negative rows to match the declared case count and to be both matched
+  and expected-failure rows. Dashboard health now exposes negative row/count
+  drift counters before malformed-summary guardrail coverage can pass.

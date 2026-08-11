@@ -3772,6 +3772,11 @@ def write_native_summary_error_dashboard(path: Path, *, healthy: bool = True) ->
 
 
 def write_native_summary_error_negative_smoke(path: Path, *, healthy: bool = True) -> None:
+    cases = [
+        ("bad_error_counts", "error_counts mismatch"),
+        ("bad_phase_counts", "phase_counts mismatch"),
+        ("bad_case_count", "case_count mismatch"),
+    ]
     payload = {
         "schema": "vort.native_summary_error_negative_smoke",
         "schema_version": 1,
@@ -3779,12 +3784,13 @@ def write_native_summary_error_negative_smoke(path: Path, *, healthy: bool = Tru
         "case_count": 3 if healthy else 0,
         "cases": [
             {
-                "name": "bad_error_counts",
+                "name": name,
                 "expected_failure": True,
-                "expected_error": "error_counts mismatch",
-                "actual_error": "error_counts mismatch" if healthy else "<success>",
+                "expected_error": expected_error,
+                "actual_error": expected_error if healthy else "<success>",
                 "matched": healthy,
             }
+            for name, expected_error in cases
         ],
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
@@ -4510,6 +4516,10 @@ def main() -> int:
         assert manifest["native_summary_error_negative_present"] is True
         assert manifest["native_summary_error_negative_healthy"] is True
         assert manifest["native_summary_error_negative_case_count"] == 3
+        assert manifest["native_summary_error_negative_rows"] == 3
+        assert manifest["native_summary_error_negative_count_mismatch"] == 0
+        assert manifest["native_summary_error_negative_matched"] == 3
+        assert manifest["native_summary_error_negative_expected_failures"] == 3
         assert manifest["lz4_native_summary_present"] is True
         assert manifest["lz4_native_summary_healthy"] is True
         assert manifest["zstd_native_summary_present"] is True
