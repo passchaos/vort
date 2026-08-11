@@ -5392,6 +5392,8 @@ def python_zlib_diff_health(artifacts: list[Path]) -> dict:
         dictionary_encode_cases = zlib_dict_encode_cases + raw_dict_encode_cases
         malformed_cases = malformed_wrapper_cases + malformed_deflate_cases
         cli_total_outcomes = cli_successes + expected_failures
+        inline_payloads = max(0, payloads - large_file_payloads)
+        large_file_payload_overflow = max(0, large_file_payloads - payloads)
         file_hex_expected_cases = large_file_payloads * 3
         file_hex_case_mismatch = abs(file_hex_encode_cases - file_hex_expected_cases)
         cli_success_floor = payloads + file_hex_encode_cases + dictionary_encode_cases
@@ -5400,11 +5402,40 @@ def python_zlib_diff_health(artifacts: list[Path]) -> dict:
         cli_success_shortfall = max(0, cli_success_floor - cli_successes)
         expected_failure_shortfall = max(0, expected_failure_floor - expected_failures)
         cli_outcome_shortfall = max(0, cli_outcome_floor - cli_total_outcomes)
+        # The Python differential harness is intentionally black-box, but its
+        # command matrix is deterministic. Keep an exact dashboard recomputation
+        # here so future edits cannot silently drop a success/failure branch
+        # while still staying above the broad historical floor. The constants
+        # mirror tools/python_zlib_diff.py's command groups: inline payloads
+        # exercise many hex/round-trip encoder paths, large payloads route
+        # through file commands, and the fixed miscellaneous counts cover
+        # dictionary concatenation, file-limit, malformed/trailing, and known
+        # deterministic wrapper checks outside the per-case loops.
+        payload_cli_success_expected = inline_payloads * 19 + large_file_payloads * 12
+        dictionary_decode_success_expected = dictionary_cases * 4
+        dictionary_encode_success_expected = dictionary_encode_cases * 2
+        dynamic_encode_success_expected = dynamic_payloads * 2
+        fixed_misc_cli_success_expected = 30
+        cli_success_expected = (
+            payload_cli_success_expected
+            + dictionary_decode_success_expected
+            + dictionary_encode_success_expected
+            + dynamic_encode_success_expected
+            + fixed_misc_cli_success_expected
+        )
+        fixed_misc_expected_failure_expected = 31
+        expected_failure_expected = malformed_cases + dictionary_encode_cases + fixed_misc_expected_failure_expected
+        cli_total_expected = cli_success_expected + expected_failure_expected
+        cli_success_exact_mismatch = abs(cli_successes - cli_success_expected)
+        expected_failure_exact_mismatch = abs(expected_failures - expected_failure_expected)
+        cli_outcome_exact_mismatch = abs(cli_total_outcomes - cli_total_expected)
         return {
             "present": True,
             "ok": bool(data.get("ok")),
             "payloads": payloads,
             "large_file_payloads": large_file_payloads,
+            "inline_payloads": inline_payloads,
+            "large_file_payload_overflow": large_file_payload_overflow,
             "file_hex_encode_cases": file_hex_encode_cases,
             "match_heavy_payloads": match_heavy_payloads,
             "dynamic_payloads": dynamic_payloads,
@@ -5426,9 +5457,18 @@ def python_zlib_diff_health(artifacts: list[Path]) -> dict:
             "expected_failure_shortfall": expected_failure_shortfall,
             "cli_outcome_floor": cli_outcome_floor,
             "cli_outcome_shortfall": cli_outcome_shortfall,
+            "payload_cli_success_expected": payload_cli_success_expected,
+            "cli_success_expected": cli_success_expected,
+            "expected_failure_expected": expected_failure_expected,
+            "cli_total_expected": cli_total_expected,
+            "cli_success_exact_mismatch": cli_success_exact_mismatch,
+            "expected_failure_exact_mismatch": expected_failure_exact_mismatch,
+            "cli_outcome_exact_mismatch": cli_outcome_exact_mismatch,
             "healthy": bool(data.get("ok"))
             and payloads > 0
             and large_file_payloads > 0
+            and inline_payloads > 0
+            and large_file_payload_overflow == 0
             and file_hex_encode_cases > 0
             and match_heavy_payloads > 0
             and dynamic_payloads > 0
@@ -5445,13 +5485,19 @@ def python_zlib_diff_health(artifacts: list[Path]) -> dict:
             and file_hex_case_mismatch == 0
             and cli_success_shortfall == 0
             and expected_failure_shortfall == 0
-            and cli_outcome_shortfall == 0,
+            and cli_outcome_shortfall == 0
+            and payload_cli_success_expected > 0
+            and cli_success_exact_mismatch == 0
+            and expected_failure_exact_mismatch == 0
+            and cli_outcome_exact_mismatch == 0,
         }
     return {
         "present": False,
         "ok": False,
         "payloads": 0,
         "large_file_payloads": 0,
+        "inline_payloads": 0,
+        "large_file_payload_overflow": 0,
         "file_hex_encode_cases": 0,
         "match_heavy_payloads": 0,
         "dynamic_payloads": 0,
@@ -5473,6 +5519,13 @@ def python_zlib_diff_health(artifacts: list[Path]) -> dict:
         "expected_failure_shortfall": 0,
         "cli_outcome_floor": 0,
         "cli_outcome_shortfall": 0,
+        "payload_cli_success_expected": 0,
+        "cli_success_expected": 0,
+        "expected_failure_expected": 0,
+        "cli_total_expected": 0,
+        "cli_success_exact_mismatch": 0,
+        "expected_failure_exact_mismatch": 0,
+        "cli_outcome_exact_mismatch": 0,
         "healthy": False,
     }
 
@@ -7645,11 +7698,11 @@ def main() -> int:
             "",
             "| category | count | detail |",
             "| --- | ---: | --- |",
-            f"| payloads | {python_zlib_health['payloads']} | large-file/match-heavy/dynamic {python_zlib_health['large_file_payloads']}/{python_zlib_health['match_heavy_payloads']}/{python_zlib_health['dynamic_payloads']} |",
+            f"| payloads | {python_zlib_health['payloads']} | inline/large-file/match-heavy/dynamic {python_zlib_health['inline_payloads']}/{python_zlib_health['large_file_payloads']}/{python_zlib_health['match_heavy_payloads']}/{python_zlib_health['dynamic_payloads']}, large overflow {python_zlib_health['large_file_payload_overflow']} |",
             f"| file hex encodes | {python_zlib_health['file_hex_encode_cases']} | expected {python_zlib_health['file_hex_expected_cases']}, mismatch {python_zlib_health['file_hex_case_mismatch']} |",
             f"| dictionary encodes | {python_zlib_health['dictionary_encode_cases']} | zlib/raw {python_zlib_health['zlib_dict_encode_cases']}/{python_zlib_health['raw_dict_encode_cases']}, dictionary cases {python_zlib_health['dictionary_cases']} |",
             f"| malformed cases | {python_zlib_health['malformed_cases']} | wrapper/deflate {python_zlib_health['malformed_wrapper_cases']}/{python_zlib_health['malformed_deflate_cases']}, expected floor {python_zlib_health['expected_failure_floor']} |",
-            f"| CLI outcomes | {python_zlib_health['cli_total_outcomes']} | successes/expected-failures {python_zlib_health['cli_successes']}/{python_zlib_health['expected_failures']}, shortfalls {python_zlib_health['cli_success_shortfall']}/{python_zlib_health['expected_failure_shortfall']}/{python_zlib_health['cli_outcome_shortfall']} |",
+            f"| CLI outcomes | {python_zlib_health['cli_total_outcomes']} | successes/expected-failures {python_zlib_health['cli_successes']}/{python_zlib_health['expected_failures']}, shortfalls {python_zlib_health['cli_success_shortfall']}/{python_zlib_health['expected_failure_shortfall']}/{python_zlib_health['cli_outcome_shortfall']}, exact expected {python_zlib_health['cli_success_expected']}/{python_zlib_health['expected_failure_expected']}/{python_zlib_health['cli_total_expected']}, exact mismatch {python_zlib_health['cli_success_exact_mismatch']}/{python_zlib_health['expected_failure_exact_mismatch']}/{python_zlib_health['cli_outcome_exact_mismatch']} |",
             "",
         ]
     )
@@ -8488,6 +8541,8 @@ def main() -> int:
                 "python_zlib_diff_healthy": python_zlib_healthy,
                 "python_zlib_diff_payloads": python_zlib_health["payloads"],
                 "python_zlib_diff_large_file_payloads": python_zlib_health["large_file_payloads"],
+                "python_zlib_diff_inline_payloads": python_zlib_health["inline_payloads"],
+                "python_zlib_diff_large_file_payload_overflow": python_zlib_health["large_file_payload_overflow"],
                 "python_zlib_diff_file_hex_encode_cases": python_zlib_health["file_hex_encode_cases"],
                 "python_zlib_diff_match_heavy_payloads": python_zlib_health["match_heavy_payloads"],
                 "python_zlib_diff_dynamic_payloads": python_zlib_health["dynamic_payloads"],
@@ -8509,6 +8564,13 @@ def main() -> int:
                 "python_zlib_diff_expected_failure_shortfall": python_zlib_health["expected_failure_shortfall"],
                 "python_zlib_diff_cli_outcome_floor": python_zlib_health["cli_outcome_floor"],
                 "python_zlib_diff_cli_outcome_shortfall": python_zlib_health["cli_outcome_shortfall"],
+                "python_zlib_diff_payload_cli_success_expected": python_zlib_health["payload_cli_success_expected"],
+                "python_zlib_diff_cli_success_expected": python_zlib_health["cli_success_expected"],
+                "python_zlib_diff_expected_failure_expected": python_zlib_health["expected_failure_expected"],
+                "python_zlib_diff_cli_total_expected": python_zlib_health["cli_total_expected"],
+                "python_zlib_diff_cli_success_exact_mismatch": python_zlib_health["cli_success_exact_mismatch"],
+                "python_zlib_diff_expected_failure_exact_mismatch": python_zlib_health["expected_failure_exact_mismatch"],
+                "python_zlib_diff_cli_outcome_exact_mismatch": python_zlib_health["cli_outcome_exact_mismatch"],
                 "native_codec_probes_present": native_codec_health["present"],
                 "native_codec_probes_ok": native_codec_health["ok"],
                 "native_codec_probes_markdown_present": native_codec_health["markdown_present"],

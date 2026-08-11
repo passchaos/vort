@@ -1660,6 +1660,8 @@ def main() -> int:
         assert dashboard["python_zlib_diff_healthy"] is True
         assert dashboard["python_zlib_diff_payloads"] == python_zlib_diff["payloads"]
         assert dashboard["python_zlib_diff_large_file_payloads"] == python_zlib_diff["large_file_payloads"]
+        assert dashboard["python_zlib_diff_inline_payloads"] == python_zlib_diff["payloads"] - python_zlib_diff["large_file_payloads"]
+        assert dashboard["python_zlib_diff_large_file_payload_overflow"] == 0
         assert dashboard["python_zlib_diff_file_hex_encode_cases"] == python_zlib_diff["file_hex_encode_cases"]
         assert dashboard["python_zlib_diff_match_heavy_payloads"] == python_zlib_diff["match_heavy_payloads"]
         assert dashboard["python_zlib_diff_dynamic_payloads"] == python_zlib_diff["dynamic_payloads"]
@@ -1683,6 +1685,14 @@ def main() -> int:
         assert dashboard["python_zlib_diff_expected_failure_shortfall"] == 0
         assert dashboard["python_zlib_diff_cli_outcome_floor"] == dashboard["python_zlib_diff_cli_success_floor"] + dashboard["python_zlib_diff_expected_failure_floor"]
         assert dashboard["python_zlib_diff_cli_outcome_shortfall"] == 0
+        expected_payload_successes = dashboard["python_zlib_diff_inline_payloads"] * 19 + python_zlib_diff["large_file_payloads"] * 12
+        assert dashboard["python_zlib_diff_payload_cli_success_expected"] == expected_payload_successes
+        assert dashboard["python_zlib_diff_cli_success_expected"] == python_zlib_diff["cli_successes"]
+        assert dashboard["python_zlib_diff_expected_failure_expected"] == python_zlib_diff["expected_failures"]
+        assert dashboard["python_zlib_diff_cli_total_expected"] == dashboard["python_zlib_diff_cli_total_outcomes"]
+        assert dashboard["python_zlib_diff_cli_success_exact_mismatch"] == 0
+        assert dashboard["python_zlib_diff_expected_failure_exact_mismatch"] == 0
+        assert dashboard["python_zlib_diff_cli_outcome_exact_mismatch"] == 0
         dashboard_markdown = dashboard_path.read_text()
         assert dashboard["native_codec_probes_present"] is True
         assert dashboard["native_codec_probes_ok"] is True

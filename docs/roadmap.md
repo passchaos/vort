@@ -2749,3 +2749,8 @@ architecture blindly.
   match total cases, and required probe labels, coverage pairs, and capability
   keys to be present exactly once. Dashboard health now exposes row/count/key
   drift counters before native codec probe coverage can pass.
+- Tightened Python zlib differential dashboard health by recomputing exact
+  CLI success, expected-failure, and total outcome counts from the retained
+  payload, file-transport, dictionary, dynamic, and malformed coverage counters.
+  Dashboard health now exposes exact outcome mismatch counters before zlib
+  differential coverage can pass.

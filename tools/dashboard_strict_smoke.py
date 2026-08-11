@@ -2771,8 +2771,8 @@ def write_python_zlib_diff_report(path: Path, *, ok: bool = True) -> None:
         "raw_dict_encode_cases": 1,
         "malformed_wrapper_cases": 1,
         "malformed_deflate_cases": 1,
-        "cli_successes": 8 if ok else 0,
-        "expected_failures": 2 if ok else 0,
+        "cli_successes": 90 if ok else 0,
+        "expected_failures": 35 if ok else 0,
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
@@ -4507,6 +4507,15 @@ def main() -> int:
         assert manifest["sidecar_corrupt_markdown_rows"] == 2
         assert manifest["sidecar_corrupt_markdown_matched"] == 2
         assert manifest["sidecar_corrupt_markdown_unmatched"] == 0
+        assert manifest["python_zlib_diff_inline_payloads"] == 2
+        assert manifest["python_zlib_diff_large_file_payload_overflow"] == 0
+        assert manifest["python_zlib_diff_payload_cli_success_expected"] == 50
+        assert manifest["python_zlib_diff_cli_success_expected"] == 90
+        assert manifest["python_zlib_diff_expected_failure_expected"] == 35
+        assert manifest["python_zlib_diff_cli_total_expected"] == 125
+        assert manifest["python_zlib_diff_cli_success_exact_mismatch"] == 0
+        assert manifest["python_zlib_diff_expected_failure_exact_mismatch"] == 0
+        assert manifest["python_zlib_diff_cli_outcome_exact_mismatch"] == 0
         assert manifest["header_inspect_present"] is True
         assert manifest["header_inspect_ok"] is True
         assert manifest["header_inspect_missing_workflow_count"] == 0
@@ -5185,11 +5194,11 @@ def main() -> int:
                 [
                     "## Python zlib differential coverage",
                     "| category | count | detail |",
-                    "| payloads | 3 | large-file/match-heavy/dynamic 1/1/1 |",
+                    "| payloads | 3 | inline/large-file/match-heavy/dynamic 2/1/1/1, large overflow 0 |",
                     "| file hex encodes | 3 | expected 3, mismatch 0 |",
                     "| dictionary encodes | 2 | zlib/raw 1/1, dictionary cases 1 |",
                     "| malformed cases | 2 | wrapper/deflate 1/1, expected floor 2 |",
-                    "| CLI outcomes | 10 | successes/expected-failures 8/2, shortfalls 0/0/0 |",
+                    "| CLI outcomes | 125 | successes/expected-failures 90/35, shortfalls 0/0/0, exact expected 90/35/125, exact mismatch 0/0/0 |",
                 ],
             )
         )
