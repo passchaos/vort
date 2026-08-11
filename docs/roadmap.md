@@ -2732,3 +2732,7 @@ architecture blindly.
   phase, per-codec count, and offset-range summaries from the retained case rows.
   Dashboard health now exposes aggregate-drift counters before native summary
   malformed-stream coverage can pass.
+- Tightened native stream summary dashboard health by requiring declared content
+  bytes to match decoded payload bytes exactly for retained LZ4 and Zstd
+  summaries. Schema relations now reject declared/payload slack before native
+  stream summary coverage can pass.

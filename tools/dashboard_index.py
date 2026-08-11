@@ -5703,7 +5703,7 @@ def native_stream_summary_health(artifacts: list[Path], schema: str, *, require_
             and payload_bytes > 0
             and skippable_payload_bytes > 0
             and block_count_mismatch == 0
-            and declared_payload_slack_bytes >= 0
+            and declared_payload_slack_bytes == 0
             and metadata_frame_overflow == 0
             and checksum_frame_overflow == 0
             and (not require_block_checksum or block_checksum_frame_overflow == 0)

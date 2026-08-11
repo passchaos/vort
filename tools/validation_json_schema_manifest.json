@@ -866,6 +866,7 @@
           ],
           "zero": [
             "lz4_native_summary_block_count_mismatch",
+            "lz4_native_summary_declared_payload_slack_bytes",
             "lz4_native_summary_metadata_frame_overflow",
             "lz4_native_summary_checksum_frame_overflow",
             "lz4_native_summary_block_checksum_frame_overflow"
@@ -890,6 +891,7 @@
           ],
           "zero": [
             "zstd_native_summary_block_count_mismatch",
+            "zstd_native_summary_declared_payload_slack_bytes",
             "zstd_native_summary_metadata_frame_overflow",
             "zstd_native_summary_checksum_frame_overflow",
             "zstd_native_summary_block_checksum_frame_overflow"
@@ -3075,12 +3077,12 @@
         },
         {
           "left": "lz4_native_summary_declared_content_bytes",
-          "op": "ge",
+          "op": "eq",
           "right": "lz4_native_summary_payload_bytes"
         },
         {
           "left": "zstd_native_summary_declared_content_bytes",
-          "op": "ge",
+          "op": "eq",
           "right": "zstd_native_summary_payload_bytes"
         },
         {
