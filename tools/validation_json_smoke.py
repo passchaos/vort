@@ -1367,6 +1367,12 @@ def main() -> int:
         assert dashboard["br_static_dictionary_report_markdown_summary_rows"] == 6
         assert dashboard["br_static_dictionary_report_markdown_matched"] == 6
         assert dashboard["br_static_dictionary_report_markdown_unmatched"] == 0
+        assert dashboard["br_static_dictionary_report_markdown_matrix_rows"] == len(br_static_dictionary_report["matrix_rows"])
+        assert dashboard["br_static_dictionary_report_markdown_matrix_matched"] == len(br_static_dictionary_report["matrix_rows"])
+        assert dashboard["br_static_dictionary_report_markdown_matrix_unmatched"] == 0
+        assert dashboard["br_static_dictionary_report_markdown_entry_rows"] == br_static_dictionary_report["entry_count"]
+        assert dashboard["br_static_dictionary_report_markdown_entry_matched"] == br_static_dictionary_report["entry_count"]
+        assert dashboard["br_static_dictionary_report_markdown_entry_unmatched"] == 0
         assert dashboard["br_static_dictionary_report_negative_case_count"] == br_static_dictionary_report_negative["case_count"]
         assert dashboard["br_static_dictionary_report_negative_matched"] == br_static_dictionary_report_negative["case_count"]
         assert dashboard["br_static_dictionary_report_negative_unmatched"] == 0

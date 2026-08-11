@@ -1835,6 +1835,29 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
         # JSON-derived snippets against the retained Markdown companion.
         return str(value).replace("`", "\\`").replace("\n", " ")
 
+    def report_markdown_code_escape(value: str) -> str:
+        # Mirror tools/br_static_dictionary_report.zig's writeMarkdownCode().
+        # The Brotli word table includes punctuation and CRLF-containing words;
+        # using the exact byte-oriented spelling here makes the dashboard health
+        # sensitive to drift in every retained Markdown entry row, not just to
+        # the six summary bullets.
+        parts: list[str] = []
+        for char in value:
+            byte = ord(char)
+            if char in ("`", "\\", "|"):
+                parts.append("\\" + char)
+            elif char == "\n":
+                parts.append("\\n")
+            elif char == "\r":
+                parts.append("\\r")
+            elif char == "\t":
+                parts.append("\\t")
+            elif byte <= 0x08 or byte in (0x0B, 0x0C) or 0x0E <= byte <= 0x1F or byte == 0x7F:
+                parts.append(f"\\x{byte:02x}")
+            else:
+                parts.append(char)
+        return "".join(parts)
+
     def candidate_markdown_health(data: dict | None, markdown_path: Path | None) -> dict[str, int | bool]:
         if not isinstance(data, dict):
             return {"present": False, "summary_rows": 0, "summary_matched": 0, "summary_unmatched": 0, "sample_rows": 0, "sample_matched": 0, "sample_unmatched": 0}
@@ -1995,8 +2018,13 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
 
     report_markdown_summary_rows = 0
     report_markdown_matched = 0
+    report_markdown_matrix_rows = 0
+    report_markdown_matrix_matched = 0
+    report_markdown_entry_rows = 0
+    report_markdown_entry_matched = 0
     if isinstance(report_markdown, Path):
         markdown = report_markdown.read_text(errors="replace")
+        markdown_lines = {line.rstrip() for line in markdown.splitlines()}
         markdown_expected = {
             "Entries": report_entry_count,
             "Distinct transforms": report_transform_count,
@@ -2009,7 +2037,29 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
             report_markdown_summary_rows += 1
             if f"- {label}: {expected}" in markdown:
                 report_markdown_matched += 1
+        matrix_expected: list[str] = []
+        for row in report_matrix_rows_data:
+            if isinstance(row, dict):
+                matrix_expected.append(
+                    f"| {dict_int(row, 'transform')} | {dict_int(row, 'identity')} | {dict_int(row, 'transform_entries')} | {dict_int(row, 'phrase')} | {dict_int(row, 'total')} |"
+                )
+        report_markdown_matrix_rows = len(matrix_expected)
+        report_markdown_matrix_matched = sum(1 for line in matrix_expected if line in markdown_lines)
+        entry_expected: list[str] = []
+        for row in report_entries:
+            if isinstance(row, dict):
+                key = entry_key(row)
+                if key is None:
+                    continue
+                transform, copy_len, word_index, word = key
+                entry_expected.append(
+                    f"| {transform} | {copy_len} | {word_index} | {dict_int(row, 'word_bytes')} | `{report_markdown_code_escape(word)}` |"
+                )
+        report_markdown_entry_rows = len(entry_expected)
+        report_markdown_entry_matched = sum(1 for line in entry_expected if line in markdown_lines)
     report_markdown_unmatched = report_markdown_summary_rows - report_markdown_matched
+    report_markdown_matrix_unmatched = report_markdown_matrix_rows - report_markdown_matrix_matched
+    report_markdown_entry_unmatched = report_markdown_entry_rows - report_markdown_entry_matched
 
     report_negative_cases = report_negative.get("cases") if isinstance(report_negative, dict) else []
     report_negative_cases = report_negative_cases if isinstance(report_negative_cases, list) else []
@@ -2094,6 +2144,11 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
         and report_csv_unmatched == 0
         and report_markdown_summary_rows == 6
         and report_markdown_unmatched == 0
+        and report_markdown_matrix_rows == len(report_matrix_rows_data)
+        and report_markdown_matrix_rows > 0
+        and report_markdown_matrix_unmatched == 0
+        and report_markdown_entry_rows == report_entry_count
+        and report_markdown_entry_unmatched == 0
         and bool(report_negative.get("ok"))
         and report_negative_case_count > 0
         and report_negative_unmatched == 0
@@ -2156,6 +2211,12 @@ def br_static_dictionary_health(artifacts: list[Path]) -> dict:
         "report_markdown_summary_rows": report_markdown_summary_rows,
         "report_markdown_matched": report_markdown_matched,
         "report_markdown_unmatched": report_markdown_unmatched,
+        "report_markdown_matrix_rows": report_markdown_matrix_rows,
+        "report_markdown_matrix_matched": report_markdown_matrix_matched,
+        "report_markdown_matrix_unmatched": report_markdown_matrix_unmatched,
+        "report_markdown_entry_rows": report_markdown_entry_rows,
+        "report_markdown_entry_matched": report_markdown_entry_matched,
+        "report_markdown_entry_unmatched": report_markdown_entry_unmatched,
         "report_negative_case_count": report_negative_case_count,
         "report_negative_matched": report_negative_matched,
         "report_negative_unmatched": report_negative_unmatched,
@@ -6308,6 +6369,8 @@ def main() -> int:
             f"| source audit | {br_static_dictionary['audit_entry_count']} | anchors {br_static_dictionary['audit_anchor_count']}, generated bytes {br_static_dictionary['audit_generated_zig_bytes']} |",
             f"| negative smoke | {br_static_dictionary['negative_matched']}/{br_static_dictionary['negative_case_count']} | healthy `{br_static_dictionary['healthy']}` |",
             f"| report entries | {br_static_dictionary['report_entry_count']} | csv {br_static_dictionary['report_csv_matched']}/{br_static_dictionary['report_csv_rows']}, Markdown {br_static_dictionary['report_markdown_matched']}/{br_static_dictionary['report_markdown_summary_rows']} |",
+            f"| report matrix rows | {br_static_dictionary['report_markdown_matrix_matched']}/{br_static_dictionary['report_markdown_matrix_rows']} | unmatched {br_static_dictionary['report_markdown_matrix_unmatched']}, present `{br_static_dictionary['report_markdown_present']}` |",
+            f"| report entry rows | {br_static_dictionary['report_markdown_entry_matched']}/{br_static_dictionary['report_markdown_entry_rows']} | unmatched {br_static_dictionary['report_markdown_entry_unmatched']}, present `{br_static_dictionary['report_markdown_present']}` |",
             f"| report negative smoke | {br_static_dictionary['report_negative_matched']}/{br_static_dictionary['report_negative_case_count']} | report healthy `{br_static_dictionary['report_healthy']}` |",
             "",
         ]
@@ -7139,6 +7202,12 @@ def main() -> int:
                 "br_static_dictionary_report_markdown_summary_rows": br_static_dictionary["report_markdown_summary_rows"],
                 "br_static_dictionary_report_markdown_matched": br_static_dictionary["report_markdown_matched"],
                 "br_static_dictionary_report_markdown_unmatched": br_static_dictionary["report_markdown_unmatched"],
+                "br_static_dictionary_report_markdown_matrix_rows": br_static_dictionary["report_markdown_matrix_rows"],
+                "br_static_dictionary_report_markdown_matrix_matched": br_static_dictionary["report_markdown_matrix_matched"],
+                "br_static_dictionary_report_markdown_matrix_unmatched": br_static_dictionary["report_markdown_matrix_unmatched"],
+                "br_static_dictionary_report_markdown_entry_rows": br_static_dictionary["report_markdown_entry_rows"],
+                "br_static_dictionary_report_markdown_entry_matched": br_static_dictionary["report_markdown_entry_matched"],
+                "br_static_dictionary_report_markdown_entry_unmatched": br_static_dictionary["report_markdown_entry_unmatched"],
                 "br_static_dictionary_report_negative_case_count": br_static_dictionary["report_negative_case_count"],
                 "br_static_dictionary_report_negative_matched": br_static_dictionary["report_negative_matched"],
                 "br_static_dictionary_report_negative_unmatched": br_static_dictionary["report_negative_unmatched"],

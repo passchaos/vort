@@ -2632,3 +2632,8 @@ architecture blindly.
   rows to match the canonical JSON probe. Aggregate health now exposes node
   Markdown summary/row matched-unmatched counters before static-dictionary core
   coverage can pass.
+- Tightened Brotli static-dictionary report Markdown dashboard health by requiring
+  the retained `vort-br-static-dictionary-report.md` matrix and entry rows to
+  match the canonical JSON report. Aggregate health now exposes report
+  Markdown matrix/entry matched-unmatched counters before report coverage can
+  pass.

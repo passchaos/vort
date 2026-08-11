@@ -1460,6 +1460,10 @@
             "br_static_dictionary_report_csv_matched",
             "br_static_dictionary_report_markdown_summary_rows",
             "br_static_dictionary_report_markdown_matched",
+            "br_static_dictionary_report_markdown_matrix_rows",
+            "br_static_dictionary_report_markdown_matrix_matched",
+            "br_static_dictionary_report_markdown_entry_rows",
+            "br_static_dictionary_report_markdown_entry_matched",
             "br_static_dictionary_report_negative_case_count",
             "br_static_dictionary_report_negative_matched"
           ],
@@ -1468,6 +1472,8 @@
             "br_static_dictionary_report_matrix_mismatch_rows",
             "br_static_dictionary_report_csv_unmatched",
             "br_static_dictionary_report_markdown_unmatched",
+            "br_static_dictionary_report_markdown_matrix_unmatched",
+            "br_static_dictionary_report_markdown_entry_unmatched",
             "br_static_dictionary_report_negative_unmatched"
           ]
         },
@@ -1700,6 +1706,12 @@
         "br_static_dictionary_report_markdown_summary_rows": "int",
         "br_static_dictionary_report_markdown_matched": "int",
         "br_static_dictionary_report_markdown_unmatched": "int",
+        "br_static_dictionary_report_markdown_matrix_rows": "int",
+        "br_static_dictionary_report_markdown_matrix_matched": "int",
+        "br_static_dictionary_report_markdown_matrix_unmatched": "int",
+        "br_static_dictionary_report_markdown_entry_rows": "int",
+        "br_static_dictionary_report_markdown_entry_matched": "int",
+        "br_static_dictionary_report_markdown_entry_unmatched": "int",
         "br_static_dictionary_report_negative_case_count": "int",
         "br_static_dictionary_report_negative_matched": "int",
         "br_static_dictionary_report_negative_unmatched": "int",
@@ -2749,6 +2761,31 @@
           "left": "br_static_dictionary_node_markdown_matched_rows",
           "op": "eq",
           "right": "br_static_dictionary_node_markdown_rows"
+        },
+        {
+          "left": "br_static_dictionary_report_markdown_matched",
+          "op": "eq",
+          "right": "br_static_dictionary_report_markdown_summary_rows"
+        },
+        {
+          "left": "br_static_dictionary_report_markdown_matrix_rows",
+          "op": "eq",
+          "right": "br_static_dictionary_report_matrix_rows"
+        },
+        {
+          "left": "br_static_dictionary_report_markdown_matrix_matched",
+          "op": "eq",
+          "right": "br_static_dictionary_report_markdown_matrix_rows"
+        },
+        {
+          "left": "br_static_dictionary_report_markdown_entry_rows",
+          "op": "eq",
+          "right": "br_static_dictionary_report_entry_count"
+        },
+        {
+          "left": "br_static_dictionary_report_markdown_entry_matched",
+          "op": "eq",
+          "right": "br_static_dictionary_report_markdown_entry_rows"
         }
       ]
     },
