@@ -163,6 +163,66 @@ def main() -> int:
             )
         )
 
+        def zlib_relaxed_gate_check_value_type() -> None:
+            payload = {
+                "schema": "vort.zlib_relaxed_report_gate",
+                "schema_version": 1,
+                "ok": True,
+                "report": "zig-out/vort-zlib-relaxed-report.json",
+                "checks": {
+                    "strict_rejections": 1,
+                    "relaxed_successes": True,
+                    "dictionary_successes": True,
+                    "zlib_concatenated_successes": True,
+                    "zlib_decoder_successes": True,
+                    "limited_rejections": True,
+                    "gzip_strict_rejections": True,
+                    "gzip_relaxed_successes": True,
+                    "gzip_concatenated_successes": True,
+                    "gzip_decoder_successes": True,
+                    "gzip_limited_rejections": True,
+                },
+            }
+            docs_check.validate_value_against_manifest(payload, schemas_def)
+
+        cases.append(
+            negative_case(
+                "zlib_relaxed_gate_check_value_type",
+                "checks['strict_rejections'] expected bool",
+                zlib_relaxed_gate_check_value_type,
+            )
+        )
+
+        def zlib_relaxed_gate_boolean_formula() -> None:
+            payload = {
+                "schema": "vort.zlib_relaxed_report_gate",
+                "schema_version": 1,
+                "ok": True,
+                "report": "zig-out/vort-zlib-relaxed-report.json",
+                "checks": {
+                    "strict_rejections": True,
+                    "relaxed_successes": True,
+                    "dictionary_successes": True,
+                    "zlib_concatenated_successes": True,
+                    "zlib_decoder_successes": True,
+                    "limited_rejections": True,
+                    "gzip_strict_rejections": True,
+                    "gzip_relaxed_successes": True,
+                    "gzip_concatenated_successes": True,
+                    "gzip_decoder_successes": False,
+                    "gzip_limited_rejections": True,
+                },
+            }
+            docs_check.validate_value_against_manifest(payload, schemas_def)
+
+        cases.append(
+            negative_case(
+                "zlib_relaxed_gate_boolean_formula",
+                "ok=True does not match boolean formula",
+                zlib_relaxed_gate_boolean_formula,
+            )
+        )
+
         def native_summary_error_phase_enum() -> None:
             payload = {
                 "schema": "vort.lz4_native_stream_summary_error",

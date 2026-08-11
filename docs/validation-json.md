@@ -655,6 +655,8 @@ Example:
     "vort.zstd_native_stream_summary",
     "vort.zstd_native_stream_summary_error",
     "vort.zlib_header_info",
+    "vort.zlib_relaxed_report",
+    "vort.zlib_relaxed_report_gate",
     "vort.gzip_header_info"
   ],
   "cli_success_ok": true,
@@ -5143,6 +5145,43 @@ Example:
   "gzip_concatenated_successes": 4,
   "gzip_decoder_successes": 4,
   "gzip_limited_rejections": 1
+}
+```
+
+## `vort.zlib_relaxed_report_gate`
+
+Produced by:
+
+```sh
+zig build run-zlib-relaxed-report-gate
+```
+
+This schema records the retained gate summary for relaxed zlib/gzip decode
+coverage. The shared manifest fixes the exact `checks` keys, requires every
+value to be boolean, and recomputes `ok` as the logical AND of all check values
+so stale, missing, unknown, or non-boolean gate rows cannot validate as healthy.
+
+Example:
+
+```json
+{
+  "schema": "vort.zlib_relaxed_report_gate",
+  "schema_version": 1,
+  "ok": true,
+  "report": "zig-out/vort-zlib-relaxed-report.json",
+  "checks": {
+    "strict_rejections": true,
+    "relaxed_successes": true,
+    "dictionary_successes": true,
+    "zlib_concatenated_successes": true,
+    "zlib_decoder_successes": true,
+    "limited_rejections": true,
+    "gzip_strict_rejections": true,
+    "gzip_relaxed_successes": true,
+    "gzip_concatenated_successes": true,
+    "gzip_decoder_successes": true,
+    "gzip_limited_rejections": true
+  }
 }
 ```
 

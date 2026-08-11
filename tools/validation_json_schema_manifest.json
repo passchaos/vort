@@ -6320,6 +6320,8 @@
           "reason_check_pair_mismatch",
           "reason_fixture_pair_mismatch",
           "validation_smoke_checked_schema_enum",
+          "zlib_relaxed_gate_check_value_type",
+          "zlib_relaxed_gate_boolean_formula",
           "native_summary_error_phase_enum",
           "boolean_formula_positive_field",
           "boolean_formula_empty_string_field"
@@ -6402,6 +6404,7 @@
           "vort.zstd_native_stream_summary",
           "vort.zstd_native_stream_summary_error",
           "vort.zlib_header_info",
+          "vort.zlib_relaxed_report_gate",
           "vort.zlib_relaxed_report"
         ]
       }
@@ -6742,6 +6745,50 @@
         "strict_rejections": "int",
         "zlib_concatenated_successes": "int",
         "zlib_decoder_successes": "int"
+      }
+    },
+    "vort.zlib_relaxed_report_gate": {
+      "boolean_formula_rules": {
+        "ok": {
+          "all": [
+            "checks.strict_rejections",
+            "checks.relaxed_successes",
+            "checks.dictionary_successes",
+            "checks.zlib_concatenated_successes",
+            "checks.zlib_decoder_successes",
+            "checks.limited_rejections",
+            "checks.gzip_strict_rejections",
+            "checks.gzip_relaxed_successes",
+            "checks.gzip_concatenated_successes",
+            "checks.gzip_decoder_successes",
+            "checks.gzip_limited_rejections"
+          ]
+        }
+      },
+      "dict_key_enums": {
+        "checks": [
+          "strict_rejections",
+          "relaxed_successes",
+          "dictionary_successes",
+          "zlib_concatenated_successes",
+          "zlib_decoder_successes",
+          "limited_rejections",
+          "gzip_strict_rejections",
+          "gzip_relaxed_successes",
+          "gzip_concatenated_successes",
+          "gzip_decoder_successes",
+          "gzip_limited_rejections"
+        ]
+      },
+      "dict_value_types": {
+        "checks": "bool"
+      },
+      "fields": {
+        "checks": "dict",
+        "ok": "bool",
+        "report": "str",
+        "schema": "str",
+        "schema_version": "int"
       }
     },
     "vort.lz4_native_stream_summary": {

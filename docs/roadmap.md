@@ -2876,6 +2876,12 @@ architecture blindly.
 
 
 
+
+- Added shared schema/docs/smoke coverage for the retained zlib relaxed report
+  gate JSON. The manifest now fixes the gate check key set, enforces boolean
+  check values, and recomputes `ok` from nested check values so stale or malformed
+  gate summaries cannot validate as healthy.
+
 - Tightened zlib relaxed dashboard health by parsing retained Markdown metric rows
   as structured evidence and exposing malformed, duplicate, unknown, and
   value-mismatched metrics. Dashboard health now rejects relaxed wrapper

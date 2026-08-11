@@ -551,6 +551,7 @@ def main() -> int:
         assert zlib_relaxed_gate["schema"] == "vort.zlib_relaxed_report_gate"
         assert zlib_relaxed_gate["ok"] is True
         assert all(zlib_relaxed_gate["checks"].values())
+        validate_value_against_manifest(zlib_relaxed_gate, schemas_def)
         with checksum_bench_path.open(newline="") as f:
             checksum_bench_rows = list(csv.DictReader(f))
         assert len(checksum_bench_rows) == 21
@@ -862,6 +863,7 @@ def main() -> int:
                 docs_negative["schema"],
                 "vort.dashboard_index",
                 "vort.header_inspect_smoke",
+                zlib_relaxed_gate["schema"],
             ],
             "cli_success_ok": ok["ok"],
             "cli_failure_ok": failure["ok"],
@@ -2090,6 +2092,7 @@ def main() -> int:
                 zstd_native_summary["schema"],
                 native_summary_error_payloads[1]["schema"],
                 zlib_relaxed["schema"],
+                zlib_relaxed_gate["schema"],
                 png_scratch["schema"],
                 fuzz_report["schema"],
                 fuzz_coverage["schema"],
