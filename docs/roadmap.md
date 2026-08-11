@@ -2777,3 +2777,8 @@ architecture blindly.
 - Tightened deflate match-copy benchmark dashboard health by exposing duplicate
   and unknown `(case, kernel)` rows alongside missing pairs. Dashboard health now
   rejects match-copy CSV pair drift before benchmark coverage can pass.
+
+- Tightened deflate Huffman build benchmark dashboard health by exposing
+  duplicate and unknown `(case, build)` rows alongside missing pairs. Dashboard
+  health now rejects Huffman build CSV pair drift before benchmark coverage can
+  pass.

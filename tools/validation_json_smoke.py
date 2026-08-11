@@ -1556,6 +1556,8 @@ def main() -> int:
         assert dashboard["deflate_huffman_build_bench_throughput_rows"] == len(deflate_huffman_build_bench_rows)
         assert dashboard["deflate_huffman_build_bench_checksum_variant_cases"] == 4
         assert dashboard["deflate_huffman_build_bench_missing_pairs"] == []
+        assert dashboard["deflate_huffman_build_bench_duplicate_pairs"] == []
+        assert dashboard["deflate_huffman_build_bench_unknown_pairs"] == []
         assert dashboard["deflate_huffman_lookup_bench_present"] is True
         assert dashboard["deflate_huffman_lookup_bench_healthy"] is True
         assert dashboard["deflate_huffman_lookup_bench_rows"] == len(deflate_huffman_lookup_bench_rows)

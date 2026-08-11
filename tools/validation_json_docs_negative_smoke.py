@@ -421,6 +421,8 @@ def main() -> int:
                 "deflate_huffman_build_bench_throughput_rows": 14,
                 "deflate_huffman_build_bench_checksum_variant_cases": 4,
                 "deflate_huffman_build_bench_missing_pairs": [],
+                "deflate_huffman_build_bench_duplicate_pairs": [],
+                "deflate_huffman_build_bench_unknown_pairs": [],
                 "deflate_huffman_lookup_bench_present": True,
                 "deflate_huffman_lookup_bench_healthy": True,
                 "deflate_huffman_lookup_bench_rows": 21,

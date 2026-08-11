@@ -4935,7 +4935,7 @@ def main() -> int:
                     "| rows | 14 | expected 14, present `True` |",
                     "| lookup rows | 14 | positive/throughput rows 14/14 |",
                     "| checksum variant cases | 4 | expected cases 4 |",
-                    "| missing pairs | 0 | healthy `True` |",
+                    "| pair drift | 0 | duplicate/unknown 0/0, healthy `True` |",
                 ],
             )
         )
