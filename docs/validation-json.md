@@ -4531,9 +4531,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 132,
-      "min_expected_failures": 132,
-      "min_matched": 132
+      "min_checks": 137,
+      "min_expected_failures": 137,
+      "min_matched": 137
     },
     {
       "mode": "non-json-artifact-health",
@@ -4655,7 +4655,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 92,
+  "check_count": 97,
   "mode_count": 5,
   "expected_mode_count": 5,
   "missing_mode_count": 0,
@@ -4675,9 +4675,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 132,
-      "min_expected_failures": 132,
-      "min_matched": 132
+      "min_checks": 137,
+      "min_expected_failures": 137,
+      "min_matched": 137
     },
     {
       "mode": "non-json-artifact-health",
@@ -4720,14 +4720,14 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 45,
-      "min_checks": 132,
+      "checks": 50,
+      "min_checks": 137,
       "missing_checks": 87,
-      "expected_failures": 45,
-      "min_expected_failures": 132,
+      "expected_failures": 50,
+      "min_expected_failures": 137,
       "missing_expected_failures": 87,
-      "matched": 45,
-      "min_matched": 132,
+      "matched": 50,
+      "min_matched": 137,
       "missing_matched": 87
     },
     {
@@ -4770,9 +4770,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 45,
-      "expected_failures": 45,
-      "matched": 45
+      "checks": 50,
+      "expected_failures": 50,
+      "matched": 50
     },
     {
       "mode": "non-json-artifact-health",
@@ -5514,6 +5514,66 @@ Example:
       "expected_failure": true,
       "expected_output": "dashboard_index_validation_unhealthy=level_report_failed",
       "actual_output": "dashboard_index_validation_unhealthy=level_report_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dynamic_plan_missing_path",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dynamic_plan_duplicate_path",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dynamic_plan_unknown_path",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dynamic_plan_malformed_row",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dynamic_plan_token_accounting_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed\n",
       "actual_output_bytes": 57,
       "actual_output_limit": 240,
       "actual_output_truncated": false,

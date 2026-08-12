@@ -4782,6 +4782,29 @@ def rewrite_csv_rows(path: Path, rows: list[dict[str, str]], fieldnames: list[st
         writer.writerows(rows)
 
 
+def dynamic_plan_drift_fixture(root: Path, fixture_name: str, mutate_csv) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted dynamic-plan CSV artifact."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    csv_path = fixture_root / DYNAMIC_PLAN_ARTIFACT
+    with csv_path.open(newline="") as f:
+        reader = csv.DictReader(f)
+        fieldnames = list(reader.fieldnames or [])
+        rows = list(reader)
+    mutate_csv(rows, fieldnames, csv_path)
+    rewrite_csv_rows(csv_path, rows, fieldnames)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def level_report_drift_fixture(root: Path, fixture_name: str, mutate_csv=None, mutate_markdown=None) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted compression level report."""
 
@@ -7462,6 +7485,129 @@ def main() -> int:
                 level_markdown_detail_result.returncode,
                 "dashboard_index_validation_unhealthy=level_report_failed",
                 level_markdown_detail_result.stdout,
+            )
+        )
+
+        dynamic_missing_result, dynamic_missing_manifest = dynamic_plan_drift_fixture(
+            root,
+            "dynamic-plan-missing-path",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.pop(),
+        )
+        dynamic_missing_matched = (
+            dynamic_missing_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=dynamic_plan_failed" in dynamic_missing_result.stdout
+            and dynamic_missing_manifest["validation_healthy"] is False
+            and dynamic_missing_manifest["dynamic_plan_healthy"] is False
+            and dynamic_missing_manifest["dynamic_plan_missing_paths"] == ["project_files:docs/roadmap.md"]
+        )
+        checks.append(
+            check_row(
+                "dynamic_plan_missing_path",
+                "strict-validation-health",
+                True,
+                dynamic_missing_matched,
+                dynamic_missing_result.returncode,
+                "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+                dynamic_missing_result.stdout,
+            )
+        )
+
+        dynamic_duplicate_result, dynamic_duplicate_manifest = dynamic_plan_drift_fixture(
+            root,
+            "dynamic-plan-duplicate-path",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.append(dict(rows[0])),
+        )
+        dynamic_duplicate_matched = (
+            dynamic_duplicate_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=dynamic_plan_failed" in dynamic_duplicate_result.stdout
+            and dynamic_duplicate_manifest["validation_healthy"] is False
+            and dynamic_duplicate_manifest["dynamic_plan_healthy"] is False
+            and dynamic_duplicate_manifest["dynamic_plan_duplicate_paths"] == ["project_files:README.md"]
+        )
+        checks.append(
+            check_row(
+                "dynamic_plan_duplicate_path",
+                "strict-validation-health",
+                True,
+                dynamic_duplicate_matched,
+                dynamic_duplicate_result.returncode,
+                "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+                dynamic_duplicate_result.stdout,
+            )
+        )
+
+        dynamic_unknown_result, dynamic_unknown_manifest = dynamic_plan_drift_fixture(
+            root,
+            "dynamic-plan-unknown-path",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("path", "unknown-path"),
+        )
+        dynamic_unknown_matched = (
+            dynamic_unknown_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=dynamic_plan_failed" in dynamic_unknown_result.stdout
+            and dynamic_unknown_manifest["validation_healthy"] is False
+            and dynamic_unknown_manifest["dynamic_plan_healthy"] is False
+            and dynamic_unknown_manifest["dynamic_plan_unknown_paths"] == ["project_files:unknown-path"]
+        )
+        checks.append(
+            check_row(
+                "dynamic_plan_unknown_path",
+                "strict-validation-health",
+                True,
+                dynamic_unknown_matched,
+                dynamic_unknown_result.returncode,
+                "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+                dynamic_unknown_result.stdout,
+            )
+        )
+
+        dynamic_malformed_result, dynamic_malformed_manifest = dynamic_plan_drift_fixture(
+            root,
+            "dynamic-plan-malformed-row",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("input_bytes", "bad"),
+        )
+        dynamic_malformed_matched = (
+            dynamic_malformed_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=dynamic_plan_failed" in dynamic_malformed_result.stdout
+            and dynamic_malformed_manifest["validation_healthy"] is False
+            and dynamic_malformed_manifest["dynamic_plan_healthy"] is False
+            and dynamic_malformed_manifest["dynamic_plan_malformed_rows"] == 1
+        )
+        checks.append(
+            check_row(
+                "dynamic_plan_malformed_row",
+                "strict-validation-health",
+                True,
+                dynamic_malformed_matched,
+                dynamic_malformed_result.returncode,
+                "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+                dynamic_malformed_result.stdout,
+            )
+        )
+
+        dynamic_token_result, dynamic_token_manifest = dynamic_plan_drift_fixture(
+            root,
+            "dynamic-plan-token-accounting",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__(
+                "token_count",
+                str(int(rows[0]["token_count"]) + 1),
+            ),
+        )
+        dynamic_token_matched = (
+            dynamic_token_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=dynamic_plan_failed" in dynamic_token_result.stdout
+            and dynamic_token_manifest["validation_healthy"] is False
+            and dynamic_token_manifest["dynamic_plan_healthy"] is False
+            and dynamic_token_manifest["dynamic_plan_token_accounting_rows"] == 8
+        )
+        checks.append(
+            check_row(
+                "dynamic_plan_token_accounting_mismatch",
+                "strict-validation-health",
+                True,
+                dynamic_token_matched,
+                dynamic_token_result.returncode,
+                "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+                dynamic_token_result.stdout,
             )
         )
 
