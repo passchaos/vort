@@ -4430,6 +4430,8 @@
           "header_inspect_markdown_table",
           "huffman_length_markdown_table",
           "level_report_markdown_table",
+          "mismatched_csv_header_column_manifest",
+          "mismatched_csv_header_signature_manifest",
           "mismatched_markdown_table_count_manifest",
           "mismatched_markdown_table_separator_manifest",
           "mismatched_native_tier_discovery_case",

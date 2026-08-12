@@ -4440,6 +4440,57 @@ def markdown_manifest_drift_fixture(
     return result, manifest
 
 
+def csv_manifest_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    target_artifact: str,
+    manifest_field: str,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted CSV header manifest field."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    csv_manifest = write_csv_header_manifest(fixture_root)
+    markdown_manifest = write_markdown_heading_manifest(fixture_root)
+    payload = json.loads(csv_manifest.read_text())
+    artifacts = payload.get("artifacts")
+    if not isinstance(artifacts, list):
+        raise AssertionError("synthetic CSV header manifest did not contain artifact rows")
+    for artifact in artifacts:
+        if isinstance(artifact, dict) and artifact.get("name") == target_artifact:
+            if manifest_field == "column_count":
+                value = artifact.get("column_count")
+                if not isinstance(value, int) or isinstance(value, bool):
+                    raise AssertionError(f"{target_artifact} CSV manifest column_count is not an integer")
+                artifact["column_count"] = value + 1
+            elif manifest_field == "signature":
+                value = artifact.get("signature")
+                if not isinstance(value, str) or not value:
+                    raise AssertionError(f"{target_artifact} CSV manifest signature is not a non-empty string")
+                artifact["signature"] = f"{value}-drift"
+            else:
+                raise AssertionError(f"unsupported CSV manifest drift field {manifest_field!r}")
+            break
+    else:
+        raise AssertionError(f"missing {target_artifact} in synthetic CSV header manifest")
+    csv_manifest.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    result = run(
+        dashboard_args_with_manifests(
+            fixture_root,
+            producer_map,
+            csv_manifest,
+            markdown_manifest,
+            "--strict-validation-health",
+        ),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def expect_failure(args: list[str], needle: str) -> subprocess.CompletedProcess[str]:
     result = run(args, check=False)
     if result.returncode == 0:
@@ -5588,6 +5639,58 @@ def main() -> int:
             and mismatched_native_tier_discovery_manifest["native_tier_corpus_discovery_mismatch_total"] == 1
         )
         checks.append(check_row("mismatched_native_tier_discovery_case", "native-tier-range-health", True, native_tier_discovery_mismatched_matched, mismatched_native_tier_discovery_result.returncode, "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed", mismatched_native_tier_discovery_result.stdout))
+
+        csv_header_column_result, csv_header_column_manifest_result = csv_manifest_drift_fixture(
+            root,
+            "mismatched-csv-header-column",
+            LEVEL_REPORT_CSV_ARTIFACT,
+            "column_count",
+        )
+        csv_header_column_matched = (
+            csv_header_column_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=non_json_artifact_failed" in csv_header_column_result.stdout
+            and csv_header_column_manifest_result["validation_healthy"] is False
+            and csv_header_column_manifest_result["non_json_artifact_healthy"] is False
+            and csv_header_column_manifest_result["csv_header_column_mismatch"] == [LEVEL_REPORT_CSV_ARTIFACT]
+            and csv_header_column_manifest_result["csv_header_signature_mismatch"] == []
+        )
+        checks.append(
+            check_row(
+                "mismatched_csv_header_column_manifest",
+                "non-json-artifact-health",
+                True,
+                csv_header_column_matched,
+                csv_header_column_result.returncode,
+                "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+                csv_header_column_result.stdout,
+            )
+        )
+
+        csv_header_signature_result, csv_header_signature_manifest_result = csv_manifest_drift_fixture(
+            root,
+            "mismatched-csv-header-signature",
+            LEVEL_REPORT_CSV_ARTIFACT,
+            "signature",
+        )
+        csv_header_signature_matched = (
+            csv_header_signature_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=non_json_artifact_failed" in csv_header_signature_result.stdout
+            and csv_header_signature_manifest_result["validation_healthy"] is False
+            and csv_header_signature_manifest_result["non_json_artifact_healthy"] is False
+            and csv_header_signature_manifest_result["csv_header_column_mismatch"] == []
+            and csv_header_signature_manifest_result["csv_header_signature_mismatch"] == [LEVEL_REPORT_CSV_ARTIFACT]
+        )
+        checks.append(
+            check_row(
+                "mismatched_csv_header_signature_manifest",
+                "non-json-artifact-health",
+                True,
+                csv_header_signature_matched,
+                csv_header_signature_result.returncode,
+                "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+                csv_header_signature_result.stdout,
+            )
+        )
 
         markdown_table_count_result, markdown_table_count_manifest_result = markdown_manifest_drift_fixture(
             root,
