@@ -5060,6 +5060,33 @@ def png_scratch_drift_fixture(
     return result, manifest
 
 
+def checksum_bench_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    mutate_csv,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted checksum benchmark CSV."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    csv_path = fixture_root / CHECKSUM_BENCH_ARTIFACT
+    with csv_path.open(newline="") as f:
+        reader = csv.DictReader(f)
+        fieldnames = list(reader.fieldnames or [])
+        rows = list(reader)
+    mutate_csv(rows, fieldnames, csv_path)
+    rewrite_csv_rows(csv_path, rows, fieldnames)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def dynamic_plan_drift_fixture(root: Path, fixture_name: str, mutate_csv) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted dynamic-plan CSV artifact."""
 
@@ -8678,6 +8705,135 @@ def main() -> int:
             png_markdown_manifest,
             "png_scratch_failed",
             png_markdown_manifest["png_scratch_markdown_unmatched"] == 1,
+        )
+
+        def append_checksum_bench_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and "dashboard_index_validation_unhealthy=checksum_bench_failed" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["checksum_bench_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    "dashboard_index_validation_unhealthy=checksum_bench_failed",
+                    result.stdout,
+                )
+            )
+
+        checksum_missing_algorithm_result, checksum_missing_algorithm_manifest = checksum_bench_drift_fixture(
+            root,
+            "checksum-bench-missing-algorithm",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.pop(0),
+        )
+        append_checksum_bench_check(
+            "checksum_bench_missing_algorithm",
+            checksum_missing_algorithm_result,
+            checksum_missing_algorithm_manifest,
+            checksum_missing_algorithm_manifest["checksum_bench_rows"] == 20
+            and checksum_missing_algorithm_manifest["checksum_bench_missing_algorithms"] == ["adler32"],
+        )
+
+        checksum_duplicate_algorithm_result, checksum_duplicate_algorithm_manifest = checksum_bench_drift_fixture(
+            root,
+            "checksum-bench-duplicate-algorithm",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.append(dict(rows[0])),
+        )
+        append_checksum_bench_check(
+            "checksum_bench_duplicate_algorithm",
+            checksum_duplicate_algorithm_result,
+            checksum_duplicate_algorithm_manifest,
+            checksum_duplicate_algorithm_manifest["checksum_bench_rows"] == 22
+            and checksum_duplicate_algorithm_manifest["checksum_bench_duplicate_algorithms"] == ["adler32"],
+        )
+
+        checksum_unknown_algorithm_result, checksum_unknown_algorithm_manifest = checksum_bench_drift_fixture(
+            root,
+            "checksum-bench-unknown-algorithm",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("algorithm", "adler32-unknown"),
+        )
+        append_checksum_bench_check(
+            "checksum_bench_unknown_algorithm",
+            checksum_unknown_algorithm_result,
+            checksum_unknown_algorithm_manifest,
+            checksum_unknown_algorithm_manifest["checksum_bench_missing_algorithms"] == ["adler32"]
+            and checksum_unknown_algorithm_manifest["checksum_bench_unknown_algorithms"] == ["adler32-unknown"],
+        )
+
+        checksum_positive_result, checksum_positive_manifest = checksum_bench_drift_fixture(
+            root,
+            "checksum-bench-positive",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("mix", "0"),
+        )
+        append_checksum_bench_check(
+            "checksum_bench_positive_row_mismatch",
+            checksum_positive_result,
+            checksum_positive_manifest,
+            checksum_positive_manifest["checksum_bench_positive_rows"] == 20,
+        )
+
+        checksum_workload_result, checksum_workload_manifest = checksum_bench_drift_fixture(
+            root,
+            "checksum-bench-workload",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].update({"iterations": "127", "throughput_mib_s": "1270.00"}),
+        )
+        append_checksum_bench_check(
+            "checksum_bench_workload_mismatch",
+            checksum_workload_result,
+            checksum_workload_manifest,
+            checksum_workload_manifest["checksum_bench_workload_rows"] == 20
+            and checksum_workload_manifest["checksum_bench_throughput_rows"] == 21,
+        )
+
+        checksum_throughput_result, checksum_throughput_manifest = checksum_bench_drift_fixture(
+            root,
+            "checksum-bench-throughput",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("throughput_mib_s", "1.00"),
+        )
+        append_checksum_bench_check(
+            "checksum_bench_throughput_mismatch",
+            checksum_throughput_result,
+            checksum_throughput_manifest,
+            checksum_throughput_manifest["checksum_bench_throughput_rows"] == 20,
+        )
+
+        checksum_crc32_mix_result, checksum_crc32_mix_manifest = checksum_bench_drift_fixture(
+            root,
+            "checksum-bench-crc32-mix",
+            mutate_csv=lambda rows, fieldnames, csv_path: next(
+                row for row in rows if row["algorithm"].startswith("crc32-")
+            ).__setitem__("mix", "999"),
+        )
+        append_checksum_bench_check(
+            "checksum_bench_crc32_mix_group_mismatch",
+            checksum_crc32_mix_result,
+            checksum_crc32_mix_manifest,
+            checksum_crc32_mix_manifest["checksum_bench_crc32_mix_groups"] == 2,
+        )
+
+        checksum_crc32c_mix_result, checksum_crc32c_mix_manifest = checksum_bench_drift_fixture(
+            root,
+            "checksum-bench-crc32c-mix",
+            mutate_csv=lambda rows, fieldnames, csv_path: next(
+                row for row in rows if row["algorithm"].startswith("crc32c-")
+            ).__setitem__("mix", "999"),
+        )
+        append_checksum_bench_check(
+            "checksum_bench_crc32c_mix_group_mismatch",
+            checksum_crc32c_mix_result,
+            checksum_crc32c_mix_manifest,
+            checksum_crc32c_mix_manifest["checksum_bench_crc32c_mix_groups"] == 2,
         )
 
         native_codec_probe_count_result, native_codec_probe_count_manifest = native_codec_probes_drift_fixture(
