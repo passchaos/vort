@@ -5638,6 +5638,73 @@ def zstd_compare_drift_fixture(
     return result, manifest
 
 
+def br_static_dictionary_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    *,
+    mutate_json=None,
+    mutate_csv=None,
+    mutate_markdown=None,
+    remove_artifact: str | None = None,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted Brotli static-dictionary artifact."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    json_paths = {
+        "candidates": fixture_root / BR_STATIC_CANDIDATES_ARTIFACT,
+        "upstream": fixture_root / BR_STATIC_UPSTREAM_ARTIFACT,
+        "upstream_report": fixture_root / BR_STATIC_UPSTREAM_REPORT_ARTIFACT,
+        "node": fixture_root / BR_STATIC_NODE_ARTIFACT,
+        "audit": fixture_root / BR_STATIC_AUDIT_ARTIFACT,
+        "negative": fixture_root / BR_STATIC_AUDIT_NEGATIVE_ARTIFACT,
+        "report": fixture_root / BR_STATIC_REPORT_JSON_ARTIFACT,
+        "report_negative": fixture_root / BR_STATIC_REPORT_NEGATIVE_ARTIFACT,
+    }
+    csv_paths = {
+        "report": fixture_root / BR_STATIC_REPORT_CSV_ARTIFACT,
+    }
+    markdown_paths = {
+        "candidates": fixture_root / BR_STATIC_CANDIDATES_MARKDOWN_ARTIFACT,
+        "upstream": fixture_root / BR_STATIC_UPSTREAM_MARKDOWN_ARTIFACT,
+        "node": fixture_root / BR_STATIC_NODE_MARKDOWN_ARTIFACT,
+        "report": fixture_root / BR_STATIC_REPORT_MARKDOWN_ARTIFACT,
+    }
+
+    if mutate_json is not None:
+        payloads = {kind: json.loads(path.read_text()) for kind, path in json_paths.items()}
+        mutate_json(payloads)
+        for kind, payload in payloads.items():
+            json_paths[kind].write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+    if mutate_csv is not None:
+        def rewrite(path: Path, mutate_rows) -> None:
+            with path.open(newline="") as f:
+                reader = csv.DictReader(f)
+                fieldnames = list(reader.fieldnames or [])
+                rows = list(reader)
+            mutate_rows(rows, fieldnames, path)
+            rewrite_csv_rows(path, rows, fieldnames)
+
+        mutate_csv(csv_paths, rewrite)
+
+    if mutate_markdown is not None:
+        mutate_markdown(markdown_paths)
+
+    if remove_artifact is not None:
+        (fixture_root / remove_artifact).unlink()
+
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def python_zlib_diff_drift_fixture(
     root: Path,
     fixture_name: str,
@@ -12579,6 +12646,272 @@ def main() -> int:
             zstd_compare_markdown_detail_result,
             zstd_compare_markdown_detail_manifest,
             zstd_compare_markdown_detail_manifest["zstd_compare_markdown_detail_unmatched"] == 1,
+        )
+
+        def append_br_static_dictionary_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and "dashboard_index_validation_unhealthy=br_static_dictionary_failed" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["br_static_dictionary_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    "dashboard_index_validation_unhealthy=br_static_dictionary_failed",
+                    result.stdout,
+                )
+            )
+
+        br_static_candidate_count_result, br_static_candidate_count_manifest = br_static_dictionary_drift_fixture(
+            root,
+            "br-static-candidate-count",
+            mutate_json=lambda payloads: payloads["candidates"].__setitem__("candidate_count", 0),
+        )
+        append_br_static_dictionary_check(
+            "br_static_candidate_count_zero",
+            br_static_candidate_count_result,
+            br_static_candidate_count_manifest,
+            br_static_candidate_count_manifest["br_static_dictionary_candidate_count"] == 0,
+        )
+
+        br_static_candidate_markdown_result, br_static_candidate_markdown_manifest = br_static_dictionary_drift_fixture(
+            root,
+            "br-static-candidate-markdown-summary",
+            mutate_markdown=lambda markdown_paths: markdown_paths["candidates"].write_text(
+                markdown_paths["candidates"].read_text().replace("- Source mode: anchors", "- Source mode: drift", 1)
+            ),
+        )
+        append_br_static_dictionary_check(
+            "br_static_candidate_markdown_summary_mismatch",
+            br_static_candidate_markdown_result,
+            br_static_candidate_markdown_manifest,
+            br_static_candidate_markdown_manifest["br_static_dictionary_candidate_markdown_unmatched"] == 1,
+        )
+
+        br_static_upstream_ok_result, br_static_upstream_ok_manifest = br_static_dictionary_drift_fixture(
+            root,
+            "br-static-upstream-ok",
+            mutate_json=lambda payloads: payloads["upstream"].__setitem__("ok", False),
+        )
+        append_br_static_dictionary_check(
+            "br_static_upstream_ok_failed",
+            br_static_upstream_ok_result,
+            br_static_upstream_ok_manifest,
+            br_static_upstream_ok_manifest["br_static_dictionary_upstream_present"] is True
+            and br_static_upstream_ok_manifest["br_static_dictionary_core_healthy"] is False,
+        )
+
+        br_static_upstream_report_result, br_static_upstream_report_manifest = br_static_dictionary_drift_fixture(
+            root,
+            "br-static-upstream-report-count",
+            mutate_json=lambda payloads: payloads["upstream_report"].__setitem__("candidate_count", int(payloads["upstream_report"]["candidate_count"]) + 1),
+        )
+        append_br_static_dictionary_check(
+            "br_static_upstream_report_count_mismatch",
+            br_static_upstream_report_result,
+            br_static_upstream_report_manifest,
+            br_static_upstream_report_manifest["br_static_dictionary_upstream_report_candidate_count"]
+            == br_static_upstream_report_manifest["br_static_dictionary_upstream_candidate_count"] + 1,
+        )
+
+        br_static_upstream_markdown_result, br_static_upstream_markdown_manifest = br_static_dictionary_drift_fixture(
+            root,
+            "br-static-upstream-markdown-sample",
+            mutate_markdown=lambda markdown_paths: markdown_paths["upstream"].write_text(
+                markdown_paths["upstream"].read_text().replace("| 0 | 4 | 0 | `identity` | `test` | `test` |", "| 0 | 4 | 0 | `identity` | `drift` | `test` |", 1)
+            ),
+        )
+        append_br_static_dictionary_check(
+            "br_static_upstream_markdown_sample_mismatch",
+            br_static_upstream_markdown_result,
+            br_static_upstream_markdown_manifest,
+            br_static_upstream_markdown_manifest["br_static_dictionary_upstream_markdown_sample_unmatched"] == 1,
+        )
+
+        br_static_node_decode_result, br_static_node_decode_manifest = br_static_dictionary_drift_fixture(
+            root,
+            "br-static-node-decode-count",
+            mutate_json=lambda payloads: payloads["node"].__setitem__("node_decode_successes", int(payloads["node"]["node_decode_successes"]) - 1),
+        )
+        append_br_static_dictionary_check(
+            "br_static_node_decode_count_mismatch",
+            br_static_node_decode_result,
+            br_static_node_decode_manifest,
+            br_static_node_decode_manifest["br_static_dictionary_node_decode_successes"]
+            == br_static_node_decode_manifest["br_static_dictionary_node_probed_count"] - 1,
+        )
+
+        br_static_node_markdown_result, br_static_node_markdown_manifest = br_static_dictionary_drift_fixture(
+            root,
+            "br-static-node-markdown-row",
+            mutate_markdown=lambda markdown_paths: markdown_paths["node"].write_text(
+                markdown_paths["node"].read_text().replace("| 0 | 0 | 4 | 0 | `test0` |", "| 0 | 0 | 4 | 0 | `drift0` |", 1)
+            ),
+        )
+        append_br_static_dictionary_check(
+            "br_static_node_markdown_row_mismatch",
+            br_static_node_markdown_result,
+            br_static_node_markdown_manifest,
+            br_static_node_markdown_manifest["br_static_dictionary_node_markdown_unmatched_rows"] == 1,
+        )
+
+        br_static_audit_anchor_result, br_static_audit_anchor_manifest = br_static_dictionary_drift_fixture(
+            root,
+            "br-static-audit-anchor",
+            mutate_json=lambda payloads: payloads["audit"].__setitem__("anchor_count", 0),
+        )
+        append_br_static_dictionary_check(
+            "br_static_audit_anchor_zero",
+            br_static_audit_anchor_result,
+            br_static_audit_anchor_manifest,
+            br_static_audit_anchor_manifest["br_static_dictionary_audit_anchor_count"] == 0,
+        )
+
+        br_static_negative_count_result, br_static_negative_count_manifest = br_static_dictionary_drift_fixture(
+            root,
+            "br-static-negative-count",
+            mutate_json=lambda payloads: payloads["negative"].__setitem__("case_count", int(payloads["negative"]["case_count"]) + 1),
+        )
+        append_br_static_dictionary_check(
+            "br_static_negative_count_mismatch",
+            br_static_negative_count_result,
+            br_static_negative_count_manifest,
+            br_static_negative_count_manifest["br_static_dictionary_negative_count_mismatch"] == 1
+            and br_static_negative_count_manifest["br_static_dictionary_negative_unmatched"] == 1,
+        )
+
+        br_static_report_count_result, br_static_report_count_manifest = br_static_dictionary_drift_fixture(
+            root,
+            "br-static-report-entry-count",
+            mutate_json=lambda payloads: payloads["report"].__setitem__("entry_count", 999),
+        )
+        append_br_static_dictionary_check(
+            "br_static_report_entry_count_mismatch",
+            br_static_report_count_result,
+            br_static_report_count_manifest,
+            br_static_report_count_manifest["br_static_dictionary_report_entry_count"] == 999
+            and br_static_report_count_manifest["br_static_dictionary_report_json_entries"] == 6,
+        )
+
+        br_static_report_duplicate_result, br_static_report_duplicate_manifest = br_static_dictionary_drift_fixture(
+            root,
+            "br-static-report-json-duplicate",
+            mutate_json=lambda payloads: payloads["report"]["entries"].append(dict(payloads["report"]["entries"][0])),
+        )
+        append_br_static_dictionary_check(
+            "br_static_report_json_duplicate_entry",
+            br_static_report_duplicate_result,
+            br_static_report_duplicate_manifest,
+            br_static_report_duplicate_manifest["br_static_dictionary_report_json_entries"]
+            == br_static_report_duplicate_manifest["br_static_dictionary_report_entry_count"] + 1,
+        )
+
+        br_static_report_category_result, br_static_report_category_manifest = br_static_dictionary_drift_fixture(
+            root,
+            "br-static-report-category",
+            mutate_json=lambda payloads: payloads["report"]["category_counts"].__setitem__("identity", 0),
+        )
+        append_br_static_dictionary_check(
+            "br_static_report_category_mismatch",
+            br_static_report_category_result,
+            br_static_report_category_manifest,
+            br_static_report_category_manifest["br_static_dictionary_report_category_mismatch_rows"] == 1
+            and br_static_report_category_manifest["br_static_dictionary_report_category_total"] == 5,
+        )
+
+        br_static_report_matrix_result, br_static_report_matrix_manifest = br_static_dictionary_drift_fixture(
+            root,
+            "br-static-report-matrix",
+            mutate_json=lambda payloads: payloads["report"]["matrix_rows"][0].__setitem__("total", 2),
+        )
+        append_br_static_dictionary_check(
+            "br_static_report_matrix_mismatch",
+            br_static_report_matrix_result,
+            br_static_report_matrix_manifest,
+            br_static_report_matrix_manifest["br_static_dictionary_report_matrix_mismatch_rows"] == 1
+            and br_static_report_matrix_manifest["br_static_dictionary_report_matrix_total"] == 7,
+        )
+
+        br_static_report_csv_result, br_static_report_csv_manifest = br_static_dictionary_drift_fixture(
+            root,
+            "br-static-report-csv",
+            mutate_csv=lambda csv_paths, rewrite: rewrite(
+                csv_paths["report"],
+                lambda rows, fieldnames, path: rows[0].__setitem__("word", "drift"),
+            ),
+        )
+        append_br_static_dictionary_check(
+            "br_static_report_csv_mismatch",
+            br_static_report_csv_result,
+            br_static_report_csv_manifest,
+            br_static_report_csv_manifest["br_static_dictionary_report_csv_unmatched"] == 1
+            and br_static_report_csv_manifest["br_static_dictionary_report_csv_matched"] == 5,
+        )
+
+        br_static_report_markdown_summary_result, br_static_report_markdown_summary_manifest = br_static_dictionary_drift_fixture(
+            root,
+            "br-static-report-markdown-summary",
+            mutate_markdown=lambda markdown_paths: markdown_paths["report"].write_text(
+                markdown_paths["report"].read_text().replace("- Entries: 6", "- Entries: 5", 1)
+            ),
+        )
+        append_br_static_dictionary_check(
+            "br_static_report_markdown_summary_mismatch",
+            br_static_report_markdown_summary_result,
+            br_static_report_markdown_summary_manifest,
+            br_static_report_markdown_summary_manifest["br_static_dictionary_report_markdown_unmatched"] == 1,
+        )
+
+        br_static_report_markdown_matrix_result, br_static_report_markdown_matrix_manifest = br_static_dictionary_drift_fixture(
+            root,
+            "br-static-report-markdown-matrix",
+            mutate_markdown=lambda markdown_paths: markdown_paths["report"].write_text(
+                markdown_paths["report"].read_text().replace("| 0 | 1 | 0 | 0 | 1 |", "| 0 | 0 | 0 | 0 | 1 |", 1)
+            ),
+        )
+        append_br_static_dictionary_check(
+            "br_static_report_markdown_matrix_mismatch",
+            br_static_report_markdown_matrix_result,
+            br_static_report_markdown_matrix_manifest,
+            br_static_report_markdown_matrix_manifest["br_static_dictionary_report_markdown_matrix_unmatched"] == 1,
+        )
+
+        br_static_report_markdown_entry_result, br_static_report_markdown_entry_manifest = br_static_dictionary_drift_fixture(
+            root,
+            "br-static-report-markdown-entry",
+            mutate_markdown=lambda markdown_paths: markdown_paths["report"].write_text(
+                markdown_paths["report"].read_text().replace("| 0 | 5 | 0 | 5 | `first` |", "| 0 | 5 | 0 | 5 | `drift` |", 1)
+            ),
+        )
+        append_br_static_dictionary_check(
+            "br_static_report_markdown_entry_mismatch",
+            br_static_report_markdown_entry_result,
+            br_static_report_markdown_entry_manifest,
+            br_static_report_markdown_entry_manifest["br_static_dictionary_report_markdown_entry_unmatched"] == 1,
+        )
+
+        br_static_report_negative_result, br_static_report_negative_manifest = br_static_dictionary_drift_fixture(
+            root,
+            "br-static-report-negative",
+            mutate_json=lambda payloads: payloads["report_negative"]["cases"][0].__setitem__("matched", False),
+        )
+        append_br_static_dictionary_check(
+            "br_static_report_negative_unmatched",
+            br_static_report_negative_result,
+            br_static_report_negative_manifest,
+            br_static_report_negative_manifest["br_static_dictionary_report_negative_unmatched"] == 1
+            and br_static_report_negative_manifest["br_static_dictionary_report_negative_matched"] == 0,
         )
 
         native_allocation_count_result, native_allocation_count_manifest = native_allocation_drift_fixture(

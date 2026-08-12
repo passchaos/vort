@@ -461,6 +461,7 @@ architecture blindly.
 - [x] Dashboard strict-mode smoke directly covers dashboard-strict self-health drift, including check/mode/expected-mode/missing-mode/validation-reason count mismatches, unmatched check rows, missing requirement deltas, and retained Markdown missing/unmatched rows.
 - [x] Dashboard strict-mode smoke directly covers dashboard-configuration health drift, including config index, negative config/category smokes, required producer metadata, producer-negative guardrails, count mismatches, unmatched rows, and required smoke-gate coverage loss.
 - [x] Dashboard strict-mode smoke directly covers validation JSON health drift, including checked/observed/unchecked schema drift, JSON artifact count and manifest floors, CLI result invariants, report/corrupt row floors, and docs-negative ok/count drift.
+- [x] Dashboard strict-mode smoke directly covers Brotli static-dictionary health drift, including candidate/upstream/node/audit/negative/report count, CSV, Markdown, category, matrix, and duplicate-entry drift.
 - [x] Dashboard strict-mode smoke covers every validation unhealthy reason with isolated negative fixtures.
 - [x] Dashboard strict-mode validation unhealthy reason matrix is stored in a schema-checked external JSON config.
 - [x] Dashboard strict-mode smoke directly covers native codec probe health drift, including probe count/case-sum mismatches, missing/duplicate probes, coverage/capability count/missing/duplicate drift, unhealthy capability rows, and Markdown unmatched rows.
@@ -2530,6 +2531,14 @@ architecture blindly.
   validation floors, CLI success/failure expectations, report/corrupt rows, and
   docs-negative `ok`/count loss. These fixtures keep validation JSON health from
   relying only on broad parse/missing-schema failures.
+
+- Tightened Brotli static-dictionary strict-smoke direct drift coverage for the
+  existing candidate, upstream, Node probe, source-audit, negative-smoke, and
+  retained report artifacts without adding new compression-format scope. The
+  strict validation gate now has isolated fixtures for candidate/upstream count
+  drift, Markdown summary/sample/row drift, Node decode-count drift, audit
+  anchor loss, negative-smoke count drift, report entry/category/matrix/CSV
+  mismatches, duplicate JSON entries, and report Markdown/negative-smoke drift.
 
 - Promoted the existing Snappy report CSV from dashboard inventory metadata to
   aggregate validation health without adding new compression-format scope. The
