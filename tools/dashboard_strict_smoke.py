@@ -4782,6 +4782,41 @@ def rewrite_csv_rows(path: Path, rows: list[dict[str, str]], fieldnames: list[st
         writer.writerows(rows)
 
 
+def native_fuzz_corpus_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    mutate_report=None,
+    mutate_coverage=None,
+    mutate_markdown=None,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted native fuzz corpus artifact."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    report_path = fixture_root / NATIVE_FUZZ_ARTIFACT
+    coverage_path = fixture_root / NATIVE_FUZZ_COVERAGE_ARTIFACT
+    markdown_path = fixture_root / NATIVE_FUZZ_MARKDOWN_ARTIFACT
+    if mutate_report is not None:
+        report = json.loads(report_path.read_text())
+        mutate_report(report)
+        report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    if mutate_coverage is not None:
+        coverage = json.loads(coverage_path.read_text())
+        mutate_coverage(coverage)
+        coverage_path.write_text(json.dumps(coverage, indent=2, sort_keys=True) + "\n")
+    if mutate_markdown is not None:
+        mutate_markdown(markdown_path)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def decode_stage_drift_fixture(
     root: Path,
     fixture_name: str,
@@ -7881,6 +7916,104 @@ def main() -> int:
                 fuzz_markdown_result.returncode,
                 "dashboard_index_validation_unhealthy=fuzz_corpus_failed",
                 fuzz_markdown_result.stdout,
+            )
+        )
+
+        native_fuzz_report_count_result, native_fuzz_report_count_manifest = native_fuzz_corpus_drift_fixture(
+            root,
+            "native-fuzz-report-count",
+            mutate_report=lambda payload: payload.__setitem__("cases", int(payload["cases"]) + 1),
+        )
+        native_fuzz_report_count_matched = (
+            native_fuzz_report_count_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed" in native_fuzz_report_count_result.stdout
+            and native_fuzz_report_count_manifest["validation_healthy"] is False
+            and native_fuzz_report_count_manifest["native_fuzz_corpus_healthy"] is False
+            and native_fuzz_report_count_manifest["native_fuzz_corpus_report_count_mismatch"] == 1
+        )
+        checks.append(
+            check_row(
+                "native_fuzz_corpus_report_count_mismatch",
+                "strict-validation-health",
+                True,
+                native_fuzz_report_count_matched,
+                native_fuzz_report_count_result.returncode,
+                "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+                native_fuzz_report_count_result.stdout,
+            )
+        )
+
+        native_fuzz_matched_rows_result, native_fuzz_matched_rows_manifest = native_fuzz_corpus_drift_fixture(
+            root,
+            "native-fuzz-matched-rows",
+            mutate_report=lambda payload: payload.__setitem__("matched_rows", int(payload["matched_rows"]) - 1),
+        )
+        native_fuzz_matched_rows_matched = (
+            native_fuzz_matched_rows_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed" in native_fuzz_matched_rows_result.stdout
+            and native_fuzz_matched_rows_manifest["validation_healthy"] is False
+            and native_fuzz_matched_rows_manifest["native_fuzz_corpus_healthy"] is False
+            and native_fuzz_matched_rows_manifest["native_fuzz_corpus_unmatched_rows"] == 1
+        )
+        checks.append(
+            check_row(
+                "native_fuzz_corpus_matched_rows_mismatch",
+                "strict-validation-health",
+                True,
+                native_fuzz_matched_rows_matched,
+                native_fuzz_matched_rows_result.returncode,
+                "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+                native_fuzz_matched_rows_result.stdout,
+            )
+        )
+
+        native_fuzz_coverage_result, native_fuzz_coverage_manifest = native_fuzz_corpus_drift_fixture(
+            root,
+            "native-fuzz-coverage-unmatched",
+            mutate_coverage=lambda payload: payload["mode_requirements"][0].__setitem__("matched", False),
+        )
+        native_fuzz_coverage_matched = (
+            native_fuzz_coverage_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_fuzz_coverage_failed" in native_fuzz_coverage_result.stdout
+            and native_fuzz_coverage_manifest["validation_healthy"] is False
+            and native_fuzz_coverage_manifest["native_fuzz_corpus_healthy"] is False
+            and native_fuzz_coverage_manifest["native_fuzz_corpus_coverage_unmatched"] == 1
+        )
+        checks.append(
+            check_row(
+                "native_fuzz_corpus_coverage_unmatched",
+                "strict-validation-health",
+                True,
+                native_fuzz_coverage_matched,
+                native_fuzz_coverage_result.returncode,
+                "dashboard_index_validation_unhealthy=native_fuzz_coverage_failed",
+                native_fuzz_coverage_result.stdout,
+            )
+        )
+
+        native_fuzz_markdown_result, native_fuzz_markdown_manifest = native_fuzz_corpus_drift_fixture(
+            root,
+            "native-fuzz-markdown-unmatched",
+            mutate_markdown=lambda markdown_path: markdown_path.write_text(
+                markdown_path.read_text().replace("## Samples", "## Native sample drift", 1)
+            ),
+        )
+        native_fuzz_markdown_matched = (
+            native_fuzz_markdown_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed" in native_fuzz_markdown_result.stdout
+            and native_fuzz_markdown_manifest["validation_healthy"] is False
+            and native_fuzz_markdown_manifest["native_fuzz_corpus_healthy"] is False
+            and native_fuzz_markdown_manifest["native_fuzz_corpus_markdown_unmatched"] == 1
+        )
+        checks.append(
+            check_row(
+                "native_fuzz_corpus_markdown_unmatched",
+                "strict-validation-health",
+                True,
+                native_fuzz_markdown_matched,
+                native_fuzz_markdown_result.returncode,
+                "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+                native_fuzz_markdown_result.stdout,
             )
         )
 
