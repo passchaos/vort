@@ -4782,6 +4782,35 @@ def rewrite_csv_rows(path: Path, rows: list[dict[str, str]], fieldnames: list[st
         writer.writerows(rows)
 
 
+def native_codec_probes_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    mutate_report=None,
+    mutate_markdown=None,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted native codec probes artifact."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    report_path = fixture_root / NATIVE_CODEC_PROBES_ARTIFACT
+    markdown_path = fixture_root / NATIVE_CODEC_PROBES_MARKDOWN_ARTIFACT
+    if mutate_report is not None:
+        report = json.loads(report_path.read_text())
+        mutate_report(report)
+        report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    if mutate_markdown is not None:
+        mutate_markdown(markdown_path)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def native_allocation_drift_fixture(
     root: Path,
     fixture_name: str,
@@ -8055,6 +8084,128 @@ def main() -> int:
                 native_fuzz_markdown_result.returncode,
                 "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
                 native_fuzz_markdown_result.stdout,
+            )
+        )
+
+        native_codec_probe_count_result, native_codec_probe_count_manifest = native_codec_probes_drift_fixture(
+            root,
+            "native-codec-probe-count",
+            mutate_report=lambda payload: payload.__setitem__("probe_count", int(payload["probe_count"]) + 1),
+        )
+        native_codec_probe_count_matched = (
+            native_codec_probe_count_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_codec_probes_failed" in native_codec_probe_count_result.stdout
+            and native_codec_probe_count_manifest["validation_healthy"] is False
+            and native_codec_probe_count_manifest["native_codec_probes_healthy"] is False
+            and native_codec_probe_count_manifest["native_codec_probes_probe_count_mismatch"] == 1
+        )
+        checks.append(
+            check_row(
+                "native_codec_probes_probe_count_mismatch",
+                "strict-validation-health",
+                True,
+                native_codec_probe_count_matched,
+                native_codec_probe_count_result.returncode,
+                "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+                native_codec_probe_count_result.stdout,
+            )
+        )
+
+        native_codec_case_sum_result, native_codec_case_sum_manifest = native_codec_probes_drift_fixture(
+            root,
+            "native-codec-case-sum",
+            mutate_report=lambda payload: payload.__setitem__("total_cases", int(payload["total_cases"]) + 1),
+        )
+        native_codec_case_sum_matched = (
+            native_codec_case_sum_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_codec_probes_failed" in native_codec_case_sum_result.stdout
+            and native_codec_case_sum_manifest["validation_healthy"] is False
+            and native_codec_case_sum_manifest["native_codec_probes_healthy"] is False
+            and native_codec_case_sum_manifest["native_codec_probes_probe_case_sum_mismatch"] == 1
+        )
+        checks.append(
+            check_row(
+                "native_codec_probes_case_sum_mismatch",
+                "strict-validation-health",
+                True,
+                native_codec_case_sum_matched,
+                native_codec_case_sum_result.returncode,
+                "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+                native_codec_case_sum_result.stdout,
+            )
+        )
+
+        native_codec_coverage_count_result, native_codec_coverage_count_manifest = native_codec_probes_drift_fixture(
+            root,
+            "native-codec-coverage-count",
+            mutate_report=lambda payload: payload.__setitem__("coverage_count", int(payload["coverage_count"]) + 1),
+        )
+        native_codec_coverage_count_matched = (
+            native_codec_coverage_count_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_codec_probes_failed" in native_codec_coverage_count_result.stdout
+            and native_codec_coverage_count_manifest["validation_healthy"] is False
+            and native_codec_coverage_count_manifest["native_codec_probes_healthy"] is False
+            and native_codec_coverage_count_manifest["native_codec_probes_coverage_count_mismatch"] == 1
+        )
+        checks.append(
+            check_row(
+                "native_codec_probes_coverage_count_mismatch",
+                "strict-validation-health",
+                True,
+                native_codec_coverage_count_matched,
+                native_codec_coverage_count_result.returncode,
+                "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+                native_codec_coverage_count_result.stdout,
+            )
+        )
+
+        native_codec_capability_count_result, native_codec_capability_count_manifest = native_codec_probes_drift_fixture(
+            root,
+            "native-codec-capability-count",
+            mutate_report=lambda payload: payload.__setitem__("capability_count", int(payload["capability_count"]) + 1),
+        )
+        native_codec_capability_count_matched = (
+            native_codec_capability_count_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_codec_probes_failed" in native_codec_capability_count_result.stdout
+            and native_codec_capability_count_manifest["validation_healthy"] is False
+            and native_codec_capability_count_manifest["native_codec_probes_healthy"] is False
+            and native_codec_capability_count_manifest["native_codec_probes_capability_count_mismatch"] == 1
+        )
+        checks.append(
+            check_row(
+                "native_codec_probes_capability_count_mismatch",
+                "strict-validation-health",
+                True,
+                native_codec_capability_count_matched,
+                native_codec_capability_count_result.returncode,
+                "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+                native_codec_capability_count_result.stdout,
+            )
+        )
+
+        native_codec_markdown_result, native_codec_markdown_manifest = native_codec_probes_drift_fixture(
+            root,
+            "native-codec-markdown-unmatched",
+            mutate_markdown=lambda markdown_path: markdown_path.write_text(
+                markdown_path.read_text().replace("## Probes", "## Probe drift", 1)
+            ),
+        )
+        native_codec_markdown_matched = (
+            native_codec_markdown_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_codec_probes_failed" in native_codec_markdown_result.stdout
+            and native_codec_markdown_manifest["validation_healthy"] is False
+            and native_codec_markdown_manifest["native_codec_probes_healthy"] is False
+            and native_codec_markdown_manifest["native_codec_probes_markdown_unmatched"] == 1
+        )
+        checks.append(
+            check_row(
+                "native_codec_probes_markdown_unmatched",
+                "strict-validation-health",
+                True,
+                native_codec_markdown_matched,
+                native_codec_markdown_result.returncode,
+                "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+                native_codec_markdown_result.stdout,
             )
         )
 

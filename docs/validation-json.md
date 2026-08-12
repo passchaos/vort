@@ -4531,9 +4531,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 166,
-      "min_expected_failures": 166,
-      "min_matched": 166
+      "min_checks": 171,
+      "min_expected_failures": 171,
+      "min_matched": 171
     },
     {
       "mode": "non-json-artifact-health",
@@ -4655,7 +4655,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 126,
+  "check_count": 131,
   "mode_count": 5,
   "expected_mode_count": 5,
   "missing_mode_count": 0,
@@ -4675,9 +4675,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 166,
-      "min_expected_failures": 166,
-      "min_matched": 166
+      "min_checks": 171,
+      "min_expected_failures": 171,
+      "min_matched": 171
     },
     {
       "mode": "non-json-artifact-health",
@@ -4720,14 +4720,14 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 79,
-      "min_checks": 166,
+      "checks": 84,
+      "min_checks": 171,
       "missing_checks": 87,
-      "expected_failures": 79,
-      "min_expected_failures": 166,
+      "expected_failures": 84,
+      "min_expected_failures": 171,
       "missing_expected_failures": 87,
-      "matched": 79,
-      "min_matched": 166,
+      "matched": 84,
+      "min_matched": 171,
       "missing_matched": 87
     },
     {
@@ -4770,9 +4770,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 79,
-      "expected_failures": 79,
-      "matched": 79
+      "checks": 84,
+      "expected_failures": 84,
+      "matched": 84
     },
     {
       "mode": "non-json-artifact-health",
@@ -5923,6 +5923,66 @@ Example:
       "expected_output": "dashboard_index_validation_unhealthy=native_allocation_failed",
       "actual_output": "dashboard_index_validation_unhealthy=native_allocation_failed\n",
       "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_probe_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_case_sum_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_coverage_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_capability_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_markdown_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 64,
       "actual_output_limit": 240,
       "actual_output_truncated": false,
       "returncode": 1,
