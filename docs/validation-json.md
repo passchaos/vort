@@ -4537,9 +4537,9 @@ Example:
     },
     {
       "mode": "non-json-artifact-health",
-      "min_checks": 15,
-      "min_expected_failures": 15,
-      "min_matched": 15
+      "min_checks": 22,
+      "min_expected_failures": 22,
+      "min_matched": 22
     },
     {
       "mode": "native-tier-range-health",
@@ -4620,7 +4620,7 @@ python3 tools/dashboard_strict_smoke.py --summary zig-out/vort-dashboard-strict-
 
 This schema summarizes positive and negative smoke checks for dashboard strict
 modes: producer coverage, smoke-gate coverage, header-inspection health,
-non-JSON artifact layout/manifest-drift coverage for CSV files, CSV headers, Markdown files, and Markdown tables, native-tier range health-field coverage, dashboard Markdown review-surface
+non-JSON artifact layout/manifest-drift coverage for CSV files, CSV headers, Markdown files, Markdown headings, and Markdown tables, native-tier range health-field coverage, dashboard Markdown review-surface
 coverage, and aggregate validation-health failures. Each check records the expected output
 marker, actual truncated output, original output length, truncation limit/flag,
 and process return code for CI diagnostics. `mode_counts` groups checks by
@@ -4655,7 +4655,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 41,
+  "check_count": 48,
   "mode_count": 5,
   "expected_mode_count": 5,
   "missing_mode_count": 0,
@@ -4681,9 +4681,9 @@ Example:
     },
     {
       "mode": "non-json-artifact-health",
-      "min_checks": 15,
-      "min_expected_failures": 15,
-      "min_matched": 15
+      "min_checks": 22,
+      "min_expected_failures": 22,
+      "min_matched": 22
     },
     {
       "mode": "native-tier-range-health",
@@ -4732,14 +4732,14 @@ Example:
     },
     {
       "mode": "non-json-artifact-health",
-      "checks": 15,
-      "min_checks": 15,
+      "checks": 22,
+      "min_checks": 22,
       "missing_checks": 0,
-      "expected_failures": 15,
-      "min_expected_failures": 15,
+      "expected_failures": 22,
+      "min_expected_failures": 22,
       "missing_expected_failures": 0,
-      "matched": 15,
-      "min_matched": 15,
+      "matched": 22,
+      "min_matched": 22,
       "missing_matched": 0
     },
     {
@@ -4776,9 +4776,9 @@ Example:
     },
     {
       "mode": "non-json-artifact-health",
-      "checks": 15,
-      "expected_failures": 15,
-      "matched": 15
+      "checks": 22,
+      "expected_failures": 22,
+      "matched": 22
     },
     {
       "mode": "native-tier-range-health",
@@ -5149,6 +5149,30 @@ Example:
       "matched": true
     },
     {
+      "name": "mismatched_csv_header_manifest_missing",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_csv_header_manifest_unknown",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
       "name": "mismatched_csv_header_column_manifest",
       "mode": "non-json-artifact-health",
       "expected_failure": true,
@@ -5234,6 +5258,66 @@ Example:
     },
     {
       "name": "mismatched_markdown_artifact_table_separator_missing",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_markdown_heading_manifest_missing",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_markdown_heading_manifest_unknown",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_markdown_heading_count_manifest",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_markdown_first_heading_manifest",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_markdown_heading_signature_manifest",
       "mode": "non-json-artifact-health",
       "expected_failure": true,
       "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",

@@ -4419,9 +4419,16 @@ def markdown_manifest_drift_fixture(
     for artifact in artifacts:
         if isinstance(artifact, dict) and artifact.get("name") == target_artifact:
             value = artifact.get(manifest_field)
-            if not isinstance(value, int) or isinstance(value, bool):
-                raise AssertionError(f"{target_artifact} manifest field {manifest_field!r} is not an integer")
-            artifact[manifest_field] = value + 1
+            if manifest_field in {"heading_count", "table_row_count", "table_separator_count"}:
+                if not isinstance(value, int) or isinstance(value, bool):
+                    raise AssertionError(f"{target_artifact} manifest field {manifest_field!r} is not an integer")
+                artifact[manifest_field] = value + 1
+            elif manifest_field in {"first_heading", "signature"}:
+                if not isinstance(value, str) or not value:
+                    raise AssertionError(f"{target_artifact} manifest field {manifest_field!r} is not a non-empty string")
+                artifact[manifest_field] = f"{value} drift"
+            else:
+                raise AssertionError(f"unsupported Markdown manifest drift field {manifest_field!r}")
             break
     else:
         raise AssertionError(f"missing {target_artifact} in synthetic Markdown manifest")
@@ -4491,6 +4498,50 @@ def csv_manifest_drift_fixture(
     return result, manifest
 
 
+def csv_manifest_membership_fixture(
+    root: Path,
+    fixture_name: str,
+    artifact_name: str,
+    mutation: str,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with synthetic CSV manifest membership drift."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    target = fixture_root / artifact_name
+    write_synthetic_csv_artifact(target)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    add_synthetic_csv_artifact_metadata(producer_map, artifact_name)
+    csv_manifest = write_csv_header_manifest(fixture_root)
+    markdown_manifest = write_markdown_heading_manifest(fixture_root)
+
+    if mutation == "missing":
+        target.unlink()
+        payload = json.loads(producer_map.read_text())
+        payload.get("exact", {}).pop(artifact_name, None)
+        payload.get("artifact_metadata", {}).pop(artifact_name, None)
+        producer_map.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    elif mutation == "unknown":
+        remove_csv_manifest_artifact(csv_manifest, artifact_name)
+    else:
+        raise AssertionError(f"unsupported CSV manifest membership mutation {mutation!r}")
+
+    result = run(
+        dashboard_args_with_manifests(
+            fixture_root,
+            producer_map,
+            csv_manifest,
+            markdown_manifest,
+            "--strict-validation-health",
+        ),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def add_synthetic_csv_artifact_metadata(producer_map: Path, artifact_name: str) -> None:
     payload = json.loads(producer_map.read_text())
     payload.setdefault("exact", {})[artifact_name] = "synthetic non-json CSV artifact audit fixture"
@@ -4546,6 +4597,50 @@ def remove_markdown_manifest_artifact(manifest_path: Path, artifact_name: str) -
     payload["artifacts"] = filtered
     payload["artifact_count"] = len(filtered)
     manifest_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def markdown_manifest_membership_fixture(
+    root: Path,
+    fixture_name: str,
+    artifact_name: str,
+    mutation: str,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with synthetic Markdown heading-manifest membership drift."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    target = fixture_root / artifact_name
+    write_synthetic_markdown_artifact(target)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    add_synthetic_markdown_artifact_metadata(producer_map, artifact_name)
+    csv_manifest = write_csv_header_manifest(fixture_root)
+    markdown_manifest = write_markdown_heading_manifest(fixture_root)
+
+    if mutation == "missing":
+        target.unlink()
+        payload = json.loads(producer_map.read_text())
+        payload.get("exact", {}).pop(artifact_name, None)
+        payload.get("artifact_metadata", {}).pop(artifact_name, None)
+        producer_map.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    elif mutation == "unknown":
+        remove_markdown_manifest_artifact(markdown_manifest, artifact_name)
+    else:
+        raise AssertionError(f"unsupported Markdown manifest membership mutation {mutation!r}")
+
+    result = run(
+        dashboard_args_with_manifests(
+            fixture_root,
+            producer_map,
+            csv_manifest,
+            markdown_manifest,
+            "--strict-validation-health",
+        ),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
 
 
 def markdown_artifact_layout_fixture(
@@ -5986,6 +6081,56 @@ def main() -> int:
                 )
             )
 
+        csv_manifest_membership_cases = [
+            (
+                "missing",
+                "mismatched_csv_header_manifest_missing",
+                "vort-non-json-csv-manifest-missing.csv",
+                "csv_header_missing",
+            ),
+            (
+                "unknown",
+                "mismatched_csv_header_manifest_unknown",
+                "vort-non-json-csv-manifest-unknown.csv",
+                "csv_header_unknown",
+            ),
+        ]
+        for mutation, check_name, artifact_name, mismatch_field in csv_manifest_membership_cases:
+            csv_membership_result, csv_membership_manifest = csv_manifest_membership_fixture(
+                root,
+                f"mismatched-csv-header-manifest-{mutation}",
+                artifact_name,
+                mutation,
+            )
+            csv_membership_matched = (
+                csv_membership_result.returncode != 0
+                and "dashboard_index_validation_unhealthy=non_json_artifact_failed" in csv_membership_result.stdout
+                and csv_membership_manifest["validation_healthy"] is False
+                and csv_membership_manifest["non_json_artifact_healthy"] is False
+                and csv_membership_manifest[mismatch_field] == [artifact_name]
+                and all(
+                    csv_membership_manifest[field] == []
+                    for field in (
+                        "csv_header_missing",
+                        "csv_header_unknown",
+                        "csv_header_column_mismatch",
+                        "csv_header_signature_mismatch",
+                    )
+                    if field != mismatch_field
+                )
+            )
+            checks.append(
+                check_row(
+                    check_name,
+                    "non-json-artifact-health",
+                    True,
+                    csv_membership_matched,
+                    csv_membership_result.returncode,
+                    "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+                    csv_membership_result.stdout,
+                )
+            )
+
         csv_header_column_result, csv_header_column_manifest_result = csv_manifest_drift_fixture(
             root,
             "mismatched-csv-header-column",
@@ -6037,6 +6182,115 @@ def main() -> int:
                 csv_header_signature_result.stdout,
             )
         )
+
+        markdown_manifest_membership_cases = [
+            (
+                "missing",
+                "mismatched_markdown_heading_manifest_missing",
+                "vort-non-json-markdown-manifest-missing.md",
+                "markdown_heading_manifest_missing",
+            ),
+            (
+                "unknown",
+                "mismatched_markdown_heading_manifest_unknown",
+                "vort-non-json-markdown-manifest-unknown.md",
+                "markdown_heading_manifest_unknown",
+            ),
+        ]
+        for mutation, check_name, artifact_name, mismatch_field in markdown_manifest_membership_cases:
+            markdown_membership_result, markdown_membership_manifest = markdown_manifest_membership_fixture(
+                root,
+                f"mismatched-markdown-heading-manifest-{mutation}",
+                artifact_name,
+                mutation,
+            )
+            markdown_membership_matched = (
+                markdown_membership_result.returncode != 0
+                and "dashboard_index_validation_unhealthy=non_json_artifact_failed" in markdown_membership_result.stdout
+                and markdown_membership_manifest["validation_healthy"] is False
+                and markdown_membership_manifest["non_json_artifact_healthy"] is False
+                and markdown_membership_manifest[mismatch_field] == [artifact_name]
+                and all(
+                    markdown_membership_manifest[field] == []
+                    for field in (
+                        "markdown_heading_manifest_missing",
+                        "markdown_heading_manifest_unknown",
+                        "markdown_heading_count_mismatch",
+                        "markdown_first_heading_mismatch",
+                        "markdown_heading_signature_mismatch",
+                        "markdown_table_count_mismatch",
+                        "markdown_table_separator_count_mismatch",
+                    )
+                    if field != mismatch_field
+                )
+            )
+            checks.append(
+                check_row(
+                    check_name,
+                    "non-json-artifact-health",
+                    True,
+                    markdown_membership_matched,
+                    markdown_membership_result.returncode,
+                    "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+                    markdown_membership_result.stdout,
+                )
+            )
+
+        markdown_heading_drift_cases = [
+            (
+                "heading_count",
+                "mismatched_markdown_heading_count_manifest",
+                "markdown_heading_count_mismatch",
+            ),
+            (
+                "first_heading",
+                "mismatched_markdown_first_heading_manifest",
+                "markdown_first_heading_mismatch",
+            ),
+            (
+                "signature",
+                "mismatched_markdown_heading_signature_manifest",
+                "markdown_heading_signature_mismatch",
+            ),
+        ]
+        for manifest_field, check_name, mismatch_field in markdown_heading_drift_cases:
+            markdown_heading_result, markdown_heading_manifest = markdown_manifest_drift_fixture(
+                root,
+                f"mismatched-markdown-heading-{manifest_field.replace('_', '-')}",
+                LEVEL_REPORT_MARKDOWN_ARTIFACT,
+                manifest_field,
+            )
+            markdown_heading_matched = (
+                markdown_heading_result.returncode != 0
+                and "dashboard_index_validation_unhealthy=non_json_artifact_failed" in markdown_heading_result.stdout
+                and markdown_heading_manifest["validation_healthy"] is False
+                and markdown_heading_manifest["non_json_artifact_healthy"] is False
+                and markdown_heading_manifest[mismatch_field] == [LEVEL_REPORT_MARKDOWN_ARTIFACT]
+                and all(
+                    markdown_heading_manifest[field] == []
+                    for field in (
+                        "markdown_heading_manifest_missing",
+                        "markdown_heading_manifest_unknown",
+                        "markdown_heading_count_mismatch",
+                        "markdown_first_heading_mismatch",
+                        "markdown_heading_signature_mismatch",
+                        "markdown_table_count_mismatch",
+                        "markdown_table_separator_count_mismatch",
+                    )
+                    if field != mismatch_field
+                )
+            )
+            checks.append(
+                check_row(
+                    check_name,
+                    "non-json-artifact-health",
+                    True,
+                    markdown_heading_matched,
+                    markdown_heading_result.returncode,
+                    "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+                    markdown_heading_result.stdout,
+                )
+            )
 
         markdown_table_count_result, markdown_table_count_manifest_result = markdown_manifest_drift_fixture(
             root,
