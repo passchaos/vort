@@ -5881,6 +5881,26 @@ def validation_json_smoke_drift_fixture(root: Path, fixture_name: str, mutate) -
     return result, manifest
 
 
+def validation_json_docs_negative_drift_fixture(root: Path, fixture_name: str, mutate) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted validation docs-negative artifact."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    payload_path = fixture_root / VALIDATION_JSON_DOCS_NEGATIVE_ARTIFACT
+    payload = json.loads(payload_path.read_text())
+    mutate(payload)
+    payload_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def expect_failure(args: list[str], needle: str) -> subprocess.CompletedProcess[str]:
     result = run(args, check=False)
     if result.returncode == 0:
@@ -13825,6 +13845,184 @@ def main() -> int:
                 validation_json_count_mismatch_result.returncode,
                 "dashboard_index_validation_unhealthy=validation_json_failed",
                 validation_json_count_mismatch_result.stdout,
+            )
+        )
+
+        def append_validation_json_smoke_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and "dashboard_index_validation_unhealthy=validation_json_failed" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["validation_json_present"] is True
+                and manifest["validation_json_ok"] is True
+                and manifest["validation_json_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    "dashboard_index_validation_unhealthy=validation_json_failed",
+                    result.stdout,
+                )
+            )
+
+        validation_json_direct_cases = [
+            (
+                "checked-schema-empty",
+                "validation_json_checked_schema_missing",
+                lambda payload: payload.__setitem__("checked_schemas", []),
+                {"validation_json_checked_schema_count": 0, "validation_json_checked_schema_unique_count": 0},
+            ),
+            (
+                "checked-schema-duplicate",
+                "validation_json_checked_schema_duplicate",
+                lambda payload: payload["checked_schemas"].append(payload["checked_schemas"][0]),
+                {"validation_json_checked_schema_duplicate_count": 1},
+            ),
+            (
+                "observed-schema-rows-missing",
+                "validation_json_observed_schema_rows_missing",
+                lambda payload: payload.__setitem__("observed_schemas", []),
+                {"validation_json_observed_schema_rows": 0, "validation_json_observed_schema_count_mismatch": 5},
+            ),
+            (
+                "unchecked-observed-count-mismatch",
+                "validation_json_unchecked_observed_schema_count_mismatch",
+                lambda payload: payload.__setitem__("unchecked_observed_schema_count", 1),
+                {"validation_json_unchecked_observed_schema_count": 1, "validation_json_unchecked_observed_schema_rows": 0, "validation_json_unchecked_observed_schema_count_mismatch": 1},
+            ),
+            (
+                "json-artifact-excluded-count-mismatch",
+                "validation_json_artifact_excluded_count_mismatch",
+                lambda payload: payload.__setitem__("json_artifact_excluded_count", int(payload["json_artifact_excluded_count"]) + 1),
+                {"validation_json_json_artifact_excluded_count": 3, "validation_json_json_artifact_excluded_rows": 2, "validation_json_json_artifact_excluded_count_mismatch": 1},
+            ),
+            (
+                "json-artifact-count-zero",
+                "validation_json_artifact_count_zero",
+                lambda payload: payload.__setitem__("json_artifact_count", 0),
+                {"validation_json_json_artifact_count": 0},
+            ),
+            (
+                "json-artifact-excluded-zero",
+                "validation_json_artifact_excluded_zero",
+                lambda payload: payload.__setitem__("json_artifact_excluded_count", 0),
+                {"validation_json_json_artifact_excluded_count": 0, "validation_json_json_artifact_excluded_count_mismatch": 2},
+            ),
+            (
+                "json-artifact-parsed-zero",
+                "validation_json_artifact_parsed_zero",
+                lambda payload: payload.__setitem__("json_artifact_parsed_count", 0),
+                {"validation_json_json_artifact_parsed_count": 0},
+            ),
+            (
+                "json-artifact-schema-zero",
+                "validation_json_artifact_schema_zero",
+                lambda payload: payload.__setitem__("json_artifact_schema_count", 0),
+                {"validation_json_json_artifact_schema_count": 0},
+            ),
+            (
+                "json-artifact-manifest-validated-zero",
+                "validation_json_artifact_manifest_validated_zero",
+                lambda payload: payload.__setitem__("json_artifact_manifest_validated_count", 0),
+                {"validation_json_json_artifact_manifest_validated_count": 0},
+            ),
+            (
+                "cli-success-failed",
+                "validation_json_cli_success_failed",
+                lambda payload: payload.__setitem__("cli_success_ok", False),
+                {"validation_json_cli_success_ok": False},
+            ),
+            (
+                "cli-failure-unexpected-ok",
+                "validation_json_cli_failure_unexpected_ok",
+                lambda payload: payload.__setitem__("cli_failure_ok", True),
+                {"validation_json_cli_failure_ok": True},
+            ),
+            (
+                "cli-failure-hint-missing",
+                "validation_json_cli_failure_hint_missing",
+                lambda payload: payload.__setitem__("cli_failure_hint", ""),
+                {"validation_json_cli_failure_hint": ""},
+            ),
+            (
+                "report-rows-missing",
+                "validation_json_report_rows_missing",
+                lambda payload: payload.__setitem__("report_rows", 0),
+                {"validation_json_report_rows": 0},
+            ),
+            (
+                "corrupt-rows-missing",
+                "validation_json_corrupt_rows_missing",
+                lambda payload: payload.__setitem__("corrupt_rows", 0),
+                {"validation_json_corrupt_rows": 0},
+            ),
+        ]
+        for fixture_name, check_name, mutate, expected_manifest_fields in validation_json_direct_cases:
+            result, manifest = validation_json_smoke_drift_fixture(root, f"validation-json-{fixture_name}", mutate)
+            append_validation_json_smoke_check(
+                check_name,
+                result,
+                manifest,
+                all(manifest[field] == expected for field, expected in expected_manifest_fields.items()),
+            )
+
+        validation_json_docs_ok_result, validation_json_docs_ok_manifest = validation_json_docs_negative_drift_fixture(
+            root,
+            "validation-json-docs-negative-ok",
+            lambda payload: payload.__setitem__("ok", False),
+        )
+        validation_json_docs_ok_matched = (
+            validation_json_docs_ok_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=validation_json_docs_negative_failed" in validation_json_docs_ok_result.stdout
+            and validation_json_docs_ok_manifest["validation_healthy"] is False
+            and validation_json_docs_ok_manifest["validation_json_healthy"] is False
+            and validation_json_docs_ok_manifest["validation_json_docs_negative_present"] is True
+            and validation_json_docs_ok_manifest["validation_json_docs_negative_ok"] is False
+        )
+        checks.append(
+            check_row(
+                "validation_json_docs_negative_ok_mismatch",
+                "strict-validation-health",
+                True,
+                validation_json_docs_ok_matched,
+                validation_json_docs_ok_result.returncode,
+                "dashboard_index_validation_unhealthy=validation_json_docs_negative_failed",
+                validation_json_docs_ok_result.stdout,
+            )
+        )
+
+        validation_json_docs_count_zero_result, validation_json_docs_count_zero_manifest = validation_json_docs_negative_drift_fixture(
+            root,
+            "validation-json-docs-negative-count-zero",
+            lambda payload: payload.__setitem__("case_count", 0),
+        )
+        validation_json_docs_count_zero_matched = (
+            validation_json_docs_count_zero_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=validation_json_docs_negative_failed" in validation_json_docs_count_zero_result.stdout
+            and validation_json_docs_count_zero_manifest["validation_healthy"] is False
+            and validation_json_docs_count_zero_manifest["validation_json_healthy"] is False
+            and validation_json_docs_count_zero_manifest["validation_json_docs_negative_case_count"] == 0
+            and validation_json_docs_count_zero_manifest["validation_json_docs_negative_count_mismatch"] == 2
+        )
+        checks.append(
+            check_row(
+                "validation_json_docs_negative_count_zero",
+                "strict-validation-health",
+                True,
+                validation_json_docs_count_zero_matched,
+                validation_json_docs_count_zero_result.returncode,
+                "dashboard_index_validation_unhealthy=validation_json_docs_negative_failed",
+                validation_json_docs_count_zero_result.stdout,
             )
         )
 
