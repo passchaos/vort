@@ -5554,6 +5554,32 @@ def native_summary_error_negative_drift_fixture(
     return result, manifest
 
 
+def native_stream_summary_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    *,
+    artifact: str,
+    mutate_report,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted native stream summary."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    report_path = fixture_root / artifact
+    payload = json.loads(report_path.read_text())
+    mutate_report(payload)
+    report_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def dynamic_plan_drift_fixture(root: Path, fixture_name: str, mutate_csv) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted dynamic-plan CSV artifact."""
 
@@ -11157,6 +11183,168 @@ def main() -> int:
             native_summary_negative_expected_result,
             native_summary_negative_expected_manifest,
             native_summary_negative_expected_manifest["native_summary_error_negative_expected_failures"] == 2,
+        )
+
+        def append_native_stream_summary_check(
+            name: str,
+            reason: str,
+            health_key: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and f"dashboard_index_validation_unhealthy={reason}" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest[health_key] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    f"dashboard_index_validation_unhealthy={reason}",
+                    result.stdout,
+                )
+            )
+
+        lz4_summary_block_count_result, lz4_summary_block_count_manifest = native_stream_summary_drift_fixture(
+            root,
+            "lz4-native-summary-block-count",
+            artifact=LZ4_NATIVE_SUMMARY_ARTIFACT,
+            mutate_report=lambda payload: payload.__setitem__("block_count", int(payload["block_count"]) + 1),
+        )
+        append_native_stream_summary_check(
+            "lz4_native_summary_block_count_mismatch",
+            "lz4_native_summary_undercovered",
+            "lz4_native_summary_healthy",
+            lz4_summary_block_count_result,
+            lz4_summary_block_count_manifest,
+            lz4_summary_block_count_manifest["lz4_native_summary_block_count_mismatch"] == 1,
+        )
+
+        lz4_summary_declared_result, lz4_summary_declared_manifest = native_stream_summary_drift_fixture(
+            root,
+            "lz4-native-summary-declared-slack",
+            artifact=LZ4_NATIVE_SUMMARY_ARTIFACT,
+            mutate_report=lambda payload: payload.__setitem__("declared_content_bytes", int(payload["declared_content_bytes"]) + 1),
+        )
+        append_native_stream_summary_check(
+            "lz4_native_summary_declared_payload_slack",
+            "lz4_native_summary_undercovered",
+            "lz4_native_summary_healthy",
+            lz4_summary_declared_result,
+            lz4_summary_declared_manifest,
+            lz4_summary_declared_manifest["lz4_native_summary_declared_payload_slack_bytes"] == 1,
+        )
+
+        lz4_summary_metadata_result, lz4_summary_metadata_manifest = native_stream_summary_drift_fixture(
+            root,
+            "lz4-native-summary-metadata-overflow",
+            artifact=LZ4_NATIVE_SUMMARY_ARTIFACT,
+            mutate_report=lambda payload: payload.__setitem__("dictionary_id_frame_count", int(payload["frame_count"]) + 1),
+        )
+        append_native_stream_summary_check(
+            "lz4_native_summary_metadata_frame_overflow",
+            "lz4_native_summary_undercovered",
+            "lz4_native_summary_healthy",
+            lz4_summary_metadata_result,
+            lz4_summary_metadata_manifest,
+            lz4_summary_metadata_manifest["lz4_native_summary_metadata_frame_overflow"] == 1,
+        )
+
+        lz4_summary_checksum_result, lz4_summary_checksum_manifest = native_stream_summary_drift_fixture(
+            root,
+            "lz4-native-summary-checksum-overflow",
+            artifact=LZ4_NATIVE_SUMMARY_ARTIFACT,
+            mutate_report=lambda payload: payload.__setitem__("checksum_frame_count", int(payload["frame_count"]) + 1),
+        )
+        append_native_stream_summary_check(
+            "lz4_native_summary_checksum_frame_overflow",
+            "lz4_native_summary_undercovered",
+            "lz4_native_summary_healthy",
+            lz4_summary_checksum_result,
+            lz4_summary_checksum_manifest,
+            lz4_summary_checksum_manifest["lz4_native_summary_checksum_frame_overflow"] == 1,
+        )
+
+        lz4_summary_block_checksum_result, lz4_summary_block_checksum_manifest = native_stream_summary_drift_fixture(
+            root,
+            "lz4-native-summary-block-checksum-overflow",
+            artifact=LZ4_NATIVE_SUMMARY_ARTIFACT,
+            mutate_report=lambda payload: payload.__setitem__("block_checksum_frame_count", int(payload["frame_count"]) + 1),
+        )
+        append_native_stream_summary_check(
+            "lz4_native_summary_block_checksum_frame_overflow",
+            "lz4_native_summary_undercovered",
+            "lz4_native_summary_healthy",
+            lz4_summary_block_checksum_result,
+            lz4_summary_block_checksum_manifest,
+            lz4_summary_block_checksum_manifest["lz4_native_summary_block_checksum_frame_overflow"] == 1,
+        )
+
+        zstd_summary_block_count_result, zstd_summary_block_count_manifest = native_stream_summary_drift_fixture(
+            root,
+            "zstd-native-summary-block-count",
+            artifact=ZSTD_NATIVE_SUMMARY_ARTIFACT,
+            mutate_report=lambda payload: payload.__setitem__("block_count", int(payload["block_count"]) + 1),
+        )
+        append_native_stream_summary_check(
+            "zstd_native_summary_block_count_mismatch",
+            "zstd_native_summary_undercovered",
+            "zstd_native_summary_healthy",
+            zstd_summary_block_count_result,
+            zstd_summary_block_count_manifest,
+            zstd_summary_block_count_manifest["zstd_native_summary_block_count_mismatch"] == 1,
+        )
+
+        zstd_summary_declared_result, zstd_summary_declared_manifest = native_stream_summary_drift_fixture(
+            root,
+            "zstd-native-summary-declared-slack",
+            artifact=ZSTD_NATIVE_SUMMARY_ARTIFACT,
+            mutate_report=lambda payload: payload.__setitem__("declared_content_bytes", int(payload["declared_content_bytes"]) + 1),
+        )
+        append_native_stream_summary_check(
+            "zstd_native_summary_declared_payload_slack",
+            "zstd_native_summary_undercovered",
+            "zstd_native_summary_healthy",
+            zstd_summary_declared_result,
+            zstd_summary_declared_manifest,
+            zstd_summary_declared_manifest["zstd_native_summary_declared_payload_slack_bytes"] == 1,
+        )
+
+        zstd_summary_metadata_result, zstd_summary_metadata_manifest = native_stream_summary_drift_fixture(
+            root,
+            "zstd-native-summary-metadata-overflow",
+            artifact=ZSTD_NATIVE_SUMMARY_ARTIFACT,
+            mutate_report=lambda payload: payload.__setitem__("dictionary_id_frame_count", int(payload["frame_count"]) + 1),
+        )
+        append_native_stream_summary_check(
+            "zstd_native_summary_metadata_frame_overflow",
+            "zstd_native_summary_undercovered",
+            "zstd_native_summary_healthy",
+            zstd_summary_metadata_result,
+            zstd_summary_metadata_manifest,
+            zstd_summary_metadata_manifest["zstd_native_summary_metadata_frame_overflow"] == 1,
+        )
+
+        zstd_summary_checksum_result, zstd_summary_checksum_manifest = native_stream_summary_drift_fixture(
+            root,
+            "zstd-native-summary-checksum-overflow",
+            artifact=ZSTD_NATIVE_SUMMARY_ARTIFACT,
+            mutate_report=lambda payload: payload.__setitem__("checksum_frame_count", int(payload["frame_count"]) + 1),
+        )
+        append_native_stream_summary_check(
+            "zstd_native_summary_checksum_frame_overflow",
+            "zstd_native_summary_undercovered",
+            "zstd_native_summary_healthy",
+            zstd_summary_checksum_result,
+            zstd_summary_checksum_manifest,
+            zstd_summary_checksum_manifest["zstd_native_summary_checksum_frame_overflow"] == 1,
         )
 
         def append_native_library_bench_check(

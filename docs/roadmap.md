@@ -2672,6 +2672,12 @@ architecture blindly.
   and Zstd summary JSON for block-count consistency, declared-content slack,
   and impossible metadata/checksum frame overflows. Dashboard health now exposes
   mismatch/slack/overflow counters before native summary coverage can pass.
+
+- Added direct dashboard strict-smoke drift coverage for LZ4/Zstd native stream
+  summaries. The strict validation gate now exercises block-count mismatches,
+  declared payload slack, metadata/checksum-frame overflows, and LZ4
+  block-checksum overflow so native stream summary health cannot rely only on
+  aggregate undercovered fixtures.
 - Tightened dashboard configuration health by requiring config, category,
   required-producer, and producer-negative smoke row counts to match their
   declared counts and by exposing count-mismatch/row-unmatched counters in the
