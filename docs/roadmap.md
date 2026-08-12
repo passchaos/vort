@@ -474,6 +474,7 @@ architecture blindly.
 - [x] Dashboard strict-mode smoke directly covers dictionary decode benchmark health drift, including missing/duplicate/unknown case-format-encoder-mode rows, positive/output-size/throughput row drift, and per-payload checksum mismatches.
 - [x] Dashboard strict-mode smoke directly covers PNG scanline benchmark health drift, including missing/duplicate/unknown stage-bpp rows, positive/I/O/throughput row drift, and per-bpp checksum mismatches.
 - [x] Dashboard strict-mode smoke directly covers chunked zlib benchmark health drift, including missing Markdown, missing/duplicate/unknown cases, positive/shape/chunk-count/ratio row drift, and Markdown row drift.
+- [x] Dashboard strict-mode smoke directly covers PNG streaming zlib benchmark health drift, including missing/duplicate/unknown cases and positive/shape/image-size/chunk-count/ratio row drift.
 - [x] Dashboard strict-mode smoke directly covers native allocation health drift, including report count/unbalanced/duplicate rows, zero/budget smoke mismatches and duplicate cases, negative-smoke unmatched rows, and Markdown malformed/duplicate/unknown rows.
 - [x] Dashboard strict-mode smoke directly covers native fuzz corpus health drift, including report count/matched-row drift, coverage requirement mismatches, and Markdown unmatched rows.
 - [x] Dashboard strict-mode smoke directly covers decode-stage health drift, including report/error count mismatches, CSV missing/duplicate/unknown cases, and Markdown unmatched rows.
