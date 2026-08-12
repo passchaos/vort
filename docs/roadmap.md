@@ -459,6 +459,7 @@ architecture blindly.
 - [x] Dashboard strict-mode smoke records original actual-output length per check.
 - [x] Dashboard strict-mode smoke exercises the actual-output truncation path with a synthetic long-output check.
 - [x] Dashboard strict-mode smoke directly covers dashboard-strict self-health drift, including check/mode/expected-mode/missing-mode/validation-reason count mismatches, unmatched check rows, missing requirement deltas, and retained Markdown missing/unmatched rows.
+- [x] Dashboard strict-mode smoke directly covers dashboard-configuration health drift, including config index, negative config/category smokes, required producer metadata, producer-negative guardrails, count mismatches, unmatched rows, and required smoke-gate coverage loss.
 - [x] Dashboard strict-mode smoke covers every validation unhealthy reason with isolated negative fixtures.
 - [x] Dashboard strict-mode validation unhealthy reason matrix is stored in a schema-checked external JSON config.
 - [x] Dashboard strict-mode smoke directly covers native codec probe health drift, including probe count/case-sum mismatches, missing/duplicate probes, coverage/capability count/missing/duplicate drift, unhealthy capability rows, and Markdown unmatched rows.
@@ -2515,6 +2516,13 @@ architecture blindly.
   requirement deltas, missing-mode count drift, and retained Markdown
   missing/unmatched rows. `dashboard_strict_healthy` now also requires zero
   requirement deltas and at least one retained validation-reason row.
+
+- Tightened dashboard-configuration strict-smoke direct drift coverage for all
+  retained meta-smoke artifact families: config index, config negative, category
+  negative, producers-required, and producers-negative. Isolated fixtures now
+  fail aggregate health for `ok` drift, count mismatches, unmatched rows, and
+  required-smoke-gate count loss before `dashboard_configuration_healthy` can
+  pass.
 
 - Promoted the existing Snappy report CSV from dashboard inventory metadata to
   aggregate validation health without adding new compression-format scope. The

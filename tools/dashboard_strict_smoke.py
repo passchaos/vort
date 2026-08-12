@@ -5011,6 +5011,36 @@ def native_tier_discovery_drift_fixture(
     return result, manifest
 
 
+def dashboard_configuration_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    artifact_name: str,
+    mutate_payload,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted dashboard config artifact.
+
+    The dashboard configuration health gate is an aggregate over multiple
+    meta-smoke artifacts. Mutating exactly one retained artifact per fixture
+    keeps count and row-matching failures attributable to one field family.
+    """
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    artifact_path = fixture_root / artifact_name
+    payload = json.loads(artifact_path.read_text())
+    mutate_payload(payload)
+    artifact_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def dashboard_strict_drift_fixture(
     root: Path,
     fixture_name: str,
@@ -6468,6 +6498,264 @@ def main() -> int:
             dashboard_strict_markdown_missing_manifest,
             dashboard_strict_markdown_missing_manifest["dashboard_strict_markdown_present"] is False,
             expected_reason="missing_dashboard_strict_artifact",
+        )
+
+        def append_dashboard_configuration_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            detail_matched: bool,
+        ) -> None:
+            expected = "dashboard_index_validation_unhealthy=dashboard_configuration_failed"
+            matched = (
+                result.returncode != 0
+                and expected in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["dashboard_configuration_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    expected,
+                    result.stdout,
+                )
+            )
+
+        def increment_dashboard_configuration_field(payload: dict[str, object], field: str) -> None:
+            payload[field] = int(payload[field]) + 1
+
+        def mark_first_dashboard_configuration_case_unmatched(payload: dict[str, object], field: str) -> None:
+            rows = payload.get(field)
+            if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
+                raise AssertionError(f"dashboard configuration fixture missing {field} row")
+            rows[0]["matched"] = False
+
+        dashboard_config_ok_result, dashboard_config_ok_manifest = dashboard_configuration_drift_fixture(
+            root,
+            "dashboard-config-index-ok",
+            DASHBOARD_CONFIG_INDEX_SMOKE_ARTIFACT,
+            lambda payload: payload.__setitem__("ok", False),
+        )
+        append_dashboard_configuration_check(
+            "dashboard_config_index_ok_mismatch",
+            dashboard_config_ok_result,
+            dashboard_config_ok_manifest,
+            dashboard_config_ok_manifest["dashboard_config_index_ok"] is False,
+        )
+
+        dashboard_config_count_result, dashboard_config_count_manifest = dashboard_configuration_drift_fixture(
+            root,
+            "dashboard-config-index-count",
+            DASHBOARD_CONFIG_INDEX_SMOKE_ARTIFACT,
+            lambda payload: increment_dashboard_configuration_field(payload, "config_count"),
+        )
+        append_dashboard_configuration_check(
+            "dashboard_config_index_count_mismatch",
+            dashboard_config_count_result,
+            dashboard_config_count_manifest,
+            dashboard_config_count_manifest["dashboard_config_index_config_count"] == 4
+            and dashboard_config_count_manifest["dashboard_config_index_config_rows"] == 3
+            and dashboard_config_count_manifest["dashboard_config_index_count_mismatch"] == 1,
+        )
+
+        dashboard_config_row_result, dashboard_config_row_manifest = dashboard_configuration_drift_fixture(
+            root,
+            "dashboard-config-index-row-unmatched",
+            DASHBOARD_CONFIG_INDEX_SMOKE_ARTIFACT,
+            lambda payload: mark_first_dashboard_configuration_case_unmatched(payload, "configs"),
+        )
+        append_dashboard_configuration_check(
+            "dashboard_config_index_row_unmatched",
+            dashboard_config_row_result,
+            dashboard_config_row_manifest,
+            dashboard_config_row_manifest["dashboard_config_index_matched"] == 2
+            and dashboard_config_row_manifest["dashboard_config_index_row_unmatched"] == 1,
+        )
+
+        dashboard_config_negative_ok_result, dashboard_config_negative_ok_manifest = dashboard_configuration_drift_fixture(
+            root,
+            "dashboard-config-negative-ok",
+            DASHBOARD_CONFIG_INDEX_NEGATIVE_ARTIFACT,
+            lambda payload: payload.__setitem__("ok", False),
+        )
+        append_dashboard_configuration_check(
+            "dashboard_config_index_negative_ok_mismatch",
+            dashboard_config_negative_ok_result,
+            dashboard_config_negative_ok_manifest,
+            dashboard_config_negative_ok_manifest["dashboard_config_index_negative_ok"] is False,
+        )
+
+        dashboard_config_negative_count_result, dashboard_config_negative_count_manifest = dashboard_configuration_drift_fixture(
+            root,
+            "dashboard-config-negative-count",
+            DASHBOARD_CONFIG_INDEX_NEGATIVE_ARTIFACT,
+            lambda payload: increment_dashboard_configuration_field(payload, "case_count"),
+        )
+        append_dashboard_configuration_check(
+            "dashboard_config_index_negative_count_mismatch",
+            dashboard_config_negative_count_result,
+            dashboard_config_negative_count_manifest,
+            dashboard_config_negative_count_manifest["dashboard_config_index_negative_case_count"] == 3
+            and dashboard_config_negative_count_manifest["dashboard_config_index_negative_rows"] == 2
+            and dashboard_config_negative_count_manifest["dashboard_config_index_negative_count_mismatch"] == 1,
+        )
+
+        dashboard_config_negative_row_result, dashboard_config_negative_row_manifest = dashboard_configuration_drift_fixture(
+            root,
+            "dashboard-config-negative-row-unmatched",
+            DASHBOARD_CONFIG_INDEX_NEGATIVE_ARTIFACT,
+            lambda payload: mark_first_dashboard_configuration_case_unmatched(payload, "cases"),
+        )
+        append_dashboard_configuration_check(
+            "dashboard_config_index_negative_row_unmatched",
+            dashboard_config_negative_row_result,
+            dashboard_config_negative_row_manifest,
+            dashboard_config_negative_row_manifest["dashboard_config_index_negative_matched"] == 1
+            and dashboard_config_negative_row_manifest["dashboard_config_index_negative_row_unmatched"] == 1,
+        )
+
+        dashboard_category_ok_result, dashboard_category_ok_manifest = dashboard_configuration_drift_fixture(
+            root,
+            "dashboard-category-negative-ok",
+            DASHBOARD_CATEGORY_NEGATIVE_ARTIFACT,
+            lambda payload: payload.__setitem__("ok", False),
+        )
+        append_dashboard_configuration_check(
+            "dashboard_category_negative_ok_mismatch",
+            dashboard_category_ok_result,
+            dashboard_category_ok_manifest,
+            dashboard_category_ok_manifest["dashboard_category_negative_ok"] is False,
+        )
+
+        dashboard_category_count_result, dashboard_category_count_manifest = dashboard_configuration_drift_fixture(
+            root,
+            "dashboard-category-negative-count",
+            DASHBOARD_CATEGORY_NEGATIVE_ARTIFACT,
+            lambda payload: increment_dashboard_configuration_field(payload, "case_count"),
+        )
+        append_dashboard_configuration_check(
+            "dashboard_category_negative_count_mismatch",
+            dashboard_category_count_result,
+            dashboard_category_count_manifest,
+            dashboard_category_count_manifest["dashboard_category_negative_case_count"] == 4
+            and dashboard_category_count_manifest["dashboard_category_negative_rows"] == 3
+            and dashboard_category_count_manifest["dashboard_category_negative_count_mismatch"] == 1,
+        )
+
+        dashboard_category_row_result, dashboard_category_row_manifest = dashboard_configuration_drift_fixture(
+            root,
+            "dashboard-category-negative-row-unmatched",
+            DASHBOARD_CATEGORY_NEGATIVE_ARTIFACT,
+            lambda payload: mark_first_dashboard_configuration_case_unmatched(payload, "cases"),
+        )
+        append_dashboard_configuration_check(
+            "dashboard_category_negative_row_unmatched",
+            dashboard_category_row_result,
+            dashboard_category_row_manifest,
+            dashboard_category_row_manifest["dashboard_category_negative_matched"] == 2
+            and dashboard_category_row_manifest["dashboard_category_negative_row_unmatched"] == 1,
+        )
+
+        dashboard_producers_required_ok_result, dashboard_producers_required_ok_manifest = dashboard_configuration_drift_fixture(
+            root,
+            "dashboard-producers-required-ok",
+            DASHBOARD_PRODUCERS_REQUIRED_ARTIFACT,
+            lambda payload: payload.__setitem__("ok", False),
+        )
+        append_dashboard_configuration_check(
+            "dashboard_producers_required_ok_mismatch",
+            dashboard_producers_required_ok_result,
+            dashboard_producers_required_ok_manifest,
+            dashboard_producers_required_ok_manifest["dashboard_producers_required_ok"] is False,
+        )
+
+        dashboard_producers_required_count_result, dashboard_producers_required_count_manifest = dashboard_configuration_drift_fixture(
+            root,
+            "dashboard-producers-required-count",
+            DASHBOARD_PRODUCERS_REQUIRED_ARTIFACT,
+            lambda payload: increment_dashboard_configuration_field(payload, "artifact_count"),
+        )
+        append_dashboard_configuration_check(
+            "dashboard_producers_required_count_mismatch",
+            dashboard_producers_required_count_result,
+            dashboard_producers_required_count_manifest,
+            dashboard_producers_required_count_manifest["dashboard_producers_required_artifact_count"] == 5
+            and dashboard_producers_required_count_manifest["dashboard_producers_required_rows"] == 4
+            and dashboard_producers_required_count_manifest["dashboard_producers_required_count_mismatch"] == 1,
+        )
+
+        dashboard_producers_required_row_result, dashboard_producers_required_row_manifest = dashboard_configuration_drift_fixture(
+            root,
+            "dashboard-producers-required-row-unmatched",
+            DASHBOARD_PRODUCERS_REQUIRED_ARTIFACT,
+            lambda payload: mark_first_dashboard_configuration_case_unmatched(payload, "cases"),
+        )
+        append_dashboard_configuration_check(
+            "dashboard_producers_required_row_unmatched",
+            dashboard_producers_required_row_result,
+            dashboard_producers_required_row_manifest,
+            dashboard_producers_required_row_manifest["dashboard_producers_required_matched"] == 3
+            and dashboard_producers_required_row_manifest["dashboard_producers_required_row_unmatched"] == 1,
+        )
+
+        dashboard_producers_required_smoke_gate_result, dashboard_producers_required_smoke_gate_manifest = dashboard_configuration_drift_fixture(
+            root,
+            "dashboard-producers-required-smoke-gate",
+            DASHBOARD_PRODUCERS_REQUIRED_ARTIFACT,
+            lambda payload: payload.__setitem__("required_smoke_gate_count", 0),
+        )
+        append_dashboard_configuration_check(
+            "dashboard_producers_required_smoke_gate_count_mismatch",
+            dashboard_producers_required_smoke_gate_result,
+            dashboard_producers_required_smoke_gate_manifest,
+            dashboard_producers_required_smoke_gate_manifest["dashboard_producers_required_smoke_gate_count"] == 0,
+        )
+
+        dashboard_producers_negative_ok_result, dashboard_producers_negative_ok_manifest = dashboard_configuration_drift_fixture(
+            root,
+            "dashboard-producers-negative-ok",
+            DASHBOARD_PRODUCERS_NEGATIVE_ARTIFACT,
+            lambda payload: payload.__setitem__("ok", False),
+        )
+        append_dashboard_configuration_check(
+            "dashboard_producers_negative_ok_mismatch",
+            dashboard_producers_negative_ok_result,
+            dashboard_producers_negative_ok_manifest,
+            dashboard_producers_negative_ok_manifest["dashboard_producers_negative_ok"] is False,
+        )
+
+        dashboard_producers_negative_count_result, dashboard_producers_negative_count_manifest = dashboard_configuration_drift_fixture(
+            root,
+            "dashboard-producers-negative-count",
+            DASHBOARD_PRODUCERS_NEGATIVE_ARTIFACT,
+            lambda payload: increment_dashboard_configuration_field(payload, "case_count"),
+        )
+        append_dashboard_configuration_check(
+            "dashboard_producers_negative_count_mismatch",
+            dashboard_producers_negative_count_result,
+            dashboard_producers_negative_count_manifest,
+            dashboard_producers_negative_count_manifest["dashboard_producers_negative_case_count"] == 3
+            and dashboard_producers_negative_count_manifest["dashboard_producers_negative_rows"] == 2
+            and dashboard_producers_negative_count_manifest["dashboard_producers_negative_count_mismatch"] == 1,
+        )
+
+        dashboard_producers_negative_row_result, dashboard_producers_negative_row_manifest = dashboard_configuration_drift_fixture(
+            root,
+            "dashboard-producers-negative-row-unmatched",
+            DASHBOARD_PRODUCERS_NEGATIVE_ARTIFACT,
+            lambda payload: mark_first_dashboard_configuration_case_unmatched(payload, "cases"),
+        )
+        append_dashboard_configuration_check(
+            "dashboard_producers_negative_row_unmatched",
+            dashboard_producers_negative_row_result,
+            dashboard_producers_negative_row_manifest,
+            dashboard_producers_negative_row_manifest["dashboard_producers_negative_matched"] == 1
+            and dashboard_producers_negative_row_manifest["dashboard_producers_negative_row_unmatched"] == 1,
         )
 
         checks.append(
