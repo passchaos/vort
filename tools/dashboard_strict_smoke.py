@@ -4775,6 +4775,29 @@ def csv_artifact_layout_fixture(
     return result, manifest
 
 
+def header_inspect_drift_fixture(root: Path, fixture_name: str, mutate_summary, mutate_markdown=None) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted header-inspect artifact."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    summary_path = fixture_root / HEADER_INSPECT_ARTIFACT
+    summary = json.loads(summary_path.read_text())
+    mutate_summary(summary)
+    summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
+    if mutate_markdown is not None:
+        markdown_path = fixture_root / HEADER_INSPECT_MARKDOWN_ARTIFACT
+        mutate_markdown(markdown_path)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def validation_json_smoke_drift_fixture(root: Path, fixture_name: str, mutate) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted validation JSON smoke artifact."""
 
@@ -6406,6 +6429,81 @@ def main() -> int:
             "dashboard_index_header_inspect_missing_workflows=1:inspect-raw-header-file:file",
         )
         checks.append(check_row("missing_header_workflow", "strict-header-inspect", True, True, missing_workflow_result.returncode, "dashboard_index_header_inspect_missing_workflows=1:inspect-raw-header-file:file", missing_workflow_result.stdout))
+
+        header_report_count_result, header_report_count_manifest = header_inspect_drift_fixture(
+            root,
+            "header-inspect-report-count-mismatch",
+            lambda payload: payload.__setitem__("case_count", int(payload["case_count"]) + 1),
+        )
+        header_report_count_matched = (
+            header_report_count_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=header_inspect_undercovered" in header_report_count_result.stdout
+            and header_report_count_manifest["validation_healthy"] is False
+            and header_report_count_manifest["header_inspect_healthy"] is False
+            and header_report_count_manifest["header_inspect_report_count_mismatch"] == 1
+        )
+        checks.append(
+            check_row(
+                "header_inspect_report_count_mismatch",
+                "strict-validation-health",
+                True,
+                header_report_count_matched,
+                header_report_count_result.returncode,
+                "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+                header_report_count_result.stdout,
+            )
+        )
+
+        header_duplicate_case_result, header_duplicate_case_manifest = header_inspect_drift_fixture(
+            root,
+            "header-inspect-duplicate-case",
+            lambda payload: payload["cases"].append(dict(payload["cases"][0])),
+        )
+        header_duplicate_case_matched = (
+            header_duplicate_case_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=header_inspect_undercovered" in header_duplicate_case_result.stdout
+            and header_duplicate_case_manifest["validation_healthy"] is False
+            and header_duplicate_case_manifest["header_inspect_healthy"] is False
+            and header_duplicate_case_manifest["header_inspect_duplicate_case_names"] == ["raw_fixed"]
+        )
+        checks.append(
+            check_row(
+                "header_inspect_duplicate_case",
+                "strict-validation-health",
+                True,
+                header_duplicate_case_matched,
+                header_duplicate_case_result.returncode,
+                "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+                header_duplicate_case_result.stdout,
+            )
+        )
+
+        header_markdown_unmatched_result, header_markdown_unmatched_manifest = header_inspect_drift_fixture(
+            root,
+            "header-inspect-markdown-unmatched",
+            lambda payload: None,
+            lambda markdown_path: markdown_path.write_text(
+                markdown_path.read_text().replace("## Command coverage", "## Cmd coverage drift", 1)
+            ),
+        )
+        header_markdown_unmatched_matched = (
+            header_markdown_unmatched_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=header_inspect_undercovered" in header_markdown_unmatched_result.stdout
+            and header_markdown_unmatched_manifest["validation_healthy"] is False
+            and header_markdown_unmatched_manifest["header_inspect_healthy"] is False
+            and header_markdown_unmatched_manifest["header_inspect_markdown_unmatched"] == 1
+        )
+        checks.append(
+            check_row(
+                "header_inspect_markdown_unmatched",
+                "strict-validation-health",
+                True,
+                header_markdown_unmatched_matched,
+                header_markdown_unmatched_result.returncode,
+                "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+                header_markdown_unmatched_result.stdout,
+            )
+        )
 
         expected_validation_reasons = load_expected_validation_reasons(VALIDATION_REASONS)
         validation_reason_checks: list[dict[str, object]] = []
