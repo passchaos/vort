@@ -3966,6 +3966,7 @@
           "strict-header-inspect",
           "strict-validation-health",
           "synthetic",
+          "non-json-artifact-health",
           "native-tier-range-health"
         ]
       },
@@ -3994,6 +3995,7 @@
               "strict-header-inspect",
               "strict-validation-health",
               "synthetic",
+              "non-json-artifact-health",
               "native-tier-range-health"
             ]
           },
@@ -4015,6 +4017,7 @@
               "strict-header-inspect",
               "strict-validation-health",
               "synthetic",
+              "non-json-artifact-health",
               "native-tier-range-health"
             ]
           },
@@ -4035,6 +4038,7 @@
               "strict-header-inspect",
               "strict-validation-health",
               "synthetic",
+              "non-json-artifact-health",
               "native-tier-range-health"
             ]
           },
@@ -4055,6 +4059,7 @@
               "strict-header-inspect",
               "strict-validation-health",
               "synthetic",
+              "non-json-artifact-health",
               "native-tier-range-health"
             ]
           },
@@ -4399,6 +4404,7 @@
           "strict-header-inspect",
           "strict-validation-health",
           "synthetic",
+          "non-json-artifact-health",
           "native-tier-range-health"
         ],
         "name": [
@@ -4424,6 +4430,8 @@
           "header_inspect_markdown_table",
           "huffman_length_markdown_table",
           "level_report_markdown_table",
+          "mismatched_markdown_table_count_manifest",
+          "mismatched_markdown_table_separator_manifest",
           "mismatched_native_tier_discovery_case",
           "mismatched_native_tier_range_summary_csv",
           "missing_header_inspect",

@@ -4362,6 +4362,16 @@ def write_healthy_artifacts(root: Path) -> None:
 def dashboard_args(root: Path, producer_map: Path, *extra: str) -> list[str]:
     csv_header_manifest = write_csv_header_manifest(root)
     markdown_heading_manifest = write_markdown_heading_manifest(root)
+    return dashboard_args_with_manifests(root, producer_map, csv_header_manifest, markdown_heading_manifest, *extra)
+
+
+def dashboard_args_with_manifests(
+    root: Path,
+    producer_map: Path,
+    csv_header_manifest: Path,
+    markdown_heading_manifest: Path,
+    *extra: str,
+) -> list[str]:
     return [
         "python3",
         str(DASHBOARD_INDEX),
@@ -4379,6 +4389,55 @@ def dashboard_args(root: Path, producer_map: Path, *extra: str) -> list[str]:
         str(markdown_heading_manifest),
         *extra,
     ]
+
+
+def markdown_manifest_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    target_artifact: str,
+    manifest_field: str,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted Markdown manifest field.
+
+    The general non-JSON health fixture already proves that malformed Markdown
+    artifacts fail aggregate health. These targeted fixtures instead keep the
+    artifacts healthy and corrupt only the expected layout manifest, so the
+    table-row and separator-row drift gates are covered directly.
+    """
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    csv_manifest = write_csv_header_manifest(fixture_root)
+    markdown_manifest = write_markdown_heading_manifest(fixture_root)
+    payload = json.loads(markdown_manifest.read_text())
+    artifacts = payload.get("artifacts")
+    if not isinstance(artifacts, list):
+        raise AssertionError("synthetic Markdown manifest did not contain artifact rows")
+    for artifact in artifacts:
+        if isinstance(artifact, dict) and artifact.get("name") == target_artifact:
+            value = artifact.get(manifest_field)
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise AssertionError(f"{target_artifact} manifest field {manifest_field!r} is not an integer")
+            artifact[manifest_field] = value + 1
+            break
+    else:
+        raise AssertionError(f"missing {target_artifact} in synthetic Markdown manifest")
+    markdown_manifest.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    result = run(
+        dashboard_args_with_manifests(
+            fixture_root,
+            producer_map,
+            csv_manifest,
+            markdown_manifest,
+            "--strict-validation-health",
+        ),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
 
 
 def expect_failure(args: list[str], needle: str) -> subprocess.CompletedProcess[str]:
@@ -5529,6 +5588,58 @@ def main() -> int:
             and mismatched_native_tier_discovery_manifest["native_tier_corpus_discovery_mismatch_total"] == 1
         )
         checks.append(check_row("mismatched_native_tier_discovery_case", "native-tier-range-health", True, native_tier_discovery_mismatched_matched, mismatched_native_tier_discovery_result.returncode, "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed", mismatched_native_tier_discovery_result.stdout))
+
+        markdown_table_count_result, markdown_table_count_manifest_result = markdown_manifest_drift_fixture(
+            root,
+            "mismatched-markdown-table-count",
+            LEVEL_REPORT_MARKDOWN_ARTIFACT,
+            "table_row_count",
+        )
+        markdown_table_count_matched = (
+            markdown_table_count_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=non_json_artifact_failed" in markdown_table_count_result.stdout
+            and markdown_table_count_manifest_result["validation_healthy"] is False
+            and markdown_table_count_manifest_result["non_json_artifact_healthy"] is False
+            and markdown_table_count_manifest_result["markdown_table_count_mismatch"] == [LEVEL_REPORT_MARKDOWN_ARTIFACT]
+            and markdown_table_count_manifest_result["markdown_table_separator_count_mismatch"] == []
+        )
+        checks.append(
+            check_row(
+                "mismatched_markdown_table_count_manifest",
+                "non-json-artifact-health",
+                True,
+                markdown_table_count_matched,
+                markdown_table_count_result.returncode,
+                "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+                markdown_table_count_result.stdout,
+            )
+        )
+
+        markdown_separator_count_result, markdown_separator_count_manifest_result = markdown_manifest_drift_fixture(
+            root,
+            "mismatched-markdown-separator-count",
+            LEVEL_REPORT_MARKDOWN_ARTIFACT,
+            "table_separator_count",
+        )
+        markdown_separator_count_matched = (
+            markdown_separator_count_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=non_json_artifact_failed" in markdown_separator_count_result.stdout
+            and markdown_separator_count_manifest_result["validation_healthy"] is False
+            and markdown_separator_count_manifest_result["non_json_artifact_healthy"] is False
+            and markdown_separator_count_manifest_result["markdown_table_count_mismatch"] == []
+            and markdown_separator_count_manifest_result["markdown_table_separator_count_mismatch"] == [LEVEL_REPORT_MARKDOWN_ARTIFACT]
+        )
+        checks.append(
+            check_row(
+                "mismatched_markdown_table_separator_manifest",
+                "non-json-artifact-health",
+                True,
+                markdown_separator_count_matched,
+                markdown_separator_count_result.returncode,
+                "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+                markdown_separator_count_result.stdout,
+            )
+        )
 
         no_producer = root / "no-producer.json"
         write_producer_map(no_producer, include_header_exact=False, required_names=[HEADER_INSPECT_ARTIFACT, DASHBOARD_STRICT_ARTIFACT])

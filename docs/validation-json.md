@@ -4531,9 +4531,15 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 87,
-      "min_expected_failures": 87,
-      "min_matched": 87
+      "min_checks": 88,
+      "min_expected_failures": 88,
+      "min_matched": 88
+    },
+    {
+      "mode": "non-json-artifact-health",
+      "min_checks": 2,
+      "min_expected_failures": 2,
+      "min_matched": 2
     },
     {
       "mode": "native-tier-range-health",
@@ -4614,7 +4620,7 @@ python3 tools/dashboard_strict_smoke.py --summary zig-out/vort-dashboard-strict-
 
 This schema summarizes positive and negative smoke checks for dashboard strict
 modes: producer coverage, smoke-gate coverage, header-inspection health,
-native-tier range health-field coverage, dashboard Markdown review-surface
+non-JSON artifact manifest-drift coverage, native-tier range health-field coverage, dashboard Markdown review-surface
 coverage, and aggregate validation-health failures. Each check records the expected output
 marker, actual truncated output, original output length, truncation limit/flag,
 and process return code for CI diagnostics. `mode_counts` groups checks by
@@ -4627,7 +4633,7 @@ aggregate health reasons must be backed by real failing dashboard inputs before
 the smoke artifact can pass. The expected reason/check/fixture matrix lives in
 `tools/dashboard_strict_validation_reasons.json`; the retained
 `strict-validation-health` mode minimums must cover every configured reason,
-currently 87. Dashboard aggregate health also reads the retained
+currently 88. Dashboard aggregate health also reads the retained
 `vort-dashboard-strict-smoke.md` companion and requires its mode, requirement,
 validation-reason, and check rows to match the JSON counts before
 `dashboard_strict_healthy` can pass. The `dashboard-markdown` mode verifies that important human-facing
@@ -4649,9 +4655,9 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 26,
-  "mode_count": 4,
-  "expected_mode_count": 4,
+  "check_count": 28,
+  "mode_count": 5,
+  "expected_mode_count": 5,
   "missing_mode_count": 0,
   "validation_unhealthy_reason_count": 1,
   "expected_modes": [
@@ -4669,9 +4675,15 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 87,
-      "min_expected_failures": 87,
-      "min_matched": 87
+      "min_checks": 88,
+      "min_expected_failures": 88,
+      "min_matched": 88
+    },
+    {
+      "mode": "non-json-artifact-health",
+      "min_checks": 2,
+      "min_expected_failures": 2,
+      "min_matched": 2
     },
     {
       "mode": "native-tier-range-health",
@@ -4709,14 +4721,26 @@ Example:
     {
       "mode": "strict-validation-health",
       "checks": 1,
-      "min_checks": 87,
-      "missing_checks": 86,
+      "min_checks": 88,
+      "missing_checks": 87,
       "expected_failures": 1,
-      "min_expected_failures": 87,
-      "missing_expected_failures": 86,
+      "min_expected_failures": 88,
+      "missing_expected_failures": 87,
       "matched": 1,
-      "min_matched": 87,
-      "missing_matched": 86
+      "min_matched": 88,
+      "missing_matched": 87
+    },
+    {
+      "mode": "non-json-artifact-health",
+      "checks": 2,
+      "min_checks": 2,
+      "missing_checks": 0,
+      "expected_failures": 2,
+      "min_expected_failures": 2,
+      "missing_expected_failures": 0,
+      "matched": 2,
+      "min_matched": 2,
+      "missing_matched": 0
     },
     {
       "mode": "native-tier-range-health",
@@ -4749,6 +4773,12 @@ Example:
       "checks": 1,
       "expected_failures": 1,
       "matched": 1
+    },
+    {
+      "mode": "non-json-artifact-health",
+      "checks": 2,
+      "expected_failures": 2,
+      "matched": 2
     },
     {
       "mode": "native-tier-range-health",
@@ -5053,6 +5083,30 @@ Example:
       "expected_output": "dashboard_index_validation_unhealthy=missing_lz4_native_summary_artifact",
       "actual_output": "dashboard_index_validation_unhealthy=missing_lz4_native_summary_artifact",
       "actual_output_bytes": 74,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_markdown_table_count_manifest",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_markdown_table_separator_manifest",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\\n",
+      "actual_output_bytes": 63,
       "actual_output_limit": 240,
       "actual_output_truncated": false,
       "returncode": 1,
