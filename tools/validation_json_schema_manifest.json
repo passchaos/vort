@@ -4456,6 +4456,8 @@
           "level_report_token_accounting_mismatch",
           "level_report_ratio_mismatch",
           "level_report_roundtrip_mismatch",
+          "level_report_markdown_summary_mismatch",
+          "level_report_markdown_detail_mismatch",
           "mismatched_csv_artifact_empty",
           "mismatched_csv_artifact_blank_header",
           "mismatched_csv_artifact_duplicate_header",

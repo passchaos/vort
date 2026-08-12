@@ -7413,6 +7413,58 @@ def main() -> int:
             )
         )
 
+        level_markdown_summary_result, level_markdown_summary_manifest = level_report_drift_fixture(
+            root,
+            "level-report-markdown-summary",
+            mutate_markdown=lambda markdown_path: markdown_path.write_text(
+                markdown_path.read_text().replace("Rows: 48", "Rows: 49", 1)
+            ),
+        )
+        level_markdown_summary_matched = (
+            level_markdown_summary_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=level_report_failed" in level_markdown_summary_result.stdout
+            and level_markdown_summary_manifest["validation_healthy"] is False
+            and level_markdown_summary_manifest["level_report_healthy"] is False
+            and level_markdown_summary_manifest["level_report_markdown_unmatched"] == 1
+        )
+        checks.append(
+            check_row(
+                "level_report_markdown_summary_mismatch",
+                "strict-validation-health",
+                True,
+                level_markdown_summary_matched,
+                level_markdown_summary_result.returncode,
+                "dashboard_index_validation_unhealthy=level_report_failed",
+                level_markdown_summary_result.stdout,
+            )
+        )
+
+        level_markdown_detail_result, level_markdown_detail_manifest = level_report_drift_fixture(
+            root,
+            "level-report-markdown-detail",
+            mutate_markdown=lambda markdown_path: markdown_path.write_text(
+                markdown_path.read_text().replace("|text | fastest |", "|text-drift | fastest |", 1)
+            ),
+        )
+        level_markdown_detail_matched = (
+            level_markdown_detail_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=level_report_failed" in level_markdown_detail_result.stdout
+            and level_markdown_detail_manifest["validation_healthy"] is False
+            and level_markdown_detail_manifest["level_report_healthy"] is False
+            and level_markdown_detail_manifest["level_report_markdown_detail_unmatched"] == 1
+        )
+        checks.append(
+            check_row(
+                "level_report_markdown_detail_mismatch",
+                "strict-validation-health",
+                True,
+                level_markdown_detail_matched,
+                level_markdown_detail_result.returncode,
+                "dashboard_index_validation_unhealthy=level_report_failed",
+                level_markdown_detail_result.stdout,
+            )
+        )
+
         expected_validation_reasons = load_expected_validation_reasons(VALIDATION_REASONS)
         validation_reason_checks: list[dict[str, object]] = []
 
