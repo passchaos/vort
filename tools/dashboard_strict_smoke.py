@@ -4775,6 +4775,30 @@ def csv_artifact_layout_fixture(
     return result, manifest
 
 
+def sidecar_corrupt_drift_fixture(root: Path, fixture_name: str, mutate_report=None, mutate_markdown=None) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted sidecar corrupt artifact."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    report_path = fixture_root / SIDECAR_CORRUPT_ARTIFACT
+    if mutate_report is not None:
+        report = json.loads(report_path.read_text())
+        mutate_report(report)
+        report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    if mutate_markdown is not None:
+        markdown_path = fixture_root / SIDECAR_CORRUPT_MARKDOWN_ARTIFACT
+        mutate_markdown(markdown_path)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def header_inspect_drift_fixture(root: Path, fixture_name: str, mutate_summary, mutate_markdown=None) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted header-inspect artifact."""
 
@@ -6780,6 +6804,158 @@ def main() -> int:
                 header_missing_workflow_drift_result.returncode,
                 "dashboard_index_validation_unhealthy=header_inspect_undercovered",
                 header_missing_workflow_drift_result.stdout,
+            )
+        )
+
+        sidecar_item_malformed_result, sidecar_item_malformed_manifest = sidecar_corrupt_drift_fixture(
+            root,
+            "sidecar-corrupt-item-malformed",
+            lambda payload: payload["items"][0].__setitem__("metadata_ok", "true"),
+        )
+        sidecar_item_malformed_matched = (
+            sidecar_item_malformed_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=sidecar_corrupt_failed" in sidecar_item_malformed_result.stdout
+            and sidecar_item_malformed_manifest["validation_healthy"] is False
+            and sidecar_item_malformed_manifest["sidecar_corrupt_healthy"] is False
+            and sidecar_item_malformed_manifest["sidecar_corrupt_item_malformed_rows"] == 1
+        )
+        checks.append(
+            check_row(
+                "sidecar_corrupt_item_malformed",
+                "strict-validation-health",
+                True,
+                sidecar_item_malformed_matched,
+                sidecar_item_malformed_result.returncode,
+                "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+                sidecar_item_malformed_result.stdout,
+            )
+        )
+
+        sidecar_item_duplicate_result, sidecar_item_duplicate_manifest = sidecar_corrupt_drift_fixture(
+            root,
+            "sidecar-corrupt-item-duplicate",
+            lambda payload: payload["items"].append(dict(payload["items"][0])),
+        )
+        sidecar_item_duplicate_matched = (
+            sidecar_item_duplicate_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=sidecar_corrupt_failed" in sidecar_item_duplicate_result.stdout
+            and sidecar_item_duplicate_manifest["validation_healthy"] is False
+            and sidecar_item_duplicate_manifest["sidecar_corrupt_healthy"] is False
+            and sidecar_item_duplicate_manifest["sidecar_corrupt_item_duplicate_cases"] == ["deflate"]
+        )
+        checks.append(
+            check_row(
+                "sidecar_corrupt_item_duplicate",
+                "strict-validation-health",
+                True,
+                sidecar_item_duplicate_matched,
+                sidecar_item_duplicate_result.returncode,
+                "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+                sidecar_item_duplicate_result.stdout,
+            )
+        )
+
+        sidecar_markdown_unmatched_result, sidecar_markdown_unmatched_manifest = sidecar_corrupt_drift_fixture(
+            root,
+            "sidecar-corrupt-markdown-unmatched",
+            mutate_markdown=lambda path: path.write_text(path.read_text().replace("InvalidMatch", "InvalidMatchDrift", 1)),
+        )
+        sidecar_markdown_unmatched_matched = (
+            sidecar_markdown_unmatched_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=sidecar_corrupt_failed" in sidecar_markdown_unmatched_result.stdout
+            and sidecar_markdown_unmatched_manifest["validation_healthy"] is False
+            and sidecar_markdown_unmatched_manifest["sidecar_corrupt_healthy"] is False
+            and sidecar_markdown_unmatched_manifest["sidecar_corrupt_markdown_unmatched"] == 1
+        )
+        checks.append(
+            check_row(
+                "sidecar_corrupt_markdown_unmatched",
+                "strict-validation-health",
+                True,
+                sidecar_markdown_unmatched_matched,
+                sidecar_markdown_unmatched_result.returncode,
+                "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+                sidecar_markdown_unmatched_result.stdout,
+            )
+        )
+
+        sidecar_markdown_malformed_result, sidecar_markdown_malformed_manifest = sidecar_corrupt_drift_fixture(
+            root,
+            "sidecar-corrupt-markdown-malformed",
+            mutate_markdown=lambda path: path.write_text(path.read_text().replace("44 | 48", "NaN | 48", 1)),
+        )
+        sidecar_markdown_malformed_matched = (
+            sidecar_markdown_malformed_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=sidecar_corrupt_failed" in sidecar_markdown_malformed_result.stdout
+            and sidecar_markdown_malformed_manifest["validation_healthy"] is False
+            and sidecar_markdown_malformed_manifest["sidecar_corrupt_healthy"] is False
+            and sidecar_markdown_malformed_manifest["sidecar_corrupt_markdown_malformed_rows"] == 1
+        )
+        checks.append(
+            check_row(
+                "sidecar_corrupt_markdown_malformed",
+                "strict-validation-health",
+                True,
+                sidecar_markdown_malformed_matched,
+                sidecar_markdown_malformed_result.returncode,
+                "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+                sidecar_markdown_malformed_result.stdout,
+            )
+        )
+
+        sidecar_markdown_duplicate_result, sidecar_markdown_duplicate_manifest = sidecar_corrupt_drift_fixture(
+            root,
+            "sidecar-corrupt-markdown-duplicate",
+            mutate_markdown=lambda path: path.write_text(
+                path.read_text().replace(
+                    "| deflate | true | true | TruncatedFrame | 44 | 48 |\n",
+                    "| deflate | true | true | TruncatedFrame | 44 | 48 |\n| deflate | true | true | TruncatedFrame | 44 | 48 |\n",
+                    1,
+                )
+            ),
+        )
+        sidecar_markdown_duplicate_matched = (
+            sidecar_markdown_duplicate_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=sidecar_corrupt_failed" in sidecar_markdown_duplicate_result.stdout
+            and sidecar_markdown_duplicate_manifest["validation_healthy"] is False
+            and sidecar_markdown_duplicate_manifest["sidecar_corrupt_healthy"] is False
+            and sidecar_markdown_duplicate_manifest["sidecar_corrupt_markdown_duplicate_cases"] == ["deflate"]
+        )
+        checks.append(
+            check_row(
+                "sidecar_corrupt_markdown_duplicate",
+                "strict-validation-health",
+                True,
+                sidecar_markdown_duplicate_matched,
+                sidecar_markdown_duplicate_result.returncode,
+                "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+                sidecar_markdown_duplicate_result.stdout,
+            )
+        )
+
+        sidecar_markdown_unknown_result, sidecar_markdown_unknown_manifest = sidecar_corrupt_drift_fixture(
+            root,
+            "sidecar-corrupt-markdown-unknown",
+            mutate_markdown=lambda path: path.write_text(
+                path.read_text() + "| extra | true | true | ExtraError | 1 | 2 |\n"
+            ),
+        )
+        sidecar_markdown_unknown_matched = (
+            sidecar_markdown_unknown_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=sidecar_corrupt_failed" in sidecar_markdown_unknown_result.stdout
+            and sidecar_markdown_unknown_manifest["validation_healthy"] is False
+            and sidecar_markdown_unknown_manifest["sidecar_corrupt_healthy"] is False
+            and sidecar_markdown_unknown_manifest["sidecar_corrupt_markdown_unknown_cases"] == ["extra"]
+        )
+        checks.append(
+            check_row(
+                "sidecar_corrupt_markdown_unknown",
+                "strict-validation-health",
+                True,
+                sidecar_markdown_unknown_matched,
+                sidecar_markdown_unknown_result.returncode,
+                "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+                sidecar_markdown_unknown_result.stdout,
             )
         )
 
