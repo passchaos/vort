@@ -6778,6 +6778,58 @@ def main() -> int:
             fixture_root, fixture_producer_map = prepare_validation_reason_fixture(row)
             add_validation_reason_check(fixture_root, fixture_producer_map, row["check"], row["reason"])
 
+        validation_json_docs_row_mismatch_root = root / "validation-json-docs-negative-row-mismatch"
+        validation_json_docs_row_mismatch_root.mkdir()
+        write_healthy_artifacts(validation_json_docs_row_mismatch_root)
+        validation_json_docs_row_mismatch_payload = json.loads(
+            (validation_json_docs_row_mismatch_root / VALIDATION_JSON_DOCS_NEGATIVE_ARTIFACT).read_text()
+        )
+        validation_json_docs_row_mismatch_payload["cases"].append(
+            {
+                "name": "synthetic_unmatched_docs_negative_case",
+                "expected_failure": True,
+                "expected_error": "synthetic unmatched",
+                "actual_error": "different synthetic error",
+                "matched": False,
+            }
+        )
+        (validation_json_docs_row_mismatch_root / VALIDATION_JSON_DOCS_NEGATIVE_ARTIFACT).write_text(
+            json.dumps(validation_json_docs_row_mismatch_payload, indent=2, sort_keys=True) + "\n"
+        )
+        validation_json_docs_row_mismatch_producer = validation_json_docs_row_mismatch_root / "producers.json"
+        write_producer_map(validation_json_docs_row_mismatch_producer)
+        validation_json_docs_row_mismatch_result = run(
+            dashboard_args(validation_json_docs_row_mismatch_root, validation_json_docs_row_mismatch_producer, "--strict-validation-health"),
+            check=False,
+        )
+        validation_json_docs_row_mismatch_manifest = json.loads(
+            (validation_json_docs_row_mismatch_root / "vort-dashboard-index.json").read_text()
+        )
+        validation_json_docs_row_mismatch_matched = (
+            validation_json_docs_row_mismatch_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=validation_json_docs_negative_failed" in validation_json_docs_row_mismatch_result.stdout
+            and validation_json_docs_row_mismatch_manifest["validation_healthy"] is False
+            and validation_json_docs_row_mismatch_manifest["validation_json_healthy"] is False
+            and validation_json_docs_row_mismatch_manifest["validation_json_docs_negative_present"] is True
+            and validation_json_docs_row_mismatch_manifest["validation_json_docs_negative_ok"] is True
+            and validation_json_docs_row_mismatch_manifest["validation_json_docs_negative_case_count"] == 2
+            and validation_json_docs_row_mismatch_manifest["validation_json_docs_negative_rows"] == 3
+            and validation_json_docs_row_mismatch_manifest["validation_json_docs_negative_matched"] == 2
+            and validation_json_docs_row_mismatch_manifest["validation_json_docs_negative_count_mismatch"] == 1
+            and validation_json_docs_row_mismatch_manifest["validation_json_docs_negative_row_unmatched"] == 1
+        )
+        checks.append(
+            check_row(
+                "validation_json_docs_negative_row_mismatch",
+                "strict-validation-health",
+                True,
+                validation_json_docs_row_mismatch_matched,
+                validation_json_docs_row_mismatch_result.returncode,
+                "dashboard_index_validation_unhealthy=validation_json_docs_negative_failed",
+                validation_json_docs_row_mismatch_result.stdout,
+            )
+        )
+
         validation_json_count_mismatch_root = root / "validation-json-observed-schema-count-mismatch"
         validation_json_count_mismatch_root.mkdir()
         write_healthy_artifacts(validation_json_count_mismatch_root)

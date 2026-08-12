@@ -8096,6 +8096,16 @@ def main() -> int:
         and validation_json["report_rows"] > 0
         and validation_json["corrupt_rows"] > 0
     )
+    validation_json_docs_negative_healthy = (
+        validation_json["docs_negative_present"]
+        and validation_json["docs_negative_ok"]
+        and validation_json["docs_negative_case_count"] > 0
+        and validation_json["docs_negative_rows"] > 0
+        and validation_json["docs_negative_matched"] == validation_json["docs_negative_case_count"]
+        and validation_json["docs_negative_unmatched"] == 0
+        and validation_json["docs_negative_count_mismatch"] == 0
+        and validation_json["docs_negative_row_unmatched"] == 0
+    )
     sidecar_corrupt_healthy = sidecar_corrupt_health_summary["healthy"]
     huffman_healthy = huffman_health["healthy"]
     level_report_healthy = level_report["healthy"]
@@ -8210,11 +8220,7 @@ def main() -> int:
         validation_unhealthy_reasons.append("validation_json_failed")
     if not validation_json["docs_negative_present"]:
         validation_unhealthy_reasons.append("missing_validation_json_docs_negative_artifact")
-    elif not (
-        validation_json["docs_negative_ok"]
-        and validation_json["docs_negative_case_count"] > 0
-        and validation_json["docs_negative_matched"] == validation_json["docs_negative_case_count"]
-    ):
+    elif not validation_json_docs_negative_healthy:
         validation_unhealthy_reasons.append("validation_json_docs_negative_failed")
     if not (sidecar_corrupt_health_summary["present"] and sidecar_corrupt_health_summary["markdown_present"]):
         validation_unhealthy_reasons.append("missing_sidecar_corrupt_artifact")
