@@ -5222,6 +5222,33 @@ def deflate_chunked_huffman_bench_drift_fixture(
     return result, manifest
 
 
+def deflate_extra_bits_bench_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    mutate_csv,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted deflate extra-bit benchmark CSV."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    csv_path = fixture_root / DEFLATE_EXTRA_BITS_BENCH_ARTIFACT
+    with csv_path.open(newline="") as f:
+        reader = csv.DictReader(f)
+        fieldnames = list(reader.fieldnames or [])
+        rows = list(reader)
+    mutate_csv(rows, fieldnames, csv_path)
+    rewrite_csv_rows(csv_path, rows, fieldnames)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def dynamic_plan_drift_fixture(root: Path, fixture_name: str, mutate_csv) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted dynamic-plan CSV artifact."""
 
@@ -9575,6 +9602,133 @@ def main() -> int:
             chunked_huffman_checksum_result,
             chunked_huffman_checksum_manifest,
             chunked_huffman_checksum_manifest["deflate_chunked_huffman_bench_checksum_matched_cases"] == 2,
+        )
+
+        def append_deflate_extra_bits_bench_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and "dashboard_index_validation_unhealthy=deflate_extra_bits_bench_failed" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["deflate_extra_bits_bench_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    "dashboard_index_validation_unhealthy=deflate_extra_bits_bench_failed",
+                    result.stdout,
+                )
+            )
+
+        extra_bits_missing_pair_result, extra_bits_missing_pair_manifest = deflate_extra_bits_bench_drift_fixture(
+            root,
+            "deflate-extra-bits-missing-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.pop(0),
+        )
+        append_deflate_extra_bits_bench_check(
+            "deflate_extra_bits_bench_missing_pair",
+            extra_bits_missing_pair_result,
+            extra_bits_missing_pair_manifest,
+            extra_bits_missing_pair_manifest["deflate_extra_bits_bench_rows"] == 104
+            and extra_bits_missing_pair_manifest["deflate_extra_bits_bench_missing_pairs"] == ["extra-1:buffered:single"],
+        )
+
+        extra_bits_duplicate_pair_result, extra_bits_duplicate_pair_manifest = deflate_extra_bits_bench_drift_fixture(
+            root,
+            "deflate-extra-bits-duplicate-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.append(dict(rows[0])),
+        )
+        append_deflate_extra_bits_bench_check(
+            "deflate_extra_bits_bench_duplicate_pair",
+            extra_bits_duplicate_pair_result,
+            extra_bits_duplicate_pair_manifest,
+            extra_bits_duplicate_pair_manifest["deflate_extra_bits_bench_rows"] == 106
+            and extra_bits_duplicate_pair_manifest["deflate_extra_bits_bench_duplicate_pairs"] == ["extra-1:buffered:single"],
+        )
+
+        extra_bits_unknown_pair_result, extra_bits_unknown_pair_manifest = deflate_extra_bits_bench_drift_fixture(
+            root,
+            "deflate-extra-bits-unknown-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("kernel", "unknown_extra_kernel"),
+        )
+        append_deflate_extra_bits_bench_check(
+            "deflate_extra_bits_bench_unknown_pair",
+            extra_bits_unknown_pair_result,
+            extra_bits_unknown_pair_manifest,
+            extra_bits_unknown_pair_manifest["deflate_extra_bits_bench_missing_pairs"] == ["extra-1:buffered:single"]
+            and extra_bits_unknown_pair_manifest["deflate_extra_bits_bench_unknown_pairs"] == ["extra-1:buffered:unknown_extra_kernel"],
+        )
+
+        extra_bits_positive_result, extra_bits_positive_manifest = deflate_extra_bits_bench_drift_fixture(
+            root,
+            "deflate-extra-bits-positive",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("checksum", "0"),
+        )
+        append_deflate_extra_bits_bench_check(
+            "deflate_extra_bits_bench_positive_row_mismatch",
+            extra_bits_positive_result,
+            extra_bits_positive_manifest,
+            extra_bits_positive_manifest["deflate_extra_bits_bench_positive_rows"] == 104,
+        )
+
+        extra_bits_shape_result, extra_bits_shape_manifest = deflate_extra_bits_bench_drift_fixture(
+            root,
+            "deflate-extra-bits-shape",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("bits", "2"),
+        )
+        append_deflate_extra_bits_bench_check(
+            "deflate_extra_bits_bench_shape_mismatch",
+            extra_bits_shape_result,
+            extra_bits_shape_manifest,
+            extra_bits_shape_manifest["deflate_extra_bits_bench_shape_rows"] == 104,
+        )
+
+        extra_bits_throughput_result, extra_bits_throughput_manifest = deflate_extra_bits_bench_drift_fixture(
+            root,
+            "deflate-extra-bits-throughput",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("reads_per_s", "1.00"),
+        )
+        append_deflate_extra_bits_bench_check(
+            "deflate_extra_bits_bench_throughput_mismatch",
+            extra_bits_throughput_result,
+            extra_bits_throughput_manifest,
+            extra_bits_throughput_manifest["deflate_extra_bits_bench_throughput_rows"] == 104,
+        )
+
+        extra_bits_checksum_result, extra_bits_checksum_manifest = deflate_extra_bits_bench_drift_fixture(
+            root,
+            "deflate-extra-bits-checksum",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("checksum", "54321"),
+        )
+        append_deflate_extra_bits_bench_check(
+            "deflate_extra_bits_bench_checksum_mismatch",
+            extra_bits_checksum_result,
+            extra_bits_checksum_manifest,
+            extra_bits_checksum_manifest["deflate_extra_bits_bench_checksum_matched_cases"] == 10,
+        )
+
+        extra_bits_paired_checksum_result, extra_bits_paired_checksum_manifest = deflate_extra_bits_bench_drift_fixture(
+            root,
+            "deflate-extra-bits-paired-checksum",
+            mutate_csv=lambda rows, fieldnames, csv_path: next(
+                row for row in rows
+                if row["case"] == "mixed-readme-length" and row["reader"] == "buffered" and row["kernel"] == "staged"
+            ).__setitem__("checksum", "54321"),
+        )
+        append_deflate_extra_bits_bench_check(
+            "deflate_extra_bits_bench_paired_checksum_mismatch",
+            extra_bits_paired_checksum_result,
+            extra_bits_paired_checksum_manifest,
+            extra_bits_paired_checksum_manifest["deflate_extra_bits_bench_paired_checksum_rows"] == extra_bits_paired_checksum_manifest["deflate_extra_bits_bench_expected_paired_checksum_rows"] - 1,
         )
 
         native_codec_probe_count_result, native_codec_probe_count_manifest = native_codec_probes_drift_fixture(
