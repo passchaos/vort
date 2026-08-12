@@ -5087,6 +5087,33 @@ def checksum_bench_drift_fixture(
     return result, manifest
 
 
+def chunk_cursor_bench_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    mutate_csv,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted chunk cursor benchmark CSV."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    csv_path = fixture_root / CHUNK_CURSOR_BENCH_ARTIFACT
+    with csv_path.open(newline="") as f:
+        reader = csv.DictReader(f)
+        fieldnames = list(reader.fieldnames or [])
+        rows = list(reader)
+    mutate_csv(rows, fieldnames, csv_path)
+    rewrite_csv_rows(csv_path, rows, fieldnames)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def dynamic_plan_drift_fixture(root: Path, fixture_name: str, mutate_csv) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted dynamic-plan CSV artifact."""
 
@@ -8834,6 +8861,120 @@ def main() -> int:
             checksum_crc32c_mix_result,
             checksum_crc32c_mix_manifest,
             checksum_crc32c_mix_manifest["checksum_bench_crc32c_mix_groups"] == 2,
+        )
+
+        def append_chunk_cursor_bench_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["chunk_cursor_bench_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed",
+                    result.stdout,
+                )
+            )
+
+        chunk_cursor_missing_pair_result, chunk_cursor_missing_pair_manifest = chunk_cursor_bench_drift_fixture(
+            root,
+            "chunk-cursor-missing-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.pop(0),
+        )
+        append_chunk_cursor_bench_check(
+            "chunk_cursor_bench_missing_pair",
+            chunk_cursor_missing_pair_result,
+            chunk_cursor_missing_pair_manifest,
+            chunk_cursor_missing_pair_manifest["chunk_cursor_bench_rows"] == 7
+            and chunk_cursor_missing_pair_manifest["chunk_cursor_bench_missing_pairs"] == ["read-1b-empty:current"],
+        )
+
+        chunk_cursor_duplicate_pair_result, chunk_cursor_duplicate_pair_manifest = chunk_cursor_bench_drift_fixture(
+            root,
+            "chunk-cursor-duplicate-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.append(dict(rows[0])),
+        )
+        append_chunk_cursor_bench_check(
+            "chunk_cursor_bench_duplicate_pair",
+            chunk_cursor_duplicate_pair_result,
+            chunk_cursor_duplicate_pair_manifest,
+            chunk_cursor_duplicate_pair_manifest["chunk_cursor_bench_rows"] == 9
+            and chunk_cursor_duplicate_pair_manifest["chunk_cursor_bench_duplicate_pairs"] == ["read-1b-empty:current"],
+        )
+
+        chunk_cursor_unknown_pair_result, chunk_cursor_unknown_pair_manifest = chunk_cursor_bench_drift_fixture(
+            root,
+            "chunk-cursor-unknown-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("kernel", "unknown_cursor_kernel"),
+        )
+        append_chunk_cursor_bench_check(
+            "chunk_cursor_bench_unknown_pair",
+            chunk_cursor_unknown_pair_result,
+            chunk_cursor_unknown_pair_manifest,
+            chunk_cursor_unknown_pair_manifest["chunk_cursor_bench_missing_pairs"] == ["read-1b-empty:current"]
+            and chunk_cursor_unknown_pair_manifest["chunk_cursor_bench_unknown_pairs"] == ["read-1b-empty:unknown_cursor_kernel"],
+        )
+
+        chunk_cursor_positive_result, chunk_cursor_positive_manifest = chunk_cursor_bench_drift_fixture(
+            root,
+            "chunk-cursor-positive",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("checksum", "0"),
+        )
+        append_chunk_cursor_bench_check(
+            "chunk_cursor_bench_positive_row_mismatch",
+            chunk_cursor_positive_result,
+            chunk_cursor_positive_manifest,
+            chunk_cursor_positive_manifest["chunk_cursor_bench_positive_rows"] == 7,
+        )
+
+        chunk_cursor_shape_result, chunk_cursor_shape_manifest = chunk_cursor_bench_drift_fixture(
+            root,
+            "chunk-cursor-shape",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("chunk_count", str(int(rows[0]["chunk_count"]) + 1)),
+        )
+        append_chunk_cursor_bench_check(
+            "chunk_cursor_bench_shape_mismatch",
+            chunk_cursor_shape_result,
+            chunk_cursor_shape_manifest,
+            chunk_cursor_shape_manifest["chunk_cursor_bench_shape_rows"] == 7,
+        )
+
+        chunk_cursor_throughput_result, chunk_cursor_throughput_manifest = chunk_cursor_bench_drift_fixture(
+            root,
+            "chunk-cursor-throughput",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("mib_per_s", "1.00"),
+        )
+        append_chunk_cursor_bench_check(
+            "chunk_cursor_bench_throughput_mismatch",
+            chunk_cursor_throughput_result,
+            chunk_cursor_throughput_manifest,
+            chunk_cursor_throughput_manifest["chunk_cursor_bench_throughput_rows"] == 7,
+        )
+
+        chunk_cursor_checksum_result, chunk_cursor_checksum_manifest = chunk_cursor_bench_drift_fixture(
+            root,
+            "chunk-cursor-checksum",
+            mutate_csv=lambda rows, fieldnames, csv_path: next(
+                row for row in rows if row["case"] == "read-1b-empty" and row["kernel"] == "skip_empty_advance"
+            ).__setitem__("checksum", "54321"),
+        )
+        append_chunk_cursor_bench_check(
+            "chunk_cursor_bench_checksum_mismatch",
+            chunk_cursor_checksum_result,
+            chunk_cursor_checksum_manifest,
+            chunk_cursor_checksum_manifest["chunk_cursor_bench_checksum_matched_cases"] == 3,
         )
 
         native_codec_probe_count_result, native_codec_probe_count_manifest = native_codec_probes_drift_fixture(

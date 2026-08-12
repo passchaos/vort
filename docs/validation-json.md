@@ -4531,9 +4531,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 216,
-      "min_expected_failures": 216,
-      "min_matched": 216
+      "min_checks": 223,
+      "min_expected_failures": 223,
+      "min_matched": 223
     },
     {
       "mode": "non-json-artifact-health",
@@ -4633,7 +4633,7 @@ aggregate health reasons must be backed by real failing dashboard inputs before
 the smoke artifact can pass. The expected reason/check/fixture matrix lives in
 `tools/dashboard_strict_validation_reasons.json`; the retained
 `strict-validation-health` mode minimums must cover every configured reason,
-currently 88, plus direct validation JSON smoke/docs-negative, zlib relaxed gate/report/Markdown drift, Snappy report CSV drift, PNG scratch report/Markdown drift, checksum benchmark CSV drift, and header-inspect health regression checks. Dashboard aggregate health also reads the retained
+currently 88, plus direct validation JSON smoke/docs-negative, zlib relaxed gate/report/Markdown drift, Snappy report CSV drift, PNG scratch report/Markdown drift, checksum and chunk-cursor benchmark CSV drift, and header-inspect health regression checks. Dashboard aggregate health also reads the retained
 `vort-dashboard-strict-smoke.md` companion and requires its mode, requirement,
 validation-reason, and check rows to match the JSON counts before
 `dashboard_strict_healthy` can pass. The `dashboard-markdown` mode verifies that important human-facing
@@ -4655,7 +4655,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 176,
+  "check_count": 183,
   "mode_count": 5,
   "expected_mode_count": 5,
   "missing_mode_count": 0,
@@ -4675,9 +4675,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 216,
-      "min_expected_failures": 216,
-      "min_matched": 216
+      "min_checks": 223,
+      "min_expected_failures": 223,
+      "min_matched": 223
     },
     {
       "mode": "non-json-artifact-health",
@@ -4720,14 +4720,14 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 129,
-      "min_checks": 216,
+      "checks": 136,
+      "min_checks": 223,
       "missing_checks": 87,
-      "expected_failures": 129,
-      "min_expected_failures": 216,
+      "expected_failures": 136,
+      "min_expected_failures": 223,
       "missing_expected_failures": 87,
-      "matched": 129,
-      "min_matched": 216,
+      "matched": 136,
+      "min_matched": 223,
       "missing_matched": 87
     },
     {
@@ -4770,9 +4770,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 129,
-      "expected_failures": 129,
-      "matched": 129
+      "checks": 136,
+      "expected_failures": 136,
+      "matched": 136
     },
     {
       "mode": "non-json-artifact-health",
@@ -6247,6 +6247,90 @@ Example:
       "expected_output": "dashboard_index_validation_unhealthy=checksum_bench_failed",
       "actual_output": "dashboard_index_validation_unhealthy=checksum_bench_failed\n",
       "actual_output_bytes": 60,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "chunk_cursor_bench_missing_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "chunk_cursor_bench_duplicate_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "chunk_cursor_bench_unknown_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "chunk_cursor_bench_positive_row_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "chunk_cursor_bench_shape_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "chunk_cursor_bench_throughput_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "chunk_cursor_bench_checksum_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed\n",
+      "actual_output_bytes": 64,
       "actual_output_limit": 240,
       "actual_output_truncated": false,
       "returncode": 1,
