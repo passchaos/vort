@@ -7611,6 +7611,108 @@ def main() -> int:
             )
         )
 
+        dynamic_histogram_result, dynamic_histogram_manifest = dynamic_plan_drift_fixture(
+            root,
+            "dynamic-plan-histogram",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("length_symbol_hist", "bad"),
+        )
+        dynamic_histogram_matched = (
+            dynamic_histogram_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=dynamic_plan_failed" in dynamic_histogram_result.stdout
+            and dynamic_histogram_manifest["validation_healthy"] is False
+            and dynamic_histogram_manifest["dynamic_plan_healthy"] is False
+            and dynamic_histogram_manifest["dynamic_plan_histogram_rows"] == 8
+        )
+        checks.append(
+            check_row(
+                "dynamic_plan_histogram_mismatch",
+                "strict-validation-health",
+                True,
+                dynamic_histogram_matched,
+                dynamic_histogram_result.returncode,
+                "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+                dynamic_histogram_result.stdout,
+            )
+        )
+
+        dynamic_ratio_result, dynamic_ratio_manifest = dynamic_plan_drift_fixture(
+            root,
+            "dynamic-plan-ratio",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("fixed_dynamic_size_ratio", "999.0000"),
+        )
+        dynamic_ratio_matched = (
+            dynamic_ratio_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=dynamic_plan_failed" in dynamic_ratio_result.stdout
+            and dynamic_ratio_manifest["validation_healthy"] is False
+            and dynamic_ratio_manifest["dynamic_plan_healthy"] is False
+            and dynamic_ratio_manifest["dynamic_plan_ratio_rows"] == 8
+        )
+        checks.append(
+            check_row(
+                "dynamic_plan_ratio_mismatch",
+                "strict-validation-health",
+                True,
+                dynamic_ratio_matched,
+                dynamic_ratio_result.returncode,
+                "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+                dynamic_ratio_result.stdout,
+            )
+        )
+
+        dynamic_slack_result, dynamic_slack_manifest = dynamic_plan_drift_fixture(
+            root,
+            "dynamic-plan-slack",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__(
+                "dynamic_bits_to_save_byte",
+                str((int(rows[0]["dynamic_bits_mod8"]) + 1) % 8),
+            ),
+        )
+        dynamic_slack_matched = (
+            dynamic_slack_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=dynamic_plan_failed" in dynamic_slack_result.stdout
+            and dynamic_slack_manifest["validation_healthy"] is False
+            and dynamic_slack_manifest["dynamic_plan_healthy"] is False
+            and dynamic_slack_manifest["dynamic_plan_slack_rows"] == 8
+        )
+        checks.append(
+            check_row(
+                "dynamic_plan_slack_mismatch",
+                "strict-validation-health",
+                True,
+                dynamic_slack_matched,
+                dynamic_slack_result.returncode,
+                "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+                dynamic_slack_result.stdout,
+            )
+        )
+
+        dynamic_wrapper_result, dynamic_wrapper_manifest = dynamic_plan_drift_fixture(
+            root,
+            "dynamic-plan-wrapper",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__(
+                "dynamic_zlib_bytes",
+                str(int(rows[0]["dynamic_zlib_bytes"]) + 1),
+            ),
+        )
+        dynamic_wrapper_matched = (
+            dynamic_wrapper_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=dynamic_plan_failed" in dynamic_wrapper_result.stdout
+            and dynamic_wrapper_manifest["validation_healthy"] is False
+            and dynamic_wrapper_manifest["dynamic_plan_healthy"] is False
+            and dynamic_wrapper_manifest["dynamic_plan_wrapper_rows"] == 8
+        )
+        checks.append(
+            check_row(
+                "dynamic_plan_wrapper_mismatch",
+                "strict-validation-health",
+                True,
+                dynamic_wrapper_matched,
+                dynamic_wrapper_result.returncode,
+                "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+                dynamic_wrapper_result.stdout,
+            )
+        )
+
         expected_validation_reasons = load_expected_validation_reasons(VALIDATION_REASONS)
         validation_reason_checks: list[dict[str, object]] = []
 
