@@ -8209,6 +8209,174 @@ def main() -> int:
             )
         )
 
+        native_codec_missing_probe_result, native_codec_missing_probe_manifest = native_codec_probes_drift_fixture(
+            root,
+            "native-codec-missing-probe",
+            mutate_report=lambda payload: payload["probes"].pop(0),
+        )
+        native_codec_missing_probe_matched = (
+            native_codec_missing_probe_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_codec_probes_failed" in native_codec_missing_probe_result.stdout
+            and native_codec_missing_probe_manifest["validation_healthy"] is False
+            and native_codec_missing_probe_manifest["native_codec_probes_healthy"] is False
+            and native_codec_missing_probe_manifest["native_codec_probes_missing_required_probes"] == 1
+        )
+        checks.append(
+            check_row(
+                "native_codec_probes_missing_required_probe",
+                "strict-validation-health",
+                True,
+                native_codec_missing_probe_matched,
+                native_codec_missing_probe_result.returncode,
+                "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+                native_codec_missing_probe_result.stdout,
+            )
+        )
+
+        native_codec_duplicate_probe_result, native_codec_duplicate_probe_manifest = native_codec_probes_drift_fixture(
+            root,
+            "native-codec-duplicate-probe",
+            mutate_report=lambda payload: payload["probes"].append(dict(payload["probes"][0])),
+        )
+        native_codec_duplicate_probe_matched = (
+            native_codec_duplicate_probe_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_codec_probes_failed" in native_codec_duplicate_probe_result.stdout
+            and native_codec_duplicate_probe_manifest["validation_healthy"] is False
+            and native_codec_duplicate_probe_manifest["native_codec_probes_healthy"] is False
+            and native_codec_duplicate_probe_manifest["native_codec_probes_duplicate_probe_rows"] == 1
+        )
+        checks.append(
+            check_row(
+                "native_codec_probes_duplicate_probe",
+                "strict-validation-health",
+                True,
+                native_codec_duplicate_probe_matched,
+                native_codec_duplicate_probe_result.returncode,
+                "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+                native_codec_duplicate_probe_result.stdout,
+            )
+        )
+
+        native_codec_missing_coverage_result, native_codec_missing_coverage_manifest = native_codec_probes_drift_fixture(
+            root,
+            "native-codec-missing-coverage",
+            mutate_report=lambda payload: payload["coverage"].pop(0),
+        )
+        native_codec_missing_coverage_matched = (
+            native_codec_missing_coverage_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_codec_probes_failed" in native_codec_missing_coverage_result.stdout
+            and native_codec_missing_coverage_manifest["validation_healthy"] is False
+            and native_codec_missing_coverage_manifest["native_codec_probes_healthy"] is False
+            and native_codec_missing_coverage_manifest["native_codec_probes_missing_required_coverage"] == 1
+        )
+        checks.append(
+            check_row(
+                "native_codec_probes_missing_required_coverage",
+                "strict-validation-health",
+                True,
+                native_codec_missing_coverage_matched,
+                native_codec_missing_coverage_result.returncode,
+                "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+                native_codec_missing_coverage_result.stdout,
+            )
+        )
+
+        native_codec_duplicate_coverage_result, native_codec_duplicate_coverage_manifest = native_codec_probes_drift_fixture(
+            root,
+            "native-codec-duplicate-coverage",
+            mutate_report=lambda payload: payload["coverage"].append(dict(payload["coverage"][0])),
+        )
+        native_codec_duplicate_coverage_matched = (
+            native_codec_duplicate_coverage_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_codec_probes_failed" in native_codec_duplicate_coverage_result.stdout
+            and native_codec_duplicate_coverage_manifest["validation_healthy"] is False
+            and native_codec_duplicate_coverage_manifest["native_codec_probes_healthy"] is False
+            and native_codec_duplicate_coverage_manifest["native_codec_probes_duplicate_coverage_rows"] == 1
+        )
+        checks.append(
+            check_row(
+                "native_codec_probes_duplicate_coverage",
+                "strict-validation-health",
+                True,
+                native_codec_duplicate_coverage_matched,
+                native_codec_duplicate_coverage_result.returncode,
+                "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+                native_codec_duplicate_coverage_result.stdout,
+            )
+        )
+
+        native_codec_capability_unhealthy_result, native_codec_capability_unhealthy_manifest = native_codec_probes_drift_fixture(
+            root,
+            "native-codec-capability-unhealthy",
+            mutate_report=lambda payload: payload["capabilities"][0].__setitem__("ok", False),
+        )
+        native_codec_capability_unhealthy_matched = (
+            native_codec_capability_unhealthy_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_codec_probes_failed" in native_codec_capability_unhealthy_result.stdout
+            and native_codec_capability_unhealthy_manifest["validation_healthy"] is False
+            and native_codec_capability_unhealthy_manifest["native_codec_probes_healthy"] is False
+            and native_codec_capability_unhealthy_manifest["native_codec_probes_capability_row_unhealthy"] == 1
+        )
+        checks.append(
+            check_row(
+                "native_codec_probes_capability_unhealthy",
+                "strict-validation-health",
+                True,
+                native_codec_capability_unhealthy_matched,
+                native_codec_capability_unhealthy_result.returncode,
+                "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+                native_codec_capability_unhealthy_result.stdout,
+            )
+        )
+
+        native_codec_missing_capability_result, native_codec_missing_capability_manifest = native_codec_probes_drift_fixture(
+            root,
+            "native-codec-missing-capability",
+            mutate_report=lambda payload: payload["capabilities"].pop(),
+        )
+        native_codec_missing_capability_matched = (
+            native_codec_missing_capability_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_codec_probes_failed" in native_codec_missing_capability_result.stdout
+            and native_codec_missing_capability_manifest["validation_healthy"] is False
+            and native_codec_missing_capability_manifest["native_codec_probes_healthy"] is False
+            and native_codec_missing_capability_manifest["native_codec_probes_missing_required_capabilities"] == 1
+        )
+        checks.append(
+            check_row(
+                "native_codec_probes_missing_required_capability",
+                "strict-validation-health",
+                True,
+                native_codec_missing_capability_matched,
+                native_codec_missing_capability_result.returncode,
+                "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+                native_codec_missing_capability_result.stdout,
+            )
+        )
+
+        native_codec_duplicate_capability_result, native_codec_duplicate_capability_manifest = native_codec_probes_drift_fixture(
+            root,
+            "native-codec-duplicate-capability",
+            mutate_report=lambda payload: payload["capabilities"].append(dict(payload["capabilities"][0])),
+        )
+        native_codec_duplicate_capability_matched = (
+            native_codec_duplicate_capability_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_codec_probes_failed" in native_codec_duplicate_capability_result.stdout
+            and native_codec_duplicate_capability_manifest["validation_healthy"] is False
+            and native_codec_duplicate_capability_manifest["native_codec_probes_healthy"] is False
+            and native_codec_duplicate_capability_manifest["native_codec_probes_duplicate_capability_rows"] == 1
+        )
+        checks.append(
+            check_row(
+                "native_codec_probes_duplicate_capability",
+                "strict-validation-health",
+                True,
+                native_codec_duplicate_capability_matched,
+                native_codec_duplicate_capability_result.returncode,
+                "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+                native_codec_duplicate_capability_result.stdout,
+            )
+        )
+
         native_allocation_count_result, native_allocation_count_manifest = native_allocation_drift_fixture(
             root,
             "native-allocation-report-count",
