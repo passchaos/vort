@@ -6505,6 +6505,137 @@ def main() -> int:
             )
         )
 
+        header_command_missing_result, header_command_missing_manifest = header_inspect_drift_fixture(
+            root,
+            "header-inspect-command-coverage-missing",
+            lambda payload: payload.__setitem__(
+                "command_coverage",
+                [row for row in payload["command_coverage"] if row.get("command") != "inspect-raw-header-file"],
+            ),
+        )
+        header_command_missing_matched = (
+            header_command_missing_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=header_inspect_undercovered" in header_command_missing_result.stdout
+            and header_command_missing_manifest["validation_healthy"] is False
+            and header_command_missing_manifest["header_inspect_healthy"] is False
+            and header_command_missing_manifest["header_inspect_command_coverage_missing_rows"] == ["inspect-raw-header-file:raw"]
+        )
+        checks.append(
+            check_row(
+                "header_inspect_command_coverage_missing",
+                "strict-validation-health",
+                True,
+                header_command_missing_matched,
+                header_command_missing_result.returncode,
+                "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+                header_command_missing_result.stdout,
+            )
+        )
+
+        header_command_unknown_result, header_command_unknown_manifest = header_inspect_drift_fixture(
+            root,
+            "header-inspect-command-coverage-unknown",
+            lambda payload: payload["command_coverage"].append(
+                {"command": "inspect-extra-header-file", "format": "raw", "successes": 0, "failures": 0}
+            ),
+        )
+        header_command_unknown_matched = (
+            header_command_unknown_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=header_inspect_undercovered" in header_command_unknown_result.stdout
+            and header_command_unknown_manifest["validation_healthy"] is False
+            and header_command_unknown_manifest["header_inspect_healthy"] is False
+            and header_command_unknown_manifest["header_inspect_command_coverage_unknown_rows"] == ["inspect-extra-header-file:raw"]
+        )
+        checks.append(
+            check_row(
+                "header_inspect_command_coverage_unknown",
+                "strict-validation-health",
+                True,
+                header_command_unknown_matched,
+                header_command_unknown_result.returncode,
+                "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+                header_command_unknown_result.stdout,
+            )
+        )
+
+        header_command_mismatch_result, header_command_mismatch_manifest = header_inspect_drift_fixture(
+            root,
+            "header-inspect-command-coverage-mismatch",
+            lambda payload: payload["command_coverage"][0].__setitem__(
+                "successes",
+                int(payload["command_coverage"][0]["successes"]) + 1,
+            ),
+        )
+        header_command_mismatch_matched = (
+            header_command_mismatch_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=header_inspect_undercovered" in header_command_mismatch_result.stdout
+            and header_command_mismatch_manifest["validation_healthy"] is False
+            and header_command_mismatch_manifest["header_inspect_healthy"] is False
+            and header_command_mismatch_manifest["header_inspect_command_coverage_mismatch"] == 1
+        )
+        checks.append(
+            check_row(
+                "header_inspect_command_coverage_mismatch",
+                "strict-validation-health",
+                True,
+                header_command_mismatch_matched,
+                header_command_mismatch_result.returncode,
+                "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+                header_command_mismatch_result.stdout,
+            )
+        )
+
+        header_error_count_result, header_error_count_manifest = header_inspect_drift_fixture(
+            root,
+            "header-inspect-negative-error-count-mismatch",
+            lambda payload: payload["negative_error_counts"].__setitem__(
+                "BadZlibHeader",
+                int(payload["negative_error_counts"]["BadZlibHeader"]) + 1,
+            ),
+        )
+        header_error_count_matched = (
+            header_error_count_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=header_inspect_undercovered" in header_error_count_result.stdout
+            and header_error_count_manifest["validation_healthy"] is False
+            and header_error_count_manifest["header_inspect_healthy"] is False
+            and header_error_count_manifest["header_inspect_negative_error_count_mismatch"] == 1
+        )
+        checks.append(
+            check_row(
+                "header_inspect_negative_error_count_mismatch",
+                "strict-validation-health",
+                True,
+                header_error_count_matched,
+                header_error_count_result.returncode,
+                "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+                header_error_count_result.stdout,
+            )
+        )
+
+        header_help_workflow_result, header_help_workflow_manifest = header_inspect_drift_fixture(
+            root,
+            "header-inspect-help-required-workflow-mismatch",
+            lambda payload: payload.__setitem__("help_workflows", []),
+        )
+        header_help_workflow_matched = (
+            header_help_workflow_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=header_inspect_undercovered" in header_help_workflow_result.stdout
+            and header_help_workflow_manifest["validation_healthy"] is False
+            and header_help_workflow_manifest["header_inspect_healthy"] is False
+            and header_help_workflow_manifest["header_inspect_help_required_workflow_mismatch"] == 1
+        )
+        checks.append(
+            check_row(
+                "header_inspect_help_required_workflow_mismatch",
+                "strict-validation-health",
+                True,
+                header_help_workflow_matched,
+                header_help_workflow_result.returncode,
+                "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+                header_help_workflow_result.stdout,
+            )
+        )
+
         expected_validation_reasons = load_expected_validation_reasons(VALIDATION_REASONS)
         validation_reason_checks: list[dict[str, object]] = []
 
