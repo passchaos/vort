@@ -463,6 +463,7 @@ architecture blindly.
 - [x] Dashboard strict-mode smoke directly covers validation JSON health drift, including checked/observed/unchecked schema drift, JSON artifact count and manifest floors, CLI result invariants, report/corrupt row floors, and docs-negative ok/count drift.
 - [x] Dashboard strict-mode smoke directly covers Brotli static-dictionary health drift, including candidate/upstream/node/audit/negative/report count, CSV, Markdown, category, matrix, and duplicate-entry drift.
 - [x] Dashboard strict-mode smoke directly covers LZ4/Zstd native stream summary floor drift, including frame, skippable, checksum, dictionary, content-size, block, raw-block, compressed-byte, payload-byte, and skippable-payload floors.
+- [x] Dashboard strict-mode smoke directly covers zstd comparison gate and data-row drift, including compare/standard/sweep `ok` flags, data-row floors, missing Markdown companions, and sweep path/block-length metadata mismatches.
 - [x] Dashboard strict-mode smoke covers every validation unhealthy reason with isolated negative fixtures.
 - [x] Dashboard strict-mode validation unhealthy reason matrix is stored in a schema-checked external JSON config.
 - [x] Dashboard strict-mode smoke directly covers native codec probe health drift, including probe count/case-sum mismatches, missing/duplicate probes, coverage/capability count/missing/duplicate drift, unhealthy capability rows, and Markdown unmatched rows.
@@ -2547,6 +2548,12 @@ architecture blindly.
   frame, skippable-frame, checksum-frame, dictionary-id, content-size,
   declared-content, block, raw-block, compressed-byte, payload-byte, and
   skippable-payload coverage, plus the LZ4-only block-checksum floor.
+
+- Tightened zstd comparison strict-smoke direct drift coverage for existing
+  compare, standard-suite, and block-sweep artifacts without changing comparison
+  scope. The strict validation gate now isolates failed gate `ok` flags,
+  zero-data-row floors that still have internally consistent CSV/Markdown rows,
+  missing Markdown companions, and block-sweep path/block-length metadata drift.
 
 - Promoted the existing Snappy report CSV from dashboard inventory metadata to
   aggregate validation health without adding new compression-format scope. The

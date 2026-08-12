@@ -12815,6 +12815,97 @@ def main() -> int:
                 )
             )
 
+        def keep_only_total_csv_rows(rows: list[dict[str, str]], fieldnames: list[str], path: Path) -> None:
+            del fieldnames, path
+            rows[:] = [row for row in rows if row.get("path") == "TOTAL"]
+
+        zstd_compare_gate_not_ok_result, zstd_compare_gate_not_ok_manifest = zstd_compare_drift_fixture(
+            root,
+            "zstd-compare-gate-not-ok",
+            mutate_gate=lambda payloads: payloads["compare"].__setitem__("ok", False),
+        )
+        append_zstd_compare_check(
+            "zstd_compare_gate_not_ok",
+            zstd_compare_gate_not_ok_result,
+            zstd_compare_gate_not_ok_manifest,
+            zstd_compare_gate_not_ok_manifest["zstd_compare_present"] is True
+            and zstd_compare_gate_not_ok_manifest["zstd_compare_csv_unmatched_rows"] == 0
+            and zstd_compare_gate_not_ok_manifest["zstd_compare_markdown_unmatched"] == 0,
+        )
+
+        zstd_compare_standard_gate_not_ok_result, zstd_compare_standard_gate_not_ok_manifest = zstd_compare_drift_fixture(
+            root,
+            "zstd-compare-standard-gate-not-ok",
+            mutate_gate=lambda payloads: payloads["standard"].__setitem__("ok", False),
+        )
+        append_zstd_compare_check(
+            "zstd_compare_standard_gate_not_ok",
+            zstd_compare_standard_gate_not_ok_result,
+            zstd_compare_standard_gate_not_ok_manifest,
+            zstd_compare_standard_gate_not_ok_manifest["zstd_compare_standard_present"] is True
+            and zstd_compare_standard_gate_not_ok_manifest["zstd_compare_csv_unmatched_rows"] == 0
+            and zstd_compare_standard_gate_not_ok_manifest["zstd_compare_markdown_unmatched"] == 0,
+        )
+
+        zstd_compare_sweep_gate_not_ok_result, zstd_compare_sweep_gate_not_ok_manifest = zstd_compare_drift_fixture(
+            root,
+            "zstd-compare-sweep-gate-not-ok",
+            mutate_gate=lambda payloads: payloads["sweep"].__setitem__("ok", False),
+        )
+        append_zstd_compare_check(
+            "zstd_compare_sweep_gate_not_ok",
+            zstd_compare_sweep_gate_not_ok_result,
+            zstd_compare_sweep_gate_not_ok_manifest,
+            zstd_compare_sweep_gate_not_ok_manifest["zstd_compare_block_sweep_present"] is True
+            and zstd_compare_sweep_gate_not_ok_manifest["zstd_compare_csv_unmatched_rows"] == 0
+            and zstd_compare_sweep_gate_not_ok_manifest["zstd_compare_markdown_unmatched"] == 0,
+        )
+
+        zstd_compare_data_rows_zero_result, zstd_compare_data_rows_zero_manifest = zstd_compare_drift_fixture(
+            root,
+            "zstd-compare-data-rows-zero",
+            mutate_gate=lambda payloads: payloads["compare"].update({"data_rows": 0, "rows": 1}),
+            mutate_csv=lambda csv_paths, rewrite: rewrite(csv_paths["compare"], keep_only_total_csv_rows),
+        )
+        append_zstd_compare_check(
+            "zstd_compare_data_rows_zero",
+            zstd_compare_data_rows_zero_result,
+            zstd_compare_data_rows_zero_manifest,
+            zstd_compare_data_rows_zero_manifest["zstd_compare_rows"] == 0
+            and zstd_compare_data_rows_zero_manifest["zstd_compare_csv_unmatched_rows"] == 0
+            and zstd_compare_data_rows_zero_manifest["zstd_compare_markdown_detail_unmatched"] == 0,
+        )
+
+        zstd_compare_standard_data_rows_zero_result, zstd_compare_standard_data_rows_zero_manifest = zstd_compare_drift_fixture(
+            root,
+            "zstd-compare-standard-data-rows-zero",
+            mutate_gate=lambda payloads: payloads["standard"].update({"data_rows": 0, "rows": 1}),
+            mutate_csv=lambda csv_paths, rewrite: rewrite(csv_paths["standard"], keep_only_total_csv_rows),
+        )
+        append_zstd_compare_check(
+            "zstd_compare_standard_data_rows_zero",
+            zstd_compare_standard_data_rows_zero_result,
+            zstd_compare_standard_data_rows_zero_manifest,
+            zstd_compare_standard_data_rows_zero_manifest["zstd_compare_standard_rows"] == 0
+            and zstd_compare_standard_data_rows_zero_manifest["zstd_compare_csv_unmatched_rows"] == 0
+            and zstd_compare_standard_data_rows_zero_manifest["zstd_compare_markdown_detail_unmatched"] == 0,
+        )
+
+        zstd_compare_sweep_data_rows_zero_result, zstd_compare_sweep_data_rows_zero_manifest = zstd_compare_drift_fixture(
+            root,
+            "zstd-compare-sweep-data-rows-zero",
+            mutate_gate=lambda payloads: payloads["sweep"].update({"data_rows": 0, "path_count": 0, "rows": 5}),
+            mutate_csv=lambda csv_paths, rewrite: rewrite(csv_paths["sweep"], keep_only_total_csv_rows),
+        )
+        append_zstd_compare_check(
+            "zstd_compare_sweep_data_rows_zero",
+            zstd_compare_sweep_data_rows_zero_result,
+            zstd_compare_sweep_data_rows_zero_manifest,
+            zstd_compare_sweep_data_rows_zero_manifest["zstd_compare_block_sweep_rows"] == 0
+            and zstd_compare_sweep_data_rows_zero_manifest["zstd_compare_csv_unmatched_rows"] == 0
+            and zstd_compare_sweep_data_rows_zero_manifest["zstd_compare_markdown_detail_unmatched"] == 0,
+        )
+
         zstd_compare_missing_csv_result, zstd_compare_missing_csv_manifest = zstd_compare_drift_fixture(
             root,
             "zstd-compare-missing-csv",
@@ -12826,6 +12917,19 @@ def main() -> int:
             zstd_compare_missing_csv_manifest,
             zstd_compare_missing_csv_manifest["zstd_compare_csv_present_count"] == 2
             and zstd_compare_missing_csv_manifest["zstd_compare_csv_unmatched_rows"] > 0,
+        )
+
+        zstd_compare_missing_markdown_result, zstd_compare_missing_markdown_manifest = zstd_compare_drift_fixture(
+            root,
+            "zstd-compare-missing-markdown",
+            remove_artifact=ZSTD_COMPARE_MARKDOWN_ARTIFACT,
+        )
+        append_zstd_compare_check(
+            "zstd_compare_missing_markdown",
+            zstd_compare_missing_markdown_result,
+            zstd_compare_missing_markdown_manifest,
+            zstd_compare_missing_markdown_manifest["zstd_compare_markdown_present_count"] == 2
+            and zstd_compare_missing_markdown_manifest["zstd_compare_markdown_unmatched"] > 0,
         )
 
         zstd_compare_gate_csv_result, zstd_compare_gate_csv_manifest = zstd_compare_drift_fixture(
@@ -12866,6 +12970,42 @@ def main() -> int:
             zstd_compare_sweep_best_result,
             zstd_compare_sweep_best_manifest,
             zstd_compare_sweep_best_manifest["zstd_compare_csv_unmatched_rows"] > 0,
+        )
+
+        zstd_compare_sweep_path_count_result, zstd_compare_sweep_path_count_manifest = zstd_compare_drift_fixture(
+            root,
+            "zstd-compare-sweep-path-count",
+            mutate_gate=lambda payloads: payloads["sweep"].__setitem__("path_count", int(payloads["sweep"]["path_count"]) + 1),
+        )
+        append_zstd_compare_check(
+            "zstd_compare_sweep_path_count_mismatch",
+            zstd_compare_sweep_path_count_result,
+            zstd_compare_sweep_path_count_manifest,
+            zstd_compare_sweep_path_count_manifest["zstd_compare_csv_unmatched_rows"] > 0,
+        )
+
+        zstd_compare_sweep_block_len_count_result, zstd_compare_sweep_block_len_count_manifest = zstd_compare_drift_fixture(
+            root,
+            "zstd-compare-sweep-block-len-count",
+            mutate_gate=lambda payloads: payloads["sweep"].__setitem__("block_len_count", int(payloads["sweep"]["block_len_count"]) + 1),
+        )
+        append_zstd_compare_check(
+            "zstd_compare_sweep_block_len_count_mismatch",
+            zstd_compare_sweep_block_len_count_result,
+            zstd_compare_sweep_block_len_count_manifest,
+            zstd_compare_sweep_block_len_count_manifest["zstd_compare_csv_unmatched_rows"] > 0,
+        )
+
+        zstd_compare_sweep_block_lens_result, zstd_compare_sweep_block_lens_manifest = zstd_compare_drift_fixture(
+            root,
+            "zstd-compare-sweep-block-lens",
+            mutate_gate=lambda payloads: payloads["sweep"].__setitem__("block_lens", [4096]),
+        )
+        append_zstd_compare_check(
+            "zstd_compare_sweep_block_lens_mismatch",
+            zstd_compare_sweep_block_lens_result,
+            zstd_compare_sweep_block_lens_manifest,
+            zstd_compare_sweep_block_lens_manifest["zstd_compare_csv_unmatched_rows"] > 0,
         )
 
         zstd_compare_markdown_summary_result, zstd_compare_markdown_summary_manifest = zstd_compare_drift_fixture(
