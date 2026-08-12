@@ -462,6 +462,7 @@ architecture blindly.
 - [x] Dashboard strict-mode smoke directly covers dashboard-configuration health drift, including config index, negative config/category smokes, required producer metadata, producer-negative guardrails, count mismatches, unmatched rows, and required smoke-gate coverage loss.
 - [x] Dashboard strict-mode smoke directly covers validation JSON health drift, including checked/observed/unchecked schema drift, JSON artifact count and manifest floors, CLI result invariants, report/corrupt row floors, and docs-negative ok/count drift.
 - [x] Dashboard strict-mode smoke directly covers Brotli static-dictionary health drift, including candidate/upstream/node/audit/negative/report count, CSV, Markdown, category, matrix, and duplicate-entry drift.
+- [x] Dashboard strict-mode smoke directly covers LZ4/Zstd native stream summary floor drift, including frame, skippable, checksum, dictionary, content-size, block, raw-block, compressed-byte, payload-byte, and skippable-payload floors.
 - [x] Dashboard strict-mode smoke covers every validation unhealthy reason with isolated negative fixtures.
 - [x] Dashboard strict-mode validation unhealthy reason matrix is stored in a schema-checked external JSON config.
 - [x] Dashboard strict-mode smoke directly covers native codec probe health drift, including probe count/case-sum mismatches, missing/duplicate probes, coverage/capability count/missing/duplicate drift, unhealthy capability rows, and Markdown unmatched rows.
@@ -2539,6 +2540,13 @@ architecture blindly.
   drift, Markdown summary/sample/row drift, Node decode-count drift, audit
   anchor loss, negative-smoke count drift, report entry/category/matrix/CSV
   mismatches, duplicate JSON entries, and report Markdown/negative-smoke drift.
+
+- Tightened LZ4/Zstd native stream summary strict-smoke direct drift coverage for
+  existing retained summary artifacts without adding codec scope. The strict
+  validation gate now isolates every positive floor in the summary health formula:
+  frame, skippable-frame, checksum-frame, dictionary-id, content-size,
+  declared-content, block, raw-block, compressed-byte, payload-byte, and
+  skippable-payload coverage, plus the LZ4-only block-checksum floor.
 
 - Promoted the existing Snappy report CSV from dashboard inventory metadata to
   aggregate validation health without adding new compression-format scope. The
