@@ -5392,6 +5392,33 @@ def deflate_dynamic_decode_profile_drift_fixture(
     return result, manifest
 
 
+def native_library_bench_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    mutate_csv,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted native library benchmark CSV."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    csv_path = fixture_root / NATIVE_LIBRARY_BENCH_ARTIFACT
+    with csv_path.open(newline="") as f:
+        reader = csv.DictReader(f)
+        fieldnames = list(reader.fieldnames or [])
+        rows = list(reader)
+    mutate_csv(rows, fieldnames, csv_path)
+    rewrite_csv_rows(csv_path, rows, fieldnames)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def dynamic_plan_drift_fixture(root: Path, fixture_name: str, mutate_csv) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted dynamic-plan CSV artifact."""
 
@@ -10789,6 +10816,121 @@ def main() -> int:
                 "dashboard_index_validation_unhealthy=native_codec_probes_failed",
                 native_codec_duplicate_capability_result.stdout,
             )
+        )
+
+        def append_native_library_bench_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and "dashboard_index_validation_unhealthy=native_library_bench_failed" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["native_library_bench_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    "dashboard_index_validation_unhealthy=native_library_bench_failed",
+                    result.stdout,
+                )
+            )
+
+        native_library_missing_pair_result, native_library_missing_pair_manifest = native_library_bench_drift_fixture(
+            root,
+            "native-library-bench-missing-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.pop(0),
+        )
+        append_native_library_bench_check(
+            "native_library_bench_missing_pair",
+            native_library_missing_pair_result,
+            native_library_missing_pair_manifest,
+            native_library_missing_pair_manifest["native_library_bench_rows"] == 92
+            and native_library_missing_pair_manifest["native_library_bench_missing_pairs"] == ["lz4:one_shot:text"],
+        )
+
+        native_library_duplicate_pair_result, native_library_duplicate_pair_manifest = native_library_bench_drift_fixture(
+            root,
+            "native-library-bench-duplicate-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.append(dict(rows[0])),
+        )
+        append_native_library_bench_check(
+            "native_library_bench_duplicate_pair",
+            native_library_duplicate_pair_result,
+            native_library_duplicate_pair_manifest,
+            native_library_duplicate_pair_manifest["native_library_bench_rows"] == 94
+            and native_library_duplicate_pair_manifest["native_library_bench_duplicate_pairs"] == ["lz4:one_shot:text"],
+        )
+
+        native_library_unknown_pair_result, native_library_unknown_pair_manifest = native_library_bench_drift_fixture(
+            root,
+            "native-library-bench-unknown-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("mode", "unknown_mode"),
+        )
+        append_native_library_bench_check(
+            "native_library_bench_unknown_pair",
+            native_library_unknown_pair_result,
+            native_library_unknown_pair_manifest,
+            native_library_unknown_pair_manifest["native_library_bench_missing_pairs"] == ["lz4:one_shot:text"]
+            and native_library_unknown_pair_manifest["native_library_bench_unknown_pairs"] == ["lz4:unknown_mode:text"],
+        )
+
+        native_library_positive_result, native_library_positive_manifest = native_library_bench_drift_fixture(
+            root,
+            "native-library-bench-positive",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("checksum", "0"),
+        )
+        append_native_library_bench_check(
+            "native_library_bench_positive_row_mismatch",
+            native_library_positive_result,
+            native_library_positive_manifest,
+            native_library_positive_manifest["native_library_bench_positive_rows"] == 92,
+        )
+
+        native_library_throughput_result, native_library_throughput_manifest = native_library_bench_drift_fixture(
+            root,
+            "native-library-bench-throughput",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("encode_mib_s", "1.0000"),
+        )
+        append_native_library_bench_check(
+            "native_library_bench_throughput_mismatch",
+            native_library_throughput_result,
+            native_library_throughput_manifest,
+            native_library_throughput_manifest["native_library_bench_throughput_rows"] == 92,
+        )
+
+        native_library_iteration_result, native_library_iteration_manifest = native_library_bench_drift_fixture(
+            root,
+            "native-library-bench-iteration",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[1].__setitem__("iterations", "26"),
+        )
+        append_native_library_bench_check(
+            "native_library_bench_iteration_mismatch",
+            native_library_iteration_result,
+            native_library_iteration_manifest,
+            native_library_iteration_manifest["native_library_bench_iteration_rows"] == 92,
+        )
+
+        native_library_improvement_result, native_library_improvement_manifest = native_library_bench_drift_fixture(
+            root,
+            "native-library-bench-improvement",
+            mutate_csv=lambda rows, fieldnames, csv_path: next(
+                row for row in rows if row["codec"] == "lz4" and row["mode"] == "chain_depth_default" and row["case"] == "chain_depth"
+            ).__setitem__("encoded_bytes", "1800"),
+        )
+        append_native_library_bench_check(
+            "native_library_bench_improvement_mismatch",
+            native_library_improvement_result,
+            native_library_improvement_manifest,
+            native_library_improvement_manifest["native_library_bench_improvement_checks"]
+            == native_library_improvement_manifest["native_library_bench_expected_improvement_checks"] - 1,
         )
 
         native_allocation_count_result, native_allocation_count_manifest = native_allocation_drift_fixture(

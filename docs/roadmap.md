@@ -2836,6 +2836,12 @@ architecture blindly.
   unknown `(codec, mode, case)` rows alongside missing pairs. Dashboard health
   now rejects native library CSV pair drift before benchmark coverage can pass.
 
+- Added direct dashboard strict-smoke drift coverage for native library benchmark
+  health. The strict validation gate now exercises missing/duplicate/unknown
+  `(codec, mode, case)` rows plus positive-row, throughput, iteration, and
+  compression-improvement mismatches so `native_library_bench_failed` coverage
+  cannot hide field-level CSV drift.
+
 - Tightened native tier range CSV dashboard health by deriving expected
   `(fixture, tier)` rows from each source's JSON summary and exposing duplicate
   and unknown source-qualified pairs alongside missing pairs. Dashboard health
