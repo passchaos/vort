@@ -4531,9 +4531,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 352,
-      "min_expected_failures": 352,
-      "min_matched": 352
+      "min_checks": 364,
+      "min_expected_failures": 364,
+      "min_matched": 364
     },
     {
       "mode": "non-json-artifact-health",
@@ -4633,7 +4633,7 @@ aggregate health reasons must be backed by real failing dashboard inputs before
 the smoke artifact can pass. The expected reason/check/fixture matrix lives in
 `tools/dashboard_strict_validation_reasons.json`; the retained
 `strict-validation-health` mode minimums must cover every configured reason,
-currently 88, plus direct validation JSON smoke/docs-negative, zlib relaxed gate/report/Markdown drift, Snappy report CSV drift, PNG scratch report/Markdown drift, checksum/chunk-cursor/deflate match-copy/Huffman-build/lookup/chunked-Huffman/extra-bit/dictionary-decode/PNG-scanline/chunked-zlib/PNG-streaming-zlib benchmark CSV drift, deflate dynamic decode profile CSV drift, native library benchmark CSV drift, zstd comparison CSV/Markdown drift, Python zlib differential counter drift, native summary error counter drift, LZ4/Zstd native stream summary drift, decode-stage unmatched-error and CSV positive/header/block-type drift, native-tier CSV row/summary mismatch drift, native-tier corpus discovery field drift, and header-inspect health regression checks. Dashboard aggregate health also reads the retained
+currently 88, plus direct validation JSON smoke/docs-negative, zlib relaxed gate/report/Markdown drift, Snappy report CSV drift, PNG scratch report/Markdown drift, checksum/chunk-cursor/deflate match-copy/Huffman-build/lookup/chunked-Huffman/extra-bit/dictionary-decode/PNG-scanline/chunked-zlib/PNG-streaming-zlib benchmark CSV drift, deflate dynamic decode profile CSV drift, native library benchmark CSV drift, zstd comparison CSV/Markdown drift, Python zlib differential counter drift, native summary error counter drift, LZ4/Zstd native stream summary drift, decode-stage unmatched-error and CSV positive/header/block-type drift, native-tier CSV row/summary mismatch drift, native-tier corpus discovery field drift, dashboard strict self-health count/Markdown drift, and header-inspect health regression checks. Dashboard aggregate health also reads the retained
 `vort-dashboard-strict-smoke.md` companion and requires its mode, requirement,
 validation-reason, and check rows to match the JSON counts before
 `dashboard_strict_healthy` can pass. The `dashboard-markdown` mode verifies that important human-facing
@@ -4655,7 +4655,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 339,
+  "check_count": 351,
   "mode_count": 5,
   "expected_mode_count": 5,
   "missing_mode_count": 0,
@@ -4675,9 +4675,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 352,
-      "min_expected_failures": 352,
-      "min_matched": 352
+      "min_checks": 364,
+      "min_expected_failures": 364,
+      "min_matched": 364
     },
     {
       "mode": "non-json-artifact-health",
@@ -4720,14 +4720,14 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 265,
-      "min_checks": 352,
+      "checks": 277,
+      "min_checks": 364,
       "missing_checks": 87,
-      "expected_failures": 265,
-      "min_expected_failures": 352,
+      "expected_failures": 277,
+      "min_expected_failures": 364,
       "missing_expected_failures": 87,
-      "matched": 265,
-      "min_matched": 352,
+      "matched": 277,
+      "min_matched": 364,
       "missing_matched": 87
     },
     {
@@ -4770,9 +4770,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 265,
-      "expected_failures": 265,
-      "matched": 265
+      "checks": 277,
+      "expected_failures": 277,
+      "matched": 277
     },
     {
       "mode": "non-json-artifact-health",
@@ -4846,6 +4846,150 @@ Example:
       "actual_output_limit": 240,
       "actual_output_truncated": false,
       "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "dashboard_strict_check_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_strict_mode_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_strict_expected_mode_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_strict_missing_mode_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=missing_dashboard_strict_modes",
+      "actual_output": "dashboard_index_validation_unhealthy=missing_dashboard_strict_modes\n",
+      "actual_output_bytes": 67,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_strict_validation_reason_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_strict_unmatched_check_row",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_strict_validation_reason_rows_missing",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_strict_missing_checks_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_strict_missing_expected_failures_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_strict_missing_matched_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_strict_markdown_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_strict_markdown_missing",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=missing_dashboard_strict_artifact",
+      "actual_output": "dashboard_index_validation_unhealthy=missing_dashboard_strict_artifact\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
       "matched": true
     },
     {

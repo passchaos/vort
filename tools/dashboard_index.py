@@ -8058,6 +8058,10 @@ def main() -> int:
         and strict_health["mode_count_rows"] == strict_health["mode_count"]
         and strict_health["expected_mode_rows"] == strict_health["expected_mode_count"]
         and strict_health["mode_requirement_rows"] == strict_health["expected_mode_count"]
+        and strict_health["validation_reason_rows"] > 0
+        and strict_health["missing_checks"] == 0
+        and strict_health["missing_expected_failures"] == 0
+        and strict_health["missing_matched"] == 0
         and strict_health["markdown_rows"] > 0
         and strict_health["markdown_unmatched"] == 0
     )

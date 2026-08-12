@@ -622,6 +622,9 @@
           "zero": [
             "dashboard_strict_missing_mode_count",
             "dashboard_strict_report_count_mismatch",
+            "dashboard_strict_missing_checks",
+            "dashboard_strict_missing_expected_failures",
+            "dashboard_strict_missing_matched",
             "dashboard_strict_markdown_unmatched"
           ]
         },
@@ -4439,6 +4442,18 @@
           "dashboard_artifact_inventory_markdown_table",
           "dashboard_configuration_markdown_table",
           "dashboard_strict_mode_markdown_table",
+          "dashboard_strict_check_count_mismatch",
+          "dashboard_strict_mode_count_mismatch",
+          "dashboard_strict_expected_mode_count_mismatch",
+          "dashboard_strict_missing_mode_count_mismatch",
+          "dashboard_strict_validation_reason_count_mismatch",
+          "dashboard_strict_unmatched_check_row",
+          "dashboard_strict_validation_reason_rows_missing",
+          "dashboard_strict_missing_checks_mismatch",
+          "dashboard_strict_missing_expected_failures_mismatch",
+          "dashboard_strict_missing_matched_mismatch",
+          "dashboard_strict_markdown_unmatched",
+          "dashboard_strict_markdown_missing",
           "decode_stage_markdown_table",
           "decode_stage_report_count_mismatch",
           "decode_stage_error_match_mismatch",

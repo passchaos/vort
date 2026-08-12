@@ -5011,6 +5011,46 @@ def native_tier_discovery_drift_fixture(
     return result, manifest
 
 
+def dashboard_strict_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    mutate_summary=None,
+    mutate_markdown=None,
+    *,
+    sync_markdown: bool = False,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted strict-smoke artifact.
+
+    The dashboard strict smoke artifact is itself part of aggregate validation
+    health, so count and Markdown companion drift need direct fixtures just like
+    codec benchmark artifacts. `sync_markdown` lets count-only JSON mutations
+    keep their retained Markdown companion internally consistent, isolating the
+    report-count invariant from Markdown unmatched-row checks.
+    """
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    summary_path = fixture_root / DASHBOARD_STRICT_ARTIFACT
+    markdown_path = fixture_root / DASHBOARD_STRICT_MARKDOWN_ARTIFACT
+    if mutate_summary is not None:
+        summary = json.loads(summary_path.read_text())
+        mutate_summary(summary)
+        summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
+        if sync_markdown:
+            write_markdown(markdown_path, summary)
+    if mutate_markdown is not None:
+        mutate_markdown(markdown_path)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def fuzz_corpus_drift_fixture(
     root: Path,
     fixture_name: str,
@@ -6215,6 +6255,221 @@ def main() -> int:
         assert source_details["legacy"]["summary_count"] == 0
         dashboard_markdown = (root / "vort-dashboard-index.md").read_text()
         checks.append(check_row("all_strict_ok", "all", False, True, ok.returncode, "dashboard_index=", ok.stdout))
+
+        def append_dashboard_strict_health_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            detail_matched: bool,
+            *,
+            expected_reason: str = "dashboard_strict_failed",
+        ) -> None:
+            expected = f"dashboard_index_validation_unhealthy={expected_reason}"
+            matched = (
+                result.returncode != 0
+                and expected in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["dashboard_strict_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    expected,
+                    result.stdout,
+                )
+            )
+
+        def increment_dashboard_strict_field(payload: dict[str, object], field: str) -> None:
+            payload[field] = int(payload[field]) + 1
+
+        dashboard_strict_check_count_result, dashboard_strict_check_count_manifest = dashboard_strict_drift_fixture(
+            root,
+            "dashboard-strict-check-count-mismatch",
+            mutate_summary=lambda payload: increment_dashboard_strict_field(payload, "check_count"),
+            sync_markdown=True,
+        )
+        append_dashboard_strict_health_check(
+            "dashboard_strict_check_count_mismatch",
+            dashboard_strict_check_count_result,
+            dashboard_strict_check_count_manifest,
+            dashboard_strict_check_count_manifest["dashboard_strict_check_count"] == 2
+            and dashboard_strict_check_count_manifest["dashboard_strict_check_rows"] == 1
+            and dashboard_strict_check_count_manifest["dashboard_strict_report_count_mismatch"] == 2,
+        )
+
+        dashboard_strict_mode_count_result, dashboard_strict_mode_count_manifest = dashboard_strict_drift_fixture(
+            root,
+            "dashboard-strict-mode-count-mismatch",
+            mutate_summary=lambda payload: increment_dashboard_strict_field(payload, "mode_count"),
+            sync_markdown=True,
+        )
+        append_dashboard_strict_health_check(
+            "dashboard_strict_mode_count_mismatch",
+            dashboard_strict_mode_count_result,
+            dashboard_strict_mode_count_manifest,
+            dashboard_strict_mode_count_manifest["dashboard_strict_mode_count"] == 2
+            and dashboard_strict_mode_count_manifest["dashboard_strict_mode_count_rows"] == 1
+            and dashboard_strict_mode_count_manifest["dashboard_strict_report_count_mismatch"] == 1,
+        )
+
+        dashboard_strict_expected_mode_count_result, dashboard_strict_expected_mode_count_manifest = dashboard_strict_drift_fixture(
+            root,
+            "dashboard-strict-expected-mode-count-mismatch",
+            mutate_summary=lambda payload: increment_dashboard_strict_field(payload, "expected_mode_count"),
+            sync_markdown=True,
+        )
+        append_dashboard_strict_health_check(
+            "dashboard_strict_expected_mode_count_mismatch",
+            dashboard_strict_expected_mode_count_result,
+            dashboard_strict_expected_mode_count_manifest,
+            dashboard_strict_expected_mode_count_manifest["dashboard_strict_expected_mode_count"] == 2
+            and dashboard_strict_expected_mode_count_manifest["dashboard_strict_expected_mode_rows"] == 1
+            and dashboard_strict_expected_mode_count_manifest["dashboard_strict_mode_requirement_rows"] == 1
+            and dashboard_strict_expected_mode_count_manifest["dashboard_strict_report_count_mismatch"] == 2,
+        )
+
+        dashboard_strict_missing_mode_count_result, dashboard_strict_missing_mode_count_manifest = dashboard_strict_drift_fixture(
+            root,
+            "dashboard-strict-missing-mode-count-mismatch",
+            mutate_summary=lambda payload: increment_dashboard_strict_field(payload, "missing_mode_count"),
+            sync_markdown=True,
+        )
+        append_dashboard_strict_health_check(
+            "dashboard_strict_missing_mode_count_mismatch",
+            dashboard_strict_missing_mode_count_result,
+            dashboard_strict_missing_mode_count_manifest,
+            dashboard_strict_missing_mode_count_manifest["dashboard_strict_missing_mode_count"] == 1
+            and dashboard_strict_missing_mode_count_manifest["dashboard_strict_missing_modes"] == []
+            and dashboard_strict_missing_mode_count_manifest["dashboard_strict_report_count_mismatch"] == 1,
+            expected_reason="missing_dashboard_strict_modes",
+        )
+
+        dashboard_strict_validation_reason_count_result, dashboard_strict_validation_reason_count_manifest = dashboard_strict_drift_fixture(
+            root,
+            "dashboard-strict-validation-reason-count-mismatch",
+            mutate_summary=lambda payload: increment_dashboard_strict_field(payload, "validation_unhealthy_reason_count"),
+            sync_markdown=True,
+        )
+        append_dashboard_strict_health_check(
+            "dashboard_strict_validation_reason_count_mismatch",
+            dashboard_strict_validation_reason_count_result,
+            dashboard_strict_validation_reason_count_manifest,
+            dashboard_strict_validation_reason_count_manifest["dashboard_strict_validation_reason_rows"] == len(load_expected_validation_reasons(VALIDATION_REASONS))
+            and dashboard_strict_validation_reason_count_manifest["dashboard_strict_report_count_mismatch"] == 1,
+        )
+
+        dashboard_strict_unmatched_check_result, dashboard_strict_unmatched_check_manifest = dashboard_strict_drift_fixture(
+            root,
+            "dashboard-strict-unmatched-check-row",
+            mutate_summary=lambda payload: payload["checks"][0].__setitem__("matched", False),
+            sync_markdown=True,
+        )
+        append_dashboard_strict_health_check(
+            "dashboard_strict_unmatched_check_row",
+            dashboard_strict_unmatched_check_result,
+            dashboard_strict_unmatched_check_manifest,
+            dashboard_strict_unmatched_check_manifest["dashboard_strict_check_rows"] == 1
+            and dashboard_strict_unmatched_check_manifest["dashboard_strict_report_count_mismatch"] == 1,
+        )
+
+        def remove_dashboard_strict_validation_reasons(payload: dict[str, object]) -> None:
+            payload["validation_unhealthy_reason_checks"] = []
+            payload["validation_unhealthy_reason_count"] = 0
+
+        dashboard_strict_validation_reason_rows_result, dashboard_strict_validation_reason_rows_manifest = dashboard_strict_drift_fixture(
+            root,
+            "dashboard-strict-validation-reason-rows-missing",
+            mutate_summary=remove_dashboard_strict_validation_reasons,
+            sync_markdown=True,
+        )
+        append_dashboard_strict_health_check(
+            "dashboard_strict_validation_reason_rows_missing",
+            dashboard_strict_validation_reason_rows_result,
+            dashboard_strict_validation_reason_rows_manifest,
+            dashboard_strict_validation_reason_rows_manifest["dashboard_strict_validation_reason_rows"] == 0
+            and dashboard_strict_validation_reason_rows_manifest["dashboard_strict_report_count_mismatch"] == 0,
+        )
+
+        def set_dashboard_strict_requirement_delta(payload: dict[str, object], field: str) -> None:
+            requirements = payload.get("mode_requirements")
+            if not isinstance(requirements, list) or not requirements or not isinstance(requirements[0], dict):
+                raise AssertionError("dashboard strict fixture missing mode requirement row")
+            requirements[0][field] = 1
+
+        dashboard_strict_missing_checks_result, dashboard_strict_missing_checks_manifest = dashboard_strict_drift_fixture(
+            root,
+            "dashboard-strict-missing-checks",
+            mutate_summary=lambda payload: set_dashboard_strict_requirement_delta(payload, "missing_checks"),
+            sync_markdown=True,
+        )
+        append_dashboard_strict_health_check(
+            "dashboard_strict_missing_checks_mismatch",
+            dashboard_strict_missing_checks_result,
+            dashboard_strict_missing_checks_manifest,
+            dashboard_strict_missing_checks_manifest["dashboard_strict_missing_checks"] == 1
+            and dashboard_strict_missing_checks_manifest["dashboard_strict_report_count_mismatch"] == 0,
+        )
+
+        dashboard_strict_missing_expected_failures_result, dashboard_strict_missing_expected_failures_manifest = dashboard_strict_drift_fixture(
+            root,
+            "dashboard-strict-missing-expected-failures",
+            mutate_summary=lambda payload: set_dashboard_strict_requirement_delta(payload, "missing_expected_failures"),
+            sync_markdown=True,
+        )
+        append_dashboard_strict_health_check(
+            "dashboard_strict_missing_expected_failures_mismatch",
+            dashboard_strict_missing_expected_failures_result,
+            dashboard_strict_missing_expected_failures_manifest,
+            dashboard_strict_missing_expected_failures_manifest["dashboard_strict_missing_expected_failures"] == 1
+            and dashboard_strict_missing_expected_failures_manifest["dashboard_strict_report_count_mismatch"] == 0,
+        )
+
+        dashboard_strict_missing_matched_result, dashboard_strict_missing_matched_manifest = dashboard_strict_drift_fixture(
+            root,
+            "dashboard-strict-missing-matched",
+            mutate_summary=lambda payload: set_dashboard_strict_requirement_delta(payload, "missing_matched"),
+            sync_markdown=True,
+        )
+        append_dashboard_strict_health_check(
+            "dashboard_strict_missing_matched_mismatch",
+            dashboard_strict_missing_matched_result,
+            dashboard_strict_missing_matched_manifest,
+            dashboard_strict_missing_matched_manifest["dashboard_strict_missing_matched"] == 1
+            and dashboard_strict_missing_matched_manifest["dashboard_strict_report_count_mismatch"] == 0,
+        )
+
+        dashboard_strict_markdown_unmatched_result, dashboard_strict_markdown_unmatched_manifest = dashboard_strict_drift_fixture(
+            root,
+            "dashboard-strict-markdown-unmatched",
+            mutate_markdown=lambda markdown_path: markdown_path.write_text(
+                markdown_path.read_text().replace("## Checks", "## Check drift", 1)
+            ),
+        )
+        append_dashboard_strict_health_check(
+            "dashboard_strict_markdown_unmatched",
+            dashboard_strict_markdown_unmatched_result,
+            dashboard_strict_markdown_unmatched_manifest,
+            dashboard_strict_markdown_unmatched_manifest["dashboard_strict_markdown_unmatched"] == 1,
+        )
+
+        dashboard_strict_markdown_missing_result, dashboard_strict_markdown_missing_manifest = dashboard_strict_drift_fixture(
+            root,
+            "dashboard-strict-markdown-missing",
+            mutate_markdown=lambda markdown_path: markdown_path.unlink(),
+        )
+        append_dashboard_strict_health_check(
+            "dashboard_strict_markdown_missing",
+            dashboard_strict_markdown_missing_result,
+            dashboard_strict_markdown_missing_manifest,
+            dashboard_strict_markdown_missing_manifest["dashboard_strict_markdown_present"] is False,
+            expected_reason="missing_dashboard_strict_artifact",
+        )
+
         checks.append(
             markdown_check_row(
                 "dashboard_artifact_inventory_markdown_table",

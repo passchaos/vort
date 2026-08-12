@@ -458,6 +458,7 @@ architecture blindly.
 - [x] Dashboard strict-mode smoke records actual-output truncation limit and truncation flag per check.
 - [x] Dashboard strict-mode smoke records original actual-output length per check.
 - [x] Dashboard strict-mode smoke exercises the actual-output truncation path with a synthetic long-output check.
+- [x] Dashboard strict-mode smoke directly covers dashboard-strict self-health drift, including check/mode/expected-mode/missing-mode/validation-reason count mismatches, unmatched check rows, missing requirement deltas, and retained Markdown missing/unmatched rows.
 - [x] Dashboard strict-mode smoke covers every validation unhealthy reason with isolated negative fixtures.
 - [x] Dashboard strict-mode validation unhealthy reason matrix is stored in a schema-checked external JSON config.
 - [x] Dashboard strict-mode smoke directly covers native codec probe health drift, including probe count/case-sum mismatches, missing/duplicate probes, coverage/capability count/missing/duplicate drift, unhealthy capability rows, and Markdown unmatched rows.
@@ -2508,6 +2509,12 @@ architecture blindly.
   malformed selected cases, CSV path, missing-reason, summary fixture, CSV
   fixture, and CSV byte drift. Discovery health now has direct evidence for the
   report/summary/CSV linkage instead of relying only on a byte mismatch smoke.
+
+- Tightened dashboard strict-smoke self-health by adding isolated fixtures for
+  JSON count drift, unmatched check rows, validation-reason row loss, missing
+  requirement deltas, missing-mode count drift, and retained Markdown
+  missing/unmatched rows. `dashboard_strict_healthy` now also requires zero
+  requirement deltas and at least one retained validation-reason row.
 
 - Promoted the existing Snappy report CSV from dashboard inventory metadata to
   aggregate validation health without adding new compression-format scope. The
