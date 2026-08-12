@@ -4543,9 +4543,9 @@ Example:
     },
     {
       "mode": "native-tier-range-health",
-      "min_checks": 18,
-      "min_expected_failures": 18,
-      "min_matched": 18
+      "min_checks": 28,
+      "min_expected_failures": 28,
+      "min_matched": 28
     }
   ]
 }
@@ -4633,7 +4633,7 @@ aggregate health reasons must be backed by real failing dashboard inputs before
 the smoke artifact can pass. The expected reason/check/fixture matrix lives in
 `tools/dashboard_strict_validation_reasons.json`; the retained
 `strict-validation-health` mode minimums must cover every configured reason,
-currently 88, plus direct validation JSON smoke/docs-negative, zlib relaxed gate/report/Markdown drift, Snappy report CSV drift, PNG scratch report/Markdown drift, checksum/chunk-cursor/deflate match-copy/Huffman-build/lookup/chunked-Huffman/extra-bit/dictionary-decode/PNG-scanline/chunked-zlib/PNG-streaming-zlib benchmark CSV drift, deflate dynamic decode profile CSV drift, native library benchmark CSV drift, zstd comparison CSV/Markdown drift, Python zlib differential counter drift, native summary error counter drift, LZ4/Zstd native stream summary drift, decode-stage unmatched-error and CSV positive/header/block-type drift, native-tier CSV row/summary mismatch drift, and header-inspect health regression checks. Dashboard aggregate health also reads the retained
+currently 88, plus direct validation JSON smoke/docs-negative, zlib relaxed gate/report/Markdown drift, Snappy report CSV drift, PNG scratch report/Markdown drift, checksum/chunk-cursor/deflate match-copy/Huffman-build/lookup/chunked-Huffman/extra-bit/dictionary-decode/PNG-scanline/chunked-zlib/PNG-streaming-zlib benchmark CSV drift, deflate dynamic decode profile CSV drift, native library benchmark CSV drift, zstd comparison CSV/Markdown drift, Python zlib differential counter drift, native summary error counter drift, LZ4/Zstd native stream summary drift, decode-stage unmatched-error and CSV positive/header/block-type drift, native-tier CSV row/summary mismatch drift, native-tier corpus discovery field drift, and header-inspect health regression checks. Dashboard aggregate health also reads the retained
 `vort-dashboard-strict-smoke.md` companion and requires its mode, requirement,
 validation-reason, and check rows to match the JSON counts before
 `dashboard_strict_healthy` can pass. The `dashboard-markdown` mode verifies that important human-facing
@@ -4655,7 +4655,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 329,
+  "check_count": 339,
   "mode_count": 5,
   "expected_mode_count": 5,
   "missing_mode_count": 0,
@@ -4687,9 +4687,9 @@ Example:
     },
     {
       "mode": "native-tier-range-health",
-      "min_checks": 18,
-      "min_expected_failures": 18,
-      "min_matched": 18
+      "min_checks": 28,
+      "min_expected_failures": 28,
+      "min_matched": 28
     }
   ],
   "missing_modes": [],
@@ -4782,9 +4782,9 @@ Example:
     },
     {
       "mode": "native-tier-range-health",
-      "checks": 18,
-      "expected_failures": 18,
-      "matched": 18
+      "checks": 28,
+      "expected_failures": 28,
+      "matched": 28
     }
   ],
   "checks": [
@@ -8719,6 +8719,126 @@ Example:
       "expected_output": "dashboard_index_validation_unhealthy=native_tier_range_failed",
       "actual_output": "dashboard_index_validation_unhealthy=native_tier_range_failed\n",
       "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_discovery_ok_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_discovery_source_mode_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_discovery_candidate_count_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_discovery_source_count_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_discovery_selected_count_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_discovery_selected_case_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_discovery_csv_path_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_discovery_missing_reason_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_discovery_summary_fixture_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_discovery_csv_fixture_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed\n",
+      "actual_output_bytes": 73,
       "actual_output_limit": 240,
       "actual_output_truncated": false,
       "returncode": 1,

@@ -46,9 +46,9 @@
     },
     {
       "mode": "native-tier-range-health",
-      "min_checks": 18,
-      "min_expected_failures": 18,
-      "min_matched": 18
+      "min_checks": 28,
+      "min_expected_failures": 28,
+      "min_matched": 28
     },
     {
       "mode": "strict-validation-health",

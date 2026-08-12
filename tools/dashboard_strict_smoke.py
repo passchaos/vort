@@ -4965,6 +4965,52 @@ def native_tier_range_drift_fixture(
     return result, manifest
 
 
+def native_tier_discovery_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    mutate_discovery=None,
+    mutate_summary=None,
+    mutate_csv=None,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one drifted native-tier corpus-discovery artifact.
+
+    The corpus discovery report ties the selected standard-corpus cases to both
+    the native-tier summary and the retained CSV. Mutating those artifacts in an
+    otherwise healthy fixture keeps each discovery invariant independently
+    reviewable in strict smoke output.
+    """
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    discovery_path = fixture_root / NATIVE_TIER_RANGE_CORPUS_DISCOVERY_ARTIFACT
+    summary_path = fixture_root / NATIVE_TIER_RANGE_CORPUS_ARTIFACT
+    csv_path = fixture_root / NATIVE_TIER_RANGE_CORPUS_CSV_ARTIFACT
+    if mutate_discovery is not None:
+        discovery = json.loads(discovery_path.read_text())
+        mutate_discovery(discovery)
+        discovery_path.write_text(json.dumps(discovery, indent=2, sort_keys=True) + "\n")
+    if mutate_summary is not None:
+        summary = json.loads(summary_path.read_text())
+        mutate_summary(summary)
+        summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
+    if mutate_csv is not None:
+        with csv_path.open(newline="") as f:
+            reader = csv.DictReader(f)
+            fieldnames = list(reader.fieldnames or [])
+            rows = list(reader)
+        mutate_csv(rows, fieldnames, csv_path)
+        rewrite_csv_rows(csv_path, rows, fieldnames)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def fuzz_corpus_drift_fixture(
     root: Path,
     fixture_name: str,
@@ -7103,26 +7149,180 @@ def main() -> int:
             and native_tier_summary_min_full_manifest["native_tier_range_summary_csv_mismatch_total"] == 1,
         )
 
-        mismatched_native_tier_discovery_root = root / "mismatched-native-tier-discovery"
-        mismatched_native_tier_discovery_root.mkdir()
-        write_healthy_artifacts(mismatched_native_tier_discovery_root)
-        mismatched_discovery_payload = json.loads((mismatched_native_tier_discovery_root / NATIVE_TIER_RANGE_CORPUS_DISCOVERY_ARTIFACT).read_text())
-        mismatched_discovery_payload["selected_cases"][0]["bytes"] += 1
-        (mismatched_native_tier_discovery_root / NATIVE_TIER_RANGE_CORPUS_DISCOVERY_ARTIFACT).write_text(json.dumps(mismatched_discovery_payload, indent=2, sort_keys=True) + "\n")
-        mismatched_native_tier_discovery_producer = mismatched_native_tier_discovery_root / "producers.json"
-        write_producer_map(mismatched_native_tier_discovery_producer)
-        mismatched_native_tier_discovery_result = run(dashboard_args(mismatched_native_tier_discovery_root, mismatched_native_tier_discovery_producer, "--strict-validation-health"), check=False)
-        mismatched_native_tier_discovery_manifest = json.loads((mismatched_native_tier_discovery_root / "vort-dashboard-index.json").read_text())
-        native_tier_discovery_mismatched_matched = (
-            mismatched_native_tier_discovery_result.returncode != 0
-            and "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed" in mismatched_native_tier_discovery_result.stdout
-            and mismatched_native_tier_discovery_manifest["validation_healthy"] is False
-            and mismatched_native_tier_discovery_manifest["native_tier_corpus_discovery_present"] is True
-            and mismatched_native_tier_discovery_manifest["native_tier_corpus_discovery_healthy"] is False
-            and mismatched_native_tier_discovery_manifest["native_tier_corpus_discovery_csv_byte_mismatch"] == 1
-            and mismatched_native_tier_discovery_manifest["native_tier_corpus_discovery_mismatch_total"] == 1
+        def append_native_tier_discovery_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and "native_tier_corpus_discovery_failed" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["native_tier_corpus_discovery_present"] is True
+                and manifest["native_tier_corpus_discovery_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "native-tier-range-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed",
+                    result.stdout,
+                )
+            )
+
+        discovery_ok_result, discovery_ok_manifest = native_tier_discovery_drift_fixture(
+            root,
+            "native-tier-discovery-ok",
+            mutate_discovery=lambda payload: payload.__setitem__("ok", False),
         )
-        checks.append(check_row("mismatched_native_tier_discovery_case", "native-tier-range-health", True, native_tier_discovery_mismatched_matched, mismatched_native_tier_discovery_result.returncode, "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed", mismatched_native_tier_discovery_result.stdout))
+        append_native_tier_discovery_check(
+            "native_tier_discovery_ok_mismatch",
+            discovery_ok_result,
+            discovery_ok_manifest,
+            discovery_ok_manifest["native_tier_corpus_discovery_ok"] is False
+            and discovery_ok_manifest["native_tier_corpus_discovery_mismatch_total"] == 0,
+        )
+
+        discovery_source_mode_result, discovery_source_mode_manifest = native_tier_discovery_drift_fixture(
+            root,
+            "native-tier-discovery-source-mode",
+            mutate_discovery=lambda payload: payload.__setitem__("source_mode", "unknown"),
+        )
+        append_native_tier_discovery_check(
+            "native_tier_discovery_source_mode_mismatch",
+            discovery_source_mode_result,
+            discovery_source_mode_manifest,
+            discovery_source_mode_manifest["native_tier_corpus_discovery_source_mode"] == "unknown"
+            and discovery_source_mode_manifest["native_tier_corpus_discovery_mismatch_total"] == 0,
+        )
+
+        discovery_candidate_result, discovery_candidate_manifest = native_tier_discovery_drift_fixture(
+            root,
+            "native-tier-discovery-candidate-count",
+            mutate_discovery=lambda payload: payload.__setitem__("candidate_count", 0),
+        )
+        append_native_tier_discovery_check(
+            "native_tier_discovery_candidate_count_mismatch",
+            discovery_candidate_result,
+            discovery_candidate_manifest,
+            discovery_candidate_manifest["native_tier_corpus_discovery_candidate_count"] == 0
+            and discovery_candidate_manifest["native_tier_corpus_discovery_mismatch_total"] == 0,
+        )
+
+        discovery_source_count_result, discovery_source_count_manifest = native_tier_discovery_drift_fixture(
+            root,
+            "native-tier-discovery-source-count",
+            mutate_discovery=lambda payload: payload.__setitem__("source_count", int(payload["source_count"]) + 1),
+        )
+        append_native_tier_discovery_check(
+            "native_tier_discovery_source_count_mismatch",
+            discovery_source_count_result,
+            discovery_source_count_manifest,
+            discovery_source_count_manifest["native_tier_corpus_discovery_source_count"] == 2
+            and discovery_source_count_manifest["native_tier_corpus_discovery_mismatch_total"] == 0,
+        )
+
+        discovery_selected_count_result, discovery_selected_count_manifest = native_tier_discovery_drift_fixture(
+            root,
+            "native-tier-discovery-selected-count",
+            mutate_discovery=lambda payload: payload.__setitem__("selected_case_count", int(payload["selected_case_count"]) + 1),
+        )
+        append_native_tier_discovery_check(
+            "native_tier_discovery_selected_count_mismatch",
+            discovery_selected_count_result,
+            discovery_selected_count_manifest,
+            discovery_selected_count_manifest["native_tier_corpus_discovery_selected_case_count"] == 4
+            and discovery_selected_count_manifest["native_tier_corpus_discovery_summary_fixture_mismatch"] == 1
+            and discovery_selected_count_manifest["native_tier_corpus_discovery_csv_fixture_mismatch"] == 1
+            and discovery_selected_count_manifest["native_tier_corpus_discovery_mismatch_total"] == 2,
+        )
+
+        discovery_selected_case_result, discovery_selected_case_manifest = native_tier_discovery_drift_fixture(
+            root,
+            "native-tier-discovery-selected-case",
+            mutate_discovery=lambda payload: payload["selected_cases"][0].__setitem__("label", ""),
+        )
+        append_native_tier_discovery_check(
+            "native_tier_discovery_selected_case_mismatch",
+            discovery_selected_case_result,
+            discovery_selected_case_manifest,
+            discovery_selected_case_manifest["native_tier_corpus_discovery_selected_case_mismatch"] == 1
+            and discovery_selected_case_manifest["native_tier_corpus_discovery_summary_fixture_mismatch"] == 1
+            and discovery_selected_case_manifest["native_tier_corpus_discovery_csv_fixture_mismatch"] == 1
+            and discovery_selected_case_manifest["native_tier_corpus_discovery_csv_byte_mismatch"] == 0
+            and discovery_selected_case_manifest["native_tier_corpus_discovery_mismatch_total"] == 3,
+        )
+
+        discovery_csv_path_result, discovery_csv_path_manifest = native_tier_discovery_drift_fixture(
+            root,
+            "native-tier-discovery-csv-path",
+            mutate_discovery=lambda payload: payload.__setitem__("csv", "zig-out/vort-native-tier-range-wrong.csv"),
+        )
+        append_native_tier_discovery_check(
+            "native_tier_discovery_csv_path_mismatch",
+            discovery_csv_path_result,
+            discovery_csv_path_manifest,
+            discovery_csv_path_manifest["native_tier_corpus_discovery_csv_path_mismatch"] == 1
+            and discovery_csv_path_manifest["native_tier_corpus_discovery_mismatch_total"] == 1,
+        )
+
+        discovery_missing_reason_result, discovery_missing_reason_manifest = native_tier_discovery_drift_fixture(
+            root,
+            "native-tier-discovery-missing-reason",
+            mutate_discovery=lambda payload: payload.__setitem__("missing_reason", "manual_drift"),
+        )
+        append_native_tier_discovery_check(
+            "native_tier_discovery_missing_reason_mismatch",
+            discovery_missing_reason_result,
+            discovery_missing_reason_manifest,
+            discovery_missing_reason_manifest["native_tier_corpus_discovery_missing_reason"] == "manual_drift"
+            and discovery_missing_reason_manifest["native_tier_corpus_discovery_mismatch_total"] == 0,
+        )
+
+        discovery_summary_fixture_result, discovery_summary_fixture_manifest = native_tier_discovery_drift_fixture(
+            root,
+            "native-tier-discovery-summary-fixture",
+            mutate_summary=lambda payload: payload.__setitem__("fixtures", payload["fixtures"][1:]),
+        )
+        append_native_tier_discovery_check(
+            "native_tier_discovery_summary_fixture_mismatch",
+            discovery_summary_fixture_result,
+            discovery_summary_fixture_manifest,
+            discovery_summary_fixture_manifest["native_tier_corpus_discovery_summary_fixture_mismatch"] == 1
+            and discovery_summary_fixture_manifest["native_tier_corpus_discovery_mismatch_total"] == 1,
+        )
+
+        discovery_csv_fixture_result, discovery_csv_fixture_manifest = native_tier_discovery_drift_fixture(
+            root,
+            "native-tier-discovery-csv-fixture",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("fixture", "unknown"),
+        )
+        append_native_tier_discovery_check(
+            "native_tier_discovery_csv_fixture_mismatch",
+            discovery_csv_fixture_result,
+            discovery_csv_fixture_manifest,
+            discovery_csv_fixture_manifest["native_tier_corpus_discovery_csv_fixture_mismatch"] == 1
+            and discovery_csv_fixture_manifest["native_tier_corpus_discovery_csv_byte_mismatch"] == 0
+            and discovery_csv_fixture_manifest["native_tier_corpus_discovery_mismatch_total"] == 1,
+        )
+
+        discovery_csv_byte_result, discovery_csv_byte_manifest = native_tier_discovery_drift_fixture(
+            root,
+            "native-tier-discovery-csv-byte",
+            mutate_discovery=lambda payload: payload["selected_cases"][0].__setitem__("bytes", int(payload["selected_cases"][0]["bytes"]) + 1),
+        )
+        append_native_tier_discovery_check(
+            "mismatched_native_tier_discovery_case",
+            discovery_csv_byte_result,
+            discovery_csv_byte_manifest,
+            discovery_csv_byte_manifest["native_tier_corpus_discovery_csv_byte_mismatch"] == 1
+            and discovery_csv_byte_manifest["native_tier_corpus_discovery_mismatch_total"] == 1,
+        )
 
         csv_layout_cases = [
             (

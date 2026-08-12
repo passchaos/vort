@@ -2503,6 +2503,12 @@ architecture blindly.
   shape, throughput formula checks, and each summary mismatch counter for rows,
   fixtures, tiers, paths, index totals, and minimum range/full-input throughput.
 
+- Tightened native tier corpus-discovery strict-smoke coverage with isolated
+  negative fixtures for `ok`, source-mode, candidate/source/selected counts,
+  malformed selected cases, CSV path, missing-reason, summary fixture, CSV
+  fixture, and CSV byte drift. Discovery health now has direct evidence for the
+  report/summary/CSV linkage instead of relying only on a byte mismatch smoke.
+
 - Promoted the existing Snappy report CSV from dashboard inventory metadata to
   aggregate validation health without adding new compression-format scope. The
   dashboard now parses `vort-snappy-report.csv`, validates the 20-row
