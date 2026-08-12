@@ -4787,6 +4787,7 @@ def native_allocation_drift_fixture(
     fixture_name: str,
     mutate_report=None,
     mutate_smoke=None,
+    mutate_negative=None,
     mutate_markdown=None,
 ) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted native allocation artifact."""
@@ -4796,6 +4797,7 @@ def native_allocation_drift_fixture(
     write_healthy_artifacts(fixture_root)
     report_path = fixture_root / NATIVE_ALLOCATION_REPORT_ARTIFACT
     smoke_path = fixture_root / NATIVE_ALLOCATION_SMOKE_ARTIFACT
+    negative_path = fixture_root / NATIVE_ALLOCATION_NEGATIVE_ARTIFACT
     markdown_path = fixture_root / NATIVE_ALLOCATION_REPORT_MARKDOWN_ARTIFACT
     if mutate_report is not None:
         report = json.loads(report_path.read_text())
@@ -4805,6 +4807,10 @@ def native_allocation_drift_fixture(
         smoke = json.loads(smoke_path.read_text())
         mutate_smoke(smoke)
         smoke_path.write_text(json.dumps(smoke, indent=2, sort_keys=True) + "\n")
+    if mutate_negative is not None:
+        negative = json.loads(negative_path.read_text())
+        mutate_negative(negative)
+        negative_path.write_text(json.dumps(negative, indent=2, sort_keys=True) + "\n")
     if mutate_markdown is not None:
         mutate_markdown(markdown_path)
     producer_map = fixture_root / "producers.json"
@@ -8200,6 +8206,132 @@ def main() -> int:
                 native_allocation_markdown_unknown_result.returncode,
                 "dashboard_index_validation_unhealthy=native_allocation_failed",
                 native_allocation_markdown_unknown_result.stdout,
+            )
+        )
+
+        native_allocation_report_duplicate_result, native_allocation_report_duplicate_manifest = native_allocation_drift_fixture(
+            root,
+            "native-allocation-report-duplicate",
+            mutate_report=lambda payload: payload["cases"].append(dict(payload["cases"][0])),
+        )
+        native_allocation_report_duplicate_matched = (
+            native_allocation_report_duplicate_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_allocation_failed" in native_allocation_report_duplicate_result.stdout
+            and native_allocation_report_duplicate_manifest["validation_healthy"] is False
+            and native_allocation_report_duplicate_manifest["native_allocation_healthy"] is False
+            and native_allocation_report_duplicate_manifest["native_allocation_report_duplicate_case_names"] == ["zero_decode"]
+        )
+        checks.append(
+            check_row(
+                "native_allocation_report_duplicate_case",
+                "strict-validation-health",
+                True,
+                native_allocation_report_duplicate_matched,
+                native_allocation_report_duplicate_result.returncode,
+                "dashboard_index_validation_unhealthy=native_allocation_failed",
+                native_allocation_report_duplicate_result.stdout,
+            )
+        )
+
+        native_allocation_zero_duplicate_result, native_allocation_zero_duplicate_manifest = native_allocation_drift_fixture(
+            root,
+            "native-allocation-zero-duplicate",
+            mutate_smoke=lambda payload: payload["cases"].append(dict(payload["cases"][0])),
+        )
+        native_allocation_zero_duplicate_matched = (
+            native_allocation_zero_duplicate_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_allocation_failed" in native_allocation_zero_duplicate_result.stdout
+            and native_allocation_zero_duplicate_manifest["validation_healthy"] is False
+            and native_allocation_zero_duplicate_manifest["native_allocation_healthy"] is False
+            and native_allocation_zero_duplicate_manifest["native_allocation_zero_duplicate_cases"] == ["zero_decode"]
+        )
+        checks.append(
+            check_row(
+                "native_allocation_zero_duplicate_case",
+                "strict-validation-health",
+                True,
+                native_allocation_zero_duplicate_matched,
+                native_allocation_zero_duplicate_result.returncode,
+                "dashboard_index_validation_unhealthy=native_allocation_failed",
+                native_allocation_zero_duplicate_result.stdout,
+            )
+        )
+
+        native_allocation_budget_duplicate_result, native_allocation_budget_duplicate_manifest = native_allocation_drift_fixture(
+            root,
+            "native-allocation-budget-duplicate",
+            mutate_smoke=lambda payload: payload["budget_cases"].append(dict(payload["budget_cases"][0])),
+        )
+        native_allocation_budget_duplicate_matched = (
+            native_allocation_budget_duplicate_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_allocation_failed" in native_allocation_budget_duplicate_result.stdout
+            and native_allocation_budget_duplicate_manifest["validation_healthy"] is False
+            and native_allocation_budget_duplicate_manifest["native_allocation_healthy"] is False
+            and native_allocation_budget_duplicate_manifest["native_allocation_budget_duplicate_cases"] == ["budgeted_index"]
+        )
+        checks.append(
+            check_row(
+                "native_allocation_budget_duplicate_case",
+                "strict-validation-health",
+                True,
+                native_allocation_budget_duplicate_matched,
+                native_allocation_budget_duplicate_result.returncode,
+                "dashboard_index_validation_unhealthy=native_allocation_failed",
+                native_allocation_budget_duplicate_result.stdout,
+            )
+        )
+
+        native_allocation_negative_unmatched_result, native_allocation_negative_unmatched_manifest = native_allocation_drift_fixture(
+            root,
+            "native-allocation-negative-unmatched",
+            mutate_negative=lambda payload: payload["cases"][0].__setitem__("matched", False),
+        )
+        native_allocation_negative_unmatched_matched = (
+            native_allocation_negative_unmatched_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_allocation_failed" in native_allocation_negative_unmatched_result.stdout
+            and native_allocation_negative_unmatched_manifest["validation_healthy"] is False
+            and native_allocation_negative_unmatched_manifest["native_allocation_healthy"] is False
+            and native_allocation_negative_unmatched_manifest["native_allocation_negative_unmatched"] == 1
+        )
+        checks.append(
+            check_row(
+                "native_allocation_negative_unmatched",
+                "strict-validation-health",
+                True,
+                native_allocation_negative_unmatched_matched,
+                native_allocation_negative_unmatched_result.returncode,
+                "dashboard_index_validation_unhealthy=native_allocation_failed",
+                native_allocation_negative_unmatched_result.stdout,
+            )
+        )
+
+        native_allocation_markdown_duplicate_result, native_allocation_markdown_duplicate_manifest = native_allocation_drift_fixture(
+            root,
+            "native-allocation-markdown-duplicate",
+            mutate_markdown=lambda markdown_path: markdown_path.write_text(
+                markdown_path.read_text().replace(
+                    "| zero_decode | 16 | 16 | 0 | 0 | 0 | 0 |\n",
+                    "| zero_decode | 16 | 16 | 0 | 0 | 0 | 0 |\n| zero_decode | 16 | 16 | 0 | 0 | 0 | 0 |\n",
+                    1,
+                )
+            ),
+        )
+        native_allocation_markdown_duplicate_matched = (
+            native_allocation_markdown_duplicate_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_allocation_failed" in native_allocation_markdown_duplicate_result.stdout
+            and native_allocation_markdown_duplicate_manifest["validation_healthy"] is False
+            and native_allocation_markdown_duplicate_manifest["native_allocation_healthy"] is False
+            and native_allocation_markdown_duplicate_manifest["native_allocation_markdown_duplicate_cases"] == ["zero_decode"]
+        )
+        checks.append(
+            check_row(
+                "native_allocation_markdown_duplicate",
+                "strict-validation-health",
+                True,
+                native_allocation_markdown_duplicate_matched,
+                native_allocation_markdown_duplicate_result.returncode,
+                "dashboard_index_validation_unhealthy=native_allocation_failed",
+                native_allocation_markdown_duplicate_result.stdout,
             )
         )
 
