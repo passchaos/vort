@@ -467,6 +467,7 @@ architecture blindly.
 - [x] Dashboard strict-mode smoke directly covers checksum benchmark health drift, including missing/duplicate/unknown algorithms, positive/workload/throughput row drift, and CRC32/CRC32C digest mix-group mismatches.
 - [x] Dashboard strict-mode smoke directly covers chunk cursor benchmark health drift, including missing/duplicate/unknown case-kernel rows, positive/shape/throughput row drift, and checksum mismatches between current and optimized kernels.
 - [x] Dashboard strict-mode smoke directly covers deflate match-copy benchmark health drift, including missing/duplicate/unknown case-kernel rows, positive/class/output/throughput row drift, and checksum mismatches across kernels.
+- [x] Dashboard strict-mode smoke directly covers deflate Huffman build benchmark health drift, including missing/duplicate/unknown case-build rows, positive/lookup/throughput row drift, and checksum variant mismatches.
 - [x] Dashboard strict-mode smoke directly covers native allocation health drift, including report count/unbalanced/duplicate rows, zero/budget smoke mismatches and duplicate cases, negative-smoke unmatched rows, and Markdown malformed/duplicate/unknown rows.
 - [x] Dashboard strict-mode smoke directly covers native fuzz corpus health drift, including report count/matched-row drift, coverage requirement mismatches, and Markdown unmatched rows.
 - [x] Dashboard strict-mode smoke directly covers decode-stage health drift, including report/error count mismatches, CSV missing/duplicate/unknown cases, and Markdown unmatched rows.

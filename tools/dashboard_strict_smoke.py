@@ -5141,6 +5141,33 @@ def deflate_match_copy_bench_drift_fixture(
     return result, manifest
 
 
+def deflate_huffman_build_bench_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    mutate_csv,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted deflate Huffman-build benchmark CSV."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    csv_path = fixture_root / DEFLATE_HUFFMAN_BUILD_BENCH_ARTIFACT
+    with csv_path.open(newline="") as f:
+        reader = csv.DictReader(f)
+        fieldnames = list(reader.fieldnames or [])
+        rows = list(reader)
+    mutate_csv(rows, fieldnames, csv_path)
+    rewrite_csv_rows(csv_path, rows, fieldnames)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def dynamic_plan_drift_fixture(root: Path, fixture_name: str, mutate_csv) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted dynamic-plan CSV artifact."""
 
@@ -9128,6 +9155,120 @@ def main() -> int:
             match_copy_checksum_result,
             match_copy_checksum_manifest,
             match_copy_checksum_manifest["deflate_match_copy_bench_checksum_matched_cases"] == 6,
+        )
+
+        def append_deflate_huffman_build_bench_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and "dashboard_index_validation_unhealthy=deflate_huffman_build_bench_failed" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["deflate_huffman_build_bench_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    "dashboard_index_validation_unhealthy=deflate_huffman_build_bench_failed",
+                    result.stdout,
+                )
+            )
+
+        huffman_build_missing_pair_result, huffman_build_missing_pair_manifest = deflate_huffman_build_bench_drift_fixture(
+            root,
+            "deflate-huffman-build-missing-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.pop(0),
+        )
+        append_deflate_huffman_build_bench_check(
+            "deflate_huffman_build_bench_missing_pair",
+            huffman_build_missing_pair_result,
+            huffman_build_missing_pair_manifest,
+            huffman_build_missing_pair_manifest["deflate_huffman_build_bench_rows"] == 13
+            and huffman_build_missing_pair_manifest["deflate_huffman_build_bench_missing_pairs"] == ["literal-mixed:table"],
+        )
+
+        huffman_build_duplicate_pair_result, huffman_build_duplicate_pair_manifest = deflate_huffman_build_bench_drift_fixture(
+            root,
+            "deflate-huffman-build-duplicate-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.append(dict(rows[0])),
+        )
+        append_deflate_huffman_build_bench_check(
+            "deflate_huffman_build_bench_duplicate_pair",
+            huffman_build_duplicate_pair_result,
+            huffman_build_duplicate_pair_manifest,
+            huffman_build_duplicate_pair_manifest["deflate_huffman_build_bench_rows"] == 15
+            and huffman_build_duplicate_pair_manifest["deflate_huffman_build_bench_duplicate_pairs"] == ["literal-mixed:table"],
+        )
+
+        huffman_build_unknown_pair_result, huffman_build_unknown_pair_manifest = deflate_huffman_build_bench_drift_fixture(
+            root,
+            "deflate-huffman-build-unknown-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("build", "unknown_build"),
+        )
+        append_deflate_huffman_build_bench_check(
+            "deflate_huffman_build_bench_unknown_pair",
+            huffman_build_unknown_pair_result,
+            huffman_build_unknown_pair_manifest,
+            huffman_build_unknown_pair_manifest["deflate_huffman_build_bench_missing_pairs"] == ["literal-mixed:table"]
+            and huffman_build_unknown_pair_manifest["deflate_huffman_build_bench_unknown_pairs"] == ["literal-mixed:unknown_build"],
+        )
+
+        huffman_build_positive_result, huffman_build_positive_manifest = deflate_huffman_build_bench_drift_fixture(
+            root,
+            "deflate-huffman-build-positive",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("checksum", "0"),
+        )
+        append_deflate_huffman_build_bench_check(
+            "deflate_huffman_build_bench_positive_row_mismatch",
+            huffman_build_positive_result,
+            huffman_build_positive_manifest,
+            huffman_build_positive_manifest["deflate_huffman_build_bench_positive_rows"] == 13,
+        )
+
+        huffman_build_lookup_result, huffman_build_lookup_manifest = deflate_huffman_build_bench_drift_fixture(
+            root,
+            "deflate-huffman-build-lookup",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("lookup_bits", "1"),
+        )
+        append_deflate_huffman_build_bench_check(
+            "deflate_huffman_build_bench_lookup_mismatch",
+            huffman_build_lookup_result,
+            huffman_build_lookup_manifest,
+            huffman_build_lookup_manifest["deflate_huffman_build_bench_lookup_rows"] == 13,
+        )
+
+        huffman_build_throughput_result, huffman_build_throughput_manifest = deflate_huffman_build_bench_drift_fixture(
+            root,
+            "deflate-huffman-build-throughput",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("builds_per_s", "1.00"),
+        )
+        append_deflate_huffman_build_bench_check(
+            "deflate_huffman_build_bench_throughput_mismatch",
+            huffman_build_throughput_result,
+            huffman_build_throughput_manifest,
+            huffman_build_throughput_manifest["deflate_huffman_build_bench_throughput_rows"] == 13,
+        )
+
+        huffman_build_checksum_result, huffman_build_checksum_manifest = deflate_huffman_build_bench_drift_fixture(
+            root,
+            "deflate-huffman-build-checksum",
+            mutate_csv=lambda rows, fieldnames, csv_path: next(
+                row for row in rows if row["case"] == "literal-mixed" and row["build"] == "fast9"
+            ).__setitem__("checksum", rows[0]["checksum"]),
+        )
+        append_deflate_huffman_build_bench_check(
+            "deflate_huffman_build_bench_checksum_variant_mismatch",
+            huffman_build_checksum_result,
+            huffman_build_checksum_manifest,
+            huffman_build_checksum_manifest["deflate_huffman_build_bench_checksum_variant_cases"] == 3,
         )
 
         native_codec_probe_count_result, native_codec_probe_count_manifest = native_codec_probes_drift_fixture(
