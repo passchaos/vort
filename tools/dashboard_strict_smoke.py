@@ -4775,6 +4775,26 @@ def csv_artifact_layout_fixture(
     return result, manifest
 
 
+def validation_json_smoke_drift_fixture(root: Path, fixture_name: str, mutate) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted validation JSON smoke artifact."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    payload_path = fixture_root / VALIDATION_JSON_SMOKE_ARTIFACT
+    payload = json.loads(payload_path.read_text())
+    mutate(payload)
+    payload_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def expect_failure(args: list[str], needle: str) -> subprocess.CompletedProcess[str]:
     result = run(args, check=False)
     if result.returncode == 0:
@@ -6793,6 +6813,94 @@ def main() -> int:
                 validation_json_count_mismatch_result.stdout,
             )
         )
+
+        validation_json_drift_cases = [
+            (
+                "unchecked-observed-schema",
+                "validation_json_unchecked_observed_schema",
+                {
+                    "unchecked_observed_schema_count": 1,
+                    "unchecked_observed_schemas": ["vort.unchecked_schema"],
+                },
+                {
+                    "validation_json_unchecked_observed_schema_count": 1,
+                    "validation_json_unchecked_observed_schema_rows": 1,
+                    "validation_json_unchecked_observed_schemas": ["vort.unchecked_schema"],
+                },
+            ),
+            (
+                "json-artifact-parse-failed",
+                "validation_json_artifact_parse_failed",
+                {
+                    "json_artifact_parse_failed_count": 1,
+                    "json_artifact_parse_failed": ["synthetic-bad.json"],
+                },
+                {
+                    "validation_json_json_artifact_parse_failed_count": 1,
+                    "validation_json_json_artifact_parse_failed": ["synthetic-bad.json"],
+                },
+            ),
+            (
+                "json-artifact-missing-schema",
+                "validation_json_artifact_missing_schema",
+                {
+                    "json_artifact_missing_schema_count": 1,
+                    "json_artifact_missing_schema": ["synthetic-missing-schema.json"],
+                },
+                {
+                    "validation_json_json_artifact_missing_schema_count": 1,
+                    "validation_json_json_artifact_missing_schema": ["synthetic-missing-schema.json"],
+                },
+            ),
+            (
+                "json-artifact-manifest-failed",
+                "validation_json_artifact_manifest_failed",
+                {
+                    "json_artifact_manifest_failed_count": 1,
+                    "json_artifact_manifest_failed_names": ["synthetic-manifest-failed.json"],
+                },
+                {
+                    "validation_json_json_artifact_manifest_failed_count": 1,
+                    "validation_json_json_artifact_manifest_failed_names": ["synthetic-manifest-failed.json"],
+                },
+            ),
+            (
+                "json-artifact-manifest-accounting-mismatch",
+                "validation_json_artifact_manifest_accounting_mismatch",
+                {
+                    "json_artifact_manifest_accounting_mismatch": 1,
+                },
+                {
+                    "validation_json_json_artifact_manifest_accounting_mismatch": 1,
+                },
+            ),
+        ]
+        for fixture_name, check_name, updates, expected_manifest_fields in validation_json_drift_cases:
+            result, manifest = validation_json_smoke_drift_fixture(
+                root,
+                f"validation-json-{fixture_name}",
+                lambda payload, updates=updates: payload.update(updates),
+            )
+            matched = (
+                result.returncode != 0
+                and "dashboard_index_validation_unhealthy=validation_json_failed" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["validation_json_present"] is True
+                and manifest["validation_json_ok"] is True
+                and manifest["validation_json_healthy"] is False
+                and all(manifest[field] == expected for field, expected in expected_manifest_fields.items())
+            )
+            checks.append(
+                check_row(
+                    check_name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    "dashboard_index_validation_unhealthy=validation_json_failed",
+                    result.stdout,
+                )
+            )
 
         covered_validation_reasons = {str(row["reason"]) for row in validation_reason_checks}
         configured_validation_reasons = [row["reason"] for row in expected_validation_reasons]
