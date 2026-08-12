@@ -5114,6 +5114,33 @@ def chunk_cursor_bench_drift_fixture(
     return result, manifest
 
 
+def deflate_match_copy_bench_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    mutate_csv,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted deflate match-copy benchmark CSV."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    csv_path = fixture_root / DEFLATE_MATCH_COPY_BENCH_ARTIFACT
+    with csv_path.open(newline="") as f:
+        reader = csv.DictReader(f)
+        fieldnames = list(reader.fieldnames or [])
+        rows = list(reader)
+    mutate_csv(rows, fieldnames, csv_path)
+    rewrite_csv_rows(csv_path, rows, fieldnames)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def dynamic_plan_drift_fixture(root: Path, fixture_name: str, mutate_csv) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted dynamic-plan CSV artifact."""
 
@@ -8975,6 +9002,132 @@ def main() -> int:
             chunk_cursor_checksum_result,
             chunk_cursor_checksum_manifest,
             chunk_cursor_checksum_manifest["chunk_cursor_bench_checksum_matched_cases"] == 3,
+        )
+
+        def append_deflate_match_copy_bench_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and "dashboard_index_validation_unhealthy=deflate_match_copy_bench_failed" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["deflate_match_copy_bench_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    "dashboard_index_validation_unhealthy=deflate_match_copy_bench_failed",
+                    result.stdout,
+                )
+            )
+
+        match_copy_missing_pair_result, match_copy_missing_pair_manifest = deflate_match_copy_bench_drift_fixture(
+            root,
+            "deflate-match-copy-missing-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.pop(0),
+        )
+        append_deflate_match_copy_bench_check(
+            "deflate_match_copy_bench_missing_pair",
+            match_copy_missing_pair_result,
+            match_copy_missing_pair_manifest,
+            match_copy_missing_pair_manifest["deflate_match_copy_bench_rows"] == 20
+            and match_copy_missing_pair_manifest["deflate_match_copy_bench_missing_pairs"] == ["rle-long:current"],
+        )
+
+        match_copy_duplicate_pair_result, match_copy_duplicate_pair_manifest = deflate_match_copy_bench_drift_fixture(
+            root,
+            "deflate-match-copy-duplicate-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.append(dict(rows[0])),
+        )
+        append_deflate_match_copy_bench_check(
+            "deflate_match_copy_bench_duplicate_pair",
+            match_copy_duplicate_pair_result,
+            match_copy_duplicate_pair_manifest,
+            match_copy_duplicate_pair_manifest["deflate_match_copy_bench_rows"] == 22
+            and match_copy_duplicate_pair_manifest["deflate_match_copy_bench_duplicate_pairs"] == ["rle-long:current"],
+        )
+
+        match_copy_unknown_pair_result, match_copy_unknown_pair_manifest = deflate_match_copy_bench_drift_fixture(
+            root,
+            "deflate-match-copy-unknown-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("kernel", "unknown_match_copy_kernel"),
+        )
+        append_deflate_match_copy_bench_check(
+            "deflate_match_copy_bench_unknown_pair",
+            match_copy_unknown_pair_result,
+            match_copy_unknown_pair_manifest,
+            match_copy_unknown_pair_manifest["deflate_match_copy_bench_missing_pairs"] == ["rle-long:current"]
+            and match_copy_unknown_pair_manifest["deflate_match_copy_bench_unknown_pairs"] == ["rle-long:unknown_match_copy_kernel"],
+        )
+
+        match_copy_positive_result, match_copy_positive_manifest = deflate_match_copy_bench_drift_fixture(
+            root,
+            "deflate-match-copy-positive",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("checksum", "0"),
+        )
+        append_deflate_match_copy_bench_check(
+            "deflate_match_copy_bench_positive_row_mismatch",
+            match_copy_positive_result,
+            match_copy_positive_manifest,
+            match_copy_positive_manifest["deflate_match_copy_bench_positive_rows"] == 20,
+        )
+
+        match_copy_class_result, match_copy_class_manifest = deflate_match_copy_bench_drift_fixture(
+            root,
+            "deflate-match-copy-class",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("class", "unknown_class"),
+        )
+        append_deflate_match_copy_bench_check(
+            "deflate_match_copy_bench_class_mismatch",
+            match_copy_class_result,
+            match_copy_class_manifest,
+            match_copy_class_manifest["deflate_match_copy_bench_expected_class_rows"] == 20,
+        )
+
+        match_copy_output_result, match_copy_output_manifest = deflate_match_copy_bench_drift_fixture(
+            root,
+            "deflate-match-copy-output-bytes",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("output_bytes", str(int(rows[0]["output_bytes"]) + 1)),
+        )
+        append_deflate_match_copy_bench_check(
+            "deflate_match_copy_bench_output_bytes_mismatch",
+            match_copy_output_result,
+            match_copy_output_manifest,
+            match_copy_output_manifest["deflate_match_copy_bench_output_bytes_rows"] == 20,
+        )
+
+        match_copy_throughput_result, match_copy_throughput_manifest = deflate_match_copy_bench_drift_fixture(
+            root,
+            "deflate-match-copy-throughput",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("output_mib_per_s", "1.00"),
+        )
+        append_deflate_match_copy_bench_check(
+            "deflate_match_copy_bench_throughput_mismatch",
+            match_copy_throughput_result,
+            match_copy_throughput_manifest,
+            match_copy_throughput_manifest["deflate_match_copy_bench_throughput_rows"] == 20,
+        )
+
+        match_copy_checksum_result, match_copy_checksum_manifest = deflate_match_copy_bench_drift_fixture(
+            root,
+            "deflate-match-copy-checksum",
+            mutate_csv=lambda rows, fieldnames, csv_path: next(
+                row for row in rows if row["case"] == "rle-long" and row["kernel"] == "small_unrolled"
+            ).__setitem__("checksum", "54321"),
+        )
+        append_deflate_match_copy_bench_check(
+            "deflate_match_copy_bench_checksum_mismatch",
+            match_copy_checksum_result,
+            match_copy_checksum_manifest,
+            match_copy_checksum_manifest["deflate_match_copy_bench_checksum_matched_cases"] == 6,
         )
 
         native_codec_probe_count_result, native_codec_probe_count_manifest = native_codec_probes_drift_fixture(
