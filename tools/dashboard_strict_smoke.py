@@ -5365,6 +5365,33 @@ def png_streaming_zlib_bench_drift_fixture(
     return result, manifest
 
 
+def deflate_dynamic_decode_profile_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    mutate_csv,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted dynamic decode profile CSV."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    csv_path = fixture_root / DEFLATE_DYNAMIC_DECODE_PROFILE_ARTIFACT
+    with csv_path.open(newline="") as f:
+        reader = csv.DictReader(f)
+        fieldnames = list(reader.fieldnames or [])
+        rows = list(reader)
+    mutate_csv(rows, fieldnames, csv_path)
+    rewrite_csv_rows(csv_path, rows, fieldnames)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def dynamic_plan_drift_fixture(root: Path, fixture_name: str, mutate_csv) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted dynamic-plan CSV artifact."""
 
@@ -10344,6 +10371,134 @@ def main() -> int:
             png_streaming_ratio_result,
             png_streaming_ratio_manifest,
             png_streaming_ratio_manifest["png_streaming_zlib_bench_ratio_rows"] == 9,
+        )
+
+        def append_deflate_dynamic_decode_profile_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and "dashboard_index_validation_unhealthy=deflate_dynamic_decode_profile_failed" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["deflate_dynamic_decode_profile_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    "dashboard_index_validation_unhealthy=deflate_dynamic_decode_profile_failed",
+                    result.stdout,
+                )
+            )
+
+        dynamic_profile_missing_case_result, dynamic_profile_missing_case_manifest = deflate_dynamic_decode_profile_drift_fixture(
+            root,
+            "deflate-dynamic-decode-profile-missing-case",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.pop(0),
+        )
+        append_deflate_dynamic_decode_profile_check(
+            "deflate_dynamic_decode_profile_missing_case",
+            dynamic_profile_missing_case_result,
+            dynamic_profile_missing_case_manifest,
+            dynamic_profile_missing_case_manifest["deflate_dynamic_decode_profile_rows"] == 2
+            and dynamic_profile_missing_case_manifest["deflate_dynamic_decode_profile_missing_cases"] == ["README.md"],
+        )
+
+        dynamic_profile_duplicate_case_result, dynamic_profile_duplicate_case_manifest = deflate_dynamic_decode_profile_drift_fixture(
+            root,
+            "deflate-dynamic-decode-profile-duplicate-case",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.append(dict(rows[0])),
+        )
+        append_deflate_dynamic_decode_profile_check(
+            "deflate_dynamic_decode_profile_duplicate_case",
+            dynamic_profile_duplicate_case_result,
+            dynamic_profile_duplicate_case_manifest,
+            dynamic_profile_duplicate_case_manifest["deflate_dynamic_decode_profile_rows"] == 4
+            and dynamic_profile_duplicate_case_manifest["deflate_dynamic_decode_profile_duplicate_cases"] == ["README.md"],
+        )
+
+        dynamic_profile_positive_result, dynamic_profile_positive_manifest = deflate_dynamic_decode_profile_drift_fixture(
+            root,
+            "deflate-dynamic-decode-profile-positive",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("mix", "0"),
+        )
+        append_deflate_dynamic_decode_profile_check(
+            "deflate_dynamic_decode_profile_positive_row_mismatch",
+            dynamic_profile_positive_result,
+            dynamic_profile_positive_manifest,
+            dynamic_profile_positive_manifest["deflate_dynamic_decode_profile_positive_rows"] == 2,
+        )
+
+        dynamic_profile_histogram_result, dynamic_profile_histogram_manifest = deflate_dynamic_decode_profile_drift_fixture(
+            root,
+            "deflate-dynamic-decode-profile-histogram",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__(
+                "length_symbol_histogram",
+                "5;" + ";".join(["0"] * 28),
+            ),
+        )
+        append_deflate_dynamic_decode_profile_check(
+            "deflate_dynamic_decode_profile_histogram_mismatch",
+            dynamic_profile_histogram_result,
+            dynamic_profile_histogram_manifest,
+            dynamic_profile_histogram_manifest["deflate_dynamic_decode_profile_histogram_rows"] == 2,
+        )
+
+        dynamic_profile_lookup_result, dynamic_profile_lookup_manifest = deflate_dynamic_decode_profile_drift_fixture(
+            root,
+            "deflate-dynamic-decode-profile-lookup",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("literal_lookup_bits", "8"),
+        )
+        append_deflate_dynamic_decode_profile_check(
+            "deflate_dynamic_decode_profile_lookup_mismatch",
+            dynamic_profile_lookup_result,
+            dynamic_profile_lookup_manifest,
+            dynamic_profile_lookup_manifest["deflate_dynamic_decode_profile_lookup_rows"] == 2,
+        )
+
+        dynamic_profile_match_class_result, dynamic_profile_match_class_manifest = deflate_dynamic_decode_profile_drift_fixture(
+            root,
+            "deflate-dynamic-decode-profile-match-class",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("dominant_match_class", "rle"),
+        )
+        append_deflate_dynamic_decode_profile_check(
+            "deflate_dynamic_decode_profile_match_class_mismatch",
+            dynamic_profile_match_class_result,
+            dynamic_profile_match_class_manifest,
+            dynamic_profile_match_class_manifest["deflate_dynamic_decode_profile_match_class_rows"] == 2,
+        )
+
+        dynamic_profile_ratio_result, dynamic_profile_ratio_manifest = deflate_dynamic_decode_profile_drift_fixture(
+            root,
+            "deflate-dynamic-decode-profile-ratio",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("extra_bits_per_match", "9.000000"),
+        )
+        append_deflate_dynamic_decode_profile_check(
+            "deflate_dynamic_decode_profile_ratio_mismatch",
+            dynamic_profile_ratio_result,
+            dynamic_profile_ratio_manifest,
+            dynamic_profile_ratio_manifest["deflate_dynamic_decode_profile_ratio_rows"] == 2,
+        )
+
+        dynamic_profile_chunked_window_result, dynamic_profile_chunked_window_manifest = deflate_dynamic_decode_profile_drift_fixture(
+            root,
+            "deflate-dynamic-decode-profile-chunked-window",
+            mutate_csv=lambda rows, fieldnames, csv_path: next(
+                row for row in rows if row["case"] == "chunked-window-match"
+            ).__setitem__("raw_bytes", "65536"),
+        )
+        append_deflate_dynamic_decode_profile_check(
+            "deflate_dynamic_decode_profile_chunked_window_mismatch",
+            dynamic_profile_chunked_window_result,
+            dynamic_profile_chunked_window_manifest,
+            dynamic_profile_chunked_window_manifest["deflate_dynamic_decode_profile_chunked_window_rows"] == 0,
         )
 
         native_codec_probe_count_result, native_codec_probe_count_manifest = native_codec_probes_drift_fixture(

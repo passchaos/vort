@@ -2859,6 +2859,13 @@ architecture blindly.
   profiling rows. Dashboard health now rejects required profile case drift before
   decode-profile coverage can pass.
 
+- Added direct dashboard strict-smoke drift coverage for deflate dynamic decode
+  profile health. The strict validation gate now exercises missing/duplicate
+  required profile cases plus positive-row, histogram, lookup, match-class,
+  ratio-accounting, and chunked-window-shape mismatches, so aggregate
+  `deflate_dynamic_decode_profile_failed` coverage cannot hide field-level CSV
+  drift.
+
 - Tightened compression level report dashboard health by exposing duplicate and
   unknown `(case, level, strategy)` rows alongside missing pairs. Dashboard
   health now rejects level report CSV pair drift before Markdown and row
