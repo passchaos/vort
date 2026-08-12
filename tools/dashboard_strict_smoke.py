@@ -5249,6 +5249,33 @@ def deflate_extra_bits_bench_drift_fixture(
     return result, manifest
 
 
+def dictionary_decode_bench_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    mutate_csv,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted dictionary decode benchmark CSV."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    csv_path = fixture_root / DICTIONARY_DECODE_BENCH_ARTIFACT
+    with csv_path.open(newline="") as f:
+        reader = csv.DictReader(f)
+        fieldnames = list(reader.fieldnames or [])
+        rows = list(reader)
+    mutate_csv(rows, fieldnames, csv_path)
+    rewrite_csv_rows(csv_path, rows, fieldnames)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def dynamic_plan_drift_fixture(root: Path, fixture_name: str, mutate_csv) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted dynamic-plan CSV artifact."""
 
@@ -9729,6 +9756,118 @@ def main() -> int:
             extra_bits_paired_checksum_result,
             extra_bits_paired_checksum_manifest,
             extra_bits_paired_checksum_manifest["deflate_extra_bits_bench_paired_checksum_rows"] == extra_bits_paired_checksum_manifest["deflate_extra_bits_bench_expected_paired_checksum_rows"] - 1,
+        )
+
+        def append_dictionary_decode_bench_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and "dashboard_index_validation_unhealthy=dictionary_decode_bench_failed" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["dictionary_decode_bench_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    "dashboard_index_validation_unhealthy=dictionary_decode_bench_failed",
+                    result.stdout,
+                )
+            )
+
+        dictionary_missing_pair_result, dictionary_missing_pair_manifest = dictionary_decode_bench_drift_fixture(
+            root,
+            "dictionary-decode-missing-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.pop(0),
+        )
+        append_dictionary_decode_bench_check(
+            "dictionary_decode_bench_missing_pair",
+            dictionary_missing_pair_result,
+            dictionary_missing_pair_manifest,
+            dictionary_missing_pair_manifest["dictionary_decode_bench_rows"] == 17
+            and dictionary_missing_pair_manifest["dictionary_decode_bench_missing_pairs"] == ["history-replay-raw-dynamic-alloc:raw:dynamic:alloc"],
+        )
+
+        dictionary_duplicate_pair_result, dictionary_duplicate_pair_manifest = dictionary_decode_bench_drift_fixture(
+            root,
+            "dictionary-decode-duplicate-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.append(dict(rows[0])),
+        )
+        append_dictionary_decode_bench_check(
+            "dictionary_decode_bench_duplicate_pair",
+            dictionary_duplicate_pair_result,
+            dictionary_duplicate_pair_manifest,
+            dictionary_duplicate_pair_manifest["dictionary_decode_bench_rows"] == 19
+            and dictionary_duplicate_pair_manifest["dictionary_decode_bench_duplicate_pairs"] == ["history-replay-raw-dynamic-alloc:raw:dynamic:alloc"],
+        )
+
+        dictionary_unknown_pair_result, dictionary_unknown_pair_manifest = dictionary_decode_bench_drift_fixture(
+            root,
+            "dictionary-decode-unknown-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("mode", "unknown_mode"),
+        )
+        append_dictionary_decode_bench_check(
+            "dictionary_decode_bench_unknown_pair",
+            dictionary_unknown_pair_result,
+            dictionary_unknown_pair_manifest,
+            dictionary_unknown_pair_manifest["dictionary_decode_bench_missing_pairs"] == ["history-replay-raw-dynamic-alloc:raw:dynamic:alloc"]
+            and dictionary_unknown_pair_manifest["dictionary_decode_bench_unknown_pairs"] == ["history-replay-raw-dynamic-alloc:raw:dynamic:unknown_mode"],
+        )
+
+        dictionary_positive_result, dictionary_positive_manifest = dictionary_decode_bench_drift_fixture(
+            root,
+            "dictionary-decode-positive",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("checksum", "0"),
+        )
+        append_dictionary_decode_bench_check(
+            "dictionary_decode_bench_positive_row_mismatch",
+            dictionary_positive_result,
+            dictionary_positive_manifest,
+            dictionary_positive_manifest["dictionary_decode_bench_positive_rows"] == 17,
+        )
+
+        dictionary_output_result, dictionary_output_manifest = dictionary_decode_bench_drift_fixture(
+            root,
+            "dictionary-decode-output-size",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("output_bytes", str(int(rows[0]["output_bytes"]) + 1)),
+        )
+        append_dictionary_decode_bench_check(
+            "dictionary_decode_bench_output_size_mismatch",
+            dictionary_output_result,
+            dictionary_output_manifest,
+            dictionary_output_manifest["dictionary_decode_bench_output_size_rows"] == 17,
+        )
+
+        dictionary_throughput_result, dictionary_throughput_manifest = dictionary_decode_bench_drift_fixture(
+            root,
+            "dictionary-decode-throughput",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("decode_mib_s", "1.00"),
+        )
+        append_dictionary_decode_bench_check(
+            "dictionary_decode_bench_throughput_mismatch",
+            dictionary_throughput_result,
+            dictionary_throughput_manifest,
+            dictionary_throughput_manifest["dictionary_decode_bench_throughput_rows"] == 17,
+        )
+
+        dictionary_checksum_result, dictionary_checksum_manifest = dictionary_decode_bench_drift_fixture(
+            root,
+            "dictionary-decode-checksum",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("checksum", "54321"),
+        )
+        append_dictionary_decode_bench_check(
+            "dictionary_decode_bench_checksum_mismatch",
+            dictionary_checksum_result,
+            dictionary_checksum_manifest,
+            dictionary_checksum_manifest["dictionary_decode_bench_checksum_matched_payloads"] == 2,
         )
 
         native_codec_probe_count_result, native_codec_probe_count_manifest = native_codec_probes_drift_fixture(
