@@ -5506,6 +5506,54 @@ def python_zlib_diff_drift_fixture(
     return result, manifest
 
 
+def native_summary_error_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    mutate_report,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted native summary error report."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    report_path = fixture_root / NATIVE_SUMMARY_ERROR_ARTIFACT
+    payload = json.loads(report_path.read_text())
+    mutate_report(payload)
+    report_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
+def native_summary_error_negative_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    mutate_report,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted native summary negative-smoke report."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    report_path = fixture_root / NATIVE_SUMMARY_ERROR_NEGATIVE_ARTIFACT
+    payload = json.loads(report_path.read_text())
+    mutate_report(payload)
+    report_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def dynamic_plan_drift_fixture(root: Path, fixture_name: str, mutate_csv) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted dynamic-plan CSV artifact."""
 
@@ -10903,6 +10951,212 @@ def main() -> int:
                 "dashboard_index_validation_unhealthy=native_codec_probes_failed",
                 native_codec_duplicate_capability_result.stdout,
             )
+        )
+
+        def append_native_summary_error_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["native_summary_error_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered",
+                    result.stdout,
+                )
+            )
+
+        native_summary_case_count_result, native_summary_case_count_manifest = native_summary_error_drift_fixture(
+            root,
+            "native-summary-error-case-count",
+            mutate_report=lambda payload: payload.__setitem__("case_count", int(payload["case_count"]) + 1),
+        )
+        append_native_summary_error_check(
+            "native_summary_error_case_count_mismatch",
+            native_summary_case_count_result,
+            native_summary_case_count_manifest,
+            native_summary_case_count_manifest["native_summary_error_case_count_mismatch"] == 1,
+        )
+
+        native_summary_codec_case_result, native_summary_codec_case_manifest = native_summary_error_drift_fixture(
+            root,
+            "native-summary-error-codec-case",
+            mutate_report=lambda payload: payload.__setitem__("lz4_case_count", int(payload["lz4_case_count"]) + 1),
+        )
+        append_native_summary_error_check(
+            "native_summary_error_codec_case_count_mismatch",
+            native_summary_codec_case_result,
+            native_summary_codec_case_manifest,
+            native_summary_codec_case_manifest["native_summary_error_codec_case_count_mismatch"] == 1,
+        )
+
+        native_summary_error_count_result, native_summary_error_count_manifest = native_summary_error_drift_fixture(
+            root,
+            "native-summary-error-error-count",
+            mutate_report=lambda payload: payload["error_counts"].__setitem__(
+                "CorruptFrame",
+                int(payload["error_counts"]["CorruptFrame"]) + 1,
+            ),
+        )
+        append_native_summary_error_check(
+            "native_summary_error_error_count_mismatch",
+            native_summary_error_count_result,
+            native_summary_error_count_manifest,
+            native_summary_error_count_manifest["native_summary_error_error_count_mismatch"] == 1,
+        )
+
+        native_summary_phase_count_result, native_summary_phase_count_manifest = native_summary_error_drift_fixture(
+            root,
+            "native-summary-error-phase-count",
+            mutate_report=lambda payload: payload["phase_counts"].__setitem__(
+                "magic",
+                int(payload["phase_counts"]["magic"]) + 1,
+            ),
+        )
+        append_native_summary_error_check(
+            "native_summary_error_phase_count_mismatch",
+            native_summary_phase_count_result,
+            native_summary_phase_count_manifest,
+            native_summary_phase_count_manifest["native_summary_error_phase_count_mismatch"] == 1,
+        )
+
+        native_summary_codec_error_result, native_summary_codec_error_manifest = native_summary_error_drift_fixture(
+            root,
+            "native-summary-error-codec-error",
+            mutate_report=lambda payload: payload["lz4_error_counts"].__setitem__(
+                "CorruptFrame",
+                int(payload["lz4_error_counts"]["CorruptFrame"]) + 1,
+            ),
+        )
+        append_native_summary_error_check(
+            "native_summary_error_codec_error_count_mismatch",
+            native_summary_codec_error_result,
+            native_summary_codec_error_manifest,
+            native_summary_codec_error_manifest["native_summary_error_codec_error_count_mismatch"] == 1,
+        )
+
+        native_summary_codec_phase_result, native_summary_codec_phase_manifest = native_summary_error_drift_fixture(
+            root,
+            "native-summary-error-codec-phase",
+            mutate_report=lambda payload: payload["lz4_phase_counts"].__setitem__(
+                "magic",
+                int(payload["lz4_phase_counts"]["magic"]) + 1,
+            ),
+        )
+        append_native_summary_error_check(
+            "native_summary_error_codec_phase_count_mismatch",
+            native_summary_codec_phase_result,
+            native_summary_codec_phase_manifest,
+            native_summary_codec_phase_manifest["native_summary_error_codec_phase_count_mismatch"] == 1,
+        )
+
+        native_summary_offset_result, native_summary_offset_manifest = native_summary_error_drift_fixture(
+            root,
+            "native-summary-error-offset",
+            mutate_report=lambda payload: payload.__setitem__("offset_min", int(payload["offset_min"]) + 1),
+        )
+        append_native_summary_error_check(
+            "native_summary_error_offset_range_mismatch",
+            native_summary_offset_result,
+            native_summary_offset_manifest,
+            native_summary_offset_manifest["native_summary_error_offset_range_mismatch"] == 1,
+        )
+
+        native_summary_lz4_missing_phase_result, native_summary_lz4_missing_phase_manifest = native_summary_error_drift_fixture(
+            root,
+            "native-summary-error-lz4-missing-phase",
+            mutate_report=lambda payload: payload["lz4_phase_counts"].__setitem__("frame", 0),
+        )
+        append_native_summary_error_check(
+            "native_summary_error_lz4_missing_phase",
+            native_summary_lz4_missing_phase_result,
+            native_summary_lz4_missing_phase_manifest,
+            native_summary_lz4_missing_phase_manifest["native_summary_error_lz4_missing_phases"] == ["frame"],
+        )
+
+        native_summary_zstd_missing_phase_result, native_summary_zstd_missing_phase_manifest = native_summary_error_drift_fixture(
+            root,
+            "native-summary-error-zstd-missing-phase",
+            mutate_report=lambda payload: payload["zstd_phase_counts"].__setitem__("frame", 0),
+        )
+        append_native_summary_error_check(
+            "native_summary_error_zstd_missing_phase",
+            native_summary_zstd_missing_phase_result,
+            native_summary_zstd_missing_phase_manifest,
+            native_summary_zstd_missing_phase_manifest["native_summary_error_zstd_missing_phases"] == ["frame"],
+        )
+
+        def append_native_summary_error_negative_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and "dashboard_index_validation_unhealthy=native_summary_error_negative_failed" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["native_summary_error_negative_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    "dashboard_index_validation_unhealthy=native_summary_error_negative_failed",
+                    result.stdout,
+                )
+            )
+
+        native_summary_negative_count_result, native_summary_negative_count_manifest = native_summary_error_negative_drift_fixture(
+            root,
+            "native-summary-error-negative-count",
+            mutate_report=lambda payload: payload.__setitem__("case_count", int(payload["case_count"]) + 1),
+        )
+        append_native_summary_error_negative_check(
+            "native_summary_error_negative_count_mismatch",
+            native_summary_negative_count_result,
+            native_summary_negative_count_manifest,
+            native_summary_negative_count_manifest["native_summary_error_negative_count_mismatch"] == 1,
+        )
+
+        native_summary_negative_matched_result, native_summary_negative_matched_manifest = native_summary_error_negative_drift_fixture(
+            root,
+            "native-summary-error-negative-matched",
+            mutate_report=lambda payload: payload["cases"][0].__setitem__("matched", False),
+        )
+        append_native_summary_error_negative_check(
+            "native_summary_error_negative_matched_mismatch",
+            native_summary_negative_matched_result,
+            native_summary_negative_matched_manifest,
+            native_summary_negative_matched_manifest["native_summary_error_negative_matched"] == 2,
+        )
+
+        native_summary_negative_expected_result, native_summary_negative_expected_manifest = native_summary_error_negative_drift_fixture(
+            root,
+            "native-summary-error-negative-expected",
+            mutate_report=lambda payload: payload["cases"][0].__setitem__("expected_failure", False),
+        )
+        append_native_summary_error_negative_check(
+            "native_summary_error_negative_expected_failure_mismatch",
+            native_summary_negative_expected_result,
+            native_summary_negative_expected_manifest,
+            native_summary_negative_expected_manifest["native_summary_error_negative_expected_failures"] == 2,
         )
 
         def append_native_library_bench_check(

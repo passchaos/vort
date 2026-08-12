@@ -2766,6 +2766,12 @@ architecture blindly.
   retained negative rows to match the declared case count and to be both matched
   and expected-failure rows. Dashboard health now exposes negative row/count
   drift counters before malformed-summary guardrail coverage can pass.
+
+- Added direct dashboard strict-smoke drift coverage for native summary error
+  dashboards. The strict validation gate now exercises case/codec/error/phase
+  count mismatches, codec-specific count drift, offset-range drift, missing
+  required codec phases, and negative-smoke count/matched/expected-failure drift
+  so native malformed-summary health cannot hide aggregate counter regressions.
 - Tightened Brotli static-dictionary negative-smoke dashboard health by requiring
   both source-audit and report guardrail rows to match declared case counts with
   no unmatched rows. Dashboard health now exposes row/count drift counters before
