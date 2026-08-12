@@ -40,9 +40,9 @@
     },
     {
       "mode": "non-json-artifact-health",
-      "min_checks": 9,
-      "min_expected_failures": 9,
-      "min_matched": 9
+      "min_checks": 15,
+      "min_expected_failures": 15,
+      "min_matched": 15
     },
     {
       "mode": "native-tier-range-health",

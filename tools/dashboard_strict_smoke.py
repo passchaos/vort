@@ -4521,6 +4521,96 @@ def remove_csv_manifest_artifact(manifest_path: Path, artifact_name: str) -> Non
     manifest_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def add_synthetic_markdown_artifact_metadata(producer_map: Path, artifact_name: str) -> None:
+    payload = json.loads(producer_map.read_text())
+    payload.setdefault("exact", {})[artifact_name] = "synthetic non-json Markdown artifact audit fixture"
+    payload.setdefault("artifact_metadata", {})[artifact_name] = {
+        "expected_format": "md",
+        "smoke_gate": "synthetic non-json Markdown artifact audit fixture",
+    }
+    producer_map.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def write_synthetic_markdown_artifact(path: Path) -> None:
+    path.write_text("# Synthetic Markdown artifact\n\n| case | value |\n| --- | ---: |\n| ok | 1 |\n")
+
+
+def remove_markdown_manifest_artifact(manifest_path: Path, artifact_name: str) -> None:
+    payload = json.loads(manifest_path.read_text())
+    artifacts = payload.get("artifacts")
+    if not isinstance(artifacts, list):
+        raise AssertionError("synthetic Markdown heading manifest did not contain artifact rows")
+    filtered = [artifact for artifact in artifacts if not (isinstance(artifact, dict) and artifact.get("name") == artifact_name)]
+    if len(filtered) == len(artifacts):
+        raise AssertionError(f"missing {artifact_name} in synthetic Markdown heading manifest")
+    payload["artifacts"] = filtered
+    payload["artifact_count"] = len(filtered)
+    manifest_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def markdown_artifact_layout_fixture(
+    root: Path,
+    fixture_name: str,
+    artifact_name: str,
+    mutation: str,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally malformed synthetic Markdown artifact.
+
+    Mutations with no heading are removed from the heading manifest so the
+    fixture isolates the artifact layout rule rather than also exercising
+    manifest-missing drift. Mutations that still have headings regenerate the
+    manifest after the mutation, keeping table-count and heading signatures
+    aligned while the structural rule fails.
+    """
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    target = fixture_root / artifact_name
+    write_synthetic_markdown_artifact(target)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    add_synthetic_markdown_artifact_metadata(producer_map, artifact_name)
+    csv_manifest = write_csv_header_manifest(fixture_root)
+
+    if mutation == "empty":
+        markdown_manifest = write_markdown_heading_manifest(fixture_root)
+        remove_markdown_manifest_artifact(markdown_manifest, artifact_name)
+        target.write_text("")
+    elif mutation == "marker_missing":
+        markdown_manifest = write_markdown_heading_manifest(fixture_root)
+        remove_markdown_manifest_artifact(markdown_manifest, artifact_name)
+        target.write_text("plain text without markdown markers\n")
+    elif mutation == "heading_missing":
+        markdown_manifest = write_markdown_heading_manifest(fixture_root)
+        remove_markdown_manifest_artifact(markdown_manifest, artifact_name)
+        target.write_text("| case | value |\n| --- | ---: |\n| ok | 1 |\n")
+    elif mutation == "heading_not_first":
+        target.write_text("| case | value |\n| --- | ---: |\n| ok | 1 |\n\n# Synthetic Markdown artifact\n")
+        markdown_manifest = write_markdown_heading_manifest(fixture_root)
+    elif mutation == "table_missing":
+        target.write_text("# Synthetic Markdown artifact\n\nplain text without a table\n")
+        markdown_manifest = write_markdown_heading_manifest(fixture_root)
+    elif mutation == "table_separator_missing":
+        target.write_text("# Synthetic Markdown artifact\n\n| case | value |\n| ok | 1 |\n")
+        markdown_manifest = write_markdown_heading_manifest(fixture_root)
+    else:
+        raise AssertionError(f"unsupported synthetic Markdown artifact mutation {mutation!r}")
+
+    result = run(
+        dashboard_args_with_manifests(
+            fixture_root,
+            producer_map,
+            csv_manifest,
+            markdown_manifest,
+            "--strict-validation-health",
+        ),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def csv_artifact_layout_fixture(
     root: Path,
     fixture_name: str,
@@ -5809,6 +5899,90 @@ def main() -> int:
                     csv_layout_result.returncode,
                     "dashboard_index_validation_unhealthy=non_json_artifact_failed",
                     csv_layout_result.stdout,
+                )
+            )
+
+        markdown_layout_cases = [
+            (
+                "empty",
+                "mismatched_markdown_artifact_empty",
+                "vort-non-json-markdown-empty.md",
+                {"markdown_artifact_empty"},
+            ),
+            (
+                "marker_missing",
+                "mismatched_markdown_artifact_marker_missing",
+                "vort-non-json-markdown-marker-missing.md",
+                {
+                    "markdown_artifact_marker_missing",
+                    "markdown_artifact_heading_missing",
+                    "markdown_artifact_table_missing",
+                },
+            ),
+            (
+                "heading_missing",
+                "mismatched_markdown_artifact_heading_missing",
+                "vort-non-json-markdown-heading-missing.md",
+                {"markdown_artifact_heading_missing"},
+            ),
+            (
+                "heading_not_first",
+                "mismatched_markdown_artifact_heading_not_first",
+                "vort-non-json-markdown-heading-not-first.md",
+                {"markdown_artifact_heading_not_first"},
+            ),
+            (
+                "table_missing",
+                "mismatched_markdown_artifact_table_missing",
+                "vort-non-json-markdown-table-missing.md",
+                {"markdown_artifact_table_missing"},
+            ),
+            (
+                "table_separator_missing",
+                "mismatched_markdown_artifact_table_separator_missing",
+                "vort-non-json-markdown-table-separator-missing.md",
+                {"markdown_artifact_table_separator_missing"},
+            ),
+        ]
+        markdown_layout_fields = {
+            "markdown_artifact_empty",
+            "markdown_artifact_marker_missing",
+            "markdown_artifact_heading_missing",
+            "markdown_artifact_heading_not_first",
+            "markdown_artifact_table_missing",
+            "markdown_artifact_table_separator_missing",
+        }
+        for mutation, check_name, artifact_name, expected_fields in markdown_layout_cases:
+            markdown_layout_result, markdown_layout_manifest = markdown_artifact_layout_fixture(
+                root,
+                f"mismatched-markdown-artifact-{mutation.replace('_', '-')}",
+                artifact_name,
+                mutation,
+            )
+            markdown_layout_matched = (
+                markdown_layout_result.returncode != 0
+                and "dashboard_index_validation_unhealthy=non_json_artifact_failed" in markdown_layout_result.stdout
+                and markdown_layout_manifest["validation_healthy"] is False
+                and markdown_layout_manifest["non_json_artifact_healthy"] is False
+                and all(markdown_layout_manifest[field] == [artifact_name] for field in expected_fields)
+                and all(markdown_layout_manifest[field] == [] for field in markdown_layout_fields - expected_fields)
+                and markdown_layout_manifest["markdown_heading_manifest_missing"] == []
+                and markdown_layout_manifest["markdown_heading_manifest_unknown"] == []
+                and markdown_layout_manifest["markdown_heading_count_mismatch"] == []
+                and markdown_layout_manifest["markdown_first_heading_mismatch"] == []
+                and markdown_layout_manifest["markdown_heading_signature_mismatch"] == []
+                and markdown_layout_manifest["markdown_table_count_mismatch"] == []
+                and markdown_layout_manifest["markdown_table_separator_count_mismatch"] == []
+            )
+            checks.append(
+                check_row(
+                    check_name,
+                    "non-json-artifact-health",
+                    True,
+                    markdown_layout_matched,
+                    markdown_layout_result.returncode,
+                    "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+                    markdown_layout_result.stdout,
                 )
             )
 

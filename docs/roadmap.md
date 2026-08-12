@@ -460,7 +460,7 @@ architecture blindly.
 - [x] Dashboard strict-mode smoke exercises the actual-output truncation path with a synthetic long-output check.
 - [x] Dashboard strict-mode smoke covers every validation unhealthy reason with isolated negative fixtures.
 - [x] Dashboard strict-mode validation unhealthy reason matrix is stored in a schema-checked external JSON config.
-- [x] Dashboard strict-mode smoke directly covers non-JSON artifact manifest drift, including CSV file layout failures, CSV header column/signature mismatches, and Markdown table-row/separator-row count mismatches.
+- [x] Dashboard strict-mode smoke directly covers non-JSON artifact manifest drift, including CSV file layout failures, CSV header column/signature mismatches, Markdown file layout failures, and Markdown table-row/separator-row count mismatches.
 - [x] Validation JSON docs negative smoke catches dashboard strict config drift cases.
 - [x] Dashboard producer-map negative smoke catches format, producer-step, and smoke-gate drift cases.
 - [x] Dashboard producer-map required artifact matrix is stored in a schema-checked external JSON config.
