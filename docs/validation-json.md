@@ -4531,9 +4531,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 103,
-      "min_expected_failures": 103,
-      "min_matched": 103
+      "min_checks": 109,
+      "min_expected_failures": 109,
+      "min_matched": 109
     },
     {
       "mode": "non-json-artifact-health",
@@ -4655,7 +4655,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 63,
+  "check_count": 69,
   "mode_count": 5,
   "expected_mode_count": 5,
   "missing_mode_count": 0,
@@ -4675,9 +4675,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 103,
-      "min_expected_failures": 103,
-      "min_matched": 103
+      "min_checks": 109,
+      "min_expected_failures": 109,
+      "min_matched": 109
     },
     {
       "mode": "non-json-artifact-health",
@@ -4720,14 +4720,14 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 16,
-      "min_checks": 103,
+      "checks": 22,
+      "min_checks": 109,
       "missing_checks": 87,
-      "expected_failures": 16,
-      "min_expected_failures": 103,
+      "expected_failures": 22,
+      "min_expected_failures": 109,
       "missing_expected_failures": 87,
-      "matched": 16,
-      "min_matched": 103,
+      "matched": 22,
+      "min_matched": 109,
       "missing_matched": 87
     },
     {
@@ -4770,9 +4770,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 16,
-      "expected_failures": 16,
-      "matched": 16
+      "checks": 22,
+      "expected_failures": 22,
+      "matched": 22
     },
     {
       "mode": "non-json-artifact-health",
@@ -5162,6 +5162,78 @@ Example:
     },
     {
       "name": "header_inspect_help_required_workflow_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "header_inspect_duplicate_negative",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "header_inspect_duplicate_command_coverage",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "header_inspect_duplicate_workflow_coverage",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "header_inspect_duplicate_required_workflow",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "header_inspect_duplicate_help_workflow",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "header_inspect_missing_workflow_drift",
       "mode": "strict-validation-health",
       "expected_failure": true,
       "expected_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered",

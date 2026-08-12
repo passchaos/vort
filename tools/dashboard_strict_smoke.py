@@ -6636,6 +6636,153 @@ def main() -> int:
             )
         )
 
+        header_duplicate_negative_result, header_duplicate_negative_manifest = header_inspect_drift_fixture(
+            root,
+            "header-inspect-duplicate-negative",
+            lambda payload: payload["negative_items"].append(dict(payload["negative_items"][0])),
+        )
+        header_duplicate_negative_matched = (
+            header_duplicate_negative_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=header_inspect_undercovered" in header_duplicate_negative_result.stdout
+            and header_duplicate_negative_manifest["validation_healthy"] is False
+            and header_duplicate_negative_manifest["header_inspect_healthy"] is False
+            and header_duplicate_negative_manifest["header_inspect_duplicate_negative_names"] == ["raw_reserved_btype"]
+        )
+        checks.append(
+            check_row(
+                "header_inspect_duplicate_negative",
+                "strict-validation-health",
+                True,
+                header_duplicate_negative_matched,
+                header_duplicate_negative_result.returncode,
+                "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+                header_duplicate_negative_result.stdout,
+            )
+        )
+
+        header_duplicate_command_result, header_duplicate_command_manifest = header_inspect_drift_fixture(
+            root,
+            "header-inspect-duplicate-command",
+            lambda payload: payload["command_coverage"].append(dict(payload["command_coverage"][0])),
+        )
+        header_duplicate_command_matched = (
+            header_duplicate_command_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=header_inspect_undercovered" in header_duplicate_command_result.stdout
+            and header_duplicate_command_manifest["validation_healthy"] is False
+            and header_duplicate_command_manifest["header_inspect_healthy"] is False
+            and header_duplicate_command_manifest["header_inspect_duplicate_command_coverage_rows"] == ["inspect-raw-header-file:raw"]
+        )
+        checks.append(
+            check_row(
+                "header_inspect_duplicate_command_coverage",
+                "strict-validation-health",
+                True,
+                header_duplicate_command_matched,
+                header_duplicate_command_result.returncode,
+                "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+                header_duplicate_command_result.stdout,
+            )
+        )
+
+        header_duplicate_workflow_result, header_duplicate_workflow_manifest = header_inspect_drift_fixture(
+            root,
+            "header-inspect-duplicate-workflow",
+            lambda payload: payload["workflow_coverage"].append(dict(payload["workflow_coverage"][0])),
+        )
+        header_duplicate_workflow_matched = (
+            header_duplicate_workflow_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=header_inspect_undercovered" in header_duplicate_workflow_result.stdout
+            and header_duplicate_workflow_manifest["validation_healthy"] is False
+            and header_duplicate_workflow_manifest["header_inspect_healthy"] is False
+            and header_duplicate_workflow_manifest["header_inspect_duplicate_workflow_coverage_rows"] == ["inspect-raw-header-file:file:raw"]
+        )
+        checks.append(
+            check_row(
+                "header_inspect_duplicate_workflow_coverage",
+                "strict-validation-health",
+                True,
+                header_duplicate_workflow_matched,
+                header_duplicate_workflow_result.returncode,
+                "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+                header_duplicate_workflow_result.stdout,
+            )
+        )
+
+        header_duplicate_required_result, header_duplicate_required_manifest = header_inspect_drift_fixture(
+            root,
+            "header-inspect-duplicate-required-workflow",
+            lambda payload: payload["required_workflows"].append(dict(payload["required_workflows"][0])),
+        )
+        header_duplicate_required_matched = (
+            header_duplicate_required_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=header_inspect_undercovered" in header_duplicate_required_result.stdout
+            and header_duplicate_required_manifest["validation_healthy"] is False
+            and header_duplicate_required_manifest["header_inspect_healthy"] is False
+            and header_duplicate_required_manifest["header_inspect_duplicate_required_workflow_rows"] == ["inspect-raw-header-file:file:raw"]
+        )
+        checks.append(
+            check_row(
+                "header_inspect_duplicate_required_workflow",
+                "strict-validation-health",
+                True,
+                header_duplicate_required_matched,
+                header_duplicate_required_result.returncode,
+                "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+                header_duplicate_required_result.stdout,
+            )
+        )
+
+        header_duplicate_help_result, header_duplicate_help_manifest = header_inspect_drift_fixture(
+            root,
+            "header-inspect-duplicate-help-workflow",
+            lambda payload: payload["help_workflows"].append(dict(payload["help_workflows"][0])),
+        )
+        header_duplicate_help_matched = (
+            header_duplicate_help_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=header_inspect_undercovered" in header_duplicate_help_result.stdout
+            and header_duplicate_help_manifest["validation_healthy"] is False
+            and header_duplicate_help_manifest["header_inspect_healthy"] is False
+            and header_duplicate_help_manifest["header_inspect_duplicate_help_workflow_rows"] == ["inspect-raw-header-file:file:raw"]
+        )
+        checks.append(
+            check_row(
+                "header_inspect_duplicate_help_workflow",
+                "strict-validation-health",
+                True,
+                header_duplicate_help_matched,
+                header_duplicate_help_result.returncode,
+                "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+                header_duplicate_help_result.stdout,
+            )
+        )
+
+        header_missing_workflow_drift_result, header_missing_workflow_drift_manifest = header_inspect_drift_fixture(
+            root,
+            "header-inspect-missing-workflow-drift",
+            lambda payload: payload["missing_workflows"].append(
+                {"command": "inspect-raw-header-file", "workflow": "file", "format": "raw"}
+            ),
+        )
+        header_missing_workflow_drift_matched = (
+            header_missing_workflow_drift_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=header_inspect_undercovered" in header_missing_workflow_drift_result.stdout
+            and header_missing_workflow_drift_manifest["validation_healthy"] is False
+            and header_missing_workflow_drift_manifest["header_inspect_healthy"] is False
+            and header_missing_workflow_drift_manifest["header_inspect_missing_workflow_count"] == 0
+            and header_missing_workflow_drift_manifest["header_inspect_missing_workflow_drift"] == 1
+        )
+        checks.append(
+            check_row(
+                "header_inspect_missing_workflow_drift",
+                "strict-validation-health",
+                True,
+                header_missing_workflow_drift_matched,
+                header_missing_workflow_drift_result.returncode,
+                "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+                header_missing_workflow_drift_result.stdout,
+            )
+        )
+
         expected_validation_reasons = load_expected_validation_reasons(VALIDATION_REASONS)
         validation_reason_checks: list[dict[str, object]] = []
 
