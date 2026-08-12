@@ -11893,6 +11893,231 @@ def main() -> int:
             )
         )
 
+        def mark_decode_stage_error_unmatched(payload: dict[str, object]) -> None:
+            """Keep report counters internally consistent while surfacing an unmatched error row.
+
+            The older matched-error fixture only drifted the aggregate counter,
+            which exercises report count mismatch handling. This fixture mutates
+            one concrete error item and the matching counters together so the
+            `decode_stage_unmatched_error_rows == 0` invariant is covered
+            directly instead of only as a side effect of count drift.
+            """
+
+            payload["matched_error_rows"] = int(payload["matched_error_rows"]) - 1
+            payload["unmatched_error_rows"] = int(payload["unmatched_error_rows"]) + 1
+            error_items = payload.get("error_items")
+            if not isinstance(error_items, list) or len(error_items) < 2 or not isinstance(error_items[1], dict):
+                raise AssertionError("decode-stage fixture missing expected error item")
+            error_items[1]["actual_error"] = "TrailingData"
+            error_items[1]["matched"] = False
+
+        decode_unmatched_error_result, decode_unmatched_error_manifest = decode_stage_drift_fixture(
+            root,
+            "decode-stage-unmatched-error-row",
+            mutate_report=mark_decode_stage_error_unmatched,
+        )
+        decode_unmatched_error_matched = (
+            decode_unmatched_error_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=decode_stage_failed" in decode_unmatched_error_result.stdout
+            and decode_unmatched_error_manifest["validation_healthy"] is False
+            and decode_unmatched_error_manifest["decode_stage_healthy"] is False
+            and decode_unmatched_error_manifest["decode_stage_report_count_mismatch"] == 0
+            and decode_unmatched_error_manifest["decode_stage_matched_error_rows"] == 2
+            and decode_unmatched_error_manifest["decode_stage_unmatched_error_rows"] == 1
+        )
+        checks.append(
+            check_row(
+                "decode_stage_unmatched_error_row_mismatch",
+                "strict-validation-health",
+                True,
+                decode_unmatched_error_matched,
+                decode_unmatched_error_result.returncode,
+                "dashboard_index_validation_unhealthy=decode_stage_failed",
+                decode_unmatched_error_result.stdout,
+            )
+        )
+
+        decode_csv_positive_result, decode_csv_positive_manifest = decode_stage_drift_fixture(
+            root,
+            "decode-stage-csv-positive-row",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("raw_mib_s", "0.0"),
+        )
+        decode_csv_positive_matched = (
+            decode_csv_positive_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=decode_stage_failed" in decode_csv_positive_result.stdout
+            and decode_csv_positive_manifest["validation_healthy"] is False
+            and decode_csv_positive_manifest["decode_stage_healthy"] is False
+            and decode_csv_positive_manifest["decode_stage_csv_rows"] == 10
+            and decode_csv_positive_manifest["decode_stage_csv_positive_rows"] == 9
+            and decode_csv_positive_manifest["decode_stage_csv_header_rows"] == 10
+        )
+        checks.append(
+            check_row(
+                "decode_stage_csv_positive_row_mismatch",
+                "strict-validation-health",
+                True,
+                decode_csv_positive_matched,
+                decode_csv_positive_result.returncode,
+                "dashboard_index_validation_unhealthy=decode_stage_failed",
+                decode_csv_positive_result.stdout,
+            )
+        )
+
+        decode_stage_dynamic_header_fields = (
+            "dynamic_hlit",
+            "dynamic_hdist",
+            "dynamic_hclen",
+            "dynamic_literal_nonzero",
+            "dynamic_literal_max_bits",
+        )
+
+        def make_decode_stage_row_dynamic(row: dict[str, str]) -> None:
+            row["raw_block_type"] = "dynamic"
+            row["dynamic_hlit"] = "286"
+            row["dynamic_hdist"] = "3"
+            row["dynamic_hclen"] = "18"
+            row["dynamic_literal_nonzero"] = "6"
+            row["dynamic_literal_max_bits"] = "4"
+
+        def make_decode_stage_row_static(row: dict[str, str], block_type: str) -> None:
+            row["raw_block_type"] = block_type
+            for field in decode_stage_dynamic_header_fields:
+                row[field] = "0"
+
+        def remove_decode_stage_dynamic_rows(rows: list[dict[str, str]], fieldnames: list[str], csv_path: Path) -> None:
+            _ = fieldnames, csv_path
+            for row in rows:
+                if row.get("raw_block_type") == "dynamic":
+                    make_decode_stage_row_static(row, "fixed")
+
+        def remove_decode_stage_fixed_row(rows: list[dict[str, str]], fieldnames: list[str], csv_path: Path) -> None:
+            _ = fieldnames, csv_path
+            for row in rows:
+                if row.get("raw_block_type") == "fixed":
+                    make_decode_stage_row_dynamic(row)
+                    return
+            raise AssertionError("decode-stage fixture missing fixed CSV row")
+
+        def remove_decode_stage_stored_row(rows: list[dict[str, str]], fieldnames: list[str], csv_path: Path) -> None:
+            _ = fieldnames, csv_path
+            for row in rows:
+                if row.get("raw_block_type") == "stored":
+                    make_decode_stage_row_dynamic(row)
+                    return
+            raise AssertionError("decode-stage fixture missing stored CSV row")
+
+        decode_csv_header_result, decode_csv_header_manifest = decode_stage_drift_fixture(
+            root,
+            "decode-stage-csv-header-row",
+            mutate_csv=lambda rows, fieldnames, csv_path: next(row for row in rows if row["raw_block_type"] == "dynamic").__setitem__("dynamic_hlit", "0"),
+        )
+        decode_csv_header_matched = (
+            decode_csv_header_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=decode_stage_failed" in decode_csv_header_result.stdout
+            and decode_csv_header_manifest["validation_healthy"] is False
+            and decode_csv_header_manifest["decode_stage_healthy"] is False
+            and decode_csv_header_manifest["decode_stage_csv_positive_rows"] == 10
+            and decode_csv_header_manifest["decode_stage_csv_header_rows"] == 9
+            and decode_csv_header_manifest["decode_stage_csv_dynamic_rows"] == 7
+            and decode_csv_header_manifest["decode_stage_csv_fixed_rows"] == 1
+            and decode_csv_header_manifest["decode_stage_csv_stored_rows"] == 1
+        )
+        checks.append(
+            check_row(
+                "decode_stage_csv_header_row_mismatch",
+                "strict-validation-health",
+                True,
+                decode_csv_header_matched,
+                decode_csv_header_result.returncode,
+                "dashboard_index_validation_unhealthy=decode_stage_failed",
+                decode_csv_header_result.stdout,
+            )
+        )
+
+        decode_csv_dynamic_result, decode_csv_dynamic_manifest = decode_stage_drift_fixture(
+            root,
+            "decode-stage-csv-dynamic-row",
+            mutate_csv=remove_decode_stage_dynamic_rows,
+        )
+        decode_csv_dynamic_matched = (
+            decode_csv_dynamic_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=decode_stage_failed" in decode_csv_dynamic_result.stdout
+            and decode_csv_dynamic_manifest["validation_healthy"] is False
+            and decode_csv_dynamic_manifest["decode_stage_healthy"] is False
+            and decode_csv_dynamic_manifest["decode_stage_csv_positive_rows"] == 10
+            and decode_csv_dynamic_manifest["decode_stage_csv_header_rows"] == 10
+            and decode_csv_dynamic_manifest["decode_stage_csv_dynamic_rows"] == 0
+            and decode_csv_dynamic_manifest["decode_stage_csv_fixed_rows"] == 9
+            and decode_csv_dynamic_manifest["decode_stage_csv_stored_rows"] == 1
+        )
+        checks.append(
+            check_row(
+                "decode_stage_csv_dynamic_row_mismatch",
+                "strict-validation-health",
+                True,
+                decode_csv_dynamic_matched,
+                decode_csv_dynamic_result.returncode,
+                "dashboard_index_validation_unhealthy=decode_stage_failed",
+                decode_csv_dynamic_result.stdout,
+            )
+        )
+
+        decode_csv_fixed_result, decode_csv_fixed_manifest = decode_stage_drift_fixture(
+            root,
+            "decode-stage-csv-fixed-row",
+            mutate_csv=remove_decode_stage_fixed_row,
+        )
+        decode_csv_fixed_matched = (
+            decode_csv_fixed_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=decode_stage_failed" in decode_csv_fixed_result.stdout
+            and decode_csv_fixed_manifest["validation_healthy"] is False
+            and decode_csv_fixed_manifest["decode_stage_healthy"] is False
+            and decode_csv_fixed_manifest["decode_stage_csv_positive_rows"] == 10
+            and decode_csv_fixed_manifest["decode_stage_csv_header_rows"] == 10
+            and decode_csv_fixed_manifest["decode_stage_csv_dynamic_rows"] == 9
+            and decode_csv_fixed_manifest["decode_stage_csv_fixed_rows"] == 0
+            and decode_csv_fixed_manifest["decode_stage_csv_stored_rows"] == 1
+        )
+        checks.append(
+            check_row(
+                "decode_stage_csv_fixed_row_mismatch",
+                "strict-validation-health",
+                True,
+                decode_csv_fixed_matched,
+                decode_csv_fixed_result.returncode,
+                "dashboard_index_validation_unhealthy=decode_stage_failed",
+                decode_csv_fixed_result.stdout,
+            )
+        )
+
+        decode_csv_stored_result, decode_csv_stored_manifest = decode_stage_drift_fixture(
+            root,
+            "decode-stage-csv-stored-row",
+            mutate_csv=remove_decode_stage_stored_row,
+        )
+        decode_csv_stored_matched = (
+            decode_csv_stored_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=decode_stage_failed" in decode_csv_stored_result.stdout
+            and decode_csv_stored_manifest["validation_healthy"] is False
+            and decode_csv_stored_manifest["decode_stage_healthy"] is False
+            and decode_csv_stored_manifest["decode_stage_csv_positive_rows"] == 10
+            and decode_csv_stored_manifest["decode_stage_csv_header_rows"] == 10
+            and decode_csv_stored_manifest["decode_stage_csv_dynamic_rows"] == 9
+            and decode_csv_stored_manifest["decode_stage_csv_fixed_rows"] == 1
+            and decode_csv_stored_manifest["decode_stage_csv_stored_rows"] == 0
+        )
+        checks.append(
+            check_row(
+                "decode_stage_csv_stored_row_mismatch",
+                "strict-validation-health",
+                True,
+                decode_csv_stored_matched,
+                decode_csv_stored_result.returncode,
+                "dashboard_index_validation_unhealthy=decode_stage_failed",
+                decode_csv_stored_result.stdout,
+            )
+        )
+
         decode_csv_missing_result, decode_csv_missing_manifest = decode_stage_drift_fixture(
             root,
             "decode-stage-csv-missing",

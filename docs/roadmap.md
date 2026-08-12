@@ -477,7 +477,7 @@ architecture blindly.
 - [x] Dashboard strict-mode smoke directly covers PNG streaming zlib benchmark health drift, including missing/duplicate/unknown cases and positive/shape/image-size/chunk-count/ratio row drift.
 - [x] Dashboard strict-mode smoke directly covers native allocation health drift, including report count/unbalanced/duplicate rows, zero/budget smoke mismatches and duplicate cases, negative-smoke unmatched rows, and Markdown malformed/duplicate/unknown rows.
 - [x] Dashboard strict-mode smoke directly covers native fuzz corpus health drift, including report count/matched-row drift, coverage requirement mismatches, and Markdown unmatched rows.
-- [x] Dashboard strict-mode smoke directly covers decode-stage health drift, including report/error count mismatches, CSV missing/duplicate/unknown cases, and Markdown unmatched rows.
+- [x] Dashboard strict-mode smoke directly covers decode-stage health drift, including report/error count mismatches, internally consistent unmatched error rows, CSV positive/header/fixed/dynamic/stored row drift, CSV missing/duplicate/unknown cases, and Markdown unmatched rows.
 - [x] Dashboard strict-mode smoke directly covers fuzz corpus health drift, including report count/matched-row drift, coverage requirement mismatches, and Markdown unmatched rows.
 - [x] Dashboard strict-mode smoke directly covers dynamic-plan health drift, including missing/duplicate/unknown paths, malformed rows, token-accounting mismatches, histogram/ratio drift, and bit-slack/wrapper invariants.
 - [x] Dashboard strict-mode smoke directly covers compression level-report health drift, including missing/duplicate/unknown rows, token accounting drift, ratio drift, roundtrip checksum drift, and Markdown summary/detail mismatches.
@@ -2870,6 +2870,12 @@ architecture blindly.
 - Tightened deflate decode-stage CSV dashboard health by exposing duplicate and
   unknown `case` rows alongside missing cases. Dashboard health now rejects
   decode-stage CSV case drift before timing/header coverage can pass.
+
+- Tightened decode-stage strict-smoke direct drift coverage for the remaining
+  field-level dashboard invariants. Isolated fixtures now fail aggregate health
+  for internally consistent unmatched error rows, non-positive CSV throughput,
+  malformed dynamic headers, and missing fixed/dynamic/stored block-type
+  coverage before broader decode-stage health can pass.
 
 - Tightened chunked zlib benchmark dashboard health by exposing duplicate and
   unknown `case` rows alongside missing cases. Dashboard health now rejects
