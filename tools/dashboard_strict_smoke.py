@@ -4491,6 +4491,105 @@ def csv_manifest_drift_fixture(
     return result, manifest
 
 
+def add_synthetic_csv_artifact_metadata(producer_map: Path, artifact_name: str) -> None:
+    payload = json.loads(producer_map.read_text())
+    payload.setdefault("exact", {})[artifact_name] = "synthetic non-json CSV artifact audit fixture"
+    payload.setdefault("artifact_metadata", {})[artifact_name] = {
+        "expected_format": "csv",
+        "smoke_gate": "synthetic non-json CSV artifact audit fixture",
+    }
+    producer_map.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def write_synthetic_csv_artifact(path: Path) -> None:
+    with path.open("w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["case", "value"])
+        writer.writerow(["ok", "1"])
+
+
+def remove_csv_manifest_artifact(manifest_path: Path, artifact_name: str) -> None:
+    payload = json.loads(manifest_path.read_text())
+    artifacts = payload.get("artifacts")
+    if not isinstance(artifacts, list):
+        raise AssertionError("synthetic CSV header manifest did not contain artifact rows")
+    filtered = [artifact for artifact in artifacts if not (isinstance(artifact, dict) and artifact.get("name") == artifact_name)]
+    if len(filtered) == len(artifacts):
+        raise AssertionError(f"missing {artifact_name} in synthetic CSV header manifest")
+    payload["artifacts"] = filtered
+    payload["artifact_count"] = len(filtered)
+    manifest_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def csv_artifact_layout_fixture(
+    root: Path,
+    fixture_name: str,
+    artifact_name: str,
+    mutation: str,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally malformed synthetic CSV artifact.
+
+    A synthetic artifact avoids coupling these non-JSON audit checks to the
+    level-report or benchmark-specific health gates. Each mutation isolates one
+    CSV layout rule while producer/smoke metadata remains healthy.
+    """
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    target = fixture_root / artifact_name
+    write_synthetic_csv_artifact(target)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    add_synthetic_csv_artifact_metadata(producer_map, artifact_name)
+    csv_manifest = write_csv_header_manifest(fixture_root)
+    markdown_manifest = write_markdown_heading_manifest(fixture_root)
+
+    if mutation in {"empty", "blank_header", "duplicate_header"}:
+        # These malformed headers are rejected before the artifact can be
+        # matched against the header manifest. Removing the synthetic row keeps
+        # each fixture focused on the CSV layout rule rather than also testing
+        # expected-manifest-missing behavior.
+        remove_csv_manifest_artifact(csv_manifest, artifact_name)
+
+    if mutation == "empty":
+        target.write_text("")
+    elif mutation == "blank_header":
+        with target.open("w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["", "value"])
+            writer.writerow(["ok", "1"])
+    elif mutation == "duplicate_header":
+        with target.open("w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["case", "case"])
+            writer.writerow(["ok", "1"])
+    elif mutation == "no_data":
+        with target.open("w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["case", "value"])
+    elif mutation == "ragged":
+        with target.open("w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["case", "value"])
+            writer.writerow(["ok"])
+    else:
+        raise AssertionError(f"unsupported synthetic CSV artifact mutation {mutation!r}")
+
+    result = run(
+        dashboard_args_with_manifests(
+            fixture_root,
+            producer_map,
+            csv_manifest,
+            markdown_manifest,
+            "--strict-validation-health",
+        ),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def expect_failure(args: list[str], needle: str) -> subprocess.CompletedProcess[str]:
     result = run(args, check=False)
     if result.returncode == 0:
@@ -5639,6 +5738,79 @@ def main() -> int:
             and mismatched_native_tier_discovery_manifest["native_tier_corpus_discovery_mismatch_total"] == 1
         )
         checks.append(check_row("mismatched_native_tier_discovery_case", "native-tier-range-health", True, native_tier_discovery_mismatched_matched, mismatched_native_tier_discovery_result.returncode, "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed", mismatched_native_tier_discovery_result.stdout))
+
+        csv_layout_cases = [
+            (
+                "empty",
+                "mismatched_csv_artifact_empty",
+                "vort-non-json-csv-empty.csv",
+                "csv_artifact_empty",
+            ),
+            (
+                "blank_header",
+                "mismatched_csv_artifact_blank_header",
+                "vort-non-json-csv-blank-header.csv",
+                "csv_artifact_blank_headers",
+            ),
+            (
+                "duplicate_header",
+                "mismatched_csv_artifact_duplicate_header",
+                "vort-non-json-csv-duplicate-header.csv",
+                "csv_artifact_duplicate_headers",
+            ),
+            (
+                "no_data",
+                "mismatched_csv_artifact_no_data",
+                "vort-non-json-csv-no-data.csv",
+                "csv_artifact_no_data_rows",
+            ),
+            (
+                "ragged",
+                "mismatched_csv_artifact_ragged_row",
+                "vort-non-json-csv-ragged-row.csv",
+                "csv_artifact_ragged_rows",
+            ),
+        ]
+        for mutation, check_name, artifact_name, mismatch_field in csv_layout_cases:
+            csv_layout_result, csv_layout_manifest = csv_artifact_layout_fixture(
+                root,
+                f"mismatched-csv-artifact-{mutation.replace('_', '-')}",
+                artifact_name,
+                mutation,
+            )
+            csv_layout_matched = (
+                csv_layout_result.returncode != 0
+                and "dashboard_index_validation_unhealthy=non_json_artifact_failed" in csv_layout_result.stdout
+                and csv_layout_manifest["validation_healthy"] is False
+                and csv_layout_manifest["non_json_artifact_healthy"] is False
+                and csv_layout_manifest[mismatch_field] == [artifact_name]
+                and all(
+                    csv_layout_manifest[field] == []
+                    for field in (
+                        "csv_artifact_empty",
+                        "csv_artifact_blank_headers",
+                        "csv_artifact_duplicate_headers",
+                        "csv_artifact_no_data_rows",
+                        "csv_artifact_ragged_rows",
+                    )
+                    if field != mismatch_field
+                )
+                and csv_layout_manifest["csv_header_missing"] == []
+                and csv_layout_manifest["csv_header_unknown"] == []
+                and csv_layout_manifest["csv_header_column_mismatch"] == []
+                and csv_layout_manifest["csv_header_signature_mismatch"] == []
+            )
+            checks.append(
+                check_row(
+                    check_name,
+                    "non-json-artifact-health",
+                    True,
+                    csv_layout_matched,
+                    csv_layout_result.returncode,
+                    "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+                    csv_layout_result.stdout,
+                )
+            )
 
         csv_header_column_result, csv_header_column_manifest_result = csv_manifest_drift_fixture(
             root,

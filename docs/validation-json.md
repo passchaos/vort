@@ -4537,9 +4537,9 @@ Example:
     },
     {
       "mode": "non-json-artifact-health",
-      "min_checks": 4,
-      "min_expected_failures": 4,
-      "min_matched": 4
+      "min_checks": 9,
+      "min_expected_failures": 9,
+      "min_matched": 9
     },
     {
       "mode": "native-tier-range-health",
@@ -4620,7 +4620,7 @@ python3 tools/dashboard_strict_smoke.py --summary zig-out/vort-dashboard-strict-
 
 This schema summarizes positive and negative smoke checks for dashboard strict
 modes: producer coverage, smoke-gate coverage, header-inspection health,
-non-JSON artifact manifest-drift coverage for CSV headers and Markdown tables, native-tier range health-field coverage, dashboard Markdown review-surface
+non-JSON artifact layout/manifest-drift coverage for CSV files, CSV headers, and Markdown tables, native-tier range health-field coverage, dashboard Markdown review-surface
 coverage, and aggregate validation-health failures. Each check records the expected output
 marker, actual truncated output, original output length, truncation limit/flag,
 and process return code for CI diagnostics. `mode_counts` groups checks by
@@ -4655,7 +4655,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 30,
+  "check_count": 35,
   "mode_count": 5,
   "expected_mode_count": 5,
   "missing_mode_count": 0,
@@ -4681,9 +4681,9 @@ Example:
     },
     {
       "mode": "non-json-artifact-health",
-      "min_checks": 4,
-      "min_expected_failures": 4,
-      "min_matched": 4
+      "min_checks": 9,
+      "min_expected_failures": 9,
+      "min_matched": 9
     },
     {
       "mode": "native-tier-range-health",
@@ -4732,14 +4732,14 @@ Example:
     },
     {
       "mode": "non-json-artifact-health",
-      "checks": 4,
-      "min_checks": 4,
+      "checks": 9,
+      "min_checks": 9,
       "missing_checks": 0,
-      "expected_failures": 4,
-      "min_expected_failures": 4,
+      "expected_failures": 9,
+      "min_expected_failures": 9,
       "missing_expected_failures": 0,
-      "matched": 4,
-      "min_matched": 4,
+      "matched": 9,
+      "min_matched": 9,
       "missing_matched": 0
     },
     {
@@ -4776,9 +4776,9 @@ Example:
     },
     {
       "mode": "non-json-artifact-health",
-      "checks": 4,
-      "expected_failures": 4,
-      "matched": 4
+      "checks": 9,
+      "expected_failures": 9,
+      "matched": 9
     },
     {
       "mode": "native-tier-range-health",
@@ -5083,6 +5083,66 @@ Example:
       "expected_output": "dashboard_index_validation_unhealthy=missing_lz4_native_summary_artifact",
       "actual_output": "dashboard_index_validation_unhealthy=missing_lz4_native_summary_artifact",
       "actual_output_bytes": 74,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_csv_artifact_empty",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_csv_artifact_blank_header",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_csv_artifact_duplicate_header",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_csv_artifact_no_data",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_csv_artifact_ragged_row",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
       "actual_output_limit": 240,
       "actual_output_truncated": false,
       "returncode": 1,
