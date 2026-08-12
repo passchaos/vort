@@ -5276,6 +5276,33 @@ def dictionary_decode_bench_drift_fixture(
     return result, manifest
 
 
+def png_scanline_bench_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    mutate_csv,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted PNG scanline benchmark CSV."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    csv_path = fixture_root / PNG_SCANLINE_BENCH_ARTIFACT
+    with csv_path.open(newline="") as f:
+        reader = csv.DictReader(f)
+        fieldnames = list(reader.fieldnames or [])
+        rows = list(reader)
+    mutate_csv(rows, fieldnames, csv_path)
+    rewrite_csv_rows(csv_path, rows, fieldnames)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def dynamic_plan_drift_fixture(root: Path, fixture_name: str, mutate_csv) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted dynamic-plan CSV artifact."""
 
@@ -9868,6 +9895,120 @@ def main() -> int:
             dictionary_checksum_result,
             dictionary_checksum_manifest,
             dictionary_checksum_manifest["dictionary_decode_bench_checksum_matched_payloads"] == 2,
+        )
+
+        def append_png_scanline_bench_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and "dashboard_index_validation_unhealthy=png_scanline_bench_failed" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["png_scanline_bench_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    "dashboard_index_validation_unhealthy=png_scanline_bench_failed",
+                    result.stdout,
+                )
+            )
+
+        png_scanline_missing_pair_result, png_scanline_missing_pair_manifest = png_scanline_bench_drift_fixture(
+            root,
+            "png-scanline-missing-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.pop(0),
+        )
+        append_png_scanline_bench_check(
+            "png_scanline_bench_missing_pair",
+            png_scanline_missing_pair_result,
+            png_scanline_missing_pair_manifest,
+            png_scanline_missing_pair_manifest["png_scanline_bench_rows"] == 29
+            and png_scanline_missing_pair_manifest["png_scanline_bench_missing_pairs"] == ["none:1"],
+        )
+
+        png_scanline_duplicate_pair_result, png_scanline_duplicate_pair_manifest = png_scanline_bench_drift_fixture(
+            root,
+            "png-scanline-duplicate-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.append(dict(rows[0])),
+        )
+        append_png_scanline_bench_check(
+            "png_scanline_bench_duplicate_pair",
+            png_scanline_duplicate_pair_result,
+            png_scanline_duplicate_pair_manifest,
+            png_scanline_duplicate_pair_manifest["png_scanline_bench_rows"] == 31
+            and png_scanline_duplicate_pair_manifest["png_scanline_bench_duplicate_pairs"] == ["none:1"],
+        )
+
+        png_scanline_unknown_pair_result, png_scanline_unknown_pair_manifest = png_scanline_bench_drift_fixture(
+            root,
+            "png-scanline-unknown-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("stage", "unknown_stage"),
+        )
+        append_png_scanline_bench_check(
+            "png_scanline_bench_unknown_pair",
+            png_scanline_unknown_pair_result,
+            png_scanline_unknown_pair_manifest,
+            png_scanline_unknown_pair_manifest["png_scanline_bench_missing_pairs"] == ["none:1"]
+            and png_scanline_unknown_pair_manifest["png_scanline_bench_unknown_pairs"] == ["unknown_stage:1"],
+        )
+
+        png_scanline_positive_result, png_scanline_positive_manifest = png_scanline_bench_drift_fixture(
+            root,
+            "png-scanline-positive",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("checksum", "0"),
+        )
+        append_png_scanline_bench_check(
+            "png_scanline_bench_positive_row_mismatch",
+            png_scanline_positive_result,
+            png_scanline_positive_manifest,
+            png_scanline_positive_manifest["png_scanline_bench_positive_rows"] == 29,
+        )
+
+        png_scanline_io_result, png_scanline_io_manifest = png_scanline_bench_drift_fixture(
+            root,
+            "png-scanline-io",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("output_bytes", str(int(rows[0]["output_bytes"]) + 1)),
+        )
+        append_png_scanline_bench_check(
+            "png_scanline_bench_io_mismatch",
+            png_scanline_io_result,
+            png_scanline_io_manifest,
+            png_scanline_io_manifest["png_scanline_bench_io_match_rows"] == 29,
+        )
+
+        png_scanline_throughput_result, png_scanline_throughput_manifest = png_scanline_bench_drift_fixture(
+            root,
+            "png-scanline-throughput",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("output_mib_per_s", "1.00"),
+        )
+        append_png_scanline_bench_check(
+            "png_scanline_bench_throughput_mismatch",
+            png_scanline_throughput_result,
+            png_scanline_throughput_manifest,
+            png_scanline_throughput_manifest["png_scanline_bench_throughput_rows"] == 29,
+        )
+
+        png_scanline_checksum_result, png_scanline_checksum_manifest = png_scanline_bench_drift_fixture(
+            root,
+            "png-scanline-checksum",
+            mutate_csv=lambda rows, fieldnames, csv_path: next(
+                row for row in rows if row["stage"] == "paeth" and row["bpp"] == "1"
+            ).__setitem__("checksum", "54321"),
+        )
+        append_png_scanline_bench_check(
+            "png_scanline_bench_checksum_mismatch",
+            png_scanline_checksum_result,
+            png_scanline_checksum_manifest,
+            png_scanline_checksum_manifest["png_scanline_bench_checksum_matched_bpps"] == 5,
         )
 
         native_codec_probe_count_result, native_codec_probe_count_manifest = native_codec_probes_drift_fixture(
