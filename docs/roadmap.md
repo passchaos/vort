@@ -462,6 +462,7 @@ architecture blindly.
 - [x] Dashboard strict-mode validation unhealthy reason matrix is stored in a schema-checked external JSON config.
 - [x] Dashboard strict-mode smoke directly covers native codec probe health drift, including probe count/case-sum mismatches, missing/duplicate probes, coverage/capability count/missing/duplicate drift, unhealthy capability rows, and Markdown unmatched rows.
 - [x] Dashboard strict-mode smoke directly covers zlib relaxed health drift, including missing gate/Markdown artifacts, gate check missing/extra/rule drift, report exact/floor mismatches, and malformed/duplicate/unknown/value-mismatched Markdown metrics.
+- [x] Dashboard strict-mode smoke directly covers Snappy report health drift, including missing/duplicate/unknown mode-case rows, positive timing/ratio/throughput drift, repetitive-ratio regressions, framed-overhead drift, and reusable checksum mismatches.
 - [x] Dashboard strict-mode smoke directly covers native allocation health drift, including report count/unbalanced/duplicate rows, zero/budget smoke mismatches and duplicate cases, negative-smoke unmatched rows, and Markdown malformed/duplicate/unknown rows.
 - [x] Dashboard strict-mode smoke directly covers native fuzz corpus health drift, including report count/matched-row drift, coverage requirement mismatches, and Markdown unmatched rows.
 - [x] Dashboard strict-mode smoke directly covers decode-stage health drift, including report/error count mismatches, CSV missing/duplicate/unknown cases, and Markdown unmatched rows.

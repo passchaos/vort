@@ -5001,6 +5001,33 @@ def zlib_relaxed_drift_fixture(
     return result, manifest
 
 
+def snappy_report_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    mutate_csv,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted Snappy report CSV."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    csv_path = fixture_root / SNAPPY_REPORT_ARTIFACT
+    with csv_path.open(newline="") as f:
+        reader = csv.DictReader(f)
+        fieldnames = list(reader.fieldnames or [])
+        rows = list(reader)
+    mutate_csv(rows, fieldnames, csv_path)
+    rewrite_csv_rows(csv_path, rows, fieldnames)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def dynamic_plan_drift_fixture(root: Path, fixture_name: str, mutate_csv) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted dynamic-plan CSV artifact."""
 
@@ -8317,6 +8344,148 @@ def main() -> int:
             zlib_markdown_malformed_manifest,
             "zlib_relaxed_failed",
             zlib_markdown_malformed_manifest["zlib_relaxed_markdown_malformed_rows"] == 1,
+        )
+
+        def append_snappy_report_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and "dashboard_index_validation_unhealthy=snappy_report_failed" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["snappy_report_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    "dashboard_index_validation_unhealthy=snappy_report_failed",
+                    result.stdout,
+                )
+            )
+
+        snappy_missing_pair_result, snappy_missing_pair_manifest = snappy_report_drift_fixture(
+            root,
+            "snappy-report-missing-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.pop(0),
+        )
+        append_snappy_report_check(
+            "snappy_report_missing_pair",
+            snappy_missing_pair_result,
+            snappy_missing_pair_manifest,
+            snappy_missing_pair_manifest["snappy_report_rows"] == 19
+            and snappy_missing_pair_manifest["snappy_report_missing_pairs"] == ["raw_block:tiny"],
+        )
+
+        snappy_duplicate_pair_result, snappy_duplicate_pair_manifest = snappy_report_drift_fixture(
+            root,
+            "snappy-report-duplicate-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.append(dict(rows[0])),
+        )
+        append_snappy_report_check(
+            "snappy_report_duplicate_pair",
+            snappy_duplicate_pair_result,
+            snappy_duplicate_pair_manifest,
+            snappy_duplicate_pair_manifest["snappy_report_rows"] == 21
+            and snappy_duplicate_pair_manifest["snappy_report_duplicate_pairs"] == ["raw_block:tiny"],
+        )
+
+        snappy_unknown_pair_result, snappy_unknown_pair_manifest = snappy_report_drift_fixture(
+            root,
+            "snappy-report-unknown-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("mode", "raw_block_unknown"),
+        )
+        append_snappy_report_check(
+            "snappy_report_unknown_pair",
+            snappy_unknown_pair_result,
+            snappy_unknown_pair_manifest,
+            snappy_unknown_pair_manifest["snappy_report_missing_pairs"] == ["raw_block:tiny"]
+            and snappy_unknown_pair_manifest["snappy_report_unknown_pairs"] == ["raw_block_unknown:tiny"],
+        )
+
+        snappy_positive_result, snappy_positive_manifest = snappy_report_drift_fixture(
+            root,
+            "snappy-report-positive-timing",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("encode_mib_s", "0.0000"),
+        )
+        append_snappy_report_check(
+            "snappy_report_positive_timing_mismatch",
+            snappy_positive_result,
+            snappy_positive_manifest,
+            snappy_positive_manifest["snappy_report_positive_timing_rows"] == 19,
+        )
+
+        snappy_ratio_result, snappy_ratio_manifest = snappy_report_drift_fixture(
+            root,
+            "snappy-report-ratio",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("ratio", "9.000000"),
+        )
+        append_snappy_report_check(
+            "snappy_report_ratio_mismatch",
+            snappy_ratio_result,
+            snappy_ratio_manifest,
+            snappy_ratio_manifest["snappy_report_ratio_rows"] == 19,
+        )
+
+        snappy_throughput_result, snappy_throughput_manifest = snappy_report_drift_fixture(
+            root,
+            "snappy-report-throughput",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("decode_mib_s", "1.0000"),
+        )
+        append_snappy_report_check(
+            "snappy_report_throughput_mismatch",
+            snappy_throughput_result,
+            snappy_throughput_manifest,
+            snappy_throughput_manifest["snappy_report_throughput_rows"] == 19,
+        )
+
+        snappy_repetitive_result, snappy_repetitive_manifest = snappy_report_drift_fixture(
+            root,
+            "snappy-report-repetitive-shrink",
+            mutate_csv=lambda rows, fieldnames, csv_path: next(
+                row for row in rows if row["mode"] == "framed_reusable" and row["case"] == "repetitive"
+            ).update({"encoded_bytes": "32768", "ratio": "1.000000"}),
+        )
+        append_snappy_report_check(
+            "snappy_report_repetitive_not_shrunk",
+            snappy_repetitive_result,
+            snappy_repetitive_manifest,
+            snappy_repetitive_manifest["snappy_report_repetitive_shrunk_rows"] == 3,
+        )
+
+        snappy_overhead_result, snappy_overhead_manifest = snappy_report_drift_fixture(
+            root,
+            "snappy-report-framed-overhead",
+            mutate_csv=lambda rows, fieldnames, csv_path: next(
+                row for row in rows if row["mode"] == "framed" and row["case"] == "text"
+            ).update({"encoded_bytes": "1641", "ratio": f"{1641 / 31744:.6f}"}),
+        )
+        append_snappy_report_check(
+            "snappy_report_framed_overhead_mismatch",
+            snappy_overhead_result,
+            snappy_overhead_manifest,
+            snappy_overhead_manifest["snappy_report_framed_overhead_matched_cases"] == 4,
+        )
+
+        snappy_checksum_result, snappy_checksum_manifest = snappy_report_drift_fixture(
+            root,
+            "snappy-report-reusable-checksum",
+            mutate_csv=lambda rows, fieldnames, csv_path: next(
+                row for row in rows if row["mode"] == "framed_reusable" and row["case"] == "text"
+            ).__setitem__("checksum", "54321"),
+        )
+        append_snappy_report_check(
+            "snappy_report_reusable_checksum_mismatch",
+            snappy_checksum_result,
+            snappy_checksum_manifest,
+            snappy_checksum_manifest["snappy_report_reusable_checksum_matched_cases"] == 4,
         )
 
         native_codec_probe_count_result, native_codec_probe_count_manifest = native_codec_probes_drift_fixture(
