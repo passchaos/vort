@@ -4531,9 +4531,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 155,
-      "min_expected_failures": 155,
-      "min_matched": 155
+      "min_checks": 161,
+      "min_expected_failures": 161,
+      "min_matched": 161
     },
     {
       "mode": "non-json-artifact-health",
@@ -4655,7 +4655,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 115,
+  "check_count": 121,
   "mode_count": 5,
   "expected_mode_count": 5,
   "missing_mode_count": 0,
@@ -4675,9 +4675,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 155,
-      "min_expected_failures": 155,
-      "min_matched": 155
+      "min_checks": 161,
+      "min_expected_failures": 161,
+      "min_matched": 161
     },
     {
       "mode": "non-json-artifact-health",
@@ -4720,14 +4720,14 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 68,
-      "min_checks": 155,
+      "checks": 74,
+      "min_checks": 161,
       "missing_checks": 87,
-      "expected_failures": 68,
-      "min_expected_failures": 155,
+      "expected_failures": 74,
+      "min_expected_failures": 161,
       "missing_expected_failures": 87,
-      "matched": 68,
-      "min_matched": 155,
+      "matched": 74,
+      "min_matched": 161,
       "missing_matched": 87
     },
     {
@@ -4770,9 +4770,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 68,
-      "expected_failures": 68,
-      "matched": 68
+      "checks": 74,
+      "expected_failures": 74,
+      "matched": 74
     },
     {
       "mode": "non-json-artifact-health",
@@ -5791,6 +5791,78 @@ Example:
       "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
       "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\n",
       "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_allocation_report_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_allocation_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_allocation_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_allocation_report_unbalanced",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_allocation_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_allocation_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_allocation_zero_report_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_allocation_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_allocation_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_allocation_budget_report_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_allocation_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_allocation_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_allocation_markdown_malformed",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_allocation_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_allocation_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_allocation_markdown_unknown",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_allocation_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_allocation_failed\n",
+      "actual_output_bytes": 62,
       "actual_output_limit": 240,
       "actual_output_truncated": false,
       "returncode": 1,

@@ -4782,6 +4782,41 @@ def rewrite_csv_rows(path: Path, rows: list[dict[str, str]], fieldnames: list[st
         writer.writerows(rows)
 
 
+def native_allocation_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    mutate_report=None,
+    mutate_smoke=None,
+    mutate_markdown=None,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted native allocation artifact."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    report_path = fixture_root / NATIVE_ALLOCATION_REPORT_ARTIFACT
+    smoke_path = fixture_root / NATIVE_ALLOCATION_SMOKE_ARTIFACT
+    markdown_path = fixture_root / NATIVE_ALLOCATION_REPORT_MARKDOWN_ARTIFACT
+    if mutate_report is not None:
+        report = json.loads(report_path.read_text())
+        mutate_report(report)
+        report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    if mutate_smoke is not None:
+        smoke = json.loads(smoke_path.read_text())
+        mutate_smoke(smoke)
+        smoke_path.write_text(json.dumps(smoke, indent=2, sort_keys=True) + "\n")
+    if mutate_markdown is not None:
+        mutate_markdown(markdown_path)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def native_fuzz_corpus_drift_fixture(
     root: Path,
     fixture_name: str,
@@ -8014,6 +8049,157 @@ def main() -> int:
                 native_fuzz_markdown_result.returncode,
                 "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
                 native_fuzz_markdown_result.stdout,
+            )
+        )
+
+        native_allocation_count_result, native_allocation_count_manifest = native_allocation_drift_fixture(
+            root,
+            "native-allocation-report-count",
+            mutate_report=lambda payload: payload.__setitem__("case_count", int(payload["case_count"]) + 1),
+        )
+        native_allocation_count_matched = (
+            native_allocation_count_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_allocation_failed" in native_allocation_count_result.stdout
+            and native_allocation_count_manifest["validation_healthy"] is False
+            and native_allocation_count_manifest["native_allocation_healthy"] is False
+            and native_allocation_count_manifest["native_allocation_report_count_mismatch"] == 1
+        )
+        checks.append(
+            check_row(
+                "native_allocation_report_count_mismatch",
+                "strict-validation-health",
+                True,
+                native_allocation_count_matched,
+                native_allocation_count_result.returncode,
+                "dashboard_index_validation_unhealthy=native_allocation_failed",
+                native_allocation_count_result.stdout,
+            )
+        )
+
+        native_allocation_unbalanced_result, native_allocation_unbalanced_manifest = native_allocation_drift_fixture(
+            root,
+            "native-allocation-report-unbalanced",
+            mutate_report=lambda payload: payload["cases"][2].__setitem__(
+                "allocated_bytes",
+                int(payload["cases"][2]["allocated_bytes"]) + 1,
+            ),
+        )
+        native_allocation_unbalanced_matched = (
+            native_allocation_unbalanced_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_allocation_failed" in native_allocation_unbalanced_result.stdout
+            and native_allocation_unbalanced_manifest["validation_healthy"] is False
+            and native_allocation_unbalanced_manifest["native_allocation_healthy"] is False
+            and native_allocation_unbalanced_manifest["native_allocation_report_unbalanced_rows"] == 1
+        )
+        checks.append(
+            check_row(
+                "native_allocation_report_unbalanced",
+                "strict-validation-health",
+                True,
+                native_allocation_unbalanced_matched,
+                native_allocation_unbalanced_result.returncode,
+                "dashboard_index_validation_unhealthy=native_allocation_failed",
+                native_allocation_unbalanced_result.stdout,
+            )
+        )
+
+        native_allocation_zero_result, native_allocation_zero_manifest = native_allocation_drift_fixture(
+            root,
+            "native-allocation-zero-unmatched",
+            mutate_smoke=lambda payload: payload["cases"][0].__setitem__("matched", False),
+        )
+        native_allocation_zero_matched = (
+            native_allocation_zero_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_allocation_failed" in native_allocation_zero_result.stdout
+            and native_allocation_zero_manifest["validation_healthy"] is False
+            and native_allocation_zero_manifest["native_allocation_healthy"] is False
+            and native_allocation_zero_manifest["native_allocation_zero_report_unmatched"] == 1
+        )
+        checks.append(
+            check_row(
+                "native_allocation_zero_report_unmatched",
+                "strict-validation-health",
+                True,
+                native_allocation_zero_matched,
+                native_allocation_zero_result.returncode,
+                "dashboard_index_validation_unhealthy=native_allocation_failed",
+                native_allocation_zero_result.stdout,
+            )
+        )
+
+        native_allocation_budget_result, native_allocation_budget_manifest = native_allocation_drift_fixture(
+            root,
+            "native-allocation-budget-unmatched",
+            mutate_smoke=lambda payload: payload["budget_cases"][0].__setitem__("max_allocated_bytes", 0),
+        )
+        native_allocation_budget_matched = (
+            native_allocation_budget_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_allocation_failed" in native_allocation_budget_result.stdout
+            and native_allocation_budget_manifest["validation_healthy"] is False
+            and native_allocation_budget_manifest["native_allocation_healthy"] is False
+            and native_allocation_budget_manifest["native_allocation_budget_report_unmatched"] == 1
+        )
+        checks.append(
+            check_row(
+                "native_allocation_budget_report_unmatched",
+                "strict-validation-health",
+                True,
+                native_allocation_budget_matched,
+                native_allocation_budget_result.returncode,
+                "dashboard_index_validation_unhealthy=native_allocation_failed",
+                native_allocation_budget_result.stdout,
+            )
+        )
+
+        native_allocation_markdown_malformed_result, native_allocation_markdown_malformed_manifest = native_allocation_drift_fixture(
+            root,
+            "native-allocation-markdown-malformed",
+            mutate_markdown=lambda markdown_path: markdown_path.write_text(
+                markdown_path.read_text().replace("| zero_decode | 16 | 16 |", "| zero_decode | NaN | 16 |", 1)
+            ),
+        )
+        native_allocation_markdown_malformed_matched = (
+            native_allocation_markdown_malformed_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_allocation_failed" in native_allocation_markdown_malformed_result.stdout
+            and native_allocation_markdown_malformed_manifest["validation_healthy"] is False
+            and native_allocation_markdown_malformed_manifest["native_allocation_healthy"] is False
+            and native_allocation_markdown_malformed_manifest["native_allocation_markdown_malformed_rows"] == 1
+        )
+        checks.append(
+            check_row(
+                "native_allocation_markdown_malformed",
+                "strict-validation-health",
+                True,
+                native_allocation_markdown_malformed_matched,
+                native_allocation_markdown_malformed_result.returncode,
+                "dashboard_index_validation_unhealthy=native_allocation_failed",
+                native_allocation_markdown_malformed_result.stdout,
+            )
+        )
+
+        native_allocation_markdown_unknown_result, native_allocation_markdown_unknown_manifest = native_allocation_drift_fixture(
+            root,
+            "native-allocation-markdown-unknown",
+            mutate_markdown=lambda markdown_path: markdown_path.write_text(
+                markdown_path.read_text() + "| extra | 1 | 1 | 0 | 0 | 0 | 0 |\n"
+            ),
+        )
+        native_allocation_markdown_unknown_matched = (
+            native_allocation_markdown_unknown_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=native_allocation_failed" in native_allocation_markdown_unknown_result.stdout
+            and native_allocation_markdown_unknown_manifest["validation_healthy"] is False
+            and native_allocation_markdown_unknown_manifest["native_allocation_healthy"] is False
+            and native_allocation_markdown_unknown_manifest["native_allocation_markdown_unknown_cases"] == ["extra"]
+        )
+        checks.append(
+            check_row(
+                "native_allocation_markdown_unknown",
+                "strict-validation-health",
+                True,
+                native_allocation_markdown_unknown_matched,
+                native_allocation_markdown_unknown_result.returncode,
+                "dashboard_index_validation_unhealthy=native_allocation_failed",
+                native_allocation_markdown_unknown_result.stdout,
             )
         )
 
