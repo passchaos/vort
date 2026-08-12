@@ -5028,6 +5028,38 @@ def snappy_report_drift_fixture(
     return result, manifest
 
 
+def png_scratch_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    mutate_report=None,
+    mutate_markdown=None,
+    remove_markdown: bool = False,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted PNG scratch artifact."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    report_path = fixture_root / PNG_SCRATCH_ARTIFACT
+    markdown_path = fixture_root / PNG_SCRATCH_MARKDOWN_ARTIFACT
+    if mutate_report is not None:
+        report = json.loads(report_path.read_text())
+        mutate_report(report)
+        report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    if mutate_markdown is not None:
+        mutate_markdown(markdown_path)
+    if remove_markdown:
+        markdown_path.unlink()
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def dynamic_plan_drift_fixture(root: Path, fixture_name: str, mutate_csv) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted dynamic-plan CSV artifact."""
 
@@ -8486,6 +8518,166 @@ def main() -> int:
             snappy_checksum_result,
             snappy_checksum_manifest,
             snappy_checksum_manifest["snappy_report_reusable_checksum_matched_cases"] == 4,
+        )
+
+        def append_png_scratch_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            expected_reason: str,
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and f"dashboard_index_validation_unhealthy={expected_reason}" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["png_scratch_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    f"dashboard_index_validation_unhealthy={expected_reason}",
+                    result.stdout,
+                )
+            )
+
+        png_missing_markdown_result, png_missing_markdown_manifest = png_scratch_drift_fixture(
+            root,
+            "png-scratch-missing-markdown",
+            remove_markdown=True,
+        )
+        append_png_scratch_check(
+            "png_scratch_missing_markdown",
+            png_missing_markdown_result,
+            png_missing_markdown_manifest,
+            "missing_png_scratch_artifact",
+            png_missing_markdown_manifest["png_scratch_present"] is True
+            and png_missing_markdown_manifest["png_scratch_markdown_present"] is False,
+        )
+
+        png_count_result, png_count_manifest = png_scratch_drift_fixture(
+            root,
+            "png-scratch-count",
+            mutate_report=lambda payload: payload.__setitem__("case_count", int(payload["case_count"]) + 1),
+        )
+        append_png_scratch_check(
+            "png_scratch_report_count_mismatch",
+            png_count_result,
+            png_count_manifest,
+            "png_scratch_failed",
+            png_count_manifest["png_scratch_report_count_mismatch"] == 1,
+        )
+
+        png_missing_case_result, png_missing_case_manifest = png_scratch_drift_fixture(
+            root,
+            "png-scratch-missing-case",
+            mutate_report=lambda payload: payload["cases"].pop(0),
+        )
+        append_png_scratch_check(
+            "png_scratch_missing_case",
+            png_missing_case_result,
+            png_missing_case_manifest,
+            "png_scratch_failed",
+            png_missing_case_manifest["png_scratch_missing_cases"] == ["png_rgb8_noninterlaced"],
+        )
+
+        png_duplicate_case_result, png_duplicate_case_manifest = png_scratch_drift_fixture(
+            root,
+            "png-scratch-duplicate-case",
+            mutate_report=lambda payload: payload["cases"].append(dict(payload["cases"][0])),
+        )
+        append_png_scratch_check(
+            "png_scratch_duplicate_case",
+            png_duplicate_case_result,
+            png_duplicate_case_manifest,
+            "png_scratch_failed",
+            png_duplicate_case_manifest["png_scratch_duplicate_cases"] == ["png_rgb8_noninterlaced"],
+        )
+
+        png_unknown_case_result, png_unknown_case_manifest = png_scratch_drift_fixture(
+            root,
+            "png-scratch-unknown-case",
+            mutate_report=lambda payload: payload["cases"][0].__setitem__("case", "png_unknown_case"),
+        )
+        append_png_scratch_check(
+            "png_scratch_unknown_case",
+            png_unknown_case_result,
+            png_unknown_case_manifest,
+            "png_scratch_failed",
+            png_unknown_case_manifest["png_scratch_missing_cases"] == ["png_rgb8_noninterlaced"]
+            and png_unknown_case_manifest["png_scratch_unknown_cases"] == ["png_unknown_case"],
+        )
+
+        png_consistency_result, png_consistency_manifest = png_scratch_drift_fixture(
+            root,
+            "png-scratch-row-inconsistent",
+            mutate_report=lambda payload: payload["cases"][0].__setitem__("working_scratch_bytes", int(payload["cases"][0]["working_scratch_bytes"]) + 1),
+        )
+        append_png_scratch_check(
+            "png_scratch_row_inconsistent",
+            png_consistency_result,
+            png_consistency_manifest,
+            "png_scratch_failed",
+            png_consistency_manifest["png_scratch_row_inconsistent_count"] == 1,
+        )
+
+        png_stored_result, png_stored_manifest = png_scratch_drift_fixture(
+            root,
+            "png-scratch-stored-not-achieved",
+            mutate_report=lambda payload: payload["cases"][0].__setitem__("stored_streaming_status", "scratch-required"),
+        )
+        append_png_scratch_check(
+            "png_scratch_stored_not_achieved",
+            png_stored_result,
+            png_stored_manifest,
+            "png_scratch_failed",
+            png_stored_manifest["png_scratch_stored_achieved"] == 5,
+        )
+
+        png_fixed_result, png_fixed_manifest = png_scratch_drift_fixture(
+            root,
+            "png-scratch-fixed-not-achieved",
+            mutate_report=lambda payload: payload["cases"][0].__setitem__("fixed_dynamic_streaming_status", "scratch-required"),
+        )
+        append_png_scratch_check(
+            "png_scratch_fixed_not_achieved",
+            png_fixed_result,
+            png_fixed_manifest,
+            "png_scratch_failed",
+            png_fixed_manifest["png_scratch_fixed_achieved"] == 5,
+        )
+
+        png_savings_result, png_savings_manifest = png_scratch_drift_fixture(
+            root,
+            "png-scratch-savings-mismatch",
+            mutate_report=lambda payload: payload["cases"][0].__setitem__("streaming_scratch_savings_bytes", int(payload["cases"][0]["streaming_scratch_savings_bytes"]) - 1),
+        )
+        append_png_scratch_check(
+            "png_scratch_streaming_savings_mismatch",
+            png_savings_result,
+            png_savings_manifest,
+            "png_scratch_failed",
+            png_savings_manifest["png_scratch_total_streaming_savings"] == png_savings_manifest["png_scratch_total_zlib_scratch"] - 1,
+        )
+
+        png_markdown_result, png_markdown_manifest = png_scratch_drift_fixture(
+            root,
+            "png-scratch-markdown-unmatched",
+            mutate_markdown=lambda markdown_path: markdown_path.write_text(
+                markdown_path.read_text().replace("png_rgb8_noninterlaced", "png_rgb8_noninterlaced_drift", 1)
+            ),
+        )
+        append_png_scratch_check(
+            "png_scratch_markdown_unmatched",
+            png_markdown_result,
+            png_markdown_manifest,
+            "png_scratch_failed",
+            png_markdown_manifest["png_scratch_markdown_unmatched"] == 1,
         )
 
         native_codec_probe_count_result, native_codec_probe_count_manifest = native_codec_probes_drift_fixture(
