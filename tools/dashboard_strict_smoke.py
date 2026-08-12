@@ -4960,6 +4960,47 @@ def fuzz_corpus_drift_fixture(
     return result, manifest
 
 
+def zlib_relaxed_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    mutate_report=None,
+    mutate_gate=None,
+    mutate_markdown=None,
+    remove_gate: bool = False,
+    remove_markdown: bool = False,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted zlib relaxed artifact."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    report_path = fixture_root / ZLIB_RELAXED_ARTIFACT
+    gate_path = fixture_root / ZLIB_RELAXED_GATE_ARTIFACT
+    markdown_path = fixture_root / ZLIB_RELAXED_MARKDOWN_ARTIFACT
+    if mutate_report is not None:
+        report = json.loads(report_path.read_text())
+        mutate_report(report)
+        report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    if mutate_gate is not None:
+        gate = json.loads(gate_path.read_text())
+        mutate_gate(gate)
+        gate_path.write_text(json.dumps(gate, indent=2, sort_keys=True) + "\n")
+    if mutate_markdown is not None:
+        mutate_markdown(markdown_path)
+    if remove_gate:
+        gate_path.unlink()
+    if remove_markdown:
+        markdown_path.unlink()
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def dynamic_plan_drift_fixture(root: Path, fixture_name: str, mutate_csv) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted dynamic-plan CSV artifact."""
 
@@ -8085,6 +8126,197 @@ def main() -> int:
                 "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
                 native_fuzz_markdown_result.stdout,
             )
+        )
+
+        def append_zlib_relaxed_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            expected_reason: str,
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and f"dashboard_index_validation_unhealthy={expected_reason}" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["zlib_relaxed_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    f"dashboard_index_validation_unhealthy={expected_reason}",
+                    result.stdout,
+                )
+            )
+
+        zlib_missing_gate_result, zlib_missing_gate_manifest = zlib_relaxed_drift_fixture(
+            root,
+            "zlib-relaxed-missing-gate",
+            remove_gate=True,
+        )
+        append_zlib_relaxed_check(
+            "zlib_relaxed_missing_gate",
+            zlib_missing_gate_result,
+            zlib_missing_gate_manifest,
+            "missing_zlib_relaxed_artifact",
+            zlib_missing_gate_manifest["zlib_relaxed_present"] is True
+            and zlib_missing_gate_manifest["zlib_relaxed_gate_present"] is False
+            and zlib_missing_gate_manifest["zlib_relaxed_markdown_present"] is True,
+        )
+
+        zlib_missing_markdown_result, zlib_missing_markdown_manifest = zlib_relaxed_drift_fixture(
+            root,
+            "zlib-relaxed-missing-markdown",
+            remove_markdown=True,
+        )
+        append_zlib_relaxed_check(
+            "zlib_relaxed_missing_markdown",
+            zlib_missing_markdown_result,
+            zlib_missing_markdown_manifest,
+            "missing_zlib_relaxed_artifact",
+            zlib_missing_markdown_manifest["zlib_relaxed_present"] is True
+            and zlib_missing_markdown_manifest["zlib_relaxed_gate_present"] is True
+            and zlib_missing_markdown_manifest["zlib_relaxed_markdown_present"] is False,
+        )
+
+        zlib_gate_missing_check_result, zlib_gate_missing_check_manifest = zlib_relaxed_drift_fixture(
+            root,
+            "zlib-relaxed-gate-missing-check",
+            mutate_gate=lambda payload: payload["checks"].pop("relaxed_successes"),
+        )
+        append_zlib_relaxed_check(
+            "zlib_relaxed_gate_missing_check",
+            zlib_gate_missing_check_result,
+            zlib_gate_missing_check_manifest,
+            "zlib_relaxed_failed",
+            zlib_gate_missing_check_manifest["zlib_relaxed_gate_missing_checks"] == 1
+            and zlib_gate_missing_check_manifest["zlib_relaxed_gate_check_count"] == 10,
+        )
+
+        zlib_gate_extra_check_result, zlib_gate_extra_check_manifest = zlib_relaxed_drift_fixture(
+            root,
+            "zlib-relaxed-gate-extra-check",
+            mutate_gate=lambda payload: payload["checks"].__setitem__("unexpected_relaxed_metric", True),
+        )
+        append_zlib_relaxed_check(
+            "zlib_relaxed_gate_extra_check",
+            zlib_gate_extra_check_result,
+            zlib_gate_extra_check_manifest,
+            "zlib_relaxed_failed",
+            zlib_gate_extra_check_manifest["zlib_relaxed_gate_extra_checks"] == 1
+            and zlib_gate_extra_check_manifest["zlib_relaxed_gate_check_count"] == 12,
+        )
+
+        zlib_gate_rule_mismatch_result, zlib_gate_rule_mismatch_manifest = zlib_relaxed_drift_fixture(
+            root,
+            "zlib-relaxed-gate-rule-mismatch",
+            mutate_gate=lambda payload: payload["checks"].__setitem__("relaxed_successes", False),
+        )
+        append_zlib_relaxed_check(
+            "zlib_relaxed_gate_rule_mismatch",
+            zlib_gate_rule_mismatch_result,
+            zlib_gate_rule_mismatch_manifest,
+            "zlib_relaxed_failed",
+            zlib_gate_rule_mismatch_manifest["zlib_relaxed_gate_check_rule_mismatch"] == 1
+            and zlib_gate_rule_mismatch_manifest["zlib_relaxed_gate_report_unmatched"] == 1,
+        )
+
+        zlib_report_exact_result, zlib_report_exact_manifest = zlib_relaxed_drift_fixture(
+            root,
+            "zlib-relaxed-report-exact-mismatch",
+            mutate_report=lambda payload: payload.__setitem__("strict_rejections", int(payload["strict_rejections"]) + 1),
+        )
+        append_zlib_relaxed_check(
+            "zlib_relaxed_report_exact_mismatch",
+            zlib_report_exact_result,
+            zlib_report_exact_manifest,
+            "zlib_relaxed_failed",
+            zlib_report_exact_manifest["zlib_relaxed_gate_exact_mismatch_count"] == 1
+            and zlib_report_exact_manifest["zlib_relaxed_gate_recomputed_failed_count"] == 1,
+        )
+
+        zlib_report_floor_result, zlib_report_floor_manifest = zlib_relaxed_drift_fixture(
+            root,
+            "zlib-relaxed-report-floor-shortfall",
+            mutate_report=lambda payload: payload.__setitem__("relaxed_successes", int(payload["relaxed_successes"]) - 1),
+        )
+        append_zlib_relaxed_check(
+            "zlib_relaxed_report_floor_shortfall",
+            zlib_report_floor_result,
+            zlib_report_floor_manifest,
+            "zlib_relaxed_failed",
+            zlib_report_floor_manifest["zlib_relaxed_gate_floor_shortfall_count"] == 1
+            and zlib_report_floor_manifest["zlib_relaxed_gate_recomputed_failed_count"] == 1,
+        )
+
+        zlib_markdown_value_result, zlib_markdown_value_manifest = zlib_relaxed_drift_fixture(
+            root,
+            "zlib-relaxed-markdown-value-mismatch",
+            mutate_markdown=lambda markdown_path: markdown_path.write_text(
+                markdown_path.read_text().replace("| zlib relaxed successes | 5 |", "| zlib relaxed successes | 4 |", 1)
+            ),
+        )
+        append_zlib_relaxed_check(
+            "zlib_relaxed_markdown_value_mismatch",
+            zlib_markdown_value_result,
+            zlib_markdown_value_manifest,
+            "zlib_relaxed_failed",
+            zlib_markdown_value_manifest["zlib_relaxed_markdown_unmatched"] == 1
+            and zlib_markdown_value_manifest["zlib_relaxed_markdown_value_mismatches"] == ["zlib relaxed successes"],
+        )
+
+        zlib_markdown_duplicate_result, zlib_markdown_duplicate_manifest = zlib_relaxed_drift_fixture(
+            root,
+            "zlib-relaxed-markdown-duplicate",
+            mutate_markdown=lambda markdown_path: markdown_path.write_text(
+                markdown_path.read_text().replace(
+                    "| gzip limited rejections | 1 |\n",
+                    "| gzip limited rejections | 1 |\n| gzip limited rejections | 1 |\n",
+                    1,
+                )
+            ),
+        )
+        append_zlib_relaxed_check(
+            "zlib_relaxed_markdown_duplicate_metric",
+            zlib_markdown_duplicate_result,
+            zlib_markdown_duplicate_manifest,
+            "zlib_relaxed_failed",
+            zlib_markdown_duplicate_manifest["zlib_relaxed_markdown_unmatched"] == 1
+            and zlib_markdown_duplicate_manifest["zlib_relaxed_markdown_duplicate_metrics"] == ["gzip limited rejections"],
+        )
+
+        zlib_markdown_unknown_result, zlib_markdown_unknown_manifest = zlib_relaxed_drift_fixture(
+            root,
+            "zlib-relaxed-markdown-unknown",
+            mutate_markdown=lambda markdown_path: markdown_path.write_text(
+                markdown_path.read_text() + "| zlib unknown relaxed metric | 1 |\n"
+            ),
+        )
+        append_zlib_relaxed_check(
+            "zlib_relaxed_markdown_unknown_metric",
+            zlib_markdown_unknown_result,
+            zlib_markdown_unknown_manifest,
+            "zlib_relaxed_failed",
+            zlib_markdown_unknown_manifest["zlib_relaxed_markdown_unmatched"] == 1
+            and zlib_markdown_unknown_manifest["zlib_relaxed_markdown_unknown_metrics"] == ["zlib unknown relaxed metric"],
+        )
+
+        zlib_markdown_malformed_result, zlib_markdown_malformed_manifest = zlib_relaxed_drift_fixture(
+            root,
+            "zlib-relaxed-markdown-malformed",
+            mutate_markdown=lambda markdown_path: markdown_path.write_text(markdown_path.read_text() + "| | nope |\n"),
+        )
+        append_zlib_relaxed_check(
+            "zlib_relaxed_markdown_malformed_metric",
+            zlib_markdown_malformed_result,
+            zlib_markdown_malformed_manifest,
+            "zlib_relaxed_failed",
+            zlib_markdown_malformed_manifest["zlib_relaxed_markdown_malformed_rows"] == 1,
         )
 
         native_codec_probe_count_result, native_codec_probe_count_manifest = native_codec_probes_drift_fixture(

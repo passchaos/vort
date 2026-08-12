@@ -4657,6 +4657,17 @@
           "validation_zlib_relaxed_failed",
           "validation_zstd_compare_failed",
           "validation_zstd_native_summary_undercovered",
+          "zlib_relaxed_missing_gate",
+          "zlib_relaxed_missing_markdown",
+          "zlib_relaxed_gate_missing_check",
+          "zlib_relaxed_gate_extra_check",
+          "zlib_relaxed_gate_rule_mismatch",
+          "zlib_relaxed_report_exact_mismatch",
+          "zlib_relaxed_report_floor_shortfall",
+          "zlib_relaxed_markdown_value_mismatch",
+          "zlib_relaxed_markdown_duplicate_metric",
+          "zlib_relaxed_markdown_unknown_metric",
+          "zlib_relaxed_markdown_malformed_metric",
           "zlib_relaxed_markdown_table",
           "zstd_compare_markdown_table"
         ]

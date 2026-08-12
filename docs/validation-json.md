@@ -4531,9 +4531,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 178,
-      "min_expected_failures": 178,
-      "min_matched": 178
+      "min_checks": 189,
+      "min_expected_failures": 189,
+      "min_matched": 189
     },
     {
       "mode": "non-json-artifact-health",
@@ -4633,7 +4633,7 @@ aggregate health reasons must be backed by real failing dashboard inputs before
 the smoke artifact can pass. The expected reason/check/fixture matrix lives in
 `tools/dashboard_strict_validation_reasons.json`; the retained
 `strict-validation-health` mode minimums must cover every configured reason,
-currently 88, plus direct validation JSON smoke/docs-negative and header-inspect health regression checks. Dashboard aggregate health also reads the retained
+currently 88, plus direct validation JSON smoke/docs-negative, zlib relaxed gate/report/Markdown drift, and header-inspect health regression checks. Dashboard aggregate health also reads the retained
 `vort-dashboard-strict-smoke.md` companion and requires its mode, requirement,
 validation-reason, and check rows to match the JSON counts before
 `dashboard_strict_healthy` can pass. The `dashboard-markdown` mode verifies that important human-facing
@@ -4655,7 +4655,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 138,
+  "check_count": 149,
   "mode_count": 5,
   "expected_mode_count": 5,
   "missing_mode_count": 0,
@@ -4675,9 +4675,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 178,
-      "min_expected_failures": 178,
-      "min_matched": 178
+      "min_checks": 189,
+      "min_expected_failures": 189,
+      "min_matched": 189
     },
     {
       "mode": "non-json-artifact-health",
@@ -4720,14 +4720,14 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 91,
-      "min_checks": 178,
+      "checks": 102,
+      "min_checks": 189,
       "missing_checks": 87,
-      "expected_failures": 91,
-      "min_expected_failures": 178,
+      "expected_failures": 102,
+      "min_expected_failures": 189,
       "missing_expected_failures": 87,
-      "matched": 91,
-      "min_matched": 178,
+      "matched": 102,
+      "min_matched": 189,
       "missing_matched": 87
     },
     {
@@ -4770,9 +4770,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 91,
-      "expected_failures": 91,
-      "matched": 91
+      "checks": 102,
+      "expected_failures": 102,
+      "matched": 102
     },
     {
       "mode": "non-json-artifact-health",
@@ -5791,6 +5791,138 @@ Example:
       "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
       "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\n",
       "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_missing_gate",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=missing_zlib_relaxed_artifact",
+      "actual_output": "dashboard_index_validation_unhealthy=missing_zlib_relaxed_artifact\n",
+      "actual_output_bytes": 68,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_missing_markdown",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=missing_zlib_relaxed_artifact",
+      "actual_output": "dashboard_index_validation_unhealthy=missing_zlib_relaxed_artifact\n",
+      "actual_output_bytes": 68,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_gate_missing_check",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_gate_extra_check",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_gate_rule_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_report_exact_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_report_floor_shortfall",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_markdown_value_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_markdown_duplicate_metric",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_markdown_unknown_metric",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_markdown_malformed_metric",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\n",
+      "actual_output_bytes": 58,
       "actual_output_limit": 240,
       "actual_output_truncated": false,
       "returncode": 1,
