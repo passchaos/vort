@@ -5419,6 +5419,69 @@ def native_library_bench_drift_fixture(
     return result, manifest
 
 
+def zstd_compare_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    *,
+    mutate_gate=None,
+    mutate_csv=None,
+    mutate_markdown=None,
+    remove_artifact: str | None = None,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted zstd comparison artifact."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    gate_paths = {
+        "compare": fixture_root / ZSTD_COMPARE_ARTIFACT,
+        "standard": fixture_root / ZSTD_COMPARE_STANDARD_ARTIFACT,
+        "sweep": fixture_root / ZSTD_COMPARE_BLOCK_SWEEP_ARTIFACT,
+    }
+    csv_paths = {
+        "compare": fixture_root / ZSTD_COMPARE_CSV_ARTIFACT,
+        "standard": fixture_root / ZSTD_COMPARE_STANDARD_CSV_ARTIFACT,
+        "sweep": fixture_root / ZSTD_COMPARE_BLOCK_SWEEP_CSV_ARTIFACT,
+    }
+    markdown_paths = {
+        "compare": fixture_root / ZSTD_COMPARE_MARKDOWN_ARTIFACT,
+        "standard": fixture_root / ZSTD_COMPARE_STANDARD_MARKDOWN_ARTIFACT,
+        "sweep": fixture_root / ZSTD_COMPARE_BLOCK_SWEEP_MARKDOWN_ARTIFACT,
+    }
+
+    if mutate_gate is not None:
+        payloads = {kind: json.loads(path.read_text()) for kind, path in gate_paths.items()}
+        mutate_gate(payloads)
+        for kind, payload in payloads.items():
+            gate_paths[kind].write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+    if mutate_csv is not None:
+        def rewrite(path: Path, mutate_rows) -> None:
+            with path.open(newline="") as f:
+                reader = csv.DictReader(f)
+                fieldnames = list(reader.fieldnames or [])
+                rows = list(reader)
+            mutate_rows(rows, fieldnames, path)
+            rewrite_csv_rows(path, rows, fieldnames)
+
+        mutate_csv(csv_paths, rewrite)
+
+    if mutate_markdown is not None:
+        mutate_markdown(markdown_paths)
+
+    if remove_artifact is not None:
+        (fixture_root / remove_artifact).unlink()
+
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def dynamic_plan_drift_fixture(root: Path, fixture_name: str, mutate_csv) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted dynamic-plan CSV artifact."""
 
@@ -10931,6 +10994,112 @@ def main() -> int:
             native_library_improvement_manifest,
             native_library_improvement_manifest["native_library_bench_improvement_checks"]
             == native_library_improvement_manifest["native_library_bench_expected_improvement_checks"] - 1,
+        )
+
+        def append_zstd_compare_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and "dashboard_index_validation_unhealthy=zstd_compare_failed" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["zstd_compare_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    "dashboard_index_validation_unhealthy=zstd_compare_failed",
+                    result.stdout,
+                )
+            )
+
+        zstd_compare_missing_csv_result, zstd_compare_missing_csv_manifest = zstd_compare_drift_fixture(
+            root,
+            "zstd-compare-missing-csv",
+            remove_artifact=ZSTD_COMPARE_STANDARD_CSV_ARTIFACT,
+        )
+        append_zstd_compare_check(
+            "zstd_compare_missing_csv",
+            zstd_compare_missing_csv_result,
+            zstd_compare_missing_csv_manifest,
+            zstd_compare_missing_csv_manifest["zstd_compare_csv_present_count"] == 2
+            and zstd_compare_missing_csv_manifest["zstd_compare_csv_unmatched_rows"] > 0,
+        )
+
+        zstd_compare_gate_csv_result, zstd_compare_gate_csv_manifest = zstd_compare_drift_fixture(
+            root,
+            "zstd-compare-gate-csv",
+            mutate_gate=lambda payloads: payloads["compare"].__setitem__("total_native_ratio", 9.0),
+        )
+        append_zstd_compare_check(
+            "zstd_compare_gate_csv_mismatch",
+            zstd_compare_gate_csv_result,
+            zstd_compare_gate_csv_manifest,
+            zstd_compare_gate_csv_manifest["zstd_compare_csv_unmatched_rows"] > 0
+            and zstd_compare_gate_csv_manifest["zstd_compare_csv_matched_rows"] == 0,
+        )
+
+        zstd_compare_duplicate_result, zstd_compare_duplicate_manifest = zstd_compare_drift_fixture(
+            root,
+            "zstd-compare-duplicate-identity",
+            mutate_csv=lambda csv_paths, rewrite: rewrite(
+                csv_paths["compare"],
+                lambda rows, fieldnames, path: rows.append(dict(rows[0])),
+            ),
+        )
+        append_zstd_compare_check(
+            "zstd_compare_duplicate_identity",
+            zstd_compare_duplicate_result,
+            zstd_compare_duplicate_manifest,
+            zstd_compare_duplicate_manifest["zstd_compare_csv_duplicate_identities"] == ["compare:case-0"],
+        )
+
+        zstd_compare_sweep_best_result, zstd_compare_sweep_best_manifest = zstd_compare_drift_fixture(
+            root,
+            "zstd-compare-sweep-best",
+            mutate_gate=lambda payloads: payloads["sweep"].__setitem__("best_block_len", 32768),
+        )
+        append_zstd_compare_check(
+            "zstd_compare_sweep_best_mismatch",
+            zstd_compare_sweep_best_result,
+            zstd_compare_sweep_best_manifest,
+            zstd_compare_sweep_best_manifest["zstd_compare_csv_unmatched_rows"] > 0,
+        )
+
+        zstd_compare_markdown_summary_result, zstd_compare_markdown_summary_manifest = zstd_compare_drift_fixture(
+            root,
+            "zstd-compare-markdown-summary",
+            mutate_markdown=lambda markdown_paths: markdown_paths["compare"].write_text(
+                markdown_paths["compare"].read_text().replace("- source mode: `default-samples`", "- source mode: `drift`", 1)
+            ),
+        )
+        append_zstd_compare_check(
+            "zstd_compare_markdown_summary_mismatch",
+            zstd_compare_markdown_summary_result,
+            zstd_compare_markdown_summary_manifest,
+            zstd_compare_markdown_summary_manifest["zstd_compare_markdown_unmatched"] == 1,
+        )
+
+        zstd_compare_markdown_detail_result, zstd_compare_markdown_detail_manifest = zstd_compare_drift_fixture(
+            root,
+            "zstd-compare-markdown-detail",
+            mutate_markdown=lambda markdown_paths: markdown_paths["compare"].write_text(
+                markdown_paths["compare"].read_text().replace("| `case-0` | 1000 | 100 |", "| `case-0` | 1001 | 100 |", 1)
+            ),
+        )
+        append_zstd_compare_check(
+            "zstd_compare_markdown_detail_mismatch",
+            zstd_compare_markdown_detail_result,
+            zstd_compare_markdown_detail_manifest,
+            zstd_compare_markdown_detail_manifest["zstd_compare_markdown_detail_unmatched"] == 1,
         )
 
         native_allocation_count_result, native_allocation_count_manifest = native_allocation_drift_fixture(

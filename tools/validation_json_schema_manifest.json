@@ -4788,6 +4788,12 @@
           "zlib_relaxed_markdown_unknown_metric",
           "zlib_relaxed_markdown_malformed_metric",
           "zlib_relaxed_markdown_table",
+          "zstd_compare_missing_csv",
+          "zstd_compare_gate_csv_mismatch",
+          "zstd_compare_duplicate_identity",
+          "zstd_compare_sweep_best_mismatch",
+          "zstd_compare_markdown_summary_mismatch",
+          "zstd_compare_markdown_detail_mismatch",
           "zstd_compare_markdown_table"
         ]
       },

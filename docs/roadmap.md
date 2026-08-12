@@ -3035,3 +3035,9 @@ architecture blindly.
   identities across compare, standard, and block-sweep artifacts. Dashboard
   health now rejects duplicated zstd-compare CSV identities before aggregate
   CSV/Markdown drift checks can pass.
+
+- Added direct dashboard strict-smoke drift coverage for zstd compare health.
+  The strict validation gate now exercises missing CSV companions, gate-vs-CSV
+  summary drift, duplicate CSV identities, block-sweep best-row drift, Markdown
+  summary drift, and Markdown detail-row drift so `zstd_compare_failed` cannot
+  hide comparison artifact inconsistencies behind its aggregate fixture.
