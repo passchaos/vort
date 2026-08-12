@@ -4925,6 +4925,46 @@ def decode_stage_drift_fixture(
     return result, manifest
 
 
+def native_tier_range_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    mutate_summary=None,
+    mutate_csv=None,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted native-tier artifact.
+
+    Native-tier health is split between compact JSON gate summaries and the CSV
+    rows reviewers inspect. These fixtures keep all unrelated artifacts healthy
+    and mutate only the built-in tier summary/CSV pair so individual row-level
+    invariants are exercised without relying on a broad missing-artifact proxy.
+    """
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    summary_path = fixture_root / NATIVE_TIER_RANGE_ARTIFACT
+    csv_path = fixture_root / NATIVE_TIER_RANGE_CSV_ARTIFACT
+    if mutate_summary is not None:
+        summary = json.loads(summary_path.read_text())
+        mutate_summary(summary)
+        summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
+    if mutate_csv is not None:
+        with csv_path.open(newline="") as f:
+            reader = csv.DictReader(f)
+            fieldnames = list(reader.fieldnames or [])
+            rows = list(reader)
+        mutate_csv(rows, fieldnames, csv_path)
+        rewrite_csv_rows(csv_path, rows, fieldnames)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def fuzz_corpus_drift_fixture(
     root: Path,
     fixture_name: str,
@@ -6852,6 +6892,216 @@ def main() -> int:
             and mismatched_native_tier_manifest["native_tier_range_summary_csv_mismatch_total"] == 1
         )
         checks.append(check_row("mismatched_native_tier_range_summary_csv", "native-tier-range-health", True, native_tier_mismatched_matched, mismatched_native_tier_result.returncode, "dashboard_index_validation_unhealthy=native_tier_range_failed", mismatched_native_tier_result.stdout))
+
+        def append_native_tier_range_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and "dashboard_index_validation_unhealthy=native_tier_range_failed" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["native_tier_range_present"] is True
+                and manifest["native_tier_range_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "native-tier-range-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    "dashboard_index_validation_unhealthy=native_tier_range_failed",
+                    result.stdout,
+                )
+            )
+
+        native_tier_csv_missing_result, native_tier_csv_missing_manifest = native_tier_range_drift_fixture(
+            root,
+            "native-tier-csv-missing-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.pop(),
+        )
+        append_native_tier_range_check(
+            "native_tier_range_csv_missing_pair",
+            native_tier_csv_missing_result,
+            native_tier_csv_missing_manifest,
+            native_tier_csv_missing_manifest["native_tier_range_csv_missing_pairs"] == ["built_in:repetitive:ratio"]
+            and native_tier_csv_missing_manifest["native_tier_range_csv_rows"] == 23,
+        )
+
+        native_tier_csv_duplicate_result, native_tier_csv_duplicate_manifest = native_tier_range_drift_fixture(
+            root,
+            "native-tier-csv-duplicate-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.append(dict(rows[0])),
+        )
+        append_native_tier_range_check(
+            "native_tier_range_csv_duplicate_pair",
+            native_tier_csv_duplicate_result,
+            native_tier_csv_duplicate_manifest,
+            native_tier_csv_duplicate_manifest["native_tier_range_csv_duplicate_pairs"] == ["built_in:text:seek_fast"]
+            and native_tier_csv_duplicate_manifest["native_tier_range_csv_rows"] == 25,
+        )
+
+        native_tier_csv_unknown_result, native_tier_csv_unknown_manifest = native_tier_range_drift_fixture(
+            root,
+            "native-tier-csv-unknown-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("fixture", "unknown"),
+        )
+        append_native_tier_range_check(
+            "native_tier_range_csv_unknown_pair",
+            native_tier_csv_unknown_result,
+            native_tier_csv_unknown_manifest,
+            native_tier_csv_unknown_manifest["native_tier_range_csv_unknown_pairs"] == ["built_in:unknown:seek_fast"]
+            and native_tier_csv_unknown_manifest["native_tier_range_csv_missing_pairs"] == ["built_in:text:seek_fast"],
+        )
+
+        native_tier_csv_positive_result, native_tier_csv_positive_manifest = native_tier_range_drift_fixture(
+            root,
+            "native-tier-csv-positive-row",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("stream_bytes", "0"),
+        )
+        append_native_tier_range_check(
+            "native_tier_range_csv_positive_row_mismatch",
+            native_tier_csv_positive_result,
+            native_tier_csv_positive_manifest,
+            native_tier_csv_positive_manifest["native_tier_range_csv_positive_rows"] == 23
+            and native_tier_csv_positive_manifest["native_tier_range_csv_shape_rows"] == 24
+            and native_tier_csv_positive_manifest["native_tier_range_csv_throughput_rows"] == 24,
+        )
+
+        native_tier_csv_shape_result, native_tier_csv_shape_manifest = native_tier_range_drift_fixture(
+            root,
+            "native-tier-csv-shape-row",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("block_len", "4096"),
+        )
+        append_native_tier_range_check(
+            "native_tier_range_csv_shape_row_mismatch",
+            native_tier_csv_shape_result,
+            native_tier_csv_shape_manifest,
+            native_tier_csv_shape_manifest["native_tier_range_csv_positive_rows"] == 24
+            and native_tier_csv_shape_manifest["native_tier_range_csv_shape_rows"] == 23
+            and native_tier_csv_shape_manifest["native_tier_range_csv_throughput_rows"] == 24,
+        )
+
+        native_tier_csv_throughput_result, native_tier_csv_throughput_manifest = native_tier_range_drift_fixture(
+            root,
+            "native-tier-csv-throughput-row",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("range_mib_s", f"{NATIVE_TIER_RANGE_RANGE_MIB_S + 1.0:.6f}"),
+        )
+        append_native_tier_range_check(
+            "native_tier_range_csv_throughput_row_mismatch",
+            native_tier_csv_throughput_result,
+            native_tier_csv_throughput_manifest,
+            native_tier_csv_throughput_manifest["native_tier_range_csv_positive_rows"] == 24
+            and native_tier_csv_throughput_manifest["native_tier_range_csv_shape_rows"] == 24
+            and native_tier_csv_throughput_manifest["native_tier_range_csv_throughput_rows"] == 23,
+        )
+
+        native_tier_summary_row_result, native_tier_summary_row_manifest = native_tier_range_drift_fixture(
+            root,
+            "native-tier-summary-row",
+            mutate_summary=lambda payload: payload.__setitem__("rows", int(payload["rows"]) + 1),
+        )
+        append_native_tier_range_check(
+            "native_tier_range_summary_csv_row_mismatch",
+            native_tier_summary_row_result,
+            native_tier_summary_row_manifest,
+            native_tier_summary_row_manifest["native_tier_range_summary_csv_row_mismatch"] == 1
+            and native_tier_summary_row_manifest["native_tier_range_summary_csv_mismatch_total"] == 1,
+        )
+
+        native_tier_summary_fixture_result, native_tier_summary_fixture_manifest = native_tier_range_drift_fixture(
+            root,
+            "native-tier-summary-fixture",
+            mutate_summary=lambda payload: payload.__setitem__("fixture_count", int(payload["fixture_count"]) - 1),
+        )
+        append_native_tier_range_check(
+            "native_tier_range_summary_csv_fixture_mismatch",
+            native_tier_summary_fixture_result,
+            native_tier_summary_fixture_manifest,
+            native_tier_summary_fixture_manifest["native_tier_range_summary_csv_fixture_mismatch"] == 1
+            and native_tier_summary_fixture_manifest["native_tier_range_summary_csv_mismatch_total"] == 1,
+        )
+
+        native_tier_summary_tier_result, native_tier_summary_tier_manifest = native_tier_range_drift_fixture(
+            root,
+            "native-tier-summary-tier",
+            mutate_summary=lambda payload: payload.__setitem__("tiers", ["seek_fast", "balanced"]),
+        )
+        append_native_tier_range_check(
+            "native_tier_range_summary_csv_tier_mismatch",
+            native_tier_summary_tier_result,
+            native_tier_summary_tier_manifest,
+            native_tier_summary_tier_manifest["native_tier_range_summary_csv_tier_mismatch"] == 1
+            and native_tier_summary_tier_manifest["native_tier_range_summary_csv_mismatch_total"] == 1,
+        )
+
+        native_tier_summary_path_result, native_tier_summary_path_manifest = native_tier_range_drift_fixture(
+            root,
+            "native-tier-summary-path",
+            mutate_summary=lambda payload: payload.__setitem__("csv", "zig-out/vort-native-tier-range-wrong.csv"),
+        )
+        append_native_tier_range_check(
+            "native_tier_range_summary_csv_path_mismatch",
+            native_tier_summary_path_result,
+            native_tier_summary_path_manifest,
+            native_tier_summary_path_manifest["native_tier_range_summary_csv_path_mismatch"] == 1
+            and native_tier_summary_path_manifest["native_tier_range_summary_csv_mismatch_total"] == 1,
+        )
+
+        def drift_native_tier_summary_int_by_tier(payload: dict[str, object], field: str) -> None:
+            by_tier = payload.get(field)
+            if not isinstance(by_tier, dict):
+                raise AssertionError(f"native-tier fixture missing {field}")
+            by_tier["seek_fast"] = int(by_tier["seek_fast"]) + 1
+
+        def drift_native_tier_summary_float_by_tier(payload: dict[str, object], field: str) -> None:
+            by_tier = payload.get(field)
+            if not isinstance(by_tier, dict):
+                raise AssertionError(f"native-tier fixture missing {field}")
+            by_tier["seek_fast"] = float(by_tier["seek_fast"]) + 1.0
+
+        native_tier_summary_index_result, native_tier_summary_index_manifest = native_tier_range_drift_fixture(
+            root,
+            "native-tier-summary-index-entries",
+            mutate_summary=lambda payload: drift_native_tier_summary_int_by_tier(payload, "total_index_entries_by_tier"),
+        )
+        append_native_tier_range_check(
+            "native_tier_range_summary_csv_index_entries_mismatch",
+            native_tier_summary_index_result,
+            native_tier_summary_index_manifest,
+            native_tier_summary_index_manifest["native_tier_range_summary_csv_index_entries_mismatch"] == 1
+            and native_tier_summary_index_manifest["native_tier_range_summary_csv_mismatch_total"] == 1,
+        )
+
+        native_tier_summary_min_range_result, native_tier_summary_min_range_manifest = native_tier_range_drift_fixture(
+            root,
+            "native-tier-summary-min-range",
+            mutate_summary=lambda payload: drift_native_tier_summary_float_by_tier(payload, "min_range_mib_s_by_tier"),
+        )
+        append_native_tier_range_check(
+            "native_tier_range_summary_csv_min_range_mismatch",
+            native_tier_summary_min_range_result,
+            native_tier_summary_min_range_manifest,
+            native_tier_summary_min_range_manifest["native_tier_range_summary_csv_min_range_mismatch"] == 1
+            and native_tier_summary_min_range_manifest["native_tier_range_summary_csv_mismatch_total"] == 1,
+        )
+
+        native_tier_summary_min_full_result, native_tier_summary_min_full_manifest = native_tier_range_drift_fixture(
+            root,
+            "native-tier-summary-min-full",
+            mutate_summary=lambda payload: drift_native_tier_summary_float_by_tier(payload, "min_full_input_mib_s_by_tier"),
+        )
+        append_native_tier_range_check(
+            "native_tier_range_summary_csv_min_full_mismatch",
+            native_tier_summary_min_full_result,
+            native_tier_summary_min_full_manifest,
+            native_tier_summary_min_full_manifest["native_tier_range_summary_csv_min_full_mismatch"] == 1
+            and native_tier_summary_min_full_manifest["native_tier_range_summary_csv_mismatch_total"] == 1,
+        )
 
         mismatched_native_tier_discovery_root = root / "mismatched-native-tier-discovery"
         mismatched_native_tier_discovery_root.mkdir()

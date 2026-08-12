@@ -2497,6 +2497,12 @@ architecture blindly.
   validation formula or its own boolean formula. The strict smoke covers 55
   validation-health reasons with isolated fixtures.
 
+- Tightened native tier range direct strict-smoke coverage for row-level CSV and
+  summary-vs-CSV drift. The native-tier mode now has isolated negative fixtures
+  for missing/duplicate/unknown `(source, fixture, tier)` pairs, positive row,
+  shape, throughput formula checks, and each summary mismatch counter for rows,
+  fixtures, tiers, paths, index totals, and minimum range/full-input throughput.
+
 - Promoted the existing Snappy report CSV from dashboard inventory metadata to
   aggregate validation health without adding new compression-format scope. The
   dashboard now parses `vort-snappy-report.csv`, validates the 20-row
