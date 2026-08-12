@@ -4531,9 +4531,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 88,
-      "min_expected_failures": 88,
-      "min_matched": 88
+      "min_checks": 89,
+      "min_expected_failures": 89,
+      "min_matched": 89
     },
     {
       "mode": "non-json-artifact-health",
@@ -4633,7 +4633,7 @@ aggregate health reasons must be backed by real failing dashboard inputs before
 the smoke artifact can pass. The expected reason/check/fixture matrix lives in
 `tools/dashboard_strict_validation_reasons.json`; the retained
 `strict-validation-health` mode minimums must cover every configured reason,
-currently 88. Dashboard aggregate health also reads the retained
+currently 88, plus one direct validation JSON smoke health regression check. Dashboard aggregate health also reads the retained
 `vort-dashboard-strict-smoke.md` companion and requires its mode, requirement,
 validation-reason, and check rows to match the JSON counts before
 `dashboard_strict_healthy` can pass. The `dashboard-markdown` mode verifies that important human-facing
@@ -4655,7 +4655,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 48,
+  "check_count": 49,
   "mode_count": 5,
   "expected_mode_count": 5,
   "missing_mode_count": 0,
@@ -4675,9 +4675,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 88,
-      "min_expected_failures": 88,
-      "min_matched": 88
+      "min_checks": 89,
+      "min_expected_failures": 89,
+      "min_matched": 89
     },
     {
       "mode": "non-json-artifact-health",
@@ -4720,14 +4720,14 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 1,
-      "min_checks": 88,
+      "checks": 2,
+      "min_checks": 89,
       "missing_checks": 87,
-      "expected_failures": 1,
-      "min_expected_failures": 88,
+      "expected_failures": 2,
+      "min_expected_failures": 89,
       "missing_expected_failures": 87,
-      "matched": 1,
-      "min_matched": 88,
+      "matched": 2,
+      "min_matched": 89,
       "missing_matched": 87
     },
     {
@@ -4770,9 +4770,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 1,
-      "expected_failures": 1,
-      "matched": 1
+      "checks": 2,
+      "expected_failures": 2,
+      "matched": 2
     },
     {
       "mode": "non-json-artifact-health",
@@ -5083,6 +5083,18 @@ Example:
       "expected_output": "dashboard_index_validation_unhealthy=missing_lz4_native_summary_artifact",
       "actual_output": "dashboard_index_validation_unhealthy=missing_lz4_native_summary_artifact",
       "actual_output_bytes": 74,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_json_observed_schema_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=validation_json_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=validation_json_failed\n",
+      "actual_output_bytes": 60,
       "actual_output_limit": 240,
       "actual_output_truncated": false,
       "returncode": 1,

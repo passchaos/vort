@@ -7278,13 +7278,28 @@ def validation_json_health(artifacts: list[Path]) -> dict:
         isinstance(smoke, dict)
         and bool(smoke.get("ok"))
         and checked_schema_count > 0
+        and checked_schema_unique_count > 0
         and checked_schema_duplicate_count == 0
         and observed_schema_count > 0
+        and len(observed_schemas) > 0
         and observed_schema_count_mismatch == 0
         and unchecked_observed_schema_count == 0
         and unchecked_observed_schema_count_mismatch == 0
         and not unchecked_observed_schemas
         and abs(int_field(smoke, "json_artifact_excluded_count") - len(artifact_excluded)) == 0
+        and int_field(smoke, "json_artifact_count") > 0
+        and int_field(smoke, "json_artifact_excluded_count") > 0
+        and len(artifact_excluded) > 0
+        and int_field(smoke, "json_artifact_parsed_count") > 0
+        and int_field(smoke, "json_artifact_schema_count") > 0
+        and int_field(smoke, "json_artifact_parse_failed_count") == 0
+        and not artifact_parse_failed
+        and int_field(smoke, "json_artifact_missing_schema_count") == 0
+        and not artifact_missing_schema
+        and int_field(smoke, "json_artifact_manifest_validated_count") > 0
+        and int_field(smoke, "json_artifact_manifest_failed_count") == 0
+        and not artifact_manifest_failed
+        and int_field(smoke, "json_artifact_manifest_accounting_mismatch") == 0
         and bool(smoke.get("cli_success_ok"))
         and not cli_failure_ok
         and bool(cli_failure_hint)
@@ -8048,6 +8063,39 @@ def main() -> int:
     )
     dashboard_configuration_healthy = dashboard_configuration["healthy"]
     validation_json_healthy = validation_json["healthy"]
+    validation_json_smoke_healthy = (
+        validation_json["present"]
+        and validation_json["ok"]
+        and validation_json["checked_schema_count"] > 0
+        and validation_json["checked_schema_unique_count"] > 0
+        and validation_json["checked_schema_duplicate_count"] == 0
+        and validation_json["observed_schema_count"] > 0
+        and validation_json["observed_schema_rows"] > 0
+        and validation_json["observed_schema_count_mismatch"] == 0
+        and validation_json["unchecked_observed_schema_count"] == 0
+        and validation_json["unchecked_observed_schema_rows"] == 0
+        and validation_json["unchecked_observed_schema_count_mismatch"] == 0
+        and not validation_json["unchecked_observed_schemas"]
+        and validation_json["json_artifact_count"] > 0
+        and validation_json["json_artifact_excluded_count"] > 0
+        and validation_json["json_artifact_excluded_rows"] > 0
+        and validation_json["json_artifact_excluded_count_mismatch"] == 0
+        and validation_json["json_artifact_parsed_count"] > 0
+        and validation_json["json_artifact_schema_count"] > 0
+        and validation_json["json_artifact_parse_failed_count"] == 0
+        and not validation_json["json_artifact_parse_failed"]
+        and validation_json["json_artifact_missing_schema_count"] == 0
+        and not validation_json["json_artifact_missing_schema"]
+        and validation_json["json_artifact_manifest_validated_count"] > 0
+        and validation_json["json_artifact_manifest_failed_count"] == 0
+        and not validation_json["json_artifact_manifest_failed_names"]
+        and validation_json["json_artifact_manifest_accounting_mismatch"] == 0
+        and validation_json["cli_success_ok"]
+        and not validation_json["cli_failure_ok"]
+        and bool(validation_json["cli_failure_hint"])
+        and validation_json["report_rows"] > 0
+        and validation_json["corrupt_rows"] > 0
+    )
     sidecar_corrupt_healthy = sidecar_corrupt_health_summary["healthy"]
     huffman_healthy = huffman_health["healthy"]
     level_report_healthy = level_report["healthy"]
@@ -8158,13 +8206,7 @@ def main() -> int:
         validation_unhealthy_reasons.append("dashboard_configuration_failed")
     if not validation_json["present"]:
         validation_unhealthy_reasons.append("missing_validation_json_smoke_artifact")
-    elif not (
-        validation_json["ok"]
-        and validation_json["cli_success_ok"]
-        and validation_json["checked_schema_count"] > 0
-        and validation_json["report_rows"] > 0
-        and validation_json["corrupt_rows"] > 0
-    ):
+    elif not validation_json_smoke_healthy:
         validation_unhealthy_reasons.append("validation_json_failed")
     if not validation_json["docs_negative_present"]:
         validation_unhealthy_reasons.append("missing_validation_json_docs_negative_artifact")

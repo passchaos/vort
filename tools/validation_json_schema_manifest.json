@@ -4540,6 +4540,7 @@
           "validation_missing_required_smoke_gates",
           "validation_missing_sidecar_corrupt_artifact",
           "validation_missing_snappy_report_artifact",
+          "validation_json_observed_schema_count_mismatch",
           "validation_missing_validation_json_docs_negative_artifact",
           "validation_missing_validation_json_smoke_artifact",
           "validation_missing_zlib_relaxed_artifact",
