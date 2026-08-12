@@ -4782,6 +4782,33 @@ def rewrite_csv_rows(path: Path, rows: list[dict[str, str]], fieldnames: list[st
         writer.writerows(rows)
 
 
+def level_report_drift_fixture(root: Path, fixture_name: str, mutate_csv=None, mutate_markdown=None) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted compression level report."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    csv_path = fixture_root / LEVEL_REPORT_CSV_ARTIFACT
+    markdown_path = fixture_root / LEVEL_REPORT_MARKDOWN_ARTIFACT
+    if mutate_csv is not None:
+        with csv_path.open(newline="") as f:
+            reader = csv.DictReader(f)
+            fieldnames = list(reader.fieldnames or [])
+            rows = list(reader)
+        mutate_csv(rows, fieldnames, csv_path, markdown_path)
+        rewrite_csv_rows(csv_path, rows, fieldnames)
+    if mutate_markdown is not None:
+        mutate_markdown(markdown_path)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def huffman_length_drift_fixture(root: Path, fixture_name: str, mutate_csv=None, mutate_markdown=None) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted Huffman length report."""
 
@@ -7233,6 +7260,156 @@ def main() -> int:
                 huffman_markdown_case_result.returncode,
                 "dashboard_index_validation_unhealthy=huffman_length_failed",
                 huffman_markdown_case_result.stdout,
+            )
+        )
+
+        level_missing_result, level_missing_manifest = level_report_drift_fixture(
+            root,
+            "level-report-missing-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path, markdown_path: rows.pop(),
+        )
+        level_missing_matched = (
+            level_missing_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=level_report_failed" in level_missing_result.stdout
+            and level_missing_manifest["validation_healthy"] is False
+            and level_missing_manifest["level_report_healthy"] is False
+            and level_missing_manifest["level_report_missing_pairs"] == ["repeated/best/rle"]
+        )
+        checks.append(
+            check_row(
+                "level_report_missing_pair",
+                "strict-validation-health",
+                True,
+                level_missing_matched,
+                level_missing_result.returncode,
+                "dashboard_index_validation_unhealthy=level_report_failed",
+                level_missing_result.stdout,
+            )
+        )
+
+        level_duplicate_result, level_duplicate_manifest = level_report_drift_fixture(
+            root,
+            "level-report-duplicate-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path, markdown_path: rows.append(dict(rows[0])),
+        )
+        level_duplicate_matched = (
+            level_duplicate_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=level_report_failed" in level_duplicate_result.stdout
+            and level_duplicate_manifest["validation_healthy"] is False
+            and level_duplicate_manifest["level_report_healthy"] is False
+            and level_duplicate_manifest["level_report_duplicate_pairs"] == ["text/fastest/default"]
+        )
+        checks.append(
+            check_row(
+                "level_report_duplicate_pair",
+                "strict-validation-health",
+                True,
+                level_duplicate_matched,
+                level_duplicate_result.returncode,
+                "dashboard_index_validation_unhealthy=level_report_failed",
+                level_duplicate_result.stdout,
+            )
+        )
+
+        level_unknown_result, level_unknown_manifest = level_report_drift_fixture(
+            root,
+            "level-report-unknown-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path, markdown_path: rows[0].__setitem__("case", "unknown"),
+        )
+        level_unknown_matched = (
+            level_unknown_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=level_report_failed" in level_unknown_result.stdout
+            and level_unknown_manifest["validation_healthy"] is False
+            and level_unknown_manifest["level_report_healthy"] is False
+            and level_unknown_manifest["level_report_unknown_pairs"] == ["unknown/fastest/default"]
+        )
+        checks.append(
+            check_row(
+                "level_report_unknown_pair",
+                "strict-validation-health",
+                True,
+                level_unknown_matched,
+                level_unknown_result.returncode,
+                "dashboard_index_validation_unhealthy=level_report_failed",
+                level_unknown_result.stdout,
+            )
+        )
+
+        level_token_result, level_token_manifest = level_report_drift_fixture(
+            root,
+            "level-report-token-accounting",
+            mutate_csv=lambda rows, fieldnames, csv_path, markdown_path: rows[0].__setitem__(
+                "tokens",
+                str(int(rows[0]["tokens"]) + 1),
+            ),
+        )
+        level_token_matched = (
+            level_token_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=level_report_failed" in level_token_result.stdout
+            and level_token_manifest["validation_healthy"] is False
+            and level_token_manifest["level_report_healthy"] is False
+            and level_token_manifest["level_report_token_accounting_rows"] == 47
+        )
+        checks.append(
+            check_row(
+                "level_report_token_accounting_mismatch",
+                "strict-validation-health",
+                True,
+                level_token_matched,
+                level_token_result.returncode,
+                "dashboard_index_validation_unhealthy=level_report_failed",
+                level_token_result.stdout,
+            )
+        )
+
+        level_ratio_result, level_ratio_manifest = level_report_drift_fixture(
+            root,
+            "level-report-ratio",
+            mutate_csv=lambda rows, fieldnames, csv_path, markdown_path: rows[0].__setitem__(
+                "raw_best_ratio_x10000",
+                str(int(rows[0]["raw_best_ratio_x10000"]) + 1),
+            ),
+        )
+        level_ratio_matched = (
+            level_ratio_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=level_report_failed" in level_ratio_result.stdout
+            and level_ratio_manifest["validation_healthy"] is False
+            and level_ratio_manifest["level_report_healthy"] is False
+            and level_ratio_manifest["level_report_ratio_rows"] == 47
+        )
+        checks.append(
+            check_row(
+                "level_report_ratio_mismatch",
+                "strict-validation-health",
+                True,
+                level_ratio_matched,
+                level_ratio_result.returncode,
+                "dashboard_index_validation_unhealthy=level_report_failed",
+                level_ratio_result.stdout,
+            )
+        )
+
+        level_roundtrip_result, level_roundtrip_manifest = level_report_drift_fixture(
+            root,
+            "level-report-roundtrip",
+            mutate_csv=lambda rows, fieldnames, csv_path, markdown_path: rows[0].__setitem__("roundtrip_crc32", "0"),
+        )
+        level_roundtrip_matched = (
+            level_roundtrip_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=level_report_failed" in level_roundtrip_result.stdout
+            and level_roundtrip_manifest["validation_healthy"] is False
+            and level_roundtrip_manifest["level_report_healthy"] is False
+            and level_roundtrip_manifest["level_report_roundtrip_rows"] == 47
+        )
+        checks.append(
+            check_row(
+                "level_report_roundtrip_mismatch",
+                "strict-validation-health",
+                True,
+                level_roundtrip_matched,
+                level_roundtrip_result.returncode,
+                "dashboard_index_validation_unhealthy=level_report_failed",
+                level_roundtrip_result.stdout,
             )
         )
 

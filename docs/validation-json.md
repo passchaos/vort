@@ -4531,9 +4531,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 124,
-      "min_expected_failures": 124,
-      "min_matched": 124
+      "min_checks": 130,
+      "min_expected_failures": 130,
+      "min_matched": 130
     },
     {
       "mode": "non-json-artifact-health",
@@ -4655,7 +4655,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 84,
+  "check_count": 90,
   "mode_count": 5,
   "expected_mode_count": 5,
   "missing_mode_count": 0,
@@ -4675,9 +4675,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 124,
-      "min_expected_failures": 124,
-      "min_matched": 124
+      "min_checks": 130,
+      "min_expected_failures": 130,
+      "min_matched": 130
     },
     {
       "mode": "non-json-artifact-health",
@@ -4720,14 +4720,14 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 37,
-      "min_checks": 124,
+      "checks": 43,
+      "min_checks": 130,
       "missing_checks": 87,
-      "expected_failures": 37,
-      "min_expected_failures": 124,
+      "expected_failures": 43,
+      "min_expected_failures": 130,
       "missing_expected_failures": 87,
-      "matched": 37,
-      "min_matched": 124,
+      "matched": 43,
+      "min_matched": 130,
       "missing_matched": 87
     },
     {
@@ -4770,9 +4770,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 37,
-      "expected_failures": 37,
-      "matched": 37
+      "checks": 43,
+      "expected_failures": 43,
+      "matched": 43
     },
     {
       "mode": "non-json-artifact-health",
@@ -5419,6 +5419,78 @@ Example:
       "expected_output": "dashboard_index_validation_unhealthy=huffman_length_failed",
       "actual_output": "dashboard_index_validation_unhealthy=huffman_length_failed\n",
       "actual_output_bytes": 59,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "level_report_missing_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=level_report_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=level_report_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "level_report_duplicate_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=level_report_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=level_report_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "level_report_unknown_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=level_report_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=level_report_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "level_report_token_accounting_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=level_report_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=level_report_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "level_report_ratio_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=level_report_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=level_report_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "level_report_roundtrip_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=level_report_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=level_report_failed\n",
+      "actual_output_bytes": 57,
       "actual_output_limit": 240,
       "actual_output_truncated": false,
       "returncode": 1,
