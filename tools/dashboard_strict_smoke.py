@@ -5303,6 +5303,41 @@ def png_scanline_bench_drift_fixture(
     return result, manifest
 
 
+def chunked_zlib_bench_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    mutate_csv=None,
+    mutate_markdown=None,
+    remove_markdown: bool = False,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted chunked zlib benchmark artifact."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    csv_path = fixture_root / CHUNKED_ZLIB_BENCH_ARTIFACT
+    markdown_path = fixture_root / CHUNKED_ZLIB_BENCH_MARKDOWN_ARTIFACT
+    if mutate_csv is not None:
+        with csv_path.open(newline="") as f:
+            reader = csv.DictReader(f)
+            fieldnames = list(reader.fieldnames or [])
+            rows = list(reader)
+        mutate_csv(rows, fieldnames, csv_path)
+        rewrite_csv_rows(csv_path, rows, fieldnames)
+    if mutate_markdown is not None:
+        mutate_markdown(markdown_path)
+    if remove_markdown:
+        markdown_path.unlink()
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def dynamic_plan_drift_fixture(root: Path, fixture_name: str, mutate_csv) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted dynamic-plan CSV artifact."""
 
@@ -10009,6 +10044,155 @@ def main() -> int:
             png_scanline_checksum_result,
             png_scanline_checksum_manifest,
             png_scanline_checksum_manifest["png_scanline_bench_checksum_matched_bpps"] == 5,
+        )
+
+        def append_chunked_zlib_bench_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            expected_reason: str,
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and f"dashboard_index_validation_unhealthy={expected_reason}" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["chunked_zlib_bench_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    f"dashboard_index_validation_unhealthy={expected_reason}",
+                    result.stdout,
+                )
+            )
+
+        chunked_zlib_missing_markdown_result, chunked_zlib_missing_markdown_manifest = chunked_zlib_bench_drift_fixture(
+            root,
+            "chunked-zlib-missing-markdown",
+            remove_markdown=True,
+        )
+        append_chunked_zlib_bench_check(
+            "chunked_zlib_bench_missing_markdown",
+            chunked_zlib_missing_markdown_result,
+            chunked_zlib_missing_markdown_manifest,
+            "missing_chunked_zlib_bench_artifact",
+            chunked_zlib_missing_markdown_manifest["chunked_zlib_bench_present"] is True
+            and chunked_zlib_missing_markdown_manifest["chunked_zlib_bench_markdown_present"] is False,
+        )
+
+        chunked_zlib_missing_case_result, chunked_zlib_missing_case_manifest = chunked_zlib_bench_drift_fixture(
+            root,
+            "chunked-zlib-missing-case",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.pop(0),
+        )
+        append_chunked_zlib_bench_check(
+            "chunked_zlib_bench_missing_case",
+            chunked_zlib_missing_case_result,
+            chunked_zlib_missing_case_manifest,
+            "chunked_zlib_bench_failed",
+            chunked_zlib_missing_case_manifest["chunked_zlib_bench_rows"] == 7
+            and chunked_zlib_missing_case_manifest["chunked_zlib_bench_missing_cases"] == ["png-rgb8-dynamic-64b"],
+        )
+
+        chunked_zlib_duplicate_case_result, chunked_zlib_duplicate_case_manifest = chunked_zlib_bench_drift_fixture(
+            root,
+            "chunked-zlib-duplicate-case",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.append(dict(rows[0])),
+        )
+        append_chunked_zlib_bench_check(
+            "chunked_zlib_bench_duplicate_case",
+            chunked_zlib_duplicate_case_result,
+            chunked_zlib_duplicate_case_manifest,
+            "chunked_zlib_bench_failed",
+            chunked_zlib_duplicate_case_manifest["chunked_zlib_bench_rows"] == 9
+            and chunked_zlib_duplicate_case_manifest["chunked_zlib_bench_duplicate_cases"] == ["png-rgb8-dynamic-64b"],
+        )
+
+        chunked_zlib_unknown_case_result, chunked_zlib_unknown_case_manifest = chunked_zlib_bench_drift_fixture(
+            root,
+            "chunked-zlib-unknown-case",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("case", "png-unknown-case"),
+        )
+        append_chunked_zlib_bench_check(
+            "chunked_zlib_bench_unknown_case",
+            chunked_zlib_unknown_case_result,
+            chunked_zlib_unknown_case_manifest,
+            "chunked_zlib_bench_failed",
+            chunked_zlib_unknown_case_manifest["chunked_zlib_bench_missing_cases"] == ["png-rgb8-dynamic-64b"]
+            and chunked_zlib_unknown_case_manifest["chunked_zlib_bench_unknown_cases"] == ["png-unknown-case"],
+        )
+
+        chunked_zlib_positive_result, chunked_zlib_positive_manifest = chunked_zlib_bench_drift_fixture(
+            root,
+            "chunked-zlib-positive",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("mix", "0"),
+        )
+        append_chunked_zlib_bench_check(
+            "chunked_zlib_bench_positive_row_mismatch",
+            chunked_zlib_positive_result,
+            chunked_zlib_positive_manifest,
+            "chunked_zlib_bench_failed",
+            chunked_zlib_positive_manifest["chunked_zlib_bench_positive_rows"] == 7,
+        )
+
+        chunked_zlib_shape_result, chunked_zlib_shape_manifest = chunked_zlib_bench_drift_fixture(
+            root,
+            "chunked-zlib-shape",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("encoder", "unknown_encoder"),
+        )
+        append_chunked_zlib_bench_check(
+            "chunked_zlib_bench_shape_mismatch",
+            chunked_zlib_shape_result,
+            chunked_zlib_shape_manifest,
+            "chunked_zlib_bench_failed",
+            chunked_zlib_shape_manifest["chunked_zlib_bench_shape_rows"] == 7,
+        )
+
+        chunked_zlib_chunk_count_result, chunked_zlib_chunk_count_manifest = chunked_zlib_bench_drift_fixture(
+            root,
+            "chunked-zlib-chunk-count",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("chunk_count", str(int(rows[0]["chunk_count"]) + 1)),
+        )
+        append_chunked_zlib_bench_check(
+            "chunked_zlib_bench_chunk_count_mismatch",
+            chunked_zlib_chunk_count_result,
+            chunked_zlib_chunk_count_manifest,
+            "chunked_zlib_bench_failed",
+            chunked_zlib_chunk_count_manifest["chunked_zlib_bench_chunk_count_rows"] == 7,
+        )
+
+        chunked_zlib_ratio_result, chunked_zlib_ratio_manifest = chunked_zlib_bench_drift_fixture(
+            root,
+            "chunked-zlib-ratio",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("direct_over_contiguous", "9.0000"),
+        )
+        append_chunked_zlib_bench_check(
+            "chunked_zlib_bench_ratio_mismatch",
+            chunked_zlib_ratio_result,
+            chunked_zlib_ratio_manifest,
+            "chunked_zlib_bench_failed",
+            chunked_zlib_ratio_manifest["chunked_zlib_bench_ratio_rows"] == 7,
+        )
+
+        chunked_zlib_markdown_result, chunked_zlib_markdown_manifest = chunked_zlib_bench_drift_fixture(
+            root,
+            "chunked-zlib-markdown-unmatched",
+            mutate_markdown=lambda markdown_path: markdown_path.write_text(
+                markdown_path.read_text().replace("png-rgb8-dynamic-64b", "png-rgb8-dynamic-64b-drift", 1)
+            ),
+        )
+        append_chunked_zlib_bench_check(
+            "chunked_zlib_bench_markdown_unmatched",
+            chunked_zlib_markdown_result,
+            chunked_zlib_markdown_manifest,
+            "chunked_zlib_bench_failed",
+            chunked_zlib_markdown_manifest["chunked_zlib_bench_markdown_unmatched"] == 1,
         )
 
         native_codec_probe_count_result, native_codec_probe_count_manifest = native_codec_probes_drift_fixture(
