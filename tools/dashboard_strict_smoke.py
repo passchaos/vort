@@ -6959,6 +6959,78 @@ def main() -> int:
             )
         )
 
+        sidecar_metadata_count_result, sidecar_metadata_count_manifest = sidecar_corrupt_drift_fixture(
+            root,
+            "sidecar-corrupt-metadata-count",
+            lambda payload: payload.__setitem__("metadata_ok_rows", int(payload["metadata_ok_rows"]) - 1),
+        )
+        sidecar_metadata_count_matched = (
+            sidecar_metadata_count_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=sidecar_corrupt_failed" in sidecar_metadata_count_result.stdout
+            and sidecar_metadata_count_manifest["validation_healthy"] is False
+            and sidecar_metadata_count_manifest["sidecar_corrupt_healthy"] is False
+            and sidecar_metadata_count_manifest["sidecar_corrupt_metadata_failed_rows"] == 1
+        )
+        checks.append(
+            check_row(
+                "sidecar_corrupt_metadata_failed_count",
+                "strict-validation-health",
+                True,
+                sidecar_metadata_count_matched,
+                sidecar_metadata_count_result.returncode,
+                "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+                sidecar_metadata_count_result.stdout,
+            )
+        )
+
+        sidecar_full_rejected_count_result, sidecar_full_rejected_count_manifest = sidecar_corrupt_drift_fixture(
+            root,
+            "sidecar-corrupt-full-rejected-count",
+            lambda payload: payload.__setitem__("full_rejected_rows", int(payload["full_rejected_rows"]) - 1),
+        )
+        sidecar_full_rejected_count_matched = (
+            sidecar_full_rejected_count_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=sidecar_corrupt_failed" in sidecar_full_rejected_count_result.stdout
+            and sidecar_full_rejected_count_manifest["validation_healthy"] is False
+            and sidecar_full_rejected_count_manifest["sidecar_corrupt_healthy"] is False
+            and sidecar_full_rejected_count_manifest["sidecar_corrupt_full_not_rejected_rows"] == 1
+        )
+        checks.append(
+            check_row(
+                "sidecar_corrupt_full_not_rejected_count",
+                "strict-validation-health",
+                True,
+                sidecar_full_rejected_count_matched,
+                sidecar_full_rejected_count_result.returncode,
+                "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+                sidecar_full_rejected_count_result.stdout,
+            )
+        )
+
+        sidecar_item_count_result, sidecar_item_count_manifest = sidecar_corrupt_drift_fixture(
+            root,
+            "sidecar-corrupt-item-count",
+            lambda payload: payload.__setitem__("rows", int(payload["rows"]) + 1),
+        )
+        sidecar_item_count_matched = (
+            sidecar_item_count_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=sidecar_corrupt_failed" in sidecar_item_count_result.stdout
+            and sidecar_item_count_manifest["validation_healthy"] is False
+            and sidecar_item_count_manifest["sidecar_corrupt_healthy"] is False
+            and sidecar_item_count_manifest["sidecar_corrupt_item_count_mismatch"] >= 1
+        )
+        checks.append(
+            check_row(
+                "sidecar_corrupt_item_count_mismatch",
+                "strict-validation-health",
+                True,
+                sidecar_item_count_matched,
+                sidecar_item_count_result.returncode,
+                "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+                sidecar_item_count_result.stdout,
+            )
+        )
+
         expected_validation_reasons = load_expected_validation_reasons(VALIDATION_REASONS)
         validation_reason_checks: list[dict[str, object]] = []
 
