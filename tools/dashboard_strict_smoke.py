@@ -4782,6 +4782,44 @@ def rewrite_csv_rows(path: Path, rows: list[dict[str, str]], fieldnames: list[st
         writer.writerows(rows)
 
 
+def decode_stage_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    mutate_report=None,
+    mutate_csv=None,
+    mutate_markdown=None,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted decode-stage artifact."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    report_path = fixture_root / DECODE_STAGE_ARTIFACT
+    csv_path = fixture_root / DECODE_STAGE_CSV_ARTIFACT
+    markdown_path = fixture_root / DECODE_STAGE_MARKDOWN_ARTIFACT
+    if mutate_report is not None:
+        report = json.loads(report_path.read_text())
+        mutate_report(report)
+        report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    if mutate_csv is not None:
+        with csv_path.open(newline="") as f:
+            reader = csv.DictReader(f)
+            fieldnames = list(reader.fieldnames or [])
+            rows = list(reader)
+        mutate_csv(rows, fieldnames, csv_path)
+        rewrite_csv_rows(csv_path, rows, fieldnames)
+    if mutate_markdown is not None:
+        mutate_markdown(markdown_path)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def fuzz_corpus_drift_fixture(
     root: Path,
     fixture_name: str,
@@ -7843,6 +7881,152 @@ def main() -> int:
                 fuzz_markdown_result.returncode,
                 "dashboard_index_validation_unhealthy=fuzz_corpus_failed",
                 fuzz_markdown_result.stdout,
+            )
+        )
+
+        decode_report_count_result, decode_report_count_manifest = decode_stage_drift_fixture(
+            root,
+            "decode-stage-report-count",
+            mutate_report=lambda payload: payload.__setitem__("rows", int(payload["rows"]) + 1),
+        )
+        decode_report_count_matched = (
+            decode_report_count_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=decode_stage_failed" in decode_report_count_result.stdout
+            and decode_report_count_manifest["validation_healthy"] is False
+            and decode_report_count_manifest["decode_stage_healthy"] is False
+            and decode_report_count_manifest["decode_stage_report_count_mismatch"] == 1
+        )
+        checks.append(
+            check_row(
+                "decode_stage_report_count_mismatch",
+                "strict-validation-health",
+                True,
+                decode_report_count_matched,
+                decode_report_count_result.returncode,
+                "dashboard_index_validation_unhealthy=decode_stage_failed",
+                decode_report_count_result.stdout,
+            )
+        )
+
+        decode_error_match_result, decode_error_match_manifest = decode_stage_drift_fixture(
+            root,
+            "decode-stage-error-match",
+            mutate_report=lambda payload: payload.__setitem__("matched_error_rows", int(payload["matched_error_rows"]) - 1),
+        )
+        decode_error_match_matched = (
+            decode_error_match_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=decode_stage_failed" in decode_error_match_result.stdout
+            and decode_error_match_manifest["validation_healthy"] is False
+            and decode_error_match_manifest["decode_stage_healthy"] is False
+            and decode_error_match_manifest["decode_stage_matched_error_rows"] == 2
+        )
+        checks.append(
+            check_row(
+                "decode_stage_error_match_mismatch",
+                "strict-validation-health",
+                True,
+                decode_error_match_matched,
+                decode_error_match_result.returncode,
+                "dashboard_index_validation_unhealthy=decode_stage_failed",
+                decode_error_match_result.stdout,
+            )
+        )
+
+        decode_csv_missing_result, decode_csv_missing_manifest = decode_stage_drift_fixture(
+            root,
+            "decode-stage-csv-missing",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.pop(),
+        )
+        decode_csv_missing_matched = (
+            decode_csv_missing_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=decode_stage_failed" in decode_csv_missing_result.stdout
+            and decode_csv_missing_manifest["validation_healthy"] is False
+            and decode_csv_missing_manifest["decode_stage_healthy"] is False
+            and decode_csv_missing_manifest["decode_stage_csv_missing_cases"] == ["structured"]
+        )
+        checks.append(
+            check_row(
+                "decode_stage_csv_missing_case",
+                "strict-validation-health",
+                True,
+                decode_csv_missing_matched,
+                decode_csv_missing_result.returncode,
+                "dashboard_index_validation_unhealthy=decode_stage_failed",
+                decode_csv_missing_result.stdout,
+            )
+        )
+
+        decode_csv_duplicate_result, decode_csv_duplicate_manifest = decode_stage_drift_fixture(
+            root,
+            "decode-stage-csv-duplicate",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.append(dict(rows[0])),
+        )
+        decode_csv_duplicate_matched = (
+            decode_csv_duplicate_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=decode_stage_failed" in decode_csv_duplicate_result.stdout
+            and decode_csv_duplicate_manifest["validation_healthy"] is False
+            and decode_csv_duplicate_manifest["decode_stage_healthy"] is False
+            and decode_csv_duplicate_manifest["decode_stage_csv_duplicate_cases"] == ["tiny"]
+        )
+        checks.append(
+            check_row(
+                "decode_stage_csv_duplicate_case",
+                "strict-validation-health",
+                True,
+                decode_csv_duplicate_matched,
+                decode_csv_duplicate_result.returncode,
+                "dashboard_index_validation_unhealthy=decode_stage_failed",
+                decode_csv_duplicate_result.stdout,
+            )
+        )
+
+        decode_csv_unknown_result, decode_csv_unknown_manifest = decode_stage_drift_fixture(
+            root,
+            "decode-stage-csv-unknown",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("case", "unknown"),
+        )
+        decode_csv_unknown_matched = (
+            decode_csv_unknown_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=decode_stage_failed" in decode_csv_unknown_result.stdout
+            and decode_csv_unknown_manifest["validation_healthy"] is False
+            and decode_csv_unknown_manifest["decode_stage_healthy"] is False
+            and decode_csv_unknown_manifest["decode_stage_csv_unknown_cases"] == ["unknown"]
+        )
+        checks.append(
+            check_row(
+                "decode_stage_csv_unknown_case",
+                "strict-validation-health",
+                True,
+                decode_csv_unknown_matched,
+                decode_csv_unknown_result.returncode,
+                "dashboard_index_validation_unhealthy=decode_stage_failed",
+                decode_csv_unknown_result.stdout,
+            )
+        )
+
+        decode_markdown_result, decode_markdown_manifest = decode_stage_drift_fixture(
+            root,
+            "decode-stage-markdown-unmatched",
+            mutate_markdown=lambda markdown_path: markdown_path.write_text(
+                markdown_path.read_text().replace("## Error path smoke", "## Error path drift", 1)
+            ),
+        )
+        decode_markdown_matched = (
+            decode_markdown_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=decode_stage_failed" in decode_markdown_result.stdout
+            and decode_markdown_manifest["validation_healthy"] is False
+            and decode_markdown_manifest["decode_stage_healthy"] is False
+            and decode_markdown_manifest["decode_stage_markdown_unmatched"] == 1
+        )
+        checks.append(
+            check_row(
+                "decode_stage_markdown_unmatched",
+                "strict-validation-health",
+                True,
+                decode_markdown_matched,
+                decode_markdown_result.returncode,
+                "dashboard_index_validation_unhealthy=decode_stage_failed",
+                decode_markdown_result.stdout,
             )
         )
 
