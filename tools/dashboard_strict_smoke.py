@@ -5482,6 +5482,30 @@ def zstd_compare_drift_fixture(
     return result, manifest
 
 
+def python_zlib_diff_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    mutate_report,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted Python zlib differential summary."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    report_path = fixture_root / PYTHON_ZLIB_DIFF_ARTIFACT
+    payload = json.loads(report_path.read_text())
+    mutate_report(payload)
+    report_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def dynamic_plan_drift_fixture(root: Path, fixture_name: str, mutate_csv) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted dynamic-plan CSV artifact."""
 
@@ -11523,6 +11547,166 @@ def main() -> int:
                 "dashboard_index_validation_unhealthy=decode_stage_failed",
                 decode_markdown_result.stdout,
             )
+        )
+
+        def append_python_zlib_diff_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and "dashboard_index_validation_unhealthy=python_zlib_diff_failed" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["python_zlib_diff_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+                    result.stdout,
+                )
+            )
+
+        python_zlib_overflow_result, python_zlib_overflow_manifest = python_zlib_diff_drift_fixture(
+            root,
+            "python-zlib-diff-large-file-overflow",
+            mutate_report=lambda payload: payload.__setitem__("large_file_payloads", int(payload["payloads"]) + 1),
+        )
+        append_python_zlib_diff_check(
+            "python_zlib_diff_large_file_payload_overflow",
+            python_zlib_overflow_result,
+            python_zlib_overflow_manifest,
+            python_zlib_overflow_manifest["python_zlib_diff_large_file_payload_overflow"] == 1,
+        )
+
+        python_zlib_file_hex_result, python_zlib_file_hex_manifest = python_zlib_diff_drift_fixture(
+            root,
+            "python-zlib-diff-file-hex",
+            mutate_report=lambda payload: payload.__setitem__("file_hex_encode_cases", int(payload["file_hex_encode_cases"]) - 1),
+        )
+        append_python_zlib_diff_check(
+            "python_zlib_diff_file_hex_case_mismatch",
+            python_zlib_file_hex_result,
+            python_zlib_file_hex_manifest,
+            python_zlib_file_hex_manifest["python_zlib_diff_file_hex_case_mismatch"] == 1,
+        )
+
+        python_zlib_cli_shortfall_result, python_zlib_cli_shortfall_manifest = python_zlib_diff_drift_fixture(
+            root,
+            "python-zlib-diff-cli-success-shortfall",
+            mutate_report=lambda payload: payload.__setitem__("cli_successes", int(payload["cli_success_floor"]) - 1)
+            if "cli_success_floor" in payload
+            else payload.__setitem__("cli_successes", 7),
+        )
+        append_python_zlib_diff_check(
+            "python_zlib_diff_cli_success_shortfall",
+            python_zlib_cli_shortfall_result,
+            python_zlib_cli_shortfall_manifest,
+            python_zlib_cli_shortfall_manifest["python_zlib_diff_cli_success_shortfall"] == 1,
+        )
+
+        python_zlib_failure_shortfall_result, python_zlib_failure_shortfall_manifest = python_zlib_diff_drift_fixture(
+            root,
+            "python-zlib-diff-expected-failure-shortfall",
+            mutate_report=lambda payload: payload.__setitem__("expected_failures", 1),
+        )
+        append_python_zlib_diff_check(
+            "python_zlib_diff_expected_failure_shortfall",
+            python_zlib_failure_shortfall_result,
+            python_zlib_failure_shortfall_manifest,
+            python_zlib_failure_shortfall_manifest["python_zlib_diff_expected_failure_shortfall"] == 1,
+        )
+
+        python_zlib_cli_exact_result, python_zlib_cli_exact_manifest = python_zlib_diff_drift_fixture(
+            root,
+            "python-zlib-diff-cli-exact",
+            mutate_report=lambda payload: payload.__setitem__("cli_successes", int(payload["cli_successes"]) + 1),
+        )
+        append_python_zlib_diff_check(
+            "python_zlib_diff_cli_success_exact_mismatch",
+            python_zlib_cli_exact_result,
+            python_zlib_cli_exact_manifest,
+            python_zlib_cli_exact_manifest["python_zlib_diff_cli_success_exact_mismatch"] == 1,
+        )
+
+        python_zlib_failure_exact_result, python_zlib_failure_exact_manifest = python_zlib_diff_drift_fixture(
+            root,
+            "python-zlib-diff-failure-exact",
+            mutate_report=lambda payload: payload.__setitem__("expected_failures", int(payload["expected_failures"]) + 1),
+        )
+        append_python_zlib_diff_check(
+            "python_zlib_diff_expected_failure_exact_mismatch",
+            python_zlib_failure_exact_result,
+            python_zlib_failure_exact_manifest,
+            python_zlib_failure_exact_manifest["python_zlib_diff_expected_failure_exact_mismatch"] == 1,
+        )
+
+        python_zlib_outcome_exact_result, python_zlib_outcome_exact_manifest = python_zlib_diff_drift_fixture(
+            root,
+            "python-zlib-diff-outcome-exact",
+            mutate_report=lambda payload: payload.__setitem__("cli_successes", int(payload["cli_successes"]) + 1),
+        )
+        append_python_zlib_diff_check(
+            "python_zlib_diff_cli_outcome_exact_mismatch",
+            python_zlib_outcome_exact_result,
+            python_zlib_outcome_exact_manifest,
+            python_zlib_outcome_exact_manifest["python_zlib_diff_cli_outcome_exact_mismatch"] == 1,
+        )
+
+        python_zlib_match_heavy_result, python_zlib_match_heavy_manifest = python_zlib_diff_drift_fixture(
+            root,
+            "python-zlib-diff-match-heavy-missing",
+            mutate_report=lambda payload: payload.__setitem__("match_heavy_payloads", 0),
+        )
+        append_python_zlib_diff_check(
+            "python_zlib_diff_match_heavy_payload_missing",
+            python_zlib_match_heavy_result,
+            python_zlib_match_heavy_manifest,
+            python_zlib_match_heavy_manifest["python_zlib_diff_match_heavy_payloads"] == 0,
+        )
+
+        python_zlib_dynamic_result, python_zlib_dynamic_manifest = python_zlib_diff_drift_fixture(
+            root,
+            "python-zlib-diff-dynamic-missing",
+            mutate_report=lambda payload: payload.__setitem__("dynamic_payloads", 0),
+        )
+        append_python_zlib_diff_check(
+            "python_zlib_diff_dynamic_payload_missing",
+            python_zlib_dynamic_result,
+            python_zlib_dynamic_manifest,
+            python_zlib_dynamic_manifest["python_zlib_diff_dynamic_payloads"] == 0,
+        )
+
+        python_zlib_dictionary_encode_result, python_zlib_dictionary_encode_manifest = python_zlib_diff_drift_fixture(
+            root,
+            "python-zlib-diff-dictionary-encode-undercovered",
+            mutate_report=lambda payload: payload.__setitem__("zlib_dict_encode_cases", 0),
+        )
+        append_python_zlib_diff_check(
+            "python_zlib_diff_dictionary_encode_undercovered",
+            python_zlib_dictionary_encode_result,
+            python_zlib_dictionary_encode_manifest,
+            python_zlib_dictionary_encode_manifest["python_zlib_diff_zlib_dict_encode_cases"] == 0
+            and python_zlib_dictionary_encode_manifest["python_zlib_diff_dictionary_encode_cases"] == 1,
+        )
+
+        python_zlib_malformed_wrapper_result, python_zlib_malformed_wrapper_manifest = python_zlib_diff_drift_fixture(
+            root,
+            "python-zlib-diff-malformed-wrapper-missing",
+            mutate_report=lambda payload: payload.__setitem__("malformed_wrapper_cases", 0),
+        )
+        append_python_zlib_diff_check(
+            "python_zlib_diff_malformed_wrapper_missing",
+            python_zlib_malformed_wrapper_result,
+            python_zlib_malformed_wrapper_manifest,
+            python_zlib_malformed_wrapper_manifest["python_zlib_diff_malformed_wrapper_cases"] == 0,
         )
 
         expected_validation_reasons = load_expected_validation_reasons(VALIDATION_REASONS)

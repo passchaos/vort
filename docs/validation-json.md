@@ -4531,9 +4531,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 314,
-      "min_expected_failures": 314,
-      "min_matched": 314
+      "min_checks": 325,
+      "min_expected_failures": 325,
+      "min_matched": 325
     },
     {
       "mode": "non-json-artifact-health",
@@ -4633,7 +4633,7 @@ aggregate health reasons must be backed by real failing dashboard inputs before
 the smoke artifact can pass. The expected reason/check/fixture matrix lives in
 `tools/dashboard_strict_validation_reasons.json`; the retained
 `strict-validation-health` mode minimums must cover every configured reason,
-currently 88, plus direct validation JSON smoke/docs-negative, zlib relaxed gate/report/Markdown drift, Snappy report CSV drift, PNG scratch report/Markdown drift, checksum/chunk-cursor/deflate match-copy/Huffman-build/lookup/chunked-Huffman/extra-bit/dictionary-decode/PNG-scanline/chunked-zlib/PNG-streaming-zlib benchmark CSV drift, deflate dynamic decode profile CSV drift, native library benchmark CSV drift, zstd comparison CSV/Markdown drift, and header-inspect health regression checks. Dashboard aggregate health also reads the retained
+currently 88, plus direct validation JSON smoke/docs-negative, zlib relaxed gate/report/Markdown drift, Snappy report CSV drift, PNG scratch report/Markdown drift, checksum/chunk-cursor/deflate match-copy/Huffman-build/lookup/chunked-Huffman/extra-bit/dictionary-decode/PNG-scanline/chunked-zlib/PNG-streaming-zlib benchmark CSV drift, deflate dynamic decode profile CSV drift, native library benchmark CSV drift, zstd comparison CSV/Markdown drift, Python zlib differential counter drift, and header-inspect health regression checks. Dashboard aggregate health also reads the retained
 `vort-dashboard-strict-smoke.md` companion and requires its mode, requirement,
 validation-reason, and check rows to match the JSON counts before
 `dashboard_strict_healthy` can pass. The `dashboard-markdown` mode verifies that important human-facing
@@ -4655,7 +4655,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 274,
+  "check_count": 285,
   "mode_count": 5,
   "expected_mode_count": 5,
   "missing_mode_count": 0,
@@ -4675,9 +4675,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 314,
-      "min_expected_failures": 314,
-      "min_matched": 314
+      "min_checks": 325,
+      "min_expected_failures": 325,
+      "min_matched": 325
     },
     {
       "mode": "non-json-artifact-health",
@@ -4720,14 +4720,14 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 227,
-      "min_checks": 314,
+      "checks": 238,
+      "min_checks": 325,
       "missing_checks": 87,
-      "expected_failures": 227,
-      "min_expected_failures": 314,
+      "expected_failures": 238,
+      "min_expected_failures": 325,
       "missing_expected_failures": 87,
-      "matched": 227,
-      "min_matched": 314,
+      "matched": 238,
+      "min_matched": 325,
       "missing_matched": 87
     },
     {
@@ -4770,9 +4770,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 227,
-      "expected_failures": 227,
-      "matched": 227
+      "checks": 238,
+      "expected_failures": 238,
+      "matched": 238
     },
     {
       "mode": "non-json-artifact-health",
@@ -7423,6 +7423,138 @@ Example:
       "expected_output": "dashboard_index_validation_unhealthy=zstd_compare_failed",
       "actual_output": "dashboard_index_validation_unhealthy=zstd_compare_failed\n",
       "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_large_file_payload_overflow",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_file_hex_case_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_cli_success_shortfall",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_expected_failure_shortfall",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_cli_success_exact_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_expected_failure_exact_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_cli_outcome_exact_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_match_heavy_payload_missing",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_dynamic_payload_missing",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_dictionary_encode_undercovered",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_malformed_wrapper_missing",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\n",
+      "actual_output_bytes": 61,
       "actual_output_limit": 240,
       "actual_output_truncated": false,
       "returncode": 1,

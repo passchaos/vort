@@ -2780,6 +2780,13 @@ architecture blindly.
   payload, file-transport, dictionary, dynamic, and malformed coverage counters.
   Dashboard health now exposes exact outcome mismatch counters before zlib
   differential coverage can pass.
+
+- Added direct dashboard strict-smoke drift coverage for Python zlib differential
+  health. The strict validation gate now exercises large-file payload overflow,
+  file-hex count drift, CLI success/failure shortfalls, exact outcome mismatches,
+  missing match-heavy/dynamic payload coverage, dictionary-encode undercoverage,
+  and malformed-wrapper coverage loss so `python_zlib_diff_failed` cannot hide
+  differential summary counter regressions behind its aggregate fixture.
 - Tightened zlib/gzip relaxed-wrapper dashboard health by recomputing the
   retained gate's exact and floor rules from report counters instead of trusting
   gate booleans alone. Dashboard health now exposes missing/extra gate checks,
