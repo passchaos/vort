@@ -460,6 +460,7 @@ architecture blindly.
 - [x] Dashboard strict-mode smoke exercises the actual-output truncation path with a synthetic long-output check.
 - [x] Dashboard strict-mode smoke covers every validation unhealthy reason with isolated negative fixtures.
 - [x] Dashboard strict-mode validation unhealthy reason matrix is stored in a schema-checked external JSON config.
+- [x] Dashboard strict-mode smoke directly covers Huffman length-report health drift, including malformed/blank/duplicate cases, non-optimal rows, and Markdown summary/case mismatches.
 - [x] Dashboard strict-mode smoke directly covers sidecar corrupt health drift, including metadata/full rejection count drift, JSON item count/malformed/duplicate drift, and unmatched/malformed/duplicate/unknown Markdown rows.
 - [x] Dashboard strict-mode smoke directly covers header-inspect health drift, including report count mismatches, duplicate case/negative/command/workflow/required/help rows, command coverage missing/unknown/mismatch rows, negative error-count drift, missing-workflow drift, help/required workflow drift, and Markdown unmatched rows.
 - [x] Dashboard strict-mode smoke directly covers validation JSON smoke/docs-negative health drift, including observed-schema count mismatches, unchecked observed schemas, JSON artifact audit parse/missing-schema/manifest/accounting failures, and docs-negative row/count mismatches.

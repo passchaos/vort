@@ -4775,6 +4775,41 @@ def csv_artifact_layout_fixture(
     return result, manifest
 
 
+def rewrite_csv_rows(path: Path, rows: list[dict[str, str]], fieldnames: list[str]) -> None:
+    with path.open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def huffman_length_drift_fixture(root: Path, fixture_name: str, mutate_csv=None, mutate_markdown=None) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted Huffman length report."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    csv_path = fixture_root / HUFFMAN_LENGTH_ARTIFACT
+    markdown_path = fixture_root / "vort-huffman-length-report.md"
+    if mutate_csv is not None:
+        with csv_path.open(newline="") as f:
+            reader = csv.DictReader(f)
+            fieldnames = list(reader.fieldnames or [])
+            rows = list(reader)
+        mutate_csv(rows, fieldnames, csv_path, markdown_path)
+        if rows is not None:
+            rewrite_csv_rows(csv_path, rows, fieldnames)
+    if mutate_markdown is not None:
+        mutate_markdown(markdown_path)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def sidecar_corrupt_drift_fixture(root: Path, fixture_name: str, mutate_report=None, mutate_markdown=None) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted sidecar corrupt artifact."""
 
@@ -7028,6 +7063,176 @@ def main() -> int:
                 sidecar_item_count_result.returncode,
                 "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
                 sidecar_item_count_result.stdout,
+            )
+        )
+
+        huffman_malformed_result, huffman_malformed_manifest = huffman_length_drift_fixture(
+            root,
+            "huffman-length-malformed",
+            mutate_csv=lambda rows, fieldnames, csv_path, markdown_path: rows[0].__setitem__("gap_bits", "bad"),
+        )
+        huffman_malformed_matched = (
+            huffman_malformed_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=huffman_length_failed" in huffman_malformed_result.stdout
+            and huffman_malformed_manifest["validation_healthy"] is False
+            and huffman_malformed_manifest["huffman_length_healthy"] is False
+            and huffman_malformed_manifest["huffman_length_malformed_rows"] == 1
+        )
+        checks.append(
+            check_row(
+                "huffman_length_malformed_row",
+                "strict-validation-health",
+                True,
+                huffman_malformed_matched,
+                huffman_malformed_result.returncode,
+                "dashboard_index_validation_unhealthy=huffman_length_failed",
+                huffman_malformed_result.stdout,
+            )
+        )
+
+        huffman_blank_case_result, huffman_blank_case_manifest = huffman_length_drift_fixture(
+            root,
+            "huffman-length-blank-case",
+            mutate_csv=lambda rows, fieldnames, csv_path, markdown_path: rows[0].__setitem__("case", ""),
+        )
+        huffman_blank_case_matched = (
+            huffman_blank_case_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=huffman_length_failed" in huffman_blank_case_result.stdout
+            and huffman_blank_case_manifest["validation_healthy"] is False
+            and huffman_blank_case_manifest["huffman_length_healthy"] is False
+            and huffman_blank_case_manifest["huffman_length_blank_case_rows"] == 1
+        )
+        checks.append(
+            check_row(
+                "huffman_length_blank_case",
+                "strict-validation-health",
+                True,
+                huffman_blank_case_matched,
+                huffman_blank_case_result.returncode,
+                "dashboard_index_validation_unhealthy=huffman_length_failed",
+                huffman_blank_case_result.stdout,
+            )
+        )
+
+        huffman_duplicate_result, huffman_duplicate_manifest = huffman_length_drift_fixture(
+            root,
+            "huffman-length-duplicate-case",
+            mutate_csv=lambda rows, fieldnames, csv_path, markdown_path: rows.append(dict(rows[0])),
+        )
+        huffman_duplicate_matched = (
+            huffman_duplicate_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=huffman_length_failed" in huffman_duplicate_result.stdout
+            and huffman_duplicate_manifest["validation_healthy"] is False
+            and huffman_duplicate_manifest["huffman_length_healthy"] is False
+            and huffman_duplicate_manifest["huffman_length_duplicate_cases"] == ["strict-smoke"]
+        )
+        checks.append(
+            check_row(
+                "huffman_length_duplicate_case",
+                "strict-validation-health",
+                True,
+                huffman_duplicate_matched,
+                huffman_duplicate_result.returncode,
+                "dashboard_index_validation_unhealthy=huffman_length_failed",
+                huffman_duplicate_result.stdout,
+            )
+        )
+
+        def make_huffman_non_optimal(rows: list[dict[str, str]], fieldnames: list[str], csv_path: Path, markdown_path: Path) -> None:
+            rows[0].update({
+                "actual_cost": "6",
+                "gap_bits": "1",
+                "optimal": "false",
+                "lengths": "2;2;2",
+                "package_merge_cost": "6",
+                "package_merge_gap_bits": "1",
+                "package_merge_optimal": "false",
+                "package_merge_lengths": "2;2;2",
+            })
+            write_huffman_length_markdown(
+                markdown_path,
+                optimal_rows=0,
+                non_optimal_rows=1,
+                worst_gap_bits=1,
+                package_merge_optimal_rows=0,
+                package_merge_non_optimal_rows=1,
+                package_merge_worst_gap_bits=1,
+            )
+
+        huffman_non_optimal_result, huffman_non_optimal_manifest = huffman_length_drift_fixture(
+            root,
+            "huffman-length-non-optimal",
+            mutate_csv=make_huffman_non_optimal,
+        )
+        huffman_non_optimal_matched = (
+            huffman_non_optimal_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=huffman_length_failed" in huffman_non_optimal_result.stdout
+            and huffman_non_optimal_manifest["validation_healthy"] is False
+            and huffman_non_optimal_manifest["huffman_length_healthy"] is False
+            and huffman_non_optimal_manifest["huffman_length_non_optimal_rows"] == 1
+            and huffman_non_optimal_manifest["huffman_length_package_merge_non_optimal_rows"] == 1
+        )
+        checks.append(
+            check_row(
+                "huffman_length_non_optimal_row",
+                "strict-validation-health",
+                True,
+                huffman_non_optimal_matched,
+                huffman_non_optimal_result.returncode,
+                "dashboard_index_validation_unhealthy=huffman_length_failed",
+                huffman_non_optimal_result.stdout,
+            )
+        )
+
+        huffman_markdown_summary_result, huffman_markdown_summary_manifest = huffman_length_drift_fixture(
+            root,
+            "huffman-length-markdown-summary",
+            mutate_markdown=lambda markdown_path: markdown_path.write_text(
+                markdown_path.read_text().replace("- rows: 1", "- rows: 2", 1)
+            ),
+        )
+        huffman_markdown_summary_matched = (
+            huffman_markdown_summary_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=huffman_length_failed" in huffman_markdown_summary_result.stdout
+            and huffman_markdown_summary_manifest["validation_healthy"] is False
+            and huffman_markdown_summary_manifest["huffman_length_healthy"] is False
+            and huffman_markdown_summary_manifest["huffman_length_markdown_unmatched"] == 1
+        )
+        checks.append(
+            check_row(
+                "huffman_length_markdown_summary_unmatched",
+                "strict-validation-health",
+                True,
+                huffman_markdown_summary_matched,
+                huffman_markdown_summary_result.returncode,
+                "dashboard_index_validation_unhealthy=huffman_length_failed",
+                huffman_markdown_summary_result.stdout,
+            )
+        )
+
+        huffman_markdown_case_result, huffman_markdown_case_manifest = huffman_length_drift_fixture(
+            root,
+            "huffman-length-markdown-case",
+            mutate_markdown=lambda markdown_path: markdown_path.write_text(
+                markdown_path.read_text().replace("| strict-smoke |", "| strict-smoke-drift |", 1)
+            ),
+        )
+        huffman_markdown_case_matched = (
+            huffman_markdown_case_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=huffman_length_failed" in huffman_markdown_case_result.stdout
+            and huffman_markdown_case_manifest["validation_healthy"] is False
+            and huffman_markdown_case_manifest["huffman_length_healthy"] is False
+            and huffman_markdown_case_manifest["huffman_length_markdown_case_unmatched"] == 1
+        )
+        checks.append(
+            check_row(
+                "huffman_length_markdown_case_unmatched",
+                "strict-validation-health",
+                True,
+                huffman_markdown_case_matched,
+                huffman_markdown_case_result.returncode,
+                "dashboard_index_validation_unhealthy=huffman_length_failed",
+                huffman_markdown_case_result.stdout,
             )
         )
 
