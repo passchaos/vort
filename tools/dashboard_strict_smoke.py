@@ -5195,6 +5195,33 @@ def deflate_huffman_lookup_bench_drift_fixture(
     return result, manifest
 
 
+def deflate_chunked_huffman_bench_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    mutate_csv,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+    """Run dashboard_index with one intentionally drifted deflate chunked-Huffman benchmark CSV."""
+
+    fixture_root = root / fixture_name
+    fixture_root.mkdir()
+    write_healthy_artifacts(fixture_root)
+    csv_path = fixture_root / DEFLATE_CHUNKED_HUFFMAN_BENCH_ARTIFACT
+    with csv_path.open(newline="") as f:
+        reader = csv.DictReader(f)
+        fieldnames = list(reader.fieldnames or [])
+        rows = list(reader)
+    mutate_csv(rows, fieldnames, csv_path)
+    rewrite_csv_rows(csv_path, rows, fieldnames)
+    producer_map = fixture_root / "producers.json"
+    write_producer_map(producer_map)
+    result = run(
+        dashboard_args(fixture_root, producer_map, "--strict-validation-health"),
+        check=False,
+    )
+    manifest = json.loads((fixture_root / "vort-dashboard-index.json").read_text())
+    return result, manifest
+
+
 def dynamic_plan_drift_fixture(root: Path, fixture_name: str, mutate_csv) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted dynamic-plan CSV artifact."""
 
@@ -9410,6 +9437,144 @@ def main() -> int:
             huffman_lookup_checksum_result,
             huffman_lookup_checksum_manifest,
             huffman_lookup_checksum_manifest["deflate_huffman_lookup_bench_checksum_matched_cases"] == 5,
+        )
+
+        def append_deflate_chunked_huffman_bench_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and "dashboard_index_validation_unhealthy=deflate_chunked_huffman_bench_failed" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["deflate_chunked_huffman_bench_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    "dashboard_index_validation_unhealthy=deflate_chunked_huffman_bench_failed",
+                    result.stdout,
+                )
+            )
+
+        chunked_huffman_missing_pair_result, chunked_huffman_missing_pair_manifest = deflate_chunked_huffman_bench_drift_fixture(
+            root,
+            "deflate-chunked-huffman-missing-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.pop(0),
+        )
+        append_deflate_chunked_huffman_bench_check(
+            "deflate_chunked_huffman_bench_missing_pair",
+            chunked_huffman_missing_pair_result,
+            chunked_huffman_missing_pair_manifest,
+            chunked_huffman_missing_pair_manifest["deflate_chunked_huffman_bench_rows"] == 56
+            and chunked_huffman_missing_pair_manifest["deflate_chunked_huffman_bench_missing_pairs"] == ["fixed-literal:buffered"],
+        )
+
+        chunked_huffman_duplicate_pair_result, chunked_huffman_duplicate_pair_manifest = deflate_chunked_huffman_bench_drift_fixture(
+            root,
+            "deflate-chunked-huffman-duplicate-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows.append(dict(rows[0])),
+        )
+        append_deflate_chunked_huffman_bench_check(
+            "deflate_chunked_huffman_bench_duplicate_pair",
+            chunked_huffman_duplicate_pair_result,
+            chunked_huffman_duplicate_pair_manifest,
+            chunked_huffman_duplicate_pair_manifest["deflate_chunked_huffman_bench_rows"] == 58
+            and chunked_huffman_duplicate_pair_manifest["deflate_chunked_huffman_bench_duplicate_pairs"] == ["fixed-literal:buffered"],
+        )
+
+        chunked_huffman_unknown_pair_result, chunked_huffman_unknown_pair_manifest = deflate_chunked_huffman_bench_drift_fixture(
+            root,
+            "deflate-chunked-huffman-unknown-pair",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("reader", "unknown_reader"),
+        )
+        append_deflate_chunked_huffman_bench_check(
+            "deflate_chunked_huffman_bench_unknown_pair",
+            chunked_huffman_unknown_pair_result,
+            chunked_huffman_unknown_pair_manifest,
+            chunked_huffman_unknown_pair_manifest["deflate_chunked_huffman_bench_missing_pairs"] == ["fixed-literal:buffered"]
+            and chunked_huffman_unknown_pair_manifest["deflate_chunked_huffman_bench_unknown_pairs"] == ["fixed-literal:unknown_reader"],
+        )
+
+        chunked_huffman_positive_result, chunked_huffman_positive_manifest = deflate_chunked_huffman_bench_drift_fixture(
+            root,
+            "deflate-chunked-huffman-positive",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("checksum", "0"),
+        )
+        append_deflate_chunked_huffman_bench_check(
+            "deflate_chunked_huffman_bench_positive_row_mismatch",
+            chunked_huffman_positive_result,
+            chunked_huffman_positive_manifest,
+            chunked_huffman_positive_manifest["deflate_chunked_huffman_bench_positive_rows"] == 56,
+        )
+
+        chunked_huffman_shape_result, chunked_huffman_shape_manifest = deflate_chunked_huffman_bench_drift_fixture(
+            root,
+            "deflate-chunked-huffman-shape",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("decoder", "unknown_decoder"),
+        )
+        append_deflate_chunked_huffman_bench_check(
+            "deflate_chunked_huffman_bench_shape_mismatch",
+            chunked_huffman_shape_result,
+            chunked_huffman_shape_manifest,
+            chunked_huffman_shape_manifest["deflate_chunked_huffman_bench_shape_rows"] == 56,
+        )
+
+        chunked_huffman_buffered_result, chunked_huffman_buffered_manifest = deflate_chunked_huffman_bench_drift_fixture(
+            root,
+            "deflate-chunked-huffman-buffered",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("chunk_count", "1"),
+        )
+        append_deflate_chunked_huffman_bench_check(
+            "deflate_chunked_huffman_bench_buffered_chunk_mismatch",
+            chunked_huffman_buffered_result,
+            chunked_huffman_buffered_manifest,
+            chunked_huffman_buffered_manifest["deflate_chunked_huffman_bench_buffered_zero_chunk_rows"] == 2,
+        )
+
+        chunked_huffman_chunk_count_result, chunked_huffman_chunk_count_manifest = deflate_chunked_huffman_bench_drift_fixture(
+            root,
+            "deflate-chunked-huffman-chunk-count",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[1].__setitem__("chunk_count", str(int(rows[1]["chunk_count"]) + 1)),
+        )
+        append_deflate_chunked_huffman_bench_check(
+            "deflate_chunked_huffman_bench_chunk_count_mismatch",
+            chunked_huffman_chunk_count_result,
+            chunked_huffman_chunk_count_manifest,
+            chunked_huffman_chunk_count_manifest["deflate_chunked_huffman_bench_chunk_count_rows"] == 56,
+        )
+
+        chunked_huffman_throughput_result, chunked_huffman_throughput_manifest = deflate_chunked_huffman_bench_drift_fixture(
+            root,
+            "deflate-chunked-huffman-throughput",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("symbols_per_s", "1.00"),
+        )
+        append_deflate_chunked_huffman_bench_check(
+            "deflate_chunked_huffman_bench_throughput_mismatch",
+            chunked_huffman_throughput_result,
+            chunked_huffman_throughput_manifest,
+            chunked_huffman_throughput_manifest["deflate_chunked_huffman_bench_throughput_rows"] == 56,
+        )
+
+        chunked_huffman_checksum_result, chunked_huffman_checksum_manifest = deflate_chunked_huffman_bench_drift_fixture(
+            root,
+            "deflate-chunked-huffman-checksum",
+            mutate_csv=lambda rows, fieldnames, csv_path: next(
+                row for row in rows if row["case"] == "fixed-literal" and row["reader"] == "span_1"
+            ).__setitem__("checksum", "54321"),
+        )
+        append_deflate_chunked_huffman_bench_check(
+            "deflate_chunked_huffman_bench_checksum_mismatch",
+            chunked_huffman_checksum_result,
+            chunked_huffman_checksum_manifest,
+            chunked_huffman_checksum_manifest["deflate_chunked_huffman_bench_checksum_matched_cases"] == 2,
         )
 
         native_codec_probe_count_result, native_codec_probe_count_manifest = native_codec_probes_drift_fixture(
