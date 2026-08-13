@@ -1591,6 +1591,11 @@ architecture blindly.
   diagnostics in one value, so library integrations can preflight support and
   capacity without wrapping the throwing summary APIs themselves.
 
+- Added exact-size Brotli stream probe variants for contiguous and split-input
+  library callers. Known-size integrations now get a non-throwing `SizeMismatch`
+  result that preserves the parsed `StreamSummary` and marks the diagnostic
+  phase as output-size validation.
+
 - Added a dependency-free Snappy raw block module. `src/snappy.zig` covers the
   raw block varint length header, literal tags, copy1/copy2/copy4 decode,
   decoded-size preflight, output limits, caller-owned output, allocator-returning

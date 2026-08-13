@@ -34,6 +34,7 @@ pub const StreamSummaryErrorPhase = enum {
     uncompressed_meta_block,
     compressed_meta_block,
     padding,
+    output_size,
 };
 
 pub const StreamSummaryDiagnostics = struct {
@@ -612,6 +613,30 @@ pub fn probeStreamLimited(stream: []const u8, max_output_len: usize) StreamProbe
     };
 }
 
+pub fn probeStreamExactSize(stream: []const u8, expected_output_len: usize) StreamProbeResult {
+    var diagnostics: StreamSummaryDiagnostics = .{};
+    const summary = summarizeStreamWithDiagnostics(stream, &diagnostics) catch |err| {
+        return .{
+            .ok = false,
+            .diagnostics = diagnostics,
+            .error_name = @errorName(err),
+        };
+    };
+    if (summary.decoded_bytes != expected_output_len) {
+        return .{
+            .ok = false,
+            .summary = summary,
+            .diagnostics = .{ .phase = .output_size },
+            .error_name = @errorName(error.SizeMismatch),
+        };
+    }
+    return .{
+        .ok = true,
+        .summary = summary,
+        .diagnostics = diagnostics,
+    };
+}
+
 pub fn probeStreamChunks(chunks: []const []const u8, compressed_scratch: []u8) StreamProbeResult {
     return probeStreamChunksLimited(chunks, compressed_scratch, std.math.maxInt(usize));
 }
@@ -625,6 +650,30 @@ pub fn probeStreamChunksLimited(chunks: []const []const u8, compressed_scratch: 
             .error_name = @errorName(err),
         };
     };
+    return .{
+        .ok = true,
+        .summary = summary,
+        .diagnostics = diagnostics,
+    };
+}
+
+pub fn probeStreamChunksExactSize(chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) StreamProbeResult {
+    var diagnostics: StreamSummaryDiagnostics = .{};
+    const summary = summarizeStreamChunksWithDiagnostics(chunks, compressed_scratch, &diagnostics) catch |err| {
+        return .{
+            .ok = false,
+            .diagnostics = diagnostics,
+            .error_name = @errorName(err),
+        };
+    };
+    if (summary.decoded_bytes != expected_output_len) {
+        return .{
+            .ok = false,
+            .summary = summary,
+            .diagnostics = .{ .phase = .output_size },
+            .error_name = @errorName(error.SizeMismatch),
+        };
+    }
     return .{
         .ok = true,
         .summary = summary,

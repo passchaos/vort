@@ -69,6 +69,7 @@ pub const brSummarizeStreamWithDiagnostics = br.summarizeStreamWithDiagnostics;
 pub const brSummarizeStreamLimitedWithDiagnostics = br.summarizeStreamLimitedWithDiagnostics;
 pub const brProbeStream = br.probeStream;
 pub const brProbeStreamLimited = br.probeStreamLimited;
+pub const brProbeStreamExactSize = br.probeStreamExactSize;
 pub const brDecodeStreamChunksAlloc = br.decodeStreamChunksAlloc;
 pub const brDecodeStreamChunksAllocExactSize = br.decodeStreamChunksAllocExactSize;
 pub const brDecodeStreamChunksAllocLimited = br.decodeStreamChunksAllocLimited;
@@ -85,6 +86,7 @@ pub const brSummarizeStreamChunksWithDiagnostics = br.summarizeStreamChunksWithD
 pub const brSummarizeStreamChunksLimitedWithDiagnostics = br.summarizeStreamChunksLimitedWithDiagnostics;
 pub const brProbeStreamChunks = br.probeStreamChunks;
 pub const brProbeStreamChunksLimited = br.probeStreamChunksLimited;
+pub const brProbeStreamChunksExactSize = br.probeStreamChunksExactSize;
 
 pub const snappyEncodeBlockAlloc = snappy.encodeBlockAlloc;
 pub const snappyEncodeBlockAppend = snappy.encodeBlockAppend;
@@ -1368,6 +1370,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = brSummarizeStreamLimitedWithDiagnostics;
     _ = brProbeStream;
     _ = brProbeStreamLimited;
+    _ = brProbeStreamExactSize;
     _ = brDecodeStreamChunksAlloc;
     _ = brDecodeStreamChunksAllocExactSize;
     _ = brDecodeStreamChunksAllocLimited;
@@ -1384,6 +1387,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = brSummarizeStreamChunksLimitedWithDiagnostics;
     _ = brProbeStreamChunks;
     _ = brProbeStreamChunksLimited;
+    _ = brProbeStreamChunksExactSize;
 
     _ = snappyEncodeBlockAlloc;
     _ = snappyEncodeBlockAppend;
@@ -2197,6 +2201,14 @@ test "root brotli stream probe returns non-throwing support results" {
     try std.testing.expectEqualStrings("", ok.error_name);
     try std.testing.expectEqual(payload.len, ok.summary.?.decoded_bytes);
     try std.testing.expectEqual(BrotliStreamSummaryErrorPhase.stream, ok.diagnostics.phase);
+    const exact_ok = brProbeStreamExactSize(encoded, payload.len);
+    try std.testing.expect(exact_ok.ok);
+    try std.testing.expectEqual(payload.len, exact_ok.summary.?.decoded_bytes);
+    const exact_bad = brProbeStreamExactSize(encoded, payload.len + 1);
+    try std.testing.expect(!exact_bad.ok);
+    try std.testing.expectEqualStrings("SizeMismatch", exact_bad.error_name);
+    try std.testing.expectEqual(BrotliStreamSummaryErrorPhase.output_size, exact_bad.diagnostics.phase);
+    try std.testing.expectEqual(payload.len, exact_bad.summary.?.decoded_bytes);
 
     const limited = brProbeStreamLimited(encoded, payload.len - 1);
     try std.testing.expect(!limited.ok);
@@ -2219,6 +2231,10 @@ test "root brotli stream probe returns non-throwing support results" {
     const chunked_ok = brProbeStreamChunks(&chunks, join);
     try std.testing.expect(chunked_ok.ok);
     try std.testing.expectEqual(payload.len, chunked_ok.summary.?.decoded_bytes);
+    const chunked_exact_bad = brProbeStreamChunksExactSize(&chunks, join, payload.len - 1);
+    try std.testing.expect(!chunked_exact_bad.ok);
+    try std.testing.expectEqualStrings("SizeMismatch", chunked_exact_bad.error_name);
+    try std.testing.expectEqual(BrotliStreamSummaryErrorPhase.output_size, chunked_exact_bad.diagnostics.phase);
     const chunked_limited = brProbeStreamChunksLimited(&chunks, join, payload.len - 1);
     try std.testing.expect(!chunked_limited.ok);
     try std.testing.expectEqualStrings("OutputLimitExceeded", chunked_limited.error_name);
