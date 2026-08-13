@@ -5541,6 +5541,11 @@ test "root zlib and gzip probes report support and size mismatches" {
     const zlib_truncated = probeZlib("", &zlib_scratch);
     try std.testing.expect(!zlib_truncated.ok);
     try std.testing.expectEqualStrings("TruncatedFrame", zlib_truncated.error_name);
+    const zlib_bad_header = [_]u8{ 0, 0 };
+    const zlib_header_bad = probeZlib(&zlib_bad_header, &zlib_scratch);
+    try std.testing.expect(!zlib_header_bad.ok);
+    try std.testing.expectEqualStrings("BadZlibHeader", zlib_header_bad.error_name);
+    try std.testing.expectEqualStrings("header", zlib_header_bad.diagnostics.phase_name);
 
     const zlib_chunks = [_][]const u8{
         zlib_encoded[0..2],
@@ -5564,6 +5569,15 @@ test "root zlib and gzip probes report support and size mismatches" {
     const dict_missing = probeZlibExactSize(zlib_dict, &zlib_dict_scratch, dict_payload.len);
     try std.testing.expect(!dict_missing.ok);
     try std.testing.expectEqualStrings("NeedDictionary", dict_missing.error_name);
+    try std.testing.expectEqualStrings("header", dict_missing.diagnostics.phase_name);
+
+    const zlib_bad_checksum = try std.testing.allocator.dupe(u8, zlib_encoded);
+    defer std.testing.allocator.free(zlib_bad_checksum);
+    zlib_bad_checksum[zlib_bad_checksum.len - 1] ^= 1;
+    const zlib_footer_bad = probeZlib(zlib_bad_checksum, &zlib_scratch);
+    try std.testing.expect(!zlib_footer_bad.ok);
+    try std.testing.expectEqualStrings("ChecksumMismatch", zlib_footer_bad.error_name);
+    try std.testing.expectEqualStrings("footer", zlib_footer_bad.diagnostics.phase_name);
 
     const gzip_encoded = try encodeGzipBestAlloc(std.testing.allocator, payload, .{});
     defer std.testing.allocator.free(gzip_encoded);
@@ -5583,6 +5597,19 @@ test "root zlib and gzip probes report support and size mismatches" {
     const gzip_truncated = probeGzip("", &gzip_scratch);
     try std.testing.expect(!gzip_truncated.ok);
     try std.testing.expectEqualStrings("TruncatedFrame", gzip_truncated.error_name);
+    const gzip_bad_header: [10]u8 = @splat(0);
+    const gzip_header_bad = probeGzip(&gzip_bad_header, &gzip_scratch);
+    try std.testing.expect(!gzip_header_bad.ok);
+    try std.testing.expectEqualStrings("BadGzipHeader", gzip_header_bad.error_name);
+    try std.testing.expectEqualStrings("header", gzip_header_bad.diagnostics.phase_name);
+
+    const gzip_bad_checksum = try std.testing.allocator.dupe(u8, gzip_encoded);
+    defer std.testing.allocator.free(gzip_bad_checksum);
+    gzip_bad_checksum[gzip_bad_checksum.len - 8] ^= 1;
+    const gzip_footer_bad = probeGzip(gzip_bad_checksum, &gzip_scratch);
+    try std.testing.expect(!gzip_footer_bad.ok);
+    try std.testing.expectEqualStrings("ChecksumMismatch", gzip_footer_bad.error_name);
+    try std.testing.expectEqualStrings("footer", gzip_footer_bad.diagnostics.phase_name);
 
     const gzip_chunks = [_][]const u8{
         gzip_encoded[0..3],

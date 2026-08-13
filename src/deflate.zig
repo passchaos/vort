@@ -6538,11 +6538,23 @@ pub const ZlibDecoder = struct {
 };
 
 fn probeResultFromDecoder(decoder: anytype, comptime Decoder: type, err: anyerror) DecodeProbeResult {
-    _ = Decoder;
+    var diagnostics = decoder.diagnostics();
+    diagnostics.phase_name = probeErrorPhaseName(Decoder, err);
+    diagnostics.last_error_phase_name = diagnostics.phase_name;
     return .{
         .ok = false,
-        .diagnostics = decoder.diagnostics(),
+        .diagnostics = diagnostics,
         .error_name = @errorName(err),
+    };
+}
+
+fn probeErrorPhaseName(comptime Decoder: type, err: anyerror) []const u8 {
+    if (Decoder == ZlibDecoder and (err == error.BadZlibHeader or err == error.NeedDictionary)) return "header";
+    if (Decoder == GzipDecoder and err == error.BadGzipHeader) return "header";
+    return switch (err) {
+        error.ChecksumMismatch, error.TrailingData => "footer",
+        error.OutputTooSmall, error.SizeMismatch, error.OutputLimitExceeded => "output",
+        else => "payload",
     };
 }
 

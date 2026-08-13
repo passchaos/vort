@@ -1508,6 +1508,11 @@ architecture blindly.
   `NeedDictionary` without throwing and preserve the same decoded-byte/exact-size
   diagnostics as non-dictionary zlib/gzip probes.
 
+- Refined zlib/gzip probe diagnostics with wrapper-aware failure phases. Probe
+  results now distinguish header/dictionary failures, DEFLATE payload failures,
+  footer checksum/trailing-data failures, and output-size/limit failures while
+  retaining the non-throwing API shape.
+
 - Added zlib stream inspection helpers for split compressed input
   (`inspectZlibStreamFromChunksAlloc*`), reusing caller-provided join scratch
   before running the existing diagnostic inspector. They report the same
