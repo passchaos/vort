@@ -1849,3 +1849,19 @@ architecture blindly.
   Final validation passed `zig build test -j1` in 1:54.17 at 4,125,704-KiB
   peak RSS and `zig build check -j1` in 4:48.77 at 689,532-KiB peak RSS, both
   with zero swap.
+
+- Removed the redundant package sort at every length-limited Huffman
+  package-merge depth. Each input package list is sorted, so sums of adjacent
+  pairs are nondecreasing; equal sums require four equal input weights, where
+  the existing reverse-symbol counts tie-break remains ordered under
+  component-wise addition. Production now merges those naturally ordered pairs
+  directly with the leaves, while the original sorted-pair implementation
+  remains as a test reference. Dense/sparse/equal 286-symbol literal/length,
+  30-symbol distance, and 19-symbol code-length distributions compare exact
+  code-length arrays, including 32 collision-heavy seeds. The Huffman
+  length/build gates pass, and imx's fixed-CPU-12 11-round PNG A/B measured
+  `1.020x` adaptive L8, `1.140x` Up L8, `1.017x` nine-row geomean, neutral
+  RGB/RGBA rows, and identical encoded lengths/checksums/guards.
+  Final validation passed `zig build test -j1` in 1:40.89 at 4,125,424-KiB
+  peak RSS and `zig build check -j1` in 4:16.08 at 687,376-KiB peak RSS, both
+  with zero swap.

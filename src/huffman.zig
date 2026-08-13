@@ -585,6 +585,20 @@ pub fn treeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4) [n
 }
 
 fn packageMergeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4, active: usize) [n]u4 {
+    return packageMergeCodeLengthsWithSortPolicy(n, freqs, max_bits, active, false);
+}
+
+fn packageMergeCodeLengthsReference(comptime n: usize, freqs: *const [n]u32, max_bits: u4, active: usize) [n]u4 {
+    return packageMergeCodeLengthsWithSortPolicy(n, freqs, max_bits, active, true);
+}
+
+fn packageMergeCodeLengthsWithSortPolicy(
+    comptime n: usize,
+    freqs: *const [n]u32,
+    max_bits: u4,
+    active: usize,
+    comptime sort_pairs: bool,
+) [n]u4 {
     std.debug.assert(max_bits > 0);
     std.debug.assert(active <= (@as(usize, 1) << max_bits));
     const Pkg = LengthPackage(n);
@@ -618,7 +632,19 @@ fn packageMergeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4
             next[pair_len] = combinePackages(n, current[i], current[i + 1]);
             pair_len += 1;
         }
-        std.mem.sort(Pkg, next[0..pair_len], {}, packageLess(n));
+        if (sort_pairs) {
+            // Retained only as a test oracle for the original implementation.
+            std.mem.sort(Pkg, next[0..pair_len], {}, packageLess(n));
+        } else {
+            // `current` is sorted. Pair weights are therefore nondecreasing:
+            // a[i] <= a[i+1] <= a[i+2] <= a[i+3] implies
+            // a[i]+a[i+1] <= a[i+2]+a[i+3]. Equal pair weights require all
+            // four input weights to be equal, where the counts tie-breaker is
+            // also preserved by component-wise addition. The pair list can be
+            // merged with the sorted leaves directly; sorting it again moved
+            // the full, large package records at every code-length depth.
+            std.debug.assert(packagesAreSorted(n, next[0..pair_len]));
+        }
         current_len = mergePackageLists(n, &current, leaves[0..active], next[0..pair_len]);
         std.debug.assert(current_len <= current.len);
     }
@@ -635,6 +661,14 @@ fn packageMergeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4
         lengths[symbol] = @intCast(count);
     }
     return lengths;
+}
+
+fn packagesAreSorted(comptime n: usize, packages: []const LengthPackage(n)) bool {
+    const less = packageLess(n);
+    for (packages[1..], packages[0..packages.len -| 1]) |current, previous| {
+        if (less({}, current, previous)) return false;
+    }
+    return true;
 }
 
 fn LengthPackage(comptime n: usize) type {
@@ -1058,6 +1092,60 @@ test "package-merge Huffman length builder preserves canonical code space" {
     const Table = HuffmanTable(freqs.len);
     const table = try Table.init(&lengths);
     try std.testing.expectEqual(@as(usize, 32), table.len);
+}
+
+test "package-merge naturally ordered pairs match sorted reference" {
+    {
+        var freqs: [286]u32 = @splat(1);
+        try expectPackageMergeMatchesReference(freqs.len, &freqs, 15);
+        for (&freqs, 0..) |*freq, i| {
+            freq.* = @intCast(1 + ((i * 17 + (i / 7) * 31) % 251));
+        }
+        try expectPackageMergeMatchesReference(freqs.len, &freqs, 15);
+        for (&freqs, 0..) |*freq, i| {
+            freq.* = if (i == 256 or i % 17 == 0)
+                @intCast(1 + ((i * 13 + 5) % 97))
+            else
+                0;
+        }
+        try expectPackageMergeMatchesReference(freqs.len, &freqs, 15);
+    }
+    {
+        var freqs: [30]u32 = @splat(1);
+        try expectPackageMergeMatchesReference(freqs.len, &freqs, 15);
+        for (&freqs, 0..) |*freq, i| {
+            freq.* = @intCast(1 + ((i * 11 + 3) % 29));
+        }
+        try expectPackageMergeMatchesReference(freqs.len, &freqs, 15);
+    }
+    {
+        var freqs: [19]u32 = @splat(1);
+        try expectPackageMergeMatchesReference(freqs.len, &freqs, 7);
+        for (0..32) |seed| {
+            for (&freqs, 0..) |*freq, i| {
+                // The small modulus deliberately creates many equal package
+                // weights, exercising the counts tie-break proof as well as
+                // the simpler strictly increasing pair-weight case.
+                freq.* = @intCast(1 + ((i * 7 + seed * 11 + i * seed) % 9));
+            }
+            try expectPackageMergeMatchesReference(freqs.len, &freqs, 7);
+        }
+    }
+}
+
+fn expectPackageMergeMatchesReference(
+    comptime n: usize,
+    freqs: *const [n]u32,
+    max_bits: u4,
+) !void {
+    var active: usize = 0;
+    for (freqs.*) |freq| active += @intFromBool(freq != 0);
+    try std.testing.expect(active >= 2);
+    try std.testing.expect(active <= (@as(usize, 1) << max_bits));
+    try std.testing.expectEqual(
+        packageMergeCodeLengthsReference(n, freqs, max_bits, active),
+        packageMergeCodeLengths(n, freqs, max_bits, active),
+    );
 }
 
 test "package-merge Huffman lengths match small optimal costs" {
