@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const bitstream = @import("bitstream.zig");
 const core = @import("core.zig");
 
@@ -643,7 +644,9 @@ fn packageMergeCodeLengthsWithSortPolicy(
             // also preserved by component-wise addition. The pair list can be
             // merged with the sorted leaves directly; sorting it again moved
             // the full, large package records at every code-length depth.
-            std.debug.assert(packagesAreSorted(n, next[0..pair_len]));
+            if (comptime builtin.mode == .Debug or builtin.mode == .ReleaseSafe) {
+                std.debug.assert(packagesAreSorted(n, next[0..pair_len]));
+            }
         }
         current_len = mergePackageLists(n, &current, leaves[0..active], next[0..pair_len]);
         std.debug.assert(current_len <= current.len);

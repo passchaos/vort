@@ -1895,3 +1895,16 @@ architecture blindly.
   Final validation passed `zig build test -j1` in 1:40.82 at 4,124,876-KiB
   peak RSS and `zig build check -j1` in 5:07.71 at 687,304-KiB peak RSS, both
   with zero swap.
+
+- Removed the package-order proof scan from ReleaseFast/ReleaseSmall
+  package-merge builds. Debug/ReleaseSafe still assert every naturally ordered
+  pair list, and the sorted-pair reference continues to compare exact code
+  lengths over dense/sparse/equal DEFLATE alphabets and collision-heavy seeds,
+  so production no longer pays a second full-package traversal solely for a
+  development invariant. On imx's fixed-CPU-12 11-round PNG A/B, Up L8
+  improved `1.214x`, adaptive L8/RGB8 improved `1.008/1.011x`, the nine-row
+  geomean improved `1.020x`, and every encoded length, checksum, and guard
+  remained identical.
+  Final validation passed `zig build test -j1` in 1:41.55 at 4,126,468-KiB
+  peak RSS and `zig build check -j1` in 4:12.35 at 688,748-KiB peak RSS, both
+  with zero swap.
