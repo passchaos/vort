@@ -1620,6 +1620,43 @@ fn lengthCodeReference(length: u16) CodeExtra {
 
 fn distanceCode(distance: u16) CodeExtra {
     std.debug.assert(distance >= 1 and distance <= lz77.default_window_len);
+    const value = distance - 1;
+    const table_index: usize = if (value < 256)
+        value
+    else
+        256 + (value >> 7);
+    const symbol = distance_code_symbol_table[table_index];
+    const metadata = distance_table[symbol];
+    return .{
+        .symbol = symbol,
+        .extra_bits = metadata.extra_bits,
+        .extra_value = distance - metadata.base,
+    };
+}
+
+const distance_code_symbol_table = makeDistanceCodeSymbolTable();
+
+fn makeDistanceCodeSymbolTable() [512]u8 {
+    @setEvalBranchQuota(20_000);
+    var table: [512]u8 = undefined;
+    for (0..256) |value| {
+        table[value] = @intCast(distanceCodeReference(@intCast(value + 1)).symbol);
+    }
+    for (0..256) |high| {
+        // Every bucket spans 128 distances. Above distance 256 those bucket
+        // boundaries align with Deflate distance-code ranges, so one symbol
+        // represents the entire bucket.
+        const distance =
+            1 + @max(high, @as(usize, 2)) * @as(usize, 128);
+        table[256 + high] = @intCast(
+            distanceCodeReference(@intCast(distance)).symbol,
+        );
+    }
+    return table;
+}
+
+fn distanceCodeReference(distance: u16) CodeExtra {
+    std.debug.assert(distance >= 1 and distance <= lz77.default_window_len);
     if (distance <= 4) return .{ .symbol = distance - 1, .extra_bits = 0, .extra_value = 0 };
 
     const extra_bits: u6 = @intCast(std.math.log2_int(u16, distance - 1) - 1);
@@ -1639,6 +1676,12 @@ test "fast length and distance code selection matches RFC tables" {
         try std.testing.expectEqual(
             lengthCodeReference(@intCast(length)),
             lengthCode(@intCast(length)),
+        );
+    }
+    for (1..lz77.default_window_len + 1) |distance| {
+        try std.testing.expectEqual(
+            distanceCodeReference(@intCast(distance)),
+            distanceCode(@intCast(distance)),
         );
     }
     for (length_table, 0..) |entry, i| {

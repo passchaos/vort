@@ -1936,3 +1936,15 @@ architecture blindly.
   Final validation passed `zig build test -j1` in 1:57.52 at 4,124,928-KiB
   peak RSS and `zig build check -j1` in 5:04.65 at 688,456-KiB peak RSS, both
   with zero swap.
+
+- Replaced distance-code log2/division arithmetic with a compact zlib-style
+  two-level symbol table. Distances 1...256 index directly; larger distances
+  use `(distance - 1) >> 7` into the upper 256 entries, while existing RFC
+  metadata supplies extra-bit widths and base values. The original formula is
+  exhaustively compared over all 32,768 valid distances. On imx's fixed-CPU-12
+  11-round PNG A/B, adaptive L8/RGBA8 improved `1.028/1.051x`, the nine-row
+  geomean improved `1.009x`, other rows stayed neutral, and every encoded
+  length, checksum, and guard remained identical.
+  Final validation passed `zig build test -j1` in 1:51.75 at 4,125,404-KiB
+  peak RSS and `zig build check -j1` in 4:17.82 at 688,028-KiB peak RSS, both
+  with zero swap.
