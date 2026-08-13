@@ -5652,6 +5652,7 @@ test "root zlib and gzip concatenated probes report support and size mismatches"
     try std.testing.expect(!zlib_second_bad.ok);
     try std.testing.expectEqualStrings("ChecksumMismatch", zlib_second_bad.error_name);
     try std.testing.expectEqual(@as(usize, 1), zlib_second_bad.member_index.?);
+    try std.testing.expectEqual(zlib_first.len, zlib_second_bad.member_offset.?);
     try std.testing.expectEqualStrings("footer", zlib_second_bad.diagnostics.phase_name);
 
     const zlib_chunks = [_][]const u8{
@@ -5709,6 +5710,7 @@ test "root zlib and gzip concatenated probes report support and size mismatches"
     try std.testing.expect(!gzip_second_bad.ok);
     try std.testing.expectEqualStrings("ChecksumMismatch", gzip_second_bad.error_name);
     try std.testing.expectEqual(@as(usize, 1), gzip_second_bad.member_index.?);
+    try std.testing.expectEqual(gzip_first.len, gzip_second_bad.member_offset.?);
     try std.testing.expectEqualStrings("footer", gzip_second_bad.diagnostics.phase_name);
 
     const gzip_chunks = [_][]const u8{

@@ -1517,6 +1517,10 @@ architecture blindly.
   probe failures now report which member failed, while preserving wrapper-aware
   phases such as footer checksum failures for the offending member.
 
+- Extended the same concatenated zlib/gzip probe failures with member byte
+  offsets, so callers can jump directly to the failing wrapper member in a
+  multi-member stream after a non-throwing preflight.
+
 - Added zlib stream inspection helpers for split compressed input
   (`inspectZlibStreamFromChunksAlloc*`), reusing caller-provided join scratch
   before running the existing diagnostic inspector. They report the same
