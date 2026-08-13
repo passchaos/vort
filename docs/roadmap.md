@@ -1521,6 +1521,10 @@ architecture blindly.
   offsets, so callers can jump directly to the failing wrapper member in a
   multi-member stream after a non-throwing preflight.
 
+- Added successful concatenated zlib/gzip probe member counts. Multi-member
+  preflights now report how many wrapper members were consumed, including
+  exact-size and split-input probe variants.
+
 - Added zlib stream inspection helpers for split compressed input
   (`inspectZlibStreamFromChunksAlloc*`), reusing caller-provided join scratch
   before running the existing diagnostic inspector. They report the same
