@@ -1152,18 +1152,66 @@ const DynamicCodingPlan = struct {
         }
         for (tokens) |token| switch (token) {
             .literal => |byte| try lit_encoder.writeSymbol(writer, allocator, byte),
-            .match => |m| {
-                const len_code = lengthCode(m.length);
-                try lit_encoder.writeSymbol(writer, allocator, len_code.symbol);
-                if (len_code.extra_bits != 0) try writer.writeBits(allocator, len_code.extra_value, len_code.extra_bits);
-                const dist_code = distanceCode(m.distance);
-                try dist_encoder.writeSymbol(writer, allocator, dist_code.symbol);
-                if (dist_code.extra_bits != 0) try writer.writeBits(allocator, dist_code.extra_value, dist_code.extra_bits);
-            },
+            .match => |m| try writeDynamicMatchFused(
+                allocator,
+                writer,
+                &lit_encoder,
+                &dist_encoder,
+                m,
+            ),
         };
         try lit_encoder.writeSymbol(writer, allocator, 256);
     }
 };
+
+fn writeDynamicMatchFused(
+    allocator: std.mem.Allocator,
+    writer: *bitstream.BitWriter,
+    lit_encoder: *const huffman.HuffmanTable(286).Encoder,
+    dist_encoder: *const huffman.HuffmanTable(30).Encoder,
+    match: lz77.Token.Match,
+) !void {
+    const len = lengthCode(match.length);
+    const dist = distanceCode(match.distance);
+    const len_code_bits: u6 = lit_encoder.bits[len.symbol];
+    const dist_code_bits: u6 = dist_encoder.bits[dist.symbol];
+    if (len_code_bits == 0 or dist_code_bits == 0) {
+        return error.InvalidHuffmanCode;
+    }
+
+    // Deflate fields are LSB-first. Concatenating them at increasing bit
+    // offsets produces exactly the same stream as four writeBits calls while
+    // reducing ArrayList/capacity handling to one call per match. The maximum
+    // is 15 + 5 + 15 + 13 = 48 bits, below BitWriter's 56-bit limit.
+    var bits: u64 = lit_encoder.codes[len.symbol];
+    var count: u6 = len_code_bits;
+    bits |= @as(u64, len.extra_value) << count;
+    count += len.extra_bits;
+    bits |= @as(u64, dist_encoder.codes[dist.symbol]) << count;
+    count += dist_code_bits;
+    bits |= @as(u64, dist.extra_value) << count;
+    count += dist.extra_bits;
+    try writer.writeBits(allocator, bits, count);
+}
+
+fn writeDynamicMatchReference(
+    allocator: std.mem.Allocator,
+    writer: *bitstream.BitWriter,
+    lit_encoder: *const huffman.HuffmanTable(286).Encoder,
+    dist_encoder: *const huffman.HuffmanTable(30).Encoder,
+    match: lz77.Token.Match,
+) !void {
+    const len = lengthCode(match.length);
+    try lit_encoder.writeSymbol(writer, allocator, len.symbol);
+    if (len.extra_bits != 0) {
+        try writer.writeBits(allocator, len.extra_value, len.extra_bits);
+    }
+    const dist = distanceCode(match.distance);
+    try dist_encoder.writeSymbol(writer, allocator, dist.symbol);
+    if (dist.extra_bits != 0) {
+        try writer.writeBits(allocator, dist.extra_value, dist.extra_bits);
+    }
+}
 
 fn buildCodeLengthOps(lit_lengths: []const u4, dist_lengths: []const u4) !CodeLengthOpBuffer {
     var lengths: [286 + 30]u4 = undefined;
@@ -1453,6 +1501,78 @@ test "fast length and distance code selection matches RFC tables" {
     try std.testing.expectEqual(@as(u16, 285), max_length.symbol);
     try std.testing.expectEqual(@as(u6, 0), max_length.extra_bits);
     try std.testing.expectEqual(@as(u16, 0), max_length.extra_value);
+}
+
+test "fused dynamic match writer matches field-by-field reference" {
+    const full_lit_lengths = huffman.fixedLiteralLengths();
+    const full_dist_lengths = huffman.fixedDistanceLengths();
+    const lit_encoder = try huffman.HuffmanTable(286).Encoder.init(
+        full_lit_lengths[0..286],
+    );
+    const dist_encoder = try huffman.HuffmanTable(30).Encoder.init(
+        full_dist_lengths[0..30],
+    );
+
+    for (0..8) |prefix_bits_usize| {
+        const prefix_bits: u6 = @intCast(prefix_bits_usize);
+        var fused = bitstream.BitWriter{};
+        defer fused.deinit(std.testing.allocator);
+        var reference = bitstream.BitWriter{};
+        defer reference.deinit(std.testing.allocator);
+        try fused.writeBits(std.testing.allocator, 0b1010_1101, prefix_bits);
+        try reference.writeBits(
+            std.testing.allocator,
+            0b1010_1101,
+            prefix_bits,
+        );
+
+        for (length_table) |length_entry| {
+            const last_length = if (length_entry.base == 258)
+                length_entry.base
+            else
+                length_entry.base +
+                    (@as(u16, 1) << @intCast(length_entry.extra_bits)) - 1;
+            for ([_]u16{ length_entry.base, last_length }) |length| {
+                for (distance_table) |distance_entry| {
+                    const last_distance =
+                        distance_entry.base +
+                        (@as(u16, 1) <<
+                            @intCast(distance_entry.extra_bits)) -
+                        1;
+                    for ([_]u16{
+                        distance_entry.base,
+                        last_distance,
+                    }) |distance| {
+                        const match: lz77.Token.Match = .{
+                            .length = length,
+                            .distance = distance,
+                        };
+                        try writeDynamicMatchFused(
+                            std.testing.allocator,
+                            &fused,
+                            &lit_encoder,
+                            &dist_encoder,
+                            match,
+                        );
+                        try writeDynamicMatchReference(
+                            std.testing.allocator,
+                            &reference,
+                            &lit_encoder,
+                            &dist_encoder,
+                            match,
+                        );
+                    }
+                }
+            }
+        }
+        try fused.alignToByte(std.testing.allocator);
+        try reference.alignToByte(std.testing.allocator);
+        try std.testing.expectEqualSlices(
+            u8,
+            reference.bytes.items,
+            fused.bytes.items,
+        );
+    }
 }
 
 pub fn decodeRawFixed(input: []const u8, output: []u8) Error!DecodeResult {

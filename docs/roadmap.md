@@ -1865,3 +1865,17 @@ architecture blindly.
   Final validation passed `zig build test -j1` in 1:40.89 at 4,125,424-KiB
   peak RSS and `zig build check -j1` in 4:16.08 at 687,376-KiB peak RSS, both
   with zero swap.
+
+- Fused each dynamic-Huffman LZ77 match's length symbol, length extra value,
+  distance symbol, and distance extra value into one LSB-first `BitWriter`
+  update. The maximum concatenated field is 48 bits, below the writer's 56-bit
+  limit, and eliminates up to three repeated ArrayList/capacity calls per
+  match. A retained four-write reference compares final bytes across every
+  RFC length/distance code's first and last value and all eight starting bit
+  alignments. On imx's fixed-CPU-12 11-round PNG encode A/B, adaptive
+  L8/RGB8/RGBA8 improved `1.105/1.054/1.108x`, the nine-row geomean improved
+  `1.029x`, stored/Up rows stayed neutral, and every encoded length, checksum,
+  and guard remained identical.
+  Final validation passed `zig build test -j1` in 1:42.83 at 4,125,496-KiB
+  peak RSS and `zig build check -j1` in 4:16.48 at 686,048-KiB peak RSS, both
+  with zero swap.
