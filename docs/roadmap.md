@@ -3415,3 +3415,9 @@ architecture blindly.
   exact-size, output-limited, append, caller-owned buffer, and decoded-size
   `zstd.decodeFrameChunks*` / root `zstdDecodeFrameChunks*` helpers matching the
   contiguous dictionary decode surface.
+
+- Added explicit top-level Zstd concatenated-frame facade aliases for contiguous
+  and chunked decode flows, including dictionary and dictionary-set variants.
+  Public `zstd.decodeConcatenatedFrame*` and root
+  `zstdDecodeConcatenatedFrame*` names now mirror the native concatenated
+  surface without forcing callers to depend on native-specific identifiers.
