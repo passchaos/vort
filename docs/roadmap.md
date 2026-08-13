@@ -2994,6 +2994,10 @@ architecture blindly.
   chunked-append-exact dictionary-set improvement pair. The fixture preserves
   positive timing, throughput, and iteration accounting while removing the exact
   append dictionary-set size win over its plain baseline.
+- Extended native library benchmark strict-smoke dictionary coverage to a Zstd
+  reusable-append-exact dictionary-set improvement pair. The fixture keeps the
+  benchmark row otherwise healthy while removing the reusable exact append
+  dictionary-set size win over its plain baseline.
 
 - Tightened native tier range CSV dashboard health by deriving expected
   `(fixture, tier)` rows from each source's JSON summary and exposing duplicate
