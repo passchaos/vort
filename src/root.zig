@@ -991,6 +991,7 @@ pub const encodeRawDynamicWithDictionaryAlloc = deflate.encodeRawDynamicWithDict
 pub const encodeRawDynamicSplitAlloc = deflate.encodeRawDynamicSplitAlloc;
 pub const encodeRawFixedWithOptionsAlloc = deflate.encodeRawFixedWithOptionsAlloc;
 pub const RawDeflateDecoder = deflate.RawDeflateDecoder;
+pub const RawDeflateProbeResult = deflate.RawDeflateProbeResult;
 pub const CompressionOptions = deflate.CompressionOptions;
 pub const CompressionStrategy = deflate.CompressionStrategy;
 pub const AdaptiveSplitOptions = deflate.AdaptiveSplitOptions;
@@ -1045,6 +1046,14 @@ pub const decodeRawDeflateChunksAppendExactSize = deflate.decodeRawChunksAppendE
 pub const decodeRawDeflateChunksAppendWithDictionaryExactSize = deflate.decodeRawChunksAppendWithDictionaryExactSize;
 pub const decodeRawDeflateChunksAppendLimited = deflate.decodeRawChunksAppendLimited;
 pub const decodeRawDeflateChunksAppendWithDictionaryLimited = deflate.decodeRawChunksAppendWithDictionaryLimited;
+pub const probeRawDeflate = deflate.probeRawAuto;
+pub const probeRawDeflateWithDictionary = deflate.probeRawAutoWithDictionary;
+pub const probeRawDeflateExactSize = deflate.probeRawAutoExactSize;
+pub const probeRawDeflateWithDictionaryExactSize = deflate.probeRawAutoWithDictionaryExactSize;
+pub const probeRawDeflateChunks = deflate.probeRawChunks;
+pub const probeRawDeflateChunksWithDictionary = deflate.probeRawChunksWithDictionary;
+pub const probeRawDeflateChunksExactSize = deflate.probeRawChunksExactSize;
+pub const probeRawDeflateChunksWithDictionaryExactSize = deflate.probeRawChunksWithDictionaryExactSize;
 pub const decodeRawDynamicAlloc = deflate.decodeRawDynamicAllocStrict;
 pub const encodeZlibStored = deflate.encodeZlibStored;
 pub const encodeZlibStoredWithDictionary = deflate.encodeZlibStoredWithDictionary;
@@ -5133,6 +5142,7 @@ test "root exports chunked compatibility decode helpers" {
     // references are intentionally compile-time only: codec behavior is covered
     // in deflate.zig, while this test catches accidental public API drift.
     _ = RawDeflateDecoder;
+    _ = RawDeflateProbeResult;
     _ = parseRawDeflateHeaderInfoFromChunks;
     _ = decodeRawDeflateChunks;
     _ = decodeRawDeflateChunksWithDictionary;
@@ -5154,6 +5164,14 @@ test "root exports chunked compatibility decode helpers" {
     _ = decodeRawDeflateChunksAppendWithDictionaryExactSize;
     _ = decodeRawDeflateChunksAppendLimited;
     _ = decodeRawDeflateChunksAppendWithDictionaryLimited;
+    _ = probeRawDeflate;
+    _ = probeRawDeflateWithDictionary;
+    _ = probeRawDeflateExactSize;
+    _ = probeRawDeflateWithDictionaryExactSize;
+    _ = probeRawDeflateChunks;
+    _ = probeRawDeflateChunksWithDictionary;
+    _ = probeRawDeflateChunksExactSize;
+    _ = probeRawDeflateChunksWithDictionaryExactSize;
 
     _ = decodeZlibChunks;
     _ = decodeZlibChunksWithDictionary;
@@ -5365,6 +5383,44 @@ test "root raw deflate decoder drains caller-owned scratch and resets" {
     try std.testing.expectError(error.SizeMismatch, decoder.resetExactSize(encoded, &scratch, payload.len + 1));
     try std.testing.expectEqualStrings("SizeMismatch", decoder.snapshot().last_error_name);
     try std.testing.expectEqualStrings("payload_corrupt", decoder.diagnostics().recoverability_hint_name);
+}
+
+test "root raw deflate probe reports support and size mismatches" {
+    const payload = "raw deflate probe payload" ** 2;
+    const encoded = try encodeRawBestAlloc(std.testing.allocator, payload, .{});
+    defer std.testing.allocator.free(encoded);
+    var scratch: [payload.len + 8]u8 = undefined;
+
+    const ok = probeRawDeflate(encoded, &scratch);
+    try std.testing.expect(ok.ok);
+    try std.testing.expectEqualStrings("", ok.error_name);
+    try std.testing.expectEqual(payload.len, ok.decoded_bytes.?);
+
+    const exact_ok = probeRawDeflateExactSize(encoded, &scratch, payload.len);
+    try std.testing.expect(exact_ok.ok);
+    try std.testing.expectEqual(payload.len, exact_ok.decoded_bytes.?);
+
+    const exact_bad = probeRawDeflateExactSize(encoded, &scratch, payload.len + 1);
+    try std.testing.expect(!exact_bad.ok);
+    try std.testing.expectEqualStrings("SizeMismatch", exact_bad.error_name);
+    try std.testing.expectEqual(payload.len, exact_bad.decoded_bytes.?);
+    try std.testing.expectEqualStrings("output_size", exact_bad.diagnostics.phase_name);
+
+    const truncated = probeRawDeflate("", &scratch);
+    try std.testing.expect(!truncated.ok);
+    try std.testing.expectEqualStrings("TruncatedFrame", truncated.error_name);
+    try std.testing.expectEqualStrings("truncated_input", truncated.diagnostics.recoverability_hint_name);
+
+    const chunks = [_][]const u8{
+        encoded[0..1],
+        encoded[1..@min(encoded.len, 9)],
+        encoded[@min(encoded.len, 9)..],
+    };
+    const join = try std.testing.allocator.alloc(u8, encoded.len);
+    defer std.testing.allocator.free(join);
+    const chunked = probeRawDeflateChunksExactSize(&chunks, join, &scratch, payload.len);
+    try std.testing.expect(chunked.ok);
+    try std.testing.expectEqual(payload.len, chunked.decoded_bytes.?);
 }
 
 test "root zlib and gzip append decode helpers preserve prefixes" {

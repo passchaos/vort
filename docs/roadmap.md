@@ -1488,6 +1488,11 @@ architecture blindly.
   reset, supports exact-size and split-input reset variants, and drains through
   bounded `step` calls with snapshots and shared streaming diagnostics.
 
+- Added non-throwing raw deflate probe helpers for contiguous and split-input
+  library callers. The probes decode into caller-owned scratch and return
+  `ok`, decoded byte counts, error names, and streaming diagnostics for support
+  and exact-size preflight without requiring integrations to wrap throwing APIs.
+
 - Added zlib stream inspection helpers for split compressed input
   (`inspectZlibStreamFromChunksAlloc*`), reusing caller-provided join scratch
   before running the existing diagnostic inspector. They report the same

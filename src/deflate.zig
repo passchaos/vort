@@ -29,6 +29,13 @@ const pngScanlinePayloadLen = png.pngScanlinePayloadLen;
 pub const Error = core.Error;
 pub const max_stored_block_len: usize = std.math.maxInt(u16);
 
+pub const RawDeflateProbeResult = struct {
+    ok: bool,
+    decoded_bytes: ?usize = null,
+    diagnostics: core.StreamingDiagnostics = .{ .phase_name = "payload" },
+    error_name: []const u8 = "",
+};
+
 const BlockHeader = struct {
     final: bool,
     block_type: u2,
@@ -5728,6 +5735,102 @@ pub const RawDeflateDecoder = struct {
         };
     }
 };
+
+pub fn probeRawAuto(input: []const u8, scratch: []u8) RawDeflateProbeResult {
+    return probeRawAutoWithDictionary(input, "", scratch);
+}
+
+pub fn probeRawAutoWithDictionary(input: []const u8, dictionary: []const u8, scratch: []u8) RawDeflateProbeResult {
+    var decoder = RawDeflateDecoder{};
+    decoder.resetWithDictionary(input, dictionary, scratch) catch |err| {
+        return .{
+            .ok = false,
+            .diagnostics = decoder.diagnostics(),
+            .error_name = @errorName(err),
+        };
+    };
+    return .{
+        .ok = true,
+        .decoded_bytes = decoder.decoded.len,
+        .diagnostics = decoder.diagnostics(),
+    };
+}
+
+pub fn probeRawAutoExactSize(input: []const u8, scratch: []u8, expected_output_len: usize) RawDeflateProbeResult {
+    return probeRawAutoWithDictionaryExactSize(input, "", scratch, expected_output_len);
+}
+
+pub fn probeRawAutoWithDictionaryExactSize(input: []const u8, dictionary: []const u8, scratch: []u8, expected_output_len: usize) RawDeflateProbeResult {
+    var decoder = RawDeflateDecoder{};
+    decoder.resetWithDictionary(input, dictionary, scratch) catch |err| {
+        return .{
+            .ok = false,
+            .diagnostics = decoder.diagnostics(),
+            .error_name = @errorName(err),
+        };
+    };
+    if (decoder.decoded.len != expected_output_len) {
+        return .{
+            .ok = false,
+            .decoded_bytes = decoder.decoded.len,
+            .diagnostics = .{
+                .phase_name = "output_size",
+                .output_written = decoder.decoded.len,
+                .expected_output_len = expected_output_len,
+                .payload_remaining = 0,
+                .last_error_name = @errorName(error.SizeMismatch),
+                .last_error_phase_name = "output_size",
+                .recoverability_hint_name = "payload_corrupt",
+            },
+            .error_name = @errorName(error.SizeMismatch),
+        };
+    }
+    return .{
+        .ok = true,
+        .decoded_bytes = decoder.decoded.len,
+        .diagnostics = decoder.diagnostics(),
+    };
+}
+
+pub fn probeRawChunks(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) RawDeflateProbeResult {
+    return probeRawChunksWithDictionary(chunks, compressed_scratch, "", output_scratch);
+}
+
+pub fn probeRawChunksWithDictionary(chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, output_scratch: []u8) RawDeflateProbeResult {
+    const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+        return .{
+            .ok = false,
+            .diagnostics = .{
+                .phase_name = "input",
+                .last_error_name = @errorName(err),
+                .last_error_phase_name = "input",
+                .recoverability_hint_name = "payload_corrupt",
+            },
+            .error_name = @errorName(err),
+        };
+    };
+    return probeRawAutoWithDictionary(joined, dictionary, output_scratch);
+}
+
+pub fn probeRawChunksExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) RawDeflateProbeResult {
+    return probeRawChunksWithDictionaryExactSize(chunks, compressed_scratch, "", output_scratch, expected_output_len);
+}
+
+pub fn probeRawChunksWithDictionaryExactSize(chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, output_scratch: []u8, expected_output_len: usize) RawDeflateProbeResult {
+    const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+        return .{
+            .ok = false,
+            .diagnostics = .{
+                .phase_name = "input",
+                .last_error_name = @errorName(err),
+                .last_error_phase_name = "input",
+                .recoverability_hint_name = "payload_corrupt",
+            },
+            .error_name = @errorName(err),
+        };
+    };
+    return probeRawAutoWithDictionaryExactSize(joined, dictionary, output_scratch, expected_output_len);
+}
 
 pub fn pngIdatChunksScratchLen(chunks: []const []const u8) Error!usize {
     return chunksTotalLen(chunks);
