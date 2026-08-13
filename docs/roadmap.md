@@ -1596,6 +1596,11 @@ architecture blindly.
   result that preserves the parsed `StreamSummary` and marks the diagnostic
   phase as output-size validation.
 
+- Extended Brotli `StreamSummary` with capability flags and static-dictionary
+  counters. Library callers can now distinguish stored-only streams from
+  metadata-bearing, compressed, and minimal static-dictionary streams before
+  deciding which decode path or fallback policy to use.
+
 - Added a dependency-free Snappy raw block module. `src/snappy.zig` covers the
   raw block varint length header, literal tags, copy1/copy2/copy4 decode,
   decoded-size preflight, output limits, caller-owned output, allocator-returning

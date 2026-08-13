@@ -2061,6 +2061,11 @@ test "root brotli stream helpers expose exact and chunked decode variants" {
     try std.testing.expectEqual(@as(usize, 1), summary.uncompressed_meta_block_count);
     try std.testing.expectEqual(@as(usize, 0), summary.compressed_meta_block_count);
     try std.testing.expectEqual(@as(usize, "root-br-metadata".len), summary.metadata_bytes);
+    try std.testing.expect(summary.uses_metadata);
+    try std.testing.expect(summary.uses_uncompressed_meta_blocks);
+    try std.testing.expect(!summary.uses_compressed_meta_blocks);
+    try std.testing.expect(!summary.uses_static_dictionary);
+    try std.testing.expect(!summary.stored_only);
     try std.testing.expectEqual(payload.len, (try brSummarizeStreamLimited(encoded, payload.len)).decoded_bytes);
     try std.testing.expectError(error.OutputLimitExceeded, brSummarizeStreamLimited(encoded, payload.len - 1));
 
@@ -2144,6 +2149,32 @@ test "root brotli stream helpers expose exact and chunked decode variants" {
     try std.testing.expectEqual(payload.len, try brDecodeStreamChunksIntoExactSize(&chunks, join, &into, payload.len));
     try std.testing.expectEqualSlices(u8, payload, &into);
     try std.testing.expectError(error.SizeMismatch, brDecodeStreamChunksIntoExactSize(&chunks, join, &into, payload.len - 1));
+}
+
+test "root brotli stream summary exposes capability flags" {
+    const stored_payload = "stored only brotli payload";
+    const stored = try brEncodeStoredStreamAlloc(std.testing.allocator, stored_payload);
+    defer std.testing.allocator.free(stored);
+    const stored_summary = try brSummarizeStream(stored);
+    try std.testing.expect(stored_summary.stored_only);
+    try std.testing.expect(stored_summary.uses_uncompressed_meta_blocks);
+    try std.testing.expect(!stored_summary.uses_metadata);
+    try std.testing.expect(!stored_summary.uses_compressed_meta_blocks);
+    try std.testing.expect(!stored_summary.uses_static_dictionary);
+    try std.testing.expectEqual(@as(usize, 0), stored_summary.static_dictionary_copy_count);
+    try std.testing.expectEqual(@as(usize, 0), stored_summary.static_dictionary_bytes);
+
+    const static_dictionary_frame = [_]u8{
+        0xa1, 0xc0, 0x00, 0x00, 0x20, 0xe0, 0x38, 0xbc,
+        0xde, 0xdd, 0x77, 0x5f, 0x44, 0xa4, 0x1a, 0x24,
+        0x9f, 0x6a, 0x3c, 0xa7, 0x83, 0xd6, 0xc7, 0x00,
+    };
+    const static_summary = try brSummarizeStream(&static_dictionary_frame);
+    try std.testing.expect(!static_summary.stored_only);
+    try std.testing.expect(static_summary.uses_compressed_meta_blocks);
+    try std.testing.expect(static_summary.uses_static_dictionary);
+    try std.testing.expect(static_summary.static_dictionary_copy_count > 0);
+    try std.testing.expect(static_summary.static_dictionary_bytes > 0);
 }
 
 test "root brotli stream summary diagnostics report failure phases" {
