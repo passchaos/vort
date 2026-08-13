@@ -10302,6 +10302,21 @@ def main() -> int:
             and zlib_missing_markdown_manifest["zlib_relaxed_markdown_present"] is False,
         )
 
+        zlib_gate_ok_result, zlib_gate_ok_manifest = zlib_relaxed_drift_fixture(
+            root,
+            "zlib-relaxed-gate-ok-false",
+            mutate_gate=lambda payload: payload.__setitem__("ok", False),
+        )
+        append_zlib_relaxed_check(
+            "zlib_relaxed_gate_ok_false",
+            zlib_gate_ok_result,
+            zlib_gate_ok_manifest,
+            "zlib_relaxed_failed",
+            zlib_gate_ok_manifest["zlib_relaxed_gate_ok"] is False
+            and zlib_gate_ok_manifest["zlib_relaxed_gate_recomputed_failed_count"] == 0
+            and zlib_gate_ok_manifest["zlib_relaxed_gate_check_rule_mismatch"] == 0,
+        )
+
         zlib_gate_missing_check_result, zlib_gate_missing_check_manifest = zlib_relaxed_drift_fixture(
             root,
             "zlib-relaxed-gate-missing-check",
@@ -10371,6 +10386,96 @@ def main() -> int:
             zlib_report_floor_manifest["zlib_relaxed_gate_floor_shortfall_count"] == 1
             and zlib_report_floor_manifest["zlib_relaxed_gate_recomputed_failed_count"] == 1,
         )
+
+        zlib_exact_metric_drift_cases = [
+            (
+                "zlib_relaxed_dictionary_success_exact_mismatch",
+                "zlib-relaxed-dictionary-success-exact",
+                "dictionary_successes",
+                "zlib_relaxed_dictionary_successes",
+            ),
+            (
+                "zlib_relaxed_limited_rejection_exact_mismatch",
+                "zlib-relaxed-limited-rejection-exact",
+                "limited_rejections",
+                "zlib_relaxed_limited_rejections",
+            ),
+            (
+                "zlib_relaxed_gzip_strict_rejection_exact_mismatch",
+                "zlib-relaxed-gzip-strict-exact",
+                "gzip_strict_rejections",
+                "gzip_relaxed_strict_rejections",
+            ),
+            (
+                "zlib_relaxed_gzip_decoder_success_exact_mismatch",
+                "zlib-relaxed-gzip-decoder-exact",
+                "gzip_decoder_successes",
+                "gzip_relaxed_decoder_successes",
+            ),
+            (
+                "zlib_relaxed_gzip_limited_rejection_exact_mismatch",
+                "zlib-relaxed-gzip-limited-exact",
+                "gzip_limited_rejections",
+                "gzip_relaxed_limited_rejections",
+            ),
+        ]
+        for check_name, fixture_name, report_field, manifest_field in zlib_exact_metric_drift_cases:
+            result, manifest = zlib_relaxed_drift_fixture(
+                root,
+                fixture_name,
+                mutate_report=lambda payload, report_field=report_field: payload.__setitem__(report_field, int(payload[report_field]) + 1),
+            )
+            append_zlib_relaxed_check(
+                check_name,
+                result,
+                manifest,
+                "zlib_relaxed_failed",
+                manifest["zlib_relaxed_gate_exact_mismatch_count"] == 1
+                and manifest["zlib_relaxed_gate_recomputed_failed_count"] == 1
+                and manifest[manifest_field] > 0,
+            )
+
+        zlib_floor_metric_drift_cases = [
+            (
+                "zlib_relaxed_zlib_concatenated_floor_shortfall",
+                "zlib-relaxed-zlib-concat-floor",
+                "zlib_concatenated_successes",
+                "zlib_relaxed_concatenated_successes",
+            ),
+            (
+                "zlib_relaxed_zlib_decoder_floor_shortfall",
+                "zlib-relaxed-zlib-decoder-floor",
+                "zlib_decoder_successes",
+                "zlib_relaxed_decoder_successes",
+            ),
+            (
+                "zlib_relaxed_gzip_relaxed_floor_shortfall",
+                "zlib-relaxed-gzip-relaxed-floor",
+                "gzip_relaxed_successes",
+                "gzip_relaxed_successes",
+            ),
+            (
+                "zlib_relaxed_gzip_concatenated_floor_shortfall",
+                "zlib-relaxed-gzip-concat-floor",
+                "gzip_concatenated_successes",
+                "gzip_relaxed_concatenated_successes",
+            ),
+        ]
+        for check_name, fixture_name, report_field, manifest_field in zlib_floor_metric_drift_cases:
+            result, manifest = zlib_relaxed_drift_fixture(
+                root,
+                fixture_name,
+                mutate_report=lambda payload, report_field=report_field: payload.__setitem__(report_field, int(payload[report_field]) - 1),
+            )
+            append_zlib_relaxed_check(
+                check_name,
+                result,
+                manifest,
+                "zlib_relaxed_failed",
+                manifest["zlib_relaxed_gate_floor_shortfall_count"] == 1
+                and manifest["zlib_relaxed_gate_recomputed_failed_count"] == 1
+                and manifest[manifest_field] >= 0,
+            )
 
         zlib_markdown_value_result, zlib_markdown_value_manifest = zlib_relaxed_drift_fixture(
             root,

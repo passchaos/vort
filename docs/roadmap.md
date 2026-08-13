@@ -467,7 +467,7 @@ architecture blindly.
 - [x] Dashboard strict-mode smoke covers every validation unhealthy reason with isolated negative fixtures.
 - [x] Dashboard strict-mode validation unhealthy reason matrix is stored in a schema-checked external JSON config.
 - [x] Dashboard strict-mode smoke directly covers native codec probe health drift, including probe ok/timeout/case-floor drift, probe count/case-sum mismatches, missing/duplicate probes, coverage/capability count/missing/duplicate drift, unhealthy capability rows, and Markdown unmatched rows.
-- [x] Dashboard strict-mode smoke directly covers zlib relaxed health drift, including missing gate/Markdown artifacts, gate check missing/extra/rule drift, report exact/floor mismatches, and malformed/duplicate/unknown/value-mismatched Markdown metrics.
+- [x] Dashboard strict-mode smoke directly covers zlib relaxed health drift, including missing gate/Markdown artifacts, gate `ok` drift, gate check missing/extra/rule drift, every report exact/floor metric, and malformed/duplicate/unknown/value-mismatched Markdown metrics.
 - [x] Dashboard strict-mode smoke directly covers Snappy report health drift, including missing/duplicate/unknown mode-case rows, positive timing/ratio/throughput drift, repetitive-ratio regressions, framed-overhead drift, and reusable checksum mismatches.
 - [x] Dashboard strict-mode smoke directly covers PNG scratch health drift, including missing Markdown, report count drift, missing/duplicate/unknown cases, row accounting mismatches, stored/fixed streaming regressions, streaming-savings drift, and Markdown row drift.
 - [x] Dashboard strict-mode smoke directly covers checksum benchmark health drift, including missing/duplicate/unknown algorithms, positive/workload/throughput row drift, and CRC32/CRC32C digest mix-group mismatches.
@@ -3136,6 +3136,12 @@ architecture blindly.
   as structured evidence and exposing malformed, duplicate, unknown, and
   value-mismatched metrics. Dashboard health now rejects relaxed wrapper
   Markdown drift before gate/report coverage can pass.
+
+- Tightened zlib relaxed strict-smoke direct drift coverage for the existing
+  retained relaxed-wrapper report/gate/Markdown artifacts without adding
+  compatibility scope. The strict validation gate now isolates `ok=false` gate
+  drift, each exact report metric, and each floor metric before relaxed
+  zlib/gzip compatibility coverage can pass.
 
 - Tightened native allocation dashboard health by exposing duplicate report,
   zero-allocation smoke, budget smoke, and negative smoke identities plus
