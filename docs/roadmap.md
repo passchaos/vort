@@ -3487,6 +3487,11 @@ architecture blindly.
   scratch, and append flows for these modes, with root tests checking byte parity
   against the top-level zlib encoders.
 
+- Extended `ZlibEncoder` with preset-dictionary fixed, best, and zlib-level
+  helpers. The reusable facade now exposes alloc, scratch, and append flows for
+  dictionary modes, with root tests checking byte parity against top-level
+  dictionary encoders and dictionary decode round trips.
+
 - Extended `GzipEncoder` beyond stored blocks with fixed, option-bearing fixed,
   best, zlib-level, and metadata-rich header encode helpers. The reusable facade
   now exposes alloc, scratch, and append flows for these modes, with root tests

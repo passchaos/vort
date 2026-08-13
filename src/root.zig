@@ -7022,6 +7022,48 @@ test "root zlib encoder reuses stored scratch" {
     try std.testing.expectEqual(level_expected.len, try encoder.encodeLevelAppend(&level_appended, payload, 1));
     try std.testing.expectEqualSlices(u8, level_expected, level_appended.items);
     try std.testing.expectError(error.InvalidBlockPlan, encoder.encodeLevelAlloc(payload, 10));
+
+    const dict_options = optionsForCompressionLevel(.fast);
+    const fixed_dict_expected = try encodeZlibFixedWithDictionaryAlloc(std.testing.allocator, payload, preset_dictionary, dict_options);
+    defer std.testing.allocator.free(fixed_dict_expected);
+    const fixed_dict_owned = try encoder.encodeFixedWithDictionaryAlloc(payload, preset_dictionary, dict_options);
+    defer std.testing.allocator.free(fixed_dict_owned);
+    try std.testing.expectEqualSlices(u8, fixed_dict_expected, fixed_dict_owned);
+    const fixed_dict_scratch = try encoder.encodeFixedWithDictionaryScratch(payload, preset_dictionary, dict_options);
+    try std.testing.expectEqualSlices(u8, fixed_dict_expected, fixed_dict_scratch);
+    var fixed_dict_appended: std.ArrayList(u8) = .empty;
+    defer fixed_dict_appended.deinit(std.testing.allocator);
+    try std.testing.expectEqual(fixed_dict_expected.len, try encoder.encodeFixedWithDictionaryAppend(&fixed_dict_appended, payload, preset_dictionary, dict_options));
+    try std.testing.expectEqualSlices(u8, fixed_dict_expected, fixed_dict_appended.items);
+
+    const best_dict_expected = try encodeZlibBestWithDictionaryAlloc(std.testing.allocator, payload, preset_dictionary, dict_options);
+    defer std.testing.allocator.free(best_dict_expected);
+    const best_dict_owned = try encoder.encodeBestWithDictionaryAlloc(payload, preset_dictionary, dict_options);
+    defer std.testing.allocator.free(best_dict_owned);
+    try std.testing.expectEqualSlices(u8, best_dict_expected, best_dict_owned);
+    const best_dict_scratch = try encoder.encodeBestWithDictionaryScratch(payload, preset_dictionary, dict_options);
+    try std.testing.expectEqualSlices(u8, best_dict_expected, best_dict_scratch);
+    var best_dict_appended: std.ArrayList(u8) = .empty;
+    defer best_dict_appended.deinit(std.testing.allocator);
+    try std.testing.expectEqual(best_dict_expected.len, try encoder.encodeBestWithDictionaryAppend(&best_dict_appended, payload, preset_dictionary, dict_options));
+    try std.testing.expectEqualSlices(u8, best_dict_expected, best_dict_appended.items);
+
+    const level_dict_expected = try encodeZlibLevelWithDictionaryAlloc(std.testing.allocator, payload, preset_dictionary, 1);
+    defer std.testing.allocator.free(level_dict_expected);
+    const level_dict_owned = try encoder.encodeLevelWithDictionaryAlloc(payload, preset_dictionary, 1);
+    defer std.testing.allocator.free(level_dict_owned);
+    try std.testing.expectEqualSlices(u8, level_dict_expected, level_dict_owned);
+    const level_dict_scratch = try encoder.encodeLevelWithDictionaryScratch(payload, preset_dictionary, 1);
+    try std.testing.expectEqualSlices(u8, level_dict_expected, level_dict_scratch);
+    var level_dict_appended: std.ArrayList(u8) = .empty;
+    defer level_dict_appended.deinit(std.testing.allocator);
+    try std.testing.expectEqual(level_dict_expected.len, try encoder.encodeLevelWithDictionaryAppend(&level_dict_appended, payload, preset_dictionary, 1));
+    try std.testing.expectEqualSlices(u8, level_dict_expected, level_dict_appended.items);
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.encodeLevelWithDictionaryAlloc(payload, preset_dictionary, 10));
+
+    const dict_decoded = try decodeZlibAllocWithDictionaryExactSize(std.testing.allocator, best_dict_scratch, preset_dictionary, payload.len);
+    defer std.testing.allocator.free(dict_decoded);
+    try std.testing.expectEqualSlices(u8, payload, dict_decoded);
 }
 
 test "root gzip encoder reuses stored scratch" {
