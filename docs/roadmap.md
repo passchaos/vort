@@ -1440,6 +1440,12 @@ architecture blindly.
   first; gzip chunked append mirrors the strict/options/exact/limited matrix via
   caller-provided compressed join scratch.
 
+- Added concatenated zlib/gzip append decode helpers for library callers. Multi-member
+  zlib and gzip streams now have append, exact-size append, and output-limited
+  append variants that preserve caller prefixes and reuse existing per-member
+  wrapper validation without routing through CLI or forcing an owned decoded
+  slice first.
+
 - Added public one-shot `decodeGzipChunks` and `decodeGzipChunksWithOptions`
   helpers for caller-buffer gzip decode from split compressed input. They reuse
   the existing caller-owned compressed join scratch policy (including the
