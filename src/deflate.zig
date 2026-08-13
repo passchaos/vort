@@ -2600,6 +2600,47 @@ pub fn decodeRawAutoAllocWithDictionaryLimited(allocator: std.mem.Allocator, inp
     return result.bytes;
 }
 
+pub fn decodeRawAutoAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) !usize {
+    return decodeRawAutoAppendWithDictionaryLimitedInternal(allocator, out, input, "", null);
+}
+
+pub fn decodeRawAutoAppendWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8) !usize {
+    return decodeRawAutoAppendWithDictionaryLimitedInternal(allocator, out, input, dictionary, null);
+}
+
+pub fn decodeRawAutoAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, expected_output_len: usize) !usize {
+    return decodeRawAutoAppendWithDictionaryExactSize(allocator, out, input, "", expected_output_len);
+}
+
+pub fn decodeRawAutoAppendWithDictionaryExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, expected_output_len: usize) !usize {
+    const decoded = try decodeRawAutoAllocWithDictionaryExactSize(allocator, input, dictionary, expected_output_len);
+    defer allocator.free(decoded);
+    try out.appendSlice(allocator, decoded);
+    return decoded.len;
+}
+
+pub fn decodeRawAutoAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, max_output_len: usize) !usize {
+    return decodeRawAutoAppendWithDictionaryLimitedInternal(allocator, out, input, "", max_output_len);
+}
+
+pub fn decodeRawAutoAppendWithDictionaryLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, max_output_len: usize) !usize {
+    return decodeRawAutoAppendWithDictionaryLimitedInternal(allocator, out, input, dictionary, max_output_len);
+}
+
+fn decodeRawAutoAppendWithDictionaryLimitedInternal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, max_output_len: ?usize) !usize {
+    const start = out.items.len;
+    errdefer out.items.len = start;
+    const absolute_limit = try appendAbsoluteLimit(start, max_output_len);
+    if (try planRawStoredOnlyForFullInput(input)) |stored_plan| {
+        try appendRawStoredOnlyPlanned(allocator, input[0..stored_plan.input_read], out, stored_plan, absolute_limit);
+        return out.items.len - start;
+    }
+    try rejectReservedFirstBlockBeforeAlloc(input);
+    const decoded = try decodeRawAutoAppendPartialWithDictionary(allocator, input, dictionary, out, absolute_limit);
+    if (decoded.input_read != input.len) return error.TrailingData;
+    return out.items.len - start;
+}
+
 pub fn decodeRawChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8) ![]u8 {
     return decodeRawChunksAllocWithOptionalDictionaryLimited(allocator, chunks, compressed_scratch, "", null);
 }
@@ -2623,6 +2664,36 @@ pub fn decodeRawChunksAllocLimited(allocator: std.mem.Allocator, chunks: []const
 
 pub fn decodeRawChunksAllocWithDictionaryLimited(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, max_output_len: usize) ![]u8 {
     return decodeRawChunksAllocWithOptionalDictionaryLimited(allocator, chunks, compressed_scratch, dictionary, max_output_len);
+}
+
+pub fn decodeRawChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8) !usize {
+    return decodeRawChunksAppendWithDictionaryLimitedInternal(allocator, out, chunks, compressed_scratch, "", null);
+}
+
+pub fn decodeRawChunksAppendWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8) !usize {
+    return decodeRawChunksAppendWithDictionaryLimitedInternal(allocator, out, chunks, compressed_scratch, dictionary, null);
+}
+
+pub fn decodeRawChunksAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) !usize {
+    return decodeRawChunksAppendWithDictionaryExactSize(allocator, out, chunks, compressed_scratch, "", expected_output_len);
+}
+
+pub fn decodeRawChunksAppendWithDictionaryExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, expected_output_len: usize) !usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeRawAutoAppendWithDictionaryExactSize(allocator, out, joined, dictionary, expected_output_len);
+}
+
+pub fn decodeRawChunksAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) !usize {
+    return decodeRawChunksAppendWithDictionaryLimitedInternal(allocator, out, chunks, compressed_scratch, "", max_output_len);
+}
+
+pub fn decodeRawChunksAppendWithDictionaryLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, max_output_len: usize) !usize {
+    return decodeRawChunksAppendWithDictionaryLimitedInternal(allocator, out, chunks, compressed_scratch, dictionary, max_output_len);
+}
+
+fn decodeRawChunksAppendWithDictionaryLimitedInternal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, max_output_len: ?usize) !usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeRawAutoAppendWithDictionaryLimitedInternal(allocator, out, joined, dictionary, max_output_len);
 }
 
 fn decodeRawChunksAllocWithOptionalDictionaryLimited(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, max_output_len: ?usize) ![]u8 {

@@ -1477,6 +1477,12 @@ architecture blindly.
   dispatching to existing raw inflate APIs, covering exact-size, output-limited,
   and preset-dictionary workflows for split raw streams.
 
+- Added raw deflate append decode helpers for contiguous and split-input
+  library callers. Raw deflate now mirrors the wrapper append surfaces with
+  prefix-preserving append, exact-size append, output-limited append, and
+  preset-dictionary variants without requiring an intermediate owned decoded
+  slice.
+
 - Added zlib stream inspection helpers for split compressed input
   (`inspectZlibStreamFromChunksAlloc*`), reusing caller-provided join scratch
   before running the existing diagnostic inspector. They report the same

@@ -1026,12 +1026,24 @@ pub const decodeRawDeflateAllocLimited = deflate.decodeRawAutoAllocLimited;
 pub const decodeRawDeflateAllocWithDictionary = deflate.decodeRawAutoAllocWithDictionary;
 pub const decodeRawDeflateAllocWithDictionaryExactSize = deflate.decodeRawAutoAllocWithDictionaryExactSize;
 pub const decodeRawDeflateAllocWithDictionaryLimited = deflate.decodeRawAutoAllocWithDictionaryLimited;
+pub const decodeRawDeflateAppend = deflate.decodeRawAutoAppend;
+pub const decodeRawDeflateAppendWithDictionary = deflate.decodeRawAutoAppendWithDictionary;
+pub const decodeRawDeflateAppendExactSize = deflate.decodeRawAutoAppendExactSize;
+pub const decodeRawDeflateAppendWithDictionaryExactSize = deflate.decodeRawAutoAppendWithDictionaryExactSize;
+pub const decodeRawDeflateAppendLimited = deflate.decodeRawAutoAppendLimited;
+pub const decodeRawDeflateAppendWithDictionaryLimited = deflate.decodeRawAutoAppendWithDictionaryLimited;
 pub const decodeRawDeflateChunksAlloc = deflate.decodeRawChunksAlloc;
 pub const decodeRawDeflateChunksAllocExactSize = deflate.decodeRawChunksAllocExactSize;
 pub const decodeRawDeflateChunksAllocLimited = deflate.decodeRawChunksAllocLimited;
 pub const decodeRawDeflateChunksAllocWithDictionary = deflate.decodeRawChunksAllocWithDictionary;
 pub const decodeRawDeflateChunksAllocWithDictionaryExactSize = deflate.decodeRawChunksAllocWithDictionaryExactSize;
 pub const decodeRawDeflateChunksAllocWithDictionaryLimited = deflate.decodeRawChunksAllocWithDictionaryLimited;
+pub const decodeRawDeflateChunksAppend = deflate.decodeRawChunksAppend;
+pub const decodeRawDeflateChunksAppendWithDictionary = deflate.decodeRawChunksAppendWithDictionary;
+pub const decodeRawDeflateChunksAppendExactSize = deflate.decodeRawChunksAppendExactSize;
+pub const decodeRawDeflateChunksAppendWithDictionaryExactSize = deflate.decodeRawChunksAppendWithDictionaryExactSize;
+pub const decodeRawDeflateChunksAppendLimited = deflate.decodeRawChunksAppendLimited;
+pub const decodeRawDeflateChunksAppendWithDictionaryLimited = deflate.decodeRawChunksAppendWithDictionaryLimited;
 pub const decodeRawDynamicAlloc = deflate.decodeRawDynamicAllocStrict;
 pub const encodeZlibStored = deflate.encodeZlibStored;
 pub const encodeZlibStoredWithDictionary = deflate.encodeZlibStoredWithDictionary;
@@ -5128,6 +5140,18 @@ test "root exports chunked compatibility decode helpers" {
     _ = decodeRawDeflateChunksAllocWithDictionary;
     _ = decodeRawDeflateChunksAllocWithDictionaryExactSize;
     _ = decodeRawDeflateChunksAllocWithDictionaryLimited;
+    _ = decodeRawDeflateAppend;
+    _ = decodeRawDeflateAppendWithDictionary;
+    _ = decodeRawDeflateAppendExactSize;
+    _ = decodeRawDeflateAppendWithDictionaryExactSize;
+    _ = decodeRawDeflateAppendLimited;
+    _ = decodeRawDeflateAppendWithDictionaryLimited;
+    _ = decodeRawDeflateChunksAppend;
+    _ = decodeRawDeflateChunksAppendWithDictionary;
+    _ = decodeRawDeflateChunksAppendExactSize;
+    _ = decodeRawDeflateChunksAppendWithDictionaryExactSize;
+    _ = decodeRawDeflateChunksAppendLimited;
+    _ = decodeRawDeflateChunksAppendWithDictionaryLimited;
 
     _ = decodeZlibChunks;
     _ = decodeZlibChunksWithDictionary;
@@ -5246,6 +5270,55 @@ test "root exports chunked compatibility decode helpers" {
     _ = parseGzipHeaderInfoFromChunks;
     _ = inspectGzipMemberFromChunksAlloc;
     _ = inspectGzipMemberFromChunksAllocLimited;
+}
+
+test "root raw deflate append decode helpers preserve prefixes" {
+    const payload = "root raw deflate append payload " ** 2;
+    const encoded = try encodeRawBestAlloc(std.testing.allocator, payload, .{});
+    defer std.testing.allocator.free(encoded);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try decodeRawDeflateAppend(std.testing.allocator, &appended, encoded));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, appended.items);
+
+    appended.clearRetainingCapacity();
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try decodeRawDeflateAppendExactSize(std.testing.allocator, &appended, encoded, payload.len));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, appended.items);
+    try std.testing.expectError(error.SizeMismatch, decodeRawDeflateAppendExactSize(std.testing.allocator, &appended, encoded, payload.len + 1));
+
+    appended.clearRetainingCapacity();
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try decodeRawDeflateAppendLimited(std.testing.allocator, &appended, encoded, payload.len));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, appended.items);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeRawDeflateAppendLimited(std.testing.allocator, &appended, encoded, payload.len - 1));
+
+    const chunks = [_][]const u8{
+        encoded[0..1],
+        encoded[1..@min(encoded.len, 13)],
+        encoded[@min(encoded.len, 13)..],
+    };
+    const join = try std.testing.allocator.alloc(u8, encoded.len);
+    defer std.testing.allocator.free(join);
+
+    appended.clearRetainingCapacity();
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try decodeRawDeflateChunksAppend(std.testing.allocator, &appended, &chunks, join));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, appended.items);
+
+    appended.clearRetainingCapacity();
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try decodeRawDeflateChunksAppendExactSize(std.testing.allocator, &appended, &chunks, join, payload.len));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, appended.items);
+    try std.testing.expectError(error.SizeMismatch, decodeRawDeflateChunksAppendExactSize(std.testing.allocator, &appended, &chunks, join, payload.len - 1));
+
+    appended.clearRetainingCapacity();
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try decodeRawDeflateChunksAppendLimited(std.testing.allocator, &appended, &chunks, join, payload.len));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, appended.items);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeRawDeflateChunksAppendLimited(std.testing.allocator, &appended, &chunks, join, payload.len - 1));
 }
 
 test "root zlib and gzip append decode helpers preserve prefixes" {
