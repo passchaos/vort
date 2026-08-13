@@ -819,16 +819,31 @@ pub const BitWriter = struct {
 
     pub fn writeBits(self: *BitWriter, allocator: std.mem.Allocator, bits: u64, count: u6) !void {
         if (count > 56) return error.CorruptFrame;
-        var i: u6 = 0;
-        while (i < count) : (i += 1) {
-            const bit: u8 = @intCast((bits >> @intCast(i)) & 1);
-            self.scratch |= bit << self.bit_index;
-            self.bit_index +%= 1;
-            if (self.bit_index == 0) {
-                try self.bytes.append(allocator, self.scratch);
-                self.scratch = 0;
-            }
+        if (count == 0) return;
+
+        // A call contributes at most 56 bits and the pending byte contributes
+        // at most seven, so the complete update fits in one u64 reservoir.
+        // Materializing its full bytes at once avoids the former per-bit loop
+        // in Huffman-heavy Deflate encode paths while preserving LSB-first
+        // packing and the existing partial-byte state.
+        const value_mask = (@as(u64, 1) << count) - 1;
+        const reservoir = @as(u64, self.scratch) |
+            ((bits & value_mask) << self.bit_index);
+        const total_bits: usize = @as(usize, self.bit_index) + count;
+        const full_bytes = total_bits / 8;
+        const trailing_bits: u3 = @intCast(total_bits % 8);
+
+        if (full_bytes != 0) {
+            var encoded: [8]u8 = undefined;
+            std.mem.writeInt(u64, &encoded, reservoir, .little);
+            try self.bytes.appendSlice(allocator, encoded[0..full_bytes]);
         }
+
+        self.scratch = if (trailing_bits == 0)
+            0
+        else
+            @truncate(reservoir >> @intCast(full_bytes * 8));
+        self.bit_index = trailing_bits;
     }
 
     pub fn alignToByte(self: *BitWriter, allocator: std.mem.Allocator) !void {
@@ -853,6 +868,71 @@ test "BitReader consumes LSB-first deflate bits" {
     try std.testing.expectEqual(@as(usize, 10), reader.bitPosition());
     reader.alignToByte();
     try std.testing.expectEqual(@as(usize, 2), reader.byteOffset());
+}
+
+test "BitWriter bulk packing matches scalar bit packing" {
+    const ScalarWriter = struct {
+        bytes: std.ArrayList(u8) = .empty,
+        scratch: u8 = 0,
+        bit_index: u3 = 0,
+
+        fn deinit(self: *@This()) void {
+            self.bytes.deinit(std.testing.allocator);
+        }
+
+        fn writeBits(self: *@This(), bits: u64, count: u6) !void {
+            var i: u6 = 0;
+            while (i < count) : (i += 1) {
+                const bit: u8 = @intCast((bits >> @intCast(i)) & 1);
+                self.scratch |= bit << self.bit_index;
+                self.bit_index +%= 1;
+                if (self.bit_index == 0) {
+                    try self.bytes.append(std.testing.allocator, self.scratch);
+                    self.scratch = 0;
+                }
+            }
+        }
+
+        fn finish(self: *@This()) !void {
+            if (self.bit_index != 0) {
+                try self.bytes.append(std.testing.allocator, self.scratch);
+                self.scratch = 0;
+                self.bit_index = 0;
+            }
+        }
+    };
+
+    const patterns = [_]u64{
+        0,
+        std.math.maxInt(u64),
+        0x0123_4567_89ab_cdef,
+        0xfedc_ba98_7654_3210,
+    };
+    for (0..8) |prefix_len_usize| {
+        const prefix_len: u6 = @intCast(prefix_len_usize);
+        for (0..57) |count_usize| {
+            const count: u6 = @intCast(count_usize);
+            for (patterns) |pattern| {
+                var bulk = BitWriter{};
+                defer bulk.deinit(std.testing.allocator);
+                var scalar = ScalarWriter{};
+                defer scalar.deinit();
+
+                // Prefix/suffix writes exercise every possible initial
+                // alignment and force trailing state back through a boundary.
+                try bulk.writeBits(std.testing.allocator, 0b1010_1101, prefix_len);
+                try scalar.writeBits(0b1010_1101, prefix_len);
+                try bulk.writeBits(std.testing.allocator, pattern, count);
+                try scalar.writeBits(pattern, count);
+                try bulk.writeBits(std.testing.allocator, 0b0110_1001, 7);
+                try scalar.writeBits(0b0110_1001, 7);
+                try bulk.alignToByte(std.testing.allocator);
+                try scalar.finish();
+
+                try std.testing.expectEqualSlices(u8, scalar.bytes.items, bulk.bytes.items);
+            }
+        }
+    }
 }
 
 test "BitReader skipBits advances without reading values" {
