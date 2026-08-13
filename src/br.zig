@@ -453,6 +453,206 @@ pub fn decodedStreamChunksSizeLimited(chunks: []const []const u8, compressed_scr
     return try decodedStreamSizeLimited(joined, max_output_len);
 }
 
+/// Reusable, caller-owned Brotli stream decoder facade.
+///
+/// The current Brotli codec still validates and decodes a complete supported
+/// stream into caller-provided scratch during `reset*`; `step` then drains that
+/// decoded scratch through bounded output buffers. This mirrors the early
+/// zlib/gzip decoder facade shape without adding hidden allocations, and keeps a
+/// stable library API ready for a future byte-progressive Brotli state machine.
+pub const StreamDecoder = struct {
+    decoded: []const u8 = &.{},
+    stream_len: usize = 0,
+    offset: usize = 0,
+    done: bool = false,
+    last_error_name: []const u8 = "",
+    last_recoverability_hint: RecoverabilityHint = .none,
+
+    pub const RecoverabilityHint = enum {
+        none,
+        truncated_input,
+        unsupported_feature,
+        payload_corrupt,
+    };
+
+    pub const Snapshot = struct {
+        output_written: usize,
+        expected_output_len: usize,
+        payload_remaining: usize,
+        done: bool,
+        last_error_name: []const u8,
+        recoverability_hint: RecoverabilityHint,
+    };
+
+    pub fn init(stream: []const u8, output_scratch: []u8) Error!StreamDecoder {
+        var self = StreamDecoder{};
+        try self.reset(stream, output_scratch);
+        return self;
+    }
+
+    pub fn initExactSize(stream: []const u8, output_scratch: []u8, expected_output_len: usize) Error!StreamDecoder {
+        var self = StreamDecoder{};
+        try self.resetExactSize(stream, output_scratch, expected_output_len);
+        return self;
+    }
+
+    pub fn initLimited(stream: []const u8, output_scratch: []u8, max_output_len: usize) Error!StreamDecoder {
+        var self = StreamDecoder{};
+        try self.resetLimited(stream, output_scratch, max_output_len);
+        return self;
+    }
+
+    pub fn initFromChunks(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!StreamDecoder {
+        var self = StreamDecoder{};
+        try self.resetFromChunks(chunks, compressed_scratch, output_scratch);
+        return self;
+    }
+
+    pub fn initFromChunksExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!StreamDecoder {
+        var self = StreamDecoder{};
+        try self.resetFromChunksExactSize(chunks, compressed_scratch, output_scratch, expected_output_len);
+        return self;
+    }
+
+    pub fn initFromChunksLimited(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, max_output_len: usize) Error!StreamDecoder {
+        var self = StreamDecoder{};
+        try self.resetFromChunksLimited(chunks, compressed_scratch, output_scratch, max_output_len);
+        return self;
+    }
+
+    pub fn reset(self: *StreamDecoder, stream: []const u8, output_scratch: []u8) Error!void {
+        return self.resetLimited(stream, output_scratch, std.math.maxInt(usize));
+    }
+
+    pub fn resetExactSize(self: *StreamDecoder, stream: []const u8, output_scratch: []u8, expected_output_len: usize) Error!void {
+        const decoded_len = decodedStreamSize(stream) catch |err| {
+            self.recordError(err);
+            return err;
+        };
+        if (decoded_len != expected_output_len) {
+            self.recordError(error.SizeMismatch);
+            return error.SizeMismatch;
+        }
+        if (output_scratch.len < expected_output_len) {
+            self.recordError(error.OutputTooSmall);
+            return error.OutputTooSmall;
+        }
+        const written = decodeStreamIntoExactSize(stream, output_scratch[0..expected_output_len], expected_output_len) catch |err| {
+            self.recordError(err);
+            return err;
+        };
+        self.installDecoded(stream.len, output_scratch, written);
+    }
+
+    pub fn resetLimited(self: *StreamDecoder, stream: []const u8, output_scratch: []u8, max_output_len: usize) Error!void {
+        const decoded_len = decodedStreamSizeLimited(stream, max_output_len) catch |err| {
+            self.recordError(err);
+            return err;
+        };
+        if (output_scratch.len < decoded_len) {
+            self.recordError(error.OutputTooSmall);
+            return error.OutputTooSmall;
+        }
+        const written = decodeStreamInto(stream, output_scratch[0..decoded_len]) catch |err| {
+            self.recordError(err);
+            return err;
+        };
+        if (written != decoded_len) {
+            self.recordError(error.SizeMismatch);
+            return error.SizeMismatch;
+        }
+        self.installDecoded(stream.len, output_scratch, written);
+    }
+
+    pub fn resetFromChunks(self: *StreamDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!void {
+        const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+            self.recordError(err);
+            return err;
+        };
+        return self.reset(joined, output_scratch);
+    }
+
+    pub fn resetFromChunksExactSize(self: *StreamDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!void {
+        const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+            self.recordError(err);
+            return err;
+        };
+        return self.resetExactSize(joined, output_scratch, expected_output_len);
+    }
+
+    pub fn resetFromChunksLimited(self: *StreamDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, max_output_len: usize) Error!void {
+        const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+            self.recordError(err);
+            return err;
+        };
+        return self.resetLimited(joined, output_scratch, max_output_len);
+    }
+
+    pub fn snapshot(self: *const StreamDecoder) Snapshot {
+        return .{
+            .output_written = self.offset,
+            .expected_output_len = self.decoded.len,
+            .payload_remaining = self.decoded.len - self.offset,
+            .done = self.done,
+            .last_error_name = self.last_error_name,
+            .recoverability_hint = self.last_recoverability_hint,
+        };
+    }
+
+    pub fn diagnostics(self: *const StreamDecoder) core.StreamingDiagnostics {
+        const snap = self.snapshot();
+        return .{
+            .phase_name = if (snap.done) "done" else "payload",
+            .frame_input_read = if (snap.done) self.stream_len else null,
+            .output_written = snap.output_written,
+            .expected_output_len = snap.expected_output_len,
+            .payload_remaining = snap.payload_remaining,
+            .last_error_name = snap.last_error_name,
+            .last_error_phase_name = if (snap.last_error_name.len == 0) "" else "payload",
+            .recoverability_hint_name = hintName(snap.recoverability_hint),
+        };
+    }
+
+    pub fn step(self: *StreamDecoder, output: []u8) Error!core.StepResult {
+        if (self.done) return .{ .status = .done };
+        if (output.len == 0) return .{ .status = .need_output };
+        const remaining = self.decoded[self.offset..];
+        const n = @min(output.len, remaining.len);
+        @memcpy(output[0..n], remaining[0..n]);
+        self.offset += n;
+        if (self.offset == self.decoded.len) self.done = true;
+        return .{
+            .progress = .{ .input_read = if (self.done) self.stream_len else 0, .output_written = n },
+            .status = if (self.done) .done else .need_output,
+        };
+    }
+
+    fn installDecoded(self: *StreamDecoder, stream_len: usize, output_scratch: []u8, written: usize) void {
+        self.* = .{
+            .decoded = output_scratch[0..written],
+            .stream_len = stream_len,
+        };
+    }
+
+    fn recordError(self: *StreamDecoder, err: Error) void {
+        self.last_error_name = @errorName(err);
+        self.last_recoverability_hint = switch (err) {
+            error.TruncatedFrame => .truncated_input,
+            error.UnsupportedBrotliFeature => .unsupported_feature,
+            else => .payload_corrupt,
+        };
+    }
+
+    fn hintName(hint: RecoverabilityHint) []const u8 {
+        return switch (hint) {
+            .none => "none",
+            .truncated_input => "truncated_input",
+            .unsupported_feature => "unsupported_feature",
+            .payload_corrupt => "payload_corrupt",
+        };
+    }
+};
+
 fn joinChunks(chunks: []const []const u8, compressed_scratch: []u8) Error![]const u8 {
     var total: usize = 0;
     for (chunks) |chunk| total = std.math.add(usize, total, chunk.len) catch return error.IntegerOverflow;

@@ -1568,6 +1568,12 @@ architecture blindly.
   coalescing code while the codec remains clearly scoped to the current Brotli
   subset.
 
+- Added a reusable caller-owned Brotli `StreamDecoder` library facade. It
+  validates/decodes the current supported Brotli subset into caller-provided
+  output scratch during reset, then drains through bounded `step` calls with
+  snapshots and shared streaming diagnostics. This closes the immediate
+  library-interface gap without adding CLI surface or hiding allocations.
+
 - Added a dependency-free Snappy raw block module. `src/snappy.zig` covers the
   raw block varint length header, literal tags, copy1/copy2/copy4 decode,
   decoded-size preflight, output limits, caller-owned output, allocator-returning

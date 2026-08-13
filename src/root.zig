@@ -48,6 +48,7 @@ pub const brEncodeStoredStreamWithOptionsAlloc = br.encodeStoredStreamWithOption
 pub const brEncodeStoredStreamWithOptionsAppend = br.encodeStoredStreamWithOptionsAppend;
 pub const brEncodeStoredStreamWithOptionsInto = br.encodeStoredStreamWithOptionsInto;
 pub const BrotliStoredStreamOptions = br.StoredStreamOptions;
+pub const BrotliStreamDecoder = br.StreamDecoder;
 pub const brDecodeStreamAlloc = br.decodeStreamAlloc;
 pub const brDecodeStreamAllocExactSize = br.decodeStreamAllocExactSize;
 pub const brDecodeStreamAllocLimited = br.decodeStreamAllocLimited;
@@ -1330,6 +1331,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = brEncodeStoredStreamWithOptionsAppend;
     _ = brEncodeStoredStreamWithOptionsInto;
     _ = BrotliStoredStreamOptions;
+    _ = BrotliStreamDecoder;
     _ = brDecodeStreamAlloc;
     _ = brDecodeStreamAllocExactSize;
     _ = brDecodeStreamAllocLimited;
@@ -2086,6 +2088,59 @@ test "root brotli stream helpers expose exact and chunked decode variants" {
     try std.testing.expectEqual(payload.len, try brDecodeStreamChunksIntoExactSize(&chunks, join, &into, payload.len));
     try std.testing.expectEqualSlices(u8, payload, &into);
     try std.testing.expectError(error.SizeMismatch, brDecodeStreamChunksIntoExactSize(&chunks, join, &into, payload.len - 1));
+}
+
+test "root brotli stream decoder drains caller-owned scratch and resets" {
+    const first_payload = "brotli reusable decoder first payload";
+    const first_encoded = try brEncodeStoredStreamAlloc(std.testing.allocator, first_payload);
+    defer std.testing.allocator.free(first_encoded);
+    var scratch: [first_payload.len + 16]u8 = undefined;
+    var decoder = try BrotliStreamDecoder.initExactSize(first_encoded, &scratch, first_payload.len);
+
+    var first_out: [first_payload.len]u8 = undefined;
+    var step = try decoder.step(first_out[0..7]);
+    try std.testing.expectEqual(core.StepResult.Status.need_output, step.status);
+    try std.testing.expectEqual(@as(usize, 0), step.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 7), step.progress.output_written);
+    step = try decoder.step(first_out[7..]);
+    try std.testing.expectEqual(core.StepResult.Status.done, step.status);
+    try std.testing.expectEqual(first_encoded.len, step.progress.input_read);
+    try std.testing.expectEqual(first_payload.len - 7, step.progress.output_written);
+    try std.testing.expectEqualSlices(u8, first_payload, &first_out);
+    const done_snapshot = decoder.snapshot();
+    try std.testing.expect(done_snapshot.done);
+    try std.testing.expectEqual(first_payload.len, done_snapshot.output_written);
+    try std.testing.expectEqual(@as(usize, 0), done_snapshot.payload_remaining);
+    const done_diagnostics = decoder.diagnostics();
+    try std.testing.expectEqualStrings("done", done_diagnostics.phase_name);
+    try std.testing.expectEqual(first_encoded.len, done_diagnostics.frame_input_read.?);
+
+    const second_payload = "second brotli payload through chunks";
+    const second_encoded = try brEncodeStoredStreamWithOptionsAlloc(std.testing.allocator, second_payload, .{
+        .metadata = "second-meta",
+    });
+    defer std.testing.allocator.free(second_encoded);
+    const chunks = [_][]const u8{
+        second_encoded[0..1],
+        second_encoded[1..@min(second_encoded.len, 9)],
+        second_encoded[@min(second_encoded.len, 9)..],
+    };
+    const compressed_scratch = try std.testing.allocator.alloc(u8, second_encoded.len);
+    defer std.testing.allocator.free(compressed_scratch);
+    try decoder.resetFromChunksLimited(&chunks, compressed_scratch, scratch[0..], second_payload.len);
+
+    var second_out: [second_payload.len]u8 = undefined;
+    step = try decoder.step(&second_out);
+    try std.testing.expectEqual(core.StepResult.Status.done, step.status);
+    try std.testing.expectEqual(second_encoded.len, step.progress.input_read);
+    try std.testing.expectEqual(second_payload.len, step.progress.output_written);
+    try std.testing.expectEqualSlices(u8, second_payload, &second_out);
+
+    try std.testing.expectError(error.SizeMismatch, decoder.resetExactSize(first_encoded, &scratch, first_payload.len + 1));
+    const error_snapshot = decoder.snapshot();
+    try std.testing.expectEqualStrings("SizeMismatch", error_snapshot.last_error_name);
+    const error_diagnostics = decoder.diagnostics();
+    try std.testing.expectEqualStrings("payload_corrupt", error_diagnostics.recoverability_hint_name);
 }
 
 test "root snappy raw block helpers round trip" {
