@@ -5989,6 +5989,14 @@ pub const ZlibEncoder = struct {
         return try encodeZlibLevelWithDictionaryAlloc(self.allocator, input, dictionary, level);
     }
 
+    pub fn encodeDynamicLiteralAlloc(self: *ZlibEncoder, input: []const u8) ![]u8 {
+        return try encodeZlibDynamicLiteralAlloc(self.allocator, input);
+    }
+
+    pub fn encodeDynamicWithOptionsAlloc(self: *ZlibEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
+        return try encodeZlibDynamicWithOptionsAlloc(self.allocator, input, options);
+    }
+
     pub fn encodeStoredScratch(self: *ZlibEncoder, input: []const u8) ![]const u8 {
         self.scratch.clearRetainingCapacity();
         _ = try self.encodeStoredAppend(&self.scratch, input);
@@ -6050,6 +6058,18 @@ pub const ZlibEncoder = struct {
     pub fn encodeLevelWithDictionaryScratch(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, level: u4) ![]const u8 {
         self.scratch.clearRetainingCapacity();
         _ = try self.encodeLevelWithDictionaryAppend(&self.scratch, input, dictionary, level);
+        return self.scratch.items;
+    }
+
+    pub fn encodeDynamicLiteralScratch(self: *ZlibEncoder, input: []const u8) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeDynamicLiteralAppend(&self.scratch, input);
+        return self.scratch.items;
+    }
+
+    pub fn encodeDynamicWithOptionsScratch(self: *ZlibEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeDynamicWithOptionsAppend(&self.scratch, input, options);
         return self.scratch.items;
     }
 
@@ -6115,6 +6135,22 @@ pub const ZlibEncoder = struct {
 
     pub fn encodeLevelWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, level: u4) !usize {
         const encoded = try self.encodeLevelWithDictionaryAlloc(input, dictionary, level);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeDynamicLiteralAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
+        const encoded = try self.encodeDynamicLiteralAlloc(input);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeDynamicWithOptionsAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+        const encoded = try self.encodeDynamicWithOptionsAlloc(input, options);
         defer self.allocator.free(encoded);
         const start = out.items.len;
         try out.appendSlice(self.allocator, encoded);
