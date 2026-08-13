@@ -2963,6 +2963,10 @@ architecture blindly.
   baseline while keeping positive timing, throughput, and iteration accounting
   valid.
 - Tightened native library benchmark strict-smoke improvement coverage by
+  isolating a Zstd sequence-Huffman-literals row that no longer improves over
+  its plain baseline while keeping positive timing, throughput, and iteration
+  accounting valid.
+- Tightened native library benchmark strict-smoke improvement coverage by
   isolating a compression-floor regression for the retained high-byte Zstd row.
   The new fixture keeps positive timing, throughput, and iteration accounting
   valid while forcing the row to stop compressing below its input size.

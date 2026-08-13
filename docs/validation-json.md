@@ -4531,9 +4531,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 542,
-      "min_expected_failures": 542,
-      "min_matched": 542
+      "min_checks": 543,
+      "min_expected_failures": 543,
+      "min_matched": 543
     },
     {
       "mode": "non-json-artifact-health",
@@ -4633,7 +4633,7 @@ aggregate health reasons must be backed by real failing dashboard inputs before
 the smoke artifact can pass. The expected reason/check/fixture matrix lives in
 `tools/dashboard_strict_validation_reasons.json`; the retained
 `strict-validation-health` mode minimums must cover every configured reason,
-currently 88, plus direct validation JSON smoke/docs-negative, zlib relaxed gate/report/Markdown drift, Snappy report CSV drift, PNG scratch report/Markdown drift, checksum/chunk-cursor/deflate match-copy/Huffman-build/lookup/chunked-Huffman/extra-bit/dictionary-decode/PNG-scanline/chunked-zlib/PNG-streaming-zlib benchmark CSV drift, deflate dynamic decode profile CSV drift, native library benchmark CSV/compression, match-budget, dictionary, trained-dictionary, dictionary-set, reusable/direct/fallback/chunked/chunked-append/exact/reusable-exact dictionary improvement drift, zstd comparison gate/data-row/CSV/Markdown drift, Python zlib differential counter drift, native summary error error/phase floor and counter drift, LZ4/Zstd native stream summary floor/counter/metadata-overflow drift, decode-stage unmatched-error and CSV positive/header/block-type drift, native-tier CSV row/summary mismatch drift, native-tier corpus discovery field drift, dashboard strict self-health count/Markdown drift, dashboard configuration meta-smoke drift, validation JSON schema/artifact/docs-negative drift, Brotli static-dictionary field drift, and header-inspect health regression checks. Dashboard aggregate health also reads the retained
+currently 88, plus direct validation JSON smoke/docs-negative, zlib relaxed gate/report/Markdown drift, Snappy report CSV drift, PNG scratch report/Markdown drift, checksum/chunk-cursor/deflate match-copy/Huffman-build/lookup/chunked-Huffman/extra-bit/dictionary-decode/PNG-scanline/chunked-zlib/PNG-streaming-zlib benchmark CSV drift, deflate dynamic decode profile CSV drift, native library benchmark CSV/compression, match-budget, sequence-Huffman, dictionary, trained-dictionary, dictionary-set, reusable/direct/fallback/chunked/chunked-append/exact/reusable-exact dictionary improvement drift, zstd comparison gate/data-row/CSV/Markdown drift, Python zlib differential counter drift, native summary error error/phase floor and counter drift, LZ4/Zstd native stream summary floor/counter/metadata-overflow drift, decode-stage unmatched-error and CSV positive/header/block-type drift, native-tier CSV row/summary mismatch drift, native-tier corpus discovery field drift, dashboard strict self-health count/Markdown drift, dashboard configuration meta-smoke drift, validation JSON schema/artifact/docs-negative drift, Brotli static-dictionary field drift, and header-inspect health regression checks. Dashboard aggregate health also reads the retained
 `vort-dashboard-strict-smoke.md` companion and requires its mode, requirement,
 validation-reason, and check rows to match the JSON counts before
 `dashboard_strict_healthy` can pass. The `dashboard-markdown` mode verifies that important human-facing
@@ -4655,7 +4655,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 529,
+  "check_count": 530,
   "mode_count": 5,
   "expected_mode_count": 5,
   "missing_mode_count": 0,
@@ -4675,9 +4675,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 542,
-      "min_expected_failures": 542,
-      "min_matched": 542
+      "min_checks": 543,
+      "min_expected_failures": 543,
+      "min_matched": 543
     },
     {
       "mode": "non-json-artifact-health",
@@ -4720,14 +4720,14 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 455,
-      "min_checks": 542,
+      "checks": 456,
+      "min_checks": 543,
       "missing_checks": 87,
-      "expected_failures": 455,
-      "min_expected_failures": 542,
+      "expected_failures": 456,
+      "min_expected_failures": 543,
       "missing_expected_failures": 87,
-      "matched": 455,
-      "min_matched": 542,
+      "matched": 456,
+      "min_matched": 543,
       "missing_matched": 87
     },
     {
@@ -4770,9 +4770,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 455,
-      "expected_failures": 455,
-      "matched": 455
+      "checks": 456,
+      "expected_failures": 456,
+      "matched": 456
     },
     {
       "mode": "non-json-artifact-health",
@@ -9218,6 +9218,18 @@ Example:
     },
     {
       "name": "native_library_bench_match_budget_improvement_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_library_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_library_bench_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_library_bench_sequence_huffman_improvement_mismatch",
       "mode": "strict-validation-health",
       "expected_failure": true,
       "expected_output": "dashboard_index_validation_unhealthy=native_library_bench_failed",
