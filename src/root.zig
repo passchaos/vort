@@ -1276,6 +1276,7 @@ pub const inspectZlibStreamFromChunksAllocWithDictionary = deflate.inspectZlibSt
 pub const inspectZlibStreamFromChunksAllocWithDictionaryLimited = deflate.inspectZlibStreamFromChunksAllocWithDictionaryLimited;
 pub const decodeZlibStored = deflate.decodeZlibStored;
 pub const decodeZlibStoredWithDictionary = deflate.decodeZlibStoredWithDictionary;
+pub const ZlibEncoder = deflate.ZlibEncoder;
 pub const ZlibDecoder = deflate.ZlibDecoder;
 pub const PngAdam7Info = png_exports.PngAdam7Info;
 pub const PngAdam7PassInfo = png_exports.PngAdam7PassInfo;
@@ -6292,6 +6293,7 @@ test "root exports chunked compatibility decode helpers" {
     // references are intentionally compile-time only: codec behavior is covered
     // in deflate.zig, while this test catches accidental public API drift.
     _ = RawDeflateEncoder;
+    _ = ZlibEncoder;
     _ = RawDeflateDecoder;
     _ = RawDeflateProbeResult;
     _ = DecodeProbeResult;
@@ -6772,6 +6774,9 @@ test "root raw deflate encoder reuses stored scratch" {
     try std.testing.expectEqualSlices(u8, expected_chunks, chunks_owned);
     const chunks_scratch = try encoder.encodeStoredChunksScratch(&chunks);
     try std.testing.expectEqualSlices(u8, expected_chunks, chunks_scratch);
+    const decoded = try decodeRawDeflateAllocExactSize(std.testing.allocator, chunks_scratch, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
     var chunks_appended: std.ArrayList(u8) = .empty;
     defer chunks_appended.deinit(std.testing.allocator);
     _ = try encoder.encodeStoredChunksAppend(&chunks_appended, &chunks);
@@ -6781,10 +6786,92 @@ test "root raw deflate encoder reuses stored scratch" {
     try std.testing.expectEqual(expected_chunks.len, try encoder.encodeStoredChunksIntoSlice(&chunks, chunks_into));
     try std.testing.expectEqualSlices(u8, expected_chunks, chunks_into[0..expected_chunks.len]);
     try std.testing.expectError(error.OutputTooSmall, encoder.encodeStoredChunksIntoSlice(&chunks, chunks_into[0 .. chunks_into.len - 1]));
+}
 
-    const decoded = try decodeRawDeflateAllocExactSize(std.testing.allocator, chunks_scratch, payload.len);
+test "root zlib encoder reuses stored scratch" {
+    const payload = "root zlib reusable stored encoder payload" ** 2;
+    const preset_dictionary = "root zlib reusable stored dictionary";
+    const chunks = [_][]const u8{
+        payload[0..11],
+        payload[11..39],
+        payload[39..],
+    };
+    const expected = try encodeZlibStoredAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(expected);
+    const expected_dict = try encodeZlibStoredWithDictionaryAlloc(std.testing.allocator, payload, preset_dictionary);
+    defer std.testing.allocator.free(expected_dict);
+    const expected_chunks = try encodeZlibStoredChunksAlloc(std.testing.allocator, &chunks);
+    defer std.testing.allocator.free(expected_chunks);
+    const expected_dict_chunks = try encodeZlibStoredWithDictionaryChunksAlloc(std.testing.allocator, &chunks, preset_dictionary);
+    defer std.testing.allocator.free(expected_dict_chunks);
+    try std.testing.expectEqualSlices(u8, expected, expected_chunks);
+    try std.testing.expectEqualSlices(u8, expected_dict, expected_dict_chunks);
+
+    var encoder = ZlibEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+
+    const owned = try encoder.encodeStoredAlloc(payload);
+    defer std.testing.allocator.free(owned);
+    try std.testing.expectEqualSlices(u8, expected, owned);
+    const scratch = try encoder.encodeStoredScratch(payload);
+    try std.testing.expectEqualSlices(u8, expected, scratch);
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(expected.len, try encoder.encodeStoredAppend(&appended, payload));
+    try std.testing.expectEqualSlices(u8, expected, appended.items["prefix:".len..]);
+    const into = try std.testing.allocator.alloc(u8, try zlibStoredChunksEncodedSize(&chunks));
+    defer std.testing.allocator.free(into);
+    try std.testing.expectEqual(expected.len, try encoder.encodeStoredIntoSlice(payload, into));
+    try std.testing.expectEqualSlices(u8, expected, into[0..expected.len]);
+
+    const dict_owned = try encoder.encodeStoredWithDictionaryAlloc(payload, preset_dictionary);
+    defer std.testing.allocator.free(dict_owned);
+    try std.testing.expectEqualSlices(u8, expected_dict, dict_owned);
+    const dict_scratch = try encoder.encodeStoredWithDictionaryScratch(payload, preset_dictionary);
+    try std.testing.expectEqualSlices(u8, expected_dict, dict_scratch);
+    var dict_appended: std.ArrayList(u8) = .empty;
+    defer dict_appended.deinit(std.testing.allocator);
+    try std.testing.expectEqual(expected_dict.len, try encoder.encodeStoredWithDictionaryAppend(&dict_appended, payload, preset_dictionary));
+    try std.testing.expectEqualSlices(u8, expected_dict, dict_appended.items);
+    const dict_into = try std.testing.allocator.alloc(u8, try zlibStoredWithDictionaryChunksEncodedSize(&chunks));
+    defer std.testing.allocator.free(dict_into);
+    try std.testing.expectEqual(expected_dict.len, try encoder.encodeStoredWithDictionaryIntoSlice(payload, preset_dictionary, dict_into));
+    try std.testing.expectEqualSlices(u8, expected_dict, dict_into[0..expected_dict.len]);
+
+    const chunks_owned = try encoder.encodeStoredChunksAlloc(&chunks);
+    defer std.testing.allocator.free(chunks_owned);
+    try std.testing.expectEqualSlices(u8, expected_chunks, chunks_owned);
+    const chunks_scratch = try encoder.encodeStoredChunksScratch(&chunks);
+    try std.testing.expectEqualSlices(u8, expected_chunks, chunks_scratch);
+    const decoded = try decodeZlibStoredAlloc(std.testing.allocator, chunks_scratch);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+    var chunks_appended: std.ArrayList(u8) = .empty;
+    defer chunks_appended.deinit(std.testing.allocator);
+    _ = try encoder.encodeStoredChunksAppend(&chunks_appended, &chunks);
+    try std.testing.expectEqualSlices(u8, expected_chunks, chunks_appended.items);
+    const chunks_into = try std.testing.allocator.alloc(u8, expected_chunks.len);
+    defer std.testing.allocator.free(chunks_into);
+    try std.testing.expectEqual(expected_chunks.len, try encoder.encodeStoredChunksIntoSlice(&chunks, chunks_into));
+    try std.testing.expectEqualSlices(u8, expected_chunks, chunks_into[0..expected_chunks.len]);
+
+    const dict_chunks_owned = try encoder.encodeStoredChunksWithDictionaryAlloc(&chunks, preset_dictionary);
+    defer std.testing.allocator.free(dict_chunks_owned);
+    try std.testing.expectEqualSlices(u8, expected_dict_chunks, dict_chunks_owned);
+    const dict_chunks_scratch = try encoder.encodeStoredChunksWithDictionaryScratch(&chunks, preset_dictionary);
+    try std.testing.expectEqualSlices(u8, expected_dict_chunks, dict_chunks_scratch);
+    const decoded_dict = try decodeZlibStoredAllocWithDictionary(std.testing.allocator, dict_chunks_scratch, preset_dictionary);
+    defer std.testing.allocator.free(decoded_dict);
+    try std.testing.expectEqualSlices(u8, payload, decoded_dict);
+    var dict_chunks_appended: std.ArrayList(u8) = .empty;
+    defer dict_chunks_appended.deinit(std.testing.allocator);
+    _ = try encoder.encodeStoredChunksWithDictionaryAppend(&dict_chunks_appended, &chunks, preset_dictionary);
+    try std.testing.expectEqualSlices(u8, expected_dict_chunks, dict_chunks_appended.items);
+    const dict_chunks_into = try std.testing.allocator.alloc(u8, expected_dict_chunks.len);
+    defer std.testing.allocator.free(dict_chunks_into);
+    try std.testing.expectEqual(expected_dict_chunks.len, try encoder.encodeStoredChunksWithDictionaryIntoSlice(&chunks, preset_dictionary, dict_chunks_into));
+    try std.testing.expectEqualSlices(u8, expected_dict_chunks, dict_chunks_into[0..expected_dict_chunks.len]);
 }
 
 test "root raw deflate decoder drains caller-owned scratch and resets" {

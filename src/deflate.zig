@@ -5776,6 +5776,96 @@ pub const RawDeflateEncoder = struct {
     }
 };
 
+pub const ZlibEncoder = struct {
+    allocator: std.mem.Allocator,
+    scratch: std.ArrayList(u8) = .empty,
+
+    pub fn init(allocator: std.mem.Allocator) ZlibEncoder {
+        return .{ .allocator = allocator };
+    }
+
+    pub fn deinit(self: *ZlibEncoder) void {
+        self.scratch.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn encodeStoredAlloc(self: *ZlibEncoder, input: []const u8) ![]u8 {
+        return try encodeZlibStoredAlloc(self.allocator, input);
+    }
+
+    pub fn encodeStoredWithDictionaryAlloc(self: *ZlibEncoder, input: []const u8, dictionary: []const u8) ![]u8 {
+        return try encodeZlibStoredWithDictionaryAlloc(self.allocator, input, dictionary);
+    }
+
+    pub fn encodeStoredChunksAlloc(self: *ZlibEncoder, chunks: []const []const u8) ![]u8 {
+        return try encodeZlibStoredChunksAlloc(self.allocator, chunks);
+    }
+
+    pub fn encodeStoredChunksWithDictionaryAlloc(self: *ZlibEncoder, chunks: []const []const u8, dictionary: []const u8) ![]u8 {
+        return try encodeZlibStoredWithDictionaryChunksAlloc(self.allocator, chunks, dictionary);
+    }
+
+    pub fn encodeStoredScratch(self: *ZlibEncoder, input: []const u8) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeStoredAppend(&self.scratch, input);
+        return self.scratch.items;
+    }
+
+    pub fn encodeStoredWithDictionaryScratch(self: *ZlibEncoder, input: []const u8, dictionary: []const u8) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeStoredWithDictionaryAppend(&self.scratch, input, dictionary);
+        return self.scratch.items;
+    }
+
+    pub fn encodeStoredChunksScratch(self: *ZlibEncoder, chunks: []const []const u8) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeStoredChunksAppend(&self.scratch, chunks);
+        return self.scratch.items;
+    }
+
+    pub fn encodeStoredChunksWithDictionaryScratch(self: *ZlibEncoder, chunks: []const []const u8, dictionary: []const u8) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeStoredChunksWithDictionaryAppend(&self.scratch, chunks, dictionary);
+        return self.scratch.items;
+    }
+
+    pub fn encodeStoredAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
+        return try encodeZlibStoredAppend(self.allocator, out, input);
+    }
+
+    pub fn encodeStoredWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8) !usize {
+        return try encodeZlibStoredWithDictionaryAppend(self.allocator, out, input, dictionary);
+    }
+
+    pub fn encodeStoredChunksAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), chunks: []const []const u8) !usize {
+        return try encodeZlibStoredChunksAppend(self.allocator, out, chunks);
+    }
+
+    pub fn encodeStoredChunksWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), chunks: []const []const u8, dictionary: []const u8) !usize {
+        return try encodeZlibStoredWithDictionaryChunksAppend(self.allocator, out, chunks, dictionary);
+    }
+
+    pub fn encodeStoredIntoSlice(self: *ZlibEncoder, input: []const u8, output: []u8) !usize {
+        _ = self;
+        return try encodeZlibStored(input, output);
+    }
+
+    pub fn encodeStoredWithDictionaryIntoSlice(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, output: []u8) !usize {
+        _ = self;
+        return try encodeZlibStoredWithDictionary(input, output, dictionary);
+    }
+
+    pub fn encodeStoredChunksIntoSlice(self: *ZlibEncoder, chunks: []const []const u8, output: []u8) !usize {
+        _ = self;
+        return try encodeZlibStoredChunks(chunks, output);
+    }
+
+    pub fn encodeStoredChunksWithDictionaryIntoSlice(self: *ZlibEncoder, chunks: []const []const u8, dictionary: []const u8, output: []u8) !usize {
+        _ = self;
+        return try encodeZlibStoredWithDictionaryChunks(chunks, output, dictionary);
+    }
+};
+
 /// Reusable, caller-owned raw DEFLATE decoder facade.
 ///
 /// Like the zlib/gzip wrapper decoders below, this facade validates and decodes a

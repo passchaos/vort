@@ -3464,3 +3464,9 @@ architecture blindly.
   allocator-returning, scratch, append, caller-owned, and chunked stored encode
   flows while reusing internal scratch, with root coverage verifying byte parity
   against top-level stored helpers and raw-deflate decode round trips.
+
+- Added a reusable zlib `ZlibEncoder` stored facade. It exposes
+  allocator-returning, scratch, append, caller-owned, dictionary, and chunked
+  stored encode flows while reusing internal scratch, with root coverage
+  verifying parity against top-level zlib stored helpers and dictionary
+  round trips.
