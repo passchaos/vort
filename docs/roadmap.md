@@ -1446,6 +1446,11 @@ architecture blindly.
   wrapper validation without routing through CLI or forcing an owned decoded
   slice first.
 
+- Added split-input concatenated zlib/gzip append decode helpers. Chunked
+  multi-member wrapper streams can now append into caller-owned `ArrayList`
+  output with exact-size and output-limited variants while reusing caller-owned
+  compressed join scratch for the compatibility path.
+
 - Added public one-shot `decodeGzipChunks` and `decodeGzipChunksWithOptions`
   helpers for caller-buffer gzip decode from split compressed input. They reuse
   the existing caller-owned compressed join scratch policy (including the
