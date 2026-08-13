@@ -6567,9 +6567,25 @@ pub fn probeZlib(input: []const u8, scratch: []u8) DecodeProbeResult {
     return probeZlibWithOptions(input, scratch, .{});
 }
 
+pub fn probeZlibWithDictionary(input: []const u8, dictionary: []const u8, scratch: []u8) DecodeProbeResult {
+    return probeZlibWithDictionaryAndOptions(input, dictionary, scratch, .{});
+}
+
 pub fn probeZlibWithOptions(input: []const u8, scratch: []u8, options: ZlibDecodeOptions) DecodeProbeResult {
+    return probeZlibWithOptionalDictionaryAndOptions(input, null, scratch, options);
+}
+
+pub fn probeZlibWithDictionaryAndOptions(input: []const u8, dictionary: []const u8, scratch: []u8, options: ZlibDecodeOptions) DecodeProbeResult {
+    return probeZlibWithOptionalDictionaryAndOptions(input, dictionary, scratch, options);
+}
+
+fn probeZlibWithOptionalDictionaryAndOptions(input: []const u8, dictionary: ?[]const u8, scratch: []u8, options: ZlibDecodeOptions) DecodeProbeResult {
     var decoder = ZlibDecoder{};
-    decoder.resetWithOptions(input, scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    if (dictionary) |dict| {
+        decoder.resetWithDictionaryAndOptions(input, dict, scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    } else {
+        decoder.resetWithOptions(input, scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    }
     return .{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() };
 }
 
@@ -6577,9 +6593,25 @@ pub fn probeZlibExactSize(input: []const u8, scratch: []u8, expected_output_len:
     return probeZlibWithOptionsExactSize(input, scratch, .{}, expected_output_len);
 }
 
+pub fn probeZlibWithDictionaryExactSize(input: []const u8, dictionary: []const u8, scratch: []u8, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibWithDictionaryAndOptionsExactSize(input, dictionary, scratch, .{}, expected_output_len);
+}
+
 pub fn probeZlibWithOptionsExactSize(input: []const u8, scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibWithOptionalDictionaryAndOptionsExactSize(input, null, scratch, options, expected_output_len);
+}
+
+pub fn probeZlibWithDictionaryAndOptionsExactSize(input: []const u8, dictionary: []const u8, scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibWithOptionalDictionaryAndOptionsExactSize(input, dictionary, scratch, options, expected_output_len);
+}
+
+fn probeZlibWithOptionalDictionaryAndOptionsExactSize(input: []const u8, dictionary: ?[]const u8, scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) DecodeProbeResult {
     var decoder = ZlibDecoder{};
-    decoder.resetWithOptions(input, scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    if (dictionary) |dict| {
+        decoder.resetWithDictionaryAndOptions(input, dict, scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    } else {
+        decoder.resetWithOptions(input, scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    }
     if (decoder.decoded.len != expected_output_len) return probeOutputSizeMismatch(decoder.decoded.len, expected_output_len);
     return .{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() };
 }
@@ -6588,9 +6620,25 @@ pub fn probeZlibChunks(chunks: []const []const u8, compressed_scratch: []u8, out
     return probeZlibChunksWithOptions(chunks, compressed_scratch, output_scratch, .{});
 }
 
+pub fn probeZlibChunksWithDictionary(chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, output_scratch: []u8) DecodeProbeResult {
+    return probeZlibChunksWithDictionaryAndOptions(chunks, compressed_scratch, dictionary, output_scratch, .{});
+}
+
 pub fn probeZlibChunksWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions) DecodeProbeResult {
+    return probeZlibChunksWithOptionalDictionaryAndOptions(chunks, compressed_scratch, null, output_scratch, options);
+}
+
+pub fn probeZlibChunksWithDictionaryAndOptions(chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, output_scratch: []u8, options: ZlibDecodeOptions) DecodeProbeResult {
+    return probeZlibChunksWithOptionalDictionaryAndOptions(chunks, compressed_scratch, dictionary, output_scratch, options);
+}
+
+fn probeZlibChunksWithOptionalDictionaryAndOptions(chunks: []const []const u8, compressed_scratch: []u8, dictionary: ?[]const u8, output_scratch: []u8, options: ZlibDecodeOptions) DecodeProbeResult {
     var decoder = ZlibDecoder{};
-    decoder.resetFromChunksWithOptions(chunks, compressed_scratch, output_scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    if (dictionary) |dict| {
+        decoder.resetFromChunksWithDictionaryAndOptions(chunks, dict, compressed_scratch, output_scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    } else {
+        decoder.resetFromChunksWithOptions(chunks, compressed_scratch, output_scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    }
     return .{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() };
 }
 
@@ -6598,9 +6646,25 @@ pub fn probeZlibChunksExactSize(chunks: []const []const u8, compressed_scratch: 
     return probeZlibChunksWithOptionsExactSize(chunks, compressed_scratch, output_scratch, .{}, expected_output_len);
 }
 
+pub fn probeZlibChunksWithDictionaryExactSize(chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, output_scratch: []u8, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibChunksWithDictionaryAndOptionsExactSize(chunks, compressed_scratch, dictionary, output_scratch, .{}, expected_output_len);
+}
+
 pub fn probeZlibChunksWithOptionsExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibChunksWithOptionalDictionaryAndOptionsExactSize(chunks, compressed_scratch, null, output_scratch, options, expected_output_len);
+}
+
+pub fn probeZlibChunksWithDictionaryAndOptionsExactSize(chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibChunksWithOptionalDictionaryAndOptionsExactSize(chunks, compressed_scratch, dictionary, output_scratch, options, expected_output_len);
+}
+
+fn probeZlibChunksWithOptionalDictionaryAndOptionsExactSize(chunks: []const []const u8, compressed_scratch: []u8, dictionary: ?[]const u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) DecodeProbeResult {
     var decoder = ZlibDecoder{};
-    decoder.resetFromChunksWithOptions(chunks, compressed_scratch, output_scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    if (dictionary) |dict| {
+        decoder.resetFromChunksWithDictionaryAndOptions(chunks, dict, compressed_scratch, output_scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    } else {
+        decoder.resetFromChunksWithOptions(chunks, compressed_scratch, output_scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    }
     if (decoder.decoded.len != expected_output_len) return probeOutputSizeMismatch(decoder.decoded.len, expected_output_len);
     return .{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() };
 }
@@ -6609,9 +6673,25 @@ pub fn probeZlibConcatenated(input: []const u8, scratch: []u8) DecodeProbeResult
     return probeZlibConcatenatedWithOptions(input, scratch, .{});
 }
 
+pub fn probeZlibConcatenatedWithDictionary(input: []const u8, dictionary: []const u8, scratch: []u8) DecodeProbeResult {
+    return probeZlibConcatenatedWithDictionaryAndOptions(input, dictionary, scratch, .{});
+}
+
 pub fn probeZlibConcatenatedWithOptions(input: []const u8, scratch: []u8, options: ZlibDecodeOptions) DecodeProbeResult {
+    return probeZlibConcatenatedWithOptionalDictionaryAndOptions(input, null, scratch, options);
+}
+
+pub fn probeZlibConcatenatedWithDictionaryAndOptions(input: []const u8, dictionary: []const u8, scratch: []u8, options: ZlibDecodeOptions) DecodeProbeResult {
+    return probeZlibConcatenatedWithOptionalDictionaryAndOptions(input, dictionary, scratch, options);
+}
+
+fn probeZlibConcatenatedWithOptionalDictionaryAndOptions(input: []const u8, dictionary: ?[]const u8, scratch: []u8, options: ZlibDecodeOptions) DecodeProbeResult {
     var decoder = ZlibDecoder{};
-    decoder.resetConcatenatedWithOptions(input, scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    if (dictionary) |dict| {
+        decoder.resetConcatenatedWithDictionaryAndOptions(input, dict, scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    } else {
+        decoder.resetConcatenatedWithOptions(input, scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    }
     return .{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() };
 }
 
@@ -6619,9 +6699,25 @@ pub fn probeZlibConcatenatedExactSize(input: []const u8, scratch: []u8, expected
     return probeZlibConcatenatedWithOptionsExactSize(input, scratch, .{}, expected_output_len);
 }
 
+pub fn probeZlibConcatenatedWithDictionaryExactSize(input: []const u8, dictionary: []const u8, scratch: []u8, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibConcatenatedWithDictionaryAndOptionsExactSize(input, dictionary, scratch, .{}, expected_output_len);
+}
+
 pub fn probeZlibConcatenatedWithOptionsExactSize(input: []const u8, scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibConcatenatedWithOptionalDictionaryAndOptionsExactSize(input, null, scratch, options, expected_output_len);
+}
+
+pub fn probeZlibConcatenatedWithDictionaryAndOptionsExactSize(input: []const u8, dictionary: []const u8, scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibConcatenatedWithOptionalDictionaryAndOptionsExactSize(input, dictionary, scratch, options, expected_output_len);
+}
+
+fn probeZlibConcatenatedWithOptionalDictionaryAndOptionsExactSize(input: []const u8, dictionary: ?[]const u8, scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) DecodeProbeResult {
     var decoder = ZlibDecoder{};
-    decoder.resetConcatenatedWithOptions(input, scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    if (dictionary) |dict| {
+        decoder.resetConcatenatedWithDictionaryAndOptions(input, dict, scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    } else {
+        decoder.resetConcatenatedWithOptions(input, scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    }
     if (decoder.decoded.len != expected_output_len) return probeOutputSizeMismatch(decoder.decoded.len, expected_output_len);
     return .{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() };
 }
@@ -6630,9 +6726,25 @@ pub fn probeZlibConcatenatedChunks(chunks: []const []const u8, compressed_scratc
     return probeZlibConcatenatedChunksWithOptions(chunks, compressed_scratch, output_scratch, .{});
 }
 
+pub fn probeZlibConcatenatedChunksWithDictionary(chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, output_scratch: []u8) DecodeProbeResult {
+    return probeZlibConcatenatedChunksWithDictionaryAndOptions(chunks, compressed_scratch, dictionary, output_scratch, .{});
+}
+
 pub fn probeZlibConcatenatedChunksWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions) DecodeProbeResult {
+    return probeZlibConcatenatedChunksWithOptionalDictionaryAndOptions(chunks, compressed_scratch, null, output_scratch, options);
+}
+
+pub fn probeZlibConcatenatedChunksWithDictionaryAndOptions(chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, output_scratch: []u8, options: ZlibDecodeOptions) DecodeProbeResult {
+    return probeZlibConcatenatedChunksWithOptionalDictionaryAndOptions(chunks, compressed_scratch, dictionary, output_scratch, options);
+}
+
+fn probeZlibConcatenatedChunksWithOptionalDictionaryAndOptions(chunks: []const []const u8, compressed_scratch: []u8, dictionary: ?[]const u8, output_scratch: []u8, options: ZlibDecodeOptions) DecodeProbeResult {
     var decoder = ZlibDecoder{};
-    decoder.resetConcatenatedFromChunksWithOptions(chunks, compressed_scratch, output_scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    if (dictionary) |dict| {
+        decoder.resetConcatenatedFromChunksWithDictionaryAndOptions(chunks, dict, compressed_scratch, output_scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    } else {
+        decoder.resetConcatenatedFromChunksWithOptions(chunks, compressed_scratch, output_scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    }
     return .{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() };
 }
 
@@ -6640,9 +6752,25 @@ pub fn probeZlibConcatenatedChunksExactSize(chunks: []const []const u8, compress
     return probeZlibConcatenatedChunksWithOptionsExactSize(chunks, compressed_scratch, output_scratch, .{}, expected_output_len);
 }
 
+pub fn probeZlibConcatenatedChunksWithDictionaryExactSize(chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, output_scratch: []u8, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibConcatenatedChunksWithDictionaryAndOptionsExactSize(chunks, compressed_scratch, dictionary, output_scratch, .{}, expected_output_len);
+}
+
 pub fn probeZlibConcatenatedChunksWithOptionsExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibConcatenatedChunksWithOptionalDictionaryAndOptionsExactSize(chunks, compressed_scratch, null, output_scratch, options, expected_output_len);
+}
+
+pub fn probeZlibConcatenatedChunksWithDictionaryAndOptionsExactSize(chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibConcatenatedChunksWithOptionalDictionaryAndOptionsExactSize(chunks, compressed_scratch, dictionary, output_scratch, options, expected_output_len);
+}
+
+fn probeZlibConcatenatedChunksWithOptionalDictionaryAndOptionsExactSize(chunks: []const []const u8, compressed_scratch: []u8, dictionary: ?[]const u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) DecodeProbeResult {
     var decoder = ZlibDecoder{};
-    decoder.resetConcatenatedFromChunksWithOptions(chunks, compressed_scratch, output_scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    if (dictionary) |dict| {
+        decoder.resetConcatenatedFromChunksWithDictionaryAndOptions(chunks, dict, compressed_scratch, output_scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    } else {
+        decoder.resetConcatenatedFromChunksWithOptions(chunks, compressed_scratch, output_scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    }
     if (decoder.decoded.len != expected_output_len) return probeOutputSizeMismatch(decoder.decoded.len, expected_output_len);
     return .{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() };
 }

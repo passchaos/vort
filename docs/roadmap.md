@@ -1503,6 +1503,11 @@ architecture blindly.
   caller-owned scratch and expose decoded byte counts plus exact-size mismatch
   diagnostics before callers commit to an append or allocator-returning decode.
 
+- Extended zlib probe helpers across preset-dictionary workflows, including
+  split-input and concatenated streams. Dictionary-aware probes now surface
+  `NeedDictionary` without throwing and preserve the same decoded-byte/exact-size
+  diagnostics as non-dictionary zlib/gzip probes.
+
 - Added zlib stream inspection helpers for split compressed input
   (`inspectZlibStreamFromChunksAlloc*`), reusing caller-provided join scratch
   before running the existing diagnostic inspector. They report the same
