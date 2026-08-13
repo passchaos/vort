@@ -73,6 +73,22 @@ fn initTokenList(allocator: std.mem.Allocator, input_len: usize) !std.ArrayList(
     return std.ArrayList(Token).initCapacity(allocator, @min(input_len, 4096));
 }
 
+inline fn appendToken(
+    tokens: *std.ArrayList(Token),
+    allocator: std.mem.Allocator,
+    token: Token,
+) !void {
+    // `ArrayList.append` is deliberately not inline and its call/capacity
+    // handling showed up once per token in the fastest hash parser. Growth is
+    // rare after the small initial reserve, so keep the common store in the
+    // parser loop and retain the standard allocator path only at a boundary.
+    if (tokens.items.len < tokens.capacity) {
+        tokens.appendAssumeCapacity(token);
+    } else {
+        try tokens.append(allocator, token);
+    }
+}
+
 pub fn literalPlanAlloc(allocator: std.mem.Allocator, input: []const u8) !GreedyPlan {
     const tokens = try allocator.alloc(Token, input.len);
     errdefer allocator.free(tokens);
@@ -637,7 +653,7 @@ fn hashGreedyPlanWithTables(allocator: std.mem.Allocator, input: []const u8, opt
         const best = findBestHashMatchWithLayout(input, pos, options, head, prev, ring);
 
         if (acceptMatch(input, pos, best.length, best.distance, options)) {
-            try tokens.append(allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
+            try appendToken(&tokens, allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
             stats.matches += 1;
             stats.matched_bytes += best.length;
             const end = @min(input.len, pos + best.length);
@@ -651,7 +667,7 @@ fn hashGreedyPlanWithTables(allocator: std.mem.Allocator, input: []const u8, opt
             if (pos < tail_start) pos = tail_start;
             while (pos < end) : (pos += 1) insertHashWithLayout(input, pos, head, prev, ring);
         } else {
-            try tokens.append(allocator, .{ .literal = input[pos] });
+            try appendToken(&tokens, allocator, .{ .literal = input[pos] });
             stats.literals += 1;
             insertHashWithLayout(input, pos, head, prev, ring);
             pos += 1;
