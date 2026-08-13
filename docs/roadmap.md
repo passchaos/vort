@@ -482,7 +482,7 @@ architecture blindly.
 - [x] Dashboard strict-mode smoke directly covers chunked zlib benchmark health drift, including missing Markdown, missing/duplicate/unknown cases, positive/shape/chunk-count/ratio row drift, and Markdown row drift.
 - [x] Dashboard strict-mode smoke directly covers PNG streaming zlib benchmark health drift, including missing/duplicate/unknown cases and positive/shape/image-size/chunk-count/ratio row drift.
 - [x] Dashboard strict-mode smoke directly covers native allocation health drift, including report count/unbalanced/duplicate rows, zero/budget smoke mismatches and duplicate cases, negative-smoke unmatched rows, and Markdown malformed/duplicate/unknown rows.
-- [x] Dashboard strict-mode smoke directly covers native fuzz corpus health drift, including report count/matched-row drift, coverage requirement mismatches, and Markdown unmatched rows.
+- [x] Dashboard strict-mode smoke directly covers native fuzz corpus health drift, including report ok/mode/floor drift, summary row drift, report count/matched-row drift, coverage ok/floor/requirement mismatches, and Markdown unmatched rows.
 - [x] Dashboard strict-mode smoke directly covers decode-stage health drift, including report/error count mismatches, internally consistent unmatched error rows, CSV positive/header/fixed/dynamic/stored row drift, CSV missing/duplicate/unknown cases, and Markdown unmatched rows.
 - [x] Dashboard strict-mode smoke directly covers fuzz corpus health drift, including report count/matched-row drift, coverage requirement mismatches, and Markdown unmatched rows.
 - [x] Dashboard strict-mode smoke directly covers dynamic-plan health drift, including missing/duplicate/unknown paths, malformed rows, token-accounting mismatches, histogram/ratio drift, and bit-slack/wrapper invariants.
@@ -2560,6 +2560,13 @@ architecture blindly.
   validation gate now isolates top-level `ok` drift, per-probe `ok` and timeout
   drift, coverage row `ok` and case-sum drift, total-case floors, key capability
   case floors, and Zstd frame/dictionary probe case floors.
+
+- Tightened native fuzz corpus strict-smoke direct drift coverage for the
+  existing retained native fuzz report and coverage-smoke artifacts without
+  adding codec scope. The strict validation gate now isolates report `ok` and
+  mode drift, exact-error and summary-row floors, mode/error summary mismatch,
+  missing, and duplicate rows, plus coverage `ok` and mode/error requirement
+  floors before native fuzz coverage can pass.
 
 - Promoted the existing Snappy report CSV from dashboard inventory metadata to
   aggregate validation health without adding new compression-format scope. The

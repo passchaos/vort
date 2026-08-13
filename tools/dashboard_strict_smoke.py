@@ -9787,6 +9787,235 @@ def main() -> int:
             )
         )
 
+        def append_native_fuzz_corpus_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            expected_reason: str,
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and f"dashboard_index_validation_unhealthy={expected_reason}" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["native_fuzz_corpus_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    f"dashboard_index_validation_unhealthy={expected_reason}",
+                    result.stdout,
+                )
+            )
+
+        native_fuzz_ok_result, native_fuzz_ok_manifest = native_fuzz_corpus_drift_fixture(
+            root,
+            "native-fuzz-ok-failed",
+            mutate_report=lambda payload: payload.__setitem__("ok", False),
+        )
+        append_native_fuzz_corpus_check(
+            "native_fuzz_corpus_ok_failed",
+            native_fuzz_ok_result,
+            native_fuzz_ok_manifest,
+            "native_fuzz_corpus_failed",
+            native_fuzz_ok_manifest["native_fuzz_corpus_report_count_mismatch"] == 0
+            and native_fuzz_ok_manifest["native_fuzz_corpus_markdown_unmatched"] == 0,
+        )
+
+        native_fuzz_mode_result, native_fuzz_mode_manifest = native_fuzz_corpus_drift_fixture(
+            root,
+            "native-fuzz-mode-mismatch",
+            mutate_report=lambda payload: payload.__setitem__("mode", "raw"),
+            mutate_markdown=lambda markdown_path: markdown_path.write_text(
+                markdown_path.read_text().replace("- mode: `native`", "- mode: `raw`", 1)
+            ),
+        )
+        append_native_fuzz_corpus_check(
+            "native_fuzz_corpus_mode_mismatch",
+            native_fuzz_mode_result,
+            native_fuzz_mode_manifest,
+            "native_fuzz_corpus_failed",
+            native_fuzz_mode_manifest["native_fuzz_corpus_report_count_mismatch"] == 0
+            and native_fuzz_mode_manifest["native_fuzz_corpus_markdown_unmatched"] == 0,
+        )
+
+        native_fuzz_exact_floor_result, native_fuzz_exact_floor_manifest = native_fuzz_corpus_drift_fixture(
+            root,
+            "native-fuzz-exact-error-floor",
+            mutate_report=lambda payload: payload.__setitem__("exact_error_expectations", 0),
+        )
+        append_native_fuzz_corpus_check(
+            "native_fuzz_corpus_exact_error_expectations_floor",
+            native_fuzz_exact_floor_result,
+            native_fuzz_exact_floor_manifest,
+            "native_fuzz_corpus_failed",
+            native_fuzz_exact_floor_manifest["native_fuzz_corpus_exact_error_expectations"] == 0,
+        )
+
+        native_fuzz_mode_count_floor_result, native_fuzz_mode_count_floor_manifest = native_fuzz_corpus_drift_fixture(
+            root,
+            "native-fuzz-mode-count-floor",
+            mutate_report=lambda payload: payload.__setitem__("mode_count_rows", 0),
+        )
+        append_native_fuzz_corpus_check(
+            "native_fuzz_corpus_mode_count_rows_floor",
+            native_fuzz_mode_count_floor_result,
+            native_fuzz_mode_count_floor_manifest,
+            "native_fuzz_corpus_failed",
+            native_fuzz_mode_count_floor_manifest["native_fuzz_corpus_mode_count_rows"] == 0,
+        )
+
+        native_fuzz_error_count_floor_result, native_fuzz_error_count_floor_manifest = native_fuzz_corpus_drift_fixture(
+            root,
+            "native-fuzz-error-count-floor",
+            mutate_report=lambda payload: payload.__setitem__("error_count_rows", 0),
+        )
+        append_native_fuzz_corpus_check(
+            "native_fuzz_corpus_error_count_rows_floor",
+            native_fuzz_error_count_floor_result,
+            native_fuzz_error_count_floor_manifest,
+            "native_fuzz_corpus_failed",
+            native_fuzz_error_count_floor_manifest["native_fuzz_corpus_error_count_rows"] == 0,
+        )
+
+        native_fuzz_mode_summary_result, native_fuzz_mode_summary_manifest = native_fuzz_corpus_drift_fixture(
+            root,
+            "native-fuzz-mode-summary",
+            mutate_report=lambda payload: payload["mode_counts"][0].__setitem__("cases", int(payload["mode_counts"][0]["cases"]) + 1),
+        )
+        append_native_fuzz_corpus_check(
+            "native_fuzz_corpus_mode_summary_mismatch",
+            native_fuzz_mode_summary_result,
+            native_fuzz_mode_summary_manifest,
+            "native_fuzz_corpus_failed",
+            native_fuzz_mode_summary_manifest["native_fuzz_corpus_mode_summary_mismatch"] == 1,
+        )
+
+        def clear_native_fuzz_modes(payload: dict[str, object]) -> None:
+            payload["mode_counts"] = []
+            payload["mode_count_rows"] = 0
+
+        native_fuzz_missing_mode_result, native_fuzz_missing_mode_manifest = native_fuzz_corpus_drift_fixture(
+            root,
+            "native-fuzz-missing-mode-summary",
+            mutate_report=clear_native_fuzz_modes,
+        )
+        append_native_fuzz_corpus_check(
+            "native_fuzz_corpus_mode_summary_missing",
+            native_fuzz_missing_mode_result,
+            native_fuzz_missing_mode_manifest,
+            "native_fuzz_corpus_failed",
+            native_fuzz_missing_mode_manifest["native_fuzz_corpus_mode_summary_missing_modes"] == ["native"],
+        )
+
+        def duplicate_native_fuzz_mode(payload: dict[str, object]) -> None:
+            payload["mode_counts"].append(dict(payload["mode_counts"][0]))
+            payload["mode_count_rows"] = len(payload["mode_counts"])
+
+        native_fuzz_duplicate_mode_result, native_fuzz_duplicate_mode_manifest = native_fuzz_corpus_drift_fixture(
+            root,
+            "native-fuzz-duplicate-mode-summary",
+            mutate_report=duplicate_native_fuzz_mode,
+        )
+        append_native_fuzz_corpus_check(
+            "native_fuzz_corpus_mode_summary_duplicate",
+            native_fuzz_duplicate_mode_result,
+            native_fuzz_duplicate_mode_manifest,
+            "native_fuzz_corpus_failed",
+            native_fuzz_duplicate_mode_manifest["native_fuzz_corpus_mode_summary_duplicate_modes"] == ["native"],
+        )
+
+        native_fuzz_error_summary_result, native_fuzz_error_summary_manifest = native_fuzz_corpus_drift_fixture(
+            root,
+            "native-fuzz-error-summary",
+            mutate_report=lambda payload: payload["error_counts"][0].__setitem__("count", int(payload["error_counts"][0]["count"]) + 1),
+        )
+        append_native_fuzz_corpus_check(
+            "native_fuzz_corpus_error_summary_mismatch",
+            native_fuzz_error_summary_result,
+            native_fuzz_error_summary_manifest,
+            "native_fuzz_corpus_failed",
+            native_fuzz_error_summary_manifest["native_fuzz_corpus_error_summary_mismatch"] == 1,
+        )
+
+        def drop_native_fuzz_error(payload: dict[str, object]) -> None:
+            payload["error_counts"].pop(0)
+            payload["error_count_rows"] = len(payload["error_counts"])
+
+        native_fuzz_missing_error_result, native_fuzz_missing_error_manifest = native_fuzz_corpus_drift_fixture(
+            root,
+            "native-fuzz-missing-error-summary",
+            mutate_report=drop_native_fuzz_error,
+        )
+        append_native_fuzz_corpus_check(
+            "native_fuzz_corpus_error_summary_missing",
+            native_fuzz_missing_error_result,
+            native_fuzz_missing_error_manifest,
+            "native_fuzz_corpus_failed",
+            native_fuzz_missing_error_manifest["native_fuzz_corpus_error_summary_missing_pairs"] == ["native:InvalidMagic"],
+        )
+
+        def duplicate_native_fuzz_error(payload: dict[str, object]) -> None:
+            payload["error_counts"].append(dict(payload["error_counts"][0]))
+            payload["error_count_rows"] = len(payload["error_counts"])
+
+        native_fuzz_duplicate_error_result, native_fuzz_duplicate_error_manifest = native_fuzz_corpus_drift_fixture(
+            root,
+            "native-fuzz-duplicate-error-summary",
+            mutate_report=duplicate_native_fuzz_error,
+        )
+        append_native_fuzz_corpus_check(
+            "native_fuzz_corpus_error_summary_duplicate",
+            native_fuzz_duplicate_error_result,
+            native_fuzz_duplicate_error_manifest,
+            "native_fuzz_corpus_failed",
+            native_fuzz_duplicate_error_manifest["native_fuzz_corpus_error_summary_duplicate_pairs"] == ["native:InvalidMagic"],
+        )
+
+        native_fuzz_coverage_ok_result, native_fuzz_coverage_ok_manifest = native_fuzz_corpus_drift_fixture(
+            root,
+            "native-fuzz-coverage-ok-failed",
+            mutate_coverage=lambda payload: payload.__setitem__("ok", False),
+        )
+        append_native_fuzz_corpus_check(
+            "native_fuzz_corpus_coverage_ok_failed",
+            native_fuzz_coverage_ok_result,
+            native_fuzz_coverage_ok_manifest,
+            "native_fuzz_coverage_failed",
+            native_fuzz_coverage_ok_manifest["native_fuzz_corpus_coverage_unmatched"] == 0,
+        )
+
+        native_fuzz_coverage_mode_floor_result, native_fuzz_coverage_mode_floor_manifest = native_fuzz_corpus_drift_fixture(
+            root,
+            "native-fuzz-coverage-mode-floor",
+            mutate_coverage=lambda payload: payload.__setitem__("mode_requirement_count", 0),
+        )
+        append_native_fuzz_corpus_check(
+            "native_fuzz_corpus_coverage_mode_requirement_floor",
+            native_fuzz_coverage_mode_floor_result,
+            native_fuzz_coverage_mode_floor_manifest,
+            "native_fuzz_coverage_failed",
+            native_fuzz_coverage_mode_floor_manifest["native_fuzz_corpus_coverage_mode_requirements"] == 0,
+        )
+
+        native_fuzz_coverage_error_floor_result, native_fuzz_coverage_error_floor_manifest = native_fuzz_corpus_drift_fixture(
+            root,
+            "native-fuzz-coverage-error-floor",
+            mutate_coverage=lambda payload: payload.__setitem__("error_requirement_count", 0),
+        )
+        append_native_fuzz_corpus_check(
+            "native_fuzz_corpus_coverage_error_requirement_floor",
+            native_fuzz_coverage_error_floor_result,
+            native_fuzz_coverage_error_floor_manifest,
+            "native_fuzz_coverage_failed",
+            native_fuzz_coverage_error_floor_manifest["native_fuzz_corpus_coverage_error_requirements"] == 0,
+        )
+
         def append_zlib_relaxed_check(
             name: str,
             result: subprocess.CompletedProcess[str],

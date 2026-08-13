@@ -2550,7 +2550,7 @@ coverage`, `Deflate extra-bit benchmark coverage`, `Dictionary decode benchmark 
 probe executables`, `Native summary error codec coverage`, and `Native summary error phase offsets` tables
 so artifact inventory, aggregate validation health, producer/smoke-gate coverage, dashboard strict
 gate coverage, dashboard configuration guardrails, validation schema smoke coverage, header-format coverage, corrupt-sidecar rejection coverage,
-sidecar corrupt Markdown/JSON drift checks, Huffman optimality, zstd comparison gate coverage, deflate extra-bit benchmark coverage, dictionary decode benchmark coverage, PNG scanline benchmark coverage, chunked zlib benchmark coverage, PNG streaming zlib benchmark coverage, deflate dynamic decode profile coverage, native library benchmark coverage, native fuzz corpus coverage, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, zlib differential coverage,
+sidecar corrupt Markdown/JSON drift checks, Huffman optimality, zstd comparison gate coverage, deflate extra-bit benchmark coverage, dictionary decode benchmark coverage, PNG scanline benchmark coverage, chunked zlib benchmark coverage, PNG streaming zlib benchmark coverage, deflate dynamic decode profile coverage, native library benchmark coverage, native fuzz corpus coverage and summary/floor drift, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, zlib differential coverage,
 decode-stage error matching, fuzz corpus matching, native stream metadata
 coverage, native tier corpus discovery, codec probe status, LZ4/Zstd
 structured-error counts, phase counts, required phases, missing phases, and phase
@@ -4531,9 +4531,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 461,
-      "min_expected_failures": 461,
-      "min_matched": 461
+      "min_checks": 475,
+      "min_expected_failures": 475,
+      "min_matched": 475
     },
     {
       "mode": "non-json-artifact-health",
@@ -4639,7 +4639,7 @@ validation-reason, and check rows to match the JSON counts before
 `dashboard_strict_healthy` can pass. The `dashboard-markdown` mode verifies that important human-facing
 sections, including artifact inventory, aggregate validation health, producer/smoke-gate
 coverage, dashboard strict gate coverage, dashboard configuration coverage, validation JSON schema coverage, header inspect coverage, corrupt-sidecar
-rejection coverage, Huffman optimality, compression level report coverage, dynamic plan CSV coverage, deflate extra-bit benchmark coverage, dictionary decode benchmark coverage, PNG scanline benchmark coverage, chunked zlib benchmark coverage, PNG streaming zlib benchmark coverage, deflate dynamic decode profile coverage, native library benchmark coverage, zstd comparison gate coverage, native fuzz corpus coverage, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, Python zlib
+rejection coverage, Huffman optimality, compression level report coverage, dynamic plan CSV coverage, deflate extra-bit benchmark coverage, dictionary decode benchmark coverage, PNG scanline benchmark coverage, chunked zlib benchmark coverage, PNG streaming zlib benchmark coverage, deflate dynamic decode profile coverage, native library benchmark coverage, zstd comparison gate coverage, native fuzz corpus coverage and summary/floor drift, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility coverage, native allocation coverage, Python zlib
 differential coverage, decode-stage error matching, fuzz corpus matching, native
 stream metadata coverage, native tier corpus discovery, native summary error
 codec/phase-offset tables, native codec probe coverage/capability/floor tables, and
@@ -4655,7 +4655,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 448,
+  "check_count": 462,
   "mode_count": 5,
   "expected_mode_count": 5,
   "missing_mode_count": 0,
@@ -4675,9 +4675,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 461,
-      "min_expected_failures": 461,
-      "min_matched": 461
+      "min_checks": 475,
+      "min_expected_failures": 475,
+      "min_matched": 475
     },
     {
       "mode": "non-json-artifact-health",
@@ -4720,14 +4720,14 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 374,
-      "min_checks": 461,
+      "checks": 388,
+      "min_checks": 475,
       "missing_checks": 87,
-      "expected_failures": 374,
-      "min_expected_failures": 461,
+      "expected_failures": 388,
+      "min_expected_failures": 475,
       "missing_expected_failures": 87,
-      "matched": 374,
-      "min_matched": 461,
+      "matched": 388,
+      "min_matched": 475,
       "missing_matched": 87
     },
     {
@@ -4770,9 +4770,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 374,
-      "expected_failures": 374,
-      "matched": 374
+      "checks": 388,
+      "expected_failures": 388,
+      "matched": 388
     },
     {
       "mode": "non-json-artifact-health",
@@ -6355,6 +6355,174 @@ Example:
       "expected_output": "dashboard_index_validation_unhealthy=decode_stage_failed",
       "actual_output": "dashboard_index_validation_unhealthy=decode_stage_failed\n",
       "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_ok_failed",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_mode_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_exact_error_expectations_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_mode_count_rows_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_error_count_rows_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_mode_summary_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_mode_summary_missing",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_mode_summary_duplicate",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_error_summary_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_error_summary_missing",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_error_summary_duplicate",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_coverage_ok_failed",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_coverage_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_coverage_failed\\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_coverage_mode_requirement_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_coverage_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_coverage_failed\\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_coverage_error_requirement_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_coverage_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_coverage_failed\\n",
+      "actual_output_bytes": 66,
       "actual_output_limit": 240,
       "actual_output_truncated": false,
       "returncode": 1,
