@@ -5745,6 +5745,22 @@ pub const RawDeflateEncoder = struct {
         return try encodeRawStoredChunksAlloc(self.allocator, chunks);
     }
 
+    pub fn encodeFixedAlloc(self: *RawDeflateEncoder, input: []const u8) ![]u8 {
+        return try self.encodeFixedWithOptionsAlloc(input, .{});
+    }
+
+    pub fn encodeFixedWithOptionsAlloc(self: *RawDeflateEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
+        return try encodeRawFixedWithOptionsAlloc(self.allocator, input, options);
+    }
+
+    pub fn encodeBestAlloc(self: *RawDeflateEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
+        return try encodeRawBestAlloc(self.allocator, input, options);
+    }
+
+    pub fn encodeLevelAlloc(self: *RawDeflateEncoder, input: []const u8, level: u4) ![]u8 {
+        return try encodeRawLevelAlloc(self.allocator, input, level);
+    }
+
     pub fn encodeStoredScratch(self: *RawDeflateEncoder, input: []const u8) ![]const u8 {
         self.scratch.clearRetainingCapacity();
         _ = try self.encodeStoredAppend(&self.scratch, input);
@@ -5757,12 +5773,62 @@ pub const RawDeflateEncoder = struct {
         return self.scratch.items;
     }
 
+    pub fn encodeFixedScratch(self: *RawDeflateEncoder, input: []const u8) ![]const u8 {
+        return try self.encodeFixedWithOptionsScratch(input, .{});
+    }
+
+    pub fn encodeFixedWithOptionsScratch(self: *RawDeflateEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeFixedWithOptionsAppend(&self.scratch, input, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestScratch(self: *RawDeflateEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestAppend(&self.scratch, input, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeLevelScratch(self: *RawDeflateEncoder, input: []const u8, level: u4) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeLevelAppend(&self.scratch, input, level);
+        return self.scratch.items;
+    }
+
     pub fn encodeStoredAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
         return try encodeRawStoredAppend(self.allocator, out, input);
     }
 
     pub fn encodeStoredChunksAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), chunks: []const []const u8) !usize {
         return try encodeRawStoredChunksAppend(self.allocator, out, chunks);
+    }
+
+    pub fn encodeFixedAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
+        return try self.encodeFixedWithOptionsAppend(out, input, .{});
+    }
+
+    pub fn encodeFixedWithOptionsAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+        const encoded = try self.encodeFixedWithOptionsAlloc(input, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+        const encoded = try self.encodeBestAlloc(input, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeLevelAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, level: u4) !usize {
+        const encoded = try self.encodeLevelAlloc(input, level);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
     }
 
     pub fn encodeStoredIntoSlice(self: *RawDeflateEncoder, input: []const u8, output: []u8) !usize {

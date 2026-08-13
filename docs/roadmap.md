@@ -3476,3 +3476,8 @@ architecture blindly.
   stored encode flows while reusing internal scratch, with root coverage
   verifying parity against top-level gzip stored helpers and metadata-rich
   header round trips.
+
+- Extended `RawDeflateEncoder` beyond stored blocks with fixed, option-bearing
+  fixed, best, and zlib-level raw deflate encode helpers. The reusable facade now
+  exposes alloc, scratch, and append flows for these modes, with root tests
+  checking byte parity against the top-level raw deflate encoders.
