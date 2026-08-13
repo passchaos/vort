@@ -487,7 +487,7 @@ architecture blindly.
 - [x] Dashboard strict-mode smoke directly covers fuzz corpus health drift, including report ok/mode/floor drift, summary row drift, report count/matched-row drift, coverage ok/floor/requirement mismatches, and Markdown unmatched rows.
 - [x] Dashboard strict-mode smoke directly covers dynamic-plan health drift, including missing/duplicate/unknown paths, malformed rows, token-accounting mismatches, histogram/ratio drift, and bit-slack/wrapper invariants.
 - [x] Dashboard strict-mode smoke directly covers compression level-report health drift, including missing/duplicate/unknown rows, token accounting drift, ratio drift, roundtrip checksum drift, and Markdown summary/detail mismatches.
-- [x] Dashboard strict-mode smoke directly covers Huffman length-report health drift, including malformed/blank/duplicate cases, non-optimal rows, and Markdown summary/case mismatches.
+- [x] Dashboard strict-mode smoke directly covers Huffman length-report health drift, including missing Markdown, malformed/blank/duplicate cases, non-optimal rows, gap-bit drift, and Markdown summary/case mismatches.
 - [x] Dashboard strict-mode smoke directly covers sidecar corrupt health drift, including missing Markdown, row floors, metadata/full rejection count drift, JSON item count/malformed/duplicate drift, Markdown row count drift, and unmatched/malformed/duplicate/unknown Markdown rows.
 - [x] Dashboard strict-mode smoke directly covers header-inspect health drift, including report count mismatches, duplicate case/negative/command/workflow/required/help rows, command coverage missing/unknown/mismatch rows, negative error-count drift, missing-workflow drift, help/required workflow drift, and Markdown unmatched rows.
 - [x] Dashboard strict-mode smoke directly covers Python zlib differential health drift, including top-level ok drift, payload/file/dictionary/malformed floors, raw-dictionary undercoverage, CLI success/failure floors, exact outcome mismatches, and coverage shortfalls.
@@ -3030,6 +3030,11 @@ architecture blindly.
 - Tightened Huffman length oracle dashboard health by exposing blank and
   duplicate CSV case rows alongside malformed/cost checks. Dashboard health now
   rejects duplicated Huffman oracle case rows before Markdown coverage can pass.
+
+- Tightened Huffman length strict-smoke direct drift coverage for the existing
+  oracle CSV/Markdown artifacts. The strict validation gate now isolates missing
+  Markdown companions, worst-gap drift, and package-merge worst-gap drift in
+  addition to malformed, blank, duplicate, non-optimal, and Markdown row drift.
 
 
 

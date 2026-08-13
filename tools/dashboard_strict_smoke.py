@@ -5853,7 +5853,7 @@ def level_report_drift_fixture(root: Path, fixture_name: str, mutate_csv=None, m
     return result, manifest
 
 
-def huffman_length_drift_fixture(root: Path, fixture_name: str, mutate_csv=None, mutate_markdown=None) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+def huffman_length_drift_fixture(root: Path, fixture_name: str, mutate_csv=None, mutate_markdown=None, *, remove_markdown: bool = False) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted Huffman length report."""
 
     fixture_root = root / fixture_name
@@ -5871,6 +5871,8 @@ def huffman_length_drift_fixture(root: Path, fixture_name: str, mutate_csv=None,
             rewrite_csv_rows(csv_path, rows, fieldnames)
     if mutate_markdown is not None:
         mutate_markdown(markdown_path)
+    if remove_markdown:
+        markdown_path.unlink()
     producer_map = fixture_root / "producers.json"
     write_producer_map(producer_map)
     result = run(
@@ -9161,6 +9163,101 @@ def main() -> int:
                 huffman_duplicate_result.returncode,
                 "dashboard_index_validation_unhealthy=huffman_length_failed",
                 huffman_duplicate_result.stdout,
+            )
+        )
+
+        huffman_missing_markdown_result, huffman_missing_markdown_manifest = huffman_length_drift_fixture(
+            root,
+            "huffman-length-missing-markdown",
+            remove_markdown=True,
+        )
+        huffman_missing_markdown_matched = (
+            huffman_missing_markdown_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=missing_huffman_length_artifact" in huffman_missing_markdown_result.stdout
+            and huffman_missing_markdown_manifest["validation_healthy"] is False
+            and huffman_missing_markdown_manifest["huffman_length_healthy"] is False
+            and huffman_missing_markdown_manifest["huffman_length_present"] is True
+            and huffman_missing_markdown_manifest["huffman_length_markdown_present"] is False
+        )
+        checks.append(
+            check_row(
+                "huffman_length_missing_markdown",
+                "strict-validation-health",
+                True,
+                huffman_missing_markdown_matched,
+                huffman_missing_markdown_result.returncode,
+                "dashboard_index_validation_unhealthy=missing_huffman_length_artifact",
+                huffman_missing_markdown_result.stdout,
+            )
+        )
+
+        def make_huffman_worst_gap(rows: list[dict[str, str]], fieldnames: list[str], csv_path: Path, markdown_path: Path) -> None:
+            del fieldnames, csv_path
+            rows[0]["gap_bits"] = "1"
+            markdown_path.write_text(
+                markdown_path.read_text()
+                .replace("- worst gap bits: 0", "- worst gap bits: 1", 1)
+                .replace("| strict-smoke | 3 | 2 | 5 | 5 | 0 | 5 | 0 |", "| strict-smoke | 3 | 2 | 5 | 5 | 1 | 5 | 0 |", 1)
+            )
+
+        huffman_worst_gap_result, huffman_worst_gap_manifest = huffman_length_drift_fixture(
+            root,
+            "huffman-length-worst-gap",
+            mutate_csv=make_huffman_worst_gap,
+        )
+        huffman_worst_gap_matched = (
+            huffman_worst_gap_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=huffman_length_failed" in huffman_worst_gap_result.stdout
+            and huffman_worst_gap_manifest["validation_healthy"] is False
+            and huffman_worst_gap_manifest["huffman_length_healthy"] is False
+            and huffman_worst_gap_manifest["huffman_length_worst_gap_bits"] == 1
+            and huffman_worst_gap_manifest["huffman_length_markdown_unmatched"] == 0
+            and huffman_worst_gap_manifest["huffman_length_markdown_case_unmatched"] == 0
+        )
+        checks.append(
+            check_row(
+                "huffman_length_worst_gap_bits",
+                "strict-validation-health",
+                True,
+                huffman_worst_gap_matched,
+                huffman_worst_gap_result.returncode,
+                "dashboard_index_validation_unhealthy=huffman_length_failed",
+                huffman_worst_gap_result.stdout,
+            )
+        )
+
+        def make_huffman_package_merge_worst_gap(rows: list[dict[str, str]], fieldnames: list[str], csv_path: Path, markdown_path: Path) -> None:
+            del fieldnames, csv_path
+            rows[0]["package_merge_gap_bits"] = "1"
+            markdown_path.write_text(
+                markdown_path.read_text()
+                .replace("- package-merge worst gap bits: 0", "- package-merge worst gap bits: 1", 1)
+                .replace("| strict-smoke | 3 | 2 | 5 | 5 | 0 | 5 | 0 |", "| strict-smoke | 3 | 2 | 5 | 5 | 0 | 5 | 1 |", 1)
+            )
+
+        huffman_package_gap_result, huffman_package_gap_manifest = huffman_length_drift_fixture(
+            root,
+            "huffman-length-package-gap",
+            mutate_csv=make_huffman_package_merge_worst_gap,
+        )
+        huffman_package_gap_matched = (
+            huffman_package_gap_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=huffman_length_failed" in huffman_package_gap_result.stdout
+            and huffman_package_gap_manifest["validation_healthy"] is False
+            and huffman_package_gap_manifest["huffman_length_healthy"] is False
+            and huffman_package_gap_manifest["huffman_length_package_merge_worst_gap_bits"] == 1
+            and huffman_package_gap_manifest["huffman_length_markdown_unmatched"] == 0
+            and huffman_package_gap_manifest["huffman_length_markdown_case_unmatched"] == 0
+        )
+        checks.append(
+            check_row(
+                "huffman_length_package_merge_worst_gap_bits",
+                "strict-validation-health",
+                True,
+                huffman_package_gap_matched,
+                huffman_package_gap_result.returncode,
+                "dashboard_index_validation_unhealthy=huffman_length_failed",
+                huffman_package_gap_result.stdout,
             )
         )
 
