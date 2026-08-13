@@ -5724,6 +5724,58 @@ fn crc32Chunks(chunks: []const []const u8) u32 {
     return crc.digest();
 }
 
+pub const RawDeflateEncoder = struct {
+    allocator: std.mem.Allocator,
+    scratch: std.ArrayList(u8) = .empty,
+
+    pub fn init(allocator: std.mem.Allocator) RawDeflateEncoder {
+        return .{ .allocator = allocator };
+    }
+
+    pub fn deinit(self: *RawDeflateEncoder) void {
+        self.scratch.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn encodeStoredAlloc(self: *RawDeflateEncoder, input: []const u8) ![]u8 {
+        return try encodeRawStoredAlloc(self.allocator, input);
+    }
+
+    pub fn encodeStoredChunksAlloc(self: *RawDeflateEncoder, chunks: []const []const u8) ![]u8 {
+        return try encodeRawStoredChunksAlloc(self.allocator, chunks);
+    }
+
+    pub fn encodeStoredScratch(self: *RawDeflateEncoder, input: []const u8) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeStoredAppend(&self.scratch, input);
+        return self.scratch.items;
+    }
+
+    pub fn encodeStoredChunksScratch(self: *RawDeflateEncoder, chunks: []const []const u8) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeStoredChunksAppend(&self.scratch, chunks);
+        return self.scratch.items;
+    }
+
+    pub fn encodeStoredAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
+        return try encodeRawStoredAppend(self.allocator, out, input);
+    }
+
+    pub fn encodeStoredChunksAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), chunks: []const []const u8) !usize {
+        return try encodeRawStoredChunksAppend(self.allocator, out, chunks);
+    }
+
+    pub fn encodeStoredIntoSlice(self: *RawDeflateEncoder, input: []const u8, output: []u8) !usize {
+        _ = self;
+        return try encodeRawStored(input, output);
+    }
+
+    pub fn encodeStoredChunksIntoSlice(self: *RawDeflateEncoder, chunks: []const []const u8, output: []u8) !usize {
+        _ = self;
+        return try encodeRawStoredChunks(chunks, output);
+    }
+};
+
 /// Reusable, caller-owned raw DEFLATE decoder facade.
 ///
 /// Like the zlib/gzip wrapper decoders below, this facade validates and decodes a

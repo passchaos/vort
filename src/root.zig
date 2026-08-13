@@ -1165,6 +1165,7 @@ pub const encodeRawDynamicWithOptionsAlloc = deflate.encodeRawDynamicWithOptions
 pub const encodeRawDynamicWithDictionaryAlloc = deflate.encodeRawDynamicWithDictionaryAlloc;
 pub const encodeRawDynamicSplitAlloc = deflate.encodeRawDynamicSplitAlloc;
 pub const encodeRawFixedWithOptionsAlloc = deflate.encodeRawFixedWithOptionsAlloc;
+pub const RawDeflateEncoder = deflate.RawDeflateEncoder;
 pub const RawDeflateDecoder = deflate.RawDeflateDecoder;
 pub const RawDeflateProbeResult = deflate.RawDeflateProbeResult;
 pub const DecodeProbeResult = deflate.DecodeProbeResult;
@@ -6290,6 +6291,7 @@ test "root exports chunked compatibility decode helpers" {
     // Keep the README/API-sketch split-input helpers tied to root exports. These
     // references are intentionally compile-time only: codec behavior is covered
     // in deflate.zig, while this test catches accidental public API drift.
+    _ = RawDeflateEncoder;
     _ = RawDeflateDecoder;
     _ = RawDeflateProbeResult;
     _ = DecodeProbeResult;
@@ -6732,6 +6734,57 @@ test "root stored deflate wrapper append encode helpers preserve prefixes" {
     defer std.testing.allocator.free(gzip_header_chunks_into);
     try std.testing.expectEqual(gzip_header_expected.len, try encodeGzipStoredChunksWithHeader(&chunks, gzip_header_chunks_into, header_options));
     try std.testing.expectEqualSlices(u8, gzip_header_expected, gzip_header_chunks_into);
+}
+
+test "root raw deflate encoder reuses stored scratch" {
+    const payload = "root raw deflate reusable stored encoder payload" ** 2;
+    const chunks = [_][]const u8{
+        payload[0..13],
+        payload[13..41],
+        payload[41..],
+    };
+    const expected = try encodeRawStoredDeflateAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(expected);
+    const expected_chunks = try encodeRawStoredDeflateChunksAlloc(std.testing.allocator, &chunks);
+    defer std.testing.allocator.free(expected_chunks);
+    try std.testing.expectEqualSlices(u8, expected, expected_chunks);
+
+    var encoder = RawDeflateEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+
+    const owned = try encoder.encodeStoredAlloc(payload);
+    defer std.testing.allocator.free(owned);
+    try std.testing.expectEqualSlices(u8, expected, owned);
+    const scratch = try encoder.encodeStoredScratch(payload);
+    try std.testing.expectEqualSlices(u8, expected, scratch);
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(expected.len, try encoder.encodeStoredAppend(&appended, payload));
+    try std.testing.expectEqualSlices(u8, expected, appended.items["prefix:".len..]);
+    const into = try std.testing.allocator.alloc(u8, try rawStoredDeflateChunksEncodedSize(&chunks));
+    defer std.testing.allocator.free(into);
+    try std.testing.expectEqual(expected.len, try encoder.encodeStoredIntoSlice(payload, into));
+    try std.testing.expectEqualSlices(u8, expected, into[0..expected.len]);
+
+    const chunks_owned = try encoder.encodeStoredChunksAlloc(&chunks);
+    defer std.testing.allocator.free(chunks_owned);
+    try std.testing.expectEqualSlices(u8, expected_chunks, chunks_owned);
+    const chunks_scratch = try encoder.encodeStoredChunksScratch(&chunks);
+    try std.testing.expectEqualSlices(u8, expected_chunks, chunks_scratch);
+    var chunks_appended: std.ArrayList(u8) = .empty;
+    defer chunks_appended.deinit(std.testing.allocator);
+    _ = try encoder.encodeStoredChunksAppend(&chunks_appended, &chunks);
+    try std.testing.expectEqualSlices(u8, expected_chunks, chunks_appended.items);
+    const chunks_into = try std.testing.allocator.alloc(u8, expected_chunks.len);
+    defer std.testing.allocator.free(chunks_into);
+    try std.testing.expectEqual(expected_chunks.len, try encoder.encodeStoredChunksIntoSlice(&chunks, chunks_into));
+    try std.testing.expectEqualSlices(u8, expected_chunks, chunks_into[0..expected_chunks.len]);
+    try std.testing.expectError(error.OutputTooSmall, encoder.encodeStoredChunksIntoSlice(&chunks, chunks_into[0 .. chunks_into.len - 1]));
+
+    const decoded = try decodeRawDeflateAllocExactSize(std.testing.allocator, chunks_scratch, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
 test "root raw deflate decoder drains caller-owned scratch and resets" {

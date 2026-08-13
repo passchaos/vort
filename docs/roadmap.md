@@ -3459,3 +3459,8 @@ architecture blindly.
   dictionaries, gzip, and metadata-rich gzip headers. Chunked bound, caller-owned,
   allocator-returning, and append helpers now match contiguous stored output
   while updating zlib Adler-32 and gzip CRC/ISIZE across caller chunks.
+
+- Added a reusable raw-deflate `RawDeflateEncoder` stored facade. It exposes
+  allocator-returning, scratch, append, caller-owned, and chunked stored encode
+  flows while reusing internal scratch, with root coverage verifying byte parity
+  against top-level stored helpers and raw-deflate decode round trips.
