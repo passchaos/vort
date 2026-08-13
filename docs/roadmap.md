@@ -1483,6 +1483,11 @@ architecture blindly.
   preset-dictionary variants without requiring an intermediate owned decoded
   slice.
 
+- Added a reusable caller-owned raw deflate `RawDeflateDecoder` library facade.
+  It validates/decodes complete raw streams into caller-provided scratch during
+  reset, supports exact-size and split-input reset variants, and drains through
+  bounded `step` calls with snapshots and shared streaming diagnostics.
+
 - Added zlib stream inspection helpers for split compressed input
   (`inspectZlibStreamFromChunksAlloc*`), reusing caller-provided join scratch
   before running the existing diagnostic inspector. They report the same

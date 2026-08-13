@@ -990,6 +990,7 @@ pub const encodeRawDynamicWithOptionsAlloc = deflate.encodeRawDynamicWithOptions
 pub const encodeRawDynamicWithDictionaryAlloc = deflate.encodeRawDynamicWithDictionaryAlloc;
 pub const encodeRawDynamicSplitAlloc = deflate.encodeRawDynamicSplitAlloc;
 pub const encodeRawFixedWithOptionsAlloc = deflate.encodeRawFixedWithOptionsAlloc;
+pub const RawDeflateDecoder = deflate.RawDeflateDecoder;
 pub const CompressionOptions = deflate.CompressionOptions;
 pub const CompressionStrategy = deflate.CompressionStrategy;
 pub const AdaptiveSplitOptions = deflate.AdaptiveSplitOptions;
@@ -5131,6 +5132,7 @@ test "root exports chunked compatibility decode helpers" {
     // Keep the README/API-sketch split-input helpers tied to root exports. These
     // references are intentionally compile-time only: codec behavior is covered
     // in deflate.zig, while this test catches accidental public API drift.
+    _ = RawDeflateDecoder;
     _ = parseRawDeflateHeaderInfoFromChunks;
     _ = decodeRawDeflateChunks;
     _ = decodeRawDeflateChunksWithDictionary;
@@ -5319,6 +5321,50 @@ test "root raw deflate append decode helpers preserve prefixes" {
     try std.testing.expectEqual(payload.len, try decodeRawDeflateChunksAppendLimited(std.testing.allocator, &appended, &chunks, join, payload.len));
     try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, appended.items);
     try std.testing.expectError(error.OutputLimitExceeded, decodeRawDeflateChunksAppendLimited(std.testing.allocator, &appended, &chunks, join, payload.len - 1));
+}
+
+test "root raw deflate decoder drains caller-owned scratch and resets" {
+    const payload = "raw deflate reusable decoder payload " ** 2;
+    const encoded = try encodeRawBestAlloc(std.testing.allocator, payload, .{});
+    defer std.testing.allocator.free(encoded);
+    var scratch: [payload.len + 8]u8 = undefined;
+    var decoder = try RawDeflateDecoder.initExactSize(encoded, &scratch, payload.len);
+
+    var out: [payload.len]u8 = undefined;
+    var step = try decoder.step(out[0..9]);
+    try std.testing.expectEqual(StepResult.Status.need_output, step.status);
+    try std.testing.expectEqual(@as(usize, 0), step.progress.input_read);
+    try std.testing.expectEqual(@as(usize, 9), step.progress.output_written);
+    step = try decoder.step(out[9..]);
+    try std.testing.expectEqual(StepResult.Status.done, step.status);
+    try std.testing.expectEqual(encoded.len, step.progress.input_read);
+    try std.testing.expectEqual(payload.len - 9, step.progress.output_written);
+    try std.testing.expectEqualSlices(u8, payload, &out);
+    const done_diagnostics = decoder.diagnostics();
+    try std.testing.expectEqualStrings("done", done_diagnostics.phase_name);
+    try std.testing.expectEqual(encoded.len, done_diagnostics.frame_input_read.?);
+
+    const chunk_payload = "raw deflate chunked reset payload";
+    const chunk_encoded = try encodeRawBestAlloc(std.testing.allocator, chunk_payload, .{});
+    defer std.testing.allocator.free(chunk_encoded);
+    const chunks = [_][]const u8{
+        chunk_encoded[0..1],
+        chunk_encoded[1..@min(chunk_encoded.len, 10)],
+        chunk_encoded[@min(chunk_encoded.len, 10)..],
+    };
+    const join = try std.testing.allocator.alloc(u8, chunk_encoded.len);
+    defer std.testing.allocator.free(join);
+    try decoder.resetFromChunksExactSize(&chunks, join, &scratch, chunk_payload.len);
+    var chunk_out: [chunk_payload.len]u8 = undefined;
+    step = try decoder.step(&chunk_out);
+    try std.testing.expectEqual(StepResult.Status.done, step.status);
+    try std.testing.expectEqual(chunk_encoded.len, step.progress.input_read);
+    try std.testing.expectEqual(chunk_payload.len, step.progress.output_written);
+    try std.testing.expectEqualSlices(u8, chunk_payload, &chunk_out);
+
+    try std.testing.expectError(error.SizeMismatch, decoder.resetExactSize(encoded, &scratch, payload.len + 1));
+    try std.testing.expectEqualStrings("SizeMismatch", decoder.snapshot().last_error_name);
+    try std.testing.expectEqualStrings("payload_corrupt", decoder.diagnostics().recoverability_hint_name);
 }
 
 test "root zlib and gzip append decode helpers preserve prefixes" {

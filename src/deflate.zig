@@ -5519,6 +5519,216 @@ fn chunksTotalLen(chunks: []const []const u8) Error!usize {
     return total;
 }
 
+/// Reusable, caller-owned raw DEFLATE decoder facade.
+///
+/// Like the zlib/gzip wrapper decoders below, this facade validates and decodes a
+/// complete raw DEFLATE stream into caller-provided scratch during `reset*`; the
+/// `step` API then drains that scratch through bounded caller output buffers.
+/// Keeping this thin wrapper allocation-free gives raw users the same reusable
+/// library shape as wrapper callers while the lower-level inflater remains the
+/// single source of format behavior.
+pub const RawDeflateDecoder = struct {
+    decoded: []const u8 = &.{},
+    frame_len: usize = 0,
+    offset: usize = 0,
+    done: bool = false,
+    last_error_name: []const u8 = "",
+    last_recoverability_hint: RecoverabilityHint = .none,
+
+    pub const RecoverabilityHint = enum {
+        none,
+        corrupt_header,
+        truncated_input,
+        payload_corrupt,
+        retry_with_dictionary,
+    };
+
+    pub const Snapshot = struct {
+        output_written: usize,
+        expected_output_len: usize,
+        payload_remaining: usize,
+        done: bool,
+        last_error_name: []const u8,
+        recoverability_hint: RecoverabilityHint,
+    };
+
+    pub fn init(input: []const u8, scratch: []u8) Error!RawDeflateDecoder {
+        var self = RawDeflateDecoder{};
+        try self.reset(input, scratch);
+        return self;
+    }
+
+    pub fn initExactSize(input: []const u8, scratch: []u8, expected_output_len: usize) Error!RawDeflateDecoder {
+        var self = RawDeflateDecoder{};
+        try self.resetExactSize(input, scratch, expected_output_len);
+        return self;
+    }
+
+    pub fn initWithDictionary(input: []const u8, dictionary: []const u8, scratch: []u8) Error!RawDeflateDecoder {
+        var self = RawDeflateDecoder{};
+        try self.resetWithDictionary(input, dictionary, scratch);
+        return self;
+    }
+
+    pub fn initWithDictionaryExactSize(input: []const u8, dictionary: []const u8, scratch: []u8, expected_output_len: usize) Error!RawDeflateDecoder {
+        var self = RawDeflateDecoder{};
+        try self.resetWithDictionaryExactSize(input, dictionary, scratch, expected_output_len);
+        return self;
+    }
+
+    pub fn initFromChunks(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!RawDeflateDecoder {
+        var self = RawDeflateDecoder{};
+        try self.resetFromChunks(chunks, compressed_scratch, output_scratch);
+        return self;
+    }
+
+    pub fn initFromChunksExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!RawDeflateDecoder {
+        var self = RawDeflateDecoder{};
+        try self.resetFromChunksExactSize(chunks, compressed_scratch, output_scratch, expected_output_len);
+        return self;
+    }
+
+    pub fn initFromChunksWithDictionary(chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!RawDeflateDecoder {
+        var self = RawDeflateDecoder{};
+        try self.resetFromChunksWithDictionary(chunks, dictionary, compressed_scratch, output_scratch);
+        return self;
+    }
+
+    pub fn initFromChunksWithDictionaryExactSize(chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!RawDeflateDecoder {
+        var self = RawDeflateDecoder{};
+        try self.resetFromChunksWithDictionaryExactSize(chunks, dictionary, compressed_scratch, output_scratch, expected_output_len);
+        return self;
+    }
+
+    pub fn reset(self: *RawDeflateDecoder, input: []const u8, scratch: []u8) Error!void {
+        return self.resetWithDictionary(input, "", scratch);
+    }
+
+    pub fn resetExactSize(self: *RawDeflateDecoder, input: []const u8, scratch: []u8, expected_output_len: usize) Error!void {
+        return self.resetWithDictionaryExactSize(input, "", scratch, expected_output_len);
+    }
+
+    pub fn resetWithDictionary(self: *RawDeflateDecoder, input: []const u8, dictionary: []const u8, scratch: []u8) Error!void {
+        const decoded = decodeRawAutoWithDictionary(input, dictionary, scratch) catch |err| {
+            self.recordError(err);
+            return err;
+        };
+        if (decoded.input_read != input.len) {
+            self.recordError(error.TrailingData);
+            return error.TrailingData;
+        }
+        self.installDecoded(input.len, scratch, decoded.output_written);
+    }
+
+    pub fn resetWithDictionaryExactSize(self: *RawDeflateDecoder, input: []const u8, dictionary: []const u8, scratch: []u8, expected_output_len: usize) Error!void {
+        if (scratch.len < expected_output_len) {
+            self.recordError(error.OutputTooSmall);
+            return error.OutputTooSmall;
+        }
+        self.resetWithDictionary(input, dictionary, scratch[0..expected_output_len]) catch |err| switch (err) {
+            error.OutputTooSmall => {
+                self.recordError(error.SizeMismatch);
+                return error.SizeMismatch;
+            },
+            else => return err,
+        };
+        if (self.decoded.len != expected_output_len) {
+            self.recordError(error.SizeMismatch);
+            return error.SizeMismatch;
+        }
+    }
+
+    pub fn resetFromChunks(self: *RawDeflateDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!void {
+        return self.resetFromChunksWithDictionary(chunks, "", compressed_scratch, output_scratch);
+    }
+
+    pub fn resetFromChunksExactSize(self: *RawDeflateDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!void {
+        return self.resetFromChunksWithDictionaryExactSize(chunks, "", compressed_scratch, output_scratch, expected_output_len);
+    }
+
+    pub fn resetFromChunksWithDictionary(self: *RawDeflateDecoder, chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!void {
+        const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+            self.recordError(err);
+            return err;
+        };
+        return self.resetWithDictionary(joined, dictionary, output_scratch);
+    }
+
+    pub fn resetFromChunksWithDictionaryExactSize(self: *RawDeflateDecoder, chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!void {
+        const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+            self.recordError(err);
+            return err;
+        };
+        return self.resetWithDictionaryExactSize(joined, dictionary, output_scratch, expected_output_len);
+    }
+
+    pub fn snapshot(self: *const RawDeflateDecoder) Snapshot {
+        return .{
+            .output_written = self.offset,
+            .expected_output_len = self.decoded.len,
+            .payload_remaining = self.decoded.len - self.offset,
+            .done = self.done,
+            .last_error_name = self.last_error_name,
+            .recoverability_hint = self.last_recoverability_hint,
+        };
+    }
+
+    pub fn diagnostics(self: *const RawDeflateDecoder) core.StreamingDiagnostics {
+        const snap = self.snapshot();
+        return .{
+            .phase_name = if (snap.done) "done" else "payload",
+            .frame_input_read = if (snap.done) self.frame_len else null,
+            .output_written = snap.output_written,
+            .expected_output_len = snap.expected_output_len,
+            .payload_remaining = snap.payload_remaining,
+            .last_error_name = snap.last_error_name,
+            .last_error_phase_name = if (snap.last_error_name.len == 0) "" else "payload",
+            .recoverability_hint_name = hintName(snap.recoverability_hint),
+        };
+    }
+
+    pub fn step(self: *RawDeflateDecoder, output: []u8) Error!core.StepResult {
+        if (self.done) return .{ .status = .done };
+        if (output.len == 0) return .{ .status = .need_output };
+        const remaining = self.decoded[self.offset..];
+        const n = @min(output.len, remaining.len);
+        @memcpy(output[0..n], remaining[0..n]);
+        self.offset += n;
+        if (self.offset == self.decoded.len) self.done = true;
+        return .{
+            .progress = .{ .input_read = if (self.done) self.frame_len else 0, .output_written = n },
+            .status = if (self.done) .done else .need_output,
+        };
+    }
+
+    fn installDecoded(self: *RawDeflateDecoder, frame_len: usize, scratch: []u8, written: usize) void {
+        self.* = .{
+            .decoded = scratch[0..written],
+            .frame_len = frame_len,
+        };
+    }
+
+    fn recordError(self: *RawDeflateDecoder, err: Error) void {
+        self.last_error_name = @errorName(err);
+        self.last_recoverability_hint = switch (err) {
+            error.InvalidDeflateBlockType, error.InvalidDynamicBlockHeader, error.InvalidHuffmanCode => .corrupt_header,
+            error.TruncatedFrame => .truncated_input,
+            error.NeedDictionary, error.InvalidDictionaryTraining => .retry_with_dictionary,
+            else => .payload_corrupt,
+        };
+    }
+
+    fn hintName(hint: RecoverabilityHint) []const u8 {
+        return switch (hint) {
+            .none => "none",
+            .corrupt_header => "corrupt_header",
+            .truncated_input => "truncated_input",
+            .payload_corrupt => "payload_corrupt",
+            .retry_with_dictionary => "retry_with_dictionary",
+        };
+    }
+};
+
 pub fn pngIdatChunksScratchLen(chunks: []const []const u8) Error!usize {
     return chunksTotalLen(chunks);
 }
