@@ -731,29 +731,35 @@ fn packagesAreSorted(comptime n: usize, packages: []const LengthPackage(n)) bool
 fn PackedLengthPackage(comptime n: usize) type {
     return struct {
         weight: u64,
-        counts: [(n + 1) / 2]u8,
+        // Four bits are sufficient for every symbol multiplicity because a
+        // DEFLATE code length is capped at 15. Packing sixteen symbols per word
+        // lets package combination use native integer addition and lets the
+        // equal-weight tie-break compare sixteen symbols at a time. Symbol
+        // indices increase with nibble significance, so walking words in
+        // reverse preserves the byte-packed implementation's exact ordering.
+        counts: [(n + 15) / 16]u64,
     };
 }
 
 fn packedCountGet(
     comptime n: usize,
-    counts: [(n + 1) / 2]u8,
+    counts: [(n + 15) / 16]u64,
     symbol: usize,
 ) u4 {
-    const byte = counts[symbol / 2];
-    return @truncate(byte >> @intCast((symbol & 1) * 4));
+    const word = counts[symbol / 16];
+    return @truncate(word >> @intCast((symbol & 15) * 4));
 }
 
 fn packedCountSet(
     comptime n: usize,
-    counts: *[(n + 1) / 2]u8,
+    counts: *[(n + 15) / 16]u64,
     symbol: usize,
     value: u4,
 ) void {
-    const shift: u3 = @intCast((symbol & 1) * 4);
-    const mask: u8 = @as(u8, 0x0f) << shift;
-    counts[symbol / 2] =
-        (counts[symbol / 2] & ~mask) | (@as(u8, value) << shift);
+    const shift: u6 = @intCast((symbol & 15) * 4);
+    const mask: u64 = @as(u64, 0x0f) << shift;
+    counts[symbol / 16] =
+        (counts[symbol / 16] & ~mask) | (@as(u64, value) << shift);
 }
 
 fn packedPackageLess(
@@ -788,14 +794,19 @@ fn combinePackedPackages(
         .counts = @splat(0),
     };
     // Every nibble is a package multiplicity bounded by max_code_bits (15).
-    // Package-merge only combines disjoint selections at one depth, so each
-    // nibble sum stays <= 15. Plain byte addition therefore performs two
-    // independent nibble additions without carry crossing between symbols.
+    // Package-merge only combines selections whose per-symbol sums stay <= 15.
+    // With that invariant, a native word addition cannot carry across a nibble
+    // boundary and therefore performs sixteen independent count additions.
+    if (comptime builtin.mode == .Debug or builtin.mode == .ReleaseSafe) {
+        for (0..n) |symbol| {
+            std.debug.assert(
+                @as(u5, packedCountGet(n, lhs.counts, symbol)) +
+                    packedCountGet(n, rhs.counts, symbol) <= 0x0f,
+            );
+        }
+    }
     for (&out.counts, lhs.counts, rhs.counts) |*value, left, right| {
-        const sum = @as(u16, left) + right;
-        std.debug.assert((left & 0x0f) + (right & 0x0f) <= 0x0f);
-        std.debug.assert((left >> 4) + (right >> 4) <= 0x0f);
-        value.* = @intCast(sum);
+        value.* = left + right;
     }
     return out;
 }
