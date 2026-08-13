@@ -1498,6 +1498,11 @@ architecture blindly.
   and report decoded byte counts, exact-size mismatches, error names, and shared
   streaming diagnostics without adding CLI surface.
 
+- Added non-throwing concatenated zlib/gzip probe helpers for multi-member
+  wrapper streams, including split-input variants. These probes reuse
+  caller-owned scratch and expose decoded byte counts plus exact-size mismatch
+  diagnostics before callers commit to an append or allocator-returning decode.
+
 - Added zlib stream inspection helpers for split compressed input
   (`inspectZlibStreamFromChunksAlloc*`), reusing caller-provided join scratch
   before running the existing diagnostic inspector. They report the same
