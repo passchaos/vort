@@ -633,13 +633,27 @@ fn packageMergeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4
 
     const selected_count = 2 * active - 2;
     std.debug.assert(selected_count <= current_len);
-    var lengths: [n]u4 = @splat(0);
+    var selected_counts: [(n + 15) / 16]u64 = @splat(0);
     for (current[0..selected_count]) |package| {
-        for (&lengths, 0..) |*length, symbol| {
-            length.* += packedCountGet(n, package.counts, symbol);
+        if (comptime builtin.mode == .Debug or builtin.mode == .ReleaseSafe) {
+            for (0..n) |symbol| {
+                std.debug.assert(
+                    @as(u5, packedCountGet(n, selected_counts, symbol)) +
+                        packedCountGet(n, package.counts, symbol) <= max_bits,
+                );
+            }
+        }
+        // As in package combination, each nibble's final sum is a valid code
+        // length no greater than max_bits. Accumulating whole words therefore
+        // performs sixteen independent additions without cross-nibble carry.
+        for (&selected_counts, package.counts) |*total, counts| {
+            total.* += counts;
         }
     }
-    for (lengths) |length| std.debug.assert(length <= max_bits);
+    var lengths: [n]u4 = undefined;
+    for (&lengths, 0..) |*length, symbol| {
+        length.* = packedCountGet(n, selected_counts, symbol);
+    }
     return lengths;
 }
 
