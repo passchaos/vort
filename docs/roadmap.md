@@ -2850,6 +2850,11 @@ architecture blindly.
   count mismatches, codec-specific count drift, offset-range drift, missing
   required codec phases, and negative-smoke count/matched/expected-failure drift
   so native malformed-summary health cannot hide aggregate counter regressions.
+- Tightened native summary error strict-smoke direct drift coverage for retained
+  malformed-stream floor requirements. The strict validation gate now moves
+  concrete cases between error classes while keeping aggregate counters
+  internally consistent, isolating checksum and corrupt-frame floor regressions
+  from the existing count-mismatch checks.
 - Tightened Brotli static-dictionary negative-smoke dashboard health by requiring
   both source-audit and report guardrail rows to match declared case counts with
   no unmatched rows. Dashboard health now exposes row/count drift counters before

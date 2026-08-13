@@ -4734,6 +4734,8 @@
           "native_summary_error_case_count_mismatch",
           "native_summary_error_codec_case_count_mismatch",
           "native_summary_error_error_count_mismatch",
+          "native_summary_error_checksum_floor",
+          "native_summary_error_corrupt_frame_floor",
           "native_summary_error_phase_count_mismatch",
           "native_summary_error_codec_error_count_mismatch",
           "native_summary_error_codec_phase_count_mismatch",

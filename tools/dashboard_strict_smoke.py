@@ -13163,6 +13163,65 @@ def main() -> int:
             native_summary_error_count_manifest["native_summary_error_error_count_mismatch"] == 1,
         )
 
+        def move_native_summary_error_class(payload: dict[str, object], case_name: str, new_error: str) -> None:
+            """Move one retained malformed-stream case between error classes.
+
+            The summary dashboard recomputes aggregate counts from concrete
+            cases. Updating both the case and its published aggregate counters
+            lets these fixtures isolate floor regressions instead of exercising
+            the already-covered count-mismatch path.
+            """
+
+            cases = payload.get("cases")
+            if not isinstance(cases, list):
+                raise AssertionError("native-summary fixture missing cases")
+            target = next((case for case in cases if isinstance(case, dict) and case.get("name") == case_name), None)
+            if target is None:
+                raise AssertionError(f"native-summary fixture missing case {case_name!r}")
+            codec = str(target.get("codec") or "")
+            old_error = str(target.get("error") or "")
+            if not codec or not old_error or old_error == new_error:
+                raise AssertionError(f"native-summary fixture cannot move {case_name!r} from {old_error!r} to {new_error!r}")
+            target["error"] = new_error
+
+            def shift_count(map_name: str) -> None:
+                counts = payload.get(map_name)
+                if not isinstance(counts, dict):
+                    raise AssertionError(f"native-summary fixture missing {map_name}")
+                counts[old_error] = int(counts.get(old_error) or 0) - 1
+                counts[new_error] = int(counts.get(new_error) or 0) + 1
+
+            shift_count("error_counts")
+            shift_count(f"{codec}_error_counts")
+
+        native_summary_checksum_floor_result, native_summary_checksum_floor_manifest = native_summary_error_drift_fixture(
+            root,
+            "native-summary-error-checksum-floor",
+            mutate_report=lambda payload: move_native_summary_error_class(payload, "lz4_header_checksum", "CorruptFrame"),
+        )
+        append_native_summary_error_check(
+            "native_summary_error_checksum_floor",
+            native_summary_checksum_floor_result,
+            native_summary_checksum_floor_manifest,
+            native_summary_checksum_floor_manifest["native_summary_error_checksum_mismatch_count"] == 0
+            and native_summary_checksum_floor_manifest["native_summary_error_error_count_mismatch"] == 0
+            and native_summary_checksum_floor_manifest["native_summary_error_codec_error_count_mismatch"] == 0,
+        )
+
+        native_summary_corrupt_floor_result, native_summary_corrupt_floor_manifest = native_summary_error_drift_fixture(
+            root,
+            "native-summary-error-corrupt-floor",
+            mutate_report=lambda payload: move_native_summary_error_class(payload, "lz4_bad_magic", "TruncatedFrame"),
+        )
+        append_native_summary_error_check(
+            "native_summary_error_corrupt_frame_floor",
+            native_summary_corrupt_floor_result,
+            native_summary_corrupt_floor_manifest,
+            native_summary_corrupt_floor_manifest["native_summary_error_corrupt_frame_count"] == 3
+            and native_summary_corrupt_floor_manifest["native_summary_error_error_count_mismatch"] == 0
+            and native_summary_corrupt_floor_manifest["native_summary_error_codec_error_count_mismatch"] == 0,
+        )
+
         native_summary_phase_count_result, native_summary_phase_count_manifest = native_summary_error_drift_fixture(
             root,
             "native-summary-error-phase-count",
