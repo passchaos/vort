@@ -490,6 +490,7 @@ architecture blindly.
 - [x] Dashboard strict-mode smoke directly covers Huffman length-report health drift, including malformed/blank/duplicate cases, non-optimal rows, and Markdown summary/case mismatches.
 - [x] Dashboard strict-mode smoke directly covers sidecar corrupt health drift, including metadata/full rejection count drift, JSON item count/malformed/duplicate drift, and unmatched/malformed/duplicate/unknown Markdown rows.
 - [x] Dashboard strict-mode smoke directly covers header-inspect health drift, including report count mismatches, duplicate case/negative/command/workflow/required/help rows, command coverage missing/unknown/mismatch rows, negative error-count drift, missing-workflow drift, help/required workflow drift, and Markdown unmatched rows.
+- [x] Dashboard strict-mode smoke directly covers Python zlib differential health drift, including top-level ok drift, payload/file/dictionary/malformed floors, raw-dictionary undercoverage, CLI success/failure floors, exact outcome mismatches, and coverage shortfalls.
 - [x] Dashboard strict-mode smoke directly covers validation JSON smoke/docs-negative health drift, including observed-schema count mismatches, unchecked observed schemas, JSON artifact audit parse/missing-schema/manifest/accounting failures, and docs-negative row/count mismatches.
 - [x] Dashboard strict-mode smoke directly covers non-JSON artifact manifest drift, including CSV file layout failures, CSV header membership/column/signature mismatches, Markdown file layout failures, Markdown heading membership/count/first-heading/signature mismatches, and Markdown table-row/separator-row count mismatches.
 - [x] Validation JSON docs negative smoke catches dashboard strict config drift cases.
@@ -2870,6 +2871,14 @@ architecture blindly.
   missing match-heavy/dynamic payload coverage, dictionary-encode undercoverage,
   and malformed-wrapper coverage loss so `python_zlib_diff_failed` cannot hide
   differential summary counter regressions behind its aggregate fixture.
+
+- Tightened Python zlib differential strict-smoke direct drift coverage for the
+  retained black-box differential smoke without changing compatibility scope. The
+  strict validation gate now isolates top-level `ok` drift, payload and
+  large-file floors, file-hex floors, dictionary and raw-dictionary encode
+  floors, malformed-deflate coverage loss, and CLI success/failure floors before
+  the differential summary can pass.
+
 - Tightened zlib/gzip relaxed-wrapper dashboard health by recomputing the
   retained gate's exact and floor rules from report counters instead of trusting
   gate booleans alone. Dashboard health now exposes missing/extra gate checks,

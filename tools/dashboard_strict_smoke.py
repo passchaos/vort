@@ -14581,6 +14581,118 @@ def main() -> int:
                 )
             )
 
+        python_zlib_ok_result, python_zlib_ok_manifest = python_zlib_diff_drift_fixture(
+            root,
+            "python-zlib-diff-ok-failed",
+            mutate_report=lambda payload: payload.__setitem__("ok", False),
+        )
+        append_python_zlib_diff_check(
+            "python_zlib_diff_ok_failed",
+            python_zlib_ok_result,
+            python_zlib_ok_manifest,
+            python_zlib_ok_manifest["python_zlib_diff_ok"] is False,
+        )
+
+        python_zlib_payload_floor_result, python_zlib_payload_floor_manifest = python_zlib_diff_drift_fixture(
+            root,
+            "python-zlib-diff-payload-floor",
+            mutate_report=lambda payload: payload.update({"payloads": 0, "large_file_payloads": 0}),
+        )
+        append_python_zlib_diff_check(
+            "python_zlib_diff_payloads_floor",
+            python_zlib_payload_floor_result,
+            python_zlib_payload_floor_manifest,
+            python_zlib_payload_floor_manifest["python_zlib_diff_payloads"] == 0
+            and python_zlib_payload_floor_manifest["python_zlib_diff_inline_payloads"] == 0,
+        )
+
+        python_zlib_large_file_floor_result, python_zlib_large_file_floor_manifest = python_zlib_diff_drift_fixture(
+            root,
+            "python-zlib-diff-large-file-floor",
+            mutate_report=lambda payload: payload.__setitem__("large_file_payloads", 0),
+        )
+        append_python_zlib_diff_check(
+            "python_zlib_diff_large_file_payloads_floor",
+            python_zlib_large_file_floor_result,
+            python_zlib_large_file_floor_manifest,
+            python_zlib_large_file_floor_manifest["python_zlib_diff_large_file_payloads"] == 0,
+        )
+
+        python_zlib_file_hex_floor_result, python_zlib_file_hex_floor_manifest = python_zlib_diff_drift_fixture(
+            root,
+            "python-zlib-diff-file-hex-floor",
+            mutate_report=lambda payload: payload.update({"file_hex_encode_cases": 0, "large_file_payloads": 0}),
+        )
+        append_python_zlib_diff_check(
+            "python_zlib_diff_file_hex_encode_cases_floor",
+            python_zlib_file_hex_floor_result,
+            python_zlib_file_hex_floor_manifest,
+            python_zlib_file_hex_floor_manifest["python_zlib_diff_file_hex_encode_cases"] == 0
+            and python_zlib_file_hex_floor_manifest["python_zlib_diff_file_hex_case_mismatch"] == 0,
+        )
+
+        python_zlib_dictionary_floor_result, python_zlib_dictionary_floor_manifest = python_zlib_diff_drift_fixture(
+            root,
+            "python-zlib-diff-dictionary-floor",
+            mutate_report=lambda payload: payload.update({"dictionary_cases": 0, "zlib_dict_encode_cases": 0, "raw_dict_encode_cases": 0}),
+        )
+        append_python_zlib_diff_check(
+            "python_zlib_diff_dictionary_cases_floor",
+            python_zlib_dictionary_floor_result,
+            python_zlib_dictionary_floor_manifest,
+            python_zlib_dictionary_floor_manifest["python_zlib_diff_dictionary_cases"] == 0
+            and python_zlib_dictionary_floor_manifest["python_zlib_diff_dictionary_encode_cases"] == 0,
+        )
+
+        python_zlib_raw_dict_floor_result, python_zlib_raw_dict_floor_manifest = python_zlib_diff_drift_fixture(
+            root,
+            "python-zlib-diff-raw-dict-floor",
+            mutate_report=lambda payload: payload.__setitem__("raw_dict_encode_cases", 0),
+        )
+        append_python_zlib_diff_check(
+            "python_zlib_diff_raw_dict_encode_undercovered",
+            python_zlib_raw_dict_floor_result,
+            python_zlib_raw_dict_floor_manifest,
+            python_zlib_raw_dict_floor_manifest["python_zlib_diff_raw_dict_encode_cases"] == 0
+            and python_zlib_raw_dict_floor_manifest["python_zlib_diff_dictionary_encode_cases"] == 1,
+        )
+
+        python_zlib_malformed_deflate_result, python_zlib_malformed_deflate_manifest = python_zlib_diff_drift_fixture(
+            root,
+            "python-zlib-diff-malformed-deflate-missing",
+            mutate_report=lambda payload: payload.__setitem__("malformed_deflate_cases", 0),
+        )
+        append_python_zlib_diff_check(
+            "python_zlib_diff_malformed_deflate_missing",
+            python_zlib_malformed_deflate_result,
+            python_zlib_malformed_deflate_manifest,
+            python_zlib_malformed_deflate_manifest["python_zlib_diff_malformed_deflate_cases"] == 0,
+        )
+
+        python_zlib_cli_success_floor_result, python_zlib_cli_success_floor_manifest = python_zlib_diff_drift_fixture(
+            root,
+            "python-zlib-diff-cli-success-floor",
+            mutate_report=lambda payload: payload.__setitem__("cli_successes", 0),
+        )
+        append_python_zlib_diff_check(
+            "python_zlib_diff_cli_successes_floor",
+            python_zlib_cli_success_floor_result,
+            python_zlib_cli_success_floor_manifest,
+            python_zlib_cli_success_floor_manifest["python_zlib_diff_cli_successes"] == 0,
+        )
+
+        python_zlib_expected_failures_floor_result, python_zlib_expected_failures_floor_manifest = python_zlib_diff_drift_fixture(
+            root,
+            "python-zlib-diff-expected-failures-floor",
+            mutate_report=lambda payload: payload.__setitem__("expected_failures", 0),
+        )
+        append_python_zlib_diff_check(
+            "python_zlib_diff_expected_failures_floor",
+            python_zlib_expected_failures_floor_result,
+            python_zlib_expected_failures_floor_manifest,
+            python_zlib_expected_failures_floor_manifest["python_zlib_diff_expected_failures"] == 0,
+        )
+
         python_zlib_overflow_result, python_zlib_overflow_manifest = python_zlib_diff_drift_fixture(
             root,
             "python-zlib-diff-large-file-overflow",
