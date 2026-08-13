@@ -3433,3 +3433,8 @@ architecture blindly.
   Bound, alloc, append, and caller-owned encode helpers now cover plain,
   dictionary, and dictionary-set advanced options through `zstd.encodeFrame*`
   / root `zstdEncodeFrame*` public names.
+
+- Added Brotli stored-stream encoded-size preflight helpers so callers can size
+  exact output buffers before using the caller-owned encode path. The root
+  Brotli stored-stream coverage now checks bound equality, caller-owned encode
+  parity, short-buffer failure, and invalid window/metadata planning errors.

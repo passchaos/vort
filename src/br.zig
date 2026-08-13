@@ -14,6 +14,27 @@ pub const StoredStreamOptions = struct {
     metadata: []const u8 = "",
 };
 
+pub fn encodedStoredStreamBound(input_len: usize) Error!usize {
+    return try encodedStoredStreamBoundWithOptions(input_len, .{});
+}
+
+pub fn encodedStoredStreamBoundWithOptions(input_len: usize, options: StoredStreamOptions) Error!usize {
+    var bit_count = try storedWindowBitsLen(options.window_bits);
+    if (options.metadata.len != 0) {
+        bit_count = try addStoredMetadataMetaBlockBitsLen(bit_count, options.metadata.len);
+    }
+
+    var remaining = input_len;
+    while (remaining != 0) {
+        const block_len = @min(remaining, max_uncompressed_meta_block_len);
+        bit_count = try addStoredUncompressedMetaBlockBitsLen(bit_count, block_len);
+        remaining -= block_len;
+    }
+
+    bit_count = std.math.add(usize, bit_count, 2) catch return error.IntegerOverflow; // ISLAST + ISLASTEMPTY.
+    return bytesForBits(bit_count);
+}
+
 pub const StreamSummary = struct {
     window_bits: u5,
     input_bytes: usize,
@@ -65,13 +86,20 @@ const StreamSummaryMetaBlockStats = struct {
 const BitWriter = struct {
     out: *std.ArrayList(u8),
     bit_index: u3 = 0,
+    bounded: bool = false,
 
     fn writeBits(self: *BitWriter, allocator: std.mem.Allocator, value: u64, count: u6) Error!void {
         if (count > 64) return error.CorruptFrame;
         var remaining = count;
         var cursor = value;
         while (remaining > 0) : (remaining -= 1) {
-            if (self.bit_index == 0) try self.out.append(allocator, 0);
+            if (self.bit_index == 0) {
+                if (self.bounded) {
+                    try self.out.appendBounded(0);
+                } else {
+                    try self.out.append(allocator, 0);
+                }
+            }
             if ((cursor & 1) != 0) self.out.items[self.out.items.len - 1] |= @as(u8, 1) << self.bit_index;
             cursor >>= 1;
             self.bit_index +%= 1;
@@ -84,7 +112,11 @@ const BitWriter = struct {
 
     fn writeAlignedBytes(self: *BitWriter, allocator: std.mem.Allocator, bytes: []const u8) Error!void {
         if (self.bit_index != 0) return error.CorruptFrame;
-        try self.out.appendSlice(allocator, bytes);
+        if (self.bounded) {
+            try self.out.appendSliceBounded(bytes);
+        } else {
+            try self.out.appendSlice(allocator, bytes);
+        }
     }
 };
 
@@ -213,13 +245,34 @@ pub fn encodeStoredStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayLis
 
 pub fn encodeStoredStreamWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: StoredStreamOptions) Error!void {
     var writer = BitWriter{ .out = out };
-    try writeWindowBits(allocator, &writer, options.window_bits);
-    if (options.metadata.len != 0) try writeMetadataMetaBlock(allocator, &writer, options.metadata);
+    try encodeStoredStreamWithOptionsWrite(allocator, &writer, input, options);
+}
+
+pub fn encodeStoredStreamInto(input: []const u8, output: []u8) Error!usize {
+    return try encodeStoredStreamWithOptionsInto(input, output, .{});
+}
+
+pub fn encodeStoredStreamWithOptionsInto(input: []const u8, output: []u8, options: StoredStreamOptions) Error!usize {
+    const needed = try encodedStoredStreamBoundWithOptions(input.len, options);
+    if (output.len < needed) return error.OutOfMemory;
+    var out: std.ArrayList(u8) = .{
+        .items = output[0..0],
+        .capacity = output.len,
+    };
+    var writer = BitWriter{ .out = &out, .bounded = true };
+    try encodeStoredStreamWithOptionsWrite(std.heap.smp_allocator, &writer, input, options);
+    if (out.items.len != needed) return error.SizeMismatch;
+    return out.items.len;
+}
+
+fn encodeStoredStreamWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8, options: StoredStreamOptions) Error!void {
+    try writeWindowBits(allocator, writer, options.window_bits);
+    if (options.metadata.len != 0) try writeMetadataMetaBlock(allocator, writer, options.metadata);
 
     var offset: usize = 0;
     while (offset < input.len) {
         const block_len = @min(input.len - offset, max_uncompressed_meta_block_len);
-        try writeUncompressedMetaBlock(allocator, &writer, input[offset..][0..block_len]);
+        try writeUncompressedMetaBlock(allocator, writer, input[offset..][0..block_len]);
         offset += block_len;
     }
 
@@ -228,16 +281,6 @@ pub fn encodeStoredStreamWithOptionsAppend(allocator: std.mem.Allocator, out: *s
     // need this explicit terminator.
     try writer.writeBits(allocator, 1, 1); // ISLAST
     try writer.writeBits(allocator, 1, 1); // ISLASTEMPTY
-}
-
-pub fn encodeStoredStreamInto(input: []const u8, output: []u8) Error!usize {
-    return try encodeStoredStreamWithOptionsInto(input, output, .{});
-}
-
-pub fn encodeStoredStreamWithOptionsInto(input: []const u8, output: []u8, options: StoredStreamOptions) Error!usize {
-    var fba = std.heap.FixedBufferAllocator.init(output);
-    const encoded = try encodeStoredStreamWithOptionsAlloc(fba.allocator(), input, options);
-    return encoded.len;
 }
 
 fn writeUncompressedMetaBlock(allocator: std.mem.Allocator, writer: *BitWriter, block: []const u8) Error!void {
@@ -264,6 +307,24 @@ fn writeUncompressedMetaBlock(allocator: std.mem.Allocator, writer: *BitWriter, 
     try writer.writeAlignedBytes(allocator, block);
 }
 
+fn addStoredUncompressedMetaBlockBitsLen(bit_count: usize, block_len: usize) Error!usize {
+    if (block_len == 0 or block_len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
+    const len_minus_one = block_len - 1;
+    const mnibbles: usize = if (len_minus_one <= 0xffff)
+        4
+    else if (len_minus_one <= 0xfffff)
+        5
+    else
+        6;
+    var bits = bit_count;
+    bits = std.math.add(usize, bits, 1 + 2) catch return error.IntegerOverflow; // ISLAST + MNIBBLES.
+    bits = std.math.add(usize, bits, mnibbles * 4) catch return error.IntegerOverflow;
+    bits = std.math.add(usize, bits, 1) catch return error.IntegerOverflow; // ISUNCOMPRESSED.
+    bits = alignBitCountToByte(bits);
+    const payload_bits = std.math.mul(usize, block_len, 8) catch return error.IntegerOverflow;
+    return std.math.add(usize, bits, payload_bits) catch return error.IntegerOverflow;
+}
+
 fn writeMetadataMetaBlock(allocator: std.mem.Allocator, writer: *BitWriter, metadata: []const u8) Error!void {
     if (metadata.len > 0x1_0000) return error.InvalidBlockPlan;
     try writer.writeBits(allocator, 0, 1); // ISLAST = false.
@@ -279,6 +340,23 @@ fn writeMetadataMetaBlock(allocator: std.mem.Allocator, writer: *BitWriter, meta
     }
     writer.alignToByte();
     try writer.writeAlignedBytes(allocator, metadata);
+}
+
+fn addStoredMetadataMetaBlockBitsLen(bit_count: usize, metadata_len: usize) Error!usize {
+    if (metadata_len > 0x1_0000) return error.InvalidBlockPlan;
+    var bits = bit_count;
+    bits = std.math.add(usize, bits, 1 + 2 + 1) catch return error.IntegerOverflow; // ISLAST + MNIBBLES + reserved.
+    if (metadata_len == 0) {
+        bits = std.math.add(usize, bits, 2) catch return error.IntegerOverflow;
+    } else {
+        const len_minus_one = metadata_len - 1;
+        const mskipbytes: usize = if (len_minus_one <= 0xff) 1 else 2;
+        bits = std.math.add(usize, bits, 2) catch return error.IntegerOverflow; // MSKIPBYTES.
+        bits = std.math.add(usize, bits, mskipbytes * 8) catch return error.IntegerOverflow;
+    }
+    bits = alignBitCountToByte(bits);
+    const payload_bits = std.math.mul(usize, metadata_len, 8) catch return error.IntegerOverflow;
+    return std.math.add(usize, bits, payload_bits) catch return error.IntegerOverflow;
 }
 
 pub fn decodeStreamAlloc(allocator: std.mem.Allocator, stream: []const u8) Error![]u8 {
@@ -4546,6 +4624,22 @@ fn writeWindowBits(allocator: std.mem.Allocator, writer: *BitWriter, window_bits
         },
         else => return error.InvalidBlockPlan,
     }
+}
+
+fn storedWindowBitsLen(window_bits: u5) Error!usize {
+    return switch (window_bits) {
+        16 => 1,
+        10...15, 17...24 => 7,
+        else => error.InvalidBlockPlan,
+    };
+}
+
+fn alignBitCountToByte(bit_count: usize) usize {
+    return (bit_count + 7) & ~@as(usize, 7);
+}
+
+fn bytesForBits(bit_count: usize) usize {
+    return (bit_count + 7) / 8;
 }
 
 fn consumeZeroPaddingToByte(reader: *bitstream.BitReader) Error!void {

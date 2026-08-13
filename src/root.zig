@@ -41,6 +41,8 @@ pub const crc32cSlice32 = checksum.crc32cSlice32;
 pub const crc32cBest = checksum.crc32cBest;
 pub const crc32cCombine = checksum.crc32cCombine;
 
+pub const brEncodedStoredStreamBound = br.encodedStoredStreamBound;
+pub const brEncodedStoredStreamBoundWithOptions = br.encodedStoredStreamBoundWithOptions;
 pub const brEncodeStoredStreamAlloc = br.encodeStoredStreamAlloc;
 pub const brEncodeStoredStreamAppend = br.encodeStoredStreamAppend;
 pub const brEncodeStoredStreamInto = br.encodeStoredStreamInto;
@@ -1677,6 +1679,8 @@ test "root exports lz4 and zstd codec helpers" {
     _ = decodeDictionaryPatchInto;
     _ = decodeDictionaryPatchAlloc;
 
+    _ = brEncodedStoredStreamBound;
+    _ = brEncodedStoredStreamBoundWithOptions;
     _ = brEncodeStoredStreamAlloc;
     _ = brEncodeStoredStreamAppend;
     _ = brEncodeStoredStreamInto;
@@ -2545,10 +2549,23 @@ test "root exports lz4 and zstd codec helpers" {
 
 test "root brotli stream helpers expose exact and chunked decode variants" {
     const payload = "root brotli stream helper payload" ** 3;
-    const encoded = try brEncodeStoredStreamWithOptionsAlloc(std.testing.allocator, payload, .{
+    const options: BrotliStoredStreamOptions = .{
         .metadata = "root-br-metadata",
-    });
+    };
+    const encoded_bound = try brEncodedStoredStreamBoundWithOptions(payload.len, options);
+    const encoded = try brEncodeStoredStreamWithOptionsAlloc(std.testing.allocator, payload, options);
     defer std.testing.allocator.free(encoded);
+    try std.testing.expectEqual(encoded.len, encoded_bound);
+    const default_encoded = try brEncodeStoredStreamAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(default_encoded);
+    try std.testing.expectEqual(default_encoded.len, try brEncodedStoredStreamBound(payload.len));
+    const into_encoded = try std.testing.allocator.alloc(u8, encoded_bound);
+    defer std.testing.allocator.free(into_encoded);
+    try std.testing.expectEqual(encoded.len, try brEncodeStoredStreamWithOptionsInto(payload, into_encoded, options));
+    try std.testing.expectEqualSlices(u8, encoded, into_encoded[0..encoded.len]);
+    try std.testing.expectError(error.OutOfMemory, brEncodeStoredStreamWithOptionsInto(payload, into_encoded[0 .. encoded.len - 1], options));
+    try std.testing.expectError(error.InvalidBlockPlan, brEncodedStoredStreamBoundWithOptions(payload.len, .{ .window_bits = 9 }));
+    try std.testing.expectError(error.InvalidBlockPlan, brEncodedStoredStreamBoundWithOptions(payload.len, .{ .metadata = &([_]u8{0} ** 0x1_0001) }));
 
     const summary = try brSummarizeStream(encoded);
     try std.testing.expectEqual(@as(u5, 16), summary.window_bits);
