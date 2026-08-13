@@ -2966,6 +2966,10 @@ architecture blindly.
   coverage by isolating an LZ4 dictionary row that no longer improves over its
   plain baseline while leaving positive timing, throughput, and iteration
   accounting intact.
+- Extended native library benchmark strict-smoke dictionary coverage to a Zstd
+  trained-dictionary improvement pair. The retained row now has an isolated
+  negative fixture that keeps positive timing, throughput, and iteration
+  accounting valid while removing the trained-dictionary size win.
 
 - Tightened native tier range CSV dashboard health by deriving expected
   `(fixture, tier)` rows from each source's JSON summary and exposing duplicate
