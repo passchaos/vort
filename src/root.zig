@@ -5641,11 +5641,15 @@ test "root zlib and gzip concatenated probes report support and size mismatches"
     try std.testing.expect(zlib_ok.ok);
     try std.testing.expectEqual(expected.len, zlib_ok.decoded_bytes.?);
     try std.testing.expectEqual(@as(usize, 2), zlib_ok.member_count.?);
+    try std.testing.expectEqual(zlib_stream.items.len, zlib_ok.stream_input_bytes.?);
+    try std.testing.expectEqual(zlib_first.len, zlib_ok.last_member_offset.?);
     const zlib_exact_bad = probeZlibConcatenatedExactSize(zlib_stream.items, &zlib_scratch, expected.len + 1);
     try std.testing.expect(!zlib_exact_bad.ok);
     try std.testing.expectEqualStrings("SizeMismatch", zlib_exact_bad.error_name);
     try std.testing.expectEqual(expected.len, zlib_exact_bad.decoded_bytes.?);
     try std.testing.expectEqual(@as(usize, 2), zlib_exact_bad.member_count.?);
+    try std.testing.expectEqual(zlib_stream.items.len, zlib_exact_bad.stream_input_bytes.?);
+    try std.testing.expectEqual(zlib_first.len, zlib_exact_bad.last_member_offset.?);
 
     const zlib_bad_second = try std.testing.allocator.dupe(u8, zlib_stream.items);
     defer std.testing.allocator.free(zlib_bad_second);
@@ -5668,6 +5672,8 @@ test "root zlib and gzip concatenated probes report support and size mismatches"
     try std.testing.expect(zlib_chunked.ok);
     try std.testing.expectEqual(expected.len, zlib_chunked.decoded_bytes.?);
     try std.testing.expectEqual(@as(usize, 2), zlib_chunked.member_count.?);
+    try std.testing.expectEqual(zlib_stream.items.len, zlib_chunked.stream_input_bytes.?);
+    try std.testing.expectEqual(zlib_first.len, zlib_chunked.last_member_offset.?);
 
     const concatenated_dictionary = "concatenated probe dictionary";
     const dict_first_payload = "concatenated probe dictionary first";
@@ -5702,11 +5708,15 @@ test "root zlib and gzip concatenated probes report support and size mismatches"
     try std.testing.expect(gzip_ok.ok);
     try std.testing.expectEqual(expected.len, gzip_ok.decoded_bytes.?);
     try std.testing.expectEqual(@as(usize, 2), gzip_ok.member_count.?);
+    try std.testing.expectEqual(gzip_stream.items.len, gzip_ok.stream_input_bytes.?);
+    try std.testing.expectEqual(gzip_first.len, gzip_ok.last_member_offset.?);
     const gzip_exact_bad = probeGzipConcatenatedExactSize(gzip_stream.items, &gzip_scratch, expected.len - 1);
     try std.testing.expect(!gzip_exact_bad.ok);
     try std.testing.expectEqualStrings("SizeMismatch", gzip_exact_bad.error_name);
     try std.testing.expectEqual(expected.len, gzip_exact_bad.decoded_bytes.?);
     try std.testing.expectEqual(@as(usize, 2), gzip_exact_bad.member_count.?);
+    try std.testing.expectEqual(gzip_stream.items.len, gzip_exact_bad.stream_input_bytes.?);
+    try std.testing.expectEqual(gzip_first.len, gzip_exact_bad.last_member_offset.?);
 
     const gzip_bad_second = try std.testing.allocator.dupe(u8, gzip_stream.items);
     defer std.testing.allocator.free(gzip_bad_second);
@@ -5729,6 +5739,8 @@ test "root zlib and gzip concatenated probes report support and size mismatches"
     try std.testing.expect(gzip_chunked.ok);
     try std.testing.expectEqual(expected.len, gzip_chunked.decoded_bytes.?);
     try std.testing.expectEqual(@as(usize, 2), gzip_chunked.member_count.?);
+    try std.testing.expectEqual(gzip_stream.items.len, gzip_chunked.stream_input_bytes.?);
+    try std.testing.expectEqual(gzip_first.len, gzip_chunked.last_member_offset.?);
 }
 
 test "root zlib and gzip append decode helpers preserve prefixes" {

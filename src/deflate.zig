@@ -37,6 +37,8 @@ pub const RawDeflateProbeResult = struct {
     member_index: ?usize = null,
     member_offset: ?usize = null,
     member_count: ?usize = null,
+    stream_input_bytes: ?usize = null,
+    last_member_offset: ?usize = null,
 };
 
 pub const DecodeProbeResult = RawDeflateProbeResult;
@@ -6592,10 +6594,20 @@ fn withProbeMemberLocation(result: DecodeProbeResult, location: ?ProbeMemberLoca
     return with_location;
 }
 
-fn withProbeMemberCount(result: DecodeProbeResult, member_count: ?usize) DecodeProbeResult {
-    var with_count = result;
-    with_count.member_count = member_count;
-    return with_count;
+const ProbeMemberSummary = struct {
+    count: usize,
+    input_bytes: usize,
+    last_offset: usize,
+};
+
+fn withProbeMemberCount(result: DecodeProbeResult, summary: ?ProbeMemberSummary) DecodeProbeResult {
+    var with_summary = result;
+    if (summary) |s| {
+        with_summary.member_count = s.count;
+        with_summary.stream_input_bytes = s.input_bytes;
+        with_summary.last_member_offset = s.last_offset;
+    }
+    return with_summary;
 }
 
 fn zlibProbeFailureMemberIndex(input: []const u8, dictionary: ?[]const u8, scratch: []u8, options: ZlibDecodeOptions) ?ProbeMemberLocation {
@@ -6619,12 +6631,14 @@ fn zlibProbeFailureMemberIndex(input: []const u8, dictionary: ?[]const u8, scrat
     return null;
 }
 
-fn zlibProbeMemberCount(input: []const u8, dictionary: ?[]const u8, scratch: []u8, options: ZlibDecodeOptions) ?usize {
+fn zlibProbeMemberCount(input: []const u8, dictionary: ?[]const u8, scratch: []u8, options: ZlibDecodeOptions) ?ProbeMemberSummary {
     var offset: usize = 0;
     var count: usize = 0;
+    var last_offset: usize = 0;
     while (offset < input.len) : (count += 1) {
+        last_offset = offset;
         const header = parseZlibHeader(input[offset..], dictionary) catch {
-            if (options.allow_trailing_data and offset != 0) return count;
+            if (options.allow_trailing_data and offset != 0) return .{ .count = count, .input_bytes = offset, .last_offset = last_offset };
             return null;
         };
         const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
@@ -6637,7 +6651,7 @@ fn zlibProbeMemberCount(input: []const u8, dictionary: ?[]const u8, scratch: []u
         validateZlibFooterPartialWithOptions(input, footer_offset, actual_adler, options) catch return null;
         offset = footer_offset + 4;
     }
-    return count;
+    return .{ .count = count, .input_bytes = input.len, .last_offset = last_offset };
 }
 
 fn gzipProbeFailureMemberIndex(input: []const u8, scratch: []u8, options: GzipDecodeOptions) ?ProbeMemberLocation {
@@ -6661,12 +6675,14 @@ fn gzipProbeFailureMemberIndex(input: []const u8, scratch: []u8, options: GzipDe
     return null;
 }
 
-fn gzipProbeMemberCount(input: []const u8, scratch: []u8, options: GzipDecodeOptions) ?usize {
+fn gzipProbeMemberCount(input: []const u8, scratch: []u8, options: GzipDecodeOptions) ?ProbeMemberSummary {
     var offset: usize = 0;
     var count: usize = 0;
+    var last_offset: usize = 0;
     while (offset < input.len) : (count += 1) {
+        last_offset = offset;
         const data_offset = parseGzipHeader(input[offset..]) catch {
-            if (options.allow_trailing_data and offset != 0) return count;
+            if (options.allow_trailing_data and offset != 0) return .{ .count = count, .input_bytes = offset, .last_offset = last_offset };
             return null;
         };
         const raw_offset = offset + data_offset;
@@ -6679,7 +6695,7 @@ fn gzipProbeMemberCount(input: []const u8, scratch: []u8, options: GzipDecodeOpt
         validateGzipFooterPartialWithOptions(input, footer_offset, actual_crc, member_payload.len, options) catch return null;
         offset = footer_offset + 8;
     }
-    return count;
+    return .{ .count = count, .input_bytes = input.len, .last_offset = last_offset };
 }
 
 pub fn probeZlib(input: []const u8, scratch: []u8) DecodeProbeResult {

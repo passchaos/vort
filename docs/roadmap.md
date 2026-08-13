@@ -1525,6 +1525,11 @@ architecture blindly.
   preflights now report how many wrapper members were consumed, including
   exact-size and split-input probe variants.
 
+- Extended successful concatenated zlib/gzip probe summaries with total consumed
+  input bytes and the last member's byte offset, giving callers enough member
+  boundary context to pair non-throwing preflight results with their own stream
+  indexes.
+
 - Added zlib stream inspection helpers for split compressed input
   (`inspectZlibStreamFromChunksAlloc*`), reusing caller-provided join scratch
   before running the existing diagnostic inspector. They report the same
