@@ -3481,3 +3481,8 @@ architecture blindly.
   fixed, best, and zlib-level raw deflate encode helpers. The reusable facade now
   exposes alloc, scratch, and append flows for these modes, with root tests
   checking byte parity against the top-level raw deflate encoders.
+
+- Extended `ZlibEncoder` beyond stored blocks with fixed, option-bearing fixed,
+  best, and zlib-level encode helpers. The reusable facade now exposes alloc,
+  scratch, and append flows for these modes, with root tests checking byte parity
+  against the top-level zlib encoders.

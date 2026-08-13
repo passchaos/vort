@@ -6926,6 +6926,58 @@ test "root zlib encoder reuses stored scratch" {
     defer std.testing.allocator.free(dict_chunks_into);
     try std.testing.expectEqual(expected_dict_chunks.len, try encoder.encodeStoredChunksWithDictionaryIntoSlice(&chunks, preset_dictionary, dict_chunks_into));
     try std.testing.expectEqualSlices(u8, expected_dict_chunks, dict_chunks_into[0..expected_dict_chunks.len]);
+
+    const fixed_expected = try encodeZlibFixedAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(fixed_expected);
+    const fixed_owned = try encoder.encodeFixedAlloc(payload);
+    defer std.testing.allocator.free(fixed_owned);
+    try std.testing.expectEqualSlices(u8, fixed_expected, fixed_owned);
+    const fixed_scratch = try encoder.encodeFixedScratch(payload);
+    try std.testing.expectEqualSlices(u8, fixed_expected, fixed_scratch);
+    var fixed_appended: std.ArrayList(u8) = .empty;
+    defer fixed_appended.deinit(std.testing.allocator);
+    try fixed_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(fixed_expected.len, try encoder.encodeFixedAppend(&fixed_appended, payload));
+    try std.testing.expectEqualSlices(u8, fixed_expected, fixed_appended.items["prefix:".len..]);
+
+    const fixed_options = optionsForCompressionLevel(.fast);
+    const fixed_options_expected = try encodeZlibFixedWithOptionsAlloc(std.testing.allocator, payload, fixed_options);
+    defer std.testing.allocator.free(fixed_options_expected);
+    const fixed_options_owned = try encoder.encodeFixedWithOptionsAlloc(payload, fixed_options);
+    defer std.testing.allocator.free(fixed_options_owned);
+    try std.testing.expectEqualSlices(u8, fixed_options_expected, fixed_options_owned);
+    const fixed_options_scratch = try encoder.encodeFixedWithOptionsScratch(payload, fixed_options);
+    try std.testing.expectEqualSlices(u8, fixed_options_expected, fixed_options_scratch);
+    var fixed_options_appended: std.ArrayList(u8) = .empty;
+    defer fixed_options_appended.deinit(std.testing.allocator);
+    try std.testing.expectEqual(fixed_options_expected.len, try encoder.encodeFixedWithOptionsAppend(&fixed_options_appended, payload, fixed_options));
+    try std.testing.expectEqualSlices(u8, fixed_options_expected, fixed_options_appended.items);
+
+    const best_options = optionsForCompressionLevel(.fastest);
+    const best_expected = try encodeZlibBestAlloc(std.testing.allocator, payload, best_options);
+    defer std.testing.allocator.free(best_expected);
+    const best_owned = try encoder.encodeBestAlloc(payload, best_options);
+    defer std.testing.allocator.free(best_owned);
+    try std.testing.expectEqualSlices(u8, best_expected, best_owned);
+    const best_scratch = try encoder.encodeBestScratch(payload, best_options);
+    try std.testing.expectEqualSlices(u8, best_expected, best_scratch);
+    var best_appended: std.ArrayList(u8) = .empty;
+    defer best_appended.deinit(std.testing.allocator);
+    try std.testing.expectEqual(best_expected.len, try encoder.encodeBestAppend(&best_appended, payload, best_options));
+    try std.testing.expectEqualSlices(u8, best_expected, best_appended.items);
+
+    const level_expected = try encodeZlibLevelAlloc(std.testing.allocator, payload, 1);
+    defer std.testing.allocator.free(level_expected);
+    const level_owned = try encoder.encodeLevelAlloc(payload, 1);
+    defer std.testing.allocator.free(level_owned);
+    try std.testing.expectEqualSlices(u8, level_expected, level_owned);
+    const level_scratch = try encoder.encodeLevelScratch(payload, 1);
+    try std.testing.expectEqualSlices(u8, level_expected, level_scratch);
+    var level_appended: std.ArrayList(u8) = .empty;
+    defer level_appended.deinit(std.testing.allocator);
+    try std.testing.expectEqual(level_expected.len, try encoder.encodeLevelAppend(&level_appended, payload, 1));
+    try std.testing.expectEqualSlices(u8, level_expected, level_appended.items);
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.encodeLevelAlloc(payload, 10));
 }
 
 test "root gzip encoder reuses stored scratch" {

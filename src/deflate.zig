@@ -5871,6 +5871,22 @@ pub const ZlibEncoder = struct {
         return try encodeZlibStoredWithDictionaryChunksAlloc(self.allocator, chunks, dictionary);
     }
 
+    pub fn encodeFixedAlloc(self: *ZlibEncoder, input: []const u8) ![]u8 {
+        return try self.encodeFixedWithOptionsAlloc(input, .{});
+    }
+
+    pub fn encodeFixedWithOptionsAlloc(self: *ZlibEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
+        return try encodeZlibFixedWithOptionsAlloc(self.allocator, input, options);
+    }
+
+    pub fn encodeBestAlloc(self: *ZlibEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
+        return try encodeZlibBestAlloc(self.allocator, input, options);
+    }
+
+    pub fn encodeLevelAlloc(self: *ZlibEncoder, input: []const u8, level: u4) ![]u8 {
+        return try encodeZlibLevelAlloc(self.allocator, input, level);
+    }
+
     pub fn encodeStoredScratch(self: *ZlibEncoder, input: []const u8) ![]const u8 {
         self.scratch.clearRetainingCapacity();
         _ = try self.encodeStoredAppend(&self.scratch, input);
@@ -5895,6 +5911,28 @@ pub const ZlibEncoder = struct {
         return self.scratch.items;
     }
 
+    pub fn encodeFixedScratch(self: *ZlibEncoder, input: []const u8) ![]const u8 {
+        return try self.encodeFixedWithOptionsScratch(input, .{});
+    }
+
+    pub fn encodeFixedWithOptionsScratch(self: *ZlibEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeFixedWithOptionsAppend(&self.scratch, input, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestScratch(self: *ZlibEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestAppend(&self.scratch, input, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeLevelScratch(self: *ZlibEncoder, input: []const u8, level: u4) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeLevelAppend(&self.scratch, input, level);
+        return self.scratch.items;
+    }
+
     pub fn encodeStoredAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
         return try encodeZlibStoredAppend(self.allocator, out, input);
     }
@@ -5909,6 +5947,34 @@ pub const ZlibEncoder = struct {
 
     pub fn encodeStoredChunksWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), chunks: []const []const u8, dictionary: []const u8) !usize {
         return try encodeZlibStoredWithDictionaryChunksAppend(self.allocator, out, chunks, dictionary);
+    }
+
+    pub fn encodeFixedAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
+        return try self.encodeFixedWithOptionsAppend(out, input, .{});
+    }
+
+    pub fn encodeFixedWithOptionsAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+        const encoded = try self.encodeFixedWithOptionsAlloc(input, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+        const encoded = try self.encodeBestAlloc(input, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeLevelAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, level: u4) !usize {
+        const encoded = try self.encodeLevelAlloc(input, level);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
     }
 
     pub fn encodeStoredIntoSlice(self: *ZlibEncoder, input: []const u8, output: []u8) !usize {
