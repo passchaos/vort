@@ -9591,6 +9591,236 @@ def main() -> int:
             )
         )
 
+        def append_fuzz_corpus_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            expected_reason: str,
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and f"dashboard_index_validation_unhealthy={expected_reason}" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["fuzz_corpus_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    f"dashboard_index_validation_unhealthy={expected_reason}",
+                    result.stdout,
+                )
+            )
+
+        fuzz_ok_result, fuzz_ok_manifest = fuzz_corpus_drift_fixture(
+            root,
+            "fuzz-corpus-ok-failed",
+            mutate_report=lambda payload: payload.__setitem__("ok", False),
+        )
+        append_fuzz_corpus_check(
+            "fuzz_corpus_ok_failed",
+            fuzz_ok_result,
+            fuzz_ok_manifest,
+            "fuzz_corpus_failed",
+            fuzz_ok_manifest["fuzz_corpus_ok"] is False
+            and fuzz_ok_manifest["fuzz_corpus_report_count_mismatch"] == 0
+            and fuzz_ok_manifest["fuzz_corpus_markdown_unmatched"] == 0,
+        )
+
+        fuzz_mode_result, fuzz_mode_manifest = fuzz_corpus_drift_fixture(
+            root,
+            "fuzz-corpus-mode-mismatch",
+            mutate_report=lambda payload: payload.__setitem__("mode", "raw"),
+            mutate_markdown=lambda markdown_path: markdown_path.write_text(
+                markdown_path.read_text().replace("- mode: `mixed`", "- mode: `raw`", 1)
+            ),
+        )
+        append_fuzz_corpus_check(
+            "fuzz_corpus_mode_mismatch",
+            fuzz_mode_result,
+            fuzz_mode_manifest,
+            "fuzz_corpus_failed",
+            fuzz_mode_manifest["fuzz_corpus_report_count_mismatch"] == 0
+            and fuzz_mode_manifest["fuzz_corpus_markdown_unmatched"] == 0,
+        )
+
+        fuzz_exact_floor_result, fuzz_exact_floor_manifest = fuzz_corpus_drift_fixture(
+            root,
+            "fuzz-corpus-exact-error-floor",
+            mutate_report=lambda payload: payload.__setitem__("exact_error_expectations", 0),
+        )
+        append_fuzz_corpus_check(
+            "fuzz_corpus_exact_error_expectations_floor",
+            fuzz_exact_floor_result,
+            fuzz_exact_floor_manifest,
+            "fuzz_corpus_failed",
+            fuzz_exact_floor_manifest["fuzz_corpus_exact_error_expectations"] == 0,
+        )
+
+        fuzz_mode_count_floor_result, fuzz_mode_count_floor_manifest = fuzz_corpus_drift_fixture(
+            root,
+            "fuzz-corpus-mode-count-floor",
+            mutate_report=lambda payload: payload.__setitem__("mode_count_rows", 0),
+        )
+        append_fuzz_corpus_check(
+            "fuzz_corpus_mode_count_rows_floor",
+            fuzz_mode_count_floor_result,
+            fuzz_mode_count_floor_manifest,
+            "fuzz_corpus_failed",
+            fuzz_mode_count_floor_manifest["fuzz_corpus_mode_count_rows"] == 0,
+        )
+
+        fuzz_error_count_floor_result, fuzz_error_count_floor_manifest = fuzz_corpus_drift_fixture(
+            root,
+            "fuzz-corpus-error-count-floor",
+            mutate_report=lambda payload: payload.__setitem__("error_count_rows", 0),
+        )
+        append_fuzz_corpus_check(
+            "fuzz_corpus_error_count_rows_floor",
+            fuzz_error_count_floor_result,
+            fuzz_error_count_floor_manifest,
+            "fuzz_corpus_failed",
+            fuzz_error_count_floor_manifest["fuzz_corpus_error_count_rows"] == 0,
+        )
+
+        fuzz_mode_summary_result, fuzz_mode_summary_manifest = fuzz_corpus_drift_fixture(
+            root,
+            "fuzz-corpus-mode-summary",
+            mutate_report=lambda payload: payload["mode_counts"][0].__setitem__("cases", int(payload["mode_counts"][0]["cases"]) + 1),
+        )
+        append_fuzz_corpus_check(
+            "fuzz_corpus_mode_summary_mismatch",
+            fuzz_mode_summary_result,
+            fuzz_mode_summary_manifest,
+            "fuzz_corpus_failed",
+            fuzz_mode_summary_manifest["fuzz_corpus_mode_summary_mismatch"] == 1,
+        )
+
+        def clear_fuzz_modes(payload: dict[str, object]) -> None:
+            payload["mode_counts"] = []
+            payload["mode_count_rows"] = 0
+
+        fuzz_missing_mode_result, fuzz_missing_mode_manifest = fuzz_corpus_drift_fixture(
+            root,
+            "fuzz-corpus-missing-mode-summary",
+            mutate_report=clear_fuzz_modes,
+        )
+        append_fuzz_corpus_check(
+            "fuzz_corpus_mode_summary_missing",
+            fuzz_missing_mode_result,
+            fuzz_missing_mode_manifest,
+            "fuzz_corpus_failed",
+            fuzz_missing_mode_manifest["fuzz_corpus_mode_summary_missing_modes"] == ["deflate", "gzip", "zlib"],
+        )
+
+        def duplicate_fuzz_mode(payload: dict[str, object]) -> None:
+            payload["mode_counts"].append(dict(payload["mode_counts"][0]))
+            payload["mode_count_rows"] = len(payload["mode_counts"])
+
+        fuzz_duplicate_mode_result, fuzz_duplicate_mode_manifest = fuzz_corpus_drift_fixture(
+            root,
+            "fuzz-corpus-duplicate-mode-summary",
+            mutate_report=duplicate_fuzz_mode,
+        )
+        append_fuzz_corpus_check(
+            "fuzz_corpus_mode_summary_duplicate",
+            fuzz_duplicate_mode_result,
+            fuzz_duplicate_mode_manifest,
+            "fuzz_corpus_failed",
+            fuzz_duplicate_mode_manifest["fuzz_corpus_mode_summary_duplicate_modes"] == ["deflate"],
+        )
+
+        fuzz_error_summary_result, fuzz_error_summary_manifest = fuzz_corpus_drift_fixture(
+            root,
+            "fuzz-corpus-error-summary",
+            mutate_report=lambda payload: payload["error_counts"][0].__setitem__("count", int(payload["error_counts"][0]["count"]) + 1),
+        )
+        append_fuzz_corpus_check(
+            "fuzz_corpus_error_summary_mismatch",
+            fuzz_error_summary_result,
+            fuzz_error_summary_manifest,
+            "fuzz_corpus_failed",
+            fuzz_error_summary_manifest["fuzz_corpus_error_summary_mismatch"] == 1,
+        )
+
+        def drop_fuzz_error(payload: dict[str, object]) -> None:
+            payload["error_counts"].pop(0)
+            payload["error_count_rows"] = len(payload["error_counts"])
+
+        fuzz_missing_error_result, fuzz_missing_error_manifest = fuzz_corpus_drift_fixture(
+            root,
+            "fuzz-corpus-missing-error-summary",
+            mutate_report=drop_fuzz_error,
+        )
+        append_fuzz_corpus_check(
+            "fuzz_corpus_error_summary_missing",
+            fuzz_missing_error_result,
+            fuzz_missing_error_manifest,
+            "fuzz_corpus_failed",
+            fuzz_missing_error_manifest["fuzz_corpus_error_summary_missing_pairs"] == ["deflate:InvalidDeflateBlockType"],
+        )
+
+        def duplicate_fuzz_error(payload: dict[str, object]) -> None:
+            payload["error_counts"].append(dict(payload["error_counts"][0]))
+            payload["error_count_rows"] = len(payload["error_counts"])
+
+        fuzz_duplicate_error_result, fuzz_duplicate_error_manifest = fuzz_corpus_drift_fixture(
+            root,
+            "fuzz-corpus-duplicate-error-summary",
+            mutate_report=duplicate_fuzz_error,
+        )
+        append_fuzz_corpus_check(
+            "fuzz_corpus_error_summary_duplicate",
+            fuzz_duplicate_error_result,
+            fuzz_duplicate_error_manifest,
+            "fuzz_corpus_failed",
+            fuzz_duplicate_error_manifest["fuzz_corpus_error_summary_duplicate_pairs"] == ["deflate:InvalidDeflateBlockType"],
+        )
+
+        fuzz_coverage_ok_result, fuzz_coverage_ok_manifest = fuzz_corpus_drift_fixture(
+            root,
+            "fuzz-corpus-coverage-ok-failed",
+            mutate_coverage=lambda payload: payload.__setitem__("ok", False),
+        )
+        append_fuzz_corpus_check(
+            "fuzz_corpus_coverage_ok_failed",
+            fuzz_coverage_ok_result,
+            fuzz_coverage_ok_manifest,
+            "fuzz_coverage_failed",
+            fuzz_coverage_ok_manifest["fuzz_corpus_coverage_unmatched"] == 0,
+        )
+
+        fuzz_coverage_mode_floor_result, fuzz_coverage_mode_floor_manifest = fuzz_corpus_drift_fixture(
+            root,
+            "fuzz-corpus-coverage-mode-floor",
+            mutate_coverage=lambda payload: payload.__setitem__("mode_requirement_count", 0),
+        )
+        append_fuzz_corpus_check(
+            "fuzz_corpus_coverage_mode_requirement_floor",
+            fuzz_coverage_mode_floor_result,
+            fuzz_coverage_mode_floor_manifest,
+            "fuzz_coverage_failed",
+            fuzz_coverage_mode_floor_manifest["fuzz_corpus_coverage_mode_requirements"] == 0,
+        )
+
+        fuzz_coverage_error_floor_result, fuzz_coverage_error_floor_manifest = fuzz_corpus_drift_fixture(
+            root,
+            "fuzz-corpus-coverage-error-floor",
+            mutate_coverage=lambda payload: payload.__setitem__("error_requirement_count", 0),
+        )
+        append_fuzz_corpus_check(
+            "fuzz_corpus_coverage_error_requirement_floor",
+            fuzz_coverage_error_floor_result,
+            fuzz_coverage_error_floor_manifest,
+            "fuzz_coverage_failed",
+            fuzz_coverage_error_floor_manifest["fuzz_corpus_coverage_error_requirements"] == 0,
+        )
+
         fuzz_report_count_result, fuzz_report_count_manifest = fuzz_corpus_drift_fixture(
             root,
             "fuzz-corpus-report-count",

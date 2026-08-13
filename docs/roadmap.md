@@ -484,7 +484,7 @@ architecture blindly.
 - [x] Dashboard strict-mode smoke directly covers native allocation health drift, including report count/unbalanced/duplicate rows, zero/budget smoke mismatches and duplicate cases, negative-smoke unmatched rows, and Markdown malformed/duplicate/unknown rows.
 - [x] Dashboard strict-mode smoke directly covers native fuzz corpus health drift, including report ok/mode/floor drift, summary row drift, report count/matched-row drift, coverage ok/floor/requirement mismatches, and Markdown unmatched rows.
 - [x] Dashboard strict-mode smoke directly covers decode-stage health drift, including report/error count mismatches, internally consistent unmatched error rows, CSV positive/header/fixed/dynamic/stored row drift, CSV missing/duplicate/unknown cases, and Markdown unmatched rows.
-- [x] Dashboard strict-mode smoke directly covers fuzz corpus health drift, including report count/matched-row drift, coverage requirement mismatches, and Markdown unmatched rows.
+- [x] Dashboard strict-mode smoke directly covers fuzz corpus health drift, including report ok/mode/floor drift, summary row drift, report count/matched-row drift, coverage ok/floor/requirement mismatches, and Markdown unmatched rows.
 - [x] Dashboard strict-mode smoke directly covers dynamic-plan health drift, including missing/duplicate/unknown paths, malformed rows, token-accounting mismatches, histogram/ratio drift, and bit-slack/wrapper invariants.
 - [x] Dashboard strict-mode smoke directly covers compression level-report health drift, including missing/duplicate/unknown rows, token accounting drift, ratio drift, roundtrip checksum drift, and Markdown summary/detail mismatches.
 - [x] Dashboard strict-mode smoke directly covers Huffman length-report health drift, including malformed/blank/duplicate cases, non-optimal rows, and Markdown summary/case mismatches.
@@ -2982,6 +2982,13 @@ architecture blindly.
   `mode_counts` and `error_counts` from row-level `items`, exposing missing,
   duplicate, unknown, and mismatched summary rows. Dashboard health now rejects
   stale fuzz summary aggregates before coverage and Markdown checks can pass.
+
+- Tightened deflate wrapper fuzz corpus strict-smoke direct drift coverage for
+  existing retained wrapper fuzz artifacts without adding format scope. The
+  strict validation gate now isolates report `ok` and mode drift,
+  exact-error and summary-row floors, mode/error summary mismatch, missing, and
+  duplicate rows, plus coverage `ok` and mode/error requirement floors before
+  wrapper fuzz coverage can pass.
 
 - Tightened native fuzz corpus dashboard health by applying the same row-level
   recomputation to native `mode_counts` and `error_counts`, exposing missing,
