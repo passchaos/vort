@@ -1047,6 +1047,10 @@ pub const decodeRawDeflateChunksAppendExactSize = deflate.decodeRawChunksAppendE
 pub const decodeRawDeflateChunksAppendWithDictionaryExactSize = deflate.decodeRawChunksAppendWithDictionaryExactSize;
 pub const decodeRawDeflateChunksAppendLimited = deflate.decodeRawChunksAppendLimited;
 pub const decodeRawDeflateChunksAppendWithDictionaryLimited = deflate.decodeRawChunksAppendWithDictionaryLimited;
+pub const decodedRawDeflateSize = deflate.decodedRawAutoSize;
+pub const decodedRawDeflateSizeWithDictionary = deflate.decodedRawAutoSizeWithDictionary;
+pub const decodedRawDeflateChunksSize = deflate.decodedRawChunksSize;
+pub const decodedRawDeflateChunksSizeWithDictionary = deflate.decodedRawChunksSizeWithDictionary;
 pub const probeRawDeflate = deflate.probeRawAuto;
 pub const probeRawDeflateWithDictionary = deflate.probeRawAutoWithDictionary;
 pub const probeRawDeflateExactSize = deflate.probeRawAutoExactSize;
@@ -5238,6 +5242,10 @@ test "root exports chunked compatibility decode helpers" {
     _ = decodeRawDeflateChunksAppendWithDictionaryExactSize;
     _ = decodeRawDeflateChunksAppendLimited;
     _ = decodeRawDeflateChunksAppendWithDictionaryLimited;
+    _ = decodedRawDeflateSize;
+    _ = decodedRawDeflateSizeWithDictionary;
+    _ = decodedRawDeflateChunksSize;
+    _ = decodedRawDeflateChunksSizeWithDictionary;
     _ = probeRawDeflate;
     _ = probeRawDeflateWithDictionary;
     _ = probeRawDeflateExactSize;
@@ -5541,6 +5549,7 @@ test "root raw deflate probe reports support and size mismatches" {
     try std.testing.expect(ok.ok);
     try std.testing.expectEqualStrings("", ok.error_name);
     try std.testing.expectEqual(payload.len, ok.decoded_bytes.?);
+    try std.testing.expectEqual(payload.len, try decodedRawDeflateSize(encoded, &scratch));
 
     const exact_ok = probeRawDeflateExactSize(encoded, &scratch, payload.len);
     try std.testing.expect(exact_ok.ok);
@@ -5567,6 +5576,14 @@ test "root raw deflate probe reports support and size mismatches" {
     const chunked = probeRawDeflateChunksExactSize(&chunks, join, &scratch, payload.len);
     try std.testing.expect(chunked.ok);
     try std.testing.expectEqual(payload.len, chunked.decoded_bytes.?);
+    try std.testing.expectEqual(payload.len, try decodedRawDeflateChunksSize(&chunks, join, &scratch));
+
+    const dictionary_bytes = "raw probe shared dictionary";
+    const dict_payload = "raw probe shared dictionary payload";
+    const dict_encoded = try encodeRawBestWithDictionaryAlloc(std.testing.allocator, dict_payload, dictionary_bytes, .{});
+    defer std.testing.allocator.free(dict_encoded);
+    var dict_scratch: [dict_payload.len + 8]u8 = undefined;
+    try std.testing.expectEqual(dict_payload.len, try decodedRawDeflateSizeWithDictionary(dict_encoded, dictionary_bytes, &dict_scratch));
 }
 
 test "root zlib and gzip probes report support and size mismatches" {

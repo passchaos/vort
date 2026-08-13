@@ -5743,6 +5743,24 @@ pub const RawDeflateDecoder = struct {
     }
 };
 
+pub fn decodedRawAutoSize(input: []const u8, scratch: []u8) Error!usize {
+    return decodedRawAutoSizeWithDictionary(input, "", scratch);
+}
+
+pub fn decodedRawAutoSizeWithDictionary(input: []const u8, dictionary: []const u8, scratch: []u8) Error!usize {
+    const decoder = try RawDeflateDecoder.initWithDictionary(input, dictionary, scratch);
+    return decoder.decoded.len;
+}
+
+pub fn decodedRawChunksSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!usize {
+    return decodedRawChunksSizeWithDictionary(chunks, compressed_scratch, "", output_scratch);
+}
+
+pub fn decodedRawChunksSizeWithDictionary(chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, output_scratch: []u8) Error!usize {
+    const decoder = try RawDeflateDecoder.initFromChunksWithDictionary(chunks, dictionary, compressed_scratch, output_scratch);
+    return decoder.decoded.len;
+}
+
 pub fn probeRawAuto(input: []const u8, scratch: []u8) RawDeflateProbeResult {
     return probeRawAutoWithDictionary(input, "", scratch);
 }
