@@ -2974,6 +2974,10 @@ architecture blindly.
   reusable LZ4 dictionary-set improvement pair. The new negative fixture keeps
   the benchmark row otherwise healthy while removing the reusable dictionary
   size win over its plain baseline.
+- Extended native library benchmark strict-smoke dictionary coverage to a Zstd
+  direct dictionary-set improvement pair. The fixture keeps positive timing,
+  throughput, and iteration accounting healthy while removing the direct
+  dictionary-set size win over its plain baseline.
 
 - Tightened native tier range CSV dashboard health by deriving expected
   `(fixture, tier)` rows from each source's JSON summary and exposing duplicate
