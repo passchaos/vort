@@ -1830,3 +1830,22 @@ architecture blindly.
   Final validation passed `zig build test -j1` in 1:53.79 at 4,124,084-KiB
   peak RSS and `zig build check -j1` in 5:01.65 at 687,136-KiB peak RSS; both
   completed with zero swap.
+
+- Bounded the hash-greedy predecessor table by its active power-of-two history
+  window for inputs of at least 512 KiB. The production PNG-fastest path now
+  uses 16 KiB predecessor slots instead of one `isize` per filtered input byte,
+  while short inputs and custom non-power-of-two or above-DEFLATE windows retain
+  the original full table. A full-table oracle compares the public ring-backed
+  planner token-for-token and stat-for-stat across 1/8/1024/4096/16384-byte
+  windows and inputs that wrap every slot repeatedly. An unrestricted ring was
+  rejected because changing allocator reuse after the first small PNG case
+  regressed later stored/Up rows; the retained 512 KiB threshold preserves that
+  short-stream behavior. On imx's fixed-CPU-12 harness, a final 11-round
+  alternating old/new A/B measured `1.008x` nine-row throughput geomean,
+  `1.078x` adaptive RGB, and all other rows within about 1.7%, with identical
+  encoded lengths/checksums/guards. A separate seven-round external-time A/B
+  reduced median imx child RSS from 21,041,152 to 10,055,680 bytes (`0.478x`);
+  all 14 children reported zero swap.
+  Final validation passed `zig build test -j1` in 1:54.17 at 4,125,704-KiB
+  peak RSS and `zig build check -j1` in 4:48.77 at 689,532-KiB peak RSS, both
+  with zero swap.

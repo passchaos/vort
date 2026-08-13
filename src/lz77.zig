@@ -6,6 +6,10 @@ pub const Error = core.Error;
 pub const min_match_len: usize = 3;
 pub const max_match_len: usize = 258;
 pub const default_window_len: usize = 32 * 1024;
+// Below this size the full predecessor table is modest and avoids changing
+// allocator reuse behavior for short one-shot streams. Large image-style
+// payloads receive nearly all of the memory benefit from the bounded ring.
+const min_hash_prev_ring_input_len: usize = 512 * 1024;
 
 pub const Token = union(enum) {
     literal: u8,
@@ -566,9 +570,21 @@ pub fn hashGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
     const head = try allocator.alloc(isize, table_size);
     defer allocator.free(head);
     @memset(head, -1);
-    const prev = try allocator.alloc(isize, input.len);
+    const prev_len = hashPrevTableLen(input.len, options.window_len);
+    const ring = prev_len < input.len;
+    const prev = try allocator.alloc(isize, prev_len);
     defer allocator.free(prev);
-    return hashGreedyPlanWithTables(allocator, input, options, head, prev);
+    if (ring) {
+        // Keep the ring-specialized planner out of encodeZlibBestAlloc's
+        // caller body. Inlining both predecessor layouts enlarged the function
+        // enough to regress the unrelated stored fast path on PNG RGB rows.
+        return @call(
+            .never_inline,
+            hashGreedyPlanWithTables,
+            .{ allocator, input, options, head, prev, true },
+        );
+    }
+    return hashGreedyPlanWithTables(allocator, input, options, head, prev, false);
 }
 
 pub fn hashGreedyPlanTinyAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
@@ -576,16 +592,41 @@ pub fn hashGreedyPlanTinyAlloc(allocator: std.mem.Allocator, input: []const u8, 
 
     var head: [4096]isize = @splat(-1);
     var prev_stack: [32 * 1024]isize = undefined;
-    return hashGreedyPlanWithTables(allocator, input, options, &head, prev_stack[0..input.len]);
+    return hashGreedyPlanWithTables(allocator, input, options, &head, prev_stack[0..input.len], false);
 }
 
-fn hashGreedyPlanWithTables(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, head: []isize, prev: []isize) !GreedyPlan {
+fn hashPrevTableLen(input_len: usize, window_len: usize) usize {
+    // Power-of-two windows can address the live predecessor chain with one
+    // mask. A position is queried before its slot is reused, so the entry
+    // exactly `window_len` bytes behind remains visible; after insertion it is
+    // too old for every subsequent query. Preserve the full table for custom
+    // non-power-of-two windows rather than adding a modulo operation to the hot
+    // chain walk.
+    if (input_len >= min_hash_prev_ring_input_len and
+        window_len != 0 and
+        window_len <= default_window_len and
+        input_len > window_len and
+        std.math.isPowerOfTwo(window_len))
+    {
+        return window_len;
+    }
+    return input_len;
+}
+
+fn hashPrevIndex(position: usize, prev: []const isize, comptime ring: bool) usize {
+    return if (ring) position & (prev.len - 1) else position;
+}
+
+fn hashGreedyPlanWithTables(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, head: []isize, prev: []isize, comptime ring: bool) !GreedyPlan {
     // The heap-backed and stack-backed hash parsers share exactly the same
     // state machine. Keeping the loop in one place protects token/stat
     // accounting and hash seeding from drifting as fast-level heuristics evolve.
     // `prev` starts uninitialized by design: only positions previously inserted
     // into `head` are reachable through a hash chain, and `insertHash` writes the
-    // corresponding `prev` slot before that position can be followed.
+    // corresponding `prev` slot before that position can be followed. The
+    // production heap path uses a power-of-two ring bounded by the active
+    // history window. A slot is overwritten only after its previous absolute
+    // position is too old to be a valid match for any later lookup.
 
     var tokens = try initTokenList(allocator, input.len);
     errdefer tokens.deinit(allocator);
@@ -593,14 +634,14 @@ fn hashGreedyPlanWithTables(allocator: std.mem.Allocator, input: []const u8, opt
 
     var pos: usize = 0;
     while (pos < input.len) {
-        const best = findBestHashMatch(input, pos, options, head, prev);
+        const best = findBestHashMatchWithLayout(input, pos, options, head, prev, ring);
 
         if (acceptMatch(input, pos, best.length, best.distance, options)) {
             try tokens.append(allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
             stats.matches += 1;
             stats.matched_bytes += best.length;
             const end = @min(input.len, pos + best.length);
-            insertHash(input, pos, head, prev);
+            insertHashWithLayout(input, pos, head, prev, ring);
             // fdeflate-style fast parsers do not seed every byte inside a
             // consumed match. Keeping just the first and final few positions
             // preserves useful future anchors while avoiding long insertion
@@ -608,11 +649,11 @@ fn hashGreedyPlanWithTables(allocator: std.mem.Allocator, input: []const u8, opt
             const tail_start = if (end > pos + 4) end - 4 else pos + 1;
             pos += 1;
             if (pos < tail_start) pos = tail_start;
-            while (pos < end) : (pos += 1) insertHash(input, pos, head, prev);
+            while (pos < end) : (pos += 1) insertHashWithLayout(input, pos, head, prev, ring);
         } else {
             try tokens.append(allocator, .{ .literal = input[pos] });
             stats.literals += 1;
-            insertHash(input, pos, head, prev);
+            insertHashWithLayout(input, pos, head, prev, ring);
             pos += 1;
         }
     }
@@ -620,6 +661,10 @@ fn hashGreedyPlanWithTables(allocator: std.mem.Allocator, input: []const u8, opt
 }
 
 fn findBestHashMatch(input: []const u8, pos: usize, options: GreedyOptions, head: []const isize, prev: []const isize) MatchCandidate {
+    return findBestHashMatchWithLayout(input, pos, options, head, prev, false);
+}
+
+fn findBestHashMatchWithLayout(input: []const u8, pos: usize, options: GreedyOptions, head: []const isize, prev: []const isize, comptime ring: bool) MatchCandidate {
     const minimum = minMatch(options);
     if (pos + minimum > input.len) return .{};
 
@@ -637,7 +682,7 @@ fn findBestHashMatch(input: []const u8, pos: usize, options: GreedyOptions, head
         if (best.length == max_len) break;
         const required_prefix = @max(best.length, minimum - 1);
         if (input[candidate + required_prefix] != input[pos + required_prefix]) {
-            candidate_i = prev[candidate];
+            candidate_i = prev[hashPrevIndex(candidate, prev, ring)];
             continue;
         }
         checked += 1;
@@ -646,7 +691,7 @@ fn findBestHashMatch(input: []const u8, pos: usize, options: GreedyOptions, head
             best = .{ .length = len, .distance = distance };
             if (len >= options.nice_len) break;
         }
-        candidate_i = prev[candidate];
+        candidate_i = prev[hashPrevIndex(candidate, prev, ring)];
     }
     return best;
 }
@@ -773,9 +818,13 @@ test "tiny lazy hash planner round trips source-like blocks" {
 }
 
 fn insertHash(input: []const u8, pos: usize, head: []isize, prev: []isize) void {
+    insertHashWithLayout(input, pos, head, prev, false);
+}
+
+fn insertHashWithLayout(input: []const u8, pos: usize, head: []isize, prev: []isize, comptime ring: bool) void {
     if (pos + min_match_len > input.len) return;
     const h = hash3(input[pos..][0..3]) & (head.len - 1);
-    prev[pos] = head[h];
+    prev[hashPrevIndex(pos, prev, ring)] = head[h];
     head[h] = @intCast(pos);
 }
 
@@ -1091,7 +1140,7 @@ test "hash greedy table variants share token and stats accounting" {
 
     var heap_head: [1 << 15]isize = @splat(-1);
     var heap_prev: [input.len]isize = undefined;
-    const heap_direct = try hashGreedyPlanWithTables(std.testing.allocator, input, options, &heap_head, &heap_prev);
+    const heap_direct = try hashGreedyPlanWithTables(std.testing.allocator, input, options, &heap_head, &heap_prev, false);
     defer heap_direct.deinit(std.testing.allocator);
     try expectEqualTokenSlices(heap.tokens, heap_direct.tokens);
     try std.testing.expectEqual(heap.stats, heap_direct.stats);
@@ -1103,11 +1152,74 @@ test "hash greedy table variants share token and stats accounting" {
 
     var tiny_head: [4096]isize = @splat(-1);
     var tiny_prev: [input.len]isize = undefined;
-    const tiny_direct = try hashGreedyPlanWithTables(std.testing.allocator, input, options, &tiny_head, &tiny_prev);
+    const tiny_direct = try hashGreedyPlanWithTables(std.testing.allocator, input, options, &tiny_head, &tiny_prev, false);
     defer tiny_direct.deinit(std.testing.allocator);
     try expectEqualTokenSlices(tiny.tokens, tiny_direct.tokens);
     try std.testing.expectEqual(tiny.stats, tiny_direct.stats);
     try expectPlanStatsConsistent(tiny_direct, input.len);
+}
+
+test "hash greedy predecessor ring matches full-table reference" {
+    const windows = [_]usize{ 1, 8, 1024, 4096, 16 * 1024 };
+    for (windows) |window_len| {
+        const input_len = min_hash_prev_ring_input_len + window_len * 2 + 257;
+        const input = try std.testing.allocator.alloc(u8, input_len);
+        defer std.testing.allocator.free(input);
+        for (input, 0..) |*byte, i| {
+            // Mix short repeats, long-distance anchors, and hash collisions
+            // while crossing each ring slot at least three times.
+            byte.* = @truncate((i * 37 + (i / 7) * 13 + (i % 19) * 5) ^ (i >> 3));
+            if (i >= window_len and i % 11 < 7) byte.* = input[i - window_len];
+        }
+
+        const options: GreedyOptions = .{
+            .window_len = window_len,
+            .max_chain = 32,
+            .nice_len = 24,
+            .max_candidates = 2,
+            .min_match = 4,
+            .max_match = 96,
+            .min_savings_bits = 4,
+        };
+
+        var reference_head: [1 << 15]isize = @splat(-1);
+        const reference_prev = try std.testing.allocator.alloc(isize, input.len);
+        defer std.testing.allocator.free(reference_prev);
+        const reference = try hashGreedyPlanWithTables(
+            std.testing.allocator,
+            input,
+            options,
+            &reference_head,
+            reference_prev,
+            false,
+        );
+        defer reference.deinit(std.testing.allocator);
+
+        const ring_len = hashPrevTableLen(input.len, window_len);
+        try std.testing.expectEqual(window_len, ring_len);
+        const ring = try hashGreedyPlanAlloc(std.testing.allocator, input, options);
+        defer ring.deinit(std.testing.allocator);
+
+        try expectEqualTokenSlices(reference.tokens, ring.tokens);
+        try std.testing.expectEqual(reference.stats, ring.stats);
+    }
+
+    try std.testing.expectEqual(
+        @as(usize, 70_000),
+        hashPrevTableLen(70_000, 12_345),
+    );
+    try std.testing.expectEqual(
+        @as(usize, 4096),
+        hashPrevTableLen(4096, 16 * 1024),
+    );
+    try std.testing.expectEqual(
+        min_hash_prev_ring_input_len - 1,
+        hashPrevTableLen(min_hash_prev_ring_input_len - 1, 16 * 1024),
+    );
+    try std.testing.expectEqual(
+        @as(usize, 70_000),
+        hashPrevTableLen(70_000, 64 * 1024),
+    );
 }
 
 fn expectPlanStatsConsistent(plan: GreedyPlan, input_len: usize) !void {
