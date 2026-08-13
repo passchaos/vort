@@ -3421,3 +3421,9 @@ architecture blindly.
   Public `zstd.decodeConcatenatedFrame*` and root
   `zstdDecodeConcatenatedFrame*` names now mirror the native concatenated
   surface without forcing callers to depend on native-specific identifiers.
+
+- Added non-`Native*` Zstd reusable and dictionary facade aliases for public
+  library callers. `zstd.FrameEncoder`, `zstd.FrameDecoder`,
+  `zstd.IncrementalFrameDecoder`, `zstd.Dictionary`, `zstd.DictionarySet`, and
+  top-level train/catalog helpers now expose the same reusable dictionary
+  workflows without requiring applications to name the native-specific types.

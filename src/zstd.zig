@@ -110,6 +110,9 @@ pub const NativeFrameOptions = struct {
     match_search_budget: usize = mixed_match_path_search_budget,
 };
 
+pub const FrameSelection = NativeFrameSelection;
+pub const AdvancedFrameOptions = NativeFrameOptions;
+
 pub const NativeDictionary = struct {
     id: u32,
     content: []const u8,
@@ -146,6 +149,8 @@ pub const NativeDictionary = struct {
 };
 
 pub const NativeDictionaryTrainOptions = dictionary_mod.TrainOptions;
+pub const Dictionary = NativeDictionary;
+pub const DictionaryTrainOptions = NativeDictionaryTrainOptions;
 
 pub const OwnedNativeDictionary = struct {
     id: u32,
@@ -171,6 +176,8 @@ pub const OwnedNativeDictionary = struct {
     }
 };
 
+pub const OwnedDictionary = OwnedNativeDictionary;
+
 /// Train an owned native Zstd preset dictionary from representative samples.
 ///
 /// This is a lightweight deterministic trainer rather than zstd's full cover or
@@ -184,6 +191,14 @@ pub fn trainNativeDictionaryAlloc(
 ) Error!OwnedNativeDictionary {
     const content = try dictionary_mod.trainAlloc(allocator, samples, options);
     return .{ .id = NativeDictionary.derivedId(content), .content = content };
+}
+
+pub fn trainDictionaryAlloc(
+    allocator: std.mem.Allocator,
+    samples: []const []const u8,
+    options: DictionaryTrainOptions,
+) Error!OwnedDictionary {
+    return try trainNativeDictionaryAlloc(allocator, samples, options);
 }
 
 /// Caller-supplied preset dictionary catalog used when decoding concatenated
@@ -245,6 +260,8 @@ pub const NativeDictionarySet = struct {
     }
 };
 
+pub const DictionarySet = NativeDictionarySet;
+
 pub const OwnedNativeDictionarySet = struct {
     dictionaries: []NativeDictionary,
 
@@ -256,6 +273,8 @@ pub const OwnedNativeDictionarySet = struct {
         allocator.free(self.dictionaries);
     }
 };
+
+pub const OwnedDictionarySet = OwnedNativeDictionarySet;
 
 /// Allocate and validate a borrowed dictionary catalog from persisted metadata.
 ///
@@ -275,25 +294,41 @@ pub fn nativeDictionarySetFromMetadataAlloc(
     return .{ .dictionaries = dictionaries };
 }
 
+pub fn dictionarySetFromMetadataAlloc(
+    allocator: std.mem.Allocator,
+    metadata: []const dictionary_mod.Metadata,
+    contents: []const []const u8,
+) Error!OwnedDictionarySet {
+    return try nativeDictionarySetFromMetadataAlloc(allocator, metadata, contents);
+}
+
 pub const NativeFrameMode = enum {
     raw_or_rle,
     literal_only,
 };
+
+pub const FrameMode = NativeFrameMode;
 
 pub const NativeFrameEncodeResult = struct {
     frame: []u8,
     mode: NativeFrameMode,
 };
 
+pub const FrameEncodeResult = NativeFrameEncodeResult;
+
 pub const NativeFrameEncodeIntoResult = struct {
     written: usize,
     mode: NativeFrameMode,
 };
 
+pub const FrameEncodeIntoResult = NativeFrameEncodeIntoResult;
+
 pub const NativeFrameEncodeScratchResult = struct {
     frame: []const u8,
     mode: NativeFrameMode,
 };
+
+pub const FrameEncodeScratchResult = NativeFrameEncodeScratchResult;
 
 pub fn encodedNativeFrameBound(input_len: usize) Error!usize {
     return try encodedNativeFrameBoundWithOptions(input_len, .{});
@@ -2240,6 +2275,8 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 };
 
+pub const IncrementalFrameDecoder = NativeIncrementalFrameDecoder;
+
 pub const NativeFrameDecoder = struct {
     allocator: std.mem.Allocator,
     scratch: std.ArrayList(u8) = .empty,
@@ -2964,6 +3001,8 @@ pub const NativeFrameDecoder = struct {
     }
 };
 
+pub const FrameDecoder = NativeFrameDecoder;
+
 /// Compress a complete Zstandard frame through Vort's dependency-free native
 /// subset.
 pub fn encodeFrameAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
@@ -3625,6 +3664,8 @@ pub const NativeFrameEncoder = struct {
         return .raw_or_rle;
     }
 };
+
+pub const FrameEncoder = NativeFrameEncoder;
 
 fn forceNativeSelection(options: NativeFrameOptions, selection: NativeFrameSelection) NativeFrameOptions {
     var forced = options;

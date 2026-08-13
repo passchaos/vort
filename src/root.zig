@@ -638,6 +638,22 @@ pub const zstdDecodeConcatenatedFrameChunksIntoWithDictionarySetExactSize = zstd
 pub const zstdDecodedConcatenatedFrameChunksSizeWithDictionarySet = zstd.decodedConcatenatedFrameChunksSizeWithDictionarySet;
 pub const zstdDecodedConcatenatedFrameChunksSizeLimitedWithDictionarySet = zstd.decodedConcatenatedFrameChunksSizeLimitedWithDictionarySet;
 pub const ZstdFrameOptions = zstd.FrameOptions;
+pub const ZstdFrameSelection = zstd.FrameSelection;
+pub const ZstdAdvancedFrameOptions = zstd.AdvancedFrameOptions;
+pub const ZstdFrameMode = zstd.FrameMode;
+pub const ZstdFrameEncodeResult = zstd.FrameEncodeResult;
+pub const ZstdFrameEncodeIntoResult = zstd.FrameEncodeIntoResult;
+pub const ZstdFrameEncodeScratchResult = zstd.FrameEncodeScratchResult;
+pub const ZstdFrameEncoder = zstd.FrameEncoder;
+pub const ZstdFrameDecoder = zstd.FrameDecoder;
+pub const ZstdIncrementalFrameDecoder = zstd.IncrementalFrameDecoder;
+pub const ZstdDictionary = zstd.Dictionary;
+pub const ZstdDictionaryTrainOptions = zstd.DictionaryTrainOptions;
+pub const ZstdOwnedDictionary = zstd.OwnedDictionary;
+pub const ZstdDictionarySet = zstd.DictionarySet;
+pub const ZstdOwnedDictionarySet = zstd.OwnedDictionarySet;
+pub const zstdTrainDictionaryAlloc = zstd.trainDictionaryAlloc;
+pub const zstdDictionarySetFromMetadataAlloc = zstd.dictionarySetFromMetadataAlloc;
 pub const zstdEncodeRawOrRleFrameAlloc = zstd.encodeRawOrRleFrameAlloc;
 pub const zstdEncodeRawOrRleFrameWithOptionsAlloc = zstd.encodeRawOrRleFrameWithOptionsAlloc;
 pub const zstdEncodeRawOrRleFrameAppend = zstd.encodeRawOrRleFrameAppend;
@@ -2240,6 +2256,22 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdDecodedConcatenatedFrameChunksSizeWithDictionarySet;
     _ = zstdDecodedConcatenatedFrameChunksSizeLimitedWithDictionarySet;
     _ = ZstdFrameOptions;
+    _ = ZstdFrameSelection;
+    _ = ZstdAdvancedFrameOptions;
+    _ = ZstdFrameMode;
+    _ = ZstdFrameEncodeResult;
+    _ = ZstdFrameEncodeIntoResult;
+    _ = ZstdFrameEncodeScratchResult;
+    _ = ZstdFrameEncoder;
+    _ = ZstdFrameDecoder;
+    _ = ZstdIncrementalFrameDecoder;
+    _ = ZstdDictionary;
+    _ = ZstdDictionaryTrainOptions;
+    _ = ZstdOwnedDictionary;
+    _ = ZstdDictionarySet;
+    _ = ZstdOwnedDictionarySet;
+    _ = zstdTrainDictionaryAlloc;
+    _ = zstdDictionarySetFromMetadataAlloc;
     _ = zstdEncodeRawOrRleFrameAlloc;
     _ = zstdEncodeRawOrRleFrameWithOptionsAlloc;
     _ = zstdEncodeRawOrRleFrameAppend;
@@ -3375,6 +3407,86 @@ test "root zstd frame facade exposes append exact and chunked decode helpers" {
     try std.testing.expectEqual(payload.len, try zstdDecodeFrameChunksIntoExactSize(&chunks, join, &into, payload.len));
     try std.testing.expectEqualSlices(u8, payload, &into);
     try std.testing.expectError(error.SizeMismatch, zstdDecodeFrameChunksIntoExactSize(&chunks, join, &into, payload.len - 1));
+}
+
+test "root zstd public reusable aliases expose dictionary helpers" {
+    const samples = [_][]const u8{
+        "root zstd public dictionary sample alpha alpha alpha",
+        "root zstd public dictionary sample beta beta beta",
+        "root zstd public dictionary sample gamma gamma gamma",
+    };
+    const train_options: ZstdDictionaryTrainOptions = .{ .target_size = 32 };
+    const trained = try zstdTrainDictionaryAlloc(std.testing.allocator, &samples, train_options);
+    defer trained.deinit(std.testing.allocator);
+    const dict: ZstdDictionary = trained.asDictionary();
+    const metadata = trained.metadata();
+    var metadata_dicts: [1]ZstdDictionary = undefined;
+    const metadata_set: ZstdDictionarySet = try ZstdDictionarySet.initFromMetadata(&metadata_dicts, &.{metadata}, &.{dict.content});
+    const owned_set: ZstdOwnedDictionarySet = try zstdDictionarySetFromMetadataAlloc(std.testing.allocator, &.{metadata}, &.{dict.content});
+    defer owned_set.deinit(std.testing.allocator);
+    try std.testing.expectEqual(dict.id, metadata_set.dictionaries[0].id);
+    try std.testing.expectEqual(dict.id, owned_set.asDictionarySet().dictionaries[0].id);
+
+    var options: ZstdAdvancedFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = true,
+    };
+    try std.testing.expectEqual(ZstdFrameSelection.literal_only, options.selection);
+    const payload = "root zstd public dictionary sample alpha gamma payload";
+    const bound = try zstdEncodedNativeFrameBoundWithDictionary(payload.len, options, dict);
+
+    var encoder = ZstdFrameEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const encoded = try encoder.encodeWithDictionaryAlloc(payload, options, dict);
+    defer std.testing.allocator.free(encoded.frame);
+    try std.testing.expectEqual(ZstdFrameMode.literal_only, encoded.mode);
+    try std.testing.expect(encoded.frame.len <= bound);
+
+    var into = try std.testing.allocator.alloc(u8, bound);
+    defer std.testing.allocator.free(into);
+    const encoded_into: ZstdFrameEncodeIntoResult = try encoder.encodeIntoSliceWithDictionary(payload, options, dict, into);
+    try std.testing.expectEqual(encoded.mode, encoded_into.mode);
+    try std.testing.expectEqualSlices(u8, encoded.frame, into[0..encoded_into.written]);
+    const scratch: ZstdFrameEncodeScratchResult = try encoder.encodeScratchWithDictionary(payload, options, dict);
+    try std.testing.expectEqual(encoded.mode, scratch.mode);
+    try std.testing.expectEqualSlices(u8, encoded.frame, scratch.frame);
+    const owned_result: ZstdFrameEncodeResult = encoded;
+    try std.testing.expectEqual(ZstdFrameMode.literal_only, owned_result.mode);
+
+    var decoder = ZstdFrameDecoder.init(std.testing.allocator);
+    defer decoder.deinit();
+    const decoded = try decoder.decodeAllocWithDictionaryExactSize(encoded.frame, dict, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expectEqual(payload.len, try decoder.decodedSizeWithDictionary(encoded.frame, dict));
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try decoder.decodeAppendExactSizeWithDictionary(&appended, encoded.frame, dict, payload.len));
+    try std.testing.expectEqualSlices(u8, payload, appended.items["prefix:".len..]);
+
+    var incremental = ZstdIncrementalFrameDecoder.initWithDictionaryAndOptions(std.testing.allocator, dict, .{
+        .expected_output_len = payload.len,
+    });
+    defer incremental.deinit();
+    var output: [payload.len]u8 = undefined;
+    var written_total: usize = 0;
+    var input_offset: usize = 0;
+    while (true) {
+        const input_end = @min(encoded.frame.len, input_offset + 5);
+        const output_end = @min(output.len, written_total + 7);
+        const result = try incremental.step(encoded.frame[input_offset..input_end], output[written_total..output_end]);
+        input_offset += result.progress.input_read;
+        written_total += result.progress.output_written;
+        if (result.status == .done) break;
+        try std.testing.expect(result.status == .need_input or result.status == .need_output);
+    }
+    try std.testing.expectEqual(payload.len, written_total);
+    try std.testing.expectEqualSlices(u8, payload, &output);
+    try std.testing.expectEqualSlices(u8, "done", incremental.diagnostics().phase_name);
+
+    options.selection = .raw_or_rle;
+    try std.testing.expectEqual(ZstdFrameSelection.raw_or_rle, options.selection);
 }
 
 test "root zstd concatenated frame facade exposes public helpers" {
