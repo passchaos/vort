@@ -14,6 +14,18 @@ pub const StoredStreamOptions = struct {
     metadata: []const u8 = "",
 };
 
+pub const StreamSummary = struct {
+    window_bits: u5,
+    input_bytes: usize,
+    decoded_bytes: usize = 0,
+    meta_block_count: usize = 0,
+    empty_meta_block_count: usize = 0,
+    metadata_meta_block_count: usize = 0,
+    uncompressed_meta_block_count: usize = 0,
+    compressed_meta_block_count: usize = 0,
+    metadata_bytes: usize = 0,
+};
+
 const BitWriter = struct {
     out: *std.ArrayList(u8),
     bit_index: u3 = 0,
@@ -354,9 +366,19 @@ pub fn decodedStreamSize(stream: []const u8) Error!usize {
 }
 
 pub fn decodedStreamSizeLimited(stream: []const u8, max_output_len: usize) Error!usize {
+    return (try summarizeStreamLimited(stream, max_output_len)).decoded_bytes;
+}
+
+pub fn summarizeStream(stream: []const u8) Error!StreamSummary {
+    return try summarizeStreamLimited(stream, std.math.maxInt(usize));
+}
+
+pub fn summarizeStreamLimited(stream: []const u8, max_output_len: usize) Error!StreamSummary {
     var reader = bitstream.BitReader.init(stream);
-    try readWindowBits(&reader);
-    var total: usize = 0;
+    var summary = StreamSummary{
+        .window_bits = try readWindowBitsValue(&reader),
+        .input_bytes = stream.len,
+    };
     var last_distances = initial_last_distances;
     var literal_history = LiteralHistory{};
     while (true) {
@@ -365,7 +387,9 @@ pub fn decodedStreamSizeLimited(stream: []const u8, max_output_len: usize) Error
             const is_last_empty = try reader.readBits(u1, 1) == 1;
             if (is_last_empty) {
                 try ensureZeroPaddingAndEnd(reader);
-                return total;
+                summary.meta_block_count = std.math.add(usize, summary.meta_block_count, 1) catch return error.IntegerOverflow;
+                summary.empty_meta_block_count = std.math.add(usize, summary.empty_meta_block_count, 1) catch return error.IntegerOverflow;
+                return summary;
             }
         }
 
@@ -377,25 +401,32 @@ pub fn decodedStreamSizeLimited(stream: []const u8, max_output_len: usize) Error
             0b11 => 0,
         };
         if (mnibbles == 0) {
-            try skipMetadataMetaBlock(&reader);
+            const metadata_len = try skipMetadataMetaBlockAndReturnLen(&reader);
+            summary.meta_block_count = std.math.add(usize, summary.meta_block_count, 1) catch return error.IntegerOverflow;
+            summary.metadata_meta_block_count = std.math.add(usize, summary.metadata_meta_block_count, 1) catch return error.IntegerOverflow;
+            summary.metadata_bytes = std.math.add(usize, summary.metadata_bytes, metadata_len) catch return error.IntegerOverflow;
             continue;
         }
         const len_minus_one = try reader.readBits(u32, @intCast(mnibbles * 4));
         if (mnibbles > 4 and ((len_minus_one >> @intCast((mnibbles - 1) * 4)) & 0xf) == 0) return error.CorruptFrame;
         const meta_block_len = std.math.add(usize, len_minus_one, 1) catch return error.IntegerOverflow;
-        const meta_block_start = total;
-        total = std.math.add(usize, total, meta_block_len) catch return error.IntegerOverflow;
-        if (total > max_output_len) return error.OutputLimitExceeded;
+        const meta_block_start = summary.decoded_bytes;
+        summary.decoded_bytes = std.math.add(usize, summary.decoded_bytes, meta_block_len) catch return error.IntegerOverflow;
+        if (summary.decoded_bytes > max_output_len) return error.OutputLimitExceeded;
+        summary.meta_block_count = std.math.add(usize, summary.meta_block_count, 1) catch return error.IntegerOverflow;
         if (is_last) {
+            summary.compressed_meta_block_count = std.math.add(usize, summary.compressed_meta_block_count, 1) catch return error.IntegerOverflow;
             try skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history);
             try ensureZeroPaddingAndEnd(reader);
-            return total;
+            return summary;
         }
         const is_uncompressed = try reader.readBits(u1, 1) == 1;
         if (!is_uncompressed) {
+            summary.compressed_meta_block_count = std.math.add(usize, summary.compressed_meta_block_count, 1) catch return error.IntegerOverflow;
             try skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history);
             continue;
         }
+        summary.uncompressed_meta_block_count = std.math.add(usize, summary.uncompressed_meta_block_count, 1) catch return error.IntegerOverflow;
         try consumeZeroPaddingToByte(&reader);
         if (reader.byte_index > stream.len or stream.len - reader.byte_index < meta_block_len) return error.TruncatedFrame;
         literal_history.pushSlice(stream[reader.byte_index..][0..meta_block_len]);
@@ -451,6 +482,16 @@ pub fn decodedStreamChunksSize(chunks: []const []const u8, compressed_scratch: [
 pub fn decodedStreamChunksSizeLimited(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!usize {
     const joined = try joinChunks(chunks, compressed_scratch);
     return try decodedStreamSizeLimited(joined, max_output_len);
+}
+
+pub fn summarizeStreamChunks(chunks: []const []const u8, compressed_scratch: []u8) Error!StreamSummary {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try summarizeStream(joined);
+}
+
+pub fn summarizeStreamChunksLimited(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!StreamSummary {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try summarizeStreamLimited(joined, max_output_len);
 }
 
 /// Reusable, caller-owned Brotli stream decoder facade.
@@ -4284,6 +4325,10 @@ fn consumeZeroPaddingToByte(reader: *bitstream.BitReader) Error!void {
 }
 
 fn skipMetadataMetaBlock(reader: *bitstream.BitReader) Error!void {
+    _ = try skipMetadataMetaBlockAndReturnLen(reader);
+}
+
+fn skipMetadataMetaBlockAndReturnLen(reader: *bitstream.BitReader) Error!usize {
     const reserved = try reader.readBits(u1, 1);
     if (reserved != 0) return error.CorruptFrame;
     const mskipbytes = try reader.readBits(u2, 2);
@@ -4296,6 +4341,7 @@ fn skipMetadataMetaBlock(reader: *bitstream.BitReader) Error!void {
     try consumeZeroPaddingToByte(reader);
     if (reader.byte_index > reader.input.len or reader.input.len - reader.byte_index < metadata_len) return error.TruncatedFrame;
     reader.byte_index += metadata_len;
+    return metadata_len;
 }
 
 fn ensureZeroPaddingAndEnd(reader: bitstream.BitReader) Error!void {

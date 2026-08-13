@@ -1574,6 +1574,12 @@ architecture blindly.
   snapshots and shared streaming diagnostics. This closes the immediate
   library-interface gap without adding CLI surface or hiding allocations.
 
+- Added a Brotli `StreamSummary` library preflight API for contiguous and
+  split-input streams. It reports window bits, decoded bytes, meta-block counts
+  by kind, metadata bytes, and output-limit failures without materializing
+  decoded output, giving library callers a cheap capability/capacity probe for
+  the current Brotli subset.
+
 - Added a dependency-free Snappy raw block module. `src/snappy.zig` covers the
   raw block varint length header, literal tags, copy1/copy2/copy4 decode,
   decoded-size preflight, output limits, caller-owned output, allocator-returning

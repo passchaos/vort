@@ -48,6 +48,7 @@ pub const brEncodeStoredStreamWithOptionsAlloc = br.encodeStoredStreamWithOption
 pub const brEncodeStoredStreamWithOptionsAppend = br.encodeStoredStreamWithOptionsAppend;
 pub const brEncodeStoredStreamWithOptionsInto = br.encodeStoredStreamWithOptionsInto;
 pub const BrotliStoredStreamOptions = br.StoredStreamOptions;
+pub const BrotliStreamSummary = br.StreamSummary;
 pub const BrotliStreamDecoder = br.StreamDecoder;
 pub const brDecodeStreamAlloc = br.decodeStreamAlloc;
 pub const brDecodeStreamAllocExactSize = br.decodeStreamAllocExactSize;
@@ -59,6 +60,8 @@ pub const brDecodeStreamInto = br.decodeStreamInto;
 pub const brDecodeStreamIntoExactSize = br.decodeStreamIntoExactSize;
 pub const brDecodedStreamSize = br.decodedStreamSize;
 pub const brDecodedStreamSizeLimited = br.decodedStreamSizeLimited;
+pub const brSummarizeStream = br.summarizeStream;
+pub const brSummarizeStreamLimited = br.summarizeStreamLimited;
 pub const brDecodeStreamChunksAlloc = br.decodeStreamChunksAlloc;
 pub const brDecodeStreamChunksAllocExactSize = br.decodeStreamChunksAllocExactSize;
 pub const brDecodeStreamChunksAllocLimited = br.decodeStreamChunksAllocLimited;
@@ -69,6 +72,8 @@ pub const brDecodeStreamChunksInto = br.decodeStreamChunksInto;
 pub const brDecodeStreamChunksIntoExactSize = br.decodeStreamChunksIntoExactSize;
 pub const brDecodedStreamChunksSize = br.decodedStreamChunksSize;
 pub const brDecodedStreamChunksSizeLimited = br.decodedStreamChunksSizeLimited;
+pub const brSummarizeStreamChunks = br.summarizeStreamChunks;
+pub const brSummarizeStreamChunksLimited = br.summarizeStreamChunksLimited;
 
 pub const snappyEncodeBlockAlloc = snappy.encodeBlockAlloc;
 pub const snappyEncodeBlockAppend = snappy.encodeBlockAppend;
@@ -1331,6 +1336,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = brEncodeStoredStreamWithOptionsAppend;
     _ = brEncodeStoredStreamWithOptionsInto;
     _ = BrotliStoredStreamOptions;
+    _ = BrotliStreamSummary;
     _ = BrotliStreamDecoder;
     _ = brDecodeStreamAlloc;
     _ = brDecodeStreamAllocExactSize;
@@ -1342,6 +1348,8 @@ test "root exports lz4 and zstd codec helpers" {
     _ = brDecodeStreamIntoExactSize;
     _ = brDecodedStreamSize;
     _ = brDecodedStreamSizeLimited;
+    _ = brSummarizeStream;
+    _ = brSummarizeStreamLimited;
     _ = brDecodeStreamChunksAlloc;
     _ = brDecodeStreamChunksAllocExactSize;
     _ = brDecodeStreamChunksAllocLimited;
@@ -1352,6 +1360,8 @@ test "root exports lz4 and zstd codec helpers" {
     _ = brDecodeStreamChunksIntoExactSize;
     _ = brDecodedStreamChunksSize;
     _ = brDecodedStreamChunksSizeLimited;
+    _ = brSummarizeStreamChunks;
+    _ = brSummarizeStreamChunksLimited;
 
     _ = snappyEncodeBlockAlloc;
     _ = snappyEncodeBlockAppend;
@@ -2015,6 +2025,19 @@ test "root brotli stream helpers expose exact and chunked decode variants" {
     });
     defer std.testing.allocator.free(encoded);
 
+    const summary = try brSummarizeStream(encoded);
+    try std.testing.expectEqual(@as(u5, 16), summary.window_bits);
+    try std.testing.expectEqual(encoded.len, summary.input_bytes);
+    try std.testing.expectEqual(payload.len, summary.decoded_bytes);
+    try std.testing.expectEqual(@as(usize, 3), summary.meta_block_count);
+    try std.testing.expectEqual(@as(usize, 1), summary.empty_meta_block_count);
+    try std.testing.expectEqual(@as(usize, 1), summary.metadata_meta_block_count);
+    try std.testing.expectEqual(@as(usize, 1), summary.uncompressed_meta_block_count);
+    try std.testing.expectEqual(@as(usize, 0), summary.compressed_meta_block_count);
+    try std.testing.expectEqual(@as(usize, "root-br-metadata".len), summary.metadata_bytes);
+    try std.testing.expectEqual(payload.len, (try brSummarizeStreamLimited(encoded, payload.len)).decoded_bytes);
+    try std.testing.expectError(error.OutputLimitExceeded, brSummarizeStreamLimited(encoded, payload.len - 1));
+
     const exact = try brDecodeStreamAllocExactSize(std.testing.allocator, encoded, payload.len);
     defer std.testing.allocator.free(exact);
     try std.testing.expectEqualSlices(u8, payload, exact);
@@ -2052,6 +2075,13 @@ test "root brotli stream helpers expose exact and chunked decode variants" {
     try std.testing.expectEqual(payload.len, try brDecodedStreamChunksSize(&chunks, join));
     try std.testing.expectEqual(payload.len, try brDecodedStreamChunksSizeLimited(&chunks, join, payload.len));
     try std.testing.expectError(error.OutputLimitExceeded, brDecodedStreamChunksSizeLimited(&chunks, join, payload.len - 1));
+    const chunked_summary = try brSummarizeStreamChunks(&chunks, join);
+    try std.testing.expectEqual(summary.decoded_bytes, chunked_summary.decoded_bytes);
+    try std.testing.expectEqual(summary.meta_block_count, chunked_summary.meta_block_count);
+    try std.testing.expectEqual(summary.empty_meta_block_count, chunked_summary.empty_meta_block_count);
+    try std.testing.expectEqual(summary.metadata_bytes, chunked_summary.metadata_bytes);
+    try std.testing.expectEqual(payload.len, (try brSummarizeStreamChunksLimited(&chunks, join, payload.len)).decoded_bytes);
+    try std.testing.expectError(error.OutputLimitExceeded, brSummarizeStreamChunksLimited(&chunks, join, payload.len - 1));
 
     const chunked = try brDecodeStreamChunksAlloc(std.testing.allocator, &chunks, join);
     defer std.testing.allocator.free(chunked);
