@@ -43,12 +43,20 @@ pub const crc32cCombine = checksum.crc32cCombine;
 
 pub const brEncodedStoredStreamBound = br.encodedStoredStreamBound;
 pub const brEncodedStoredStreamBoundWithOptions = br.encodedStoredStreamBoundWithOptions;
+pub const brEncodedStoredStreamChunksBound = br.encodedStoredStreamChunksBound;
+pub const brEncodedStoredStreamChunksBoundWithOptions = br.encodedStoredStreamChunksBoundWithOptions;
 pub const brEncodeStoredStreamAlloc = br.encodeStoredStreamAlloc;
 pub const brEncodeStoredStreamAppend = br.encodeStoredStreamAppend;
 pub const brEncodeStoredStreamInto = br.encodeStoredStreamInto;
 pub const brEncodeStoredStreamWithOptionsAlloc = br.encodeStoredStreamWithOptionsAlloc;
 pub const brEncodeStoredStreamWithOptionsAppend = br.encodeStoredStreamWithOptionsAppend;
 pub const brEncodeStoredStreamWithOptionsInto = br.encodeStoredStreamWithOptionsInto;
+pub const brEncodeStoredStreamChunksAlloc = br.encodeStoredStreamChunksAlloc;
+pub const brEncodeStoredStreamChunksAppend = br.encodeStoredStreamChunksAppend;
+pub const brEncodeStoredStreamChunksInto = br.encodeStoredStreamChunksInto;
+pub const brEncodeStoredStreamChunksWithOptionsAlloc = br.encodeStoredStreamChunksWithOptionsAlloc;
+pub const brEncodeStoredStreamChunksWithOptionsAppend = br.encodeStoredStreamChunksWithOptionsAppend;
+pub const brEncodeStoredStreamChunksWithOptionsInto = br.encodeStoredStreamChunksWithOptionsInto;
 pub const BrotliStoredStreamOptions = br.StoredStreamOptions;
 pub const BrotliStreamSummary = br.StreamSummary;
 pub const BrotliStreamSummaryDiagnostics = br.StreamSummaryDiagnostics;
@@ -1681,12 +1689,20 @@ test "root exports lz4 and zstd codec helpers" {
 
     _ = brEncodedStoredStreamBound;
     _ = brEncodedStoredStreamBoundWithOptions;
+    _ = brEncodedStoredStreamChunksBound;
+    _ = brEncodedStoredStreamChunksBoundWithOptions;
     _ = brEncodeStoredStreamAlloc;
     _ = brEncodeStoredStreamAppend;
     _ = brEncodeStoredStreamInto;
     _ = brEncodeStoredStreamWithOptionsAlloc;
     _ = brEncodeStoredStreamWithOptionsAppend;
     _ = brEncodeStoredStreamWithOptionsInto;
+    _ = brEncodeStoredStreamChunksAlloc;
+    _ = brEncodeStoredStreamChunksAppend;
+    _ = brEncodeStoredStreamChunksInto;
+    _ = brEncodeStoredStreamChunksWithOptionsAlloc;
+    _ = brEncodeStoredStreamChunksWithOptionsAppend;
+    _ = brEncodeStoredStreamChunksWithOptionsInto;
     _ = BrotliStoredStreamOptions;
     _ = BrotliStreamSummary;
     _ = BrotliStreamSummaryDiagnostics;
@@ -2566,6 +2582,42 @@ test "root brotli stream helpers expose exact and chunked decode variants" {
     try std.testing.expectError(error.OutOfMemory, brEncodeStoredStreamWithOptionsInto(payload, into_encoded[0 .. encoded.len - 1], options));
     try std.testing.expectError(error.InvalidBlockPlan, brEncodedStoredStreamBoundWithOptions(payload.len, .{ .window_bits = 9 }));
     try std.testing.expectError(error.InvalidBlockPlan, brEncodedStoredStreamBoundWithOptions(payload.len, .{ .metadata = &([_]u8{0} ** 0x1_0001) }));
+
+    const input_chunks = [_][]const u8{
+        payload[0..11],
+        payload[11..31],
+        payload[31..],
+    };
+    const chunk_encoded_bound = try brEncodedStoredStreamChunksBoundWithOptions(&input_chunks, options);
+    const chunk_encoded = try brEncodeStoredStreamChunksWithOptionsAlloc(std.testing.allocator, &input_chunks, options);
+    defer std.testing.allocator.free(chunk_encoded);
+    try std.testing.expectEqual(chunk_encoded.len, chunk_encoded_bound);
+    const chunk_decoded = try brDecodeStreamAllocExactSize(std.testing.allocator, chunk_encoded, payload.len);
+    defer std.testing.allocator.free(chunk_decoded);
+    try std.testing.expectEqualSlices(u8, payload, chunk_decoded);
+    var chunk_append_encoded: std.ArrayList(u8) = .empty;
+    defer chunk_append_encoded.deinit(std.testing.allocator);
+    try chunk_append_encoded.appendSlice(std.testing.allocator, "prefix:");
+    try brEncodeStoredStreamChunksWithOptionsAppend(std.testing.allocator, &chunk_append_encoded, &input_chunks, options);
+    try std.testing.expectEqualSlices(u8, "prefix:", chunk_append_encoded.items[0.."prefix:".len]);
+    try std.testing.expectEqualSlices(u8, chunk_encoded, chunk_append_encoded.items["prefix:".len..]);
+    const chunk_into_encoded = try std.testing.allocator.alloc(u8, chunk_encoded_bound);
+    defer std.testing.allocator.free(chunk_into_encoded);
+    try std.testing.expectEqual(chunk_encoded.len, try brEncodeStoredStreamChunksWithOptionsInto(&input_chunks, chunk_into_encoded, options));
+    try std.testing.expectEqualSlices(u8, chunk_encoded, chunk_into_encoded[0..chunk_encoded.len]);
+    try std.testing.expectError(error.OutOfMemory, brEncodeStoredStreamChunksWithOptionsInto(&input_chunks, chunk_into_encoded[0 .. chunk_encoded.len - 1], options));
+    const default_chunk_bound = try brEncodedStoredStreamChunksBound(&input_chunks);
+    const default_chunk_encoded = try brEncodeStoredStreamChunksAlloc(std.testing.allocator, &input_chunks);
+    defer std.testing.allocator.free(default_chunk_encoded);
+    try std.testing.expectEqual(default_chunk_encoded.len, default_chunk_bound);
+    var default_chunk_appended: std.ArrayList(u8) = .empty;
+    defer default_chunk_appended.deinit(std.testing.allocator);
+    try brEncodeStoredStreamChunksAppend(std.testing.allocator, &default_chunk_appended, &input_chunks);
+    try std.testing.expectEqualSlices(u8, default_chunk_encoded, default_chunk_appended.items);
+    const default_chunk_into = try std.testing.allocator.alloc(u8, default_chunk_bound);
+    defer std.testing.allocator.free(default_chunk_into);
+    try std.testing.expectEqual(default_chunk_encoded.len, try brEncodeStoredStreamChunksInto(&input_chunks, default_chunk_into));
+    try std.testing.expectEqualSlices(u8, default_chunk_encoded, default_chunk_into[0..default_chunk_encoded.len]);
 
     const summary = try brSummarizeStream(encoded);
     try std.testing.expectEqual(@as(u5, 16), summary.window_bits);

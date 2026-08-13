@@ -3438,3 +3438,9 @@ architecture blindly.
   exact output buffers before using the caller-owned encode path. The root
   Brotli stored-stream coverage now checks bound equality, caller-owned encode
   parity, short-buffer failure, and invalid window/metadata planning errors.
+
+- Added Brotli stored-stream chunked encode helpers for split caller input.
+  Bound, allocator-returning, append, and caller-owned output variants now cover
+  both default and option-bearing stored-stream encodes, with root tests checking
+  round-trip decode, byte parity across alloc/append/into, and short-buffer
+  failure.

@@ -35,6 +35,29 @@ pub fn encodedStoredStreamBoundWithOptions(input_len: usize, options: StoredStre
     return bytesForBits(bit_count);
 }
 
+pub fn encodedStoredStreamChunksBound(chunks: []const []const u8) Error!usize {
+    return try encodedStoredStreamChunksBoundWithOptions(chunks, .{});
+}
+
+pub fn encodedStoredStreamChunksBoundWithOptions(chunks: []const []const u8, options: StoredStreamOptions) Error!usize {
+    var bit_count = try storedWindowBitsLen(options.window_bits);
+    if (options.metadata.len != 0) {
+        bit_count = try addStoredMetadataMetaBlockBitsLen(bit_count, options.metadata.len);
+    }
+
+    for (chunks) |chunk| {
+        var offset: usize = 0;
+        while (offset < chunk.len) {
+            const block_len = @min(chunk.len - offset, max_uncompressed_meta_block_len);
+            bit_count = try addStoredUncompressedMetaBlockBitsLen(bit_count, block_len);
+            offset += block_len;
+        }
+    }
+
+    bit_count = std.math.add(usize, bit_count, 2) catch return error.IntegerOverflow; // ISLAST + ISLASTEMPTY.
+    return bytesForBits(bit_count);
+}
+
 pub const StreamSummary = struct {
     window_bits: u5,
     input_bytes: usize,
@@ -239,6 +262,17 @@ pub fn encodeStoredStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: [
     return out.toOwnedSlice(allocator);
 }
 
+pub fn encodeStoredStreamChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8) Error![]u8 {
+    return try encodeStoredStreamChunksWithOptionsAlloc(allocator, chunks, .{});
+}
+
+pub fn encodeStoredStreamChunksWithOptionsAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, options: StoredStreamOptions) Error![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    try encodeStoredStreamChunksWithOptionsAppend(allocator, &out, chunks, options);
+    return out.toOwnedSlice(allocator);
+}
+
 pub fn encodeStoredStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) Error!void {
     try encodeStoredStreamWithOptionsAppend(allocator, out, input, .{});
 }
@@ -246,6 +280,15 @@ pub fn encodeStoredStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayLis
 pub fn encodeStoredStreamWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: StoredStreamOptions) Error!void {
     var writer = BitWriter{ .out = out };
     try encodeStoredStreamWithOptionsWrite(allocator, &writer, input, options);
+}
+
+pub fn encodeStoredStreamChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8) Error!void {
+    try encodeStoredStreamChunksWithOptionsAppend(allocator, out, chunks, .{});
+}
+
+pub fn encodeStoredStreamChunksWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, options: StoredStreamOptions) Error!void {
+    var writer = BitWriter{ .out = out };
+    try encodeStoredStreamChunksWithOptionsWrite(allocator, &writer, chunks, options);
 }
 
 pub fn encodeStoredStreamInto(input: []const u8, output: []u8) Error!usize {
@@ -265,6 +308,23 @@ pub fn encodeStoredStreamWithOptionsInto(input: []const u8, output: []u8, option
     return out.items.len;
 }
 
+pub fn encodeStoredStreamChunksInto(chunks: []const []const u8, output: []u8) Error!usize {
+    return try encodeStoredStreamChunksWithOptionsInto(chunks, output, .{});
+}
+
+pub fn encodeStoredStreamChunksWithOptionsInto(chunks: []const []const u8, output: []u8, options: StoredStreamOptions) Error!usize {
+    const needed = try encodedStoredStreamChunksBoundWithOptions(chunks, options);
+    if (output.len < needed) return error.OutOfMemory;
+    var out: std.ArrayList(u8) = .{
+        .items = output[0..0],
+        .capacity = output.len,
+    };
+    var writer = BitWriter{ .out = &out, .bounded = true };
+    try encodeStoredStreamChunksWithOptionsWrite(std.heap.smp_allocator, &writer, chunks, options);
+    if (out.items.len != needed) return error.SizeMismatch;
+    return out.items.len;
+}
+
 fn encodeStoredStreamWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8, options: StoredStreamOptions) Error!void {
     try writeWindowBits(allocator, writer, options.window_bits);
     if (options.metadata.len != 0) try writeMetadataMetaBlock(allocator, writer, options.metadata);
@@ -279,6 +339,28 @@ fn encodeStoredStreamWithOptionsWrite(allocator: std.mem.Allocator, writer: *Bit
     // End with an empty final meta-block. Brotli forbids marking an
     // uncompressed meta-block as the last one, so even non-empty stored streams
     // need this explicit terminator.
+    try writer.writeBits(allocator, 1, 1); // ISLAST
+    try writer.writeBits(allocator, 1, 1); // ISLASTEMPTY
+}
+
+fn encodeStoredStreamChunksWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitWriter, chunks: []const []const u8, options: StoredStreamOptions) Error!void {
+    try writeWindowBits(allocator, writer, options.window_bits);
+    if (options.metadata.len != 0) try writeMetadataMetaBlock(allocator, writer, options.metadata);
+
+    var chunk_index: usize = 0;
+    var chunk_offset: usize = 0;
+    while (chunk_index < chunks.len) {
+        while (chunk_index < chunks.len and chunk_offset == chunks[chunk_index].len) {
+            chunk_index += 1;
+            chunk_offset = 0;
+        }
+        if (chunk_index >= chunks.len) break;
+        const chunk = chunks[chunk_index];
+        const block_len = @min(chunk.len - chunk_offset, max_uncompressed_meta_block_len);
+        try writeUncompressedMetaBlock(allocator, writer, chunk[chunk_offset..][0..block_len]);
+        chunk_offset += block_len;
+    }
+
     try writer.writeBits(allocator, 1, 1); // ISLAST
     try writer.writeBits(allocator, 1, 1); // ISLASTEMPTY
 }
