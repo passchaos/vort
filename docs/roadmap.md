@@ -3454,3 +3454,8 @@ architecture blindly.
   dictionaries, gzip, and metadata-rich gzip headers. The root stored-wrapper
   smoke now verifies prefix preservation, byte parity with allocator-returning
   encoders, and decode round trips for each wrapper.
+
+- Added split-input stored encode helpers for raw deflate, zlib, zlib preset
+  dictionaries, gzip, and metadata-rich gzip headers. Chunked bound, caller-owned,
+  allocator-returning, and append helpers now match contiguous stored output
+  while updating zlib Adler-32 and gzip CRC/ISIZE across caller chunks.

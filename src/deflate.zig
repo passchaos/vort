@@ -2857,6 +2857,59 @@ pub fn encodeRawStoredAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u
     return written;
 }
 
+pub fn rawStoredChunksEncodedSize(chunks: []const []const u8) Error!usize {
+    return rawStoredEncodedSize(try chunksTotalLen(chunks));
+}
+
+pub fn encodeRawStoredChunks(chunks: []const []const u8, output: []u8) Error!usize {
+    const total_len = try chunksTotalLen(chunks);
+    const required = try rawStoredEncodedSize(total_len);
+    if (output.len < required) return error.OutputTooSmall;
+    if (total_len == 0) {
+        writeStoredHeader(true, 0, output[0..5]);
+        return 5;
+    }
+
+    var cursor = try ChunkCursor.init(chunks, total_len, 0);
+    var remaining = total_len;
+    var out_offset: usize = 0;
+    while (remaining != 0) {
+        const block_len = @min(max_stored_block_len, remaining);
+        const final = block_len == remaining;
+        writeStoredHeader(final, @intCast(block_len), output[out_offset..][0..5]);
+        out_offset += 5;
+        try cursor.copyTo(output[out_offset..][0..block_len]);
+        out_offset += block_len;
+        remaining -= block_len;
+    }
+    return out_offset;
+}
+
+pub fn encodeRawStoredChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8) ![]u8 {
+    const required = try rawStoredChunksEncodedSize(chunks);
+    const out = try allocator.alloc(u8, required);
+    errdefer allocator.free(out);
+    const written = try encodeRawStoredChunks(chunks, out);
+    std.debug.assert(written == out.len);
+    return out;
+}
+
+pub fn encodeRawStoredChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8) !usize {
+    const required = try rawStoredChunksEncodedSize(chunks);
+    const start = out.items.len;
+    try out.ensureUnusedCapacity(allocator, required);
+    const slot = out.addManyAsSliceAssumeCapacity(required);
+    const written = encodeRawStoredChunks(chunks, slot) catch |err| {
+        out.items.len = start;
+        return err;
+    };
+    if (written != required) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
+}
+
 fn encodeRawStoredSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize) ![]u8 {
     if (block_len == 0) return error.InvalidBlockPlan;
     var writer = bitstream.BitWriter{};
@@ -4796,6 +4849,14 @@ pub fn zlibStoredWithDictionaryEncodedSize(input_len: usize) Error!usize {
     return std.math.add(usize, with_header, 4) catch error.IntegerOverflow;
 }
 
+pub fn zlibStoredChunksEncodedSize(chunks: []const []const u8) Error!usize {
+    return zlibStoredEncodedSize(try chunksTotalLen(chunks));
+}
+
+pub fn zlibStoredWithDictionaryChunksEncodedSize(chunks: []const []const u8) Error!usize {
+    return zlibStoredWithDictionaryEncodedSize(try chunksTotalLen(chunks));
+}
+
 pub fn encodeZlibStored(input: []const u8, output: []u8) Error!usize {
     const required = try zlibStoredEncodedSize(input.len);
     if (output.len < required) return error.OutputTooSmall;
@@ -4807,6 +4868,16 @@ pub fn encodeZlibStored(input: []const u8, output: []u8) Error!usize {
     return footer_offset + 4;
 }
 
+pub fn encodeZlibStoredChunks(chunks: []const []const u8, output: []u8) Error!usize {
+    const required = try zlibStoredChunksEncodedSize(chunks);
+    if (output.len < required) return error.OutputTooSmall;
+    writeZlibHeader(output[0..2], null);
+    const raw_written = try encodeRawStoredChunks(chunks, output[2 .. required - 4]);
+    const footer_offset = 2 + raw_written;
+    std.mem.writeInt(u32, output[footer_offset..][0..4], adler32Chunks(chunks), .big);
+    return footer_offset + 4;
+}
+
 pub fn encodeZlibStoredWithDictionary(input: []const u8, output: []u8, dictionary: []const u8) Error!usize {
     const required = try zlibStoredWithDictionaryEncodedSize(input.len);
     if (output.len < required) return error.OutputTooSmall;
@@ -4815,6 +4886,16 @@ pub fn encodeZlibStoredWithDictionary(input: []const u8, output: []u8, dictionar
     const raw_written = try encodeRawStored(input, output[6 .. required - 4]);
     const footer_offset = 6 + raw_written;
     std.mem.writeInt(u32, output[footer_offset..][0..4], checksum.adler32(input), .big);
+    return footer_offset + 4;
+}
+
+pub fn encodeZlibStoredWithDictionaryChunks(chunks: []const []const u8, output: []u8, dictionary: []const u8) Error!usize {
+    const required = try zlibStoredWithDictionaryChunksEncodedSize(chunks);
+    if (output.len < required) return error.OutputTooSmall;
+    writeZlibHeader(output[0..6], dictionary);
+    const raw_written = try encodeRawStoredChunks(chunks, output[6 .. required - 4]);
+    const footer_offset = 6 + raw_written;
+    std.mem.writeInt(u32, output[footer_offset..][0..4], adler32Chunks(chunks), .big);
     return footer_offset + 4;
 }
 
@@ -4858,6 +4939,56 @@ pub fn encodeZlibStoredWithDictionaryAppend(allocator: std.mem.Allocator, out: *
     try out.ensureUnusedCapacity(allocator, required);
     const slot = out.addManyAsSliceAssumeCapacity(required);
     const written = encodeZlibStoredWithDictionary(input, slot, dictionary) catch |err| {
+        out.items.len = start;
+        return err;
+    };
+    if (written != required) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
+}
+
+pub fn encodeZlibStoredChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8) ![]u8 {
+    const required = try zlibStoredChunksEncodedSize(chunks);
+    const out = try allocator.alloc(u8, required);
+    errdefer allocator.free(out);
+    const written = try encodeZlibStoredChunks(chunks, out);
+    std.debug.assert(written == out.len);
+    return out;
+}
+
+pub fn encodeZlibStoredWithDictionaryChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, dictionary: []const u8) ![]u8 {
+    const required = try zlibStoredWithDictionaryChunksEncodedSize(chunks);
+    const out = try allocator.alloc(u8, required);
+    errdefer allocator.free(out);
+    const written = try encodeZlibStoredWithDictionaryChunks(chunks, out, dictionary);
+    std.debug.assert(written == out.len);
+    return out;
+}
+
+pub fn encodeZlibStoredChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8) !usize {
+    const required = try zlibStoredChunksEncodedSize(chunks);
+    const start = out.items.len;
+    try out.ensureUnusedCapacity(allocator, required);
+    const slot = out.addManyAsSliceAssumeCapacity(required);
+    const written = encodeZlibStoredChunks(chunks, slot) catch |err| {
+        out.items.len = start;
+        return err;
+    };
+    if (written != required) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
+}
+
+pub fn encodeZlibStoredWithDictionaryChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, dictionary: []const u8) !usize {
+    const required = try zlibStoredWithDictionaryChunksEncodedSize(chunks);
+    const start = out.items.len;
+    try out.ensureUnusedCapacity(allocator, required);
+    const slot = out.addManyAsSliceAssumeCapacity(required);
+    const written = encodeZlibStoredWithDictionaryChunks(chunks, slot, dictionary) catch |err| {
         out.items.len = start;
         return err;
     };
@@ -5579,6 +5710,18 @@ fn chunksTotalLen(chunks: []const []const u8) Error!usize {
         total = std.math.add(usize, total, chunk.len) catch return error.IntegerOverflow;
     }
     return total;
+}
+
+fn adler32Chunks(chunks: []const []const u8) u32 {
+    var adler = checksum.Adler32.init();
+    for (chunks) |chunk| adler.update(chunk);
+    return adler.digest();
+}
+
+fn crc32Chunks(chunks: []const []const u8) u32 {
+    var crc = checksum.Crc32.init();
+    for (chunks) |chunk| crc.update(chunk);
+    return crc.digest();
 }
 
 /// Reusable, caller-owned raw DEFLATE decoder facade.
@@ -11165,6 +11308,17 @@ pub fn gzipStoredEncodedSizeWithHeader(input_len: usize, header_options: GzipHea
     return std.math.add(usize, with_header, 8) catch error.IntegerOverflow;
 }
 
+pub fn gzipStoredChunksEncodedSize(chunks: []const []const u8) Error!usize {
+    return gzipStoredChunksEncodedSizeWithHeader(chunks, .{});
+}
+
+pub fn gzipStoredChunksEncodedSizeWithHeader(chunks: []const []const u8, header_options: GzipHeaderOptions) Error!usize {
+    const raw_len = try rawStoredChunksEncodedSize(chunks);
+    const header_len = try gzipHeaderEncodedSize(header_options);
+    const with_header = std.math.add(usize, header_len, raw_len) catch return error.IntegerOverflow;
+    return std.math.add(usize, with_header, 8) catch error.IntegerOverflow;
+}
+
 pub fn encodeGzipStored(input: []const u8, output: []u8) Error!usize {
     return encodeGzipStoredWithHeader(input, output, .{});
 }
@@ -11178,6 +11332,23 @@ pub fn encodeGzipStoredWithHeader(input: []const u8, output: []u8, header_option
     const footer_offset = header_len + raw_written;
     std.mem.writeInt(u32, output[footer_offset..][0..4], checksum.crc32Best(input), .little);
     std.mem.writeInt(u32, output[footer_offset + 4 ..][0..4], @truncate(input.len), .little);
+    return footer_offset + 8;
+}
+
+pub fn encodeGzipStoredChunks(chunks: []const []const u8, output: []u8) Error!usize {
+    return try encodeGzipStoredChunksWithHeader(chunks, output, .{});
+}
+
+pub fn encodeGzipStoredChunksWithHeader(chunks: []const []const u8, output: []u8, header_options: GzipHeaderOptions) Error!usize {
+    const required = try gzipStoredChunksEncodedSizeWithHeader(chunks, header_options);
+    if (output.len < required) return error.OutputTooSmall;
+    const total_len = try chunksTotalLen(chunks);
+
+    const header_len = try writeGzipHeader(output[0..required], header_options);
+    const raw_written = try encodeRawStoredChunks(chunks, output[header_len .. required - 8]);
+    const footer_offset = header_len + raw_written;
+    std.mem.writeInt(u32, output[footer_offset..][0..4], crc32Chunks(chunks), .little);
+    std.mem.writeInt(u32, output[footer_offset + 4 ..][0..4], @truncate(total_len), .little);
     return footer_offset + 8;
 }
 
@@ -11204,6 +11375,39 @@ pub fn encodeGzipStoredWithHeaderAppend(allocator: std.mem.Allocator, out: *std.
     try out.ensureUnusedCapacity(allocator, required);
     const slot = out.addManyAsSliceAssumeCapacity(required);
     const written = encodeGzipStoredWithHeader(input, slot, header_options) catch |err| {
+        out.items.len = start;
+        return err;
+    };
+    if (written != required) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
+}
+
+pub fn encodeGzipStoredChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8) ![]u8 {
+    return try encodeGzipStoredChunksWithHeaderAlloc(allocator, chunks, .{});
+}
+
+pub fn encodeGzipStoredChunksWithHeaderAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, header_options: GzipHeaderOptions) ![]u8 {
+    const required = try gzipStoredChunksEncodedSizeWithHeader(chunks, header_options);
+    const out = try allocator.alloc(u8, required);
+    errdefer allocator.free(out);
+    const written = try encodeGzipStoredChunksWithHeader(chunks, out, header_options);
+    std.debug.assert(written == out.len);
+    return out;
+}
+
+pub fn encodeGzipStoredChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8) !usize {
+    return try encodeGzipStoredChunksWithHeaderAppend(allocator, out, chunks, .{});
+}
+
+pub fn encodeGzipStoredChunksWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, header_options: GzipHeaderOptions) !usize {
+    const required = try gzipStoredChunksEncodedSizeWithHeader(chunks, header_options);
+    const start = out.items.len;
+    try out.ensureUnusedCapacity(allocator, required);
+    const slot = out.addManyAsSliceAssumeCapacity(required);
+    const written = encodeGzipStoredChunksWithHeader(chunks, slot, header_options) catch |err| {
         out.items.len = start;
         return err;
     };
