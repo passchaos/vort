@@ -1908,3 +1908,20 @@ architecture blindly.
   Final validation passed `zig build test -j1` in 1:41.55 at 4,126,468-KiB
   peak RSS and `zig build check -j1` in 4:12.35 at 688,748-KiB peak RSS, both
   with zero swap.
+
+- Packed package-merge symbol multiplicities into 4-bit nibbles. Code lengths
+  are capped at 15, so two symbols fit in each byte; component-wise package
+  addition cannot carry between nibbles, and reverse byte comparison preserves
+  the original reverse-symbol tie-break. Production literal/length package
+  records are roughly halved, while the old byte-per-symbol implementation
+  remains the exact-code-length reference. Dense, sparse, equal, and seeded
+  collision-heavy 286/30/19-symbol distributions compare identically, with
+  Debug assertions covering every intermediate nibble sum. On imx's
+  fixed-CPU-12 11-round PNG A/B, Up L8 improved `1.152x`, adaptive
+  L8/RGB8/RGBA8 improved `1.009/1.006/1.023x`, the nine-row geomean improved
+  `1.019x`, and encoded lengths/checksums/guards stayed identical. A separate
+  seven-round external-time A/B reduced median imx child RSS from 10,055,680 to
+  9,592,832 bytes (`0.954x`), with zero swap in all 14 children.
+  Final validation passed `zig build test -j1` in 1:59.58 at 4,125,180-KiB
+  peak RSS and `zig build check -j1` in 5:03.48 at 687,060-KiB peak RSS, both
+  with zero swap.

@@ -586,7 +586,61 @@ pub fn treeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4) [n
 }
 
 fn packageMergeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4, active: usize) [n]u4 {
-    return packageMergeCodeLengthsWithSortPolicy(n, freqs, max_bits, active, false);
+    std.debug.assert(max_bits <= max_code_bits);
+    const Packed = PackedLengthPackage(n);
+    var leaves: [n]Packed = undefined;
+    var leaf_count: usize = 0;
+    for (freqs.*, 0..) |freq, symbol| {
+        if (freq == 0) continue;
+        var package = Packed{ .weight = freq, .counts = @splat(0) };
+        packedCountSet(n, &package.counts, symbol, 1);
+        leaves[leaf_count] = package;
+        leaf_count += 1;
+    }
+    std.debug.assert(leaf_count == active);
+    std.mem.sort(Packed, leaves[0..active], {}, packedPackageLess(n));
+
+    var current: [2 * n]Packed = undefined;
+    var next: [2 * n]Packed = undefined;
+    var current_len = active;
+    @memcpy(current[0..current_len], leaves[0..active]);
+
+    var depth: u4 = 1;
+    while (depth < max_bits) : (depth += 1) {
+        var pair_len: usize = 0;
+        var i: usize = 0;
+        while (i + 1 < current_len) : (i += 2) {
+            next[pair_len] = combinePackedPackages(
+                n,
+                current[i],
+                current[i + 1],
+            );
+            pair_len += 1;
+        }
+        if (comptime builtin.mode == .Debug or builtin.mode == .ReleaseSafe) {
+            std.debug.assert(
+                packedPackagesAreSorted(n, next[0..pair_len]),
+            );
+        }
+        current_len = mergePackedPackageLists(
+            n,
+            &current,
+            leaves[0..active],
+            next[0..pair_len],
+        );
+        std.debug.assert(current_len <= current.len);
+    }
+
+    const selected_count = 2 * active - 2;
+    std.debug.assert(selected_count <= current_len);
+    var lengths: [n]u4 = @splat(0);
+    for (current[0..selected_count]) |package| {
+        for (&lengths, 0..) |*length, symbol| {
+            length.* += packedCountGet(n, package.counts, symbol);
+        }
+    }
+    for (lengths) |length| std.debug.assert(length <= max_bits);
+    return lengths;
 }
 
 fn packageMergeCodeLengthsReference(comptime n: usize, freqs: *const [n]u32, max_bits: u4, active: usize) [n]u4 {
@@ -672,6 +726,123 @@ fn packagesAreSorted(comptime n: usize, packages: []const LengthPackage(n)) bool
         if (less({}, current, previous)) return false;
     }
     return true;
+}
+
+fn PackedLengthPackage(comptime n: usize) type {
+    return struct {
+        weight: u64,
+        counts: [(n + 1) / 2]u8,
+    };
+}
+
+fn packedCountGet(
+    comptime n: usize,
+    counts: [(n + 1) / 2]u8,
+    symbol: usize,
+) u4 {
+    const byte = counts[symbol / 2];
+    return @truncate(byte >> @intCast((symbol & 1) * 4));
+}
+
+fn packedCountSet(
+    comptime n: usize,
+    counts: *[(n + 1) / 2]u8,
+    symbol: usize,
+    value: u4,
+) void {
+    const shift: u3 = @intCast((symbol & 1) * 4);
+    const mask: u8 = @as(u8, 0x0f) << shift;
+    counts[symbol / 2] =
+        (counts[symbol / 2] & ~mask) | (@as(u8, value) << shift);
+}
+
+fn packedPackageLess(
+    comptime n: usize,
+) fn (void, PackedLengthPackage(n), PackedLengthPackage(n)) bool {
+    return struct {
+        fn less(
+            _: void,
+            lhs: PackedLengthPackage(n),
+            rhs: PackedLengthPackage(n),
+        ) bool {
+            if (lhs.weight != rhs.weight) return lhs.weight < rhs.weight;
+            var i: usize = lhs.counts.len;
+            while (i > 0) {
+                i -= 1;
+                if (lhs.counts[i] != rhs.counts[i]) {
+                    return lhs.counts[i] < rhs.counts[i];
+                }
+            }
+            return false;
+        }
+    }.less;
+}
+
+fn combinePackedPackages(
+    comptime n: usize,
+    lhs: PackedLengthPackage(n),
+    rhs: PackedLengthPackage(n),
+) PackedLengthPackage(n) {
+    var out = PackedLengthPackage(n){
+        .weight = lhs.weight + rhs.weight,
+        .counts = @splat(0),
+    };
+    // Every nibble is a package multiplicity bounded by max_code_bits (15).
+    // Package-merge only combines disjoint selections at one depth, so each
+    // nibble sum stays <= 15. Plain byte addition therefore performs two
+    // independent nibble additions without carry crossing between symbols.
+    for (&out.counts, lhs.counts, rhs.counts) |*value, left, right| {
+        const sum = @as(u16, left) + right;
+        std.debug.assert((left & 0x0f) + (right & 0x0f) <= 0x0f);
+        std.debug.assert((left >> 4) + (right >> 4) <= 0x0f);
+        value.* = @intCast(sum);
+    }
+    return out;
+}
+
+fn packedPackagesAreSorted(
+    comptime n: usize,
+    packages: []const PackedLengthPackage(n),
+) bool {
+    const less = packedPackageLess(n);
+    for (
+        packages[1..],
+        packages[0..packages.len -| 1],
+    ) |current, previous| {
+        if (less({}, current, previous)) return false;
+    }
+    return true;
+}
+
+fn mergePackedPackageLists(
+    comptime n: usize,
+    out: *[2 * n]PackedLengthPackage(n),
+    leaves: []const PackedLengthPackage(n),
+    packages: []const PackedLengthPackage(n),
+) usize {
+    var out_len: usize = 0;
+    var leaf_i: usize = 0;
+    var package_i: usize = 0;
+    const less = packedPackageLess(n);
+    while (leaf_i < leaves.len or package_i < packages.len) {
+        const take_leaf = if (package_i >= packages.len)
+            true
+        else if (leaf_i >= leaves.len)
+            false
+        else
+            less({}, leaves[leaf_i], packages[package_i]);
+        out[out_len] = if (take_leaf)
+            leaves[leaf_i]
+        else
+            packages[package_i];
+        out_len += 1;
+        if (take_leaf) {
+            leaf_i += 1;
+        } else {
+            package_i += 1;
+        }
+    }
+    return out_len;
 }
 
 fn LengthPackage(comptime n: usize) type {
@@ -1112,6 +1283,18 @@ test "package-merge naturally ordered pairs match sorted reference" {
                 0;
         }
         try expectPackageMergeMatchesReference(freqs.len, &freqs, 15);
+        for (0..16) |seed| {
+            for (&freqs, 0..) |*freq, i| {
+                // Include sparse entries and many equal weights so packed
+                // byte comparison exercises both nibbles of every tie-break
+                // byte, including the odd final symbol pair.
+                freq.* = if ((i + seed) % 11 == 0 and i != 256)
+                    0
+                else
+                    @intCast(1 + ((i * 5 + seed * 7 + i * seed) % 13));
+            }
+            try expectPackageMergeMatchesReference(freqs.len, &freqs, 15);
+        }
     }
     {
         var freqs: [30]u32 = @splat(1);
@@ -1120,6 +1303,15 @@ test "package-merge naturally ordered pairs match sorted reference" {
             freq.* = @intCast(1 + ((i * 11 + 3) % 29));
         }
         try expectPackageMergeMatchesReference(freqs.len, &freqs, 15);
+        for (0..16) |seed| {
+            for (&freqs, 0..) |*freq, i| {
+                freq.* = if ((i + seed) % 7 == 0)
+                    0
+                else
+                    @intCast(1 + ((i * 3 + seed * 5 + i * seed) % 9));
+            }
+            try expectPackageMergeMatchesReference(freqs.len, &freqs, 15);
+        }
     }
     {
         var freqs: [19]u32 = @splat(1);
