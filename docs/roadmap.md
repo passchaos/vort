@@ -3470,3 +3470,9 @@ architecture blindly.
   stored encode flows while reusing internal scratch, with root coverage
   verifying parity against top-level zlib stored helpers and dictionary
   round trips.
+
+- Added a reusable gzip `GzipEncoder` stored facade. It exposes
+  allocator-returning, scratch, append, caller-owned, header-options, and chunked
+  stored encode flows while reusing internal scratch, with root coverage
+  verifying parity against top-level gzip stored helpers and metadata-rich
+  header round trips.

@@ -5866,6 +5866,96 @@ pub const ZlibEncoder = struct {
     }
 };
 
+pub const GzipEncoder = struct {
+    allocator: std.mem.Allocator,
+    scratch: std.ArrayList(u8) = .empty,
+
+    pub fn init(allocator: std.mem.Allocator) GzipEncoder {
+        return .{ .allocator = allocator };
+    }
+
+    pub fn deinit(self: *GzipEncoder) void {
+        self.scratch.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn encodeStoredAlloc(self: *GzipEncoder, input: []const u8) ![]u8 {
+        return try encodeGzipStoredAlloc(self.allocator, input);
+    }
+
+    pub fn encodeStoredWithHeaderAlloc(self: *GzipEncoder, input: []const u8, header_options: GzipHeaderOptions) ![]u8 {
+        return try encodeGzipStoredWithHeaderAlloc(self.allocator, input, header_options);
+    }
+
+    pub fn encodeStoredChunksAlloc(self: *GzipEncoder, chunks: []const []const u8) ![]u8 {
+        return try encodeGzipStoredChunksAlloc(self.allocator, chunks);
+    }
+
+    pub fn encodeStoredChunksWithHeaderAlloc(self: *GzipEncoder, chunks: []const []const u8, header_options: GzipHeaderOptions) ![]u8 {
+        return try encodeGzipStoredChunksWithHeaderAlloc(self.allocator, chunks, header_options);
+    }
+
+    pub fn encodeStoredScratch(self: *GzipEncoder, input: []const u8) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeStoredAppend(&self.scratch, input);
+        return self.scratch.items;
+    }
+
+    pub fn encodeStoredWithHeaderScratch(self: *GzipEncoder, input: []const u8, header_options: GzipHeaderOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeStoredWithHeaderAppend(&self.scratch, input, header_options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeStoredChunksScratch(self: *GzipEncoder, chunks: []const []const u8) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeStoredChunksAppend(&self.scratch, chunks);
+        return self.scratch.items;
+    }
+
+    pub fn encodeStoredChunksWithHeaderScratch(self: *GzipEncoder, chunks: []const []const u8, header_options: GzipHeaderOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeStoredChunksWithHeaderAppend(&self.scratch, chunks, header_options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeStoredAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
+        return try encodeGzipStoredAppend(self.allocator, out, input);
+    }
+
+    pub fn encodeStoredWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, header_options: GzipHeaderOptions) !usize {
+        return try encodeGzipStoredWithHeaderAppend(self.allocator, out, input, header_options);
+    }
+
+    pub fn encodeStoredChunksAppend(self: *GzipEncoder, out: *std.ArrayList(u8), chunks: []const []const u8) !usize {
+        return try encodeGzipStoredChunksAppend(self.allocator, out, chunks);
+    }
+
+    pub fn encodeStoredChunksWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), chunks: []const []const u8, header_options: GzipHeaderOptions) !usize {
+        return try encodeGzipStoredChunksWithHeaderAppend(self.allocator, out, chunks, header_options);
+    }
+
+    pub fn encodeStoredIntoSlice(self: *GzipEncoder, input: []const u8, output: []u8) !usize {
+        _ = self;
+        return try encodeGzipStored(input, output);
+    }
+
+    pub fn encodeStoredWithHeaderIntoSlice(self: *GzipEncoder, input: []const u8, header_options: GzipHeaderOptions, output: []u8) !usize {
+        _ = self;
+        return try encodeGzipStoredWithHeader(input, output, header_options);
+    }
+
+    pub fn encodeStoredChunksIntoSlice(self: *GzipEncoder, chunks: []const []const u8, output: []u8) !usize {
+        _ = self;
+        return try encodeGzipStoredChunks(chunks, output);
+    }
+
+    pub fn encodeStoredChunksWithHeaderIntoSlice(self: *GzipEncoder, chunks: []const []const u8, header_options: GzipHeaderOptions, output: []u8) !usize {
+        _ = self;
+        return try encodeGzipStoredChunksWithHeader(chunks, output, header_options);
+    }
+};
+
 /// Reusable, caller-owned raw DEFLATE decoder facade.
 ///
 /// Like the zlib/gzip wrapper decoders below, this facade validates and decodes a

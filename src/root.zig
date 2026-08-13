@@ -1503,6 +1503,7 @@ pub const encodeGzipBestAlloc = deflate.encodeGzipBestAlloc;
 pub const encodeGzipLevelAlloc = deflate.encodeGzipLevelAlloc;
 pub const encodeGzipBestSplitAlloc = deflate.encodeGzipBestSplitAlloc;
 pub const encodeGzipBestAdaptiveSplitAlloc = deflate.encodeGzipBestAdaptiveSplitAlloc;
+pub const GzipEncoder = deflate.GzipEncoder;
 pub const GzipDecoder = deflate.GzipDecoder;
 pub const GzipDecodeOptions = deflate.GzipDecodeOptions;
 pub const GzipHeaderOptions = deflate.GzipHeaderOptions;
@@ -6294,6 +6295,7 @@ test "root exports chunked compatibility decode helpers" {
     // in deflate.zig, while this test catches accidental public API drift.
     _ = RawDeflateEncoder;
     _ = ZlibEncoder;
+    _ = GzipEncoder;
     _ = RawDeflateDecoder;
     _ = RawDeflateProbeResult;
     _ = DecodeProbeResult;
@@ -6872,6 +6874,96 @@ test "root zlib encoder reuses stored scratch" {
     defer std.testing.allocator.free(dict_chunks_into);
     try std.testing.expectEqual(expected_dict_chunks.len, try encoder.encodeStoredChunksWithDictionaryIntoSlice(&chunks, preset_dictionary, dict_chunks_into));
     try std.testing.expectEqualSlices(u8, expected_dict_chunks, dict_chunks_into[0..expected_dict_chunks.len]);
+}
+
+test "root gzip encoder reuses stored scratch" {
+    const payload = "root gzip reusable stored encoder payload" ** 2;
+    const header_options: GzipHeaderOptions = .{
+        .filename = "gzip-reusable.txt",
+        .comment = "root gzip reusable",
+        .header_crc = true,
+    };
+    const chunks = [_][]const u8{
+        payload[0..12],
+        payload[12..43],
+        payload[43..],
+    };
+    const expected = try encodeGzipStoredAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(expected);
+    const expected_header = try encodeGzipStoredWithHeaderAlloc(std.testing.allocator, payload, header_options);
+    defer std.testing.allocator.free(expected_header);
+    const expected_chunks = try encodeGzipStoredChunksAlloc(std.testing.allocator, &chunks);
+    defer std.testing.allocator.free(expected_chunks);
+    const expected_header_chunks = try encodeGzipStoredChunksWithHeaderAlloc(std.testing.allocator, &chunks, header_options);
+    defer std.testing.allocator.free(expected_header_chunks);
+    try std.testing.expectEqualSlices(u8, expected, expected_chunks);
+    try std.testing.expectEqualSlices(u8, expected_header, expected_header_chunks);
+
+    var encoder = GzipEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+
+    const owned = try encoder.encodeStoredAlloc(payload);
+    defer std.testing.allocator.free(owned);
+    try std.testing.expectEqualSlices(u8, expected, owned);
+    const scratch = try encoder.encodeStoredScratch(payload);
+    try std.testing.expectEqualSlices(u8, expected, scratch);
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(expected.len, try encoder.encodeStoredAppend(&appended, payload));
+    try std.testing.expectEqualSlices(u8, expected, appended.items["prefix:".len..]);
+    const into = try std.testing.allocator.alloc(u8, try gzipStoredChunksEncodedSize(&chunks));
+    defer std.testing.allocator.free(into);
+    try std.testing.expectEqual(expected.len, try encoder.encodeStoredIntoSlice(payload, into));
+    try std.testing.expectEqualSlices(u8, expected, into[0..expected.len]);
+
+    const header_owned = try encoder.encodeStoredWithHeaderAlloc(payload, header_options);
+    defer std.testing.allocator.free(header_owned);
+    try std.testing.expectEqualSlices(u8, expected_header, header_owned);
+    const header_scratch = try encoder.encodeStoredWithHeaderScratch(payload, header_options);
+    try std.testing.expectEqualSlices(u8, expected_header, header_scratch);
+    var header_appended: std.ArrayList(u8) = .empty;
+    defer header_appended.deinit(std.testing.allocator);
+    try std.testing.expectEqual(expected_header.len, try encoder.encodeStoredWithHeaderAppend(&header_appended, payload, header_options));
+    try std.testing.expectEqualSlices(u8, expected_header, header_appended.items);
+    const header_into = try std.testing.allocator.alloc(u8, try gzipStoredChunksEncodedSizeWithHeader(&chunks, header_options));
+    defer std.testing.allocator.free(header_into);
+    try std.testing.expectEqual(expected_header.len, try encoder.encodeStoredWithHeaderIntoSlice(payload, header_options, header_into));
+    try std.testing.expectEqualSlices(u8, expected_header, header_into[0..expected_header.len]);
+
+    const chunks_owned = try encoder.encodeStoredChunksAlloc(&chunks);
+    defer std.testing.allocator.free(chunks_owned);
+    try std.testing.expectEqualSlices(u8, expected_chunks, chunks_owned);
+    const chunks_scratch = try encoder.encodeStoredChunksScratch(&chunks);
+    try std.testing.expectEqualSlices(u8, expected_chunks, chunks_scratch);
+    const decoded = try decodeGzipStoredAlloc(std.testing.allocator, chunks_scratch);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    var chunks_appended: std.ArrayList(u8) = .empty;
+    defer chunks_appended.deinit(std.testing.allocator);
+    _ = try encoder.encodeStoredChunksAppend(&chunks_appended, &chunks);
+    try std.testing.expectEqualSlices(u8, expected_chunks, chunks_appended.items);
+    const chunks_into = try std.testing.allocator.alloc(u8, expected_chunks.len);
+    defer std.testing.allocator.free(chunks_into);
+    try std.testing.expectEqual(expected_chunks.len, try encoder.encodeStoredChunksIntoSlice(&chunks, chunks_into));
+    try std.testing.expectEqualSlices(u8, expected_chunks, chunks_into[0..expected_chunks.len]);
+
+    const header_chunks_owned = try encoder.encodeStoredChunksWithHeaderAlloc(&chunks, header_options);
+    defer std.testing.allocator.free(header_chunks_owned);
+    try std.testing.expectEqualSlices(u8, expected_header_chunks, header_chunks_owned);
+    const header_chunks_scratch = try encoder.encodeStoredChunksWithHeaderScratch(&chunks, header_options);
+    try std.testing.expectEqualSlices(u8, expected_header_chunks, header_chunks_scratch);
+    const decoded_header = try decodeGzipStoredAlloc(std.testing.allocator, header_chunks_scratch);
+    defer std.testing.allocator.free(decoded_header);
+    try std.testing.expectEqualSlices(u8, payload, decoded_header);
+    var header_chunks_appended: std.ArrayList(u8) = .empty;
+    defer header_chunks_appended.deinit(std.testing.allocator);
+    _ = try encoder.encodeStoredChunksWithHeaderAppend(&header_chunks_appended, &chunks, header_options);
+    try std.testing.expectEqualSlices(u8, expected_header_chunks, header_chunks_appended.items);
+    const header_chunks_into = try std.testing.allocator.alloc(u8, expected_header_chunks.len);
+    defer std.testing.allocator.free(header_chunks_into);
+    try std.testing.expectEqual(expected_header_chunks.len, try encoder.encodeStoredChunksWithHeaderIntoSlice(&chunks, header_options, header_chunks_into));
+    try std.testing.expectEqualSlices(u8, expected_header_chunks, header_chunks_into[0..expected_header_chunks.len]);
 }
 
 test "root raw deflate decoder drains caller-owned scratch and resets" {
