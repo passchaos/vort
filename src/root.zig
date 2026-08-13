@@ -6884,6 +6884,36 @@ test "root raw deflate encoder reuses stored scratch" {
     const dict_decoded = try decodeRawDeflateAllocWithDictionaryExactSize(std.testing.allocator, best_dict_scratch, preset_dictionary, dict_payload.len);
     defer std.testing.allocator.free(dict_decoded);
     try std.testing.expectEqualSlices(u8, dict_payload, dict_decoded);
+
+    const dynamic_literal_expected = try encodeRawDynamicLiteralAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(dynamic_literal_expected);
+    const dynamic_literal_owned = try encoder.encodeDynamicLiteralAlloc(payload);
+    defer std.testing.allocator.free(dynamic_literal_owned);
+    try std.testing.expectEqualSlices(u8, dynamic_literal_expected, dynamic_literal_owned);
+    const dynamic_literal_scratch = try encoder.encodeDynamicLiteralScratch(payload);
+    try std.testing.expectEqualSlices(u8, dynamic_literal_expected, dynamic_literal_scratch);
+    var dynamic_literal_appended: std.ArrayList(u8) = .empty;
+    defer dynamic_literal_appended.deinit(std.testing.allocator);
+    try dynamic_literal_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(dynamic_literal_expected.len, try encoder.encodeDynamicLiteralAppend(&dynamic_literal_appended, payload));
+    try std.testing.expectEqualSlices(u8, dynamic_literal_expected, dynamic_literal_appended.items["prefix:".len..]);
+
+    const dynamic_options = optionsForCompressionLevel(.default);
+    const dynamic_expected = try encodeRawDynamicWithOptionsAlloc(std.testing.allocator, payload, dynamic_options);
+    defer std.testing.allocator.free(dynamic_expected);
+    const dynamic_owned = try encoder.encodeDynamicWithOptionsAlloc(payload, dynamic_options);
+    defer std.testing.allocator.free(dynamic_owned);
+    try std.testing.expectEqualSlices(u8, dynamic_expected, dynamic_owned);
+    const dynamic_scratch = try encoder.encodeDynamicWithOptionsScratch(payload, dynamic_options);
+    try std.testing.expectEqualSlices(u8, dynamic_expected, dynamic_scratch);
+    var dynamic_appended: std.ArrayList(u8) = .empty;
+    defer dynamic_appended.deinit(std.testing.allocator);
+    try std.testing.expectEqual(dynamic_expected.len, try encoder.encodeDynamicWithOptionsAppend(&dynamic_appended, payload, dynamic_options));
+    try std.testing.expectEqualSlices(u8, dynamic_expected, dynamic_appended.items);
+
+    const dynamic_decoded = try decodeRawDeflateAllocExactSize(std.testing.allocator, dynamic_scratch, payload.len);
+    defer std.testing.allocator.free(dynamic_decoded);
+    try std.testing.expectEqualSlices(u8, payload, dynamic_decoded);
 }
 
 test "root zlib encoder reuses stored scratch" {

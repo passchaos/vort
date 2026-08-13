@@ -3492,6 +3492,11 @@ architecture blindly.
   dictionary modes, with root tests checking byte parity against top-level
   dictionary encoders and dictionary decode round trips.
 
+- Extended `RawDeflateEncoder` with dynamic-literal and option-bearing dynamic
+  raw deflate helpers. The reusable facade now exposes alloc, scratch, and append
+  flows for dynamic modes, with root tests checking byte parity against top-level
+  dynamic encoders and decode round trips.
+
 - Extended `GzipEncoder` beyond stored blocks with fixed, option-bearing fixed,
   best, zlib-level, and metadata-rich header encode helpers. The reusable facade
   now exposes alloc, scratch, and append flows for these modes, with root tests
