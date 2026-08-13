@@ -3409,3 +3409,9 @@ architecture blindly.
   size flows. Public `zstd.decodeFrame*` and root `zstdDecodeFrame*` APIs can
   now round-trip dictionary-compressed frames without callers dropping down to
   the native-specific decode names.
+
+- Extended the top-level Zstd public decode facade to chunked dictionary and
+  dictionary-set input. Split compressed buffers now have allocator,
+  exact-size, output-limited, append, caller-owned buffer, and decoded-size
+  `zstd.decodeFrameChunks*` / root `zstdDecodeFrameChunks*` helpers matching the
+  contiguous dictionary decode surface.

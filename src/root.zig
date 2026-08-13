@@ -537,6 +537,26 @@ pub const zstdDecodeFrameChunksInto = zstd.decodeFrameChunksInto;
 pub const zstdDecodeFrameChunksIntoExactSize = zstd.decodeFrameChunksIntoExactSize;
 pub const zstdDecodedFrameChunksSize = zstd.decodedFrameChunksSize;
 pub const zstdDecodedFrameChunksSizeLimited = zstd.decodedFrameChunksSizeLimited;
+pub const zstdDecodeFrameChunksAllocWithDictionary = zstd.decodeFrameChunksAllocWithDictionary;
+pub const zstdDecodeFrameChunksAllocWithDictionaryExactSize = zstd.decodeFrameChunksAllocWithDictionaryExactSize;
+pub const zstdDecodeFrameChunksAllocWithDictionaryLimited = zstd.decodeFrameChunksAllocWithDictionaryLimited;
+pub const zstdDecodeFrameChunksAppendWithDictionary = zstd.decodeFrameChunksAppendWithDictionary;
+pub const zstdDecodeFrameChunksAppendExactSizeWithDictionary = zstd.decodeFrameChunksAppendExactSizeWithDictionary;
+pub const zstdDecodeFrameChunksAppendLimitedWithDictionary = zstd.decodeFrameChunksAppendLimitedWithDictionary;
+pub const zstdDecodeFrameChunksIntoWithDictionary = zstd.decodeFrameChunksIntoWithDictionary;
+pub const zstdDecodeFrameChunksIntoWithDictionaryExactSize = zstd.decodeFrameChunksIntoWithDictionaryExactSize;
+pub const zstdDecodedFrameChunksSizeWithDictionary = zstd.decodedFrameChunksSizeWithDictionary;
+pub const zstdDecodedFrameChunksSizeLimitedWithDictionary = zstd.decodedFrameChunksSizeLimitedWithDictionary;
+pub const zstdDecodeFrameChunksAllocWithDictionarySet = zstd.decodeFrameChunksAllocWithDictionarySet;
+pub const zstdDecodeFrameChunksAllocWithDictionarySetExactSize = zstd.decodeFrameChunksAllocWithDictionarySetExactSize;
+pub const zstdDecodeFrameChunksAllocWithDictionarySetLimited = zstd.decodeFrameChunksAllocWithDictionarySetLimited;
+pub const zstdDecodeFrameChunksAppendWithDictionarySet = zstd.decodeFrameChunksAppendWithDictionarySet;
+pub const zstdDecodeFrameChunksAppendExactSizeWithDictionarySet = zstd.decodeFrameChunksAppendExactSizeWithDictionarySet;
+pub const zstdDecodeFrameChunksAppendLimitedWithDictionarySet = zstd.decodeFrameChunksAppendLimitedWithDictionarySet;
+pub const zstdDecodeFrameChunksIntoWithDictionarySet = zstd.decodeFrameChunksIntoWithDictionarySet;
+pub const zstdDecodeFrameChunksIntoWithDictionarySetExactSize = zstd.decodeFrameChunksIntoWithDictionarySetExactSize;
+pub const zstdDecodedFrameChunksSizeWithDictionarySet = zstd.decodedFrameChunksSizeWithDictionarySet;
+pub const zstdDecodedFrameChunksSizeLimitedWithDictionarySet = zstd.decodedFrameChunksSizeLimitedWithDictionarySet;
 pub const zstdDecodeFrameAllocWithDictionary = zstd.decodeFrameAllocWithDictionary;
 pub const zstdDecodeFrameAllocWithDictionaryExactSize = zstd.decodeFrameAllocWithDictionaryExactSize;
 pub const zstdDecodeFrameAllocWithDictionaryLimited = zstd.decodeFrameAllocWithDictionaryLimited;
@@ -2059,6 +2079,26 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdDecodeFrameChunksIntoExactSize;
     _ = zstdDecodedFrameChunksSize;
     _ = zstdDecodedFrameChunksSizeLimited;
+    _ = zstdDecodeFrameChunksAllocWithDictionary;
+    _ = zstdDecodeFrameChunksAllocWithDictionaryExactSize;
+    _ = zstdDecodeFrameChunksAllocWithDictionaryLimited;
+    _ = zstdDecodeFrameChunksAppendWithDictionary;
+    _ = zstdDecodeFrameChunksAppendExactSizeWithDictionary;
+    _ = zstdDecodeFrameChunksAppendLimitedWithDictionary;
+    _ = zstdDecodeFrameChunksIntoWithDictionary;
+    _ = zstdDecodeFrameChunksIntoWithDictionaryExactSize;
+    _ = zstdDecodedFrameChunksSizeWithDictionary;
+    _ = zstdDecodedFrameChunksSizeLimitedWithDictionary;
+    _ = zstdDecodeFrameChunksAllocWithDictionarySet;
+    _ = zstdDecodeFrameChunksAllocWithDictionarySetExactSize;
+    _ = zstdDecodeFrameChunksAllocWithDictionarySetLimited;
+    _ = zstdDecodeFrameChunksAppendWithDictionarySet;
+    _ = zstdDecodeFrameChunksAppendExactSizeWithDictionarySet;
+    _ = zstdDecodeFrameChunksAppendLimitedWithDictionarySet;
+    _ = zstdDecodeFrameChunksIntoWithDictionarySet;
+    _ = zstdDecodeFrameChunksIntoWithDictionarySetExactSize;
+    _ = zstdDecodedFrameChunksSizeWithDictionarySet;
+    _ = zstdDecodedFrameChunksSizeLimitedWithDictionarySet;
     _ = zstdDecodeFrameAllocWithDictionary;
     _ = zstdDecodeFrameAllocWithDictionaryExactSize;
     _ = zstdDecodeFrameAllocWithDictionaryLimited;
@@ -2949,6 +2989,50 @@ test "root zstd frame facade exposes dictionary encode helpers" {
     const facade_decoded_default = try zstdDecodeFrameAllocWithDictionary(std.testing.allocator, encoded, zstd_dictionary);
     defer std.testing.allocator.free(facade_decoded_default);
     try std.testing.expectEqualSlices(u8, payload, facade_decoded_default);
+
+    const chunk_scratch = try std.testing.allocator.alloc(u8, encoded.len);
+    defer std.testing.allocator.free(chunk_scratch);
+    const chunks = [_][]const u8{
+        encoded[0..3],
+        encoded[3 .. encoded.len - 2],
+        encoded[encoded.len - 2 ..],
+    };
+    try std.testing.expectEqual(payload.len, try zstdDecodedFrameChunksSizeWithDictionary(&chunks, chunk_scratch, zstd_dictionary));
+    try std.testing.expectEqual(payload.len, try zstdDecodedFrameChunksSizeLimitedWithDictionary(&chunks, chunk_scratch, zstd_dictionary, payload.len));
+    try std.testing.expectError(error.OutputLimitExceeded, zstdDecodedFrameChunksSizeLimitedWithDictionary(&chunks, chunk_scratch, zstd_dictionary, payload.len - 1));
+    const chunk_decoded_default = try zstdDecodeFrameChunksAllocWithDictionary(std.testing.allocator, &chunks, chunk_scratch, zstd_dictionary);
+    defer std.testing.allocator.free(chunk_decoded_default);
+    try std.testing.expectEqualSlices(u8, payload, chunk_decoded_default);
+    const chunk_decoded_exact = try zstdDecodeFrameChunksAllocWithDictionaryExactSize(std.testing.allocator, &chunks, chunk_scratch, zstd_dictionary, payload.len);
+    defer std.testing.allocator.free(chunk_decoded_exact);
+    try std.testing.expectEqualSlices(u8, payload, chunk_decoded_exact);
+    const chunk_decoded_limited = try zstdDecodeFrameChunksAllocWithDictionaryLimited(std.testing.allocator, &chunks, chunk_scratch, zstd_dictionary, payload.len);
+    defer std.testing.allocator.free(chunk_decoded_limited);
+    try std.testing.expectEqualSlices(u8, payload, chunk_decoded_limited);
+    try std.testing.expectError(error.OutputLimitExceeded, zstdDecodeFrameChunksAllocWithDictionaryLimited(std.testing.allocator, &chunks, chunk_scratch, zstd_dictionary, payload.len - 1));
+    var chunk_append: std.ArrayList(u8) = .empty;
+    defer chunk_append.deinit(std.testing.allocator);
+    try chunk_append.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try zstdDecodeFrameChunksAppendWithDictionary(std.testing.allocator, &chunk_append, &chunks, chunk_scratch, zstd_dictionary));
+    try std.testing.expectEqualSlices(u8, payload, chunk_append.items["prefix:".len..]);
+    var chunk_append_exact: std.ArrayList(u8) = .empty;
+    defer chunk_append_exact.deinit(std.testing.allocator);
+    try chunk_append_exact.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try zstdDecodeFrameChunksAppendExactSizeWithDictionary(std.testing.allocator, &chunk_append_exact, &chunks, chunk_scratch, zstd_dictionary, payload.len));
+    try std.testing.expectEqualSlices(u8, payload, chunk_append_exact.items["prefix:".len..]);
+    var chunk_append_limited: std.ArrayList(u8) = .empty;
+    defer chunk_append_limited.deinit(std.testing.allocator);
+    try chunk_append_limited.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try zstdDecodeFrameChunksAppendLimitedWithDictionary(std.testing.allocator, &chunk_append_limited, &chunks, chunk_scratch, zstd_dictionary, payload.len));
+    try std.testing.expectEqualSlices(u8, payload, chunk_append_limited.items["prefix:".len..]);
+    try std.testing.expectError(error.OutputLimitExceeded, zstdDecodeFrameChunksAppendLimitedWithDictionary(std.testing.allocator, &chunk_append_limited, &chunks, chunk_scratch, zstd_dictionary, payload.len - 1));
+    var chunk_into_default: [payload.len]u8 = undefined;
+    try std.testing.expectEqual(payload.len, try zstdDecodeFrameChunksIntoWithDictionary(&chunks, chunk_scratch, &chunk_into_default, zstd_dictionary));
+    try std.testing.expectEqualSlices(u8, payload, &chunk_into_default);
+    var chunk_into_exact: [payload.len]u8 = undefined;
+    try std.testing.expectEqual(payload.len, try zstdDecodeFrameChunksIntoWithDictionaryExactSize(&chunks, chunk_scratch, &chunk_into_exact, zstd_dictionary, payload.len));
+    try std.testing.expectEqualSlices(u8, payload, &chunk_into_exact);
+
     const facade_decoded = try zstdDecodeFrameAllocWithDictionaryExactSize(std.testing.allocator, encoded, zstd_dictionary, payload.len);
     defer std.testing.allocator.free(facade_decoded);
     try std.testing.expectEqualSlices(u8, payload, facade_decoded);
@@ -3016,6 +3100,50 @@ test "root zstd frame facade exposes dictionary-set encode helpers" {
     const facade_decoded_default = try zstdDecodeFrameAllocWithDictionarySet(std.testing.allocator, encoded, dictionary_set);
     defer std.testing.allocator.free(facade_decoded_default);
     try std.testing.expectEqualSlices(u8, payload, facade_decoded_default);
+
+    const chunk_scratch = try std.testing.allocator.alloc(u8, encoded.len);
+    defer std.testing.allocator.free(chunk_scratch);
+    const chunks = [_][]const u8{
+        encoded[0..3],
+        encoded[3 .. encoded.len - 2],
+        encoded[encoded.len - 2 ..],
+    };
+    try std.testing.expectEqual(payload.len, try zstdDecodedFrameChunksSizeWithDictionarySet(&chunks, chunk_scratch, dictionary_set));
+    try std.testing.expectEqual(payload.len, try zstdDecodedFrameChunksSizeLimitedWithDictionarySet(&chunks, chunk_scratch, dictionary_set, payload.len));
+    try std.testing.expectError(error.OutputLimitExceeded, zstdDecodedFrameChunksSizeLimitedWithDictionarySet(&chunks, chunk_scratch, dictionary_set, payload.len - 1));
+    const chunk_decoded_default = try zstdDecodeFrameChunksAllocWithDictionarySet(std.testing.allocator, &chunks, chunk_scratch, dictionary_set);
+    defer std.testing.allocator.free(chunk_decoded_default);
+    try std.testing.expectEqualSlices(u8, payload, chunk_decoded_default);
+    const chunk_decoded_exact = try zstdDecodeFrameChunksAllocWithDictionarySetExactSize(std.testing.allocator, &chunks, chunk_scratch, dictionary_set, payload.len);
+    defer std.testing.allocator.free(chunk_decoded_exact);
+    try std.testing.expectEqualSlices(u8, payload, chunk_decoded_exact);
+    const chunk_decoded_limited = try zstdDecodeFrameChunksAllocWithDictionarySetLimited(std.testing.allocator, &chunks, chunk_scratch, dictionary_set, payload.len);
+    defer std.testing.allocator.free(chunk_decoded_limited);
+    try std.testing.expectEqualSlices(u8, payload, chunk_decoded_limited);
+    try std.testing.expectError(error.OutputLimitExceeded, zstdDecodeFrameChunksAllocWithDictionarySetLimited(std.testing.allocator, &chunks, chunk_scratch, dictionary_set, payload.len - 1));
+    var chunk_append: std.ArrayList(u8) = .empty;
+    defer chunk_append.deinit(std.testing.allocator);
+    try chunk_append.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try zstdDecodeFrameChunksAppendWithDictionarySet(std.testing.allocator, &chunk_append, &chunks, chunk_scratch, dictionary_set));
+    try std.testing.expectEqualSlices(u8, payload, chunk_append.items["prefix:".len..]);
+    var chunk_append_exact: std.ArrayList(u8) = .empty;
+    defer chunk_append_exact.deinit(std.testing.allocator);
+    try chunk_append_exact.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try zstdDecodeFrameChunksAppendExactSizeWithDictionarySet(std.testing.allocator, &chunk_append_exact, &chunks, chunk_scratch, dictionary_set, payload.len));
+    try std.testing.expectEqualSlices(u8, payload, chunk_append_exact.items["prefix:".len..]);
+    var chunk_append_limited: std.ArrayList(u8) = .empty;
+    defer chunk_append_limited.deinit(std.testing.allocator);
+    try chunk_append_limited.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try zstdDecodeFrameChunksAppendLimitedWithDictionarySet(std.testing.allocator, &chunk_append_limited, &chunks, chunk_scratch, dictionary_set, payload.len));
+    try std.testing.expectEqualSlices(u8, payload, chunk_append_limited.items["prefix:".len..]);
+    try std.testing.expectError(error.OutputLimitExceeded, zstdDecodeFrameChunksAppendLimitedWithDictionarySet(std.testing.allocator, &chunk_append_limited, &chunks, chunk_scratch, dictionary_set, payload.len - 1));
+    var chunk_into_default: [payload.len]u8 = undefined;
+    try std.testing.expectEqual(payload.len, try zstdDecodeFrameChunksIntoWithDictionarySet(&chunks, chunk_scratch, &chunk_into_default, dictionary_set));
+    try std.testing.expectEqualSlices(u8, payload, &chunk_into_default);
+    var chunk_into_exact: [payload.len]u8 = undefined;
+    try std.testing.expectEqual(payload.len, try zstdDecodeFrameChunksIntoWithDictionarySetExactSize(&chunks, chunk_scratch, &chunk_into_exact, dictionary_set, payload.len));
+    try std.testing.expectEqualSlices(u8, payload, &chunk_into_exact);
+
     const facade_decoded = try zstdDecodeFrameAllocWithDictionarySetExactSize(std.testing.allocator, encoded, dictionary_set, payload.len);
     defer std.testing.allocator.free(facade_decoded);
     try std.testing.expectEqualSlices(u8, payload, facade_decoded);
