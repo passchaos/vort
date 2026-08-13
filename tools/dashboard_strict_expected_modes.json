@@ -52,9 +52,9 @@
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 535,
-      "min_expected_failures": 535,
-      "min_matched": 535
+      "min_checks": 536,
+      "min_expected_failures": 536,
+      "min_matched": 536
     }
   ]
 }
