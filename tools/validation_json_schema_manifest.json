@@ -4734,6 +4734,7 @@
           "native_library_bench_sequence_huffman_improvement_mismatch",
           "native_library_bench_compression_floor_mismatch",
           "native_library_bench_decode_compression_mismatch",
+          "native_library_bench_generated_compression_mismatch",
           "native_library_bench_dictionary_improvement_mismatch",
           "native_library_bench_trained_dictionary_improvement_mismatch",
           "native_library_bench_dictionary_set_improvement_mismatch",

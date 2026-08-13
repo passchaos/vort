@@ -14177,6 +14177,24 @@ def main() -> int:
             == native_library_decode_compression_manifest["native_library_bench_expected_improvement_checks"] - 1,
         )
 
+        native_library_generated_compression_result, native_library_generated_compression_manifest = native_library_bench_drift_fixture(
+            root,
+            "native-library-bench-generated-compression",
+            mutate_csv=lambda rows, fieldnames, csv_path: next(
+                row for row in rows if row["codec"] == "lz4" and row["mode"] == "lib_generated" and row["case"] == "lib_generated"
+            ).__setitem__("encoded_bytes", "4096"),
+        )
+        append_native_library_bench_check(
+            "native_library_bench_generated_compression_mismatch",
+            native_library_generated_compression_result,
+            native_library_generated_compression_manifest,
+            native_library_generated_compression_manifest["native_library_bench_positive_rows"] == 93
+            and native_library_generated_compression_manifest["native_library_bench_throughput_rows"] == 93
+            and native_library_generated_compression_manifest["native_library_bench_iteration_rows"] == 93
+            and native_library_generated_compression_manifest["native_library_bench_improvement_checks"]
+            == native_library_generated_compression_manifest["native_library_bench_expected_improvement_checks"] - 1,
+        )
+
         native_library_dictionary_improvement_result, native_library_dictionary_improvement_manifest = native_library_bench_drift_fixture(
             root,
             "native-library-bench-dictionary-improvement",
