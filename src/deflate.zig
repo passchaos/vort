@@ -6804,6 +6804,42 @@ fn probeZlibChunksWithOptionalDictionaryAndOptionsExactSize(chunks: []const []co
     return .{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() };
 }
 
+pub fn decodedZlibSize(input: []const u8, scratch: []u8) Error!usize {
+    return decodedZlibSizeWithOptions(input, scratch, .{});
+}
+
+pub fn decodedZlibSizeWithOptions(input: []const u8, scratch: []u8, options: ZlibDecodeOptions) Error!usize {
+    const decoder = try ZlibDecoder.initWithOptions(input, scratch, options);
+    return decoder.decoded.len;
+}
+
+pub fn decodedZlibSizeWithDictionary(input: []const u8, dictionary: []const u8, scratch: []u8) Error!usize {
+    return decodedZlibSizeWithDictionaryAndOptions(input, dictionary, scratch, .{});
+}
+
+pub fn decodedZlibSizeWithDictionaryAndOptions(input: []const u8, dictionary: []const u8, scratch: []u8, options: ZlibDecodeOptions) Error!usize {
+    const decoder = try ZlibDecoder.initWithDictionaryAndOptions(input, dictionary, scratch, options);
+    return decoder.decoded.len;
+}
+
+pub fn decodedZlibChunksSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!usize {
+    return decodedZlibChunksSizeWithOptions(chunks, compressed_scratch, output_scratch, .{});
+}
+
+pub fn decodedZlibChunksSizeWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions) Error!usize {
+    const decoder = try ZlibDecoder.initFromChunksWithOptions(chunks, compressed_scratch, output_scratch, options);
+    return decoder.decoded.len;
+}
+
+pub fn decodedZlibChunksSizeWithDictionary(chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!usize {
+    return decodedZlibChunksSizeWithDictionaryAndOptions(chunks, dictionary, compressed_scratch, output_scratch, .{});
+}
+
+pub fn decodedZlibChunksSizeWithDictionaryAndOptions(chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions) Error!usize {
+    const decoder = try ZlibDecoder.initFromChunksWithDictionaryAndOptions(chunks, dictionary, compressed_scratch, output_scratch, options);
+    return decoder.decoded.len;
+}
+
 pub fn probeZlibConcatenated(input: []const u8, scratch: []u8) DecodeProbeResult {
     return probeZlibConcatenatedWithOptions(input, scratch, .{});
 }
@@ -11769,6 +11805,24 @@ pub fn probeGzipChunksWithOptionsExactSize(chunks: []const []const u8, compresse
     decoder.resetFromChunksWithOptions(chunks, compressed_scratch, output_scratch, options) catch |err| return probeResultFromDecoder(&decoder, GzipDecoder, err);
     if (decoder.decoded.len != expected_output_len) return probeOutputSizeMismatch(decoder.decoded.len, expected_output_len);
     return .{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() };
+}
+
+pub fn decodedGzipSize(input: []const u8, scratch: []u8) Error!usize {
+    return decodedGzipSizeWithOptions(input, scratch, .{});
+}
+
+pub fn decodedGzipSizeWithOptions(input: []const u8, scratch: []u8, options: GzipDecodeOptions) Error!usize {
+    const decoder = try GzipDecoder.initWithOptions(input, scratch, options);
+    return decoder.decoded.len;
+}
+
+pub fn decodedGzipChunksSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!usize {
+    return decodedGzipChunksSizeWithOptions(chunks, compressed_scratch, output_scratch, .{});
+}
+
+pub fn decodedGzipChunksSizeWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: GzipDecodeOptions) Error!usize {
+    const decoder = try GzipDecoder.initFromChunksWithOptions(chunks, compressed_scratch, output_scratch, options);
+    return decoder.decoded.len;
 }
 
 pub fn probeGzipConcatenated(input: []const u8, scratch: []u8) DecodeProbeResult {

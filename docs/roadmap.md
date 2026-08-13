@@ -1513,6 +1513,11 @@ architecture blindly.
   footer checksum/trailing-data failures, and output-size/limit failures while
   retaining the non-throwing API shape.
 
+- Added caller-scratch decoded-size helpers for zlib/gzip single streams and
+  split-input streams, including zlib preset-dictionary variants. These provide
+  throwing size preflights for callers that already manage scratch and do not
+  want to inspect a full probe result.
+
 - Extended concatenated zlib/gzip probes with failing member indexes. Multi-member
   probe failures now report which member failed, while preserving wrapper-aware
   phases such as footer checksum failures for the offending member.
