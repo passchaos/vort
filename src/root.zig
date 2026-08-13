@@ -49,6 +49,8 @@ pub const brEncodeStoredStreamWithOptionsAppend = br.encodeStoredStreamWithOptio
 pub const brEncodeStoredStreamWithOptionsInto = br.encodeStoredStreamWithOptionsInto;
 pub const BrotliStoredStreamOptions = br.StoredStreamOptions;
 pub const BrotliStreamSummary = br.StreamSummary;
+pub const BrotliStreamSummaryDiagnostics = br.StreamSummaryDiagnostics;
+pub const BrotliStreamSummaryErrorPhase = br.StreamSummaryErrorPhase;
 pub const BrotliStreamDecoder = br.StreamDecoder;
 pub const brDecodeStreamAlloc = br.decodeStreamAlloc;
 pub const brDecodeStreamAllocExactSize = br.decodeStreamAllocExactSize;
@@ -62,6 +64,8 @@ pub const brDecodedStreamSize = br.decodedStreamSize;
 pub const brDecodedStreamSizeLimited = br.decodedStreamSizeLimited;
 pub const brSummarizeStream = br.summarizeStream;
 pub const brSummarizeStreamLimited = br.summarizeStreamLimited;
+pub const brSummarizeStreamWithDiagnostics = br.summarizeStreamWithDiagnostics;
+pub const brSummarizeStreamLimitedWithDiagnostics = br.summarizeStreamLimitedWithDiagnostics;
 pub const brDecodeStreamChunksAlloc = br.decodeStreamChunksAlloc;
 pub const brDecodeStreamChunksAllocExactSize = br.decodeStreamChunksAllocExactSize;
 pub const brDecodeStreamChunksAllocLimited = br.decodeStreamChunksAllocLimited;
@@ -74,6 +78,8 @@ pub const brDecodedStreamChunksSize = br.decodedStreamChunksSize;
 pub const brDecodedStreamChunksSizeLimited = br.decodedStreamChunksSizeLimited;
 pub const brSummarizeStreamChunks = br.summarizeStreamChunks;
 pub const brSummarizeStreamChunksLimited = br.summarizeStreamChunksLimited;
+pub const brSummarizeStreamChunksWithDiagnostics = br.summarizeStreamChunksWithDiagnostics;
+pub const brSummarizeStreamChunksLimitedWithDiagnostics = br.summarizeStreamChunksLimitedWithDiagnostics;
 
 pub const snappyEncodeBlockAlloc = snappy.encodeBlockAlloc;
 pub const snappyEncodeBlockAppend = snappy.encodeBlockAppend;
@@ -1337,6 +1343,8 @@ test "root exports lz4 and zstd codec helpers" {
     _ = brEncodeStoredStreamWithOptionsInto;
     _ = BrotliStoredStreamOptions;
     _ = BrotliStreamSummary;
+    _ = BrotliStreamSummaryDiagnostics;
+    _ = BrotliStreamSummaryErrorPhase;
     _ = BrotliStreamDecoder;
     _ = brDecodeStreamAlloc;
     _ = brDecodeStreamAllocExactSize;
@@ -1350,6 +1358,8 @@ test "root exports lz4 and zstd codec helpers" {
     _ = brDecodedStreamSizeLimited;
     _ = brSummarizeStream;
     _ = brSummarizeStreamLimited;
+    _ = brSummarizeStreamWithDiagnostics;
+    _ = brSummarizeStreamLimitedWithDiagnostics;
     _ = brDecodeStreamChunksAlloc;
     _ = brDecodeStreamChunksAllocExactSize;
     _ = brDecodeStreamChunksAllocLimited;
@@ -1362,6 +1372,8 @@ test "root exports lz4 and zstd codec helpers" {
     _ = brDecodedStreamChunksSizeLimited;
     _ = brSummarizeStreamChunks;
     _ = brSummarizeStreamChunksLimited;
+    _ = brSummarizeStreamChunksWithDiagnostics;
+    _ = brSummarizeStreamChunksLimitedWithDiagnostics;
 
     _ = snappyEncodeBlockAlloc;
     _ = snappyEncodeBlockAppend;
@@ -2118,6 +2130,51 @@ test "root brotli stream helpers expose exact and chunked decode variants" {
     try std.testing.expectEqual(payload.len, try brDecodeStreamChunksIntoExactSize(&chunks, join, &into, payload.len));
     try std.testing.expectEqualSlices(u8, payload, &into);
     try std.testing.expectError(error.SizeMismatch, brDecodeStreamChunksIntoExactSize(&chunks, join, &into, payload.len - 1));
+}
+
+test "root brotli stream summary diagnostics report failure phases" {
+    var diagnostics: BrotliStreamSummaryDiagnostics = .{};
+    try std.testing.expectError(error.TruncatedFrame, brSummarizeStreamWithDiagnostics("", &diagnostics));
+    try std.testing.expectEqual(BrotliStreamSummaryErrorPhase.window_bits, diagnostics.phase);
+    try std.testing.expectEqual(@as(usize, 0), diagnostics.offset);
+    try std.testing.expectEqual(@as(usize, 0), diagnostics.meta_block_index);
+
+    const truncated_compressed = [_]u8{ 0x00, 0x00, 0x00 };
+    diagnostics = .{};
+    try std.testing.expectError(error.TruncatedFrame, brSummarizeStreamWithDiagnostics(&truncated_compressed, &diagnostics));
+    try std.testing.expectEqual(BrotliStreamSummaryErrorPhase.compressed_meta_block, diagnostics.phase);
+    try std.testing.expectEqual(@as(usize, 0), diagnostics.meta_block_index);
+
+    diagnostics = .{};
+    try std.testing.expectError(error.TrailingData, brSummarizeStreamWithDiagnostics(&.{ 0x06, 0x00 }, &diagnostics));
+    try std.testing.expectEqual(BrotliStreamSummaryErrorPhase.padding, diagnostics.phase);
+    try std.testing.expectEqual(@as(usize, 0), diagnostics.meta_block_index);
+
+    const payload = "brotli summary diagnostic payload";
+    const encoded = try brEncodeStoredStreamAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    diagnostics = .{};
+    const summary = try brSummarizeStreamWithDiagnostics(encoded, &diagnostics);
+    try std.testing.expectEqual(payload.len, summary.decoded_bytes);
+    try std.testing.expectEqual(BrotliStreamSummaryErrorPhase.stream, diagnostics.phase);
+    try std.testing.expectEqual(@as(usize, 0), diagnostics.offset);
+
+    diagnostics = .{};
+    try std.testing.expectError(error.OutputLimitExceeded, brSummarizeStreamLimitedWithDiagnostics(encoded, payload.len - 1, &diagnostics));
+    try std.testing.expectEqual(BrotliStreamSummaryErrorPhase.meta_block_header, diagnostics.phase);
+    try std.testing.expectEqual(@as(usize, 0), diagnostics.meta_block_index);
+
+    const chunks = [_][]const u8{
+        encoded[0..1],
+        encoded[1..@min(encoded.len, 7)],
+        encoded[@min(encoded.len, 7)..],
+    };
+    const join = try std.testing.allocator.alloc(u8, encoded.len);
+    defer std.testing.allocator.free(join);
+    diagnostics = .{};
+    try std.testing.expectError(error.OutputLimitExceeded, brSummarizeStreamChunksLimitedWithDiagnostics(&chunks, join, payload.len - 1, &diagnostics));
+    try std.testing.expectEqual(BrotliStreamSummaryErrorPhase.meta_block_header, diagnostics.phase);
+    try std.testing.expectEqual(@as(usize, 0), diagnostics.meta_block_index);
 }
 
 test "root brotli stream decoder drains caller-owned scratch and resets" {

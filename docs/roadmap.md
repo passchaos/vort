@@ -1580,6 +1580,12 @@ architecture blindly.
   decoded output, giving library callers a cheap capability/capacity probe for
   the current Brotli subset.
 
+- Added diagnostics-bearing Brotli summary entrypoints for contiguous and
+  split-input streams. `StreamSummaryDiagnostics` reports the failing phase,
+  byte offset, and meta-block index for truncated window bits, metadata blocks,
+  compressed-block unsupported features, padding/trailing-data failures, and
+  output-limit rejections without adding CLI surface.
+
 - Added a dependency-free Snappy raw block module. `src/snappy.zig` covers the
   raw block varint length header, literal tags, copy1/copy2/copy4 decode,
   decoded-size preflight, output limits, caller-owned output, allocator-returning

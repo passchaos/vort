@@ -26,6 +26,22 @@ pub const StreamSummary = struct {
     metadata_bytes: usize = 0,
 };
 
+pub const StreamSummaryErrorPhase = enum {
+    stream,
+    window_bits,
+    meta_block_header,
+    metadata_meta_block,
+    uncompressed_meta_block,
+    compressed_meta_block,
+    padding,
+};
+
+pub const StreamSummaryDiagnostics = struct {
+    phase: StreamSummaryErrorPhase = .stream,
+    offset: usize = 0,
+    meta_block_index: usize = 0,
+};
+
 const BitWriter = struct {
     out: *std.ArrayList(u8),
     bit_index: u3 = 0,
@@ -374,26 +390,54 @@ pub fn summarizeStream(stream: []const u8) Error!StreamSummary {
 }
 
 pub fn summarizeStreamLimited(stream: []const u8, max_output_len: usize) Error!StreamSummary {
+    var diagnostics: StreamSummaryDiagnostics = .{};
+    return try summarizeStreamLimitedWithDiagnostics(stream, max_output_len, &diagnostics);
+}
+
+pub fn summarizeStreamWithDiagnostics(stream: []const u8, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    return try summarizeStreamLimitedWithDiagnostics(stream, std.math.maxInt(usize), diagnostics);
+}
+
+pub fn summarizeStreamLimitedWithDiagnostics(stream: []const u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    diagnostics.* = .{};
     var reader = bitstream.BitReader.init(stream);
     var summary = StreamSummary{
-        .window_bits = try readWindowBitsValue(&reader),
+        .window_bits = readWindowBitsValue(&reader) catch |err| {
+            recordSummaryError(diagnostics, .window_bits, reader, 0);
+            return err;
+        },
         .input_bytes = stream.len,
     };
     var last_distances = initial_last_distances;
     var literal_history = LiteralHistory{};
     while (true) {
-        const is_last = try reader.readBits(u1, 1) == 1;
+        const meta_block_index = summary.meta_block_count;
+        const is_last_bit = reader.readBits(u1, 1) catch |err| {
+            recordSummaryError(diagnostics, .meta_block_header, reader, meta_block_index);
+            return err;
+        };
+        const is_last = is_last_bit == 1;
         if (is_last) {
-            const is_last_empty = try reader.readBits(u1, 1) == 1;
+            const is_last_empty_bit = reader.readBits(u1, 1) catch |err| {
+                recordSummaryError(diagnostics, .meta_block_header, reader, meta_block_index);
+                return err;
+            };
+            const is_last_empty = is_last_empty_bit == 1;
             if (is_last_empty) {
-                try ensureZeroPaddingAndEnd(reader);
+                ensureZeroPaddingAndEnd(reader) catch |err| {
+                    recordSummaryError(diagnostics, .padding, reader, meta_block_index);
+                    return err;
+                };
                 summary.meta_block_count = std.math.add(usize, summary.meta_block_count, 1) catch return error.IntegerOverflow;
                 summary.empty_meta_block_count = std.math.add(usize, summary.empty_meta_block_count, 1) catch return error.IntegerOverflow;
                 return summary;
             }
         }
 
-        const mnibbles_code = try reader.readBits(u2, 2);
+        const mnibbles_code = reader.readBits(u2, 2) catch |err| {
+            recordSummaryError(diagnostics, .meta_block_header, reader, meta_block_index);
+            return err;
+        };
         const mnibbles: usize = switch (mnibbles_code) {
             0b00 => 4,
             0b01 => 5,
@@ -401,34 +445,65 @@ pub fn summarizeStreamLimited(stream: []const u8, max_output_len: usize) Error!S
             0b11 => 0,
         };
         if (mnibbles == 0) {
-            const metadata_len = try skipMetadataMetaBlockAndReturnLen(&reader);
+            const metadata_len = skipMetadataMetaBlockAndReturnLen(&reader) catch |err| {
+                recordSummaryError(diagnostics, .metadata_meta_block, reader, meta_block_index);
+                return err;
+            };
             summary.meta_block_count = std.math.add(usize, summary.meta_block_count, 1) catch return error.IntegerOverflow;
             summary.metadata_meta_block_count = std.math.add(usize, summary.metadata_meta_block_count, 1) catch return error.IntegerOverflow;
             summary.metadata_bytes = std.math.add(usize, summary.metadata_bytes, metadata_len) catch return error.IntegerOverflow;
             continue;
         }
-        const len_minus_one = try reader.readBits(u32, @intCast(mnibbles * 4));
-        if (mnibbles > 4 and ((len_minus_one >> @intCast((mnibbles - 1) * 4)) & 0xf) == 0) return error.CorruptFrame;
+        const len_minus_one = reader.readBits(u32, @intCast(mnibbles * 4)) catch |err| {
+            recordSummaryError(diagnostics, .meta_block_header, reader, meta_block_index);
+            return err;
+        };
+        if (mnibbles > 4 and ((len_minus_one >> @intCast((mnibbles - 1) * 4)) & 0xf) == 0) {
+            recordSummaryError(diagnostics, .meta_block_header, reader, meta_block_index);
+            return error.CorruptFrame;
+        }
         const meta_block_len = std.math.add(usize, len_minus_one, 1) catch return error.IntegerOverflow;
         const meta_block_start = summary.decoded_bytes;
         summary.decoded_bytes = std.math.add(usize, summary.decoded_bytes, meta_block_len) catch return error.IntegerOverflow;
-        if (summary.decoded_bytes > max_output_len) return error.OutputLimitExceeded;
+        if (summary.decoded_bytes > max_output_len) {
+            recordSummaryError(diagnostics, .meta_block_header, reader, meta_block_index);
+            return error.OutputLimitExceeded;
+        }
         summary.meta_block_count = std.math.add(usize, summary.meta_block_count, 1) catch return error.IntegerOverflow;
         if (is_last) {
             summary.compressed_meta_block_count = std.math.add(usize, summary.compressed_meta_block_count, 1) catch return error.IntegerOverflow;
-            try skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history);
-            try ensureZeroPaddingAndEnd(reader);
+            skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history) catch |err| {
+                recordSummaryError(diagnostics, .compressed_meta_block, reader, meta_block_index);
+                return err;
+            };
+            ensureZeroPaddingAndEnd(reader) catch |err| {
+                recordSummaryError(diagnostics, .padding, reader, meta_block_index);
+                return err;
+            };
             return summary;
         }
-        const is_uncompressed = try reader.readBits(u1, 1) == 1;
+        const is_uncompressed_bit = reader.readBits(u1, 1) catch |err| {
+            recordSummaryError(diagnostics, .meta_block_header, reader, meta_block_index);
+            return err;
+        };
+        const is_uncompressed = is_uncompressed_bit == 1;
         if (!is_uncompressed) {
             summary.compressed_meta_block_count = std.math.add(usize, summary.compressed_meta_block_count, 1) catch return error.IntegerOverflow;
-            try skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history);
+            skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history) catch |err| {
+                recordSummaryError(diagnostics, .compressed_meta_block, reader, meta_block_index);
+                return err;
+            };
             continue;
         }
         summary.uncompressed_meta_block_count = std.math.add(usize, summary.uncompressed_meta_block_count, 1) catch return error.IntegerOverflow;
-        try consumeZeroPaddingToByte(&reader);
-        if (reader.byte_index > stream.len or stream.len - reader.byte_index < meta_block_len) return error.TruncatedFrame;
+        consumeZeroPaddingToByte(&reader) catch |err| {
+            recordSummaryError(diagnostics, .uncompressed_meta_block, reader, meta_block_index);
+            return err;
+        };
+        if (reader.byte_index > stream.len or stream.len - reader.byte_index < meta_block_len) {
+            recordSummaryError(diagnostics, .uncompressed_meta_block, reader, meta_block_index);
+            return error.TruncatedFrame;
+        }
         literal_history.pushSlice(stream[reader.byte_index..][0..meta_block_len]);
         reader.byte_index += meta_block_len;
     }
@@ -492,6 +567,30 @@ pub fn summarizeStreamChunks(chunks: []const []const u8, compressed_scratch: []u
 pub fn summarizeStreamChunksLimited(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!StreamSummary {
     const joined = try joinChunks(chunks, compressed_scratch);
     return try summarizeStreamLimited(joined, max_output_len);
+}
+
+pub fn summarizeStreamChunksWithDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+        diagnostics.* = .{};
+        return err;
+    };
+    return try summarizeStreamWithDiagnostics(joined, diagnostics);
+}
+
+pub fn summarizeStreamChunksLimitedWithDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+        diagnostics.* = .{};
+        return err;
+    };
+    return try summarizeStreamLimitedWithDiagnostics(joined, max_output_len, diagnostics);
+}
+
+fn recordSummaryError(diagnostics: *StreamSummaryDiagnostics, phase: StreamSummaryErrorPhase, reader: bitstream.BitReader, meta_block_index: usize) void {
+    diagnostics.* = .{
+        .phase = phase,
+        .offset = reader.byteOffset(),
+        .meta_block_index = meta_block_index,
+    };
 }
 
 /// Reusable, caller-owned Brotli stream decoder facade.
