@@ -9602,6 +9602,54 @@ pub fn decodeZlibChunksAllocWithDictionaryAndOptionsLimited(allocator: std.mem.A
     return decodeZlibChunksAllocWithOptionalDictionaryAndOptionsLimited(allocator, chunks, dictionary, options, max_output_len);
 }
 
+pub fn decodeZlibChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8) !usize {
+    return decodeZlibChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, chunks, null, .{}, null);
+}
+
+pub fn decodeZlibChunksAppendWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, dictionary: []const u8) !usize {
+    return decodeZlibChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, chunks, dictionary, .{}, null);
+}
+
+pub fn decodeZlibChunksAppendWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, options: ZlibDecodeOptions) !usize {
+    return decodeZlibChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, chunks, null, options, null);
+}
+
+pub fn decodeZlibChunksAppendWithDictionaryAndOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, dictionary: []const u8, options: ZlibDecodeOptions) !usize {
+    return decodeZlibChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, chunks, dictionary, options, null);
+}
+
+pub fn decodeZlibChunksAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, expected_output_len: usize) !usize {
+    return decodeZlibChunksAppendWithOptionalDictionaryAndOptionsExactSize(allocator, out, chunks, null, .{}, expected_output_len);
+}
+
+pub fn decodeZlibChunksAppendWithDictionaryExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, dictionary: []const u8, expected_output_len: usize) !usize {
+    return decodeZlibChunksAppendWithOptionalDictionaryAndOptionsExactSize(allocator, out, chunks, dictionary, .{}, expected_output_len);
+}
+
+pub fn decodeZlibChunksAppendWithOptionsExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, options: ZlibDecodeOptions, expected_output_len: usize) !usize {
+    return decodeZlibChunksAppendWithOptionalDictionaryAndOptionsExactSize(allocator, out, chunks, null, options, expected_output_len);
+}
+
+pub fn decodeZlibChunksAppendWithDictionaryAndOptionsExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, dictionary: []const u8, options: ZlibDecodeOptions, expected_output_len: usize) !usize {
+    return decodeZlibChunksAppendWithOptionalDictionaryAndOptionsExactSize(allocator, out, chunks, dictionary, options, expected_output_len);
+}
+
+pub fn decodeZlibChunksAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, max_output_len: usize) !usize {
+    return decodeZlibChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, chunks, null, .{}, max_output_len);
+}
+
+pub fn decodeZlibChunksAppendWithDictionaryLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, dictionary: []const u8, max_output_len: usize) !usize {
+    return decodeZlibChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, chunks, dictionary, .{}, max_output_len);
+}
+
+pub fn decodeZlibChunksAppendWithOptionsLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, options: ZlibDecodeOptions, max_output_len: usize) !usize {
+    return decodeZlibChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, chunks, null, options, max_output_len);
+}
+
+pub fn decodeZlibChunksAppendWithDictionaryAndOptionsLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, dictionary: []const u8, options: ZlibDecodeOptions, max_output_len: usize) !usize {
+    return decodeZlibChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, chunks, dictionary, options, max_output_len);
+}
+
 pub fn decodeZlibConcatenated(input: []const u8, output: []u8) Error!usize {
     return decodeZlibConcatenatedWithOptionalDictionaryAndOptions(input, output, null, .{});
 }
@@ -9796,6 +9844,51 @@ fn decodeZlibChunksAllocWithOptionalDictionaryAndOptionsExactSize(allocator: std
     };
     if (written != expected_output_len) return error.SizeMismatch;
     return out;
+}
+
+fn decodeZlibChunksAppendWithOptionalDictionaryAndOptionsLimited(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    chunks: []const []const u8,
+    dictionary: ?[]const u8,
+    options: ZlibDecodeOptions,
+    max_output_len: ?usize,
+) !usize {
+    const start = out.items.len;
+    errdefer out.items.len = start;
+    const absolute_limit = try appendAbsoluteLimit(start, max_output_len);
+    const compressed_len = try chunksTotalLen(chunks);
+    const header = try parseZlibHeaderFromChunks(chunks, dictionary);
+    const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
+    const first_deflate_byte = chunkByteAt(chunks, header.data_offset) orelse return error.TruncatedFrame;
+    try rejectReservedFirstBlockBeforeAlloc(&.{first_deflate_byte});
+
+    if (try precheckZlibStoredChunksBeforeAlloc(chunks, compressed_len, header.data_offset, options)) |stored_output_len| {
+        try ensureOutputLimit(start, stored_output_len, absolute_limit);
+    }
+
+    try reserveInflateAppendOutputHint(allocator, out, compressed_len, absolute_limit);
+    var reader = try bitstream.ChunkedSpanBitReader.initAtKnownTotal(chunks, header.data_offset, compressed_len);
+    const before_member = out.items.len;
+    const raw = try decodeRawAutoAppendPartialWithDictionaryFromReader(allocator, &reader, header.data_offset, raw_dictionary, out, absolute_limit);
+    const footer_offset = header.data_offset + raw.input_read;
+    const actual_adler = if (options.ignore_adler) 0 else checksum.adler32(out.items[before_member..]);
+    try validateZlibFooterChunksWithKnownTotal(chunks, compressed_len, footer_offset, actual_adler, options);
+    return out.items.len - start;
+}
+
+fn decodeZlibChunksAppendWithOptionalDictionaryAndOptionsExactSize(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    chunks: []const []const u8,
+    dictionary: ?[]const u8,
+    options: ZlibDecodeOptions,
+    expected_output_len: usize,
+) !usize {
+    const decoded = try decodeZlibChunksAllocWithOptionalDictionaryAndOptionsExactSize(allocator, chunks, dictionary, options, expected_output_len);
+    defer allocator.free(decoded);
+    try out.appendSlice(allocator, decoded);
+    return decoded.len;
 }
 
 fn precheckZlibStoredChunksBeforeAlloc(chunks: []const []const u8, total_len: usize, raw_offset: usize, options: ZlibDecodeOptions) Error!?usize {
@@ -10383,6 +10476,36 @@ pub fn decodeGzipChunksAllocLimited(allocator: std.mem.Allocator, chunks: []cons
 
 pub fn decodeGzipChunksAllocWithOptionsLimited(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions, max_output_len: usize) ![]u8 {
     return decodeGzipChunksAllocWithOptionsLimitedInternal(allocator, chunks, compressed_scratch, options, max_output_len);
+}
+
+pub fn decodeGzipChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8) !usize {
+    return decodeGzipChunksAppendWithOptionsLimitedInternal(allocator, out, chunks, compressed_scratch, .{}, null);
+}
+
+pub fn decodeGzipChunksAppendWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions) !usize {
+    return decodeGzipChunksAppendWithOptionsLimitedInternal(allocator, out, chunks, compressed_scratch, options, null);
+}
+
+pub fn decodeGzipChunksAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) !usize {
+    return decodeGzipChunksAppendWithOptionsExactSize(allocator, out, chunks, compressed_scratch, .{}, expected_output_len);
+}
+
+pub fn decodeGzipChunksAppendWithOptionsExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) !usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeGzipAppendWithOptionsExactSize(allocator, out, joined, options, expected_output_len);
+}
+
+pub fn decodeGzipChunksAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) !usize {
+    return decodeGzipChunksAppendWithOptionsLimitedInternal(allocator, out, chunks, compressed_scratch, .{}, max_output_len);
+}
+
+pub fn decodeGzipChunksAppendWithOptionsLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions, max_output_len: usize) !usize {
+    return decodeGzipChunksAppendWithOptionsLimitedInternal(allocator, out, chunks, compressed_scratch, options, max_output_len);
+}
+
+fn decodeGzipChunksAppendWithOptionsLimitedInternal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions, max_output_len: ?usize) !usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeGzipAppendWithOptionsLimitedInternal(allocator, out, joined, options, max_output_len);
 }
 
 fn decodeGzipChunksAllocWithOptionsLimitedInternal(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions, max_output_len: ?usize) ![]u8 {

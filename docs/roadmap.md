@@ -1434,6 +1434,12 @@ architecture blindly.
   strict/options matrix. These preserve caller prefixes and reuse the existing
   wrapper validation paths without adding CLI surface.
 
+- Added split-input zlib/gzip append decode helpers. Zlib chunked append now
+  covers strict, dictionary, relaxed-option, exact-size, and output-limited
+  library workflows without requiring callers to allocate an owned decoded slice
+  first; gzip chunked append mirrors the strict/options/exact/limited matrix via
+  caller-provided compressed join scratch.
+
 - Added public one-shot `decodeGzipChunks` and `decodeGzipChunksWithOptions`
   helpers for caller-buffer gzip decode from split compressed input. They reuse
   the existing caller-owned compressed join scratch policy (including the
