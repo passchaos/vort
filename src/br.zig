@@ -42,6 +42,13 @@ pub const StreamSummaryDiagnostics = struct {
     meta_block_index: usize = 0,
 };
 
+pub const StreamProbeResult = struct {
+    ok: bool,
+    summary: ?StreamSummary = null,
+    diagnostics: StreamSummaryDiagnostics = .{},
+    error_name: []const u8 = "",
+};
+
 const BitWriter = struct {
     out: *std.ArrayList(u8),
     bit_index: u3 = 0,
@@ -583,6 +590,46 @@ pub fn summarizeStreamChunksLimitedWithDiagnostics(chunks: []const []const u8, c
         return err;
     };
     return try summarizeStreamLimitedWithDiagnostics(joined, max_output_len, diagnostics);
+}
+
+pub fn probeStream(stream: []const u8) StreamProbeResult {
+    return probeStreamLimited(stream, std.math.maxInt(usize));
+}
+
+pub fn probeStreamLimited(stream: []const u8, max_output_len: usize) StreamProbeResult {
+    var diagnostics: StreamSummaryDiagnostics = .{};
+    const summary = summarizeStreamLimitedWithDiagnostics(stream, max_output_len, &diagnostics) catch |err| {
+        return .{
+            .ok = false,
+            .diagnostics = diagnostics,
+            .error_name = @errorName(err),
+        };
+    };
+    return .{
+        .ok = true,
+        .summary = summary,
+        .diagnostics = diagnostics,
+    };
+}
+
+pub fn probeStreamChunks(chunks: []const []const u8, compressed_scratch: []u8) StreamProbeResult {
+    return probeStreamChunksLimited(chunks, compressed_scratch, std.math.maxInt(usize));
+}
+
+pub fn probeStreamChunksLimited(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) StreamProbeResult {
+    var diagnostics: StreamSummaryDiagnostics = .{};
+    const summary = summarizeStreamChunksLimitedWithDiagnostics(chunks, compressed_scratch, max_output_len, &diagnostics) catch |err| {
+        return .{
+            .ok = false,
+            .diagnostics = diagnostics,
+            .error_name = @errorName(err),
+        };
+    };
+    return .{
+        .ok = true,
+        .summary = summary,
+        .diagnostics = diagnostics,
+    };
 }
 
 fn recordSummaryError(diagnostics: *StreamSummaryDiagnostics, phase: StreamSummaryErrorPhase, reader: bitstream.BitReader, meta_block_index: usize) void {

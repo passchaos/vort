@@ -51,6 +51,7 @@ pub const BrotliStoredStreamOptions = br.StoredStreamOptions;
 pub const BrotliStreamSummary = br.StreamSummary;
 pub const BrotliStreamSummaryDiagnostics = br.StreamSummaryDiagnostics;
 pub const BrotliStreamSummaryErrorPhase = br.StreamSummaryErrorPhase;
+pub const BrotliStreamProbeResult = br.StreamProbeResult;
 pub const BrotliStreamDecoder = br.StreamDecoder;
 pub const brDecodeStreamAlloc = br.decodeStreamAlloc;
 pub const brDecodeStreamAllocExactSize = br.decodeStreamAllocExactSize;
@@ -66,6 +67,8 @@ pub const brSummarizeStream = br.summarizeStream;
 pub const brSummarizeStreamLimited = br.summarizeStreamLimited;
 pub const brSummarizeStreamWithDiagnostics = br.summarizeStreamWithDiagnostics;
 pub const brSummarizeStreamLimitedWithDiagnostics = br.summarizeStreamLimitedWithDiagnostics;
+pub const brProbeStream = br.probeStream;
+pub const brProbeStreamLimited = br.probeStreamLimited;
 pub const brDecodeStreamChunksAlloc = br.decodeStreamChunksAlloc;
 pub const brDecodeStreamChunksAllocExactSize = br.decodeStreamChunksAllocExactSize;
 pub const brDecodeStreamChunksAllocLimited = br.decodeStreamChunksAllocLimited;
@@ -80,6 +83,8 @@ pub const brSummarizeStreamChunks = br.summarizeStreamChunks;
 pub const brSummarizeStreamChunksLimited = br.summarizeStreamChunksLimited;
 pub const brSummarizeStreamChunksWithDiagnostics = br.summarizeStreamChunksWithDiagnostics;
 pub const brSummarizeStreamChunksLimitedWithDiagnostics = br.summarizeStreamChunksLimitedWithDiagnostics;
+pub const brProbeStreamChunks = br.probeStreamChunks;
+pub const brProbeStreamChunksLimited = br.probeStreamChunksLimited;
 
 pub const snappyEncodeBlockAlloc = snappy.encodeBlockAlloc;
 pub const snappyEncodeBlockAppend = snappy.encodeBlockAppend;
@@ -1345,6 +1350,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = BrotliStreamSummary;
     _ = BrotliStreamSummaryDiagnostics;
     _ = BrotliStreamSummaryErrorPhase;
+    _ = BrotliStreamProbeResult;
     _ = BrotliStreamDecoder;
     _ = brDecodeStreamAlloc;
     _ = brDecodeStreamAllocExactSize;
@@ -1360,6 +1366,8 @@ test "root exports lz4 and zstd codec helpers" {
     _ = brSummarizeStreamLimited;
     _ = brSummarizeStreamWithDiagnostics;
     _ = brSummarizeStreamLimitedWithDiagnostics;
+    _ = brProbeStream;
+    _ = brProbeStreamLimited;
     _ = brDecodeStreamChunksAlloc;
     _ = brDecodeStreamChunksAllocExactSize;
     _ = brDecodeStreamChunksAllocLimited;
@@ -1374,6 +1382,8 @@ test "root exports lz4 and zstd codec helpers" {
     _ = brSummarizeStreamChunksLimited;
     _ = brSummarizeStreamChunksWithDiagnostics;
     _ = brSummarizeStreamChunksLimitedWithDiagnostics;
+    _ = brProbeStreamChunks;
+    _ = brProbeStreamChunksLimited;
 
     _ = snappyEncodeBlockAlloc;
     _ = snappyEncodeBlockAppend;
@@ -2175,6 +2185,43 @@ test "root brotli stream summary diagnostics report failure phases" {
     try std.testing.expectError(error.OutputLimitExceeded, brSummarizeStreamChunksLimitedWithDiagnostics(&chunks, join, payload.len - 1, &diagnostics));
     try std.testing.expectEqual(BrotliStreamSummaryErrorPhase.meta_block_header, diagnostics.phase);
     try std.testing.expectEqual(@as(usize, 0), diagnostics.meta_block_index);
+}
+
+test "root brotli stream probe returns non-throwing support results" {
+    const payload = "brotli probe payload";
+    const encoded = try brEncodeStoredStreamAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+
+    const ok = brProbeStream(encoded);
+    try std.testing.expect(ok.ok);
+    try std.testing.expectEqualStrings("", ok.error_name);
+    try std.testing.expectEqual(payload.len, ok.summary.?.decoded_bytes);
+    try std.testing.expectEqual(BrotliStreamSummaryErrorPhase.stream, ok.diagnostics.phase);
+
+    const limited = brProbeStreamLimited(encoded, payload.len - 1);
+    try std.testing.expect(!limited.ok);
+    try std.testing.expect(limited.summary == null);
+    try std.testing.expectEqualStrings("OutputLimitExceeded", limited.error_name);
+    try std.testing.expectEqual(BrotliStreamSummaryErrorPhase.meta_block_header, limited.diagnostics.phase);
+
+    const truncated = brProbeStream("");
+    try std.testing.expect(!truncated.ok);
+    try std.testing.expectEqualStrings("TruncatedFrame", truncated.error_name);
+    try std.testing.expectEqual(BrotliStreamSummaryErrorPhase.window_bits, truncated.diagnostics.phase);
+
+    const chunks = [_][]const u8{
+        encoded[0..2],
+        encoded[2..@min(encoded.len, 8)],
+        encoded[@min(encoded.len, 8)..],
+    };
+    const join = try std.testing.allocator.alloc(u8, encoded.len);
+    defer std.testing.allocator.free(join);
+    const chunked_ok = brProbeStreamChunks(&chunks, join);
+    try std.testing.expect(chunked_ok.ok);
+    try std.testing.expectEqual(payload.len, chunked_ok.summary.?.decoded_bytes);
+    const chunked_limited = brProbeStreamChunksLimited(&chunks, join, payload.len - 1);
+    try std.testing.expect(!chunked_limited.ok);
+    try std.testing.expectEqualStrings("OutputLimitExceeded", chunked_limited.error_name);
 }
 
 test "root brotli stream decoder drains caller-owned scratch and resets" {

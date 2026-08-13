@@ -1586,6 +1586,11 @@ architecture blindly.
   compressed-block unsupported features, padding/trailing-data failures, and
   output-limit rejections without adding CLI surface.
 
+- Added non-throwing Brotli stream probe helpers for contiguous and split-input
+  callers. The probe returns `ok`, optional `StreamSummary`, `error_name`, and
+  diagnostics in one value, so library integrations can preflight support and
+  capacity without wrapping the throwing summary APIs themselves.
+
 - Added a dependency-free Snappy raw block module. `src/snappy.zig` covers the
   raw block varint length header, literal tags, copy1/copy2/copy4 decode,
   decoded-size preflight, output limits, caller-owned output, allocator-returning
