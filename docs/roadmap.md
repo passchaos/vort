@@ -2986,6 +2986,10 @@ architecture blindly.
   chunked dictionary-set improvement pair. The fixture keeps positive timing,
   throughput, and iteration accounting healthy while removing the chunked
   dictionary-set size win over its plain baseline.
+- Extended native library benchmark strict-smoke dictionary coverage to an LZ4
+  chunked-append dictionary-set improvement pair. The fixture keeps the row's
+  non-improvement accounting healthy while removing the append dictionary-set
+  size win over its plain baseline.
 
 - Tightened native tier range CSV dashboard health by deriving expected
   `(fixture, tier)` rows from each source's JSON summary and exposing duplicate
