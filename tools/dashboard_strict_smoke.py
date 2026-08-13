@@ -13863,6 +13863,25 @@ def main() -> int:
             lz4_summary_metadata_manifest["lz4_native_summary_metadata_frame_overflow"] == 1,
         )
 
+        lz4_summary_content_size_overflow_result, lz4_summary_content_size_overflow_manifest = native_stream_summary_drift_fixture(
+            root,
+            "lz4-native-summary-content-size-overflow",
+            artifact=LZ4_NATIVE_SUMMARY_ARTIFACT,
+            mutate_report=lambda payload: payload.__setitem__("content_size_frame_count", int(payload["frame_count"]) + 1),
+        )
+        append_native_stream_summary_check(
+            "lz4_native_summary_content_size_frame_overflow",
+            "lz4_native_summary_undercovered",
+            "lz4_native_summary_healthy",
+            lz4_summary_content_size_overflow_result,
+            lz4_summary_content_size_overflow_manifest,
+            lz4_summary_content_size_overflow_manifest["lz4_native_summary_content_size_frame_count"]
+            == lz4_summary_content_size_overflow_manifest["lz4_native_summary_frame_count"] + 1
+            and lz4_summary_content_size_overflow_manifest["lz4_native_summary_metadata_frame_overflow"] == 1
+            and lz4_summary_content_size_overflow_manifest["lz4_native_summary_checksum_frame_overflow"] == 0
+            and lz4_summary_content_size_overflow_manifest["lz4_native_summary_block_checksum_frame_overflow"] == 0,
+        )
+
         lz4_summary_checksum_result, lz4_summary_checksum_manifest = native_stream_summary_drift_fixture(
             root,
             "lz4-native-summary-checksum-overflow",
@@ -13936,6 +13955,24 @@ def main() -> int:
             zstd_summary_metadata_result,
             zstd_summary_metadata_manifest,
             zstd_summary_metadata_manifest["zstd_native_summary_metadata_frame_overflow"] == 1,
+        )
+
+        zstd_summary_content_size_overflow_result, zstd_summary_content_size_overflow_manifest = native_stream_summary_drift_fixture(
+            root,
+            "zstd-native-summary-content-size-overflow",
+            artifact=ZSTD_NATIVE_SUMMARY_ARTIFACT,
+            mutate_report=lambda payload: payload.__setitem__("content_size_frame_count", int(payload["frame_count"]) + 1),
+        )
+        append_native_stream_summary_check(
+            "zstd_native_summary_content_size_frame_overflow",
+            "zstd_native_summary_undercovered",
+            "zstd_native_summary_healthy",
+            zstd_summary_content_size_overflow_result,
+            zstd_summary_content_size_overflow_manifest,
+            zstd_summary_content_size_overflow_manifest["zstd_native_summary_content_size_frame_count"]
+            == zstd_summary_content_size_overflow_manifest["zstd_native_summary_frame_count"] + 1
+            and zstd_summary_content_size_overflow_manifest["zstd_native_summary_metadata_frame_overflow"] == 1
+            and zstd_summary_content_size_overflow_manifest["zstd_native_summary_checksum_frame_overflow"] == 0,
         )
 
         zstd_summary_checksum_result, zstd_summary_checksum_manifest = native_stream_summary_drift_fixture(

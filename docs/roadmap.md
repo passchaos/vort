@@ -2750,6 +2750,10 @@ architecture blindly.
   declared payload slack, metadata/checksum-frame overflows, and LZ4
   block-checksum overflow so native stream summary health cannot rely only on
   aggregate undercovered fixtures.
+- Tightened LZ4/Zstd native stream summary strict-smoke direct overflow
+  coverage for content-size metadata. The strict validation gate now isolates
+  impossible content-size frame counts separately from dictionary metadata
+  overflow while preserving checksum and block-checksum overflow counters.
 - Tightened dashboard configuration health by requiring config, category,
   required-producer, and producer-negative smoke row counts to match their
   declared counts and by exposing count-mismatch/row-unmatched counters in the
