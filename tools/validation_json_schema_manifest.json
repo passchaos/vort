@@ -4730,6 +4730,7 @@
           "native_library_bench_throughput_mismatch",
           "native_library_bench_iteration_mismatch",
           "native_library_bench_improvement_mismatch",
+          "native_library_bench_match_budget_improvement_mismatch",
           "native_library_bench_compression_floor_mismatch",
           "native_library_bench_dictionary_improvement_mismatch",
           "native_library_bench_trained_dictionary_improvement_mismatch",

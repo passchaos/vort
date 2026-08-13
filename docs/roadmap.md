@@ -2959,6 +2959,10 @@ architecture blindly.
   compression-improvement mismatches so `native_library_bench_failed` coverage
   cannot hide field-level CSV drift.
 - Tightened native library benchmark strict-smoke improvement coverage by
+  isolating a Zstd match-budget row that no longer improves over its zero-budget
+  baseline while keeping positive timing, throughput, and iteration accounting
+  valid.
+- Tightened native library benchmark strict-smoke improvement coverage by
   isolating a compression-floor regression for the retained high-byte Zstd row.
   The new fixture keeps positive timing, throughput, and iteration accounting
   valid while forcing the row to stop compressing below its input size.
