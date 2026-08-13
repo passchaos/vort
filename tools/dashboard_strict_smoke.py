@@ -5881,20 +5881,22 @@ def huffman_length_drift_fixture(root: Path, fixture_name: str, mutate_csv=None,
     return result, manifest
 
 
-def sidecar_corrupt_drift_fixture(root: Path, fixture_name: str, mutate_report=None, mutate_markdown=None) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+def sidecar_corrupt_drift_fixture(root: Path, fixture_name: str, mutate_report=None, mutate_markdown=None, *, remove_markdown: bool = False) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted sidecar corrupt artifact."""
 
     fixture_root = root / fixture_name
     fixture_root.mkdir()
     write_healthy_artifacts(fixture_root)
     report_path = fixture_root / SIDECAR_CORRUPT_ARTIFACT
+    markdown_path = fixture_root / SIDECAR_CORRUPT_MARKDOWN_ARTIFACT
     if mutate_report is not None:
         report = json.loads(report_path.read_text())
         mutate_report(report)
         report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     if mutate_markdown is not None:
-        markdown_path = fixture_root / SIDECAR_CORRUPT_MARKDOWN_ARTIFACT
         mutate_markdown(markdown_path)
+    if remove_markdown:
+        markdown_path.unlink()
     producer_map = fixture_root / "producers.json"
     write_producer_map(producer_map)
     result = run(
@@ -8768,6 +8770,102 @@ def main() -> int:
                 "dashboard_index_validation_unhealthy=header_inspect_undercovered",
                 header_missing_workflow_drift_result.stdout,
             )
+        )
+
+        def append_sidecar_corrupt_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            expected_reason: str,
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and f"dashboard_index_validation_unhealthy={expected_reason}" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["sidecar_corrupt_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    f"dashboard_index_validation_unhealthy={expected_reason}",
+                    result.stdout,
+                )
+            )
+
+        sidecar_missing_markdown_result, sidecar_missing_markdown_manifest = sidecar_corrupt_drift_fixture(
+            root,
+            "sidecar-corrupt-missing-markdown",
+            remove_markdown=True,
+        )
+        append_sidecar_corrupt_check(
+            "sidecar_corrupt_missing_markdown",
+            sidecar_missing_markdown_result,
+            sidecar_missing_markdown_manifest,
+            "missing_sidecar_corrupt_artifact",
+            sidecar_missing_markdown_manifest["sidecar_corrupt_present"] is True
+            and sidecar_missing_markdown_manifest["sidecar_corrupt_markdown_present"] is False,
+        )
+
+        sidecar_rows_floor_result, sidecar_rows_floor_manifest = sidecar_corrupt_drift_fixture(
+            root,
+            "sidecar-corrupt-rows-floor",
+            lambda payload: payload.update({"rows": 0, "metadata_ok_rows": 0, "full_rejected_rows": 0, "items": []}),
+            mutate_markdown=lambda path: path.write_text(path.read_text().split("| case |", 1)[0] + "| case | metadata ok | full rejected | full error | stream bytes | sidecar bytes |\n| --- | --- | --- | --- | ---: | ---: |\n"),
+        )
+        append_sidecar_corrupt_check(
+            "sidecar_corrupt_rows_floor",
+            sidecar_rows_floor_result,
+            sidecar_rows_floor_manifest,
+            "sidecar_corrupt_failed",
+            sidecar_rows_floor_manifest["sidecar_corrupt_rows"] == 0
+            and sidecar_rows_floor_manifest["sidecar_corrupt_item_rows"] == 0
+            and sidecar_rows_floor_manifest["sidecar_corrupt_markdown_rows"] == 0,
+        )
+
+        sidecar_markdown_row_count_result, sidecar_markdown_row_count_manifest = sidecar_corrupt_drift_fixture(
+            root,
+            "sidecar-corrupt-markdown-row-count",
+            mutate_markdown=lambda path: path.write_text(path.read_text().replace("| ldm | true | true | InvalidMatch | 128 | 48 |\n", "", 1)),
+        )
+        append_sidecar_corrupt_check(
+            "sidecar_corrupt_markdown_row_count_mismatch",
+            sidecar_markdown_row_count_result,
+            sidecar_markdown_row_count_manifest,
+            "sidecar_corrupt_failed",
+            sidecar_markdown_row_count_manifest["sidecar_corrupt_markdown_rows"] == 1
+            and sidecar_markdown_row_count_manifest["sidecar_corrupt_markdown_unmatched"] == 1,
+        )
+
+        sidecar_item_metadata_count_result, sidecar_item_metadata_count_manifest = sidecar_corrupt_drift_fixture(
+            root,
+            "sidecar-corrupt-item-metadata-count",
+            lambda payload: payload["items"][0].__setitem__("metadata_ok", False),
+        )
+        append_sidecar_corrupt_check(
+            "sidecar_corrupt_item_metadata_count_mismatch",
+            sidecar_item_metadata_count_result,
+            sidecar_item_metadata_count_manifest,
+            "sidecar_corrupt_failed",
+            sidecar_item_metadata_count_manifest["sidecar_corrupt_item_count_mismatch"] == 1,
+        )
+
+        sidecar_item_full_rejected_count_result, sidecar_item_full_rejected_count_manifest = sidecar_corrupt_drift_fixture(
+            root,
+            "sidecar-corrupt-item-full-rejected-count",
+            lambda payload: payload["items"][0].__setitem__("full_rejected", False),
+        )
+        append_sidecar_corrupt_check(
+            "sidecar_corrupt_item_full_rejected_count_mismatch",
+            sidecar_item_full_rejected_count_result,
+            sidecar_item_full_rejected_count_manifest,
+            "sidecar_corrupt_failed",
+            sidecar_item_full_rejected_count_manifest["sidecar_corrupt_item_count_mismatch"] == 1,
         )
 
         sidecar_item_malformed_result, sidecar_item_malformed_manifest = sidecar_corrupt_drift_fixture(

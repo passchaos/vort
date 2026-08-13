@@ -2550,7 +2550,7 @@ coverage`, `Deflate extra-bit benchmark coverage`, `Dictionary decode benchmark 
 probe executables`, `Native summary error codec coverage`, and `Native summary error phase offsets` tables
 so artifact inventory, aggregate validation health, producer/smoke-gate coverage, dashboard strict
 gate coverage, dashboard configuration guardrails, validation schema smoke coverage, header-format coverage, corrupt-sidecar rejection coverage,
-sidecar corrupt Markdown/JSON drift checks, Huffman optimality, zstd comparison gate coverage, deflate extra-bit benchmark coverage, dictionary decode benchmark coverage, PNG scanline benchmark coverage, chunked zlib benchmark coverage, PNG streaming zlib benchmark coverage, deflate dynamic decode profile coverage, native library benchmark coverage, native fuzz corpus coverage and summary/floor drift, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility exact/floor coverage, native allocation coverage, zlib differential coverage,
+sidecar corrupt Markdown/JSON row and count drift checks, Huffman optimality, zstd comparison gate coverage, deflate extra-bit benchmark coverage, dictionary decode benchmark coverage, PNG scanline benchmark coverage, chunked zlib benchmark coverage, PNG streaming zlib benchmark coverage, deflate dynamic decode profile coverage, native library benchmark coverage, native fuzz corpus coverage and summary/floor drift, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility exact/floor coverage, native allocation coverage, zlib differential coverage,
 decode-stage error matching, fuzz corpus summary/floor matching, native stream metadata
 coverage, native tier corpus discovery, codec probe status, LZ4/Zstd
 structured-error counts, phase counts, required phases, missing phases, and phase
@@ -4531,9 +4531,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 508,
-      "min_expected_failures": 508,
-      "min_matched": 508
+      "min_checks": 513,
+      "min_expected_failures": 513,
+      "min_matched": 513
     },
     {
       "mode": "non-json-artifact-health",
@@ -4655,7 +4655,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 495,
+  "check_count": 500,
   "mode_count": 5,
   "expected_mode_count": 5,
   "missing_mode_count": 0,
@@ -4675,9 +4675,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 508,
-      "min_expected_failures": 508,
-      "min_matched": 508
+      "min_checks": 513,
+      "min_expected_failures": 513,
+      "min_matched": 513
     },
     {
       "mode": "non-json-artifact-health",
@@ -4720,14 +4720,14 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 421,
-      "min_checks": 508,
+      "checks": 426,
+      "min_checks": 513,
       "missing_checks": 87,
-      "expected_failures": 421,
-      "min_expected_failures": 508,
+      "expected_failures": 426,
+      "min_expected_failures": 513,
       "missing_expected_failures": 87,
-      "matched": 421,
-      "min_matched": 508,
+      "matched": 426,
+      "min_matched": 513,
       "missing_matched": 87
     },
     {
@@ -4770,9 +4770,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 421,
-      "expected_failures": 421,
-      "matched": 421
+      "checks": 426,
+      "expected_failures": 426,
+      "matched": 426
     },
     {
       "mode": "non-json-artifact-health",
@@ -5482,6 +5482,66 @@ Example:
       "actual_output_limit": 240,
       "actual_output_truncated": false,
       "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "sidecar_corrupt_missing_markdown",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=missing_sidecar_corrupt_artifact",
+      "actual_output": "dashboard_index_validation_unhealthy=missing_sidecar_corrupt_artifact\\n",
+      "actual_output_bytes": 71,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "sidecar_corrupt_rows_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed\\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "sidecar_corrupt_markdown_row_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed\\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "sidecar_corrupt_item_metadata_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed\\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "sidecar_corrupt_item_full_rejected_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed\\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
       "matched": true
     },
     {

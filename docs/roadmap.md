@@ -488,7 +488,7 @@ architecture blindly.
 - [x] Dashboard strict-mode smoke directly covers dynamic-plan health drift, including missing/duplicate/unknown paths, malformed rows, token-accounting mismatches, histogram/ratio drift, and bit-slack/wrapper invariants.
 - [x] Dashboard strict-mode smoke directly covers compression level-report health drift, including missing/duplicate/unknown rows, token accounting drift, ratio drift, roundtrip checksum drift, and Markdown summary/detail mismatches.
 - [x] Dashboard strict-mode smoke directly covers Huffman length-report health drift, including malformed/blank/duplicate cases, non-optimal rows, and Markdown summary/case mismatches.
-- [x] Dashboard strict-mode smoke directly covers sidecar corrupt health drift, including metadata/full rejection count drift, JSON item count/malformed/duplicate drift, and unmatched/malformed/duplicate/unknown Markdown rows.
+- [x] Dashboard strict-mode smoke directly covers sidecar corrupt health drift, including missing Markdown, row floors, metadata/full rejection count drift, JSON item count/malformed/duplicate drift, Markdown row count drift, and unmatched/malformed/duplicate/unknown Markdown rows.
 - [x] Dashboard strict-mode smoke directly covers header-inspect health drift, including report count mismatches, duplicate case/negative/command/workflow/required/help rows, command coverage missing/unknown/mismatch rows, negative error-count drift, missing-workflow drift, help/required workflow drift, and Markdown unmatched rows.
 - [x] Dashboard strict-mode smoke directly covers Python zlib differential health drift, including top-level ok drift, payload/file/dictionary/malformed floors, raw-dictionary undercoverage, CLI success/failure floors, exact outcome mismatches, and coverage shortfalls.
 - [x] Dashboard strict-mode smoke directly covers validation JSON smoke/docs-negative health drift, including observed-schema count mismatches, unchecked observed schemas, JSON artifact audit parse/missing-schema/manifest/accounting failures, and docs-negative row/count mismatches.
@@ -3020,6 +3020,12 @@ architecture blindly.
   duplicate JSON item rows plus malformed, duplicate, and unknown Markdown rows.
   Dashboard health now rejects sidecar row drift before corrupt-payload coverage
   can pass.
+
+- Tightened sidecar corrupt strict-smoke direct drift coverage for the existing
+  corrupt-payload JSON/Markdown artifacts without adding format scope. The
+  strict validation gate now isolates missing Markdown companions, zero-row
+  report floors, Markdown row-count loss, and item metadata/full-rejection count
+  drift before corrupt-payload coverage can pass.
 
 - Tightened Huffman length oracle dashboard health by exposing blank and
   duplicate CSV case rows alongside malformed/cost checks. Dashboard health now
