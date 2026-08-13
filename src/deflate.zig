@@ -6027,6 +6027,34 @@ pub const GzipEncoder = struct {
         return try encodeGzipStoredChunksWithHeaderAlloc(self.allocator, chunks, header_options);
     }
 
+    pub fn encodeFixedAlloc(self: *GzipEncoder, input: []const u8) ![]u8 {
+        return try self.encodeFixedWithOptionsAlloc(input, .{});
+    }
+
+    pub fn encodeFixedWithOptionsAlloc(self: *GzipEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
+        return try self.encodeFixedWithHeaderAlloc(input, options, .{});
+    }
+
+    pub fn encodeFixedWithHeaderAlloc(self: *GzipEncoder, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
+        return try encodeGzipFixedWithHeaderAlloc(self.allocator, input, options, header_options);
+    }
+
+    pub fn encodeBestAlloc(self: *GzipEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
+        return try self.encodeBestWithHeaderAlloc(input, options, .{});
+    }
+
+    pub fn encodeBestWithHeaderAlloc(self: *GzipEncoder, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
+        return try encodeGzipBestWithHeaderAlloc(self.allocator, input, options, header_options);
+    }
+
+    pub fn encodeLevelAlloc(self: *GzipEncoder, input: []const u8, level: u4) ![]u8 {
+        return try self.encodeLevelWithHeaderAlloc(input, level, .{});
+    }
+
+    pub fn encodeLevelWithHeaderAlloc(self: *GzipEncoder, input: []const u8, level: u4, header_options: GzipHeaderOptions) ![]u8 {
+        return try encodeGzipLevelWithHeaderAlloc(self.allocator, input, level, header_options);
+    }
+
     pub fn encodeStoredScratch(self: *GzipEncoder, input: []const u8) ![]const u8 {
         self.scratch.clearRetainingCapacity();
         _ = try self.encodeStoredAppend(&self.scratch, input);
@@ -6051,6 +6079,40 @@ pub const GzipEncoder = struct {
         return self.scratch.items;
     }
 
+    pub fn encodeFixedScratch(self: *GzipEncoder, input: []const u8) ![]const u8 {
+        return try self.encodeFixedWithOptionsScratch(input, .{});
+    }
+
+    pub fn encodeFixedWithOptionsScratch(self: *GzipEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
+        return try self.encodeFixedWithHeaderScratch(input, options, .{});
+    }
+
+    pub fn encodeFixedWithHeaderScratch(self: *GzipEncoder, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeFixedWithHeaderAppend(&self.scratch, input, options, header_options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestScratch(self: *GzipEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
+        return try self.encodeBestWithHeaderScratch(input, options, .{});
+    }
+
+    pub fn encodeBestWithHeaderScratch(self: *GzipEncoder, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestWithHeaderAppend(&self.scratch, input, options, header_options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeLevelScratch(self: *GzipEncoder, input: []const u8, level: u4) ![]const u8 {
+        return try self.encodeLevelWithHeaderScratch(input, level, .{});
+    }
+
+    pub fn encodeLevelWithHeaderScratch(self: *GzipEncoder, input: []const u8, level: u4, header_options: GzipHeaderOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeLevelWithHeaderAppend(&self.scratch, input, level, header_options);
+        return self.scratch.items;
+    }
+
     pub fn encodeStoredAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
         return try encodeGzipStoredAppend(self.allocator, out, input);
     }
@@ -6065,6 +6127,46 @@ pub const GzipEncoder = struct {
 
     pub fn encodeStoredChunksWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), chunks: []const []const u8, header_options: GzipHeaderOptions) !usize {
         return try encodeGzipStoredChunksWithHeaderAppend(self.allocator, out, chunks, header_options);
+    }
+
+    pub fn encodeFixedAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
+        return try self.encodeFixedWithOptionsAppend(out, input, .{});
+    }
+
+    pub fn encodeFixedWithOptionsAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+        return try self.encodeFixedWithHeaderAppend(out, input, options, .{});
+    }
+
+    pub fn encodeFixedWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+        const encoded = try self.encodeFixedWithHeaderAlloc(input, options, header_options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+        return try self.encodeBestWithHeaderAppend(out, input, options, .{});
+    }
+
+    pub fn encodeBestWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+        const encoded = try self.encodeBestWithHeaderAlloc(input, options, header_options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeLevelAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, level: u4) !usize {
+        return try self.encodeLevelWithHeaderAppend(out, input, level, .{});
+    }
+
+    pub fn encodeLevelWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, level: u4, header_options: GzipHeaderOptions) !usize {
+        const encoded = try self.encodeLevelWithHeaderAlloc(input, level, header_options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
     }
 
     pub fn encodeStoredIntoSlice(self: *GzipEncoder, input: []const u8, output: []u8) !usize {
