@@ -505,6 +505,18 @@ pub const zstdEncodeFrameAppendWithLevelAndOptionsAndDictionary = zstd.encodeFra
 pub const zstdEncodeFrameIntoSliceWithDictionary = zstd.encodeFrameIntoSliceWithDictionary;
 pub const zstdEncodeFrameIntoSliceWithOptionsAndDictionary = zstd.encodeFrameIntoSliceWithOptionsAndDictionary;
 pub const zstdEncodeFrameIntoSliceWithLevelAndOptionsAndDictionary = zstd.encodeFrameIntoSliceWithLevelAndOptionsAndDictionary;
+pub const zstdEncodedFrameBoundWithDictionarySet = zstd.encodedFrameBoundWithDictionarySet;
+pub const zstdEncodedFrameBoundWithOptionsAndDictionarySet = zstd.encodedFrameBoundWithOptionsAndDictionarySet;
+pub const zstdEncodedFrameBoundWithLevelAndOptionsAndDictionarySet = zstd.encodedFrameBoundWithLevelAndOptionsAndDictionarySet;
+pub const zstdEncodeFrameWithDictionarySetAlloc = zstd.encodeFrameWithDictionarySetAlloc;
+pub const zstdEncodeFrameWithOptionsAndDictionarySetAlloc = zstd.encodeFrameWithOptionsAndDictionarySetAlloc;
+pub const zstdEncodeFrameWithLevelAndOptionsAndDictionarySetAlloc = zstd.encodeFrameWithLevelAndOptionsAndDictionarySetAlloc;
+pub const zstdEncodeFrameAppendWithDictionarySet = zstd.encodeFrameAppendWithDictionarySet;
+pub const zstdEncodeFrameAppendWithOptionsAndDictionarySet = zstd.encodeFrameAppendWithOptionsAndDictionarySet;
+pub const zstdEncodeFrameAppendWithLevelAndOptionsAndDictionarySet = zstd.encodeFrameAppendWithLevelAndOptionsAndDictionarySet;
+pub const zstdEncodeFrameIntoSliceWithDictionarySet = zstd.encodeFrameIntoSliceWithDictionarySet;
+pub const zstdEncodeFrameIntoSliceWithOptionsAndDictionarySet = zstd.encodeFrameIntoSliceWithOptionsAndDictionarySet;
+pub const zstdEncodeFrameIntoSliceWithLevelAndOptionsAndDictionarySet = zstd.encodeFrameIntoSliceWithLevelAndOptionsAndDictionarySet;
 pub const zstdDecodeFrameAlloc = zstd.decodeFrameAlloc;
 pub const zstdDecodeFrameAllocExactSize = zstd.decodeFrameAllocExactSize;
 pub const zstdDecodeFrameAllocLimited = zstd.decodeFrameAllocLimited;
@@ -1995,6 +2007,18 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdEncodeFrameIntoSliceWithDictionary;
     _ = zstdEncodeFrameIntoSliceWithOptionsAndDictionary;
     _ = zstdEncodeFrameIntoSliceWithLevelAndOptionsAndDictionary;
+    _ = zstdEncodedFrameBoundWithDictionarySet;
+    _ = zstdEncodedFrameBoundWithOptionsAndDictionarySet;
+    _ = zstdEncodedFrameBoundWithLevelAndOptionsAndDictionarySet;
+    _ = zstdEncodeFrameWithDictionarySetAlloc;
+    _ = zstdEncodeFrameWithOptionsAndDictionarySetAlloc;
+    _ = zstdEncodeFrameWithLevelAndOptionsAndDictionarySetAlloc;
+    _ = zstdEncodeFrameAppendWithDictionarySet;
+    _ = zstdEncodeFrameAppendWithOptionsAndDictionarySet;
+    _ = zstdEncodeFrameAppendWithLevelAndOptionsAndDictionarySet;
+    _ = zstdEncodeFrameIntoSliceWithDictionarySet;
+    _ = zstdEncodeFrameIntoSliceWithOptionsAndDictionarySet;
+    _ = zstdEncodeFrameIntoSliceWithLevelAndOptionsAndDictionarySet;
     _ = zstdDecodeFrameAlloc;
     _ = zstdDecodeFrameAllocExactSize;
     _ = zstdDecodeFrameAllocLimited;
@@ -2876,6 +2900,36 @@ test "root zstd frame facade exposes dictionary encode helpers" {
     try std.testing.expectEqualSlices(u8, encoded, into[0..written]);
 
     const decoded = try zstdDecodeNativeFrameAllocWithDictionaryExactSize(std.testing.allocator, into[0..written], zstd_dictionary, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "root zstd frame facade exposes dictionary-set encode helpers" {
+    const dict = ZstdNativeDictionary.init(0x7a55, "set-dictionary-prefix-");
+    const other = ZstdNativeDictionary.init(0x7a56, "other-prefix-");
+    const dictionary_set = ZstdNativeDictionarySet.init(&.{ dict, other });
+    const payload = "set-dictionary-prefix-payload set-dictionary-prefix-tail";
+    const options: ZstdFrameOptions = .{ .content_checksum = true };
+
+    const bound = try zstdEncodedFrameBoundWithOptionsAndDictionarySet(payload.len, options, dictionary_set, dict.id);
+    const encoded = try zstdEncodeFrameWithOptionsAndDictionarySetAlloc(std.testing.allocator, payload, options, dictionary_set, dict.id);
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expect(encoded.len <= bound);
+    try std.testing.expectError(error.NeedDictionary, zstdEncodedFrameBoundWithDictionarySet(payload.len, dictionary_set, 0xeeee));
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(encoded.len, try zstdEncodeFrameAppendWithOptionsAndDictionarySet(std.testing.allocator, &appended, payload, options, dictionary_set, dict.id));
+    try std.testing.expectEqualSlices(u8, "prefix:", appended.items[0.."prefix:".len]);
+    try std.testing.expectEqualSlices(u8, encoded, appended.items["prefix:".len..]);
+
+    const into = try std.testing.allocator.alloc(u8, bound);
+    defer std.testing.allocator.free(into);
+    const written = try zstdEncodeFrameIntoSliceWithOptionsAndDictionarySet(std.testing.allocator, payload, options, dictionary_set, dict.id, into);
+    try std.testing.expectEqualSlices(u8, encoded, into[0..written]);
+
+    const decoded = try zstdDecodeNativeFrameAllocWithDictionarySetExactSize(std.testing.allocator, into[0..written], dictionary_set, payload.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
 }

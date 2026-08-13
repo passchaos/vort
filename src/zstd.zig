@@ -2870,6 +2870,58 @@ pub fn encodeFrameIntoSliceWithLevelAndOptionsAndDictionary(allocator: std.mem.A
     return result.written;
 }
 
+pub fn encodedFrameBoundWithDictionarySet(input_len: usize, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error!usize {
+    return try encodedFrameBoundWithLevelAndOptionsAndDictionarySet(input_len, default_compression_level, .{}, dictionary_set, dictionary_id);
+}
+
+pub fn encodedFrameBoundWithOptionsAndDictionarySet(input_len: usize, options: FrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error!usize {
+    return try encodedFrameBoundWithLevelAndOptionsAndDictionarySet(input_len, default_compression_level, options, dictionary_set, dictionary_id);
+}
+
+pub fn encodedFrameBoundWithLevelAndOptionsAndDictionarySet(input_len: usize, level: c_int, options: FrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error!usize {
+    return try encodedNativeFrameBoundWithDictionarySet(input_len, nativeFrameOptionsForLevel(level, options), dictionary_set, dictionary_id);
+}
+
+pub fn encodeFrameWithDictionarySetAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error![]u8 {
+    return try encodeFrameWithLevelAndOptionsAndDictionarySetAlloc(allocator, input, default_compression_level, .{}, dictionary_set, dictionary_id);
+}
+
+pub fn encodeFrameWithOptionsAndDictionarySetAlloc(allocator: std.mem.Allocator, input: []const u8, options: FrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error![]u8 {
+    return try encodeFrameWithLevelAndOptionsAndDictionarySetAlloc(allocator, input, default_compression_level, options, dictionary_set, dictionary_id);
+}
+
+pub fn encodeFrameWithLevelAndOptionsAndDictionarySetAlloc(allocator: std.mem.Allocator, input: []const u8, level: c_int, options: FrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error![]u8 {
+    const result = try encodeNativeFrameWithDictionarySetAlloc(allocator, input, nativeFrameOptionsForLevel(level, options), dictionary_set, dictionary_id);
+    return result.frame;
+}
+
+pub fn encodeFrameAppendWithDictionarySet(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error!usize {
+    return try encodeFrameAppendWithLevelAndOptionsAndDictionarySet(allocator, out, input, default_compression_level, .{}, dictionary_set, dictionary_id);
+}
+
+pub fn encodeFrameAppendWithOptionsAndDictionarySet(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: FrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error!usize {
+    return try encodeFrameAppendWithLevelAndOptionsAndDictionarySet(allocator, out, input, default_compression_level, options, dictionary_set, dictionary_id);
+}
+
+pub fn encodeFrameAppendWithLevelAndOptionsAndDictionarySet(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, level: c_int, options: FrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error!usize {
+    const start = out.items.len;
+    _ = try encodeNativeFrameAppendWithDictionarySet(allocator, out, input, nativeFrameOptionsForLevel(level, options), dictionary_set, dictionary_id);
+    return out.items.len - start;
+}
+
+pub fn encodeFrameIntoSliceWithDictionarySet(allocator: std.mem.Allocator, input: []const u8, dictionary_set: NativeDictionarySet, dictionary_id: u32, output: []u8) Error!usize {
+    return try encodeFrameIntoSliceWithLevelAndOptionsAndDictionarySet(allocator, input, default_compression_level, .{}, dictionary_set, dictionary_id, output);
+}
+
+pub fn encodeFrameIntoSliceWithOptionsAndDictionarySet(allocator: std.mem.Allocator, input: []const u8, options: FrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32, output: []u8) Error!usize {
+    return try encodeFrameIntoSliceWithLevelAndOptionsAndDictionarySet(allocator, input, default_compression_level, options, dictionary_set, dictionary_id, output);
+}
+
+pub fn encodeFrameIntoSliceWithLevelAndOptionsAndDictionarySet(allocator: std.mem.Allocator, input: []const u8, level: c_int, options: FrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32, output: []u8) Error!usize {
+    const result = try encodeNativeFrameIntoSliceWithDictionarySet(allocator, input, nativeFrameOptionsForLevel(level, options), dictionary_set, dictionary_id, output);
+    return result.written;
+}
+
 fn nativeFrameOptionsForLevel(level: c_int, options: FrameOptions) NativeFrameOptions {
     var native_options: NativeFrameOptions = .{
         .content_checksum = options.content_checksum,

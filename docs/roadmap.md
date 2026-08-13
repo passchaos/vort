@@ -1654,6 +1654,11 @@ architecture blindly.
   `NativeDictionary` values can stay on the top-level frame API instead of
   dropping to native-specific entrypoints for basic dictionary workflows.
 
+- Extended the Zstd encode facade again with dictionary-set helpers, including
+  bound, allocator, append, and into-slice variants keyed by `Dictionary_ID`.
+  Top-level frame encoding now covers both single dictionaries and checked
+  dictionary catalogs without requiring native-specific entrypoints.
+
 - Added a dependency-free Brotli `br` bootstrap module for stored/uncompressed
   streams. `src/br.zig` emits RFC-valid WBITS=16 streams with uncompressed
   meta-blocks plus final empty terminators, decodes the same stored subset with
