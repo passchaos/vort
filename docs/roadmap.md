@@ -2970,6 +2970,10 @@ architecture blindly.
   trained-dictionary improvement pair. The retained row now has an isolated
   negative fixture that keeps positive timing, throughput, and iteration
   accounting valid while removing the trained-dictionary size win.
+- Extended native library benchmark strict-smoke dictionary coverage to a
+  reusable LZ4 dictionary-set improvement pair. The new negative fixture keeps
+  the benchmark row otherwise healthy while removing the reusable dictionary
+  size win over its plain baseline.
 
 - Tightened native tier range CSV dashboard health by deriving expected
   `(fixture, tier)` rows from each source's JSON summary and exposing duplicate
