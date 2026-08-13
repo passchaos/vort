@@ -4531,9 +4531,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 524,
-      "min_expected_failures": 524,
-      "min_matched": 524
+      "min_checks": 528,
+      "min_expected_failures": 528,
+      "min_matched": 528
     },
     {
       "mode": "non-json-artifact-health",
@@ -4655,7 +4655,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 511,
+  "check_count": 515,
   "mode_count": 5,
   "expected_mode_count": 5,
   "missing_mode_count": 0,
@@ -4675,9 +4675,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 524,
-      "min_expected_failures": 524,
-      "min_matched": 524
+      "min_checks": 528,
+      "min_expected_failures": 528,
+      "min_matched": 528
     },
     {
       "mode": "non-json-artifact-health",
@@ -4720,14 +4720,14 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 437,
-      "min_checks": 524,
+      "checks": 441,
+      "min_checks": 528,
       "missing_checks": 87,
-      "expected_failures": 437,
-      "min_expected_failures": 524,
+      "expected_failures": 441,
+      "min_expected_failures": 528,
       "missing_expected_failures": 87,
-      "matched": 437,
-      "min_matched": 524,
+      "matched": 441,
+      "min_matched": 528,
       "missing_matched": 87
     },
     {
@@ -4770,9 +4770,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 437,
-      "expected_failures": 437,
-      "matched": 437
+      "checks": 441,
+      "expected_failures": 441,
+      "matched": 441
     },
     {
       "mode": "non-json-artifact-health",
@@ -8570,6 +8570,54 @@ Example:
     },
     {
       "name": "native_summary_error_frame_checksum_phase_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered\n",
+      "actual_output_bytes": 82,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_magic_phase_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered\n",
+      "actual_output_bytes": 82,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_skippable_payload_phase_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered\n",
+      "actual_output_bytes": 82,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_frame_body_phase_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered\n",
+      "actual_output_bytes": 82,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_frame_phase_floor",
       "mode": "strict-validation-health",
       "expected_failure": true,
       "expected_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered",

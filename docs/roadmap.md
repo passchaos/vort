@@ -2860,6 +2860,10 @@ architecture blindly.
   codec-specific aggregates, offset ranges, and required-phase metadata
   internally consistent so these floor regressions cannot hide behind existing
   mismatch checks.
+- Completed the remaining native summary error phase-floor direct coverage for
+  magic, skippable-payload, frame-body, and frame phases. The strict validation
+  gate now isolates every aggregate phase floor while keeping phase counts,
+  codec phase counts, offset ranges, and required-phase metadata consistent.
 - Tightened Brotli static-dictionary negative-smoke dashboard health by requiring
   both source-audit and report guardrail rows to match declared case counts with
   no unmatched rows. Dashboard health now exposes row/count drift counters before

@@ -13308,6 +13308,99 @@ def main() -> int:
             and native_summary_frame_checksum_floor_manifest["native_summary_error_zstd_missing_phases"] == [],
         )
 
+        def move_native_summary_phases(payload: dict[str, object], moves: list[tuple[str, str]]) -> None:
+            for case_name, new_phase in moves:
+                move_native_summary_phase(payload, case_name, new_phase, remove_old_required_phase=True)
+
+        native_summary_magic_floor_result, native_summary_magic_floor_manifest = native_summary_error_drift_fixture(
+            root,
+            "native-summary-error-magic-floor",
+            mutate_report=lambda payload: move_native_summary_phases(
+                payload,
+                [
+                    ("lz4_bad_magic", "frame_body"),
+                    ("zstd_bad_magic", "frame_body"),
+                ],
+            ),
+        )
+        append_native_summary_error_check(
+            "native_summary_error_magic_phase_floor",
+            native_summary_magic_floor_result,
+            native_summary_magic_floor_manifest,
+            native_summary_magic_floor_manifest["native_summary_error_magic_phase_count"] == 1
+            and native_summary_magic_floor_manifest["native_summary_error_phase_count_mismatch"] == 0
+            and native_summary_magic_floor_manifest["native_summary_error_codec_phase_count_mismatch"] == 0
+            and native_summary_magic_floor_manifest["native_summary_error_offset_range_mismatch"] == 0
+            and native_summary_magic_floor_manifest["native_summary_error_lz4_missing_phases"] == []
+            and native_summary_magic_floor_manifest["native_summary_error_zstd_missing_phases"] == [],
+        )
+
+        native_summary_skippable_floor_result, native_summary_skippable_floor_manifest = native_summary_error_drift_fixture(
+            root,
+            "native-summary-error-skippable-floor",
+            mutate_report=lambda payload: move_native_summary_phase(
+                payload,
+                "lz4_truncated_skippable",
+                "frame_body",
+                remove_old_required_phase=True,
+            ),
+        )
+        append_native_summary_error_check(
+            "native_summary_error_skippable_payload_phase_floor",
+            native_summary_skippable_floor_result,
+            native_summary_skippable_floor_manifest,
+            native_summary_skippable_floor_manifest["native_summary_error_skippable_payload_phase_count"] == 1
+            and native_summary_skippable_floor_manifest["native_summary_error_phase_count_mismatch"] == 0
+            and native_summary_skippable_floor_manifest["native_summary_error_codec_phase_count_mismatch"] == 0
+            and native_summary_skippable_floor_manifest["native_summary_error_offset_range_mismatch"] == 0
+            and native_summary_skippable_floor_manifest["native_summary_error_lz4_missing_phases"] == []
+            and native_summary_skippable_floor_manifest["native_summary_error_zstd_missing_phases"] == [],
+        )
+
+        native_summary_frame_body_floor_result, native_summary_frame_body_floor_manifest = native_summary_error_drift_fixture(
+            root,
+            "native-summary-error-frame-body-floor",
+            mutate_report=lambda payload: move_native_summary_phase(
+                payload,
+                "lz4_truncated_body",
+                "frame",
+                remove_old_required_phase=True,
+            ),
+        )
+        append_native_summary_error_check(
+            "native_summary_error_frame_body_phase_floor",
+            native_summary_frame_body_floor_result,
+            native_summary_frame_body_floor_manifest,
+            native_summary_frame_body_floor_manifest["native_summary_error_frame_body_phase_count"] == 1
+            and native_summary_frame_body_floor_manifest["native_summary_error_phase_count_mismatch"] == 0
+            and native_summary_frame_body_floor_manifest["native_summary_error_codec_phase_count_mismatch"] == 0
+            and native_summary_frame_body_floor_manifest["native_summary_error_offset_range_mismatch"] == 0
+            and native_summary_frame_body_floor_manifest["native_summary_error_lz4_missing_phases"] == []
+            and native_summary_frame_body_floor_manifest["native_summary_error_zstd_missing_phases"] == [],
+        )
+
+        native_summary_frame_floor_result, native_summary_frame_floor_manifest = native_summary_error_drift_fixture(
+            root,
+            "native-summary-error-frame-floor",
+            mutate_report=lambda payload: move_native_summary_phase(
+                payload,
+                "lz4_invalid_block_header",
+                "frame_body",
+                remove_old_required_phase=True,
+            ),
+        )
+        append_native_summary_error_check(
+            "native_summary_error_frame_phase_floor",
+            native_summary_frame_floor_result,
+            native_summary_frame_floor_manifest,
+            native_summary_frame_floor_manifest["native_summary_error_frame_phase_count"] == 1
+            and native_summary_frame_floor_manifest["native_summary_error_phase_count_mismatch"] == 0
+            and native_summary_frame_floor_manifest["native_summary_error_codec_phase_count_mismatch"] == 0
+            and native_summary_frame_floor_manifest["native_summary_error_offset_range_mismatch"] == 0
+            and native_summary_frame_floor_manifest["native_summary_error_lz4_missing_phases"] == []
+            and native_summary_frame_floor_manifest["native_summary_error_zstd_missing_phases"] == [],
+        )
+
         native_summary_phase_count_result, native_summary_phase_count_manifest = native_summary_error_drift_fixture(
             root,
             "native-summary-error-phase-count",
