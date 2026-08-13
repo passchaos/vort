@@ -908,7 +908,7 @@ fn writeBestTokensBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWrit
         return writeFixedTokens(allocator, writer, tokens, final);
     }
     try writer.bytes.ensureTotalCapacity(allocator, writer.bytes.items.len + dynamic_len);
-    return dynamic_plan.write(allocator, writer, tokens, final);
+    return dynamic_plan.writeReserved(writer, tokens, final);
 }
 
 fn encodedBytesForBitsFromState(writer: bitstream.BitWriter, bit_count: usize) usize {
@@ -1136,33 +1136,157 @@ const DynamicCodingPlan = struct {
     }
 
     fn write(self: *const DynamicCodingPlan, allocator: std.mem.Allocator, writer: *bitstream.BitWriter, tokens: []const lz77.Token, final: bool) !void {
+        return self.writeWithCapacity(allocator, writer, tokens, final, false);
+    }
+
+    fn writeReserved(
+        self: *const DynamicCodingPlan,
+        writer: *bitstream.BitWriter,
+        tokens: []const lz77.Token,
+        final: bool,
+    ) !void {
+        return self.writeWithCapacity(
+            undefined,
+            writer,
+            tokens,
+            final,
+            true,
+        );
+    }
+
+    fn writeWithCapacity(
+        self: *const DynamicCodingPlan,
+        allocator: std.mem.Allocator,
+        writer: *bitstream.BitWriter,
+        tokens: []const lz77.Token,
+        final: bool,
+        comptime assume_capacity: bool,
+    ) !void {
         const lit_encoder = try huffman.HuffmanTable(286).Encoder.init(self.lit_lengths_full[0..self.hlit]);
         const dist_encoder = try huffman.HuffmanTable(30).Encoder.init(self.dist_lengths_full[0..self.hdist]);
         const code_len_encoder = try huffman.CodeLengthTable.Encoder.init(&self.code_len_lengths);
 
-        try writer.writeBits(allocator, @intFromBool(final), 1);
-        try writer.writeBits(allocator, 0b10, 2);
-        try writer.writeBits(allocator, @intCast(self.hlit - 257), 5);
-        try writer.writeBits(allocator, @intCast(self.hdist - 1), 5);
-        try writer.writeBits(allocator, @intCast(self.hclen - 4), 4);
-        for (huffman.code_length_order[0..self.hclen]) |symbol| try writer.writeBits(allocator, self.code_len_lengths[symbol], 3);
+        try writeBitsWithCapacity(
+            allocator,
+            writer,
+            @intFromBool(final),
+            1,
+            assume_capacity,
+        );
+        try writeBitsWithCapacity(
+            allocator,
+            writer,
+            0b10,
+            2,
+            assume_capacity,
+        );
+        try writeBitsWithCapacity(
+            allocator,
+            writer,
+            @intCast(self.hlit - 257),
+            5,
+            assume_capacity,
+        );
+        try writeBitsWithCapacity(
+            allocator,
+            writer,
+            @intCast(self.hdist - 1),
+            5,
+            assume_capacity,
+        );
+        try writeBitsWithCapacity(
+            allocator,
+            writer,
+            @intCast(self.hclen - 4),
+            4,
+            assume_capacity,
+        );
+        for (huffman.code_length_order[0..self.hclen]) |symbol| {
+            try writeBitsWithCapacity(
+                allocator,
+                writer,
+                self.code_len_lengths[symbol],
+                3,
+                assume_capacity,
+            );
+        }
         for (self.code_len_ops.slice()) |op| {
-            try code_len_encoder.writeSymbol(writer, allocator, op.symbol);
-            if (op.extra_bits != 0) try writer.writeBits(allocator, op.extra_value, op.extra_bits);
+            try writeHuffmanSymbolWithCapacity(
+                allocator,
+                writer,
+                &code_len_encoder,
+                op.symbol,
+                assume_capacity,
+            );
+            if (op.extra_bits != 0) {
+                try writeBitsWithCapacity(
+                    allocator,
+                    writer,
+                    op.extra_value,
+                    op.extra_bits,
+                    assume_capacity,
+                );
+            }
         }
         for (tokens) |token| switch (token) {
-            .literal => |byte| try lit_encoder.writeSymbol(writer, allocator, byte),
-            .match => |m| try writeDynamicMatchFused(
+            .literal => |byte| try writeHuffmanSymbolWithCapacity(
+                allocator,
+                writer,
+                &lit_encoder,
+                byte,
+                assume_capacity,
+            ),
+            .match => |m| try writeDynamicMatchFusedWithCapacity(
                 allocator,
                 writer,
                 &lit_encoder,
                 &dist_encoder,
                 m,
+                assume_capacity,
             ),
         };
-        try lit_encoder.writeSymbol(writer, allocator, 256);
+        try writeHuffmanSymbolWithCapacity(
+            allocator,
+            writer,
+            &lit_encoder,
+            256,
+            assume_capacity,
+        );
     }
 };
+
+fn writeBitsWithCapacity(
+    allocator: std.mem.Allocator,
+    writer: *bitstream.BitWriter,
+    bits: u64,
+    count: u6,
+    comptime assume_capacity: bool,
+) !void {
+    if (assume_capacity) {
+        writer.writeBitsAssumeCapacity(bits, count);
+    } else {
+        try writer.writeBits(allocator, bits, count);
+    }
+}
+
+fn writeHuffmanSymbolWithCapacity(
+    allocator: std.mem.Allocator,
+    writer: *bitstream.BitWriter,
+    encoder: anytype,
+    symbol: usize,
+    comptime assume_capacity: bool,
+) !void {
+    if (symbol >= encoder.bits.len or encoder.bits[symbol] == 0) {
+        return error.InvalidHuffmanCode;
+    }
+    try writeBitsWithCapacity(
+        allocator,
+        writer,
+        encoder.codes[symbol],
+        encoder.bits[symbol],
+        assume_capacity,
+    );
+}
 
 fn writeDynamicMatchFused(
     allocator: std.mem.Allocator,
@@ -1170,6 +1294,24 @@ fn writeDynamicMatchFused(
     lit_encoder: *const huffman.HuffmanTable(286).Encoder,
     dist_encoder: *const huffman.HuffmanTable(30).Encoder,
     match: lz77.Token.Match,
+) !void {
+    return writeDynamicMatchFusedWithCapacity(
+        allocator,
+        writer,
+        lit_encoder,
+        dist_encoder,
+        match,
+        false,
+    );
+}
+
+fn writeDynamicMatchFusedWithCapacity(
+    allocator: std.mem.Allocator,
+    writer: *bitstream.BitWriter,
+    lit_encoder: *const huffman.HuffmanTable(286).Encoder,
+    dist_encoder: *const huffman.HuffmanTable(30).Encoder,
+    match: lz77.Token.Match,
+    comptime assume_capacity: bool,
 ) !void {
     const len = lengthCode(match.length);
     const dist = distanceCode(match.distance);
@@ -1191,7 +1333,13 @@ fn writeDynamicMatchFused(
     count += dist_code_bits;
     bits |= @as(u64, dist.extra_value) << count;
     count += dist.extra_bits;
-    try writer.writeBits(allocator, bits, count);
+    try writeBitsWithCapacity(
+        allocator,
+        writer,
+        bits,
+        count,
+        assume_capacity,
+    );
 }
 
 fn writeDynamicMatchReference(
@@ -16206,6 +16354,60 @@ test "dynamic bit cost model predicts dynamic token byte length" {
     const dynamic = try encodeRawDynamicTokensFinalAlloc(std.testing.allocator, plan.tokens, true);
     defer std.testing.allocator.free(dynamic);
     try std.testing.expectEqual((try dynamicTokenBitCost(plan.tokens) + 7) / 8, dynamic.len);
+}
+
+test "reserved dynamic block writer matches checked writer" {
+    const input =
+        ("abcabcabcabc xyz xyz xyz 0123456789 " ** 32) ++
+        ("aaaaaaaaabbbbbbbbbcccccccccddddddddd" ** 16);
+    const tokens = try planTokensAlloc(
+        std.testing.allocator,
+        input,
+        optionsForLevel(.fastest),
+    );
+    defer tokens.deinit(std.testing.allocator);
+    const plan = try DynamicCodingPlan.init(tokens.tokens);
+
+    for (0..8) |prefix_bits_usize| {
+        const prefix_bits: u6 = @intCast(prefix_bits_usize);
+        var checked = bitstream.BitWriter{};
+        defer checked.deinit(std.testing.allocator);
+        var reserved = bitstream.BitWriter{};
+        defer reserved.deinit(std.testing.allocator);
+        try checked.writeBits(
+            std.testing.allocator,
+            0b1010_1101,
+            prefix_bits,
+        );
+        try reserved.writeBits(
+            std.testing.allocator,
+            0b1010_1101,
+            prefix_bits,
+        );
+
+        const encoded_bytes = encodedBytesForBitsFromState(
+            reserved,
+            plan.bitCost(),
+        );
+        try reserved.bytes.ensureTotalCapacity(
+            std.testing.allocator,
+            reserved.bytes.items.len + encoded_bytes,
+        );
+        try plan.write(
+            std.testing.allocator,
+            &checked,
+            tokens.tokens,
+            true,
+        );
+        try plan.writeReserved(&reserved, tokens.tokens, true);
+        try checked.alignToByte(std.testing.allocator);
+        try reserved.alignToByte(std.testing.allocator);
+        try std.testing.expectEqualSlices(
+            u8,
+            checked.bytes.items,
+            reserved.bytes.items,
+        );
+    }
 }
 
 test "cached Deflate block costs match token-scan references" {

@@ -1879,3 +1879,19 @@ architecture blindly.
   Final validation passed `zig build test -j1` in 1:42.83 at 4,125,496-KiB
   peak RSS and `zig build check -j1` in 4:16.48 at 686,048-KiB peak RSS, both
   with zero swap.
+
+- Added a reserved-capacity bit-writer path for best dynamic Deflate blocks.
+  `writeBestTokensBlock` already reserves the exact encoded byte count before
+  emitting a selected dynamic block; that path now appends complete bytes
+  without rechecking/growing the ArrayList for every header field, Huffman
+  symbol, and fused match. Other dynamic/split writers retain checked writes.
+  Exhaustive 0..56-bit/all-alignment packing tests compare checked and reserved
+  writers, while a full dynamic-block reference compares header, code-length
+  tree, literal/match payload, EOB, and final bytes across all starting
+  alignments. On imx's fixed-CPU-12 11-round PNG A/B, adaptive
+  L8/RGB8/RGBA8 improved `1.022/1.017/1.019x`, the nine-row geomean improved
+  `1.007x`, other modes stayed neutral, and all encoded lengths, checksums, and
+  guards remained identical.
+  Final validation passed `zig build test -j1` in 1:40.82 at 4,124,876-KiB
+  peak RSS and `zig build check -j1` in 5:07.71 at 687,304-KiB peak RSS, both
+  with zero swap.

@@ -818,6 +818,23 @@ pub const BitWriter = struct {
     }
 
     pub fn writeBits(self: *BitWriter, allocator: std.mem.Allocator, bits: u64, count: u6) !void {
+        return self.writeBitsWithCapacity(allocator, bits, count, false);
+    }
+
+    /// Write bits after the caller has reserved enough `bytes` capacity for
+    /// every complete output byte this call can append. Deflate block writers
+    /// use this only after reserving their exact encoded byte count.
+    pub fn writeBitsAssumeCapacity(self: *BitWriter, bits: u64, count: u6) void {
+        self.writeBitsWithCapacity(undefined, bits, count, true) catch unreachable;
+    }
+
+    fn writeBitsWithCapacity(
+        self: *BitWriter,
+        allocator: std.mem.Allocator,
+        bits: u64,
+        count: u6,
+        comptime assume_capacity: bool,
+    ) !void {
         if (count > 56) return error.CorruptFrame;
         if (count == 0) return;
 
@@ -836,7 +853,14 @@ pub const BitWriter = struct {
         if (full_bytes != 0) {
             var encoded: [8]u8 = undefined;
             std.mem.writeInt(u64, &encoded, reservoir, .little);
-            try self.bytes.appendSlice(allocator, encoded[0..full_bytes]);
+            if (assume_capacity) {
+                std.debug.assert(
+                    self.bytes.capacity >= self.bytes.items.len + full_bytes,
+                );
+                self.bytes.appendSliceAssumeCapacity(encoded[0..full_bytes]);
+            } else {
+                try self.bytes.appendSlice(allocator, encoded[0..full_bytes]);
+            }
         }
 
         self.scratch = if (trailing_bits == 0)
@@ -930,6 +954,61 @@ test "BitWriter bulk packing matches scalar bit packing" {
                 try scalar.finish();
 
                 try std.testing.expectEqualSlices(u8, scalar.bytes.items, bulk.bytes.items);
+            }
+        }
+    }
+}
+
+test "BitWriter reserved-capacity packing matches checked packing" {
+    const patterns = [_]u64{
+        0,
+        std.math.maxInt(u64),
+        0x0123_4567_89ab_cdef,
+        0xfedc_ba98_7654_3210,
+    };
+    for (0..8) |prefix_len_usize| {
+        const prefix_len: u6 = @intCast(prefix_len_usize);
+        for (0..57) |count_usize| {
+            const count: u6 = @intCast(count_usize);
+            for (patterns) |pattern| {
+                var checked = BitWriter{};
+                defer checked.deinit(std.testing.allocator);
+                var reserved = BitWriter{};
+                defer reserved.deinit(std.testing.allocator);
+                try reserved.bytes.ensureTotalCapacity(
+                    std.testing.allocator,
+                    16,
+                );
+
+                try checked.writeBits(
+                    std.testing.allocator,
+                    0b1010_1101,
+                    prefix_len,
+                );
+                reserved.writeBitsAssumeCapacity(
+                    0b1010_1101,
+                    prefix_len,
+                );
+                try checked.writeBits(
+                    std.testing.allocator,
+                    pattern,
+                    count,
+                );
+                reserved.writeBitsAssumeCapacity(pattern, count);
+                try checked.writeBits(
+                    std.testing.allocator,
+                    0b0110_1001,
+                    7,
+                );
+                reserved.writeBitsAssumeCapacity(0b0110_1001, 7);
+                try checked.alignToByte(std.testing.allocator);
+                try reserved.alignToByte(std.testing.allocator);
+
+                try std.testing.expectEqualSlices(
+                    u8,
+                    checked.bytes.items,
+                    reserved.bytes.items,
+                );
             }
         }
     }
