@@ -11769,6 +11769,153 @@ def main() -> int:
             dynamic_profile_chunked_window_manifest["deflate_dynamic_decode_profile_chunked_window_rows"] == 0,
         )
 
+        def append_native_codec_probes_check(
+            name: str,
+            result: subprocess.CompletedProcess[str],
+            manifest: dict[str, object],
+            detail_matched: bool,
+        ) -> None:
+            matched = (
+                result.returncode != 0
+                and "dashboard_index_validation_unhealthy=native_codec_probes_failed" in result.stdout
+                and manifest["validation_healthy"] is False
+                and manifest["native_codec_probes_healthy"] is False
+                and detail_matched
+            )
+            checks.append(
+                check_row(
+                    name,
+                    "strict-validation-health",
+                    True,
+                    matched,
+                    result.returncode,
+                    "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+                    result.stdout,
+                )
+            )
+
+        native_codec_ok_result, native_codec_ok_manifest = native_codec_probes_drift_fixture(
+            root,
+            "native-codec-ok-failed",
+            mutate_report=lambda payload: payload.__setitem__("ok", False),
+        )
+        append_native_codec_probes_check(
+            "native_codec_probes_ok_failed",
+            native_codec_ok_result,
+            native_codec_ok_manifest,
+            native_codec_ok_manifest["native_codec_probes_ok"] is False,
+        )
+
+        native_codec_probe_not_ok_result, native_codec_probe_not_ok_manifest = native_codec_probes_drift_fixture(
+            root,
+            "native-codec-probe-not-ok",
+            mutate_report=lambda payload: payload["probes"][0].__setitem__("ok", False),
+        )
+        append_native_codec_probes_check(
+            "native_codec_probes_probe_not_ok",
+            native_codec_probe_not_ok_result,
+            native_codec_probe_not_ok_manifest,
+            native_codec_probe_not_ok_manifest["native_codec_probes_ok_probe_count"] == 3,
+        )
+
+        native_codec_probe_timed_out_result, native_codec_probe_timed_out_manifest = native_codec_probes_drift_fixture(
+            root,
+            "native-codec-probe-timed-out",
+            mutate_report=lambda payload: payload["probes"][0].__setitem__("timed_out", True),
+        )
+        append_native_codec_probes_check(
+            "native_codec_probes_probe_timed_out",
+            native_codec_probe_timed_out_result,
+            native_codec_probe_timed_out_manifest,
+            native_codec_probe_timed_out_manifest["native_codec_probes_timed_out_probes"] == 1,
+        )
+
+        native_codec_coverage_not_ok_result, native_codec_coverage_not_ok_manifest = native_codec_probes_drift_fixture(
+            root,
+            "native-codec-coverage-not-ok",
+            mutate_report=lambda payload: payload["coverage"][0].__setitem__("ok", False),
+        )
+        append_native_codec_probes_check(
+            "native_codec_probes_coverage_not_ok",
+            native_codec_coverage_not_ok_result,
+            native_codec_coverage_not_ok_manifest,
+            native_codec_coverage_not_ok_manifest["native_codec_probes_coverage_ok_rows"] == 3,
+        )
+
+        native_codec_coverage_case_sum_result, native_codec_coverage_case_sum_manifest = native_codec_probes_drift_fixture(
+            root,
+            "native-codec-coverage-case-sum",
+            mutate_report=lambda payload: payload["coverage"][0].__setitem__("cases", int(payload["coverage"][0]["cases"]) + 1),
+        )
+        append_native_codec_probes_check(
+            "native_codec_probes_coverage_case_sum_mismatch",
+            native_codec_coverage_case_sum_result,
+            native_codec_coverage_case_sum_manifest,
+            native_codec_coverage_case_sum_manifest["native_codec_probes_coverage_case_sum"] == 363,
+        )
+
+        native_codec_total_cases_zero_result, native_codec_total_cases_zero_manifest = native_codec_probes_drift_fixture(
+            root,
+            "native-codec-total-cases-zero",
+            mutate_report=lambda payload: payload.__setitem__("total_cases", 0),
+        )
+        append_native_codec_probes_check(
+            "native_codec_probes_total_cases_zero",
+            native_codec_total_cases_zero_result,
+            native_codec_total_cases_zero_manifest,
+            native_codec_total_cases_zero_manifest["native_codec_probes_total_cases"] == 0,
+        )
+
+        native_codec_capability_floor_cases = [
+            ("native_codec_probes_lib_generated_floor", "native-codec-lib-generated-floor", "lib-generated", "native_codec_probes_lib_generated_cases"),
+            ("native_codec_probes_incremental_floor", "native-codec-incremental-floor", "incremental", "native_codec_probes_incremental_cases"),
+            ("native_codec_probes_chunked_floor", "native-codec-chunked-floor", "chunked", "native_codec_probes_chunked_cases"),
+            ("native_codec_probes_reusable_chunked_floor", "native-codec-reusable-chunked-floor", "reusable-chunked", "native_codec_probes_reusable_chunked_cases"),
+            ("native_codec_probes_fse_repeat_floor", "native-codec-fse-repeat-floor", "fse-repeat", "native_codec_probes_fse_repeat_cases"),
+        ]
+        for check_name, fixture_name, capability, manifest_field in native_codec_capability_floor_cases:
+            result, manifest = native_codec_probes_drift_fixture(
+                root,
+                fixture_name,
+                mutate_report=lambda payload, capability=capability: next(
+                    row for row in payload["capabilities"] if row["capability"] == capability
+                ).__setitem__("cases", 0),
+            )
+            append_native_codec_probes_check(
+                check_name,
+                result,
+                manifest,
+                manifest[manifest_field] == 0,
+            )
+
+        native_codec_zstd_frame_floor_result, native_codec_zstd_frame_floor_manifest = native_codec_probes_drift_fixture(
+            root,
+            "native-codec-zstd-frame-floor",
+            mutate_report=lambda payload: next(
+                row for row in payload["probes"] if row["label"] == "zstd-native-frame-probe"
+            ).__setitem__("cases", 212),
+        )
+        append_native_codec_probes_check(
+            "native_codec_probes_zstd_frame_cases_floor",
+            native_codec_zstd_frame_floor_result,
+            native_codec_zstd_frame_floor_manifest,
+            native_codec_zstd_frame_floor_manifest["native_codec_probes_zstd_frame_cases"] == 212,
+        )
+
+        native_codec_zstd_dictionary_floor_result, native_codec_zstd_dictionary_floor_manifest = native_codec_probes_drift_fixture(
+            root,
+            "native-codec-zstd-dictionary-floor",
+            mutate_report=lambda payload: next(
+                row for row in payload["probes"] if row["label"] == "zstd-native-dictionary-probe"
+            ).__setitem__("cases", 24),
+        )
+        append_native_codec_probes_check(
+            "native_codec_probes_zstd_dictionary_cases_floor",
+            native_codec_zstd_dictionary_floor_result,
+            native_codec_zstd_dictionary_floor_manifest,
+            native_codec_zstd_dictionary_floor_manifest["native_codec_probes_zstd_dictionary_cases"] == 24,
+        )
+
         native_codec_probe_count_result, native_codec_probe_count_manifest = native_codec_probes_drift_fixture(
             root,
             "native-codec-probe-count",

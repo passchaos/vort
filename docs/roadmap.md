@@ -466,7 +466,7 @@ architecture blindly.
 - [x] Dashboard strict-mode smoke directly covers zstd comparison gate and data-row drift, including compare/standard/sweep `ok` flags, data-row floors, missing Markdown companions, and sweep path/block-length metadata mismatches.
 - [x] Dashboard strict-mode smoke covers every validation unhealthy reason with isolated negative fixtures.
 - [x] Dashboard strict-mode validation unhealthy reason matrix is stored in a schema-checked external JSON config.
-- [x] Dashboard strict-mode smoke directly covers native codec probe health drift, including probe count/case-sum mismatches, missing/duplicate probes, coverage/capability count/missing/duplicate drift, unhealthy capability rows, and Markdown unmatched rows.
+- [x] Dashboard strict-mode smoke directly covers native codec probe health drift, including probe ok/timeout/case-floor drift, probe count/case-sum mismatches, missing/duplicate probes, coverage/capability count/missing/duplicate drift, unhealthy capability rows, and Markdown unmatched rows.
 - [x] Dashboard strict-mode smoke directly covers zlib relaxed health drift, including missing gate/Markdown artifacts, gate check missing/extra/rule drift, report exact/floor mismatches, and malformed/duplicate/unknown/value-mismatched Markdown metrics.
 - [x] Dashboard strict-mode smoke directly covers Snappy report health drift, including missing/duplicate/unknown mode-case rows, positive timing/ratio/throughput drift, repetitive-ratio regressions, framed-overhead drift, and reusable checksum mismatches.
 - [x] Dashboard strict-mode smoke directly covers PNG scratch health drift, including missing Markdown, report count drift, missing/duplicate/unknown cases, row accounting mismatches, stored/fixed streaming regressions, streaming-savings drift, and Markdown row drift.
@@ -2554,6 +2554,12 @@ architecture blindly.
   scope. The strict validation gate now isolates failed gate `ok` flags,
   zero-data-row floors that still have internally consistent CSV/Markdown rows,
   missing Markdown companions, and block-sweep path/block-length metadata drift.
+
+- Tightened native codec probe strict-smoke direct drift coverage for existing
+  LZ4/Zstd probe dashboard artifacts without adding codec scope. The strict
+  validation gate now isolates top-level `ok` drift, per-probe `ok` and timeout
+  drift, coverage row `ok` and case-sum drift, total-case floors, key capability
+  case floors, and Zstd frame/dictionary probe case floors.
 
 - Promoted the existing Snappy report CSV from dashboard inventory metadata to
   aggregate validation health without adding new compression-format scope. The
