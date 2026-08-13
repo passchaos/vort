@@ -4531,9 +4531,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 518,
-      "min_expected_failures": 518,
-      "min_matched": 518
+      "min_checks": 520,
+      "min_expected_failures": 520,
+      "min_matched": 520
     },
     {
       "mode": "non-json-artifact-health",
@@ -4639,7 +4639,7 @@ validation-reason, and check rows to match the JSON counts before
 `dashboard_strict_healthy` can pass. The `dashboard-markdown` mode verifies that important human-facing
 sections, including artifact inventory, aggregate validation health, producer/smoke-gate
 coverage, dashboard strict gate coverage, dashboard configuration coverage, validation JSON schema coverage, header inspect coverage, corrupt-sidecar
-rejection coverage, Huffman optimality/gap coverage, compression level positive-row/Markdown coverage, dynamic plan CSV coverage, deflate extra-bit benchmark coverage, dictionary decode benchmark coverage, PNG scanline benchmark coverage, chunked zlib benchmark coverage, PNG streaming zlib benchmark coverage, deflate dynamic decode profile coverage, native library benchmark coverage, zstd comparison gate coverage, native fuzz corpus coverage and summary/floor drift, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility exact/floor coverage, native allocation coverage, Python zlib
+rejection coverage, Huffman optimality/gap coverage, compression level positive-row/Markdown coverage, dynamic plan source/positive-row CSV coverage, deflate extra-bit benchmark coverage, dictionary decode benchmark coverage, PNG scanline benchmark coverage, chunked zlib benchmark coverage, PNG streaming zlib benchmark coverage, deflate dynamic decode profile coverage, native library benchmark coverage, zstd comparison gate coverage, native fuzz corpus coverage and summary/floor drift, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility exact/floor coverage, native allocation coverage, Python zlib
 differential floor coverage, decode-stage error matching, fuzz corpus summary/floor matching, native
 stream metadata coverage, native tier corpus discovery, native summary error
 codec/phase-offset tables, native codec probe coverage/capability/floor tables, and
@@ -4655,7 +4655,7 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 505,
+  "check_count": 507,
   "mode_count": 5,
   "expected_mode_count": 5,
   "missing_mode_count": 0,
@@ -4675,9 +4675,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "min_checks": 518,
-      "min_expected_failures": 518,
-      "min_matched": 518
+      "min_checks": 520,
+      "min_expected_failures": 520,
+      "min_matched": 520
     },
     {
       "mode": "non-json-artifact-health",
@@ -4720,14 +4720,14 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 431,
-      "min_checks": 518,
+      "checks": 433,
+      "min_checks": 520,
       "missing_checks": 87,
-      "expected_failures": 431,
-      "min_expected_failures": 518,
+      "expected_failures": 433,
+      "min_expected_failures": 520,
       "missing_expected_failures": 87,
-      "matched": 431,
-      "min_matched": 518,
+      "matched": 433,
+      "min_matched": 520,
       "missing_matched": 87
     },
     {
@@ -4770,9 +4770,9 @@ Example:
     },
     {
       "mode": "strict-validation-health",
-      "checks": 431,
-      "expected_failures": 431,
-      "matched": 431
+      "checks": 433,
+      "expected_failures": 433,
+      "matched": 433
     },
     {
       "mode": "non-json-artifact-health",
@@ -6174,6 +6174,30 @@ Example:
       "expected_failure": true,
       "expected_output": "dashboard_index_validation_unhealthy=level_report_failed",
       "actual_output": "dashboard_index_validation_unhealthy=level_report_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dynamic_plan_missing_source",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=missing_dynamic_plan_artifact",
+      "actual_output": "dashboard_index_validation_unhealthy=missing_dynamic_plan_artifact\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dynamic_plan_positive_row_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed\n",
       "actual_output_bytes": 57,
       "actual_output_limit": 240,
       "actual_output_truncated": false,

@@ -4545,6 +4545,8 @@
           "dictionary_decode_bench_checksum_mismatch",
           "dictionary_decode_bench_markdown_table",
           "dynamic_plan_markdown_table",
+          "dynamic_plan_missing_source",
+          "dynamic_plan_positive_row_mismatch",
           "dynamic_plan_missing_path",
           "dynamic_plan_duplicate_path",
           "dynamic_plan_unknown_path",

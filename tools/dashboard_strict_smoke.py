@@ -5803,19 +5803,29 @@ def native_stream_summary_drift_fixture(
     return result, manifest
 
 
-def dynamic_plan_drift_fixture(root: Path, fixture_name: str, mutate_csv) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+def dynamic_plan_drift_fixture(
+    root: Path,
+    fixture_name: str,
+    mutate_csv=None,
+    *,
+    artifact_name: str = DYNAMIC_PLAN_ARTIFACT,
+    remove_artifact: bool = False,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted dynamic-plan CSV artifact."""
 
     fixture_root = root / fixture_name
     fixture_root.mkdir()
     write_healthy_artifacts(fixture_root)
-    csv_path = fixture_root / DYNAMIC_PLAN_ARTIFACT
-    with csv_path.open(newline="") as f:
-        reader = csv.DictReader(f)
-        fieldnames = list(reader.fieldnames or [])
-        rows = list(reader)
-    mutate_csv(rows, fieldnames, csv_path)
-    rewrite_csv_rows(csv_path, rows, fieldnames)
+    csv_path = fixture_root / artifact_name
+    if remove_artifact:
+        csv_path.unlink()
+    elif mutate_csv is not None:
+        with csv_path.open(newline="") as f:
+            reader = csv.DictReader(f)
+            fieldnames = list(reader.fieldnames or [])
+            rows = list(reader)
+        mutate_csv(rows, fieldnames, csv_path)
+        rewrite_csv_rows(csv_path, rows, fieldnames)
     producer_map = fixture_root / "producers.json"
     write_producer_map(producer_map)
     result = run(
@@ -9626,6 +9636,62 @@ def main() -> int:
                 level_markdown_detail_result.returncode,
                 "dashboard_index_validation_unhealthy=level_report_failed",
                 level_markdown_detail_result.stdout,
+            )
+        )
+
+        dynamic_missing_source_result, dynamic_missing_source_manifest = dynamic_plan_drift_fixture(
+            root,
+            "dynamic-plan-missing-source",
+            artifact_name=DYNAMIC_PLAN_BUILTINS_ARTIFACT,
+            remove_artifact=True,
+        )
+        dynamic_missing_source_matched = (
+            dynamic_missing_source_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=missing_dynamic_plan_artifact" in dynamic_missing_source_result.stdout
+            and dynamic_missing_source_manifest["validation_healthy"] is False
+            and dynamic_missing_source_manifest["dynamic_plan_healthy"] is False
+            and dynamic_missing_source_manifest["dynamic_plan_present"] is False
+            and dynamic_missing_source_manifest["dynamic_plan_missing_sources"] == ["builtins"]
+        )
+        checks.append(
+            check_row(
+                "dynamic_plan_missing_source",
+                "strict-validation-health",
+                True,
+                dynamic_missing_source_matched,
+                dynamic_missing_source_result.returncode,
+                "dashboard_index_validation_unhealthy=missing_dynamic_plan_artifact",
+                dynamic_missing_source_result.stdout,
+            )
+        )
+
+        dynamic_positive_result, dynamic_positive_manifest = dynamic_plan_drift_fixture(
+            root,
+            "dynamic-plan-positive-row",
+            mutate_csv=lambda rows, fieldnames, csv_path: rows[0].__setitem__("stored_bytes", "0"),
+        )
+        dynamic_positive_matched = (
+            dynamic_positive_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=dynamic_plan_failed" in dynamic_positive_result.stdout
+            and dynamic_positive_manifest["validation_healthy"] is False
+            and dynamic_positive_manifest["dynamic_plan_healthy"] is False
+            and dynamic_positive_manifest["dynamic_plan_positive_rows"] == 8
+            and dynamic_positive_manifest["dynamic_plan_token_accounting_rows"] == 9
+            and dynamic_positive_manifest["dynamic_plan_histogram_rows"] == 9
+            and dynamic_positive_manifest["dynamic_plan_ratio_rows"] == 9
+            and dynamic_positive_manifest["dynamic_plan_slack_rows"] == 9
+            and dynamic_positive_manifest["dynamic_plan_wrapper_rows"] == 9
+            and dynamic_positive_manifest["dynamic_plan_malformed_rows"] == 0
+        )
+        checks.append(
+            check_row(
+                "dynamic_plan_positive_row_mismatch",
+                "strict-validation-health",
+                True,
+                dynamic_positive_matched,
+                dynamic_positive_result.returncode,
+                "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+                dynamic_positive_result.stdout,
             )
         )
 

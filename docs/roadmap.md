@@ -485,7 +485,7 @@ architecture blindly.
 - [x] Dashboard strict-mode smoke directly covers native fuzz corpus health drift, including report ok/mode/floor drift, summary row drift, report count/matched-row drift, coverage ok/floor/requirement mismatches, and Markdown unmatched rows.
 - [x] Dashboard strict-mode smoke directly covers decode-stage health drift, including report/error count mismatches, internally consistent unmatched error rows, CSV positive/header/fixed/dynamic/stored row drift, CSV missing/duplicate/unknown cases, and Markdown unmatched rows.
 - [x] Dashboard strict-mode smoke directly covers fuzz corpus health drift, including report ok/mode/floor drift, summary row drift, report count/matched-row drift, coverage ok/floor/requirement mismatches, and Markdown unmatched rows.
-- [x] Dashboard strict-mode smoke directly covers dynamic-plan health drift, including missing/duplicate/unknown paths, malformed rows, token-accounting mismatches, histogram/ratio drift, and bit-slack/wrapper invariants.
+- [x] Dashboard strict-mode smoke directly covers dynamic-plan health drift, including missing sources, missing/duplicate/unknown paths, positive row drift, malformed rows, token-accounting mismatches, histogram/ratio drift, and bit-slack/wrapper invariants.
 - [x] Dashboard strict-mode smoke directly covers compression level-report health drift, including missing Markdown, missing/duplicate/unknown rows, positive row drift, token accounting drift, ratio drift, roundtrip checksum drift, and Markdown summary/detail mismatches.
 - [x] Dashboard strict-mode smoke directly covers Huffman length-report health drift, including missing Markdown, malformed/blank/duplicate cases, non-optimal rows, gap-bit drift, and Markdown summary/case mismatches.
 - [x] Dashboard strict-mode smoke directly covers sidecar corrupt health drift, including missing Markdown, row floors, metadata/full rejection count drift, JSON item count/malformed/duplicate drift, Markdown row count drift, and unmatched/malformed/duplicate/unknown Markdown rows.
@@ -3040,6 +3040,11 @@ architecture blindly.
   existing CSV/Markdown artifacts. The strict validation gate now isolates a
   missing Markdown companion and non-positive row accounting without relying on
   token, ratio, roundtrip, or Markdown detail drift to catch those failures.
+
+- Tightened dynamic-plan strict-smoke direct drift coverage for the existing
+  project-file and built-in CSV artifacts. The strict validation gate now
+  isolates missing source artifacts and positive-row drift before token,
+  histogram, ratio, slack, or wrapper invariants are evaluated.
 
 
 
