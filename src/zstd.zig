@@ -361,8 +361,28 @@ pub fn decodeFrameAllocLimited(allocator: std.mem.Allocator, frame: []const u8, 
     return try decodeFrameAllocWithLimit(allocator, frame, max_output_len);
 }
 
+pub fn decodeFrameAllocExactSize(allocator: std.mem.Allocator, frame: []const u8, expected_output_len: usize) Error![]u8 {
+    return try decodeNativeFrameAllocExactSize(allocator, frame, expected_output_len);
+}
+
+pub fn decodeFrameAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8) Error!usize {
+    return try decodeNativeFrameAppend(allocator, out, frame);
+}
+
+pub fn decodeFrameAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8, expected_output_len: usize) Error!usize {
+    return try decodeNativeFrameAppendExactSize(allocator, out, frame, expected_output_len);
+}
+
+pub fn decodeFrameAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8, max_output_len: usize) Error!usize {
+    return try decodeNativeFrameAppendLimited(allocator, out, frame, max_output_len);
+}
+
 pub fn decodeFrameInto(frame: []const u8, output: []u8) Error!usize {
     return try decodeNativeFrameInto(frame, output);
+}
+
+pub fn decodeFrameIntoExactSize(frame: []const u8, output: []u8, expected_output_len: usize) Error!usize {
+    return try decodeNativeFrameIntoExactSize(frame, output, expected_output_len);
 }
 
 pub fn decodedFrameSize(frame: []const u8) Error!usize {
@@ -371,6 +391,46 @@ pub fn decodedFrameSize(frame: []const u8) Error!usize {
 
 pub fn decodedFrameSizeLimited(frame: []const u8, max_output_len: usize) Error!usize {
     return try decodedNativeFrameSizeLimited(frame, max_output_len);
+}
+
+pub fn decodeFrameChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8) Error![]u8 {
+    return try decodeNativeFrameChunksAlloc(allocator, chunks, compressed_scratch);
+}
+
+pub fn decodeFrameChunksAllocExactSize(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) Error![]u8 {
+    return try decodeNativeFrameChunksAllocExactSize(allocator, chunks, compressed_scratch, expected_output_len);
+}
+
+pub fn decodeFrameChunksAllocLimited(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error![]u8 {
+    return try decodeNativeFrameChunksAllocLimited(allocator, chunks, compressed_scratch, max_output_len);
+}
+
+pub fn decodeFrameChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8) Error!usize {
+    return try decodeNativeFrameChunksAppend(allocator, out, chunks, compressed_scratch);
+}
+
+pub fn decodeFrameChunksAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) Error!usize {
+    return try decodeNativeFrameChunksAppendExactSize(allocator, out, chunks, compressed_scratch, expected_output_len);
+}
+
+pub fn decodeFrameChunksAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!usize {
+    return try decodeNativeFrameChunksAppendLimited(allocator, out, chunks, compressed_scratch, max_output_len);
+}
+
+pub fn decodeFrameChunksInto(chunks: []const []const u8, compressed_scratch: []u8, output: []u8) Error!usize {
+    return try decodeNativeFrameChunksInto(chunks, compressed_scratch, output);
+}
+
+pub fn decodeFrameChunksIntoExactSize(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, expected_output_len: usize) Error!usize {
+    return try decodeNativeFrameChunksIntoExactSize(chunks, compressed_scratch, output, expected_output_len);
+}
+
+pub fn decodedFrameChunksSize(chunks: []const []const u8, compressed_scratch: []u8) Error!usize {
+    return try decodedNativeFrameChunksSize(chunks, compressed_scratch);
+}
+
+pub fn decodedFrameChunksSizeLimited(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!usize {
+    return try decodedNativeFrameChunksSizeLimited(chunks, compressed_scratch, max_output_len);
 }
 
 fn nativeBlockSizeMax(options: NativeFrameOptions) Error!usize {

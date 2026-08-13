@@ -450,10 +450,25 @@ pub const zstdEncodeFrameWithLevelAlloc = zstd.encodeFrameWithLevelAlloc;
 pub const zstdEncodeFrameWithOptionsAlloc = zstd.encodeFrameWithOptionsAlloc;
 pub const zstdEncodeFrameWithLevelAndOptionsAlloc = zstd.encodeFrameWithLevelAndOptionsAlloc;
 pub const zstdDecodeFrameAlloc = zstd.decodeFrameAlloc;
+pub const zstdDecodeFrameAllocExactSize = zstd.decodeFrameAllocExactSize;
 pub const zstdDecodeFrameAllocLimited = zstd.decodeFrameAllocLimited;
+pub const zstdDecodeFrameAppend = zstd.decodeFrameAppend;
+pub const zstdDecodeFrameAppendExactSize = zstd.decodeFrameAppendExactSize;
+pub const zstdDecodeFrameAppendLimited = zstd.decodeFrameAppendLimited;
 pub const zstdDecodeFrameInto = zstd.decodeFrameInto;
+pub const zstdDecodeFrameIntoExactSize = zstd.decodeFrameIntoExactSize;
 pub const zstdDecodedFrameSize = zstd.decodedFrameSize;
 pub const zstdDecodedFrameSizeLimited = zstd.decodedFrameSizeLimited;
+pub const zstdDecodeFrameChunksAlloc = zstd.decodeFrameChunksAlloc;
+pub const zstdDecodeFrameChunksAllocExactSize = zstd.decodeFrameChunksAllocExactSize;
+pub const zstdDecodeFrameChunksAllocLimited = zstd.decodeFrameChunksAllocLimited;
+pub const zstdDecodeFrameChunksAppend = zstd.decodeFrameChunksAppend;
+pub const zstdDecodeFrameChunksAppendExactSize = zstd.decodeFrameChunksAppendExactSize;
+pub const zstdDecodeFrameChunksAppendLimited = zstd.decodeFrameChunksAppendLimited;
+pub const zstdDecodeFrameChunksInto = zstd.decodeFrameChunksInto;
+pub const zstdDecodeFrameChunksIntoExactSize = zstd.decodeFrameChunksIntoExactSize;
+pub const zstdDecodedFrameChunksSize = zstd.decodedFrameChunksSize;
+pub const zstdDecodedFrameChunksSizeLimited = zstd.decodedFrameChunksSizeLimited;
 pub const ZstdFrameOptions = zstd.FrameOptions;
 pub const zstdEncodeRawOrRleFrameAlloc = zstd.encodeRawOrRleFrameAlloc;
 pub const zstdEncodeRawOrRleFrameWithOptionsAlloc = zstd.encodeRawOrRleFrameWithOptionsAlloc;
@@ -1698,10 +1713,25 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdEncodeFrameWithOptionsAlloc;
     _ = zstdEncodeFrameWithLevelAndOptionsAlloc;
     _ = zstdDecodeFrameAlloc;
+    _ = zstdDecodeFrameAllocExactSize;
     _ = zstdDecodeFrameAllocLimited;
+    _ = zstdDecodeFrameAppend;
+    _ = zstdDecodeFrameAppendExactSize;
+    _ = zstdDecodeFrameAppendLimited;
     _ = zstdDecodeFrameInto;
+    _ = zstdDecodeFrameIntoExactSize;
     _ = zstdDecodedFrameSize;
     _ = zstdDecodedFrameSizeLimited;
+    _ = zstdDecodeFrameChunksAlloc;
+    _ = zstdDecodeFrameChunksAllocExactSize;
+    _ = zstdDecodeFrameChunksAllocLimited;
+    _ = zstdDecodeFrameChunksAppend;
+    _ = zstdDecodeFrameChunksAppendExactSize;
+    _ = zstdDecodeFrameChunksAppendLimited;
+    _ = zstdDecodeFrameChunksInto;
+    _ = zstdDecodeFrameChunksIntoExactSize;
+    _ = zstdDecodedFrameChunksSize;
+    _ = zstdDecodedFrameChunksSizeLimited;
     _ = ZstdFrameOptions;
     _ = zstdEncodeRawOrRleFrameAlloc;
     _ = zstdEncodeRawOrRleFrameWithOptionsAlloc;
@@ -2231,6 +2261,87 @@ test "root zstd frame options round trip" {
     try std.testing.expectEqualSlices(u8, payload, into_buffer[0..written]);
     try std.testing.expectEqual(bound, try zstdDecodedFrameSizeLimited(encoded, bound));
     try std.testing.expectError(error.OutputLimitExceeded, zstdDecodedFrameSizeLimited(encoded, bound - 1));
+}
+
+test "root zstd frame facade exposes append exact and chunked decode helpers" {
+    const payload = "root zstd public facade helper coverage" ** 3;
+    const encoded = try zstdEncodeFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .content_checksum = true,
+    });
+    defer std.testing.allocator.free(encoded);
+
+    const exact = try zstdDecodeFrameAllocExactSize(std.testing.allocator, encoded, payload.len);
+    defer std.testing.allocator.free(exact);
+    try std.testing.expectEqualSlices(u8, payload, exact);
+    try std.testing.expectError(error.SizeMismatch, zstdDecodeFrameAllocExactSize(std.testing.allocator, encoded, payload.len - 1));
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try zstdDecodeFrameAppend(std.testing.allocator, &appended, encoded));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, appended.items);
+    appended.clearRetainingCapacity();
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try zstdDecodeFrameAppendExactSize(std.testing.allocator, &appended, encoded, payload.len));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, appended.items);
+    try std.testing.expectError(error.SizeMismatch, zstdDecodeFrameAppendExactSize(std.testing.allocator, &appended, encoded, payload.len + 1));
+    appended.clearRetainingCapacity();
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try zstdDecodeFrameAppendLimited(std.testing.allocator, &appended, encoded, payload.len));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, appended.items);
+    try std.testing.expectError(error.OutputLimitExceeded, zstdDecodeFrameAppendLimited(std.testing.allocator, &appended, encoded, payload.len - 1));
+
+    var into: [payload.len]u8 = undefined;
+    try std.testing.expectEqual(payload.len, try zstdDecodeFrameIntoExactSize(encoded, &into, payload.len));
+    try std.testing.expectEqualSlices(u8, payload, &into);
+    try std.testing.expectError(error.SizeMismatch, zstdDecodeFrameIntoExactSize(encoded, &into, payload.len - 1));
+
+    const chunks = [_][]const u8{
+        encoded[0..5],
+        encoded[5 .. encoded.len - 3],
+        encoded[encoded.len - 3 ..],
+    };
+    const join = try std.testing.allocator.alloc(u8, encoded.len);
+    defer std.testing.allocator.free(join);
+    try std.testing.expectEqual(payload.len, try zstdDecodedFrameChunksSize(&chunks, join));
+    try std.testing.expectEqual(payload.len, try zstdDecodedFrameChunksSizeLimited(&chunks, join, payload.len));
+    try std.testing.expectError(error.OutputLimitExceeded, zstdDecodedFrameChunksSizeLimited(&chunks, join, payload.len - 1));
+
+    const chunked = try zstdDecodeFrameChunksAlloc(std.testing.allocator, &chunks, join);
+    defer std.testing.allocator.free(chunked);
+    try std.testing.expectEqualSlices(u8, payload, chunked);
+    const chunked_exact = try zstdDecodeFrameChunksAllocExactSize(std.testing.allocator, &chunks, join, payload.len);
+    defer std.testing.allocator.free(chunked_exact);
+    try std.testing.expectEqualSlices(u8, payload, chunked_exact);
+    try std.testing.expectError(error.SizeMismatch, zstdDecodeFrameChunksAllocExactSize(std.testing.allocator, &chunks, join, payload.len + 1));
+    const chunked_limited = try zstdDecodeFrameChunksAllocLimited(std.testing.allocator, &chunks, join, payload.len);
+    defer std.testing.allocator.free(chunked_limited);
+    try std.testing.expectEqualSlices(u8, payload, chunked_limited);
+    try std.testing.expectError(error.OutputLimitExceeded, zstdDecodeFrameChunksAllocLimited(std.testing.allocator, &chunks, join, payload.len - 1));
+
+    var chunked_append: std.ArrayList(u8) = .empty;
+    defer chunked_append.deinit(std.testing.allocator);
+    try chunked_append.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try zstdDecodeFrameChunksAppend(std.testing.allocator, &chunked_append, &chunks, join));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, chunked_append.items);
+    chunked_append.clearRetainingCapacity();
+    try chunked_append.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try zstdDecodeFrameChunksAppendExactSize(std.testing.allocator, &chunked_append, &chunks, join, payload.len));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, chunked_append.items);
+    try std.testing.expectError(error.SizeMismatch, zstdDecodeFrameChunksAppendExactSize(std.testing.allocator, &chunked_append, &chunks, join, payload.len + 1));
+    chunked_append.clearRetainingCapacity();
+    try chunked_append.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try zstdDecodeFrameChunksAppendLimited(std.testing.allocator, &chunked_append, &chunks, join, payload.len));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, chunked_append.items);
+    try std.testing.expectError(error.OutputLimitExceeded, zstdDecodeFrameChunksAppendLimited(std.testing.allocator, &chunked_append, &chunks, join, payload.len - 1));
+
+    @memset(&into, 0);
+    try std.testing.expectEqual(payload.len, try zstdDecodeFrameChunksInto(&chunks, join, &into));
+    try std.testing.expectEqualSlices(u8, payload, &into);
+    @memset(&into, 0);
+    try std.testing.expectEqual(payload.len, try zstdDecodeFrameChunksIntoExactSize(&chunks, join, &into, payload.len));
+    try std.testing.expectEqualSlices(u8, payload, &into);
+    try std.testing.expectError(error.SizeMismatch, zstdDecodeFrameChunksIntoExactSize(&chunks, join, &into, payload.len - 1));
 }
 
 test "root zstd native size preflight covers compressed blocks" {
