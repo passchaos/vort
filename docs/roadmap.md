@@ -1925,3 +1925,14 @@ architecture blindly.
   Final validation passed `zig build test -j1` in 1:59.58 at 4,125,180-KiB
   peak RSS and `zig build check -j1` in 5:03.48 at 687,060-KiB peak RSS, both
   with zero swap.
+
+- Replaced repeated DEFLATE length-code arithmetic with a compile-time table
+  covering every match length from 3 through 258. The original log2/division
+  formula remains a test reference and matches every table entry, so token
+  frequencies, block decisions, and encoded bytes are unchanged. On imx's
+  fixed-CPU-12 11-round PNG A/B, adaptive L8/RGB8/RGBA8 improved
+  `1.044/1.035/1.037x`, the nine-row geomean improved `1.012x`, and every
+  encoded length, checksum, and guard remained identical.
+  Final validation passed `zig build test -j1` in 1:57.52 at 4,124,928-KiB
+  peak RSS and `zig build check -j1` in 5:04.65 at 688,456-KiB peak RSS, both
+  with zero swap.

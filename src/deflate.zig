@@ -1583,6 +1583,25 @@ const CodeExtra = struct {
 };
 
 fn lengthCode(length: u16) CodeExtra {
+    std.debug.assert(
+        length >= lz77.min_match_len and length <= lz77.max_match_len,
+    );
+    return length_code_table[length - lz77.min_match_len];
+}
+
+const length_code_table = makeLengthCodeTable();
+
+fn makeLengthCodeTable() [lz77.max_match_len - lz77.min_match_len + 1]CodeExtra {
+    @setEvalBranchQuota(10_000);
+    var table: [lz77.max_match_len - lz77.min_match_len + 1]CodeExtra =
+        undefined;
+    for (&table, lz77.min_match_len..) |*entry, length| {
+        entry.* = lengthCodeReference(@intCast(length));
+    }
+    return table;
+}
+
+fn lengthCodeReference(length: u16) CodeExtra {
     std.debug.assert(length >= lz77.min_match_len and length <= lz77.max_match_len);
     if (length <= 10) return .{ .symbol = length + 254, .extra_bits = 0, .extra_value = 0 };
     if (length == 258) return .{ .symbol = 285, .extra_bits = 0, .extra_value = 0 };
@@ -1616,6 +1635,12 @@ fn distanceCode(distance: u16) CodeExtra {
 }
 
 test "fast length and distance code selection matches RFC tables" {
+    for (lz77.min_match_len..lz77.max_match_len + 1) |length| {
+        try std.testing.expectEqual(
+            lengthCodeReference(@intCast(length)),
+            lengthCode(@intCast(length)),
+        );
+    }
     for (length_table, 0..) |entry, i| {
         const first = lengthCode(entry.base);
         try std.testing.expectEqual(@as(u16, @intCast(257 + i)), first.symbol);
