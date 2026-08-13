@@ -1644,6 +1644,11 @@ architecture blindly.
   External zstd/LZ4 tools remain validation inputs for differential probes, not
   runtime support paths.
 
+- Extended the public Zstd frame encode facade with encoded-bound, append, and
+  caller-owned into-slice helpers across level/options variants. Library callers
+  no longer need to drop to native-specific APIs or allocate an owned frame just
+  to write into existing buffers.
+
 - Added a dependency-free Brotli `br` bootstrap module for stored/uncompressed
   streams. `src/br.zig` emits RFC-valid WBITS=16 streams with uncompressed
   meta-blocks plus final empty terminators, decodes the same stored subset with

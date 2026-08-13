@@ -2767,6 +2767,57 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
     return result.frame;
 }
 
+pub fn encodedFrameBound(input_len: usize) Error!usize {
+    return try encodedFrameBoundWithLevelAndOptions(input_len, default_compression_level, .{});
+}
+
+pub fn encodedFrameBoundWithLevel(input_len: usize, level: c_int) Error!usize {
+    return try encodedFrameBoundWithLevelAndOptions(input_len, level, .{});
+}
+
+pub fn encodedFrameBoundWithOptions(input_len: usize, options: FrameOptions) Error!usize {
+    return try encodedFrameBoundWithLevelAndOptions(input_len, default_compression_level, options);
+}
+
+pub fn encodedFrameBoundWithLevelAndOptions(input_len: usize, level: c_int, options: FrameOptions) Error!usize {
+    return try encodedNativeFrameBoundWithOptions(input_len, nativeFrameOptionsForLevel(level, options));
+}
+
+pub fn encodeFrameAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) Error!usize {
+    return try encodeFrameAppendWithLevelAndOptions(allocator, out, input, default_compression_level, .{});
+}
+
+pub fn encodeFrameAppendWithLevel(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, level: c_int) Error!usize {
+    return try encodeFrameAppendWithLevelAndOptions(allocator, out, input, level, .{});
+}
+
+pub fn encodeFrameAppendWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: FrameOptions) Error!usize {
+    return try encodeFrameAppendWithLevelAndOptions(allocator, out, input, default_compression_level, options);
+}
+
+pub fn encodeFrameAppendWithLevelAndOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, level: c_int, options: FrameOptions) Error!usize {
+    const start = out.items.len;
+    _ = try encodeNativeFrameAppend(allocator, out, input, nativeFrameOptionsForLevel(level, options));
+    return out.items.len - start;
+}
+
+pub fn encodeFrameIntoSlice(allocator: std.mem.Allocator, input: []const u8, output: []u8) Error!usize {
+    return try encodeFrameIntoSliceWithLevelAndOptions(allocator, input, default_compression_level, .{}, output);
+}
+
+pub fn encodeFrameIntoSliceWithLevel(allocator: std.mem.Allocator, input: []const u8, level: c_int, output: []u8) Error!usize {
+    return try encodeFrameIntoSliceWithLevelAndOptions(allocator, input, level, .{}, output);
+}
+
+pub fn encodeFrameIntoSliceWithOptions(allocator: std.mem.Allocator, input: []const u8, options: FrameOptions, output: []u8) Error!usize {
+    return try encodeFrameIntoSliceWithLevelAndOptions(allocator, input, default_compression_level, options, output);
+}
+
+pub fn encodeFrameIntoSliceWithLevelAndOptions(allocator: std.mem.Allocator, input: []const u8, level: c_int, options: FrameOptions, output: []u8) Error!usize {
+    const result = try encodeNativeFrameIntoSlice(allocator, input, nativeFrameOptionsForLevel(level, options), output);
+    return result.written;
+}
+
 fn nativeFrameOptionsForLevel(level: c_int, options: FrameOptions) NativeFrameOptions {
     var native_options: NativeFrameOptions = .{
         .content_checksum = options.content_checksum,

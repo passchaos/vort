@@ -481,6 +481,18 @@ pub const zstdEncodeFrameAlloc = zstd.encodeFrameAlloc;
 pub const zstdEncodeFrameWithLevelAlloc = zstd.encodeFrameWithLevelAlloc;
 pub const zstdEncodeFrameWithOptionsAlloc = zstd.encodeFrameWithOptionsAlloc;
 pub const zstdEncodeFrameWithLevelAndOptionsAlloc = zstd.encodeFrameWithLevelAndOptionsAlloc;
+pub const zstdEncodedFrameBound = zstd.encodedFrameBound;
+pub const zstdEncodedFrameBoundWithLevel = zstd.encodedFrameBoundWithLevel;
+pub const zstdEncodedFrameBoundWithOptions = zstd.encodedFrameBoundWithOptions;
+pub const zstdEncodedFrameBoundWithLevelAndOptions = zstd.encodedFrameBoundWithLevelAndOptions;
+pub const zstdEncodeFrameAppend = zstd.encodeFrameAppend;
+pub const zstdEncodeFrameAppendWithLevel = zstd.encodeFrameAppendWithLevel;
+pub const zstdEncodeFrameAppendWithOptions = zstd.encodeFrameAppendWithOptions;
+pub const zstdEncodeFrameAppendWithLevelAndOptions = zstd.encodeFrameAppendWithLevelAndOptions;
+pub const zstdEncodeFrameIntoSlice = zstd.encodeFrameIntoSlice;
+pub const zstdEncodeFrameIntoSliceWithLevel = zstd.encodeFrameIntoSliceWithLevel;
+pub const zstdEncodeFrameIntoSliceWithOptions = zstd.encodeFrameIntoSliceWithOptions;
+pub const zstdEncodeFrameIntoSliceWithLevelAndOptions = zstd.encodeFrameIntoSliceWithLevelAndOptions;
 pub const zstdDecodeFrameAlloc = zstd.decodeFrameAlloc;
 pub const zstdDecodeFrameAllocExactSize = zstd.decodeFrameAllocExactSize;
 pub const zstdDecodeFrameAllocLimited = zstd.decodeFrameAllocLimited;
@@ -1947,6 +1959,18 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdEncodeFrameWithLevelAlloc;
     _ = zstdEncodeFrameWithOptionsAlloc;
     _ = zstdEncodeFrameWithLevelAndOptionsAlloc;
+    _ = zstdEncodedFrameBound;
+    _ = zstdEncodedFrameBoundWithLevel;
+    _ = zstdEncodedFrameBoundWithOptions;
+    _ = zstdEncodedFrameBoundWithLevelAndOptions;
+    _ = zstdEncodeFrameAppend;
+    _ = zstdEncodeFrameAppendWithLevel;
+    _ = zstdEncodeFrameAppendWithOptions;
+    _ = zstdEncodeFrameAppendWithLevelAndOptions;
+    _ = zstdEncodeFrameIntoSlice;
+    _ = zstdEncodeFrameIntoSliceWithLevel;
+    _ = zstdEncodeFrameIntoSliceWithOptions;
+    _ = zstdEncodeFrameIntoSliceWithLevelAndOptions;
     _ = zstdDecodeFrameAlloc;
     _ = zstdDecodeFrameAllocExactSize;
     _ = zstdDecodeFrameAllocLimited;
@@ -2776,6 +2800,33 @@ test "root zstd frame options round trip" {
     try std.testing.expectEqualSlices(u8, payload, into_buffer[0..written]);
     try std.testing.expectEqual(bound, try zstdDecodedFrameSizeLimited(encoded, bound));
     try std.testing.expectError(error.OutputLimitExceeded, zstdDecodedFrameSizeLimited(encoded, bound - 1));
+}
+
+test "root zstd frame facade exposes append into and bound encode helpers" {
+    const payload = "root zstd encode facade helper payload" ** 3;
+    const options: ZstdFrameOptions = .{ .content_checksum = true };
+
+    const bound = try zstdEncodedFrameBoundWithOptions(payload.len, options);
+    const alloc_encoded = try zstdEncodeFrameWithOptionsAlloc(std.testing.allocator, payload, options);
+    defer std.testing.allocator.free(alloc_encoded);
+    try std.testing.expect(alloc_encoded.len <= bound);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(alloc_encoded.len, try zstdEncodeFrameAppendWithOptions(std.testing.allocator, &appended, payload, options));
+    try std.testing.expectEqualSlices(u8, "prefix:", appended.items[0.."prefix:".len]);
+    try std.testing.expectEqualSlices(u8, alloc_encoded, appended.items["prefix:".len..]);
+
+    const into = try std.testing.allocator.alloc(u8, bound);
+    defer std.testing.allocator.free(into);
+    const written = try zstdEncodeFrameIntoSliceWithOptions(std.testing.allocator, payload, options, into);
+    try std.testing.expectEqualSlices(u8, alloc_encoded, into[0..written]);
+    try std.testing.expectError(error.OutputTooSmall, zstdEncodeFrameIntoSliceWithOptions(std.testing.allocator, payload, options, into[0 .. written - 1]));
+
+    const decoded = try zstdDecodeFrameAllocExactSize(std.testing.allocator, into[0..written], payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
 test "root zstd frame facade exposes append exact and chunked decode helpers" {
