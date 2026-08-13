@@ -2855,6 +2855,11 @@ architecture blindly.
   concrete cases between error classes while keeping aggregate counters
   internally consistent, isolating checksum and corrupt-frame floor regressions
   from the existing count-mismatch checks.
+- Extended native summary error strict-smoke floor coverage to truncated-frame
+  and frame-checksum phase floors. The new fixtures keep error/phase aggregates,
+  codec-specific aggregates, offset ranges, and required-phase metadata
+  internally consistent so these floor regressions cannot hide behind existing
+  mismatch checks.
 - Tightened Brotli static-dictionary negative-smoke dashboard health by requiring
   both source-audit and report guardrail rows to match declared case counts with
   no unmatched rows. Dashboard health now exposes row/count drift counters before

@@ -13222,6 +13222,92 @@ def main() -> int:
             and native_summary_corrupt_floor_manifest["native_summary_error_codec_error_count_mismatch"] == 0,
         )
 
+        native_summary_truncated_floor_result, native_summary_truncated_floor_manifest = native_summary_error_drift_fixture(
+            root,
+            "native-summary-error-truncated-floor",
+            mutate_report=lambda payload: move_native_summary_error_class(payload, "lz4_truncated_header", "CorruptFrame"),
+        )
+        append_native_summary_error_check(
+            "native_summary_error_truncated_frame_floor",
+            native_summary_truncated_floor_result,
+            native_summary_truncated_floor_manifest,
+            native_summary_truncated_floor_manifest["native_summary_error_truncated_frame_count"] == 7
+            and native_summary_truncated_floor_manifest["native_summary_error_error_count_mismatch"] == 0
+            and native_summary_truncated_floor_manifest["native_summary_error_codec_error_count_mismatch"] == 0,
+        )
+
+        def move_native_summary_phase(payload: dict[str, object], case_name: str, new_phase: str, *, remove_old_required_phase: bool = False) -> None:
+            """Move one case between parser phases while keeping derived counters coherent.
+
+            Phase floors and required-per-codec phase coverage overlap for the
+            retained malformed-stream matrix.  The optional required-phase
+            update lets a fixture isolate the aggregate floor by preventing the
+            missing-required-phase check from being the first failing invariant.
+            """
+
+            cases = payload.get("cases")
+            if not isinstance(cases, list):
+                raise AssertionError("native-summary fixture missing cases")
+            target = next((case for case in cases if isinstance(case, dict) and case.get("name") == case_name), None)
+            if target is None:
+                raise AssertionError(f"native-summary fixture missing case {case_name!r}")
+            codec = str(target.get("codec") or "")
+            old_phase = str(target.get("phase") or "")
+            if not codec or not old_phase or old_phase == new_phase:
+                raise AssertionError(f"native-summary fixture cannot move {case_name!r} from {old_phase!r} to {new_phase!r}")
+            target["phase"] = new_phase
+
+            def shift_count(map_name: str) -> None:
+                counts = payload.get(map_name)
+                if not isinstance(counts, dict):
+                    raise AssertionError(f"native-summary fixture missing {map_name}")
+                counts[old_phase] = int(counts.get(old_phase) or 0) - 1
+                counts[new_phase] = int(counts.get(new_phase) or 0) + 1
+
+            shift_count("phase_counts")
+            shift_count(f"{codec}_phase_counts")
+            if remove_old_required_phase:
+                required = payload.get("required_codec_phases")
+                if not isinstance(required, dict) or not isinstance(required.get(codec), list):
+                    raise AssertionError("native-summary fixture missing required codec phases")
+                required[codec] = [phase for phase in required[codec] if phase != old_phase]
+
+            offsets_by_phase: dict[str, list[int]] = {}
+            for case in cases:
+                if not isinstance(case, dict):
+                    continue
+                phase = str(case.get("phase") or "")
+                offset = case.get("offset")
+                if not phase or not isinstance(offset, int) or isinstance(offset, bool):
+                    continue
+                offsets_by_phase.setdefault(phase, []).append(offset)
+            payload["phase_offset_ranges"] = {
+                phase: {"min": min(offsets), "max": max(offsets)}
+                for phase, offsets in sorted(offsets_by_phase.items())
+            }
+
+        native_summary_frame_checksum_floor_result, native_summary_frame_checksum_floor_manifest = native_summary_error_drift_fixture(
+            root,
+            "native-summary-error-frame-checksum-floor",
+            mutate_report=lambda payload: move_native_summary_phase(
+                payload,
+                "lz4_truncated_checksum",
+                "frame_body",
+                remove_old_required_phase=True,
+            ),
+        )
+        append_native_summary_error_check(
+            "native_summary_error_frame_checksum_phase_floor",
+            native_summary_frame_checksum_floor_result,
+            native_summary_frame_checksum_floor_manifest,
+            native_summary_frame_checksum_floor_manifest["native_summary_error_frame_checksum_phase_count"] == 1
+            and native_summary_frame_checksum_floor_manifest["native_summary_error_phase_count_mismatch"] == 0
+            and native_summary_frame_checksum_floor_manifest["native_summary_error_codec_phase_count_mismatch"] == 0
+            and native_summary_frame_checksum_floor_manifest["native_summary_error_offset_range_mismatch"] == 0
+            and native_summary_frame_checksum_floor_manifest["native_summary_error_lz4_missing_phases"] == []
+            and native_summary_frame_checksum_floor_manifest["native_summary_error_zstd_missing_phases"] == [],
+        )
+
         native_summary_phase_count_result, native_summary_phase_count_manifest = native_summary_error_drift_fixture(
             root,
             "native-summary-error-phase-count",
