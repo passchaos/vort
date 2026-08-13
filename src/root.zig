@@ -5645,6 +5645,15 @@ test "root zlib and gzip concatenated probes report support and size mismatches"
     try std.testing.expectEqualStrings("SizeMismatch", zlib_exact_bad.error_name);
     try std.testing.expectEqual(expected.len, zlib_exact_bad.decoded_bytes.?);
 
+    const zlib_bad_second = try std.testing.allocator.dupe(u8, zlib_stream.items);
+    defer std.testing.allocator.free(zlib_bad_second);
+    zlib_bad_second[zlib_bad_second.len - 1] ^= 1;
+    const zlib_second_bad = probeZlibConcatenated(zlib_bad_second, &zlib_scratch);
+    try std.testing.expect(!zlib_second_bad.ok);
+    try std.testing.expectEqualStrings("ChecksumMismatch", zlib_second_bad.error_name);
+    try std.testing.expectEqual(@as(usize, 1), zlib_second_bad.member_index.?);
+    try std.testing.expectEqualStrings("footer", zlib_second_bad.diagnostics.phase_name);
+
     const zlib_chunks = [_][]const u8{
         zlib_stream.items[0..3],
         zlib_stream.items[3..@min(zlib_stream.items.len, 21)],
@@ -5692,6 +5701,15 @@ test "root zlib and gzip concatenated probes report support and size mismatches"
     try std.testing.expect(!gzip_exact_bad.ok);
     try std.testing.expectEqualStrings("SizeMismatch", gzip_exact_bad.error_name);
     try std.testing.expectEqual(expected.len, gzip_exact_bad.decoded_bytes.?);
+
+    const gzip_bad_second = try std.testing.allocator.dupe(u8, gzip_stream.items);
+    defer std.testing.allocator.free(gzip_bad_second);
+    gzip_bad_second[gzip_bad_second.len - 8] ^= 1;
+    const gzip_second_bad = probeGzipConcatenated(gzip_bad_second, &gzip_scratch);
+    try std.testing.expect(!gzip_second_bad.ok);
+    try std.testing.expectEqualStrings("ChecksumMismatch", gzip_second_bad.error_name);
+    try std.testing.expectEqual(@as(usize, 1), gzip_second_bad.member_index.?);
+    try std.testing.expectEqualStrings("footer", gzip_second_bad.diagnostics.phase_name);
 
     const gzip_chunks = [_][]const u8{
         gzip_stream.items[0..5],

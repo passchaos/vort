@@ -1513,6 +1513,10 @@ architecture blindly.
   footer checksum/trailing-data failures, and output-size/limit failures while
   retaining the non-throwing API shape.
 
+- Extended concatenated zlib/gzip probes with failing member indexes. Multi-member
+  probe failures now report which member failed, while preserving wrapper-aware
+  phases such as footer checksum failures for the offending member.
+
 - Added zlib stream inspection helpers for split compressed input
   (`inspectZlibStreamFromChunksAlloc*`), reusing caller-provided join scratch
   before running the existing diagnostic inspector. They report the same
