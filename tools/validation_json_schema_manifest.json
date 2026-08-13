@@ -4730,6 +4730,7 @@
           "native_library_bench_throughput_mismatch",
           "native_library_bench_iteration_mismatch",
           "native_library_bench_improvement_mismatch",
+          "native_library_bench_compression_floor_mismatch",
           "native_library_bench_markdown_table",
           "native_summary_error_case_count_mismatch",
           "native_summary_error_codec_case_count_mismatch",

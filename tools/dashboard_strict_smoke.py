@@ -14105,6 +14105,24 @@ def main() -> int:
             == native_library_improvement_manifest["native_library_bench_expected_improvement_checks"] - 1,
         )
 
+        native_library_compression_floor_result, native_library_compression_floor_manifest = native_library_bench_drift_fixture(
+            root,
+            "native-library-bench-compression-floor",
+            mutate_csv=lambda rows, fieldnames, csv_path: next(
+                row for row in rows if row["codec"] == "zstd" and row["mode"] == "high_byte_binary" and row["case"] == "high_byte_binary"
+            ).__setitem__("encoded_bytes", "4096"),
+        )
+        append_native_library_bench_check(
+            "native_library_bench_compression_floor_mismatch",
+            native_library_compression_floor_result,
+            native_library_compression_floor_manifest,
+            native_library_compression_floor_manifest["native_library_bench_positive_rows"] == 93
+            and native_library_compression_floor_manifest["native_library_bench_throughput_rows"] == 93
+            and native_library_compression_floor_manifest["native_library_bench_iteration_rows"] == 93
+            and native_library_compression_floor_manifest["native_library_bench_improvement_checks"]
+            == native_library_compression_floor_manifest["native_library_bench_expected_improvement_checks"] - 1,
+        )
+
         def append_zstd_compare_check(
             name: str,
             result: subprocess.CompletedProcess[str],
