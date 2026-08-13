@@ -4601,6 +4601,8 @@
           "huffman_length_markdown_summary_unmatched",
           "huffman_length_markdown_case_unmatched",
           "level_report_markdown_table",
+          "level_report_missing_markdown",
+          "level_report_non_positive_row",
           "level_report_missing_pair",
           "level_report_duplicate_pair",
           "level_report_unknown_pair",

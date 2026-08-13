@@ -5826,7 +5826,7 @@ def dynamic_plan_drift_fixture(root: Path, fixture_name: str, mutate_csv) -> tup
     return result, manifest
 
 
-def level_report_drift_fixture(root: Path, fixture_name: str, mutate_csv=None, mutate_markdown=None) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
+def level_report_drift_fixture(root: Path, fixture_name: str, mutate_csv=None, mutate_markdown=None, *, remove_markdown: bool = False) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:
     """Run dashboard_index with one intentionally drifted compression level report."""
 
     fixture_root = root / fixture_name
@@ -5843,6 +5843,8 @@ def level_report_drift_fixture(root: Path, fixture_name: str, mutate_csv=None, m
         rewrite_csv_rows(csv_path, rows, fieldnames)
     if mutate_markdown is not None:
         mutate_markdown(markdown_path)
+    if remove_markdown:
+        markdown_path.unlink()
     producer_map = fixture_root / "producers.json"
     write_producer_map(producer_map)
     result = run(
@@ -9356,6 +9358,72 @@ def main() -> int:
                 huffman_markdown_case_result.returncode,
                 "dashboard_index_validation_unhealthy=huffman_length_failed",
                 huffman_markdown_case_result.stdout,
+            )
+        )
+
+        level_missing_markdown_result, level_missing_markdown_manifest = level_report_drift_fixture(
+            root,
+            "level-report-missing-markdown",
+            remove_markdown=True,
+        )
+        level_missing_markdown_matched = (
+            level_missing_markdown_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=level_report_failed" in level_missing_markdown_result.stdout
+            and level_missing_markdown_manifest["validation_healthy"] is False
+            and level_missing_markdown_manifest["level_report_healthy"] is False
+            and level_missing_markdown_manifest["level_report_present"] is True
+            and level_missing_markdown_manifest["level_report_markdown_present"] is False
+        )
+        checks.append(
+            check_row(
+                "level_report_missing_markdown",
+                "strict-validation-health",
+                True,
+                level_missing_markdown_matched,
+                level_missing_markdown_result.returncode,
+                "dashboard_index_validation_unhealthy=level_report_failed",
+                level_missing_markdown_result.stdout,
+            )
+        )
+
+        def make_level_non_positive_row(rows: list[dict[str, str]], fieldnames: list[str], csv_path: Path, markdown_path: Path) -> None:
+            del fieldnames, csv_path
+            rows[0]["tokens"] = "0"
+            rows[0]["literal_tokens"] = "0"
+            rows[0]["match_tokens"] = "0"
+            markdown_path.write_text(
+                markdown_path.read_text().replace(
+                    "|text | fastest | default | hash | 105 | 3.72% | 105 | 3.72% | 99.96% | 2815.00 | 8.00 | 2 | false |",
+                    "|text | fastest | default | hash | 105 | 3.72% | 105 | 3.72% | 99.96% | 2815.00 | 8.00 | 0 | false |",
+                    1,
+                )
+            )
+
+        level_non_positive_result, level_non_positive_manifest = level_report_drift_fixture(
+            root,
+            "level-report-non-positive-row",
+            mutate_csv=make_level_non_positive_row,
+        )
+        level_non_positive_matched = (
+            level_non_positive_result.returncode != 0
+            and "dashboard_index_validation_unhealthy=level_report_failed" in level_non_positive_result.stdout
+            and level_non_positive_manifest["validation_healthy"] is False
+            and level_non_positive_manifest["level_report_healthy"] is False
+            and level_non_positive_manifest["level_report_positive_rows"] == 47
+            and level_non_positive_manifest["level_report_token_accounting_rows"] == 48
+            and level_non_positive_manifest["level_report_ratio_rows"] == 48
+            and level_non_positive_manifest["level_report_markdown_unmatched"] == 0
+            and level_non_positive_manifest["level_report_markdown_detail_unmatched"] == 0
+        )
+        checks.append(
+            check_row(
+                "level_report_non_positive_row",
+                "strict-validation-health",
+                True,
+                level_non_positive_matched,
+                level_non_positive_result.returncode,
+                "dashboard_index_validation_unhealthy=level_report_failed",
+                level_non_positive_result.stdout,
             )
         )
 
