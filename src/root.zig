@@ -992,6 +992,7 @@ pub const encodeRawDynamicSplitAlloc = deflate.encodeRawDynamicSplitAlloc;
 pub const encodeRawFixedWithOptionsAlloc = deflate.encodeRawFixedWithOptionsAlloc;
 pub const RawDeflateDecoder = deflate.RawDeflateDecoder;
 pub const RawDeflateProbeResult = deflate.RawDeflateProbeResult;
+pub const DecodeProbeResult = deflate.DecodeProbeResult;
 pub const CompressionOptions = deflate.CompressionOptions;
 pub const CompressionStrategy = deflate.CompressionStrategy;
 pub const AdaptiveSplitOptions = deflate.AdaptiveSplitOptions;
@@ -1219,6 +1220,14 @@ pub const decodeZlibConcatenatedChunksAppendLimited = deflate.decodeZlibConcaten
 pub const decodeZlibConcatenatedChunksAppendWithDictionaryLimited = deflate.decodeZlibConcatenatedChunksAppendWithDictionaryLimited;
 pub const decodeZlibConcatenatedChunksAppendWithOptionsLimited = deflate.decodeZlibConcatenatedChunksAppendWithOptionsLimited;
 pub const decodeZlibConcatenatedChunksAppendWithDictionaryAndOptionsLimited = deflate.decodeZlibConcatenatedChunksAppendWithDictionaryAndOptionsLimited;
+pub const probeZlib = deflate.probeZlib;
+pub const probeZlibWithOptions = deflate.probeZlibWithOptions;
+pub const probeZlibExactSize = deflate.probeZlibExactSize;
+pub const probeZlibWithOptionsExactSize = deflate.probeZlibWithOptionsExactSize;
+pub const probeZlibChunks = deflate.probeZlibChunks;
+pub const probeZlibChunksWithOptions = deflate.probeZlibChunksWithOptions;
+pub const probeZlibChunksExactSize = deflate.probeZlibChunksExactSize;
+pub const probeZlibChunksWithOptionsExactSize = deflate.probeZlibChunksWithOptionsExactSize;
 pub const decodeZlibAllocWithDictionary = deflate.decodeZlibAllocWithDictionary;
 pub const decodeZlibAllocWithDictionaryExactSize = deflate.decodeZlibAllocWithDictionaryExactSize;
 pub const decodeZlibAllocWithDictionaryLimited = deflate.decodeZlibAllocWithDictionaryLimited;
@@ -1343,6 +1352,14 @@ pub const decodeGzipConcatenatedChunksAppendExactSize = deflate.decodeGzipConcat
 pub const decodeGzipConcatenatedChunksAppendWithOptionsExactSize = deflate.decodeGzipConcatenatedChunksAppendWithOptionsExactSize;
 pub const decodeGzipConcatenatedChunksAppendLimited = deflate.decodeGzipConcatenatedChunksAppendLimited;
 pub const decodeGzipConcatenatedChunksAppendWithOptionsLimited = deflate.decodeGzipConcatenatedChunksAppendWithOptionsLimited;
+pub const probeGzip = deflate.probeGzip;
+pub const probeGzipWithOptions = deflate.probeGzipWithOptions;
+pub const probeGzipExactSize = deflate.probeGzipExactSize;
+pub const probeGzipWithOptionsExactSize = deflate.probeGzipWithOptionsExactSize;
+pub const probeGzipChunks = deflate.probeGzipChunks;
+pub const probeGzipChunksWithOptions = deflate.probeGzipChunksWithOptions;
+pub const probeGzipChunksExactSize = deflate.probeGzipChunksExactSize;
+pub const probeGzipChunksWithOptionsExactSize = deflate.probeGzipChunksWithOptionsExactSize;
 
 pub const Lz77Token = lz77.Token;
 pub const fixedLz77BitCost = lz77.fixedBitCost;
@@ -5143,6 +5160,7 @@ test "root exports chunked compatibility decode helpers" {
     // in deflate.zig, while this test catches accidental public API drift.
     _ = RawDeflateDecoder;
     _ = RawDeflateProbeResult;
+    _ = DecodeProbeResult;
     _ = parseRawDeflateHeaderInfoFromChunks;
     _ = decodeRawDeflateChunks;
     _ = decodeRawDeflateChunksWithDictionary;
@@ -5241,6 +5259,14 @@ test "root exports chunked compatibility decode helpers" {
     _ = decodeZlibConcatenatedChunksAppendWithDictionaryLimited;
     _ = decodeZlibConcatenatedChunksAppendWithOptionsLimited;
     _ = decodeZlibConcatenatedChunksAppendWithDictionaryAndOptionsLimited;
+    _ = probeZlib;
+    _ = probeZlibWithOptions;
+    _ = probeZlibExactSize;
+    _ = probeZlibWithOptionsExactSize;
+    _ = probeZlibChunks;
+    _ = probeZlibChunksWithOptions;
+    _ = probeZlibChunksExactSize;
+    _ = probeZlibChunksWithOptionsExactSize;
     _ = parseZlibHeaderInfoFromChunks;
     _ = inspectZlibStreamFromChunksAlloc;
     _ = inspectZlibStreamFromChunksAllocLimited;
@@ -5271,6 +5297,14 @@ test "root exports chunked compatibility decode helpers" {
     _ = decodeGzipConcatenatedChunksAppendWithOptionsExactSize;
     _ = decodeGzipConcatenatedChunksAppendLimited;
     _ = decodeGzipConcatenatedChunksAppendWithOptionsLimited;
+    _ = probeGzip;
+    _ = probeGzipWithOptions;
+    _ = probeGzipExactSize;
+    _ = probeGzipWithOptionsExactSize;
+    _ = probeGzipChunks;
+    _ = probeGzipChunksWithOptions;
+    _ = probeGzipChunksExactSize;
+    _ = probeGzipChunksWithOptionsExactSize;
     _ = decodeGzipChunks;
     _ = decodeGzipChunksWithOptions;
     _ = decodeGzipChunksAlloc;
@@ -5421,6 +5455,69 @@ test "root raw deflate probe reports support and size mismatches" {
     const chunked = probeRawDeflateChunksExactSize(&chunks, join, &scratch, payload.len);
     try std.testing.expect(chunked.ok);
     try std.testing.expectEqual(payload.len, chunked.decoded_bytes.?);
+}
+
+test "root zlib and gzip probes report support and size mismatches" {
+    const payload = "wrapper probe payload" ** 2;
+    const zlib_encoded = try encodeZlibBestAlloc(std.testing.allocator, payload, .{});
+    defer std.testing.allocator.free(zlib_encoded);
+    var zlib_scratch: [payload.len + 8]u8 = undefined;
+
+    const zlib_ok = probeZlib(zlib_encoded, &zlib_scratch);
+    try std.testing.expect(zlib_ok.ok);
+    try std.testing.expectEqualStrings("", zlib_ok.error_name);
+    try std.testing.expectEqual(payload.len, zlib_ok.decoded_bytes.?);
+
+    const zlib_exact_bad = probeZlibExactSize(zlib_encoded, &zlib_scratch, payload.len + 1);
+    try std.testing.expect(!zlib_exact_bad.ok);
+    try std.testing.expectEqualStrings("SizeMismatch", zlib_exact_bad.error_name);
+    try std.testing.expectEqual(payload.len, zlib_exact_bad.decoded_bytes.?);
+    try std.testing.expectEqualStrings("output_size", zlib_exact_bad.diagnostics.phase_name);
+
+    const zlib_truncated = probeZlib("", &zlib_scratch);
+    try std.testing.expect(!zlib_truncated.ok);
+    try std.testing.expectEqualStrings("TruncatedFrame", zlib_truncated.error_name);
+
+    const zlib_chunks = [_][]const u8{
+        zlib_encoded[0..2],
+        zlib_encoded[2..@min(zlib_encoded.len, 12)],
+        zlib_encoded[@min(zlib_encoded.len, 12)..],
+    };
+    const zlib_join = try std.testing.allocator.alloc(u8, zlib_encoded.len);
+    defer std.testing.allocator.free(zlib_join);
+    const zlib_chunked = probeZlibChunksExactSize(&zlib_chunks, zlib_join, &zlib_scratch, payload.len);
+    try std.testing.expect(zlib_chunked.ok);
+    try std.testing.expectEqual(payload.len, zlib_chunked.decoded_bytes.?);
+
+    const gzip_encoded = try encodeGzipBestAlloc(std.testing.allocator, payload, .{});
+    defer std.testing.allocator.free(gzip_encoded);
+    var gzip_scratch: [payload.len + 8]u8 = undefined;
+
+    const gzip_ok = probeGzip(gzip_encoded, &gzip_scratch);
+    try std.testing.expect(gzip_ok.ok);
+    try std.testing.expectEqualStrings("", gzip_ok.error_name);
+    try std.testing.expectEqual(payload.len, gzip_ok.decoded_bytes.?);
+
+    const gzip_exact_bad = probeGzipExactSize(gzip_encoded, &gzip_scratch, payload.len - 1);
+    try std.testing.expect(!gzip_exact_bad.ok);
+    try std.testing.expectEqualStrings("SizeMismatch", gzip_exact_bad.error_name);
+    try std.testing.expectEqual(payload.len, gzip_exact_bad.decoded_bytes.?);
+    try std.testing.expectEqualStrings("output_size", gzip_exact_bad.diagnostics.phase_name);
+
+    const gzip_truncated = probeGzip("", &gzip_scratch);
+    try std.testing.expect(!gzip_truncated.ok);
+    try std.testing.expectEqualStrings("TruncatedFrame", gzip_truncated.error_name);
+
+    const gzip_chunks = [_][]const u8{
+        gzip_encoded[0..3],
+        gzip_encoded[3..@min(gzip_encoded.len, 16)],
+        gzip_encoded[@min(gzip_encoded.len, 16)..],
+    };
+    const gzip_join = try std.testing.allocator.alloc(u8, gzip_encoded.len);
+    defer std.testing.allocator.free(gzip_join);
+    const gzip_chunked = probeGzipChunksExactSize(&gzip_chunks, gzip_join, &gzip_scratch, payload.len);
+    try std.testing.expect(gzip_chunked.ok);
+    try std.testing.expectEqual(payload.len, gzip_chunked.decoded_bytes.?);
 }
 
 test "root zlib and gzip append decode helpers preserve prefixes" {

@@ -1493,6 +1493,11 @@ architecture blindly.
   `ok`, decoded byte counts, error names, and streaming diagnostics for support
   and exact-size preflight without requiring integrations to wrap throwing APIs.
 
+- Added non-throwing zlib/gzip probe helpers for contiguous and split-input
+  library callers. Wrapper probes reuse caller-owned decoded/compressed scratch
+  and report decoded byte counts, exact-size mismatches, error names, and shared
+  streaming diagnostics without adding CLI surface.
+
 - Added zlib stream inspection helpers for split compressed input
   (`inspectZlibStreamFromChunksAlloc*`), reusing caller-provided join scratch
   before running the existing diagnostic inspector. They report the same
