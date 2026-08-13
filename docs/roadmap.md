@@ -3403,3 +3403,9 @@ architecture blindly.
   summary drift, duplicate CSV identities, block-sweep best-row drift, Markdown
   summary drift, and Markdown detail-row drift so `zstd_compare_failed` cannot
   hide comparison artifact inconsistencies behind its aggregate fixture.
+
+- Added top-level Zstd dictionary and dictionary-set decode facade helpers for
+  allocator, exact-size, output-limited, append, caller-owned buffer, and decoded
+  size flows. Public `zstd.decodeFrame*` and root `zstdDecodeFrame*` APIs can
+  now round-trip dictionary-compressed frames without callers dropping down to
+  the native-specific decode names.

@@ -433,6 +433,86 @@ pub fn decodedFrameChunksSizeLimited(chunks: []const []const u8, compressed_scra
     return try decodedNativeFrameChunksSizeLimited(chunks, compressed_scratch, max_output_len);
 }
 
+pub fn decodeFrameAllocWithDictionary(allocator: std.mem.Allocator, frame: []const u8, dictionary: NativeDictionary) Error![]u8 {
+    return try decodeNativeFrameAllocWithDictionary(allocator, frame, dictionary);
+}
+
+pub fn decodeFrameAllocWithDictionaryExactSize(allocator: std.mem.Allocator, frame: []const u8, dictionary: NativeDictionary, expected_output_len: usize) Error![]u8 {
+    return try decodeNativeFrameAllocWithDictionaryExactSize(allocator, frame, dictionary, expected_output_len);
+}
+
+pub fn decodeFrameAllocWithDictionaryLimited(allocator: std.mem.Allocator, frame: []const u8, dictionary: NativeDictionary, max_output_len: usize) Error![]u8 {
+    return try decodeNativeFrameAllocLimitedWithDictionary(allocator, frame, max_output_len, dictionary);
+}
+
+pub fn decodeFrameAppendWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8, dictionary: NativeDictionary) Error!usize {
+    return try decodeNativeFrameAppendWithDictionary(allocator, out, frame, dictionary);
+}
+
+pub fn decodeFrameAppendExactSizeWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8, dictionary: NativeDictionary, expected_output_len: usize) Error!usize {
+    return try decodeNativeFrameAppendExactSizeWithDictionary(allocator, out, frame, dictionary, expected_output_len);
+}
+
+pub fn decodeFrameAppendLimitedWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8, dictionary: NativeDictionary, max_output_len: usize) Error!usize {
+    return try decodeNativeFrameAppendLimitedWithDictionary(allocator, out, frame, max_output_len, dictionary);
+}
+
+pub fn decodeFrameIntoWithDictionary(frame: []const u8, output: []u8, dictionary: NativeDictionary) Error!usize {
+    return try decodeNativeFrameIntoWithDictionary(frame, output, dictionary);
+}
+
+pub fn decodeFrameIntoWithDictionaryExactSize(frame: []const u8, output: []u8, dictionary: NativeDictionary, expected_output_len: usize) Error!usize {
+    return try decodeNativeFrameIntoWithDictionaryExactSize(frame, output, dictionary, expected_output_len);
+}
+
+pub fn decodedFrameSizeWithDictionary(frame: []const u8, dictionary: NativeDictionary) Error!usize {
+    return try decodedNativeFrameSizeWithDictionary(frame, dictionary);
+}
+
+pub fn decodedFrameSizeLimitedWithDictionary(frame: []const u8, dictionary: NativeDictionary, max_output_len: usize) Error!usize {
+    return try decodedNativeFrameSizeLimitedWithDictionary(frame, max_output_len, dictionary);
+}
+
+pub fn decodeFrameAllocWithDictionarySet(allocator: std.mem.Allocator, frame: []const u8, dictionary_set: NativeDictionarySet) Error![]u8 {
+    return try decodeNativeFrameAllocWithDictionarySet(allocator, frame, dictionary_set);
+}
+
+pub fn decodeFrameAllocWithDictionarySetExactSize(allocator: std.mem.Allocator, frame: []const u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error![]u8 {
+    return try decodeNativeFrameAllocWithDictionarySetExactSize(allocator, frame, dictionary_set, expected_output_len);
+}
+
+pub fn decodeFrameAllocWithDictionarySetLimited(allocator: std.mem.Allocator, frame: []const u8, dictionary_set: NativeDictionarySet, max_output_len: usize) Error![]u8 {
+    return try decodeNativeFrameAllocLimitedWithDictionarySet(allocator, frame, max_output_len, dictionary_set);
+}
+
+pub fn decodeFrameAppendWithDictionarySet(allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8, dictionary_set: NativeDictionarySet) Error!usize {
+    return try decodeNativeFrameAppendWithDictionarySet(allocator, out, frame, dictionary_set);
+}
+
+pub fn decodeFrameAppendExactSizeWithDictionarySet(allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error!usize {
+    return try decodeNativeFrameAppendExactSizeWithDictionarySet(allocator, out, frame, dictionary_set, expected_output_len);
+}
+
+pub fn decodeFrameAppendLimitedWithDictionarySet(allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8, dictionary_set: NativeDictionarySet, max_output_len: usize) Error!usize {
+    return try decodeNativeFrameAppendLimitedWithDictionarySet(allocator, out, frame, max_output_len, dictionary_set);
+}
+
+pub fn decodeFrameIntoWithDictionarySet(frame: []const u8, output: []u8, dictionary_set: NativeDictionarySet) Error!usize {
+    return try decodeNativeFrameIntoWithDictionarySet(frame, output, dictionary_set);
+}
+
+pub fn decodeFrameIntoWithDictionarySetExactSize(frame: []const u8, output: []u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error!usize {
+    return try decodeNativeFrameIntoWithDictionarySetExactSize(frame, output, dictionary_set, expected_output_len);
+}
+
+pub fn decodedFrameSizeWithDictionarySet(frame: []const u8, dictionary_set: NativeDictionarySet) Error!usize {
+    return try decodedNativeFrameSizeWithDictionarySet(frame, dictionary_set);
+}
+
+pub fn decodedFrameSizeLimitedWithDictionarySet(frame: []const u8, dictionary_set: NativeDictionarySet, max_output_len: usize) Error!usize {
+    return try decodedNativeFrameSizeLimitedWithDictionarySet(frame, max_output_len, dictionary_set);
+}
+
 fn nativeBlockSizeMax(options: NativeFrameOptions) Error!usize {
     if (options.block_size_max == 0 or options.block_size_max > std.compress.zstd.block_size_max) return error.InvalidBlockPlan;
     return options.block_size_max;
