@@ -689,6 +689,19 @@ pub const decodeConcatenatedFrameChunksIntoWithDictionarySetExactSize = decodeNa
 pub const decodedConcatenatedFrameChunksSizeWithDictionarySet = decodedNativeConcatenatedFrameChunksSizeWithDictionarySet;
 pub const decodedConcatenatedFrameChunksSizeLimitedWithDictionarySet = decodedNativeConcatenatedFrameChunksSizeLimitedWithDictionarySet;
 
+pub const encodedFrameBoundWithAdvancedOptions = encodedNativeFrameBoundWithOptions;
+pub const encodedFrameBoundWithAdvancedOptionsAndDictionary = encodedNativeFrameBoundWithDictionary;
+pub const encodedFrameBoundWithAdvancedOptionsAndDictionarySet = encodedNativeFrameBoundWithDictionarySet;
+pub const encodeFrameWithAdvancedOptionsAlloc = encodeNativeFrameWithOptionsAlloc;
+pub const encodeFrameWithAdvancedOptionsAndDictionaryAlloc = encodeNativeFrameWithDictionaryAlloc;
+pub const encodeFrameWithAdvancedOptionsAndDictionarySetAlloc = encodeNativeFrameWithDictionarySetAlloc;
+pub const encodeFrameAppendWithAdvancedOptions = encodeNativeFrameAppend;
+pub const encodeFrameAppendWithAdvancedOptionsAndDictionary = encodeNativeFrameAppendWithDictionary;
+pub const encodeFrameAppendWithAdvancedOptionsAndDictionarySet = encodeNativeFrameAppendWithDictionarySet;
+pub const encodeFrameIntoSliceWithAdvancedOptions = encodeNativeFrameIntoSlice;
+pub const encodeFrameIntoSliceWithAdvancedOptionsAndDictionary = encodeNativeFrameIntoSliceWithDictionary;
+pub const encodeFrameIntoSliceWithAdvancedOptionsAndDictionarySet = encodeNativeFrameIntoSliceWithDictionarySet;
+
 fn nativeBlockSizeMax(options: NativeFrameOptions) Error!usize {
     if (options.block_size_max == 0 or options.block_size_max > std.compress.zstd.block_size_max) return error.InvalidBlockPlan;
     return options.block_size_max;

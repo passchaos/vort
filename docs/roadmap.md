@@ -3427,3 +3427,9 @@ architecture blindly.
   `zstd.IncrementalFrameDecoder`, `zstd.Dictionary`, `zstd.DictionarySet`, and
   top-level train/catalog helpers now expose the same reusable dictionary
   workflows without requiring applications to name the native-specific types.
+
+- Added public Zstd advanced-encode facade aliases for callers that need
+  `AdvancedFrameOptions` without depending on `encodeNativeFrame*` names.
+  Bound, alloc, append, and caller-owned encode helpers now cover plain,
+  dictionary, and dictionary-set advanced options through `zstd.encodeFrame*`
+  / root `zstdEncodeFrame*` public names.

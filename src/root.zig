@@ -637,6 +637,18 @@ pub const zstdDecodeConcatenatedFrameChunksIntoWithDictionarySet = zstd.decodeCo
 pub const zstdDecodeConcatenatedFrameChunksIntoWithDictionarySetExactSize = zstd.decodeConcatenatedFrameChunksIntoWithDictionarySetExactSize;
 pub const zstdDecodedConcatenatedFrameChunksSizeWithDictionarySet = zstd.decodedConcatenatedFrameChunksSizeWithDictionarySet;
 pub const zstdDecodedConcatenatedFrameChunksSizeLimitedWithDictionarySet = zstd.decodedConcatenatedFrameChunksSizeLimitedWithDictionarySet;
+pub const zstdEncodedFrameBoundWithAdvancedOptions = zstd.encodedFrameBoundWithAdvancedOptions;
+pub const zstdEncodedFrameBoundWithAdvancedOptionsAndDictionary = zstd.encodedFrameBoundWithAdvancedOptionsAndDictionary;
+pub const zstdEncodedFrameBoundWithAdvancedOptionsAndDictionarySet = zstd.encodedFrameBoundWithAdvancedOptionsAndDictionarySet;
+pub const zstdEncodeFrameWithAdvancedOptionsAlloc = zstd.encodeFrameWithAdvancedOptionsAlloc;
+pub const zstdEncodeFrameWithAdvancedOptionsAndDictionaryAlloc = zstd.encodeFrameWithAdvancedOptionsAndDictionaryAlloc;
+pub const zstdEncodeFrameWithAdvancedOptionsAndDictionarySetAlloc = zstd.encodeFrameWithAdvancedOptionsAndDictionarySetAlloc;
+pub const zstdEncodeFrameAppendWithAdvancedOptions = zstd.encodeFrameAppendWithAdvancedOptions;
+pub const zstdEncodeFrameAppendWithAdvancedOptionsAndDictionary = zstd.encodeFrameAppendWithAdvancedOptionsAndDictionary;
+pub const zstdEncodeFrameAppendWithAdvancedOptionsAndDictionarySet = zstd.encodeFrameAppendWithAdvancedOptionsAndDictionarySet;
+pub const zstdEncodeFrameIntoSliceWithAdvancedOptions = zstd.encodeFrameIntoSliceWithAdvancedOptions;
+pub const zstdEncodeFrameIntoSliceWithAdvancedOptionsAndDictionary = zstd.encodeFrameIntoSliceWithAdvancedOptionsAndDictionary;
+pub const zstdEncodeFrameIntoSliceWithAdvancedOptionsAndDictionarySet = zstd.encodeFrameIntoSliceWithAdvancedOptionsAndDictionarySet;
 pub const ZstdFrameOptions = zstd.FrameOptions;
 pub const ZstdFrameSelection = zstd.FrameSelection;
 pub const ZstdAdvancedFrameOptions = zstd.AdvancedFrameOptions;
@@ -2255,6 +2267,18 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdDecodeConcatenatedFrameChunksIntoWithDictionarySetExactSize;
     _ = zstdDecodedConcatenatedFrameChunksSizeWithDictionarySet;
     _ = zstdDecodedConcatenatedFrameChunksSizeLimitedWithDictionarySet;
+    _ = zstdEncodedFrameBoundWithAdvancedOptions;
+    _ = zstdEncodedFrameBoundWithAdvancedOptionsAndDictionary;
+    _ = zstdEncodedFrameBoundWithAdvancedOptionsAndDictionarySet;
+    _ = zstdEncodeFrameWithAdvancedOptionsAlloc;
+    _ = zstdEncodeFrameWithAdvancedOptionsAndDictionaryAlloc;
+    _ = zstdEncodeFrameWithAdvancedOptionsAndDictionarySetAlloc;
+    _ = zstdEncodeFrameAppendWithAdvancedOptions;
+    _ = zstdEncodeFrameAppendWithAdvancedOptionsAndDictionary;
+    _ = zstdEncodeFrameAppendWithAdvancedOptionsAndDictionarySet;
+    _ = zstdEncodeFrameIntoSliceWithAdvancedOptions;
+    _ = zstdEncodeFrameIntoSliceWithAdvancedOptionsAndDictionary;
+    _ = zstdEncodeFrameIntoSliceWithAdvancedOptionsAndDictionarySet;
     _ = ZstdFrameOptions;
     _ = ZstdFrameSelection;
     _ = ZstdAdvancedFrameOptions;
@@ -3487,6 +3511,78 @@ test "root zstd public reusable aliases expose dictionary helpers" {
 
     options.selection = .raw_or_rle;
     try std.testing.expectEqual(ZstdFrameSelection.raw_or_rle, options.selection);
+}
+
+test "root zstd advanced encode facade exposes public helpers" {
+    const first_dict = ZstdDictionary.init(0x7a71, "advanced-first-prefix-");
+    const second_dict = ZstdDictionary.init(0x7a72, "advanced-second-prefix-");
+    const dictionary_set = ZstdDictionarySet.init(&.{ first_dict, second_dict });
+    const plain_payload = "advanced plain payload plain payload plain payload";
+    const dict_payload = "advanced-first-prefix-payload advanced-first-prefix-tail";
+    const set_payload = "advanced-second-prefix-payload advanced-second-prefix-tail";
+    const options: ZstdAdvancedFrameOptions = .{
+        .selection = .literal_only,
+        .content_checksum = true,
+        .include_content_size = true,
+    };
+
+    const plain_bound = try zstdEncodedFrameBoundWithAdvancedOptions(plain_payload.len, options);
+    const plain_encoded = try zstdEncodeFrameWithAdvancedOptionsAlloc(std.testing.allocator, plain_payload, options);
+    defer std.testing.allocator.free(plain_encoded.frame);
+    try std.testing.expectEqual(ZstdFrameMode.literal_only, plain_encoded.mode);
+    try std.testing.expect(plain_encoded.frame.len <= plain_bound);
+    const plain_decoded = try zstdDecodeFrameAllocExactSize(std.testing.allocator, plain_encoded.frame, plain_payload.len);
+    defer std.testing.allocator.free(plain_decoded);
+    try std.testing.expectEqualSlices(u8, plain_payload, plain_decoded);
+    var plain_appended: std.ArrayList(u8) = .empty;
+    defer plain_appended.deinit(std.testing.allocator);
+    try plain_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(ZstdFrameMode.literal_only, try zstdEncodeFrameAppendWithAdvancedOptions(std.testing.allocator, &plain_appended, plain_payload, options));
+    try std.testing.expectEqualSlices(u8, plain_encoded.frame, plain_appended.items["prefix:".len..]);
+    const plain_into = try std.testing.allocator.alloc(u8, plain_bound);
+    defer std.testing.allocator.free(plain_into);
+    const plain_into_result = try zstdEncodeFrameIntoSliceWithAdvancedOptions(std.testing.allocator, plain_payload, options, plain_into);
+    try std.testing.expectEqual(ZstdFrameMode.literal_only, plain_into_result.mode);
+    try std.testing.expectEqualSlices(u8, plain_encoded.frame, plain_into[0..plain_into_result.written]);
+
+    const dict_bound = try zstdEncodedFrameBoundWithAdvancedOptionsAndDictionary(dict_payload.len, options, first_dict);
+    const dict_encoded = try zstdEncodeFrameWithAdvancedOptionsAndDictionaryAlloc(std.testing.allocator, dict_payload, options, first_dict);
+    defer std.testing.allocator.free(dict_encoded.frame);
+    try std.testing.expectEqual(ZstdFrameMode.literal_only, dict_encoded.mode);
+    try std.testing.expect(dict_encoded.frame.len <= dict_bound);
+    const dict_decoded = try zstdDecodeFrameAllocWithDictionaryExactSize(std.testing.allocator, dict_encoded.frame, first_dict, dict_payload.len);
+    defer std.testing.allocator.free(dict_decoded);
+    try std.testing.expectEqualSlices(u8, dict_payload, dict_decoded);
+    var dict_appended: std.ArrayList(u8) = .empty;
+    defer dict_appended.deinit(std.testing.allocator);
+    try dict_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(ZstdFrameMode.literal_only, try zstdEncodeFrameAppendWithAdvancedOptionsAndDictionary(std.testing.allocator, &dict_appended, dict_payload, options, first_dict));
+    try std.testing.expectEqualSlices(u8, dict_encoded.frame, dict_appended.items["prefix:".len..]);
+    const dict_into = try std.testing.allocator.alloc(u8, dict_bound);
+    defer std.testing.allocator.free(dict_into);
+    const dict_into_result = try zstdEncodeFrameIntoSliceWithAdvancedOptionsAndDictionary(std.testing.allocator, dict_payload, options, first_dict, dict_into);
+    try std.testing.expectEqual(ZstdFrameMode.literal_only, dict_into_result.mode);
+    try std.testing.expectEqualSlices(u8, dict_encoded.frame, dict_into[0..dict_into_result.written]);
+
+    const set_bound = try zstdEncodedFrameBoundWithAdvancedOptionsAndDictionarySet(set_payload.len, options, dictionary_set, second_dict.id);
+    const set_encoded = try zstdEncodeFrameWithAdvancedOptionsAndDictionarySetAlloc(std.testing.allocator, set_payload, options, dictionary_set, second_dict.id);
+    defer std.testing.allocator.free(set_encoded.frame);
+    try std.testing.expectEqual(ZstdFrameMode.literal_only, set_encoded.mode);
+    try std.testing.expect(set_encoded.frame.len <= set_bound);
+    const set_decoded = try zstdDecodeFrameAllocWithDictionarySetExactSize(std.testing.allocator, set_encoded.frame, dictionary_set, set_payload.len);
+    defer std.testing.allocator.free(set_decoded);
+    try std.testing.expectEqualSlices(u8, set_payload, set_decoded);
+    var set_appended: std.ArrayList(u8) = .empty;
+    defer set_appended.deinit(std.testing.allocator);
+    try set_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(ZstdFrameMode.literal_only, try zstdEncodeFrameAppendWithAdvancedOptionsAndDictionarySet(std.testing.allocator, &set_appended, set_payload, options, dictionary_set, second_dict.id));
+    try std.testing.expectEqualSlices(u8, set_encoded.frame, set_appended.items["prefix:".len..]);
+    const set_into = try std.testing.allocator.alloc(u8, set_bound);
+    defer std.testing.allocator.free(set_into);
+    const set_into_result = try zstdEncodeFrameIntoSliceWithAdvancedOptionsAndDictionarySet(std.testing.allocator, set_payload, options, dictionary_set, second_dict.id, set_into);
+    try std.testing.expectEqual(ZstdFrameMode.literal_only, set_into_result.mode);
+    try std.testing.expectEqualSlices(u8, set_encoded.frame, set_into[0..set_into_result.written]);
+    try std.testing.expectError(error.NeedDictionary, zstdEncodedFrameBoundWithAdvancedOptionsAndDictionarySet(set_payload.len, options, dictionary_set, 0xffff));
 }
 
 test "root zstd concatenated frame facade exposes public helpers" {
