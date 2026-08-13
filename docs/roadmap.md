@@ -1428,6 +1428,12 @@ architecture blindly.
   report now covers both non-dictionary and dictionary join-scratch chunked
   zlib decoder option paths.
 
+- Added single-stream zlib/gzip append decode helpers for library callers.
+  Zlib now exposes append, exact-size append, and output-limited append variants
+  across dictionary and relaxed-option combinations; gzip exposes the same
+  strict/options matrix. These preserve caller prefixes and reuse the existing
+  wrapper validation paths without adding CLI surface.
+
 - Added public one-shot `decodeGzipChunks` and `decodeGzipChunksWithOptions`
   helpers for caller-buffer gzip decode from split compressed input. They reuse
   the existing caller-owned compressed join scratch policy (including the

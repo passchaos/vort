@@ -1134,6 +1134,18 @@ pub const decodeZlib = deflate.decodeZlib;
 pub const decodeZlibWithDictionary = deflate.decodeZlibWithDictionary;
 pub const decodeZlibWithOptions = deflate.decodeZlibWithOptions;
 pub const decodeZlibWithDictionaryAndOptions = deflate.decodeZlibWithDictionaryAndOptions;
+pub const decodeZlibAppend = deflate.decodeZlibAppend;
+pub const decodeZlibAppendWithDictionary = deflate.decodeZlibAppendWithDictionary;
+pub const decodeZlibAppendWithOptions = deflate.decodeZlibAppendWithOptions;
+pub const decodeZlibAppendWithDictionaryAndOptions = deflate.decodeZlibAppendWithDictionaryAndOptions;
+pub const decodeZlibAppendExactSize = deflate.decodeZlibAppendExactSize;
+pub const decodeZlibAppendWithDictionaryExactSize = deflate.decodeZlibAppendWithDictionaryExactSize;
+pub const decodeZlibAppendWithOptionsExactSize = deflate.decodeZlibAppendWithOptionsExactSize;
+pub const decodeZlibAppendWithDictionaryAndOptionsExactSize = deflate.decodeZlibAppendWithDictionaryAndOptionsExactSize;
+pub const decodeZlibAppendLimited = deflate.decodeZlibAppendLimited;
+pub const decodeZlibAppendWithDictionaryLimited = deflate.decodeZlibAppendWithDictionaryLimited;
+pub const decodeZlibAppendWithOptionsLimited = deflate.decodeZlibAppendWithOptionsLimited;
+pub const decodeZlibAppendWithDictionaryAndOptionsLimited = deflate.decodeZlibAppendWithDictionaryAndOptionsLimited;
 pub const decodeZlibChunks = deflate.decodeZlibChunks;
 pub const decodeZlibChunksWithDictionary = deflate.decodeZlibChunksWithDictionary;
 pub const decodeZlibChunksWithOptions = deflate.decodeZlibChunksWithOptions;
@@ -1219,6 +1231,12 @@ pub const decodeGzipStoredAllocExactSize = deflate.decodeGzipStoredAllocExactSiz
 pub const decodeGzipStoredAllocLimited = deflate.decodeGzipStoredAllocLimited;
 pub const decodeGzip = deflate.decodeGzip;
 pub const decodeGzipWithOptions = deflate.decodeGzipWithOptions;
+pub const decodeGzipAppend = deflate.decodeGzipAppend;
+pub const decodeGzipAppendWithOptions = deflate.decodeGzipAppendWithOptions;
+pub const decodeGzipAppendExactSize = deflate.decodeGzipAppendExactSize;
+pub const decodeGzipAppendWithOptionsExactSize = deflate.decodeGzipAppendWithOptionsExactSize;
+pub const decodeGzipAppendLimited = deflate.decodeGzipAppendLimited;
+pub const decodeGzipAppendWithOptionsLimited = deflate.decodeGzipAppendWithOptionsLimited;
 pub const decodeGzipChunks = deflate.decodeGzipChunks;
 pub const decodeGzipChunksWithOptions = deflate.decodeGzipChunksWithOptions;
 pub const decodeGzipChunksAlloc = deflate.decodeGzipChunksAlloc;
@@ -5077,12 +5095,30 @@ test "root exports chunked compatibility decode helpers" {
     _ = decodeZlibChunksAllocWithDictionaryAndOptions;
     _ = decodeZlibChunksAllocWithDictionaryAndOptionsExactSize;
     _ = decodeZlibChunksAllocWithDictionaryAndOptionsLimited;
+    _ = decodeZlibAppend;
+    _ = decodeZlibAppendWithDictionary;
+    _ = decodeZlibAppendWithOptions;
+    _ = decodeZlibAppendWithDictionaryAndOptions;
+    _ = decodeZlibAppendExactSize;
+    _ = decodeZlibAppendWithDictionaryExactSize;
+    _ = decodeZlibAppendWithOptionsExactSize;
+    _ = decodeZlibAppendWithDictionaryAndOptionsExactSize;
+    _ = decodeZlibAppendLimited;
+    _ = decodeZlibAppendWithDictionaryLimited;
+    _ = decodeZlibAppendWithOptionsLimited;
+    _ = decodeZlibAppendWithDictionaryAndOptionsLimited;
     _ = parseZlibHeaderInfoFromChunks;
     _ = inspectZlibStreamFromChunksAlloc;
     _ = inspectZlibStreamFromChunksAllocLimited;
     _ = inspectZlibStreamFromChunksAllocWithDictionary;
     _ = inspectZlibStreamFromChunksAllocWithDictionaryLimited;
 
+    _ = decodeGzipAppend;
+    _ = decodeGzipAppendWithOptions;
+    _ = decodeGzipAppendExactSize;
+    _ = decodeGzipAppendWithOptionsExactSize;
+    _ = decodeGzipAppendLimited;
+    _ = decodeGzipAppendWithOptionsLimited;
     _ = decodeGzipChunks;
     _ = decodeGzipChunksWithOptions;
     _ = decodeGzipChunksAlloc;
@@ -5102,4 +5138,48 @@ test "root exports chunked compatibility decode helpers" {
     _ = parseGzipHeaderInfoFromChunks;
     _ = inspectGzipMemberFromChunksAlloc;
     _ = inspectGzipMemberFromChunksAllocLimited;
+}
+
+test "root zlib and gzip append decode helpers preserve prefixes" {
+    const payload = "root wrapper append payload " ** 2;
+
+    const zlib_encoded = try encodeZlibBestAlloc(std.testing.allocator, payload, .{});
+    defer std.testing.allocator.free(zlib_encoded);
+    var zlib_appended: std.ArrayList(u8) = .empty;
+    defer zlib_appended.deinit(std.testing.allocator);
+    try zlib_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try decodeZlibAppend(std.testing.allocator, &zlib_appended, zlib_encoded));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, zlib_appended.items);
+
+    zlib_appended.clearRetainingCapacity();
+    try zlib_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try decodeZlibAppendExactSize(std.testing.allocator, &zlib_appended, zlib_encoded, payload.len));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, zlib_appended.items);
+    try std.testing.expectError(error.SizeMismatch, decodeZlibAppendExactSize(std.testing.allocator, &zlib_appended, zlib_encoded, payload.len + 1));
+
+    zlib_appended.clearRetainingCapacity();
+    try zlib_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try decodeZlibAppendLimited(std.testing.allocator, &zlib_appended, zlib_encoded, payload.len));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, zlib_appended.items);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeZlibAppendLimited(std.testing.allocator, &zlib_appended, zlib_encoded, payload.len - 1));
+
+    const gzip_encoded = try encodeGzipBestAlloc(std.testing.allocator, payload, .{});
+    defer std.testing.allocator.free(gzip_encoded);
+    var gzip_appended: std.ArrayList(u8) = .empty;
+    defer gzip_appended.deinit(std.testing.allocator);
+    try gzip_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try decodeGzipAppend(std.testing.allocator, &gzip_appended, gzip_encoded));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, gzip_appended.items);
+
+    gzip_appended.clearRetainingCapacity();
+    try gzip_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try decodeGzipAppendExactSize(std.testing.allocator, &gzip_appended, gzip_encoded, payload.len));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, gzip_appended.items);
+    try std.testing.expectError(error.SizeMismatch, decodeGzipAppendExactSize(std.testing.allocator, &gzip_appended, gzip_encoded, payload.len - 1));
+
+    gzip_appended.clearRetainingCapacity();
+    try gzip_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try decodeGzipAppendLimited(std.testing.allocator, &gzip_appended, gzip_encoded, payload.len));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, gzip_appended.items);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeGzipAppendLimited(std.testing.allocator, &gzip_appended, gzip_encoded, payload.len - 1));
 }
