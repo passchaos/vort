@@ -1561,6 +1561,13 @@ architecture blindly.
   is intentionally a first compatibility slice, not full Brotli Huffman/LZ77
   support yet.
 
+- Extended the public Brotli stream facade with exact-size allocator, append,
+  and into helpers plus split-input chunked decode/size helpers. These reuse the
+  existing dependency-free Brotli parser through caller-owned compressed scratch
+  so known-size and fragmented-input callers no longer need private preflight or
+  coalescing code while the codec remains clearly scoped to the current Brotli
+  subset.
+
 - Added a dependency-free Snappy raw block module. `src/snappy.zig` covers the
   raw block varint length header, literal tags, copy1/copy2/copy4 decode,
   decoded-size preflight, output limits, caller-owned output, allocator-returning

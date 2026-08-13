@@ -49,12 +49,25 @@ pub const brEncodeStoredStreamWithOptionsAppend = br.encodeStoredStreamWithOptio
 pub const brEncodeStoredStreamWithOptionsInto = br.encodeStoredStreamWithOptionsInto;
 pub const BrotliStoredStreamOptions = br.StoredStreamOptions;
 pub const brDecodeStreamAlloc = br.decodeStreamAlloc;
+pub const brDecodeStreamAllocExactSize = br.decodeStreamAllocExactSize;
 pub const brDecodeStreamAllocLimited = br.decodeStreamAllocLimited;
 pub const brDecodeStreamAppend = br.decodeStreamAppend;
+pub const brDecodeStreamAppendExactSize = br.decodeStreamAppendExactSize;
 pub const brDecodeStreamAppendLimited = br.decodeStreamAppendLimited;
 pub const brDecodeStreamInto = br.decodeStreamInto;
+pub const brDecodeStreamIntoExactSize = br.decodeStreamIntoExactSize;
 pub const brDecodedStreamSize = br.decodedStreamSize;
 pub const brDecodedStreamSizeLimited = br.decodedStreamSizeLimited;
+pub const brDecodeStreamChunksAlloc = br.decodeStreamChunksAlloc;
+pub const brDecodeStreamChunksAllocExactSize = br.decodeStreamChunksAllocExactSize;
+pub const brDecodeStreamChunksAllocLimited = br.decodeStreamChunksAllocLimited;
+pub const brDecodeStreamChunksAppend = br.decodeStreamChunksAppend;
+pub const brDecodeStreamChunksAppendExactSize = br.decodeStreamChunksAppendExactSize;
+pub const brDecodeStreamChunksAppendLimited = br.decodeStreamChunksAppendLimited;
+pub const brDecodeStreamChunksInto = br.decodeStreamChunksInto;
+pub const brDecodeStreamChunksIntoExactSize = br.decodeStreamChunksIntoExactSize;
+pub const brDecodedStreamChunksSize = br.decodedStreamChunksSize;
+pub const brDecodedStreamChunksSizeLimited = br.decodedStreamChunksSizeLimited;
 
 pub const snappyEncodeBlockAlloc = snappy.encodeBlockAlloc;
 pub const snappyEncodeBlockAppend = snappy.encodeBlockAppend;
@@ -1318,12 +1331,25 @@ test "root exports lz4 and zstd codec helpers" {
     _ = brEncodeStoredStreamWithOptionsInto;
     _ = BrotliStoredStreamOptions;
     _ = brDecodeStreamAlloc;
+    _ = brDecodeStreamAllocExactSize;
     _ = brDecodeStreamAllocLimited;
     _ = brDecodeStreamAppend;
+    _ = brDecodeStreamAppendExactSize;
     _ = brDecodeStreamAppendLimited;
     _ = brDecodeStreamInto;
+    _ = brDecodeStreamIntoExactSize;
     _ = brDecodedStreamSize;
     _ = brDecodedStreamSizeLimited;
+    _ = brDecodeStreamChunksAlloc;
+    _ = brDecodeStreamChunksAllocExactSize;
+    _ = brDecodeStreamChunksAllocLimited;
+    _ = brDecodeStreamChunksAppend;
+    _ = brDecodeStreamChunksAppendExactSize;
+    _ = brDecodeStreamChunksAppendLimited;
+    _ = brDecodeStreamChunksInto;
+    _ = brDecodeStreamChunksIntoExactSize;
+    _ = brDecodedStreamChunksSize;
+    _ = brDecodedStreamChunksSizeLimited;
 
     _ = snappyEncodeBlockAlloc;
     _ = snappyEncodeBlockAppend;
@@ -1978,6 +2004,88 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdDecodeNativeConcatenatedFrameChunksIntoWithDictionarySetExactSize;
     _ = zstdDecodedNativeConcatenatedFrameChunksSizeWithDictionarySet;
     _ = zstdDecodedNativeConcatenatedFrameChunksSizeLimitedWithDictionarySet;
+}
+
+test "root brotli stream helpers expose exact and chunked decode variants" {
+    const payload = "root brotli stream helper payload" ** 3;
+    const encoded = try brEncodeStoredStreamWithOptionsAlloc(std.testing.allocator, payload, .{
+        .metadata = "root-br-metadata",
+    });
+    defer std.testing.allocator.free(encoded);
+
+    const exact = try brDecodeStreamAllocExactSize(std.testing.allocator, encoded, payload.len);
+    defer std.testing.allocator.free(exact);
+    try std.testing.expectEqualSlices(u8, payload, exact);
+    try std.testing.expectError(error.SizeMismatch, brDecodeStreamAllocExactSize(std.testing.allocator, encoded, payload.len + 1));
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try brDecodeStreamAppend(std.testing.allocator, &appended, encoded));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, appended.items);
+    appended.clearRetainingCapacity();
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try brDecodeStreamAppendExactSize(std.testing.allocator, &appended, encoded, payload.len));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, appended.items);
+    try std.testing.expectError(error.SizeMismatch, brDecodeStreamAppendExactSize(std.testing.allocator, &appended, encoded, payload.len - 1));
+    appended.clearRetainingCapacity();
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try brDecodeStreamAppendLimited(std.testing.allocator, &appended, encoded, payload.len));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, appended.items);
+    try std.testing.expectError(error.OutputLimitExceeded, brDecodeStreamAppendLimited(std.testing.allocator, &appended, encoded, payload.len - 1));
+
+    var into: [payload.len]u8 = undefined;
+    try std.testing.expectEqual(payload.len, try brDecodeStreamIntoExactSize(encoded, &into, payload.len));
+    try std.testing.expectEqualSlices(u8, payload, &into);
+    try std.testing.expectError(error.SizeMismatch, brDecodeStreamIntoExactSize(encoded, &into, payload.len - 1));
+
+    const chunks = [_][]const u8{
+        encoded[0..2],
+        encoded[2..@min(encoded.len, 11)],
+        encoded[@min(encoded.len, 11)..],
+    };
+    const join = try std.testing.allocator.alloc(u8, encoded.len);
+    defer std.testing.allocator.free(join);
+
+    try std.testing.expectEqual(payload.len, try brDecodedStreamChunksSize(&chunks, join));
+    try std.testing.expectEqual(payload.len, try brDecodedStreamChunksSizeLimited(&chunks, join, payload.len));
+    try std.testing.expectError(error.OutputLimitExceeded, brDecodedStreamChunksSizeLimited(&chunks, join, payload.len - 1));
+
+    const chunked = try brDecodeStreamChunksAlloc(std.testing.allocator, &chunks, join);
+    defer std.testing.allocator.free(chunked);
+    try std.testing.expectEqualSlices(u8, payload, chunked);
+    const chunked_exact = try brDecodeStreamChunksAllocExactSize(std.testing.allocator, &chunks, join, payload.len);
+    defer std.testing.allocator.free(chunked_exact);
+    try std.testing.expectEqualSlices(u8, payload, chunked_exact);
+    try std.testing.expectError(error.SizeMismatch, brDecodeStreamChunksAllocExactSize(std.testing.allocator, &chunks, join, payload.len + 1));
+    const chunked_limited = try brDecodeStreamChunksAllocLimited(std.testing.allocator, &chunks, join, payload.len);
+    defer std.testing.allocator.free(chunked_limited);
+    try std.testing.expectEqualSlices(u8, payload, chunked_limited);
+    try std.testing.expectError(error.OutputLimitExceeded, brDecodeStreamChunksAllocLimited(std.testing.allocator, &chunks, join, payload.len - 1));
+
+    var chunked_append: std.ArrayList(u8) = .empty;
+    defer chunked_append.deinit(std.testing.allocator);
+    try chunked_append.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try brDecodeStreamChunksAppend(std.testing.allocator, &chunked_append, &chunks, join));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, chunked_append.items);
+    chunked_append.clearRetainingCapacity();
+    try chunked_append.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try brDecodeStreamChunksAppendExactSize(std.testing.allocator, &chunked_append, &chunks, join, payload.len));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, chunked_append.items);
+    try std.testing.expectError(error.SizeMismatch, brDecodeStreamChunksAppendExactSize(std.testing.allocator, &chunked_append, &chunks, join, payload.len + 1));
+    chunked_append.clearRetainingCapacity();
+    try chunked_append.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(payload.len, try brDecodeStreamChunksAppendLimited(std.testing.allocator, &chunked_append, &chunks, join, payload.len));
+    try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, chunked_append.items);
+    try std.testing.expectError(error.OutputLimitExceeded, brDecodeStreamChunksAppendLimited(std.testing.allocator, &chunked_append, &chunks, join, payload.len - 1));
+
+    @memset(&into, 0);
+    try std.testing.expectEqual(payload.len, try brDecodeStreamChunksInto(&chunks, join, &into));
+    try std.testing.expectEqualSlices(u8, payload, &into);
+    @memset(&into, 0);
+    try std.testing.expectEqual(payload.len, try brDecodeStreamChunksIntoExactSize(&chunks, join, &into, payload.len));
+    try std.testing.expectEqualSlices(u8, payload, &into);
+    try std.testing.expectError(error.SizeMismatch, brDecodeStreamChunksIntoExactSize(&chunks, join, &into, payload.len - 1));
 }
 
 test "root snappy raw block helpers round trip" {

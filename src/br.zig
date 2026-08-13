@@ -244,6 +244,16 @@ pub fn decodeStreamAllocLimited(allocator: std.mem.Allocator, stream: []const u8
     return out.toOwnedSlice(allocator);
 }
 
+pub fn decodeStreamAllocExactSize(allocator: std.mem.Allocator, stream: []const u8, expected_output_len: usize) Error![]u8 {
+    const decoded_len = try decodedStreamSize(stream);
+    if (decoded_len != expected_output_len) return error.SizeMismatch;
+    const out = try allocator.alloc(u8, expected_output_len);
+    errdefer allocator.free(out);
+    const written = try decodeStreamIntoExactSize(stream, out, expected_output_len);
+    if (written != expected_output_len) return error.SizeMismatch;
+    return out;
+}
+
 pub fn decodeStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8) Error!usize {
     return try decodeStreamAppendLimited(allocator, out, stream, std.math.maxInt(usize));
 }
@@ -258,6 +268,23 @@ pub fn decodeStreamAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayLi
         return err;
     };
     if (written != decoded_len) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
+}
+
+pub fn decodeStreamAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, expected_output_len: usize) Error!usize {
+    const decoded_len = try decodedStreamSize(stream);
+    if (decoded_len != expected_output_len) return error.SizeMismatch;
+    try out.ensureUnusedCapacity(allocator, expected_output_len);
+    const start = out.items.len;
+    const slot = out.addManyAsSliceAssumeCapacity(expected_output_len);
+    const written = decodeStreamIntoExactSize(stream, slot, expected_output_len) catch |err| {
+        out.items.len = start;
+        return err;
+    };
+    if (written != expected_output_len) {
         out.items.len = start;
         return error.SizeMismatch;
     }
@@ -308,6 +335,18 @@ pub fn decodeStreamInto(stream: []const u8, output: []u8) Error!usize {
         try reader.readAlignedBytes(output[written..][0..meta_block_len]);
         written += meta_block_len;
     }
+}
+
+pub fn decodeStreamIntoExactSize(stream: []const u8, output: []u8, expected_output_len: usize) Error!usize {
+    if (output.len < expected_output_len) return error.OutputTooSmall;
+    const decoded_len = try decodedStreamSize(stream);
+    if (decoded_len != expected_output_len) return error.SizeMismatch;
+    const written = decodeStreamInto(stream, output[0..expected_output_len]) catch |err| switch (err) {
+        error.OutputTooSmall => return error.SizeMismatch,
+        else => return err,
+    };
+    if (written != expected_output_len) return error.SizeMismatch;
+    return written;
 }
 
 pub fn decodedStreamSize(stream: []const u8) Error!usize {
@@ -362,6 +401,68 @@ pub fn decodedStreamSizeLimited(stream: []const u8, max_output_len: usize) Error
         literal_history.pushSlice(stream[reader.byte_index..][0..meta_block_len]);
         reader.byte_index += meta_block_len;
     }
+}
+
+pub fn decodeStreamChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8) Error![]u8 {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeStreamAlloc(allocator, joined);
+}
+
+pub fn decodeStreamChunksAllocExactSize(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) Error![]u8 {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeStreamAllocExactSize(allocator, joined, expected_output_len);
+}
+
+pub fn decodeStreamChunksAllocLimited(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error![]u8 {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeStreamAllocLimited(allocator, joined, max_output_len);
+}
+
+pub fn decodeStreamChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeStreamAppend(allocator, out, joined);
+}
+
+pub fn decodeStreamChunksAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeStreamAppendExactSize(allocator, out, joined, expected_output_len);
+}
+
+pub fn decodeStreamChunksAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeStreamAppendLimited(allocator, out, joined, max_output_len);
+}
+
+pub fn decodeStreamChunksInto(chunks: []const []const u8, compressed_scratch: []u8, output: []u8) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeStreamInto(joined, output);
+}
+
+pub fn decodeStreamChunksIntoExactSize(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, expected_output_len: usize) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeStreamIntoExactSize(joined, output, expected_output_len);
+}
+
+pub fn decodedStreamChunksSize(chunks: []const []const u8, compressed_scratch: []u8) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodedStreamSize(joined);
+}
+
+pub fn decodedStreamChunksSizeLimited(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodedStreamSizeLimited(joined, max_output_len);
+}
+
+fn joinChunks(chunks: []const []const u8, compressed_scratch: []u8) Error![]const u8 {
+    var total: usize = 0;
+    for (chunks) |chunk| total = std.math.add(usize, total, chunk.len) catch return error.IntegerOverflow;
+    if (compressed_scratch.len < total) return error.OutputTooSmall;
+    var offset: usize = 0;
+    for (chunks) |chunk| {
+        @memcpy(compressed_scratch[offset..][0..chunk.len], chunk);
+        offset += chunk.len;
+    }
+    return compressed_scratch[0..total];
 }
 
 fn readWindowBits(reader: *bitstream.BitReader) Error!void {
