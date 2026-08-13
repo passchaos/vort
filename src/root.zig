@@ -62,6 +62,7 @@ pub const BrotliStreamSummary = br.StreamSummary;
 pub const BrotliStreamSummaryDiagnostics = br.StreamSummaryDiagnostics;
 pub const BrotliStreamSummaryErrorPhase = br.StreamSummaryErrorPhase;
 pub const BrotliStreamProbeResult = br.StreamProbeResult;
+pub const BrotliStoredStreamEncoder = br.StoredStreamEncoder;
 pub const BrotliStreamDecoder = br.StreamDecoder;
 pub const brDecodeStreamAlloc = br.decodeStreamAlloc;
 pub const brDecodeStreamAllocExactSize = br.decodeStreamAllocExactSize;
@@ -1708,6 +1709,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = BrotliStreamSummaryDiagnostics;
     _ = BrotliStreamSummaryErrorPhase;
     _ = BrotliStreamProbeResult;
+    _ = BrotliStoredStreamEncoder;
     _ = BrotliStreamDecoder;
     _ = brDecodeStreamAlloc;
     _ = brDecodeStreamAllocExactSize;
@@ -2717,6 +2719,95 @@ test "root brotli stream helpers expose exact and chunked decode variants" {
     try std.testing.expectEqual(payload.len, try brDecodeStreamChunksIntoExactSize(&chunks, join, &into, payload.len));
     try std.testing.expectEqualSlices(u8, payload, &into);
     try std.testing.expectError(error.SizeMismatch, brDecodeStreamChunksIntoExactSize(&chunks, join, &into, payload.len - 1));
+}
+
+test "root brotli stored stream encoder reuses scratch" {
+    const payload = "root brotli reusable encoder payload" ** 2;
+    const options: BrotliStoredStreamOptions = .{
+        .metadata = "reusable-meta",
+        .window_bits = 18,
+    };
+    const expected = try brEncodeStoredStreamWithOptionsAlloc(std.testing.allocator, payload, options);
+    defer std.testing.allocator.free(expected);
+
+    var encoder = BrotliStoredStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+
+    const owned = try encoder.encodeWithOptionsAlloc(payload, options);
+    defer std.testing.allocator.free(owned);
+    try std.testing.expectEqualSlices(u8, expected, owned);
+
+    const scratch = try encoder.encodeScratchWithOptions(payload, options);
+    try std.testing.expectEqualSlices(u8, expected, scratch);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try encoder.encodeWithOptionsAppend(&appended, payload, options);
+    try std.testing.expectEqualSlices(u8, "prefix:", appended.items[0.."prefix:".len]);
+    try std.testing.expectEqualSlices(u8, expected, appended.items["prefix:".len..]);
+
+    const into = try std.testing.allocator.alloc(u8, try brEncodedStoredStreamBoundWithOptions(payload.len, options));
+    defer std.testing.allocator.free(into);
+    try std.testing.expectEqual(expected.len, try encoder.encodeWithOptionsIntoSlice(payload, options, into));
+    try std.testing.expectEqualSlices(u8, expected, into[0..expected.len]);
+
+    const chunks = [_][]const u8{
+        payload[0..9],
+        payload[9..27],
+        payload[27..],
+    };
+    const expected_chunks = try brEncodeStoredStreamChunksWithOptionsAlloc(std.testing.allocator, &chunks, options);
+    defer std.testing.allocator.free(expected_chunks);
+    const chunk_owned = try encoder.encodeChunksWithOptionsAlloc(&chunks, options);
+    defer std.testing.allocator.free(chunk_owned);
+    try std.testing.expectEqualSlices(u8, expected_chunks, chunk_owned);
+    const chunk_scratch = try encoder.encodeChunksScratchWithOptions(&chunks, options);
+    try std.testing.expectEqualSlices(u8, expected_chunks, chunk_scratch);
+    var chunk_appended: std.ArrayList(u8) = .empty;
+    defer chunk_appended.deinit(std.testing.allocator);
+    try encoder.encodeChunksWithOptionsAppend(&chunk_appended, &chunks, options);
+    try std.testing.expectEqualSlices(u8, expected_chunks, chunk_appended.items);
+    const chunk_into = try std.testing.allocator.alloc(u8, try brEncodedStoredStreamChunksBoundWithOptions(&chunks, options));
+    defer std.testing.allocator.free(chunk_into);
+    try std.testing.expectEqual(expected_chunks.len, try encoder.encodeChunksWithOptionsIntoSlice(&chunks, options, chunk_into));
+    try std.testing.expectEqualSlices(u8, expected_chunks, chunk_into[0..expected_chunks.len]);
+
+    const decoded = try brDecodeStreamAllocExactSize(std.testing.allocator, chunk_scratch, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    const default_expected = try brEncodeStoredStreamAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(default_expected);
+    const default_scratch = try encoder.encodeScratch(payload);
+    try std.testing.expectEqualSlices(u8, default_expected, default_scratch);
+    const default_owned = try encoder.encodeAlloc(payload);
+    defer std.testing.allocator.free(default_owned);
+    try std.testing.expectEqualSlices(u8, default_expected, default_owned);
+    var default_appended: std.ArrayList(u8) = .empty;
+    defer default_appended.deinit(std.testing.allocator);
+    try encoder.encodeAppend(&default_appended, payload);
+    try std.testing.expectEqualSlices(u8, default_expected, default_appended.items);
+    const default_into = try std.testing.allocator.alloc(u8, try brEncodedStoredStreamBound(payload.len));
+    defer std.testing.allocator.free(default_into);
+    try std.testing.expectEqual(default_expected.len, try encoder.encodeIntoSlice(payload, default_into));
+    try std.testing.expectEqualSlices(u8, default_expected, default_into[0..default_expected.len]);
+
+    const default_chunks_expected = try brEncodeStoredStreamChunksAlloc(std.testing.allocator, &chunks);
+    defer std.testing.allocator.free(default_chunks_expected);
+    const default_chunks_scratch = try encoder.encodeChunksScratch(&chunks);
+    try std.testing.expectEqualSlices(u8, default_chunks_expected, default_chunks_scratch);
+    const default_chunks_owned = try encoder.encodeChunksAlloc(&chunks);
+    defer std.testing.allocator.free(default_chunks_owned);
+    try std.testing.expectEqualSlices(u8, default_chunks_expected, default_chunks_owned);
+    var default_chunks_appended: std.ArrayList(u8) = .empty;
+    defer default_chunks_appended.deinit(std.testing.allocator);
+    try encoder.encodeChunksAppend(&default_chunks_appended, &chunks);
+    try std.testing.expectEqualSlices(u8, default_chunks_expected, default_chunks_appended.items);
+    const default_chunks_into = try std.testing.allocator.alloc(u8, try brEncodedStoredStreamChunksBound(&chunks));
+    defer std.testing.allocator.free(default_chunks_into);
+    try std.testing.expectEqual(default_chunks_expected.len, try encoder.encodeChunksIntoSlice(&chunks, default_chunks_into));
+    try std.testing.expectEqualSlices(u8, default_chunks_expected, default_chunks_into[0..default_chunks_expected.len]);
 }
 
 test "root brotli stream summary exposes capability flags" {

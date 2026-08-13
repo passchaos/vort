@@ -3444,3 +3444,8 @@ architecture blindly.
   both default and option-bearing stored-stream encodes, with root tests checking
   round-trip decode, byte parity across alloc/append/into, and short-buffer
   failure.
+
+- Added a reusable Brotli `StoredStreamEncoder` facade. It exposes alloc,
+  scratch, append, caller-owned, and chunked encode flows while reusing internal
+  scratch between calls, and root tests verify parity against the top-level
+  stored-stream helpers for default and option-bearing encodes.

@@ -880,6 +880,98 @@ fn applySummaryMetaBlockStats(summary: *StreamSummary, stats: StreamSummaryMetaB
     }
 }
 
+pub const StoredStreamEncoder = struct {
+    allocator: std.mem.Allocator,
+    scratch: std.ArrayList(u8) = .empty,
+
+    pub fn init(allocator: std.mem.Allocator) StoredStreamEncoder {
+        return .{ .allocator = allocator };
+    }
+
+    pub fn deinit(self: *StoredStreamEncoder) void {
+        self.scratch.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn encodeAlloc(self: *StoredStreamEncoder, input: []const u8) Error![]u8 {
+        return try self.encodeWithOptionsAlloc(input, .{});
+    }
+
+    pub fn encodeWithOptionsAlloc(self: *StoredStreamEncoder, input: []const u8, options: StoredStreamOptions) Error![]u8 {
+        var out: std.ArrayList(u8) = .empty;
+        errdefer out.deinit(self.allocator);
+        try self.encodeWithOptionsAppend(&out, input, options);
+        return out.toOwnedSlice(self.allocator);
+    }
+
+    pub fn encodeChunksAlloc(self: *StoredStreamEncoder, chunks: []const []const u8) Error![]u8 {
+        return try self.encodeChunksWithOptionsAlloc(chunks, .{});
+    }
+
+    pub fn encodeChunksWithOptionsAlloc(self: *StoredStreamEncoder, chunks: []const []const u8, options: StoredStreamOptions) Error![]u8 {
+        var out: std.ArrayList(u8) = .empty;
+        errdefer out.deinit(self.allocator);
+        try self.encodeChunksWithOptionsAppend(&out, chunks, options);
+        return out.toOwnedSlice(self.allocator);
+    }
+
+    pub fn encodeScratch(self: *StoredStreamEncoder, input: []const u8) Error![]const u8 {
+        return try self.encodeScratchWithOptions(input, .{});
+    }
+
+    pub fn encodeScratchWithOptions(self: *StoredStreamEncoder, input: []const u8, options: StoredStreamOptions) Error![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        try self.encodeWithOptionsAppend(&self.scratch, input, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeChunksScratch(self: *StoredStreamEncoder, chunks: []const []const u8) Error![]const u8 {
+        return try self.encodeChunksScratchWithOptions(chunks, .{});
+    }
+
+    pub fn encodeChunksScratchWithOptions(self: *StoredStreamEncoder, chunks: []const []const u8, options: StoredStreamOptions) Error![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        try self.encodeChunksWithOptionsAppend(&self.scratch, chunks, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeAppend(self: *StoredStreamEncoder, out: *std.ArrayList(u8), input: []const u8) Error!void {
+        try self.encodeWithOptionsAppend(out, input, .{});
+    }
+
+    pub fn encodeWithOptionsAppend(self: *StoredStreamEncoder, out: *std.ArrayList(u8), input: []const u8, options: StoredStreamOptions) Error!void {
+        try encodeStoredStreamWithOptionsAppend(self.allocator, out, input, options);
+    }
+
+    pub fn encodeChunksAppend(self: *StoredStreamEncoder, out: *std.ArrayList(u8), chunks: []const []const u8) Error!void {
+        try self.encodeChunksWithOptionsAppend(out, chunks, .{});
+    }
+
+    pub fn encodeChunksWithOptionsAppend(self: *StoredStreamEncoder, out: *std.ArrayList(u8), chunks: []const []const u8, options: StoredStreamOptions) Error!void {
+        try encodeStoredStreamChunksWithOptionsAppend(self.allocator, out, chunks, options);
+    }
+
+    pub fn encodeIntoSlice(self: *StoredStreamEncoder, input: []const u8, output: []u8) Error!usize {
+        _ = self;
+        return try encodeStoredStreamInto(input, output);
+    }
+
+    pub fn encodeWithOptionsIntoSlice(self: *StoredStreamEncoder, input: []const u8, options: StoredStreamOptions, output: []u8) Error!usize {
+        _ = self;
+        return try encodeStoredStreamWithOptionsInto(input, output, options);
+    }
+
+    pub fn encodeChunksIntoSlice(self: *StoredStreamEncoder, chunks: []const []const u8, output: []u8) Error!usize {
+        _ = self;
+        return try encodeStoredStreamChunksInto(chunks, output);
+    }
+
+    pub fn encodeChunksWithOptionsIntoSlice(self: *StoredStreamEncoder, chunks: []const []const u8, options: StoredStreamOptions, output: []u8) Error!usize {
+        _ = self;
+        return try encodeStoredStreamChunksWithOptionsInto(chunks, output, options);
+    }
+};
+
 /// Reusable, caller-owned Brotli stream decoder facade.
 ///
 /// The current Brotli codec still validates and decodes a complete supported
