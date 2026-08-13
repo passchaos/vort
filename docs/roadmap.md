@@ -3449,3 +3449,8 @@ architecture blindly.
   scratch, append, caller-owned, and chunked encode flows while reusing internal
   scratch between calls, and root tests verify parity against the top-level
   stored-stream helpers for default and option-bearing encodes.
+
+- Added append-style stored encode helpers for raw deflate, zlib, zlib preset
+  dictionaries, gzip, and metadata-rich gzip headers. The root stored-wrapper
+  smoke now verifies prefix preservation, byte parity with allocator-returning
+  encoders, and decode round trips for each wrapper.

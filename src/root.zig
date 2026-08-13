@@ -1189,6 +1189,7 @@ pub const profileDeflateBlocks = deflate.profileDeflateBlocks;
 pub const DynamicPlanStats = deflate.DynamicPlanStats;
 pub const dynamicDeflatePlanStatsAlloc = deflate.dynamicPlanStatsAlloc;
 pub const encodeRawStoredDeflateAlloc = deflate.encodeRawStoredAlloc;
+pub const encodeRawStoredDeflateAppend = deflate.encodeRawStoredAppend;
 pub const decodeRawStoredDeflateAlloc = deflate.decodeRawStoredAlloc;
 pub const decodeRawStoredDeflateAllocExactSize = deflate.decodeRawStoredAllocExactSize;
 pub const decodeRawStoredDeflateAllocLimited = deflate.decodeRawStoredAllocLimited;
@@ -1325,7 +1326,9 @@ pub const streamPngAdam7ZlibRowsFromChunksDirect = png_exports.streamPngAdam7Zli
 pub const streamPngAdam7ZlibRowsFromChunksWithOptionsDirect = png_exports.streamPngAdam7ZlibRowsFromChunksWithOptionsDirect;
 pub const reconstructPngScanline = png_exports.reconstructPngScanline;
 pub const encodeZlibStoredAlloc = deflate.encodeZlibStoredAlloc;
+pub const encodeZlibStoredAppend = deflate.encodeZlibStoredAppend;
 pub const encodeZlibStoredWithDictionaryAlloc = deflate.encodeZlibStoredWithDictionaryAlloc;
+pub const encodeZlibStoredWithDictionaryAppend = deflate.encodeZlibStoredWithDictionaryAppend;
 pub const decodeZlibStoredAlloc = deflate.decodeZlibStoredAlloc;
 pub const decodeZlibStoredAllocExactSize = deflate.decodeZlibStoredAllocExactSize;
 pub const decodeZlibStoredAllocLimited = deflate.decodeZlibStoredAllocLimited;
@@ -1500,6 +1503,7 @@ pub const inspectGzipMemberFromChunksAllocLimited = deflate.inspectGzipMemberFro
 pub const gzipStoredEncodedSizeWithHeader = deflate.gzipStoredEncodedSizeWithHeader;
 pub const encodeGzipStoredWithHeader = deflate.encodeGzipStoredWithHeader;
 pub const encodeGzipStoredWithHeaderAlloc = deflate.encodeGzipStoredWithHeaderAlloc;
+pub const encodeGzipStoredWithHeaderAppend = deflate.encodeGzipStoredWithHeaderAppend;
 pub const encodeGzipFixedWithHeaderAlloc = deflate.encodeGzipFixedWithHeaderAlloc;
 pub const encodeGzipDynamicLiteralWithHeaderAlloc = deflate.encodeGzipDynamicLiteralWithHeaderAlloc;
 pub const encodeGzipDynamicWithHeaderAlloc = deflate.encodeGzipDynamicWithHeaderAlloc;
@@ -1512,6 +1516,7 @@ pub const encodeGzipDynamicWithOptionsAlloc = deflate.encodeGzipDynamicWithOptio
 pub const encodeGzipFixedWithOptionsAlloc = deflate.encodeGzipFixedWithOptionsAlloc;
 pub const decodeGzipStored = deflate.decodeGzipStored;
 pub const encodeGzipStoredAlloc = deflate.encodeGzipStoredAlloc;
+pub const encodeGzipStoredAppend = deflate.encodeGzipStoredAppend;
 pub const decodeGzipStoredAlloc = deflate.decodeGzipStoredAlloc;
 pub const decodeGzipStoredAllocExactSize = deflate.decodeGzipStoredAllocExactSize;
 pub const decodeGzipStoredAllocLimited = deflate.decodeGzipStoredAllocLimited;
@@ -6301,6 +6306,7 @@ test "root exports chunked compatibility decode helpers" {
     _ = probeRawDeflateChunksWithDictionary;
     _ = probeRawDeflateChunksExactSize;
     _ = probeRawDeflateChunksWithDictionaryExactSize;
+    _ = encodeRawStoredDeflateAppend;
 
     _ = decodeZlibChunks;
     _ = decodeZlibChunksWithDictionary;
@@ -6491,6 +6497,10 @@ test "root exports chunked compatibility decode helpers" {
     _ = parseGzipHeaderInfoFromChunks;
     _ = inspectGzipMemberFromChunksAlloc;
     _ = inspectGzipMemberFromChunksAllocLimited;
+    _ = encodeZlibStoredAppend;
+    _ = encodeZlibStoredWithDictionaryAppend;
+    _ = encodeGzipStoredAppend;
+    _ = encodeGzipStoredWithHeaderAppend;
 }
 
 test "root raw deflate append decode helpers preserve prefixes" {
@@ -6540,6 +6550,77 @@ test "root raw deflate append decode helpers preserve prefixes" {
     try std.testing.expectEqual(payload.len, try decodeRawDeflateChunksAppendLimited(std.testing.allocator, &appended, &chunks, join, payload.len));
     try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, appended.items);
     try std.testing.expectError(error.OutputLimitExceeded, decodeRawDeflateChunksAppendLimited(std.testing.allocator, &appended, &chunks, join, payload.len - 1));
+}
+
+test "root stored deflate wrapper append encode helpers preserve prefixes" {
+    const payload = "root stored wrapper append encode payload " ** 2;
+    const preset_dictionary = "root stored wrapper dictionary";
+
+    const raw_expected = try encodeRawStoredDeflateAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(raw_expected);
+    var raw_appended: std.ArrayList(u8) = .empty;
+    defer raw_appended.deinit(std.testing.allocator);
+    try raw_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(raw_expected.len, try encodeRawStoredDeflateAppend(std.testing.allocator, &raw_appended, payload));
+    try std.testing.expectEqualSlices(u8, "prefix:", raw_appended.items[0.."prefix:".len]);
+    try std.testing.expectEqualSlices(u8, raw_expected, raw_appended.items["prefix:".len..]);
+    const raw_decoded = try decodeRawDeflateAlloc(std.testing.allocator, raw_appended.items["prefix:".len..]);
+    defer std.testing.allocator.free(raw_decoded);
+    try std.testing.expectEqualSlices(u8, payload, raw_decoded);
+
+    const zlib_expected = try encodeZlibStoredAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(zlib_expected);
+    var zlib_appended: std.ArrayList(u8) = .empty;
+    defer zlib_appended.deinit(std.testing.allocator);
+    try zlib_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(zlib_expected.len, try encodeZlibStoredAppend(std.testing.allocator, &zlib_appended, payload));
+    try std.testing.expectEqualSlices(u8, "prefix:", zlib_appended.items[0.."prefix:".len]);
+    try std.testing.expectEqualSlices(u8, zlib_expected, zlib_appended.items["prefix:".len..]);
+    const zlib_decoded = try decodeZlibStoredAlloc(std.testing.allocator, zlib_appended.items["prefix:".len..]);
+    defer std.testing.allocator.free(zlib_decoded);
+    try std.testing.expectEqualSlices(u8, payload, zlib_decoded);
+
+    const zlib_dict_expected = try encodeZlibStoredWithDictionaryAlloc(std.testing.allocator, payload, preset_dictionary);
+    defer std.testing.allocator.free(zlib_dict_expected);
+    var zlib_dict_appended: std.ArrayList(u8) = .empty;
+    defer zlib_dict_appended.deinit(std.testing.allocator);
+    try zlib_dict_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(zlib_dict_expected.len, try encodeZlibStoredWithDictionaryAppend(std.testing.allocator, &zlib_dict_appended, payload, preset_dictionary));
+    try std.testing.expectEqualSlices(u8, "prefix:", zlib_dict_appended.items[0.."prefix:".len]);
+    try std.testing.expectEqualSlices(u8, zlib_dict_expected, zlib_dict_appended.items["prefix:".len..]);
+    const zlib_dict_decoded = try decodeZlibStoredAllocWithDictionary(std.testing.allocator, zlib_dict_appended.items["prefix:".len..], preset_dictionary);
+    defer std.testing.allocator.free(zlib_dict_decoded);
+    try std.testing.expectEqualSlices(u8, payload, zlib_dict_decoded);
+
+    const gzip_expected = try encodeGzipStoredAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(gzip_expected);
+    var gzip_appended: std.ArrayList(u8) = .empty;
+    defer gzip_appended.deinit(std.testing.allocator);
+    try gzip_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(gzip_expected.len, try encodeGzipStoredAppend(std.testing.allocator, &gzip_appended, payload));
+    try std.testing.expectEqualSlices(u8, "prefix:", gzip_appended.items[0.."prefix:".len]);
+    try std.testing.expectEqualSlices(u8, gzip_expected, gzip_appended.items["prefix:".len..]);
+    const gzip_decoded = try decodeGzipStoredAlloc(std.testing.allocator, gzip_appended.items["prefix:".len..]);
+    defer std.testing.allocator.free(gzip_decoded);
+    try std.testing.expectEqualSlices(u8, payload, gzip_decoded);
+
+    const header_options: GzipHeaderOptions = .{
+        .filename = "stored-append.txt",
+        .comment = "root append helper",
+        .header_crc = true,
+    };
+    const gzip_header_expected = try encodeGzipStoredWithHeaderAlloc(std.testing.allocator, payload, header_options);
+    defer std.testing.allocator.free(gzip_header_expected);
+    try std.testing.expectEqual(gzip_header_expected.len, try gzipStoredEncodedSizeWithHeader(payload.len, header_options));
+    var gzip_header_appended: std.ArrayList(u8) = .empty;
+    defer gzip_header_appended.deinit(std.testing.allocator);
+    try gzip_header_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(gzip_header_expected.len, try encodeGzipStoredWithHeaderAppend(std.testing.allocator, &gzip_header_appended, payload, header_options));
+    try std.testing.expectEqualSlices(u8, "prefix:", gzip_header_appended.items[0.."prefix:".len]);
+    try std.testing.expectEqualSlices(u8, gzip_header_expected, gzip_header_appended.items["prefix:".len..]);
+    const gzip_header_decoded = try decodeGzipStoredAlloc(std.testing.allocator, gzip_header_appended.items["prefix:".len..]);
+    defer std.testing.allocator.free(gzip_header_decoded);
+    try std.testing.expectEqualSlices(u8, payload, gzip_header_decoded);
 }
 
 test "root raw deflate decoder drains caller-owned scratch and resets" {

@@ -2841,6 +2841,22 @@ pub fn encodeRawStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![]
     return out;
 }
 
+pub fn encodeRawStoredAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) !usize {
+    const required = try rawStoredEncodedSize(input.len);
+    const start = out.items.len;
+    try out.ensureUnusedCapacity(allocator, required);
+    const slot = out.addManyAsSliceAssumeCapacity(required);
+    const written = encodeRawStored(input, slot) catch |err| {
+        out.items.len = start;
+        return err;
+    };
+    if (written != required) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
+}
+
 fn encodeRawStoredSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize) ![]u8 {
     if (block_len == 0) return error.InvalidBlockPlan;
     var writer = bitstream.BitWriter{};
@@ -4818,6 +4834,38 @@ pub fn encodeZlibStoredWithDictionaryAlloc(allocator: std.mem.Allocator, input: 
     const written = try encodeZlibStoredWithDictionary(input, out, dictionary);
     std.debug.assert(written == out.len);
     return out;
+}
+
+pub fn encodeZlibStoredAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) !usize {
+    const required = try zlibStoredEncodedSize(input.len);
+    const start = out.items.len;
+    try out.ensureUnusedCapacity(allocator, required);
+    const slot = out.addManyAsSliceAssumeCapacity(required);
+    const written = encodeZlibStored(input, slot) catch |err| {
+        out.items.len = start;
+        return err;
+    };
+    if (written != required) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
+}
+
+pub fn encodeZlibStoredWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8) !usize {
+    const required = try zlibStoredWithDictionaryEncodedSize(input.len);
+    const start = out.items.len;
+    try out.ensureUnusedCapacity(allocator, required);
+    const slot = out.addManyAsSliceAssumeCapacity(required);
+    const written = encodeZlibStoredWithDictionary(input, slot, dictionary) catch |err| {
+        out.items.len = start;
+        return err;
+    };
+    if (written != required) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
 }
 
 fn encodeZlibStoredSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize) ![]u8 {
@@ -11144,6 +11192,26 @@ pub fn encodeGzipStoredWithHeaderAlloc(allocator: std.mem.Allocator, input: []co
     const written = try encodeGzipStoredWithHeader(input, out, header_options);
     std.debug.assert(written == out.len);
     return out;
+}
+
+pub fn encodeGzipStoredAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) !usize {
+    return try encodeGzipStoredWithHeaderAppend(allocator, out, input, .{});
+}
+
+pub fn encodeGzipStoredWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, header_options: GzipHeaderOptions) !usize {
+    const required = try gzipStoredEncodedSizeWithHeader(input.len, header_options);
+    const start = out.items.len;
+    try out.ensureUnusedCapacity(allocator, required);
+    const slot = out.addManyAsSliceAssumeCapacity(required);
+    const written = encodeGzipStoredWithHeader(input, slot, header_options) catch |err| {
+        out.items.len = start;
+        return err;
+    };
+    if (written != required) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
 }
 
 fn encodeGzipStoredSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize) ![]u8 {
