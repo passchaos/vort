@@ -510,6 +510,30 @@ fn acceptMatch(input: []const u8, pos: usize, length: usize, distance: usize, op
     return literal_cost >= required_cost;
 }
 
+fn acceptsEveryHashMatch(options: GreedyOptions) bool {
+    // This is a sufficient condition, not a heuristic. A hash candidate never
+    // exceeds `window_len`, fixed distance cost is nondecreasing, and every
+    // literal costs at least eight bits. If that lower bound pays the
+    // worst-distance match plus the requested savings for every permitted
+    // length, `acceptMatch` cannot reject any match returned by the parser.
+    if (options.window_len == 0 or options.window_len > default_window_len) {
+        return false;
+    }
+    const distance_cost = fixedDistanceSymbolCost(options.window_len);
+    const minimum = minMatch(options);
+    const maximum = maxMatch(options);
+    var length = minimum;
+    while (length <= maximum) : (length += 1) {
+        const literal_min_cost = length * 8;
+        const match_cost = fixedLengthSymbolCost(length) + distance_cost;
+        if (match_cost > literal_min_cost) return false;
+        if (options.min_savings_bits > literal_min_cost - match_cost) {
+            return false;
+        }
+    }
+    return true;
+}
+
 pub fn fixedBitCost(tokens: []const Token) usize {
     var cost: usize = 3;
     for (tokens) |token| {
@@ -647,12 +671,17 @@ fn hashGreedyPlanWithTables(allocator: std.mem.Allocator, input: []const u8, opt
     var tokens = try initTokenList(allocator, input.len);
     errdefer tokens.deinit(allocator);
     var stats = PlanStats{};
+    const accept_all_matches = acceptsEveryHashMatch(options);
 
     var pos: usize = 0;
     while (pos < input.len) {
         const best = findBestHashMatchWithLayout(input, pos, options, head, prev, ring);
 
-        if (acceptMatch(input, pos, best.length, best.distance, options)) {
+        const accepted = if (accept_all_matches)
+            best.length != 0
+        else
+            acceptMatch(input, pos, best.length, best.distance, options);
+        if (accepted) {
             try appendToken(&tokens, allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
             stats.matches += 1;
             stats.matched_bytes += best.length;
@@ -1324,4 +1353,41 @@ test "matchLength compares word chunks and tails" {
     const input = "abcdefghijklmnopABCabcdefghijklmnopXYZ";
     try std.testing.expectEqual(@as(usize, 16), matchLength(input, 0, 19, 16));
     try std.testing.expectEqual(@as(usize, 3), matchLength(input, 0, 19, 3));
+}
+
+test "hash match fast acceptance is a sufficient condition" {
+    const fastest = GreedyOptions{
+        .window_len = 16 * 1024,
+        .max_chain = 6,
+        .nice_len = 16,
+        .max_candidates = 1,
+        .lazy_min_gain = 3,
+        .min_match = 4,
+        .max_match = 96,
+        .min_savings_bits = 6,
+    };
+    try std.testing.expect(acceptsEveryHashMatch(fastest));
+
+    // Use the cheapest possible literals so this exhaustive check exercises
+    // exactly the lower bound used by `acceptsEveryHashMatch`.
+    const input: [max_match_len]u8 = @splat(0);
+    var length = minMatch(fastest);
+    while (length <= maxMatch(fastest)) : (length += 1) {
+        var distance: usize = 1;
+        while (distance <= fastest.window_len) : (distance += 1) {
+            try std.testing.expect(
+                acceptMatch(&input, 0, length, distance, fastest),
+            );
+        }
+    }
+
+    var short = fastest;
+    short.min_match = 3;
+    try std.testing.expect(!acceptsEveryHashMatch(short));
+    var expensive = fastest;
+    expensive.min_savings_bits = 9;
+    try std.testing.expect(!acceptsEveryHashMatch(expensive));
+    var oversized_window = fastest;
+    oversized_window.window_len = default_window_len + 1;
+    try std.testing.expect(!acceptsEveryHashMatch(oversized_window));
 }
