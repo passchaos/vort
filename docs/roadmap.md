@@ -2970,6 +2970,10 @@ architecture blindly.
   isolating a compression-floor regression for the retained high-byte Zstd row.
   The new fixture keeps positive timing, throughput, and iteration accounting
   valid while forcing the row to stop compressing below its input size.
+- Tightened native library benchmark strict-smoke compression coverage by
+  isolating a decode-mode retained row that no longer compresses below its input
+  size while keeping positive timing, throughput, and iteration accounting
+  valid.
 - Tightened native library benchmark strict-smoke dictionary improvement
   coverage by isolating an LZ4 dictionary row that no longer improves over its
   plain baseline while leaving positive timing, throughput, and iteration
