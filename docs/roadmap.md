@@ -1518,6 +1518,11 @@ architecture blindly.
   throwing size preflights for callers that already manage scratch and do not
   want to inspect a full probe result.
 
+- Added caller-scratch decoded-size helpers for concatenated zlib/gzip streams,
+  including split-input variants and zlib preset-dictionary workflows. Multi-member
+  callers now have throwing size preflights alongside the non-throwing probe
+  APIs before selecting append, caller-buffer, or allocator-returning decode.
+
 - Extended concatenated zlib/gzip probes with failing member indexes. Multi-member
   probe failures now report which member failed, while preserving wrapper-aware
   phases such as footer checksum failures for the offending member.
