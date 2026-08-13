@@ -1649,6 +1649,11 @@ architecture blindly.
   no longer need to drop to native-specific APIs or allocate an owned frame just
   to write into existing buffers.
 
+- Extended the same public Zstd encode facade with dictionary-aware bound,
+  allocator, append, and into-slice helpers. Callers using explicit
+  `NativeDictionary` values can stay on the top-level frame API instead of
+  dropping to native-specific entrypoints for basic dictionary workflows.
+
 - Added a dependency-free Brotli `br` bootstrap module for stored/uncompressed
   streams. `src/br.zig` emits RFC-valid WBITS=16 streams with uncompressed
   meta-blocks plus final empty terminators, decodes the same stored subset with
