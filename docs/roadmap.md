@@ -2970,6 +2970,10 @@ architecture blindly.
   trained-dictionary improvement pair. The retained row now has an isolated
   negative fixture that keeps positive timing, throughput, and iteration
   accounting valid while removing the trained-dictionary size win.
+- Extended native library benchmark strict-smoke dictionary coverage to a Zstd
+  dictionary-set improvement pair. The retained row now has an isolated negative
+  fixture that keeps non-improvement accounting valid while removing the
+  dictionary-set size win over its plain baseline.
 - Extended native library benchmark strict-smoke dictionary coverage to a
   reusable LZ4 dictionary-set improvement pair. The new negative fixture keeps
   the benchmark row otherwise healthy while removing the reusable dictionary

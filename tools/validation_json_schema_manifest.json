@@ -4733,6 +4733,7 @@
           "native_library_bench_compression_floor_mismatch",
           "native_library_bench_dictionary_improvement_mismatch",
           "native_library_bench_trained_dictionary_improvement_mismatch",
+          "native_library_bench_dictionary_set_improvement_mismatch",
           "native_library_bench_reusable_dictionary_improvement_mismatch",
           "native_library_bench_direct_dictionary_improvement_mismatch",
           "native_library_bench_fallback_dictionary_improvement_mismatch",
