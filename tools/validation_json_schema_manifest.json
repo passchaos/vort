@@ -4738,6 +4738,7 @@
           "native_library_bench_fallback_dictionary_improvement_mismatch",
           "native_library_bench_chunked_dictionary_improvement_mismatch",
           "native_library_bench_chunked_append_dictionary_improvement_mismatch",
+          "native_library_bench_chunked_append_exact_dictionary_improvement_mismatch",
           "native_library_bench_markdown_table",
           "native_summary_error_case_count_mismatch",
           "native_summary_error_codec_case_count_mismatch",
