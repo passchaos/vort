@@ -631,7 +631,7 @@ pub fn dynamicPlanStatsAlloc(allocator: std.mem.Allocator, input: []const u8, op
     defer plan.deinit(allocator);
     const dynamic_plan = try DynamicCodingPlan.init(plan.tokens);
     const fixed_bits = lz77.fixedBitCost(plan.tokens);
-    const dynamic_bits = dynamic_plan.bitCost(plan.tokens);
+    const dynamic_bits = dynamic_plan.bitCost();
     var dynamic_literal_bits: usize = 0;
     var dynamic_length_bits: usize = 0;
     var dynamic_distance_bits: usize = 0;
@@ -887,9 +887,9 @@ fn uniqueByteCount(input: []const u8) usize {
 
 fn writeBestTokensBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, plain: []const u8, tokens: []const lz77.Token, final: bool, options: CompressionOptions) !void {
     const stored_len = storedBlocksEncodedSizeFromState(writer.*, plain.len);
-    const fixed_len = encodedBytesForBitsFromState(writer.*, lz77.fixedBitCost(tokens));
 
     if (options.block_selection == .stored_fixed) {
+        const fixed_len = encodedBytesForBitsFromState(writer.*, lz77.fixedBitCost(tokens));
         if (stored_len <= fixed_len) {
             return writeStoredBlocks(allocator, writer, plain, final);
         }
@@ -898,7 +898,8 @@ fn writeBestTokensBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWrit
     }
 
     const dynamic_plan = try DynamicCodingPlan.init(tokens);
-    const dynamic_len = encodedBytesForBitsFromState(writer.*, dynamic_plan.bitCost(tokens));
+    const fixed_len = encodedBytesForBitsFromState(writer.*, dynamic_plan.fixed_bits);
+    const dynamic_len = encodedBytesForBitsFromState(writer.*, dynamic_plan.bitCost());
     if (stored_len <= fixed_len and stored_len <= dynamic_len) {
         return writeStoredBlocks(allocator, writer, plain, final);
     }
@@ -1023,6 +1024,8 @@ const DynamicCodingPlan = struct {
     dist_lengths_full: [30]u4,
     code_len_lengths: [19]u4,
     code_len_ops: CodeLengthOpBuffer,
+    fixed_bits: usize,
+    dynamic_bits: usize,
     hlit: usize,
     hdist: usize,
     hclen: usize,
@@ -1030,21 +1033,51 @@ const DynamicCodingPlan = struct {
     fn init(tokens: []const lz77.Token) !DynamicCodingPlan {
         var lit_freqs: [286]u32 = @splat(0);
         var dist_freqs: [30]u32 = @splat(0);
-        for (tokens) |token| switch (token) {
-            .literal => |byte| lit_freqs[byte] += 1,
-            .match => |m| {
-                const len_code = lengthCode(m.length);
-                const dist_code = distanceCode(m.distance);
-                lit_freqs[len_code.symbol] += 1;
-                dist_freqs[dist_code.symbol] += 1;
-            },
-        };
+        var length_extra_bits: usize = 0;
+        var distance_extra_bits: usize = 0;
+        for (tokens) |token| {
+            switch (token) {
+                .literal => |byte| {
+                    lit_freqs[byte] += 1;
+                },
+                .match => |m| {
+                    const len_code = lengthCode(m.length);
+                    const dist_code = distanceCode(m.distance);
+                    lit_freqs[len_code.symbol] += 1;
+                    dist_freqs[dist_code.symbol] += 1;
+                    length_extra_bits += len_code.extra_bits;
+                    distance_extra_bits += dist_code.extra_bits;
+                },
+            }
+        }
         lit_freqs[256] = 1;
-        completeLiteralFrequencySet(&lit_freqs);
-        if (hasDistanceSymbols(&dist_freqs)) completeDistanceFrequencySet(&dist_freqs);
 
-        var lit_lengths_full = huffman.treeCodeLengths(286, &lit_freqs, 15);
-        var dist_lengths_full = huffman.treeCodeLengths(30, &dist_freqs, 15);
+        var fixed_bits: usize = 3 + length_extra_bits + distance_extra_bits;
+        for (lit_freqs, huffman.fixed_literal_encoder.bits[0..lit_freqs.len]) |frequency, code_bits| {
+            fixed_bits += @as(usize, frequency) * code_bits;
+        }
+        for (dist_freqs, huffman.fixed_distance_encoder.bits[0..dist_freqs.len]) |frequency, code_bits| {
+            fixed_bits += @as(usize, frequency) * code_bits;
+        }
+        // Preserve lz77.fixedBitCost's historical planning model exactly.
+        // Length symbols 280...284 are charged one bit below their emitted
+        // fixed-code-plus-extra cost there. Correcting that model could change
+        // block selection and is deliberately left to a separate size/ratio
+        // change; this optimization only removes redundant token scans.
+        for (280..285) |symbol| fixed_bits -= lit_freqs[symbol];
+
+        // Single-symbol alphabets need synthetic frequencies to produce a
+        // complete tree, but those synthetic symbols are never emitted. Keep
+        // the actual histograms intact for exact payload cost accounting.
+        var lit_tree_freqs = lit_freqs;
+        var dist_tree_freqs = dist_freqs;
+        completeLiteralFrequencySet(&lit_tree_freqs);
+        if (hasDistanceSymbols(&dist_tree_freqs)) {
+            completeDistanceFrequencySet(&dist_tree_freqs);
+        }
+
+        var lit_lengths_full = huffman.treeCodeLengths(286, &lit_tree_freqs, 15);
+        var dist_lengths_full = huffman.treeCodeLengths(30, &dist_tree_freqs, 15);
         const hlit = trimmedLiteralCodeCount(&lit_lengths_full);
         const hdist = trimmedDistanceCodeCount(&dist_lengths_full);
 
@@ -1055,18 +1088,36 @@ const DynamicCodingPlan = struct {
         const code_len_lengths = huffman.treeCodeLengths(19, &code_len_freqs, 7);
         const hclen = trimmedCodeLengthAlphabetCount(&code_len_lengths);
 
+        var dynamic_bits: usize = 3 + 5 + 5 + 4 + hclen * 3;
+        for (code_len_ops.slice()) |op| {
+            dynamic_bits += code_len_lengths[op.symbol] + op.extra_bits;
+        }
+        for (lit_freqs, lit_lengths_full) |frequency, code_bits| {
+            dynamic_bits += @as(usize, frequency) * code_bits;
+        }
+        for (dist_freqs, dist_lengths_full) |frequency, code_bits| {
+            dynamic_bits += @as(usize, frequency) * code_bits;
+        }
+        dynamic_bits += length_extra_bits + distance_extra_bits;
+
         return .{
             .lit_lengths_full = lit_lengths_full,
             .dist_lengths_full = dist_lengths_full,
             .code_len_lengths = code_len_lengths,
             .code_len_ops = code_len_ops,
+            .fixed_bits = fixed_bits,
+            .dynamic_bits = dynamic_bits,
             .hlit = hlit,
             .hdist = hdist,
             .hclen = hclen,
         };
     }
 
-    fn bitCost(self: *const DynamicCodingPlan, tokens: []const lz77.Token) usize {
+    fn bitCost(self: *const DynamicCodingPlan) usize {
+        return self.dynamic_bits;
+    }
+
+    fn bitCostReference(self: *const DynamicCodingPlan, tokens: []const lz77.Token) usize {
         var bits: usize = 3 + 5 + 5 + 4 + self.hclen * 3;
         for (self.code_len_ops.slice()) |op| {
             bits += self.code_len_lengths[op.symbol] + op.extra_bits;
@@ -1163,14 +1214,14 @@ fn encodeRawDynamicTokensFinalAlloc(allocator: std.mem.Allocator, tokens: []cons
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
     const plan = try DynamicCodingPlan.init(tokens);
-    try writer.bytes.ensureTotalCapacity(allocator, (plan.bitCost(tokens) + 7) / 8);
+    try writer.bytes.ensureTotalCapacity(allocator, (plan.bitCost() + 7) / 8);
     try plan.write(allocator, &writer, tokens, final);
     return writer.toOwnedSlice(allocator);
 }
 
 fn dynamicTokenBitCost(tokens: []const lz77.Token) !usize {
     const plan = try DynamicCodingPlan.init(tokens);
-    return plan.bitCost(tokens);
+    return plan.bitCost();
 }
 
 fn writeDynamicTokens(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, tokens: []const lz77.Token, final: bool) !void {
@@ -4881,7 +4932,7 @@ fn encodeZlibDynamicTokensAlloc(allocator: std.mem.Allocator, input: []const u8,
     errdefer writer.deinit(allocator);
     const header_len = try writeWrappedDeflatePrefix(allocator, &writer, dictionary);
     const plan = try DynamicCodingPlan.init(tokens);
-    try writer.bytes.ensureTotalCapacity(allocator, header_len + (plan.bitCost(tokens) + 7) / 8 + 4);
+    try writer.bytes.ensureTotalCapacity(allocator, header_len + (plan.bitCost() + 7) / 8 + 4);
     try plan.write(allocator, &writer, tokens, true);
     return finishZlibFrame(allocator, &writer, input, header_len);
 }
@@ -10046,7 +10097,7 @@ fn encodeGzipDynamicTokensWithHeaderAlloc(allocator: std.mem.Allocator, input: [
     errdefer writer.deinit(allocator);
     const header_len = try writeGzipPrefixWithOptions(allocator, &writer, header_options);
     const plan = try DynamicCodingPlan.init(tokens);
-    try writer.bytes.ensureTotalCapacity(allocator, header_len + (plan.bitCost(tokens) + 7) / 8 + 8);
+    try writer.bytes.ensureTotalCapacity(allocator, header_len + (plan.bitCost() + 7) / 8 + 8);
     try plan.write(allocator, &writer, tokens, true);
     return finishGzipFrame(allocator, &writer, input);
 }
@@ -16035,6 +16086,57 @@ test "dynamic bit cost model predicts dynamic token byte length" {
     const dynamic = try encodeRawDynamicTokensFinalAlloc(std.testing.allocator, plan.tokens, true);
     defer std.testing.allocator.free(dynamic);
     try std.testing.expectEqual((try dynamicTokenBitCost(plan.tokens) + 7) / 8, dynamic.len);
+}
+
+test "cached Deflate block costs match token-scan references" {
+    const empty = [_]lz77.Token{};
+    const literals = [_]lz77.Token{
+        .{ .literal = 0 },
+        .{ .literal = 143 },
+        .{ .literal = 144 },
+        .{ .literal = 255 },
+    };
+    const matches = [_]lz77.Token{
+        .{ .match = .{ .length = 3, .distance = 1 } },
+        .{ .match = .{ .length = 10, .distance = 4 } },
+        .{ .match = .{ .length = 11, .distance = 5 } },
+        .{ .match = .{ .length = 258, .distance = 32 * 1024 } },
+    };
+    const mixed = literals ++ matches ++ literals;
+    const cases = [_][]const lz77.Token{
+        &empty,
+        &literals,
+        &matches,
+        &mixed,
+    };
+    for (cases) |tokens| {
+        const plan = try DynamicCodingPlan.init(tokens);
+        try std.testing.expectEqual(lz77.fixedBitCost(tokens), plan.fixed_bits);
+        try std.testing.expectEqual(plan.bitCostReference(tokens), plan.bitCost());
+    }
+
+    // Exercise every literal, length range, and distance range in a larger
+    // histogram. The cached formula is intentionally independent of token
+    // order, while this retained reference follows the exact write sequence.
+    var generated: [4096]lz77.Token = undefined;
+    for (&generated, 0..) |*token, i| {
+        token.* = if (i % 3 == 0)
+            .{ .literal = @intCast(i % 256) }
+        else
+            .{ .match = .{
+                .length = @intCast(3 + (i % 256)),
+                .distance = @intCast(1 + ((i * 8191) % (32 * 1024))),
+            } };
+    }
+    const generated_plan = try DynamicCodingPlan.init(&generated);
+    try std.testing.expectEqual(
+        lz77.fixedBitCost(&generated),
+        generated_plan.fixed_bits,
+    );
+    try std.testing.expectEqual(
+        generated_plan.bitCostReference(&generated),
+        generated_plan.bitCost(),
+    );
 }
 
 test "inflate output capacity hint expands compressed frames but stays capped" {

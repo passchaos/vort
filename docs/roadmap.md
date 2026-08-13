@@ -1814,3 +1814,19 @@ architecture blindly.
   slice. A 256-byte Lorem Ipsum frame copies `dolor` from static dictionary
   distance 1002 after emitting `Lorem ipsum `, and now decodes through the same
   preflight/output path plus the Node-backed CLI differential smoke.
+
+- Cached exact dynamic-Huffman bit cost and the existing fixed-block planning
+  cost while collecting Deflate token frequencies. Best-block selection now
+  scans the token stream once instead of rescanning it for fixed cost, dynamic
+  frequencies, and dynamic cost; the remaining cost calculation is bounded by
+  the 286 literal/length and 30 distance histograms. The implementation keeps
+  synthetic single-symbol tree frequencies separate from actual emitted
+  frequencies and preserves the historical fixed-cost model so block choices
+  and encoded bytes do not change. A retained token-scan reference covers empty,
+  literal-only, match-only, mixed, and 4096-token full-range inputs. On imx's
+  fixed-CPU-12 PNG encode harness, an 11-round alternating old/new A/B measured
+  adaptive L8/RGB8/RGBA8 speedups of `1.098/1.072/1.118x`, a nine-row geomean
+  of `1.035x`, and identical encoded lengths, checksums, and guards.
+  Final validation passed `zig build test -j1` in 1:53.79 at 4,124,084-KiB
+  peak RSS and `zig build check -j1` in 5:01.65 at 687,136-KiB peak RSS; both
+  completed with zero swap.
