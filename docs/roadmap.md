@@ -2818,6 +2818,14 @@ architecture blindly.
   worst row. The code was fully reverted before reference/full gates. Keep the
   simple run-length accumulator unless a future scanner can skip multiple
   loads without introducing the already rejected specialization/layout cost.
+- Rejected forcing `writeZeroRun` inline after post-carried-literal profiles
+  made it the leading named Vort helper at roughly 10--17% of fixed Up encode.
+  All 65 focused tests and all 30 encoded tuples remained exact, but a CPU-12
+  21-round A/B measured `0.98760x` geomean, `0.99646x` aggregate,
+  `0.98907x` adaptive, and `0.98612x` Up. The 16/32-pixel adaptive rows fell
+  to `0.94270/0.94475x`; code growth and layout outweighed removing the helper
+  call. The annotation should not be retried without materially shrinking the
+  helper body first.
 - Reworked the narrow Brotli static-dictionary slice to resolve identity-word
   addresses relative to the current output length instead of matching only raw
   distance codes. Real Node quality-5 frames now prove additional dictionary
