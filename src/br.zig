@@ -180,6 +180,26 @@ const max_distance_block_types = 32;
 const max_distance_context_trees = 32;
 const initial_last_distances = [_]usize{ 16, 15, 11, 4 };
 
+pub const CompressedSupportLimits = struct {
+    max_literal_block_types: usize,
+    max_literal_context_trees: usize,
+    max_command_block_types: usize,
+    max_distance_block_types: usize,
+    max_distance_context_trees: usize,
+    max_distance_alphabet_size: usize,
+};
+
+pub fn compressedSupportLimits() CompressedSupportLimits {
+    return .{
+        .max_literal_block_types = max_literal_block_types,
+        .max_literal_context_trees = max_literal_context_trees,
+        .max_command_block_types = max_command_block_types,
+        .max_distance_block_types = max_distance_block_types,
+        .max_distance_context_trees = max_distance_context_trees,
+        .max_distance_alphabet_size = max_distance_alphabet_size,
+    };
+}
+
 fn BlockSwitchState(comptime max_block_types: usize) type {
     return struct {
         block_type_count: u16 = 1,

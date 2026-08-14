@@ -63,8 +63,10 @@ pub const BrotliStreamSummaryDiagnostics = br.StreamSummaryDiagnostics;
 pub const BrotliStreamSummaryErrorPhase = br.StreamSummaryErrorPhase;
 pub const BrotliStreamProbeResult = br.StreamProbeResult;
 pub const BrotliStaticDictionaryEntry = br.StaticDictionaryEntry;
+pub const BrotliCompressedSupportLimits = br.CompressedSupportLimits;
 pub const BrotliStoredStreamEncoder = br.StoredStreamEncoder;
 pub const BrotliStreamDecoder = br.StreamDecoder;
+pub const brCompressedSupportLimits = br.compressedSupportLimits;
 pub const brMinimalStaticDictionaryCoverage = br.minimalStaticDictionaryCoverage;
 pub const brMinimalStaticDictionarySizeBits = br.minimalStaticDictionarySizeBits;
 pub const brDecodeStreamAlloc = br.decodeStreamAlloc;
@@ -1838,8 +1840,10 @@ test "root exports lz4 and zstd codec helpers" {
     _ = BrotliStreamSummaryErrorPhase;
     _ = BrotliStreamProbeResult;
     _ = BrotliStaticDictionaryEntry;
+    _ = BrotliCompressedSupportLimits;
     _ = BrotliStoredStreamEncoder;
     _ = BrotliStreamDecoder;
+    _ = brCompressedSupportLimits;
     _ = brMinimalStaticDictionaryCoverage;
     _ = brMinimalStaticDictionarySizeBits;
     _ = brDecodeStreamAlloc;
@@ -3032,6 +3036,16 @@ test "root brotli stream summary exposes capability flags" {
     try std.testing.expect(static_summary.uses_static_dictionary);
     try std.testing.expect(static_summary.static_dictionary_copy_count > 0);
     try std.testing.expect(static_summary.static_dictionary_bytes > 0);
+}
+
+test "root brotli compressed support limits expose current bounded capacities" {
+    const limits: BrotliCompressedSupportLimits = brCompressedSupportLimits();
+    try std.testing.expectEqual(@as(usize, 32), limits.max_literal_block_types);
+    try std.testing.expectEqual(@as(usize, 32), limits.max_literal_context_trees);
+    try std.testing.expectEqual(@as(usize, 32), limits.max_command_block_types);
+    try std.testing.expectEqual(@as(usize, 32), limits.max_distance_block_types);
+    try std.testing.expectEqual(@as(usize, 32), limits.max_distance_context_trees);
+    try std.testing.expect(limits.max_distance_alphabet_size >= 16 + 120 + (48 << 3));
 }
 
 test "root brotli stream summary diagnostics report failure phases" {

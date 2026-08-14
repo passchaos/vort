@@ -1698,6 +1698,11 @@ architecture blindly.
   in line with existing allocator-returning and append limited variants without
   adding CLI surface.
 
+- Exposed Brotli compressed-subset support limits through a library
+  introspection API. `compressedSupportLimits` reports the current bounded
+  literal/command/distance block and context-tree capacities, so callers can
+  make fallback decisions without depending on private constants or CLI probes.
+
 - Added a reusable caller-owned Brotli `StreamDecoder` library facade. It
   validates/decodes the current supported Brotli subset into caller-provided
   output scratch during reset, then drains through bounded `step` calls with
