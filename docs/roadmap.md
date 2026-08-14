@@ -2075,6 +2075,14 @@ architecture blindly.
   4,125,488/689,176-KiB peak RSS; imx test/check passed in 574.94/95.70
   seconds at 6,421,264/695,948-KiB. The first three runs kept swap counters
   stable; imx check observed one page of system swap-in.
+- Tested exposing four independent 64-byte folds per Adler loop turn while
+  retaining the committed two-block and one-block tails. All 17 checksum tests
+  and the external differential remained exact, but a CPU-12 31-round
+  alternating checksum A/B measured only `0.98854x` median and `0.99011x`
+  paired geomean versus the committed two-block implementation. The added
+  expression/register pressure outweighed further ILP, so the four-block loop
+  was reverted before any PNG corpus run. Keep the two-block unroll as the
+  measured portable sweet spot.
 - Rejected forcing the remaining boundary `writeLiterals` helper inline.
   Scalar/fdeflate output stayed byte-exact and two 41-round CPU-12 A/Bs showed
   `1.020x/1.018x` compressed geomeans, but a 121-round repeat reproduced a
