@@ -2130,6 +2130,11 @@ architecture blindly.
   context one (`copy_len = 3`), with both Zig tests and the Node-backed CLI
   differential smoke decoding the same frame.
 
+- Raised the minimal Brotli literal context-tree retention limit to 32. A
+  compressed UTF8 literal-context frame now declares 17 literal trees and selects
+  tree index 16 through context ID 56, extending coverage beyond the previous
+  16-tree ceiling while keeping the bounded table representation explicit.
+
 - Expanded Brotli decoded-size preflight's recent literal history window to 64
   bytes. A compressed context-selected literal frame now copies with distance 33
   and then decodes another literal using the copied history, keeping preflight in

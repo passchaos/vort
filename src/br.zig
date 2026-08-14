@@ -174,7 +174,7 @@ const MinimalCompressedHeader = struct {
 const max_distance_alphabet_size = 16 + 120 + (48 << 3);
 const max_context_map_alphabet_size = 256 + 16;
 const max_literal_block_types = 16;
-const max_literal_context_trees = 16;
+const max_literal_context_trees = 32;
 const max_command_block_types = 16;
 const max_distance_block_types = 16;
 const max_distance_context_trees = 16;
@@ -5413,6 +5413,23 @@ test "br minimal compressed stream selects ninth literal context tree" {
     try writer.writeBits(std.testing.allocator, 0, 2); // MNIBBLES = 4
     try writer.writeBits(std.testing.allocator, 2, 16); // MLEN - 1
     try writeMinimalCompressedHeaderForLiteralContextNineTrees(std.testing.allocator, &writer);
+
+    try std.testing.expectEqual(@as(usize, 3), try decodedStreamSize(encoded.items));
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "aba", decoded);
+}
+
+test "br minimal compressed stream selects seventeenth literal context tree" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writer.writeBits(std.testing.allocator, 1, 1); // ISLAST
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISLASTEMPTY = false
+    try writer.writeBits(std.testing.allocator, 0, 2); // MNIBBLES = 4
+    try writer.writeBits(std.testing.allocator, 2, 16); // MLEN - 1
+    try writeMinimalCompressedHeaderForLiteralContextSeventeenTrees(std.testing.allocator, &writer);
 
     try std.testing.expectEqual(@as(usize, 3), try decodedStreamSize(encoded.items));
     const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
@@ -12556,6 +12573,27 @@ fn writeMinimalCompressedHeaderForLiteralContextNineTrees(allocator: std.mem.All
     try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
 }
 
+fn writeMinimalCompressedHeaderForLiteralContextSeventeenTrees(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 0, 4); // NDIRECT
+    try writer.writeBits(allocator, 2, 2); // literal context mode = UTF8
+    try writeBlockTypeCount(allocator, writer, 17); // NTREESL
+    try writeUtf8LiteralContextMapForSeventeenthTree(allocator, writer);
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESD
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 'a');
+    for (0..15) |_| {
+        try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 0);
+    }
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 'b');
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 24);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
+}
+
 fn writeMinimalCompressedHeaderForLiteralContextSigned(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
@@ -13217,6 +13255,19 @@ fn writeUtf8LiteralContextMapForNinthTree(allocator: std.mem.Allocator, writer: 
     try writer.writeBits(allocator, 1, 2); // NSYM = 2
     try writer.writeBits(allocator, 0, alphabetBits(9));
     try writer.writeBits(allocator, 8, alphabetBits(9));
+    var i: usize = 0;
+    while (i < 64) : (i += 1) {
+        try writer.writeBits(allocator, if (i == 56) 1 else 0, 1);
+    }
+    try writer.writeBits(allocator, 0, 1); // IMTF = false
+}
+
+fn writeUtf8LiteralContextMapForSeventeenthTree(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writer.writeBits(allocator, 0, 1); // RLEMAX = 0
+    try writer.writeBits(allocator, 1, 2); // simple context-map prefix
+    try writer.writeBits(allocator, 1, 2); // NSYM = 2
+    try writer.writeBits(allocator, 0, alphabetBits(17));
+    try writer.writeBits(allocator, 16, alphabetBits(17));
     var i: usize = 0;
     while (i < 64) : (i += 1) {
         try writer.writeBits(allocator, if (i == 56) 1 else 0, 1);
