@@ -256,7 +256,25 @@ fn writeInput(
             run = suffix_zeros;
             continue;
         }
-        try writeLiterals(allocator, writer, chunk, batch_literals);
+        if (batch_literals) {
+            // The common PNG chunk has no boundary zero run. Reuse the word
+            // already loaded for run detection instead of entering the
+            // variable-slice literal helper and loading all eight bytes again.
+            try writeLiteralQuad(
+                allocator,
+                writer,
+                @truncate(word),
+                @truncate(word >> 16),
+            );
+            try writeLiteralQuad(
+                allocator,
+                writer,
+                @truncate(word >> 32),
+                @truncate(word >> 48),
+            );
+        } else {
+            try writeLiterals(allocator, writer, chunk, false);
+        }
     }
 
     if (run != 0) try writeZeroRun(allocator, writer, run);
@@ -287,18 +305,32 @@ fn writeLiterals(
                 bytes[offset + 2 ..][0..2],
                 .little,
             );
-            const pair0 = literal_pairs[pair0_index];
-            const pair1 = literal_pairs[pair1_index];
-            const n0: u6 = @truncate(pair0 >> 56);
-            const n1: u6 = @truncate(pair1 >> 56);
-            const bits = (pair0 & 0x00ff_ffff_ffff_ffff) |
-                ((pair1 & 0x00ff_ffff_ffff_ffff) << n0);
-            try writer.writeBits(allocator, bits, n0 + n1);
+            try writeLiteralQuad(
+                allocator,
+                writer,
+                pair0_index,
+                pair1_index,
+            );
         }
     }
     while (offset < bytes.len) : (offset += 1) {
         try writeSymbol(allocator, writer, bytes[offset]);
     }
+}
+
+inline fn writeLiteralQuad(
+    allocator: std.mem.Allocator,
+    writer: anytype,
+    pair0_index: u16,
+    pair1_index: u16,
+) !void {
+    const pair0 = literal_pairs[pair0_index];
+    const pair1 = literal_pairs[pair1_index];
+    const n0: u6 = @truncate(pair0 >> 56);
+    const n1: u6 = @truncate(pair1 >> 56);
+    const bits = (pair0 & 0x00ff_ffff_ffff_ffff) |
+        ((pair1 & 0x00ff_ffff_ffff_ffff) << n0);
+    try writer.writeBits(allocator, bits, n0 + n1);
 }
 
 fn writeZeroRun(
@@ -417,6 +449,24 @@ test "batched PNG ultrafast literals match scalar writer" {
         defer std.testing.allocator.free(scalar);
         try std.testing.expectEqualSlices(u8, scalar, batched);
     }
+}
+
+test "direct full PNG ultrafast chunks match scalar writer" {
+    var input: [8 * 37 + 5]u8 = undefined;
+    for (&input, 0..) |*byte, i| {
+        // Keep every complete chunk off the boundary-zero paths while still
+        // exercising short/long trained codes and a scalar tail.
+        byte.* = @intCast((i * 73 + 19) % 255 + 1);
+    }
+    const encoded = try encodeAlloc(std.testing.allocator, &input);
+    defer std.testing.allocator.free(encoded);
+    const scalar = try encodeAllocWithLiteralPolicy(
+        std.testing.allocator,
+        &input,
+        false,
+    );
+    defer std.testing.allocator.free(scalar);
+    try std.testing.expectEqualSlices(u8, scalar, encoded);
 }
 
 test "PNG ultrafast output matches fdeflate 0.3.7 goldens" {
