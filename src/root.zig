@@ -119,6 +119,7 @@ pub const SnappyEncoder = snappy.Encoder;
 pub const SnappyFrameSummary = snappy.FrameSummary;
 pub const SnappyBlockSummary = snappy.BlockSummary;
 pub const snappySummarizeBlock = snappy.summarizeBlock;
+pub const snappySummarizeBlockLimited = snappy.summarizeBlockLimited;
 pub const snappySummarizeBlockChunks = snappy.summarizeBlockChunks;
 pub const snappySummarizeFrame = snappy.summarizeFrame;
 pub const snappySummarizeFrameChunks = snappy.summarizeFrameChunks;
@@ -1897,6 +1898,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = SnappyFrameSummary;
     _ = SnappyBlockSummary;
     _ = snappySummarizeBlock;
+    _ = snappySummarizeBlockLimited;
     _ = snappySummarizeBlockChunks;
     _ = snappySummarizeFrame;
     _ = snappySummarizeFrameChunks;
@@ -3213,6 +3215,10 @@ test "root snappy raw block helpers round trip" {
     try std.testing.expectEqual(@as(usize, 5), summary.decoded_bytes);
     try std.testing.expectEqual(@as(usize, 1), summary.literal_count);
     try std.testing.expectEqual(@as(usize, 0), summary.copy_count);
+    const limited_summary = try snappySummarizeBlockLimited(encoded, 5);
+    try std.testing.expectEqual(summary.decoded_bytes, limited_summary.decoded_bytes);
+    try std.testing.expectEqual(summary.literal_count, limited_summary.literal_count);
+    try std.testing.expectError(error.OutputLimitExceeded, snappySummarizeBlockLimited(encoded, 4));
     try std.testing.expectEqual(@as(usize, 5), try snappyDecodedBlockSize(encoded));
     try std.testing.expectError(error.OutputLimitExceeded, snappyDecodedBlockSizeLimited(encoded, 4));
 

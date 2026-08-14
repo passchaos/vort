@@ -1747,6 +1747,11 @@ architecture blindly.
   `run-snappy-block-cli-probe` cover hex and file workflows without depending on
   a system Snappy library. Framed Snappy streams remain a follow-up format slice.
 
+- Exposed the Snappy raw-block limited summary helper through the root module.
+  `snappySummarizeBlockLimited` now lets library callers preflight raw-block
+  decoded-size policy and tag statistics without allocating or dropping to the
+  `snappy` submodule.
+
 - Extended the dependency-free Snappy module to framed streams. The frame path
   writes the stream identifier plus checked uncompressed chunks, decodes
   compressed and uncompressed chunks, validates masked CRC-32C, skips skippable
