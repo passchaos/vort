@@ -460,9 +460,9 @@ fn planTokensAlloc(allocator: std.mem.Allocator, input: []const u8, options: Com
             .hash => if (useSmallInputScanPlan(input, normalized))
                 try lz77.greedyPlanAlloc(allocator, input, normalized.lz77_options)
             else if (useTinyHashPlan(input, normalized))
-                try lz77.hashGreedyPlanTinyAlloc(allocator, input, normalized.lz77_options)
+                try lz77.hashGreedyPlanAutoTinyAlloc(allocator, input, normalized.lz77_options)
             else
-                try lz77.hashGreedyPlanAlloc(allocator, input, normalized.lz77_options),
+                try lz77.hashGreedyPlanAutoAlloc(allocator, input, normalized.lz77_options),
             .greedy => try lz77.greedyPlanAlloc(allocator, input, normalized.lz77_options),
             .lazy => try lz77.lazyGreedyPlanAlloc(allocator, input, normalized.lz77_options),
             .optimal => try lz77.optimalPlanAlloc(allocator, input, normalized.lz77_options),
