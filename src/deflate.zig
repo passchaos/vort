@@ -6253,6 +6253,22 @@ pub const GzipEncoder = struct {
         return try encodeGzipLevelWithHeaderAlloc(self.allocator, input, level, header_options);
     }
 
+    pub fn encodeDynamicLiteralAlloc(self: *GzipEncoder, input: []const u8) ![]u8 {
+        return try self.encodeDynamicLiteralWithHeaderAlloc(input, .{});
+    }
+
+    pub fn encodeDynamicLiteralWithHeaderAlloc(self: *GzipEncoder, input: []const u8, header_options: GzipHeaderOptions) ![]u8 {
+        return try encodeGzipDynamicLiteralWithHeaderAlloc(self.allocator, input, header_options);
+    }
+
+    pub fn encodeDynamicWithOptionsAlloc(self: *GzipEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
+        return try self.encodeDynamicWithHeaderAlloc(input, options, .{});
+    }
+
+    pub fn encodeDynamicWithHeaderAlloc(self: *GzipEncoder, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
+        return try encodeGzipDynamicWithHeaderAlloc(self.allocator, input, options, header_options);
+    }
+
     pub fn encodeStoredScratch(self: *GzipEncoder, input: []const u8) ![]const u8 {
         self.scratch.clearRetainingCapacity();
         _ = try self.encodeStoredAppend(&self.scratch, input);
@@ -6311,6 +6327,26 @@ pub const GzipEncoder = struct {
         return self.scratch.items;
     }
 
+    pub fn encodeDynamicLiteralScratch(self: *GzipEncoder, input: []const u8) ![]const u8 {
+        return try self.encodeDynamicLiteralWithHeaderScratch(input, .{});
+    }
+
+    pub fn encodeDynamicLiteralWithHeaderScratch(self: *GzipEncoder, input: []const u8, header_options: GzipHeaderOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeDynamicLiteralWithHeaderAppend(&self.scratch, input, header_options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeDynamicWithOptionsScratch(self: *GzipEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
+        return try self.encodeDynamicWithHeaderScratch(input, options, .{});
+    }
+
+    pub fn encodeDynamicWithHeaderScratch(self: *GzipEncoder, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeDynamicWithHeaderAppend(&self.scratch, input, options, header_options);
+        return self.scratch.items;
+    }
+
     pub fn encodeStoredAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
         return try encodeGzipStoredAppend(self.allocator, out, input);
     }
@@ -6361,6 +6397,30 @@ pub const GzipEncoder = struct {
 
     pub fn encodeLevelWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, level: u4, header_options: GzipHeaderOptions) !usize {
         const encoded = try self.encodeLevelWithHeaderAlloc(input, level, header_options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeDynamicLiteralAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
+        return try self.encodeDynamicLiteralWithHeaderAppend(out, input, .{});
+    }
+
+    pub fn encodeDynamicLiteralWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, header_options: GzipHeaderOptions) !usize {
+        const encoded = try self.encodeDynamicLiteralWithHeaderAlloc(input, header_options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeDynamicWithOptionsAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+        return try self.encodeDynamicWithHeaderAppend(out, input, options, .{});
+    }
+
+    pub fn encodeDynamicWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+        const encoded = try self.encodeDynamicWithHeaderAlloc(input, options, header_options);
         defer self.allocator.free(encoded);
         const start = out.items.len;
         try out.appendSlice(self.allocator, encoded);

@@ -7318,6 +7318,59 @@ test "root gzip encoder reuses stored scratch" {
     try std.testing.expectEqual(level_header_expected.len, try encoder.encodeLevelWithHeaderAppend(&level_header_appended, payload, 1, header_options));
     try std.testing.expectEqualSlices(u8, level_header_expected, level_header_appended.items);
     try std.testing.expectError(error.InvalidBlockPlan, encoder.encodeLevelAlloc(payload, 10));
+
+    const dynamic_literal_expected = try encodeGzipDynamicLiteralAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(dynamic_literal_expected);
+    const dynamic_literal_owned = try encoder.encodeDynamicLiteralAlloc(payload);
+    defer std.testing.allocator.free(dynamic_literal_owned);
+    try std.testing.expectEqualSlices(u8, dynamic_literal_expected, dynamic_literal_owned);
+    const dynamic_literal_scratch = try encoder.encodeDynamicLiteralScratch(payload);
+    try std.testing.expectEqualSlices(u8, dynamic_literal_expected, dynamic_literal_scratch);
+    var dynamic_literal_appended: std.ArrayList(u8) = .empty;
+    defer dynamic_literal_appended.deinit(std.testing.allocator);
+    try dynamic_literal_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(dynamic_literal_expected.len, try encoder.encodeDynamicLiteralAppend(&dynamic_literal_appended, payload));
+    try std.testing.expectEqualSlices(u8, dynamic_literal_expected, dynamic_literal_appended.items["prefix:".len..]);
+
+    const dynamic_literal_header_expected = try encodeGzipDynamicLiteralWithHeaderAlloc(std.testing.allocator, payload, header_options);
+    defer std.testing.allocator.free(dynamic_literal_header_expected);
+    const dynamic_literal_header_owned = try encoder.encodeDynamicLiteralWithHeaderAlloc(payload, header_options);
+    defer std.testing.allocator.free(dynamic_literal_header_owned);
+    try std.testing.expectEqualSlices(u8, dynamic_literal_header_expected, dynamic_literal_header_owned);
+    const dynamic_literal_header_scratch = try encoder.encodeDynamicLiteralWithHeaderScratch(payload, header_options);
+    try std.testing.expectEqualSlices(u8, dynamic_literal_header_expected, dynamic_literal_header_scratch);
+    var dynamic_literal_header_appended: std.ArrayList(u8) = .empty;
+    defer dynamic_literal_header_appended.deinit(std.testing.allocator);
+    try std.testing.expectEqual(dynamic_literal_header_expected.len, try encoder.encodeDynamicLiteralWithHeaderAppend(&dynamic_literal_header_appended, payload, header_options));
+    try std.testing.expectEqualSlices(u8, dynamic_literal_header_expected, dynamic_literal_header_appended.items);
+
+    const dynamic_options = optionsForCompressionLevel(.default);
+    const dynamic_expected = try encodeGzipDynamicWithOptionsAlloc(std.testing.allocator, payload, dynamic_options);
+    defer std.testing.allocator.free(dynamic_expected);
+    const dynamic_owned = try encoder.encodeDynamicWithOptionsAlloc(payload, dynamic_options);
+    defer std.testing.allocator.free(dynamic_owned);
+    try std.testing.expectEqualSlices(u8, dynamic_expected, dynamic_owned);
+    const dynamic_scratch = try encoder.encodeDynamicWithOptionsScratch(payload, dynamic_options);
+    try std.testing.expectEqualSlices(u8, dynamic_expected, dynamic_scratch);
+    const dynamic_decoded = try decodeGzipAllocExactSize(std.testing.allocator, dynamic_scratch, payload.len);
+    defer std.testing.allocator.free(dynamic_decoded);
+    try std.testing.expectEqualSlices(u8, payload, dynamic_decoded);
+    var dynamic_appended: std.ArrayList(u8) = .empty;
+    defer dynamic_appended.deinit(std.testing.allocator);
+    try std.testing.expectEqual(dynamic_expected.len, try encoder.encodeDynamicWithOptionsAppend(&dynamic_appended, payload, dynamic_options));
+    try std.testing.expectEqualSlices(u8, dynamic_expected, dynamic_appended.items);
+
+    const dynamic_header_expected = try encodeGzipDynamicWithHeaderAlloc(std.testing.allocator, payload, dynamic_options, header_options);
+    defer std.testing.allocator.free(dynamic_header_expected);
+    const dynamic_header_owned = try encoder.encodeDynamicWithHeaderAlloc(payload, dynamic_options, header_options);
+    defer std.testing.allocator.free(dynamic_header_owned);
+    try std.testing.expectEqualSlices(u8, dynamic_header_expected, dynamic_header_owned);
+    const dynamic_header_scratch = try encoder.encodeDynamicWithHeaderScratch(payload, dynamic_options, header_options);
+    try std.testing.expectEqualSlices(u8, dynamic_header_expected, dynamic_header_scratch);
+    var dynamic_header_appended: std.ArrayList(u8) = .empty;
+    defer dynamic_header_appended.deinit(std.testing.allocator);
+    try std.testing.expectEqual(dynamic_header_expected.len, try encoder.encodeDynamicWithHeaderAppend(&dynamic_header_appended, payload, dynamic_options, header_options));
+    try std.testing.expectEqualSlices(u8, dynamic_header_expected, dynamic_header_appended.items);
 }
 
 test "root raw deflate decoder drains caller-owned scratch and resets" {
