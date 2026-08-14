@@ -1667,6 +1667,11 @@ architecture blindly.
   the relevant error sets, stored/meta/chunk size limits, and default
   compression levels from the root facade instead of importing submodules.
 
+- Exposed root-level raw deflate token encoders. Library callers that already
+  own `Lz77Token` streams can now call `encodeRawFixedTokensAlloc` and
+  `encodeRawDynamicTokensAlloc` from the root module, with root tests proving
+  token-level fixed/dynamic streams round trip through the public raw decoder.
+
 - Extended the public Zstd frame encode facade with encoded-bound, append, and
   caller-owned into-slice helpers across level/options variants. Library callers
   no longer need to drop to native-specific APIs or allocate an owned frame just

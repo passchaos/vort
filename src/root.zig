@@ -1236,8 +1236,10 @@ pub const encodeRawDynamicSplitAlloc = deflate.encodeRawDynamicSplitAlloc;
 pub const encodeRawDynamicSplitAppend = deflate.encodeRawDynamicSplitAppend;
 pub const encodeRawDynamicSplitWithDictionaryAlloc = deflate.encodeRawDynamicSplitWithDictionaryAlloc;
 pub const encodeRawDynamicSplitWithDictionaryAppend = deflate.encodeRawDynamicSplitWithDictionaryAppend;
+pub const encodeRawDynamicTokensAlloc = deflate.encodeRawDynamicTokensAlloc;
 pub const encodeRawFixedWithOptionsAlloc = deflate.encodeRawFixedWithOptionsAlloc;
 pub const encodeRawFixedWithOptionsAppend = deflate.encodeRawFixedWithOptionsAppend;
+pub const encodeRawFixedTokensAlloc = deflate.encodeRawFixedTokensAlloc;
 pub const RawDeflateEncoder = deflate.RawDeflateEncoder;
 pub const RawDeflateDecoder = deflate.RawDeflateDecoder;
 pub const DeflateDecodeResult = deflate.DecodeResult;
@@ -6631,6 +6633,8 @@ test "root exports chunked compatibility decode helpers" {
     _ = probeRawDeflateChunksExactSize;
     _ = probeRawDeflateChunksWithDictionaryExactSize;
     _ = encodeRawStoredDeflateAppend;
+    _ = encodeRawDynamicTokensAlloc;
+    _ = encodeRawFixedTokensAlloc;
     _ = rawStoredDeflateEncodedSize;
     _ = rawStoredDeflateChunksEncodedSize;
     _ = encodeRawStoredDeflateChunks;
@@ -6902,6 +6906,24 @@ test "root raw deflate append decode helpers preserve prefixes" {
     try std.testing.expectEqual(payload.len, try decodeRawDeflateChunksAppendLimited(std.testing.allocator, &appended, &chunks, join, payload.len));
     try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, appended.items);
     try std.testing.expectError(error.OutputLimitExceeded, decodeRawDeflateChunksAppendLimited(std.testing.allocator, &appended, &chunks, join, payload.len - 1));
+}
+
+test "root raw deflate token encoders round trip planned tokens" {
+    const payload = "token-level root encode token-level root encode";
+    const plan = try literalLz77PlanAlloc(std.testing.allocator, payload);
+    defer plan.deinit(std.testing.allocator);
+
+    const fixed = try encodeRawFixedTokensAlloc(std.testing.allocator, plan.tokens);
+    defer std.testing.allocator.free(fixed);
+    const fixed_decoded = try decodeRawDeflateAlloc(std.testing.allocator, fixed);
+    defer std.testing.allocator.free(fixed_decoded);
+    try std.testing.expectEqualSlices(u8, payload, fixed_decoded);
+
+    const dynamic = try encodeRawDynamicTokensAlloc(std.testing.allocator, plan.tokens);
+    defer std.testing.allocator.free(dynamic);
+    const dynamic_decoded = try decodeRawDeflateAlloc(std.testing.allocator, dynamic);
+    defer std.testing.allocator.free(dynamic_decoded);
+    try std.testing.expectEqualSlices(u8, payload, dynamic_decoded);
 }
 
 test "root raw deflate partial alloc helpers report consumed input" {
