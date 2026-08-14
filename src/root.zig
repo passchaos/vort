@@ -1541,10 +1541,15 @@ pub const decodeZlibChunksAppendWithOptionsLimited = deflate.decodeZlibChunksApp
 pub const decodeZlibChunksAppendWithDictionaryAndOptionsLimited = deflate.decodeZlibChunksAppendWithDictionaryAndOptionsLimited;
 pub const encodeGzipStored = deflate.encodeGzipStored;
 pub const encodeGzipFixedAlloc = deflate.encodeGzipFixedAlloc;
+pub const encodeGzipFixedAppend = deflate.encodeGzipFixedAppend;
 pub const encodeGzipBestAlloc = deflate.encodeGzipBestAlloc;
+pub const encodeGzipBestAppend = deflate.encodeGzipBestAppend;
 pub const encodeGzipLevelAlloc = deflate.encodeGzipLevelAlloc;
+pub const encodeGzipLevelAppend = deflate.encodeGzipLevelAppend;
 pub const encodeGzipBestSplitAlloc = deflate.encodeGzipBestSplitAlloc;
+pub const encodeGzipBestSplitAppend = deflate.encodeGzipBestSplitAppend;
 pub const encodeGzipBestAdaptiveSplitAlloc = deflate.encodeGzipBestAdaptiveSplitAlloc;
+pub const encodeGzipBestAdaptiveSplitAppend = deflate.encodeGzipBestAdaptiveSplitAppend;
 pub const GzipEncoder = deflate.GzipEncoder;
 pub const GzipDecoder = deflate.GzipDecoder;
 pub const GzipDecodeOptions = deflate.GzipDecodeOptions;
@@ -1568,19 +1573,33 @@ pub const encodeGzipStoredChunksWithHeaderAlloc = deflate.encodeGzipStoredChunks
 pub const encodeGzipStoredWithHeaderAppend = deflate.encodeGzipStoredWithHeaderAppend;
 pub const encodeGzipStoredChunksWithHeaderAppend = deflate.encodeGzipStoredChunksWithHeaderAppend;
 pub const encodeGzipFixedWithHeaderAlloc = deflate.encodeGzipFixedWithHeaderAlloc;
+pub const encodeGzipFixedWithHeaderAppend = deflate.encodeGzipFixedWithHeaderAppend;
 pub const encodeGzipFixedSplitWithHeaderAlloc = deflate.encodeGzipFixedSplitWithHeaderAlloc;
+pub const encodeGzipFixedSplitWithHeaderAppend = deflate.encodeGzipFixedSplitWithHeaderAppend;
 pub const encodeGzipDynamicLiteralWithHeaderAlloc = deflate.encodeGzipDynamicLiteralWithHeaderAlloc;
+pub const encodeGzipDynamicLiteralWithHeaderAppend = deflate.encodeGzipDynamicLiteralWithHeaderAppend;
 pub const encodeGzipDynamicWithHeaderAlloc = deflate.encodeGzipDynamicWithHeaderAlloc;
+pub const encodeGzipDynamicWithHeaderAppend = deflate.encodeGzipDynamicWithHeaderAppend;
 pub const encodeGzipDynamicSplitWithHeaderAlloc = deflate.encodeGzipDynamicSplitWithHeaderAlloc;
+pub const encodeGzipDynamicSplitWithHeaderAppend = deflate.encodeGzipDynamicSplitWithHeaderAppend;
 pub const encodeGzipBestWithHeaderAlloc = deflate.encodeGzipBestWithHeaderAlloc;
+pub const encodeGzipBestWithHeaderAppend = deflate.encodeGzipBestWithHeaderAppend;
 pub const encodeGzipLevelWithHeaderAlloc = deflate.encodeGzipLevelWithHeaderAlloc;
+pub const encodeGzipLevelWithHeaderAppend = deflate.encodeGzipLevelWithHeaderAppend;
 pub const encodeGzipBestSplitWithHeaderAlloc = deflate.encodeGzipBestSplitWithHeaderAlloc;
+pub const encodeGzipBestSplitWithHeaderAppend = deflate.encodeGzipBestSplitWithHeaderAppend;
 pub const encodeGzipBestAdaptiveSplitWithHeaderAlloc = deflate.encodeGzipBestAdaptiveSplitWithHeaderAlloc;
+pub const encodeGzipBestAdaptiveSplitWithHeaderAppend = deflate.encodeGzipBestAdaptiveSplitWithHeaderAppend;
 pub const encodeGzipDynamicLiteralAlloc = deflate.encodeGzipDynamicLiteralAlloc;
+pub const encodeGzipDynamicLiteralAppend = deflate.encodeGzipDynamicLiteralAppend;
 pub const encodeGzipDynamicWithOptionsAlloc = deflate.encodeGzipDynamicWithOptionsAlloc;
+pub const encodeGzipDynamicWithOptionsAppend = deflate.encodeGzipDynamicWithOptionsAppend;
 pub const encodeGzipDynamicSplitAlloc = deflate.encodeGzipDynamicSplitAlloc;
+pub const encodeGzipDynamicSplitAppend = deflate.encodeGzipDynamicSplitAppend;
 pub const encodeGzipFixedSplitAlloc = deflate.encodeGzipFixedSplitAlloc;
+pub const encodeGzipFixedSplitAppend = deflate.encodeGzipFixedSplitAppend;
 pub const encodeGzipFixedWithOptionsAlloc = deflate.encodeGzipFixedWithOptionsAlloc;
+pub const encodeGzipFixedWithOptionsAppend = deflate.encodeGzipFixedWithOptionsAppend;
 pub const decodeGzipStored = deflate.decodeGzipStored;
 pub const encodeGzipStoredAlloc = deflate.encodeGzipStoredAlloc;
 pub const encodeGzipStoredChunksAlloc = deflate.encodeGzipStoredChunksAlloc;
@@ -7121,6 +7140,186 @@ test "root zlib non-stored append encode helpers preserve prefixes" {
     const dict_decoded = try decodeZlibAllocWithDictionaryExactSize(std.testing.allocator, dynamic_dict_split_appended.items[prefix.len..], preset_dictionary, payload.len);
     defer std.testing.allocator.free(dict_decoded);
     try std.testing.expectEqualSlices(u8, payload, dict_decoded);
+}
+
+test "root gzip non-stored append encode helpers preserve prefixes" {
+    const prefix = "prefix:";
+    const payload = "root gzip non-stored append encode payload " ** 2;
+    const header_options: GzipHeaderOptions = .{
+        .filename = "gzip-non-stored-append.txt",
+        .comment = "root gzip non-stored append",
+        .header_crc = true,
+    };
+    const fixed_options = optionsForCompressionLevel(.fast);
+    const dynamic_options = optionsForCompressionLevel(.default);
+    const best_options = optionsForCompressionLevel(.fastest);
+    const adaptive_split_options: AdaptiveSplitOptions = .{
+        .min_block_len = 16,
+        .max_block_len = 32,
+        .sample_len = 8,
+        .search_step = 8,
+    };
+
+    const fixed_expected = try encodeGzipFixedAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(fixed_expected);
+    var fixed_appended: std.ArrayList(u8) = .empty;
+    defer fixed_appended.deinit(std.testing.allocator);
+    try fixed_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(fixed_expected.len, try encodeGzipFixedAppend(std.testing.allocator, &fixed_appended, payload));
+    try std.testing.expectEqualSlices(u8, fixed_expected, fixed_appended.items[prefix.len..]);
+
+    const fixed_options_expected = try encodeGzipFixedWithOptionsAlloc(std.testing.allocator, payload, fixed_options);
+    defer std.testing.allocator.free(fixed_options_expected);
+    var fixed_options_appended: std.ArrayList(u8) = .empty;
+    defer fixed_options_appended.deinit(std.testing.allocator);
+    try fixed_options_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(fixed_options_expected.len, try encodeGzipFixedWithOptionsAppend(std.testing.allocator, &fixed_options_appended, payload, fixed_options));
+    try std.testing.expectEqualSlices(u8, fixed_options_expected, fixed_options_appended.items[prefix.len..]);
+
+    const fixed_header_expected = try encodeGzipFixedWithHeaderAlloc(std.testing.allocator, payload, fixed_options, header_options);
+    defer std.testing.allocator.free(fixed_header_expected);
+    var fixed_header_appended: std.ArrayList(u8) = .empty;
+    defer fixed_header_appended.deinit(std.testing.allocator);
+    try fixed_header_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(fixed_header_expected.len, try encodeGzipFixedWithHeaderAppend(std.testing.allocator, &fixed_header_appended, payload, fixed_options, header_options));
+    try std.testing.expectEqualSlices(u8, fixed_header_expected, fixed_header_appended.items[prefix.len..]);
+
+    const fixed_split_expected = try encodeGzipFixedSplitAlloc(std.testing.allocator, payload, 23, fixed_options);
+    defer std.testing.allocator.free(fixed_split_expected);
+    var fixed_split_appended: std.ArrayList(u8) = .empty;
+    defer fixed_split_appended.deinit(std.testing.allocator);
+    try fixed_split_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(fixed_split_expected.len, try encodeGzipFixedSplitAppend(std.testing.allocator, &fixed_split_appended, payload, 23, fixed_options));
+    try std.testing.expectEqualSlices(u8, fixed_split_expected, fixed_split_appended.items[prefix.len..]);
+    try std.testing.expectError(error.InvalidBlockPlan, encodeGzipFixedSplitAppend(std.testing.allocator, &fixed_split_appended, payload, 0, fixed_options));
+
+    const fixed_split_header_expected = try encodeGzipFixedSplitWithHeaderAlloc(std.testing.allocator, payload, 23, fixed_options, header_options);
+    defer std.testing.allocator.free(fixed_split_header_expected);
+    var fixed_split_header_appended: std.ArrayList(u8) = .empty;
+    defer fixed_split_header_appended.deinit(std.testing.allocator);
+    try fixed_split_header_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(fixed_split_header_expected.len, try encodeGzipFixedSplitWithHeaderAppend(std.testing.allocator, &fixed_split_header_appended, payload, 23, fixed_options, header_options));
+    try std.testing.expectEqualSlices(u8, fixed_split_header_expected, fixed_split_header_appended.items[prefix.len..]);
+
+    const best_expected = try encodeGzipBestAlloc(std.testing.allocator, payload, best_options);
+    defer std.testing.allocator.free(best_expected);
+    var best_appended: std.ArrayList(u8) = .empty;
+    defer best_appended.deinit(std.testing.allocator);
+    try best_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(best_expected.len, try encodeGzipBestAppend(std.testing.allocator, &best_appended, payload, best_options));
+    try std.testing.expectEqualSlices(u8, best_expected, best_appended.items[prefix.len..]);
+
+    const best_header_expected = try encodeGzipBestWithHeaderAlloc(std.testing.allocator, payload, best_options, header_options);
+    defer std.testing.allocator.free(best_header_expected);
+    var best_header_appended: std.ArrayList(u8) = .empty;
+    defer best_header_appended.deinit(std.testing.allocator);
+    try best_header_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(best_header_expected.len, try encodeGzipBestWithHeaderAppend(std.testing.allocator, &best_header_appended, payload, best_options, header_options));
+    try std.testing.expectEqualSlices(u8, best_header_expected, best_header_appended.items[prefix.len..]);
+
+    const best_split_expected = try encodeGzipBestSplitAlloc(std.testing.allocator, payload, 29, best_options);
+    defer std.testing.allocator.free(best_split_expected);
+    var best_split_appended: std.ArrayList(u8) = .empty;
+    defer best_split_appended.deinit(std.testing.allocator);
+    try best_split_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(best_split_expected.len, try encodeGzipBestSplitAppend(std.testing.allocator, &best_split_appended, payload, 29, best_options));
+    try std.testing.expectEqualSlices(u8, best_split_expected, best_split_appended.items[prefix.len..]);
+
+    const best_split_header_expected = try encodeGzipBestSplitWithHeaderAlloc(std.testing.allocator, payload, 29, best_options, header_options);
+    defer std.testing.allocator.free(best_split_header_expected);
+    var best_split_header_appended: std.ArrayList(u8) = .empty;
+    defer best_split_header_appended.deinit(std.testing.allocator);
+    try best_split_header_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(best_split_header_expected.len, try encodeGzipBestSplitWithHeaderAppend(std.testing.allocator, &best_split_header_appended, payload, 29, best_options, header_options));
+    try std.testing.expectEqualSlices(u8, best_split_header_expected, best_split_header_appended.items[prefix.len..]);
+
+    const best_adaptive_expected = try encodeGzipBestAdaptiveSplitAlloc(std.testing.allocator, payload, best_options, adaptive_split_options);
+    defer std.testing.allocator.free(best_adaptive_expected);
+    var best_adaptive_appended: std.ArrayList(u8) = .empty;
+    defer best_adaptive_appended.deinit(std.testing.allocator);
+    try best_adaptive_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(best_adaptive_expected.len, try encodeGzipBestAdaptiveSplitAppend(std.testing.allocator, &best_adaptive_appended, payload, best_options, adaptive_split_options));
+    try std.testing.expectEqualSlices(u8, best_adaptive_expected, best_adaptive_appended.items[prefix.len..]);
+
+    const best_adaptive_header_expected = try encodeGzipBestAdaptiveSplitWithHeaderAlloc(std.testing.allocator, payload, best_options, adaptive_split_options, header_options);
+    defer std.testing.allocator.free(best_adaptive_header_expected);
+    var best_adaptive_header_appended: std.ArrayList(u8) = .empty;
+    defer best_adaptive_header_appended.deinit(std.testing.allocator);
+    try best_adaptive_header_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(best_adaptive_header_expected.len, try encodeGzipBestAdaptiveSplitWithHeaderAppend(std.testing.allocator, &best_adaptive_header_appended, payload, best_options, adaptive_split_options, header_options));
+    try std.testing.expectEqualSlices(u8, best_adaptive_header_expected, best_adaptive_header_appended.items[prefix.len..]);
+
+    const level_expected = try encodeGzipLevelAlloc(std.testing.allocator, payload, 1);
+    defer std.testing.allocator.free(level_expected);
+    var level_appended: std.ArrayList(u8) = .empty;
+    defer level_appended.deinit(std.testing.allocator);
+    try level_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(level_expected.len, try encodeGzipLevelAppend(std.testing.allocator, &level_appended, payload, 1));
+    try std.testing.expectEqualSlices(u8, level_expected, level_appended.items[prefix.len..]);
+    try std.testing.expectError(error.InvalidBlockPlan, encodeGzipLevelAppend(std.testing.allocator, &level_appended, payload, 10));
+
+    const level_header_expected = try encodeGzipLevelWithHeaderAlloc(std.testing.allocator, payload, 1, header_options);
+    defer std.testing.allocator.free(level_header_expected);
+    var level_header_appended: std.ArrayList(u8) = .empty;
+    defer level_header_appended.deinit(std.testing.allocator);
+    try level_header_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(level_header_expected.len, try encodeGzipLevelWithHeaderAppend(std.testing.allocator, &level_header_appended, payload, 1, header_options));
+    try std.testing.expectEqualSlices(u8, level_header_expected, level_header_appended.items[prefix.len..]);
+
+    const dynamic_literal_expected = try encodeGzipDynamicLiteralAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(dynamic_literal_expected);
+    var dynamic_literal_appended: std.ArrayList(u8) = .empty;
+    defer dynamic_literal_appended.deinit(std.testing.allocator);
+    try dynamic_literal_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(dynamic_literal_expected.len, try encodeGzipDynamicLiteralAppend(std.testing.allocator, &dynamic_literal_appended, payload));
+    try std.testing.expectEqualSlices(u8, dynamic_literal_expected, dynamic_literal_appended.items[prefix.len..]);
+
+    const dynamic_literal_header_expected = try encodeGzipDynamicLiteralWithHeaderAlloc(std.testing.allocator, payload, header_options);
+    defer std.testing.allocator.free(dynamic_literal_header_expected);
+    var dynamic_literal_header_appended: std.ArrayList(u8) = .empty;
+    defer dynamic_literal_header_appended.deinit(std.testing.allocator);
+    try dynamic_literal_header_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(dynamic_literal_header_expected.len, try encodeGzipDynamicLiteralWithHeaderAppend(std.testing.allocator, &dynamic_literal_header_appended, payload, header_options));
+    try std.testing.expectEqualSlices(u8, dynamic_literal_header_expected, dynamic_literal_header_appended.items[prefix.len..]);
+
+    const dynamic_expected = try encodeGzipDynamicWithOptionsAlloc(std.testing.allocator, payload, dynamic_options);
+    defer std.testing.allocator.free(dynamic_expected);
+    var dynamic_appended: std.ArrayList(u8) = .empty;
+    defer dynamic_appended.deinit(std.testing.allocator);
+    try dynamic_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(dynamic_expected.len, try encodeGzipDynamicWithOptionsAppend(std.testing.allocator, &dynamic_appended, payload, dynamic_options));
+    try std.testing.expectEqualSlices(u8, dynamic_expected, dynamic_appended.items[prefix.len..]);
+
+    const dynamic_header_expected = try encodeGzipDynamicWithHeaderAlloc(std.testing.allocator, payload, dynamic_options, header_options);
+    defer std.testing.allocator.free(dynamic_header_expected);
+    var dynamic_header_appended: std.ArrayList(u8) = .empty;
+    defer dynamic_header_appended.deinit(std.testing.allocator);
+    try dynamic_header_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(dynamic_header_expected.len, try encodeGzipDynamicWithHeaderAppend(std.testing.allocator, &dynamic_header_appended, payload, dynamic_options, header_options));
+    try std.testing.expectEqualSlices(u8, dynamic_header_expected, dynamic_header_appended.items[prefix.len..]);
+
+    const dynamic_split_expected = try encodeGzipDynamicSplitAlloc(std.testing.allocator, payload, 23, dynamic_options);
+    defer std.testing.allocator.free(dynamic_split_expected);
+    var dynamic_split_appended: std.ArrayList(u8) = .empty;
+    defer dynamic_split_appended.deinit(std.testing.allocator);
+    try dynamic_split_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(dynamic_split_expected.len, try encodeGzipDynamicSplitAppend(std.testing.allocator, &dynamic_split_appended, payload, 23, dynamic_options));
+    try std.testing.expectEqualSlices(u8, dynamic_split_expected, dynamic_split_appended.items[prefix.len..]);
+
+    const dynamic_split_header_expected = try encodeGzipDynamicSplitWithHeaderAlloc(std.testing.allocator, payload, 23, dynamic_options, header_options);
+    defer std.testing.allocator.free(dynamic_split_header_expected);
+    var dynamic_split_header_appended: std.ArrayList(u8) = .empty;
+    defer dynamic_split_header_appended.deinit(std.testing.allocator);
+    try dynamic_split_header_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(dynamic_split_header_expected.len, try encodeGzipDynamicSplitWithHeaderAppend(std.testing.allocator, &dynamic_split_header_appended, payload, 23, dynamic_options, header_options));
+    try std.testing.expectEqualSlices(u8, dynamic_split_header_expected, dynamic_split_header_appended.items[prefix.len..]);
+
+    const decoded = try decodeGzipAllocExactSize(std.testing.allocator, dynamic_split_appended.items[prefix.len..], payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    const header_decoded = try decodeGzipAllocExactSize(std.testing.allocator, dynamic_split_header_appended.items[prefix.len..], payload.len);
+    defer std.testing.allocator.free(header_decoded);
+    try std.testing.expectEqualSlices(u8, payload, header_decoded);
 }
 
 test "root raw deflate encoder reuses stored scratch" {

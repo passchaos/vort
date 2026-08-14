@@ -12793,6 +12793,82 @@ pub fn encodeGzipStoredChunksWithHeaderAppend(allocator: std.mem.Allocator, out:
     return written;
 }
 
+pub fn encodeGzipFixedAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) !usize {
+    return encodeGzipFixedWithOptionsAppend(allocator, out, input, .{});
+}
+
+pub fn encodeGzipFixedWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    return encodeGzipFixedWithHeaderAppend(allocator, out, input, options, .{});
+}
+
+pub fn encodeGzipFixedWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeGzipFixedWithHeaderAlloc(allocator, input, options, header_options));
+}
+
+pub fn encodeGzipFixedSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return encodeGzipFixedSplitWithHeaderAppend(allocator, out, input, block_len, options, .{});
+}
+
+pub fn encodeGzipFixedSplitWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeGzipFixedSplitWithHeaderAlloc(allocator, input, block_len, options, header_options));
+}
+
+pub fn encodeGzipBestAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    return encodeGzipBestWithHeaderAppend(allocator, out, input, options, .{});
+}
+
+pub fn encodeGzipBestWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeGzipBestWithHeaderAlloc(allocator, input, options, header_options));
+}
+
+pub fn encodeGzipBestSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return encodeGzipBestSplitWithHeaderAppend(allocator, out, input, block_len, options, .{});
+}
+
+pub fn encodeGzipBestSplitWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeGzipBestSplitWithHeaderAlloc(allocator, input, block_len, options, header_options));
+}
+
+pub fn encodeGzipBestAdaptiveSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
+    return encodeGzipBestAdaptiveSplitWithHeaderAppend(allocator, out, input, options, split_options, .{});
+}
+
+pub fn encodeGzipBestAdaptiveSplitWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions, header_options: GzipHeaderOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeGzipBestAdaptiveSplitWithHeaderAlloc(allocator, input, options, split_options, header_options));
+}
+
+pub fn encodeGzipLevelAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, level: u4) !usize {
+    return encodeGzipLevelWithHeaderAppend(allocator, out, input, level, .{});
+}
+
+pub fn encodeGzipLevelWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, level: u4, header_options: GzipHeaderOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeGzipLevelWithHeaderAlloc(allocator, input, level, header_options));
+}
+
+pub fn encodeGzipDynamicLiteralAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) !usize {
+    return encodeGzipDynamicLiteralWithHeaderAppend(allocator, out, input, .{});
+}
+
+pub fn encodeGzipDynamicLiteralWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, header_options: GzipHeaderOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeGzipDynamicLiteralWithHeaderAlloc(allocator, input, header_options));
+}
+
+pub fn encodeGzipDynamicWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    return encodeGzipDynamicWithHeaderAppend(allocator, out, input, options, .{});
+}
+
+pub fn encodeGzipDynamicWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeGzipDynamicWithHeaderAlloc(allocator, input, options, header_options));
+}
+
+pub fn encodeGzipDynamicSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return encodeGzipDynamicSplitWithHeaderAppend(allocator, out, input, block_len, options, .{});
+}
+
+pub fn encodeGzipDynamicSplitWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeGzipDynamicSplitWithHeaderAlloc(allocator, input, block_len, options, header_options));
+}
+
 fn encodeGzipStoredSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize) ![]u8 {
     return encodeGzipStoredSplitWithHeaderAlloc(allocator, input, block_len, .{});
 }

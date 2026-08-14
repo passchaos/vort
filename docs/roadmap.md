@@ -3587,3 +3587,9 @@ architecture blindly.
   dynamic, split, adaptive split, and preset-dictionary modes, with root tests
   checking byte parity against allocator-returning encoders, invalid-plan
   propagation, and strict/dictionary decode round trips.
+
+- Added top-level gzip append encode helpers beyond stored blocks. Gzip callers
+  now have prefix-preserving append convenience for fixed, best, zlib level,
+  dynamic, split, adaptive split, and metadata-rich header modes, with root tests
+  checking byte parity against allocator-returning encoders, invalid-plan
+  propagation, and strict decode round trips.
