@@ -1948,3 +1948,26 @@ architecture blindly.
   Final validation passed `zig build test -j1` in 1:51.75 at 4,125,404-KiB
   peak RSS and `zig build check -j1` in 4:17.82 at 688,028-KiB peak RSS, both
   with zero swap.
+
+- Added a capacity-available fast path to the PNG-ultrafast reservoir's
+  eight-byte flush. The writer keeps the same growable allocation fallback and
+  output format, but no longer enters ArrayList's generic capacity helper for
+  every flush after capacity has already been proved. A zero-loss fixed-core
+  profile previously attributed `6.54%` of the complete nine-case PNG runner
+  to that generic append; the post-change profile no longer contains the
+  symbol. Two independent CPU-12, 41-round alternating old/new A/Bs retained
+  exact encoded sizes, checksums, and guards. Compressed-case geomean improved
+  `1.116x` and `1.109x`; the second run measured `1.085x` adaptive,
+  `1.135x` Up, `1.001x` stored, and `1.072x` across all nine rows, with all
+  six compressed rows faster.
+- Rejected packing the 65,536-entry PNG literal-pair table from u64 to u32.
+  The representation was byte-exact against the scalar writer and fdeflate
+  goldens and halved table storage, but a CPU-12, 41-round alternating A/B
+  measured `0.99684x` compressed and `0.99766x` all-row throughput; all six
+  compressed rows regressed slightly. Do not repeat it as a throughput change
+  without a different access or emission strategy.
+- Final validation for the retained PNG-ultrafast append change passed focused
+  scalar/fdeflate byte-exact tests, imx PNG integration tests, full
+  `zig build test -j1` in 3:45.46 at 4,125,068-KiB peak RSS, and
+  `zig build check -j1` in 5:07.50 at 689,668-KiB peak RSS. Both full Vort
+  commands reported zero swap.
