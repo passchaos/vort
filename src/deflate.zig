@@ -2897,6 +2897,85 @@ pub fn encodeRawStoredAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u
     return written;
 }
 
+fn appendOwnedEncoded(allocator: std.mem.Allocator, out: *std.ArrayList(u8), encoded: []u8) !usize {
+    defer allocator.free(encoded);
+    const start = out.items.len;
+    try out.appendSlice(allocator, encoded);
+    return out.items.len - start;
+}
+
+pub fn encodeRawFixedAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) !usize {
+    return encodeRawFixedWithOptionsAppend(allocator, out, input, .{});
+}
+
+pub fn encodeRawFixedWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawFixedWithOptionsAlloc(allocator, input, options));
+}
+
+pub fn encodeRawFixedWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawFixedWithDictionaryAlloc(allocator, input, dictionary, options));
+}
+
+pub fn encodeRawFixedSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawFixedSplitAlloc(allocator, input, block_len, options));
+}
+
+pub fn encodeRawFixedSplitWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawFixedSplitWithDictionaryAlloc(allocator, input, dictionary, block_len, options));
+}
+
+pub fn encodeRawBestAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawBestAlloc(allocator, input, options));
+}
+
+pub fn encodeRawBestWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawBestWithDictionaryAlloc(allocator, input, dictionary, options));
+}
+
+pub fn encodeRawBestSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawBestSplitAlloc(allocator, input, block_len, options));
+}
+
+pub fn encodeRawBestSplitWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawBestSplitWithDictionaryAlloc(allocator, input, dictionary, block_len, options));
+}
+
+pub fn encodeRawBestAdaptiveSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawBestAdaptiveSplitAlloc(allocator, input, options, split_options));
+}
+
+pub fn encodeRawBestAdaptiveSplitWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawBestAdaptiveSplitWithDictionaryAlloc(allocator, input, dictionary, options, split_options));
+}
+
+pub fn encodeRawLevelAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, level: u4) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawLevelAlloc(allocator, input, level));
+}
+
+pub fn encodeRawLevelWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, level: u4) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawLevelWithDictionaryAlloc(allocator, input, dictionary, level));
+}
+
+pub fn encodeRawDynamicLiteralAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawDynamicLiteralAlloc(allocator, input));
+}
+
+pub fn encodeRawDynamicWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawDynamicWithOptionsAlloc(allocator, input, options));
+}
+
+pub fn encodeRawDynamicWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawDynamicWithDictionaryAlloc(allocator, input, dictionary, options));
+}
+
+pub fn encodeRawDynamicSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawDynamicSplitAlloc(allocator, input, block_len, options));
+}
+
+pub fn encodeRawDynamicSplitWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawDynamicSplitWithDictionaryAlloc(allocator, input, dictionary, block_len, options));
+}
+
 pub fn rawStoredChunksEncodedSize(chunks: []const []const u8) Error!usize {
     return rawStoredEncodedSize(try chunksTotalLen(chunks));
 }

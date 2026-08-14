@@ -3575,3 +3575,9 @@ architecture blindly.
   append flows for forced dynamic-Huffman split block planning with preset
   dictionaries, with root tests checking top-level parity, invalid block-length
   errors, and dictionary decode round trips.
+
+- Added top-level raw deflate append encode helpers beyond stored blocks. Raw
+  callers now have prefix-preserving append convenience for fixed, best, zlib
+  level, dynamic, split, adaptive split, and preset-dictionary modes, with root
+  tests checking byte parity against allocator-returning encoders, invalid-plan
+  propagation, and decode round trips.
