@@ -1971,3 +1971,25 @@ architecture blindly.
   `zig build test -j1` in 3:45.46 at 4,125,068-KiB peak RSS, and
   `zig build check -j1` in 5:07.50 at 689,668-KiB peak RSS. Both full Vort
   commands reported zero swap.
+
+- Directly emit the two literal quads for a complete non-zero eight-byte
+  PNG-ultrafast input word. The run detector had already loaded that u64, so
+  the common path now derives four pair-table indexes from the existing word
+  instead of entering the variable-slice helper and loading every byte again.
+  Boundary-zero chunks and scalar tails retain the generic path. A dedicated
+  37-word-plus-tail oracle joins the existing batched/scalar comparisons and
+  fdeflate byte-exact goldens.
+- Two independent CPU-12, 41-round alternating old/new A/Bs retained exact
+  encoded sizes, checksums, and guards. Compressed geomean improved
+  `1.194x/1.188x`; the repeat measured `1.150x` adaptive, `1.227x` Up,
+  `1.002x` stored, and `1.122x` overall, with all six compressed rows faster.
+  A zero-loss post-change profile reduced `writeLiterals` from `38.77%` to
+  `11.70%` of the complete nine-case PNG runner.
+- The refreshed imx/image-png gate reports `0.931x` overall, `0.865x`
+  adaptive, `0.862x` Up, `1.082x` stored, `0.863x` compressed-only, and
+  `0.966x` RSS. Every mode remains size-exact; six compressed sizes, three Up
+  checksums, three stored files, 18 cross-decodes, and all zero-swap checks
+  remain green. Final validation passed imx PNG focused tests, full
+  `zig build test -j1` in 3:50.05 at 4,125,540-KiB peak RSS, and
+  `zig build check -j1` in 5:03.26 at 688,936-KiB peak RSS, both with zero
+  swap.
