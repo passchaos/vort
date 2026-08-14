@@ -2721,6 +2721,34 @@ architecture blindly.
   fully reverted. Do not batch length-285 output fields in this implementation;
   future long-zero work should reduce input scanning without changing the
   compact token-writer shape.
+- Profiled aligned all-zero input scanning next. Across the 30 real filtered
+  payloads, 14,446,622 u64 words are zero; after one zero word is known,
+  1,592,694 aligned 64-byte probes can skip 12,741,552 further word loads
+  (`88.2%`). A lane-mask scanner consumes all leading zero u64 lanes even when
+  a 64-byte probe contains a later nonzero word, while retaining the original
+  run/token writer. Offset/run boundary oracles, scalar encoder parity, all
+  7,140 literal-prefix cases, and fdeflate goldens stayed exact.
+- The scanner itself was strongly positive. A bounded three-interior-window
+  classifier selected only sustained-zero payloads before entering a scan
+  specialization. Fixed CPU-12 A/Bs over all 30 real filtered payloads measured
+  `1.06198x/1.06733x` adaptive/Up at 21 rounds and
+  `1.06533x/1.06464x` at 61 rounds; overall/aggregate were
+  `1.06499/1.03171x`, every row improved, and every encoded signature matched.
+  Exoplanet improved roughly 9--17%, while zero-dominated Transparency improved
+  roughly 52%.
+- The optimization was still rejected because every production integration
+  enlarged or moved the complete PNG release binary enough to regress important
+  nonmatching rows. Inlining scan/non-scan specializations gave a positive
+  61-round complete-PNG geomean (`1.01728x`) but regressed 128/16-pixel
+  adaptive by about 1.5%. A noinline scan wrapper reduced the complete-PNG
+  21-round geomean to `1.00970x` and left several ordinary rows negative.
+  Exposing a separate byte-identical root API and selecting it in imx, with and
+  without an unlikely hint, still regressed 128-pixel Up by about 5--6% and
+  16-pixel Up by about 3% in the final 31-round focused run. All production
+  forms were fully reverted before the formal image-png/RSS gate. The measured
+  scanner remains a valid future candidate only if build-time feature
+  partitioning or stronger function-placement control can keep it out of the
+  ordinary encoder's release layout.
 - Reworked the narrow Brotli static-dictionary slice to resolve identity-word
   addresses relative to the current output length instead of matching only raw
   distance codes. Real Node quality-5 frames now prove additional dictionary
