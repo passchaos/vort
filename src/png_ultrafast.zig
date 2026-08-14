@@ -247,22 +247,16 @@ fn writeInput(
 
         const suffix_zeros = @clz(word) / 8;
         if (suffix_zeros != 0) {
-            if (batch_literals and suffix_zeros == 1) {
-                // Filtered RGB/RGBA rows commonly end each eight-byte word
-                // with exactly one zero. Reuse the word loaded for run
-                // detection and emit its seven literals as one quad plus one
-                // triple instead of reloading a slice and issuing four writes.
-                try writeLiteralQuad(
+            if (batch_literals) {
+                // Reuse the word loaded for run detection for every boundary
+                // shape. Small PNGs have many words ending in two or more
+                // zeros; pair/triple/quad combinations avoid reloading their
+                // literal prefix and emitting its bytes one symbol at a time.
+                try writeLiteralPrefix(
                     allocator,
                     writer,
-                    @truncate(word),
-                    @truncate(word >> 16),
-                );
-                try writeLiteralTriple(
-                    allocator,
-                    writer,
-                    @truncate(word >> 32),
-                    @truncate(word >> 48),
+                    word,
+                    @intCast(8 - suffix_zeros),
                 );
             } else {
                 try writeLiterals(
@@ -305,6 +299,54 @@ fn writeInput(
     );
 }
 
+inline fn writeLiteralPrefix(
+    allocator: std.mem.Allocator,
+    writer: anytype,
+    word: u64,
+    literal_count: u4,
+) !void {
+    std.debug.assert(literal_count >= 1 and literal_count <= 7);
+    const pair0: u16 = @truncate(word);
+    const pair1: u16 = @truncate(word >> 16);
+    switch (literal_count) {
+        1 => try writeSymbol(allocator, writer, @as(u8, @truncate(word))),
+        2 => try writeLiteralPair(allocator, writer, pair0),
+        3 => try writeLiteralTriple(
+            allocator,
+            writer,
+            pair0,
+            @truncate(word >> 16),
+        ),
+        4 => try writeLiteralQuad(allocator, writer, pair0, pair1),
+        5 => {
+            try writeLiteralQuad(allocator, writer, pair0, pair1);
+            try writeSymbol(
+                allocator,
+                writer,
+                @as(u8, @truncate(word >> 32)),
+            );
+        },
+        6 => {
+            try writeLiteralQuad(allocator, writer, pair0, pair1);
+            try writeLiteralPair(
+                allocator,
+                writer,
+                @truncate(word >> 32),
+            );
+        },
+        7 => {
+            try writeLiteralQuad(allocator, writer, pair0, pair1);
+            try writeLiteralTriple(
+                allocator,
+                writer,
+                @truncate(word >> 32),
+                @truncate(word >> 48),
+            );
+        },
+        else => unreachable,
+    }
+}
+
 fn writeLiterals(
     allocator: std.mem.Allocator,
     writer: anytype,
@@ -335,6 +377,20 @@ fn writeLiterals(
     while (offset < bytes.len) : (offset += 1) {
         try writeSymbol(allocator, writer, bytes[offset]);
     }
+}
+
+inline fn writeLiteralPair(
+    allocator: std.mem.Allocator,
+    writer: anytype,
+    pair_index: u16,
+) !void {
+    const pair = literal_pairs[pair_index];
+    const count: u6 = @truncate(pair >> 56);
+    try writer.writeBits(
+        allocator,
+        pair & 0x00ff_ffff_ffff_ffff,
+        count,
+    );
 }
 
 inline fn writeLiteralQuad(
@@ -528,20 +584,26 @@ test "direct full PNG ultrafast chunks match scalar writer" {
     try std.testing.expectEqualSlices(u8, scalar, encoded);
 }
 
-test "direct seven-literal PNG ultrafast chunks match scalar writer" {
-    var input: [8 * 7 * 255]u8 = undefined;
+test "direct boundary literal prefixes match scalar writer" {
+    const chunk_count = 255 * (1 + 2 + 3 + 4 + 5 + 6 + 7);
+    var input: [8 * chunk_count]u8 = undefined;
     var chunk_index: usize = 0;
-    for (0..7) |varied_position| {
-        for (1..256) |value| {
-            const chunk = input[chunk_index * 8 ..][0..8];
-            for (chunk[0..7], 0..) |*byte, i| {
-                byte.* = @intCast((chunk_index * 29 + i * 47) % 255 + 1);
+    for (1..8) |literal_count| {
+        for (0..literal_count) |varied_position| {
+            for (1..256) |value| {
+                const chunk = input[chunk_index * 8 ..][0..8];
+                @memset(chunk, 0);
+                for (chunk[0..literal_count], 0..) |*byte, i| {
+                    byte.* = @intCast(
+                        (chunk_index * 29 + i * 47) % 255 + 1,
+                    );
+                }
+                chunk[varied_position] = @intCast(value);
+                chunk_index += 1;
             }
-            chunk[varied_position] = @intCast(value);
-            chunk[7] = 0;
-            chunk_index += 1;
         }
     }
+    try std.testing.expectEqual(chunk_count, chunk_index);
     const encoded = try encodeAlloc(std.testing.allocator, &input);
     defer std.testing.allocator.free(encoded);
     const scalar = try encodeAllocWithLiteralPolicy(

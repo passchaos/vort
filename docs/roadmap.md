@@ -2159,3 +2159,25 @@ architecture blindly.
   pure-literal work should use a materially different table/layout or
   target-specific gather strategy and must pass the complete matrix, not only
   a favorable isolated payload.
+- Extended PNG-ultrafast's already-accepted seven-literal boundary path to all
+  one-through-seven-literal prefixes followed by zero bytes. The encoder
+  reuses the u64 loaded for run detection and emits each prefix through
+  symbol/pair/triple/quad combinations; zero-run detection, the literal-pair
+  table, bitstream, and Adler footer are unchanged. A 7,140-word oracle varies
+  every literal position through values 1...255 for every prefix length and
+  requires complete byte equality with the scalar writer; all fdeflate goldens
+  remain exact.
+- The change was driven by the real 128-pixel RGBA icon: adaptive/Up payloads
+  contain 1,225 Up boundary words ending in two-through-seven zeros, which the
+  old seven-literal specialization left on scalar symbol writes. A CPU-12
+  21-round real-corpus A/B measured `1.02227x` adaptive, `1.03675x` Up,
+  `1.02949x` overall geomean, and `1.02048x` aggregate. The 61-round
+  confirmation measured **`1.01743x` adaptive, `1.03331x` Up, `1.02534x`
+  overall, and `1.01376x` aggregate**, with all 30 encoded tuples exact and
+  stable swap counters. The 128-pixel adaptive/Up rows improved
+  `1.060/1.084x`, while 16/32-pixel Up improved `1.086/1.104x`.
+- The refreshed image-png gate reports `0.919x` geomean, `0.910x` aggregate,
+  `0.926x` median, `0.866x` adaptive, `0.975x` Up, and `1.046x` RSS. All
+  raw, cross-decode, Up-filtered-payload, size, and zero-swap gates pass. Vort
+  full test/check passed in 221.77/317.92 seconds at
+  4,124,900/687,300-KiB peak RSS with stable swap counters.
