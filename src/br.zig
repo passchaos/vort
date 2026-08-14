@@ -175,7 +175,7 @@ const max_distance_alphabet_size = 16 + 120 + (48 << 3);
 const max_context_map_alphabet_size = 256 + 16;
 const max_literal_block_types = 16;
 const max_literal_context_trees = 32;
-const max_command_block_types = 16;
+const max_command_block_types = 32;
 const max_distance_block_types = 16;
 const max_distance_context_trees = 32;
 const initial_last_distances = [_]usize{ 16, 15, 11, 4 };
@@ -11244,6 +11244,28 @@ test "br minimal compressed stream switches ninth command block tree" {
     try std.testing.expectEqualSlices(u8, "aaaaaaaaaaaaaaaaaaaaaaaab", decoded);
 }
 
+test "br minimal compressed stream switches seventeenth command block tree" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writer.writeBits(std.testing.allocator, 1, 1); // ISLAST
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISLASTEMPTY = false
+    try writer.writeBits(std.testing.allocator, 0, 2); // MNIBBLES = 4
+    try writer.writeBits(std.testing.allocator, 48, 16); // MLEN - 1
+    try writeMinimalCompressedHeaderForCommandSwitchSeventeenTypes(std.testing.allocator, &writer);
+    for (0..16) |_| {
+        try writer.writeBits(std.testing.allocator, 0, 1); // a
+        try writer.writeBits(std.testing.allocator, 0, 2); // next command block count = 1
+    }
+    try writer.writeBits(std.testing.allocator, 1, 1); // b
+
+    try std.testing.expectEqual(@as(usize, 49), try decodedStreamSize(encoded.items));
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, ("a" ** 48) ++ "b", decoded);
+}
+
 test "br minimal compressed stream switches literal block tree" {
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(std.testing.allocator);
@@ -12771,6 +12793,31 @@ fn writeMinimalCompressedHeaderForCommandSwitchNineTypes(allocator: std.mem.Allo
     try writer.writeBits(allocator, 'b', alphabetBits(256));
 
     for (0..8) |_| {
+        try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 136);
+    }
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 8);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 65, 16);
+}
+
+fn writeMinimalCompressedHeaderForCommandSwitchSeventeenTypes(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
+    try writeBlockTypeCount(allocator, writer, 17); // NBLTYPESI
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 19, 1); // next command block type
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 26, 0); // block count code
+    try writer.writeBits(allocator, 0, 2); // first command block count = 1
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 1, 4); // NDIRECT = 1
+    try writer.writeBits(allocator, 0, 2); // literal context mode
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESL
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESD
+
+    try writer.writeBits(allocator, 1, 2); // simple literal prefix
+    try writer.writeBits(allocator, 1, 2); // NSYM = 2
+    try writer.writeBits(allocator, 'a', alphabetBits(256));
+    try writer.writeBits(allocator, 'b', alphabetBits(256));
+
+    for (0..16) |_| {
         try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 136);
     }
     try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 8);

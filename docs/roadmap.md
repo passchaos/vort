@@ -2119,6 +2119,11 @@ architecture blindly.
   command block types and walks through the fifth type, with matching Zig and
   Node-backed CLI differential coverage.
 
+- Raised the minimal Brotli command block-type / insert-copy-tree retention
+  limit to 32. A compressed command-switch frame now declares 17 command block
+  types, walks through tree index 16, and verifies decoded-size and output
+  decode agree on the widened table.
+
 - Added five-block-type coverage for Brotli literal and distance block
   switching. The compressed literal-switch smoke walks to the fifth literal block
   type, while the distance-switch smoke walks to the fifth distance block type
