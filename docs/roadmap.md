@@ -1672,6 +1672,11 @@ architecture blindly.
   with `UnsupportedZstdFeature`, preserving correctness while keeping the
   candidate encoder bounded by the wire-format limits.
 
+- Tightened Zstd predefined sequence-table planning. When the candidate planner
+  is asked to score a symbol table larger than its bounded internal state array,
+  it now declines the predefined candidate instead of failing the whole encode
+  with `UnsupportedZstdFeature`; a focused unit test covers the fallback.
+
 - Added a dependency-free Brotli `br` bootstrap module for stored/uncompressed
   streams. `src/br.zig` emits RFC-valid WBITS=16 streams with uncompressed
   meta-blocks plus final empty terminators, decodes the same stored subset with

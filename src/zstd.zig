@@ -9548,7 +9548,7 @@ const PredefinedSequencePlan = struct {
 
 fn planPredefinedSequenceValues(values: []const usize, symbols: []const SequenceSymbol, min_additional_bits: u8) Error!?PredefinedSequencePlan {
     if (values.len == 0 or values.len > max_bootstrap_sequence_count) return null;
-    if (symbols.len > max_predefined_sequence_states) return error.UnsupportedZstdFeature;
+    if (symbols.len > max_predefined_sequence_states) return null;
 
     var next_choice: [max_bootstrap_sequence_count][max_predefined_sequence_states]usize = undefined;
     for (&next_choice) |*row| @memset(row[0..], max_predefined_sequence_states);
@@ -12556,6 +12556,21 @@ test "zstd sequence emitter supports compressed FSE literal-length table" {
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
     defer std.testing.allocator.free(std_decoded);
     try std.testing.expectEqualSlices(u8, payload.items, std_decoded);
+}
+
+test "zstd predefined sequence planner declines oversized symbol table" {
+    var symbols: [max_predefined_sequence_states + 1]SequenceSymbol = undefined;
+    for (&symbols, 0..) |*symbol, i| {
+        symbol.* = .{
+            .base = i,
+            .additional_bits = 0,
+            .state_bits = 0,
+            .next_state = 0,
+        };
+    }
+
+    const values = [_]usize{0};
+    try std.testing.expectEqual(@as(?PredefinedSequencePlan, null), try planPredefinedSequenceValues(&values, &symbols, 0));
 }
 
 test "zstd sequence emitter supports compressed FSE absolute-offset table" {
