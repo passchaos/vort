@@ -20330,6 +20330,14 @@
     },
     {
       "copy_len": 7,
+      "raw_word": "history",
+      "transform": 1,
+      "transform_kind": "affix_identity",
+      "transformed_word": "history ",
+      "word_index": 37
+    },
+    {
+      "copy_len": 7,
       "raw_word": "release",
       "transform": 1,
       "transform_kind": "affix_identity",
@@ -21689,7 +21697,7 @@
       "word_index": 285
     }
   ],
-  "entry_count": 2711,
+  "entry_count": 2712,
   "schema": "vort.br_static_dictionary_source_anchors",
   "schema_version": 1,
   "source": "RFC 7932 Brotli static dictionary data as exposed by upstream common/dictionary_inc.h and common/transform.c"

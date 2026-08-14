@@ -15,7 +15,7 @@ from br_static_dictionary_source_audit import DEFAULT_ANCHORS, entry_key, load_a
 from validation_json_docs_check import load_manifest, validate_value_against_manifest
 
 REQUIRED_CANDIDATES = {
-    (1, 7, 37, "history "),
+    (1, 5, 0, "first "),
     (1, 7, 94, "through "),
     (6, 5, 35, " about"),
     (9, 5, 35, "About"),
