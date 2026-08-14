@@ -1165,6 +1165,7 @@ pub const encodeRawDynamicLiteralAlloc = deflate.encodeRawDynamicLiteralAlloc;
 pub const encodeRawDynamicWithOptionsAlloc = deflate.encodeRawDynamicWithOptionsAlloc;
 pub const encodeRawDynamicWithDictionaryAlloc = deflate.encodeRawDynamicWithDictionaryAlloc;
 pub const encodeRawDynamicSplitAlloc = deflate.encodeRawDynamicSplitAlloc;
+pub const encodeRawDynamicSplitWithDictionaryAlloc = deflate.encodeRawDynamicSplitWithDictionaryAlloc;
 pub const encodeRawFixedWithOptionsAlloc = deflate.encodeRawFixedWithOptionsAlloc;
 pub const RawDeflateEncoder = deflate.RawDeflateEncoder;
 pub const RawDeflateDecoder = deflate.RawDeflateDecoder;
@@ -1264,6 +1265,7 @@ pub const encodeZlibDynamicLiteralAlloc = deflate.encodeZlibDynamicLiteralAlloc;
 pub const encodeZlibDynamicWithOptionsAlloc = deflate.encodeZlibDynamicWithOptionsAlloc;
 pub const encodeZlibDynamicWithDictionaryAlloc = deflate.encodeZlibDynamicWithDictionaryAlloc;
 pub const encodeZlibDynamicSplitAlloc = deflate.encodeZlibDynamicSplitAlloc;
+pub const encodeZlibDynamicSplitWithDictionaryAlloc = deflate.encodeZlibDynamicSplitWithDictionaryAlloc;
 pub const encodeZlibFixedWithOptionsAlloc = deflate.encodeZlibFixedWithOptionsAlloc;
 pub const ZlibHeaderInfo = deflate.ZlibHeaderInfo;
 pub const ZlibStreamInfo = deflate.ZlibStreamInfo;
@@ -7068,6 +7070,23 @@ test "root raw deflate encoder reuses stored scratch" {
     const dynamic_dict_decoded = try decodeRawDeflateAllocWithDictionaryExactSize(std.testing.allocator, dynamic_dict_scratch, preset_dictionary, dict_payload.len);
     defer std.testing.allocator.free(dynamic_dict_decoded);
     try std.testing.expectEqualSlices(u8, dict_payload, dynamic_dict_decoded);
+
+    const dynamic_dict_split_expected = try encodeRawDynamicSplitWithDictionaryAlloc(std.testing.allocator, dict_payload, preset_dictionary, 17, dynamic_options);
+    defer std.testing.allocator.free(dynamic_dict_split_expected);
+    const dynamic_dict_split_owned = try encoder.encodeDynamicSplitWithDictionaryAlloc(dict_payload, preset_dictionary, 17, dynamic_options);
+    defer std.testing.allocator.free(dynamic_dict_split_owned);
+    try std.testing.expectEqualSlices(u8, dynamic_dict_split_expected, dynamic_dict_split_owned);
+    const dynamic_dict_split_scratch = try encoder.encodeDynamicSplitWithDictionaryScratch(dict_payload, preset_dictionary, 17, dynamic_options);
+    try std.testing.expectEqualSlices(u8, dynamic_dict_split_expected, dynamic_dict_split_scratch);
+    const dynamic_dict_split_decoded = try decodeRawDeflateAllocWithDictionaryExactSize(std.testing.allocator, dynamic_dict_split_scratch, preset_dictionary, dict_payload.len);
+    defer std.testing.allocator.free(dynamic_dict_split_decoded);
+    try std.testing.expectEqualSlices(u8, dict_payload, dynamic_dict_split_decoded);
+    var dynamic_dict_split_appended: std.ArrayList(u8) = .empty;
+    defer dynamic_dict_split_appended.deinit(std.testing.allocator);
+    try dynamic_dict_split_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(dynamic_dict_split_expected.len, try encoder.encodeDynamicSplitWithDictionaryAppend(&dynamic_dict_split_appended, dict_payload, preset_dictionary, 17, dynamic_options));
+    try std.testing.expectEqualSlices(u8, dynamic_dict_split_expected, dynamic_dict_split_appended.items["prefix:".len..]);
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.encodeDynamicSplitWithDictionaryAlloc(dict_payload, preset_dictionary, 0, dynamic_options));
 }
 
 test "root zlib encoder reuses stored scratch" {
@@ -7423,6 +7442,23 @@ test "root zlib encoder reuses stored scratch" {
     const dynamic_dict_decoded = try decodeZlibAllocWithDictionaryExactSize(std.testing.allocator, dynamic_dict_scratch, preset_dictionary, payload.len);
     defer std.testing.allocator.free(dynamic_dict_decoded);
     try std.testing.expectEqualSlices(u8, payload, dynamic_dict_decoded);
+
+    const dynamic_dict_split_expected = try encodeZlibDynamicSplitWithDictionaryAlloc(std.testing.allocator, payload, preset_dictionary, 19, dynamic_options);
+    defer std.testing.allocator.free(dynamic_dict_split_expected);
+    const dynamic_dict_split_owned = try encoder.encodeDynamicSplitWithDictionaryAlloc(payload, preset_dictionary, 19, dynamic_options);
+    defer std.testing.allocator.free(dynamic_dict_split_owned);
+    try std.testing.expectEqualSlices(u8, dynamic_dict_split_expected, dynamic_dict_split_owned);
+    const dynamic_dict_split_scratch = try encoder.encodeDynamicSplitWithDictionaryScratch(payload, preset_dictionary, 19, dynamic_options);
+    try std.testing.expectEqualSlices(u8, dynamic_dict_split_expected, dynamic_dict_split_scratch);
+    const dynamic_dict_split_decoded = try decodeZlibAllocWithDictionaryExactSize(std.testing.allocator, dynamic_dict_split_scratch, preset_dictionary, payload.len);
+    defer std.testing.allocator.free(dynamic_dict_split_decoded);
+    try std.testing.expectEqualSlices(u8, payload, dynamic_dict_split_decoded);
+    var dynamic_dict_split_appended: std.ArrayList(u8) = .empty;
+    defer dynamic_dict_split_appended.deinit(std.testing.allocator);
+    try dynamic_dict_split_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(dynamic_dict_split_expected.len, try encoder.encodeDynamicSplitWithDictionaryAppend(&dynamic_dict_split_appended, payload, preset_dictionary, 19, dynamic_options));
+    try std.testing.expectEqualSlices(u8, dynamic_dict_split_expected, dynamic_dict_split_appended.items["prefix:".len..]);
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.encodeDynamicSplitWithDictionaryAlloc(payload, preset_dictionary, 0, dynamic_options));
 }
 
 test "root gzip encoder reuses stored scratch" {

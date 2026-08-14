@@ -3569,3 +3569,9 @@ architecture blindly.
   and zlib preset-dictionary variants and gzip metadata-rich headers, with root
   tests checking top-level parity, invalid block-length errors, and decode round
   trips.
+
+- Added raw/zlib preset-dictionary dynamic split encode helpers and reusable
+  encoder facades. Raw deflate and zlib callers now have alloc, scratch, and
+  append flows for forced dynamic-Huffman split block planning with preset
+  dictionaries, with root tests checking top-level parity, invalid block-length
+  errors, and dictionary decode round trips.
