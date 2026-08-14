@@ -2652,6 +2652,20 @@ architecture blindly.
   raw, cross-decode, Up-filtered-payload, size, and zero-swap gates pass. Vort
   full test/check passed in 221.77/317.92 seconds at
   4,124,900/687,300-KiB peak RSS with stable swap counters.
+- Audited whether adjacent trained-Huffman literal groups could be fused into
+  one reservoir write when their total bit length is at most 56. Across the 30
+  real payloads, 68.5% of full eight-literal words and 90.2% of one-through-
+  seven-literal boundary prefixes satisfy that bound; scalar/fdeflate output
+  remained exact for every prototype.
+- Fusing both full words and boundary prefixes improved many Up rows but
+  regressed Lohengrin adaptive/Up to `0.924/0.959x` and aggregate to `0.995x`
+  in a 21-round corpus A/B. Restricting fusion to prefixes restored much of the
+  full-word path but still left several 1--2% large-image regressions.
+  Restricting again to only five/six-literal prefixes measured `0.99856x`
+  adaptive, `0.99695x` Up, `0.99776x` overall, and `0.99518x` aggregate, with
+  the 128-pixel Up row at `0.96086x`. All three forms were fully reverted.
+  Avoid conditional multi-group fusion in this loop unless a branch-free
+  representation can preserve the accepted hot-code shape.
 - Reworked the narrow Brotli static-dictionary slice to resolve identity-word
   addresses relative to the current output length instead of matching only raw
   distance codes. Real Node quality-5 frames now prove additional dictionary
