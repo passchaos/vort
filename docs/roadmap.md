@@ -2016,6 +2016,32 @@ architecture blindly.
   one-shot loop's compiler optimization and locality are more valuable than
   avoiding that intermediate scan in this design; do not repeat per-row
   streaming without retaining the one-shot loop shape.
+- Replaced PNG-ultrafast zero-run residual length selection's linear 29-range
+  scan with a compile-time 256-entry lookup for lengths 3...258. This is
+  separate from the previously rejected literal code/length-table layouts:
+  only RFC length symbol/extra-bit selection changed, while the 512-KiB
+  literal-pair table and reservoir writes remain intact. The old range scan is
+  retained as a reference and exhaustively matches every lookup entry; scalar
+  writer comparisons and fdeflate 0.3.7 goldens remain byte-exact.
+- The optimization was selected from a post-imx-u8-row profile where
+  `writeZeroRun` represented about `6.97%` of the full Exoplanet adaptive
+  encode and its inlined `lengthCode` scan about `2.58%`. A CPU-12 21-round
+  real-corpus old/new A/B measured `1.04508x` adaptive, `1.05916x` Up,
+  `1.05210x` overall geomean, and `1.04088x` aggregate. The 61-round
+  confirmation measured **`1.05339x` adaptive, `1.05825x` Up, `1.05582x`
+  overall, and `1.05068x` aggregate**, with all 30 encoded sizes, checksums,
+  and guards exact and no swap activity. A separate 101-round, 20-encode
+  focused check of the initially noisy non-indexed Exoplanet adaptive row
+  measured `1.01235x` median and `1.01821x` paired geomean, also exact.
+- The refreshed fixed-CPU imx/image-png 15-file gate reports `0.904x`
+  throughput geomean, `0.903x` aggregate, `0.922x` median, `0.860x`
+  adaptive, `0.952x` Up, and `1.046x` RSS. All 15 raw normalizations, 60
+  cross-decodes, 15 Up filtered payloads, encoded-size constraints, and the
+  formal gate's zero-swap checks pass. Vort full test/check passed in
+  237.94/308.31 seconds at 4,125,724/688,536-KiB peak RSS; the full test saw
+  one page of system swap-in while check was stable. imx full test/check passed
+  in 570.19/64.34 seconds at 6,418,192/693,776-KiB peak RSS with stable swap
+  counters.
 - Rejected forcing the remaining boundary `writeLiterals` helper inline.
   Scalar/fdeflate output stayed byte-exact and two 41-round CPU-12 A/Bs showed
   `1.020x/1.018x` compressed geomeans, but a 121-round repeat reproduced a

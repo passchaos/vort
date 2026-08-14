@@ -406,6 +406,23 @@ const LengthCode = struct {
 };
 
 fn lengthCode(length: usize) LengthCode {
+    std.debug.assert(length >= 3 and length <= 258);
+    return length_code_table[length - 3];
+}
+
+const length_code_table = makeLengthCodeTable();
+
+fn makeLengthCodeTable() [256]LengthCode {
+    @setEvalBranchQuota(10_000);
+    var table: [256]LengthCode = undefined;
+    for (&table, 3..) |*entry, length| {
+        entry.* = lengthCodeReference(length);
+    }
+    return table;
+}
+
+fn lengthCodeReference(length: usize) LengthCode {
+    std.debug.assert(length >= 3 and length <= 258);
     const bases = [29]u16{
         3,  4,  5,  6,  7,  8,  9,  10, 11,  13,  15,  17,  19,  23,  27,
         31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258,
@@ -458,6 +475,15 @@ test "static PNG ultrafast header carries the trained tree" {
         &parsed.literal_lengths,
     );
     try std.testing.expectEqual(@as(u4, 1), parsed.distance_lengths[0]);
+}
+
+test "PNG ultrafast length lookup matches RFC range reference" {
+    for (3..259) |length| {
+        try std.testing.expectEqual(
+            lengthCodeReference(length),
+            lengthCode(length),
+        );
+    }
 }
 
 test "batched PNG ultrafast literals match scalar writer" {
