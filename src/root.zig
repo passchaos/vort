@@ -1151,6 +1151,7 @@ pub const encodeRawStoredDeflate = deflate.encodeRawStored;
 pub const decodeRawStoredDeflate = deflate.decodeRawStored;
 pub const encodeRawFixedDeflateAlloc = deflate.encodeRawFixedAlloc;
 pub const encodeRawFixedSplitAlloc = deflate.encodeRawFixedSplitAlloc;
+pub const encodeRawFixedSplitWithDictionaryAlloc = deflate.encodeRawFixedSplitWithDictionaryAlloc;
 pub const encodeRawFixedWithDictionaryAlloc = deflate.encodeRawFixedWithDictionaryAlloc;
 pub const encodeRawBestAlloc = deflate.encodeRawBestAlloc;
 pub const encodeRawBestWithDictionaryAlloc = deflate.encodeRawBestWithDictionaryAlloc;
@@ -1249,6 +1250,8 @@ pub const encodeZlibStoredWithDictionaryChunks = deflate.encodeZlibStoredWithDic
 pub const encodeZlibStoredWithDictionary = deflate.encodeZlibStoredWithDictionary;
 pub const encodeZlibFixedAlloc = deflate.encodeZlibFixedAlloc;
 pub const encodeZlibFixedWithDictionaryAlloc = deflate.encodeZlibFixedWithDictionaryAlloc;
+pub const encodeZlibFixedSplitAlloc = deflate.encodeZlibFixedSplitAlloc;
+pub const encodeZlibFixedSplitWithDictionaryAlloc = deflate.encodeZlibFixedSplitWithDictionaryAlloc;
 pub const encodeZlibBestAlloc = deflate.encodeZlibBestAlloc;
 pub const encodeZlibBestWithDictionaryAlloc = deflate.encodeZlibBestWithDictionaryAlloc;
 pub const encodeZlibLevelAlloc = deflate.encodeZlibLevelAlloc;
@@ -1527,6 +1530,7 @@ pub const encodeGzipStoredChunksWithHeaderAlloc = deflate.encodeGzipStoredChunks
 pub const encodeGzipStoredWithHeaderAppend = deflate.encodeGzipStoredWithHeaderAppend;
 pub const encodeGzipStoredChunksWithHeaderAppend = deflate.encodeGzipStoredChunksWithHeaderAppend;
 pub const encodeGzipFixedWithHeaderAlloc = deflate.encodeGzipFixedWithHeaderAlloc;
+pub const encodeGzipFixedSplitWithHeaderAlloc = deflate.encodeGzipFixedSplitWithHeaderAlloc;
 pub const encodeGzipDynamicLiteralWithHeaderAlloc = deflate.encodeGzipDynamicLiteralWithHeaderAlloc;
 pub const encodeGzipDynamicWithHeaderAlloc = deflate.encodeGzipDynamicWithHeaderAlloc;
 pub const encodeGzipDynamicSplitWithHeaderAlloc = deflate.encodeGzipDynamicSplitWithHeaderAlloc;
@@ -1537,6 +1541,7 @@ pub const encodeGzipBestAdaptiveSplitWithHeaderAlloc = deflate.encodeGzipBestAda
 pub const encodeGzipDynamicLiteralAlloc = deflate.encodeGzipDynamicLiteralAlloc;
 pub const encodeGzipDynamicWithOptionsAlloc = deflate.encodeGzipDynamicWithOptionsAlloc;
 pub const encodeGzipDynamicSplitAlloc = deflate.encodeGzipDynamicSplitAlloc;
+pub const encodeGzipFixedSplitAlloc = deflate.encodeGzipFixedSplitAlloc;
 pub const encodeGzipFixedWithOptionsAlloc = deflate.encodeGzipFixedWithOptionsAlloc;
 pub const decodeGzipStored = deflate.decodeGzipStored;
 pub const encodeGzipStoredAlloc = deflate.encodeGzipStoredAlloc;
@@ -6916,6 +6921,22 @@ test "root raw deflate encoder reuses stored scratch" {
     try std.testing.expectEqual(fixed_dict_expected.len, try encoder.encodeFixedWithDictionaryAppend(&fixed_dict_appended, dict_payload, preset_dictionary, dict_options));
     try std.testing.expectEqualSlices(u8, fixed_dict_expected, fixed_dict_appended.items);
 
+    const fixed_dict_split_expected = try encodeRawFixedSplitWithDictionaryAlloc(std.testing.allocator, dict_payload, preset_dictionary, 17, dict_options);
+    defer std.testing.allocator.free(fixed_dict_split_expected);
+    const fixed_dict_split_owned = try encoder.encodeFixedSplitWithDictionaryAlloc(dict_payload, preset_dictionary, 17, dict_options);
+    defer std.testing.allocator.free(fixed_dict_split_owned);
+    try std.testing.expectEqualSlices(u8, fixed_dict_split_expected, fixed_dict_split_owned);
+    const fixed_dict_split_scratch = try encoder.encodeFixedSplitWithDictionaryScratch(dict_payload, preset_dictionary, 17, dict_options);
+    try std.testing.expectEqualSlices(u8, fixed_dict_split_expected, fixed_dict_split_scratch);
+    const fixed_dict_split_decoded = try decodeRawDeflateAllocWithDictionaryExactSize(std.testing.allocator, fixed_dict_split_scratch, preset_dictionary, dict_payload.len);
+    defer std.testing.allocator.free(fixed_dict_split_decoded);
+    try std.testing.expectEqualSlices(u8, dict_payload, fixed_dict_split_decoded);
+    var fixed_dict_split_appended: std.ArrayList(u8) = .empty;
+    defer fixed_dict_split_appended.deinit(std.testing.allocator);
+    try std.testing.expectEqual(fixed_dict_split_expected.len, try encoder.encodeFixedSplitWithDictionaryAppend(&fixed_dict_split_appended, dict_payload, preset_dictionary, 17, dict_options));
+    try std.testing.expectEqualSlices(u8, fixed_dict_split_expected, fixed_dict_split_appended.items);
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.encodeFixedSplitWithDictionaryAlloc(dict_payload, preset_dictionary, 0, dict_options));
+
     const best_dict_expected = try encodeRawBestWithDictionaryAlloc(std.testing.allocator, dict_payload, preset_dictionary, dict_options);
     defer std.testing.allocator.free(best_dict_expected);
     const best_dict_owned = try encoder.encodeBestWithDictionaryAlloc(dict_payload, preset_dictionary, dict_options);
@@ -7160,6 +7181,23 @@ test "root zlib encoder reuses stored scratch" {
     try std.testing.expectEqual(fixed_options_expected.len, try encoder.encodeFixedWithOptionsAppend(&fixed_options_appended, payload, fixed_options));
     try std.testing.expectEqualSlices(u8, fixed_options_expected, fixed_options_appended.items);
 
+    const fixed_split_expected = try encodeZlibFixedSplitAlloc(std.testing.allocator, payload, 23, fixed_options);
+    defer std.testing.allocator.free(fixed_split_expected);
+    const fixed_split_owned = try encoder.encodeFixedSplitAlloc(payload, 23, fixed_options);
+    defer std.testing.allocator.free(fixed_split_owned);
+    try std.testing.expectEqualSlices(u8, fixed_split_expected, fixed_split_owned);
+    const fixed_split_scratch = try encoder.encodeFixedSplitScratch(payload, 23, fixed_options);
+    try std.testing.expectEqualSlices(u8, fixed_split_expected, fixed_split_scratch);
+    const fixed_split_decoded = try decodeZlibAllocExactSize(std.testing.allocator, fixed_split_scratch, payload.len);
+    defer std.testing.allocator.free(fixed_split_decoded);
+    try std.testing.expectEqualSlices(u8, payload, fixed_split_decoded);
+    var fixed_split_appended: std.ArrayList(u8) = .empty;
+    defer fixed_split_appended.deinit(std.testing.allocator);
+    try fixed_split_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(fixed_split_expected.len, try encoder.encodeFixedSplitAppend(&fixed_split_appended, payload, 23, fixed_options));
+    try std.testing.expectEqualSlices(u8, fixed_split_expected, fixed_split_appended.items["prefix:".len..]);
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.encodeFixedSplitAlloc(payload, 0, fixed_options));
+
     const best_options = optionsForCompressionLevel(.fastest);
     const best_expected = try encodeZlibBestAlloc(std.testing.allocator, payload, best_options);
     defer std.testing.allocator.free(best_expected);
@@ -7238,6 +7276,22 @@ test "root zlib encoder reuses stored scratch" {
     defer fixed_dict_appended.deinit(std.testing.allocator);
     try std.testing.expectEqual(fixed_dict_expected.len, try encoder.encodeFixedWithDictionaryAppend(&fixed_dict_appended, payload, preset_dictionary, dict_options));
     try std.testing.expectEqualSlices(u8, fixed_dict_expected, fixed_dict_appended.items);
+
+    const fixed_dict_split_expected = try encodeZlibFixedSplitWithDictionaryAlloc(std.testing.allocator, payload, preset_dictionary, 19, dict_options);
+    defer std.testing.allocator.free(fixed_dict_split_expected);
+    const fixed_dict_split_owned = try encoder.encodeFixedSplitWithDictionaryAlloc(payload, preset_dictionary, 19, dict_options);
+    defer std.testing.allocator.free(fixed_dict_split_owned);
+    try std.testing.expectEqualSlices(u8, fixed_dict_split_expected, fixed_dict_split_owned);
+    const fixed_dict_split_scratch = try encoder.encodeFixedSplitWithDictionaryScratch(payload, preset_dictionary, 19, dict_options);
+    try std.testing.expectEqualSlices(u8, fixed_dict_split_expected, fixed_dict_split_scratch);
+    const fixed_dict_split_decoded = try decodeZlibAllocWithDictionaryExactSize(std.testing.allocator, fixed_dict_split_scratch, preset_dictionary, payload.len);
+    defer std.testing.allocator.free(fixed_dict_split_decoded);
+    try std.testing.expectEqualSlices(u8, payload, fixed_dict_split_decoded);
+    var fixed_dict_split_appended: std.ArrayList(u8) = .empty;
+    defer fixed_dict_split_appended.deinit(std.testing.allocator);
+    try std.testing.expectEqual(fixed_dict_split_expected.len, try encoder.encodeFixedSplitWithDictionaryAppend(&fixed_dict_split_appended, payload, preset_dictionary, 19, dict_options));
+    try std.testing.expectEqualSlices(u8, fixed_dict_split_expected, fixed_dict_split_appended.items);
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.encodeFixedSplitWithDictionaryAlloc(payload, preset_dictionary, 0, dict_options));
 
     const best_dict_expected = try encodeZlibBestWithDictionaryAlloc(std.testing.allocator, payload, preset_dictionary, dict_options);
     defer std.testing.allocator.free(best_dict_expected);
@@ -7497,6 +7551,38 @@ test "root gzip encoder reuses stored scratch" {
     defer fixed_header_appended.deinit(std.testing.allocator);
     try std.testing.expectEqual(fixed_header_expected.len, try encoder.encodeFixedWithHeaderAppend(&fixed_header_appended, payload, fixed_options, header_options));
     try std.testing.expectEqualSlices(u8, fixed_header_expected, fixed_header_appended.items);
+
+    const fixed_split_expected = try encodeGzipFixedSplitAlloc(std.testing.allocator, payload, 23, fixed_options);
+    defer std.testing.allocator.free(fixed_split_expected);
+    const fixed_split_owned = try encoder.encodeFixedSplitAlloc(payload, 23, fixed_options);
+    defer std.testing.allocator.free(fixed_split_owned);
+    try std.testing.expectEqualSlices(u8, fixed_split_expected, fixed_split_owned);
+    const fixed_split_scratch = try encoder.encodeFixedSplitScratch(payload, 23, fixed_options);
+    try std.testing.expectEqualSlices(u8, fixed_split_expected, fixed_split_scratch);
+    const fixed_split_decoded = try decodeGzipAllocExactSize(std.testing.allocator, fixed_split_scratch, payload.len);
+    defer std.testing.allocator.free(fixed_split_decoded);
+    try std.testing.expectEqualSlices(u8, payload, fixed_split_decoded);
+    var fixed_split_appended: std.ArrayList(u8) = .empty;
+    defer fixed_split_appended.deinit(std.testing.allocator);
+    try fixed_split_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(fixed_split_expected.len, try encoder.encodeFixedSplitAppend(&fixed_split_appended, payload, 23, fixed_options));
+    try std.testing.expectEqualSlices(u8, fixed_split_expected, fixed_split_appended.items["prefix:".len..]);
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.encodeFixedSplitAlloc(payload, 0, fixed_options));
+
+    const fixed_split_header_expected = try encodeGzipFixedSplitWithHeaderAlloc(std.testing.allocator, payload, 23, fixed_options, header_options);
+    defer std.testing.allocator.free(fixed_split_header_expected);
+    const fixed_split_header_owned = try encoder.encodeFixedSplitWithHeaderAlloc(payload, 23, fixed_options, header_options);
+    defer std.testing.allocator.free(fixed_split_header_owned);
+    try std.testing.expectEqualSlices(u8, fixed_split_header_expected, fixed_split_header_owned);
+    const fixed_split_header_scratch = try encoder.encodeFixedSplitWithHeaderScratch(payload, 23, fixed_options, header_options);
+    try std.testing.expectEqualSlices(u8, fixed_split_header_expected, fixed_split_header_scratch);
+    const fixed_split_header_decoded = try decodeGzipAllocExactSize(std.testing.allocator, fixed_split_header_scratch, payload.len);
+    defer std.testing.allocator.free(fixed_split_header_decoded);
+    try std.testing.expectEqualSlices(u8, payload, fixed_split_header_decoded);
+    var fixed_split_header_appended: std.ArrayList(u8) = .empty;
+    defer fixed_split_header_appended.deinit(std.testing.allocator);
+    try std.testing.expectEqual(fixed_split_header_expected.len, try encoder.encodeFixedSplitWithHeaderAppend(&fixed_split_header_appended, payload, 23, fixed_options, header_options));
+    try std.testing.expectEqualSlices(u8, fixed_split_header_expected, fixed_split_header_appended.items);
 
     const best_options = optionsForCompressionLevel(.fastest);
     const best_expected = try encodeGzipBestAlloc(std.testing.allocator, payload, best_options);

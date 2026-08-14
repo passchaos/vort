@@ -3562,3 +3562,10 @@ architecture blindly.
   dynamic-Huffman split block planning, including gzip metadata-rich header
   variants, with root tests checking top-level parity, invalid block-length
   errors, and strict decode round trips.
+
+- Added raw/zlib/gzip fixed split dictionary and wrapper encode helpers plus
+  reusable encoder facades. Raw, zlib, and gzip callers now have alloc, scratch,
+  and append flows for forced fixed-Huffman split block planning, including raw
+  and zlib preset-dictionary variants and gzip metadata-rich headers, with root
+  tests checking top-level parity, invalid block-length errors, and decode round
+  trips.
