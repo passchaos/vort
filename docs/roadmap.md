@@ -2804,6 +2804,20 @@ architecture blindly.
   694,280-KiB. imx codec tests passed in 28.02 seconds at 607,460-KiB,
   full test in 10:01.21 at 6,429,236-KiB, and full check in 2:56.88 at
   700,048-KiB. Every measured validation reported zero swap.
+- Rejected replacing PNG-ultrafast's zero-run length accumulator with an
+  optional run-start offset. The candidate removed the serial `run += 8`
+  dependency on each all-zero u64 and computed the complete run length once at
+  its closing boundary. The former accumulator remained as the scalar
+  full-stream reference; new tests covered 7/8/9, 257/258/259,
+  1,304, repeated-258-token, terminal-run, and partial-tail boundaries. All 66
+  focused ReleaseFast tests, fdeflate goldens, and 30 real encoded tuples were
+  exact.
+- The additional optional/state arithmetic cost more than the removed add.
+  A CPU-12 21-round A/B measured `0.98332x` geomean, `0.98638x` aggregate,
+  `0.98998x` adaptive, and `0.97671x` Up; Transparency Up was the `0.90389x`
+  worst row. The code was fully reverted before reference/full gates. Keep the
+  simple run-length accumulator unless a future scanner can skip multiple
+  loads without introducing the already rejected specialization/layout cost.
 - Reworked the narrow Brotli static-dictionary slice to resolve identity-word
   addresses relative to the current output length instead of matching only raw
   distance codes. Real Node quality-5 frames now prove additional dictionary
