@@ -1193,25 +1193,28 @@ fn writeDynamicTokens(allocator: std.mem.Allocator, writer: *bitstream.BitWriter
 }
 
 pub fn encodeRawDynamicSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
-    if (block_len == 0) return error.InvalidBlockPlan;
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
+    try writeDynamicSplitBlocks(allocator, &writer, input, block_len, options);
+    return writer.toOwnedSlice(allocator);
+}
+
+fn writeDynamicSplitBlocks(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, input: []const u8, block_len: usize, options: CompressionOptions) !void {
+    if (block_len == 0) return error.InvalidBlockPlan;
     var offset: usize = 0;
     if (input.len == 0) {
         const plan = try lz77.hashGreedyPlanAlloc(allocator, "", options.lz77_options);
         defer plan.deinit(allocator);
-        try writeDynamicTokens(allocator, &writer, plan.tokens, true);
-        return writer.toOwnedSlice(allocator);
+        return writeDynamicTokens(allocator, writer, plan.tokens, true);
     }
     while (offset < input.len) {
         const n = @min(block_len, input.len - offset);
         const final = offset + n == input.len;
         const plan = try planTokensAlloc(allocator, input[offset..][0..n], options);
         defer plan.deinit(allocator);
-        try writeDynamicTokens(allocator, &writer, plan.tokens, final);
+        try writeDynamicTokens(allocator, writer, plan.tokens, final);
         offset += n;
     }
-    return writer.toOwnedSlice(allocator);
 }
 
 fn trimmedCodeLengthAlphabetCount(lengths: *const [19]u4) usize {
@@ -5050,6 +5053,14 @@ pub fn encodeZlibDynamicWithDictionaryAlloc(allocator: std.mem.Allocator, input:
     return encodeZlibDynamicTokensAlloc(allocator, input, dictionary, plan.tokens);
 }
 
+pub fn encodeZlibDynamicSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    const header_len = try writeWrappedDeflatePrefix(allocator, &writer, null);
+    try writeDynamicSplitBlocks(allocator, &writer, input, block_len, options);
+    return finishZlibFrame(allocator, &writer, input, header_len);
+}
+
 pub fn encodeZlibBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
     if (usesStoredFastPath(input, options)) return encodeZlibStoredAlloc(allocator, input);
     const plan = try planTokensAlloc(allocator, input, options);
@@ -6145,6 +6156,10 @@ pub const ZlibEncoder = struct {
         return try encodeZlibDynamicWithDictionaryAlloc(self.allocator, input, dictionary, options);
     }
 
+    pub fn encodeDynamicSplitAlloc(self: *ZlibEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+        return try encodeZlibDynamicSplitAlloc(self.allocator, input, block_len, options);
+    }
+
     pub fn encodeStoredScratch(self: *ZlibEncoder, input: []const u8) ![]const u8 {
         self.scratch.clearRetainingCapacity();
         _ = try self.encodeStoredAppend(&self.scratch, input);
@@ -6248,6 +6263,12 @@ pub const ZlibEncoder = struct {
     pub fn encodeDynamicWithDictionaryScratch(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]const u8 {
         self.scratch.clearRetainingCapacity();
         _ = try self.encodeDynamicWithDictionaryAppend(&self.scratch, input, dictionary, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeDynamicSplitScratch(self: *ZlibEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeDynamicSplitAppend(&self.scratch, input, block_len, options);
         return self.scratch.items;
     }
 
@@ -6375,6 +6396,14 @@ pub const ZlibEncoder = struct {
         return out.items.len - start;
     }
 
+    pub fn encodeDynamicSplitAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+        const encoded = try self.encodeDynamicSplitAlloc(input, block_len, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
     pub fn encodeStoredIntoSlice(self: *ZlibEncoder, input: []const u8, output: []u8) !usize {
         _ = self;
         return try encodeZlibStored(input, output);
@@ -6485,6 +6514,14 @@ pub const GzipEncoder = struct {
         return try encodeGzipDynamicWithHeaderAlloc(self.allocator, input, options, header_options);
     }
 
+    pub fn encodeDynamicSplitAlloc(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+        return try self.encodeDynamicSplitWithHeaderAlloc(input, block_len, options, .{});
+    }
+
+    pub fn encodeDynamicSplitWithHeaderAlloc(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
+        return try encodeGzipDynamicSplitWithHeaderAlloc(self.allocator, input, block_len, options, header_options);
+    }
+
     pub fn encodeStoredScratch(self: *GzipEncoder, input: []const u8) ![]const u8 {
         self.scratch.clearRetainingCapacity();
         _ = try self.encodeStoredAppend(&self.scratch, input);
@@ -6580,6 +6617,16 @@ pub const GzipEncoder = struct {
     pub fn encodeDynamicWithHeaderScratch(self: *GzipEncoder, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]const u8 {
         self.scratch.clearRetainingCapacity();
         _ = try self.encodeDynamicWithHeaderAppend(&self.scratch, input, options, header_options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeDynamicSplitScratch(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
+        return try self.encodeDynamicSplitWithHeaderScratch(input, block_len, options, .{});
+    }
+
+    pub fn encodeDynamicSplitWithHeaderScratch(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeDynamicSplitWithHeaderAppend(&self.scratch, input, block_len, options, header_options);
         return self.scratch.items;
     }
 
@@ -6681,6 +6728,18 @@ pub const GzipEncoder = struct {
 
     pub fn encodeDynamicWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
         const encoded = try self.encodeDynamicWithHeaderAlloc(input, options, header_options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeDynamicSplitAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+        return try self.encodeDynamicSplitWithHeaderAppend(out, input, block_len, options, .{});
+    }
+
+    pub fn encodeDynamicSplitWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+        const encoded = try self.encodeDynamicSplitWithHeaderAlloc(input, block_len, options, header_options);
         defer self.allocator.free(encoded);
         const start = out.items.len;
         try out.appendSlice(self.allocator, encoded);
@@ -12447,6 +12506,18 @@ pub fn encodeGzipDynamicWithHeaderAlloc(allocator: std.mem.Allocator, input: []c
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
     return encodeGzipDynamicTokensWithHeaderAlloc(allocator, input, plan.tokens, header_options);
+}
+
+pub fn encodeGzipDynamicSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    return encodeGzipDynamicSplitWithHeaderAlloc(allocator, input, block_len, options, .{});
+}
+
+pub fn encodeGzipDynamicSplitWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    _ = try writeGzipPrefixWithOptions(allocator, &writer, header_options);
+    try writeDynamicSplitBlocks(allocator, &writer, input, block_len, options);
+    return finishGzipFrame(allocator, &writer, input);
 }
 
 pub fn encodeGzipBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {

@@ -3556,3 +3556,9 @@ architecture blindly.
   fixed-Huffman split block planning, with root tests checking byte parity
   against the top-level fixed split encoder, invalid block-length errors, and
   decode round trips.
+
+- Added zlib/gzip dynamic split encode helpers and reusable encoder facades.
+  Zlib and gzip callers now have alloc, scratch, and append flows for forced
+  dynamic-Huffman split block planning, including gzip metadata-rich header
+  variants, with root tests checking top-level parity, invalid block-length
+  errors, and strict decode round trips.
