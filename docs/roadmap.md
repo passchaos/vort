@@ -2700,6 +2700,27 @@ architecture blindly.
   fully reverted before complete PNG/reference gates. Do not use generic u128
   shifts to fuse this hot path; a future wide submission would need native
   two-word operations with lower overhead than the current pair of u64 writes.
+- Profiled maximal zero runs across the 30 real filtered payloads before
+  revisiting the rejected short-field batching idea. The corpus contains
+  7,536,859 runs and 133,945,321 zero bytes; 346,725 repeated 258-byte
+  length-285 tokens are emitted, but nearly all long-run opportunity is
+  concentrated in Exoplanet. Runs at least 5,160 bytes occur only in its four
+  adaptive/Up payloads.
+- Tested batching five identical length-285-plus-distance-zero fields into one
+  ordinary 50-bit u64 writer call. A complete-stream oracle compared every
+  all-zero length 1...4,096 against the per-token reference, including the
+  previously problematic 1,304 boundary; all 65 focused tests and output
+  signatures passed. Applying batching to every eligible run nevertheless
+  measured only `0.99258x` adaptive, `0.98972x` Up, `0.99115x` overall, and
+  `0.99199x` aggregate in a CPU-12 21-round 30-payload A/B.
+- A second form moved batching to a noinline helper and used it only above
+  5,160 bytes, with extra exact boundaries around 5,160/6,450/10,320 bytes.
+  A 31-round focused A/B still left the four Exoplanet rows at only
+  `0.98453...1.00391x`, while the non-matching 128-pixel adaptive/Up controls
+  fell to `0.79883/0.85008x` from release-code layout movement. Both forms were
+  fully reverted. Do not batch length-285 output fields in this implementation;
+  future long-zero work should reduce input scanning without changing the
+  compact token-writer shape.
 - Reworked the narrow Brotli static-dictionary slice to resolve identity-word
   addresses relative to the current output length instead of matching only raw
   distance codes. Real Node quality-5 frames now prove additional dictionary
