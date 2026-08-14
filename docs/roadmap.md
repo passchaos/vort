@@ -2053,6 +2053,28 @@ architecture blindly.
   destroyed that code shape. The experiment was fully reverted before any PNG
   corpus run. Do not retry wide u32 vector weights; a future Adler attempt must
   retain narrow-lane dot-product lowering.
+- Added a narrower Adler ILP optimization modeled on zlib-ng's two-block
+  structure without importing target intrinsics. Two independent 64-byte
+  `sum/weighted` folds are exposed to LLVM together, then combined with the
+  exact two-step Adler recurrence; the existing weight vector, u32/NMAX
+  overflow proof, modulo boundary, streaming API, and scalar tail remain.
+  LLVM therefore retains the efficient AVX2/VNNI dot-product lowering rather
+  than generating the rejected wide-weight form.
+- Known vectors, all checksum families, external Zig-std differential cases,
+  63/64/65 and 127/128/129 boundaries, 5,551/5,552/5,553 boundaries, four
+  input alignments, and an all-`0xff` NMAX input remain exact. A CPU-12
+  31-round alternating checksum A/B measured `1.06030x` median and `1.04396x`
+  paired geomean with identical digest mix. On imx's 15-file PNG corpus,
+  21 rounds measured `1.00141x` throughput geomean; the 61-round confirmation
+  measured `1.00219x` adaptive, `1.00287x` Up, `1.00253x` overall, and
+  `1.00457x` aggregate with all 30 output tuples exact.
+- The refreshed formal image-png gate remains effectively unchanged at
+  `0.905x` geomean, `0.903x` aggregate, `0.925x` median, `0.860x` adaptive,
+  `0.951x` Up, and `1.046x` RSS, with all correctness/size/zero-swap checks
+  green. Final Vort test/check passed in 218.40/266.59 seconds at
+  4,125,488/689,176-KiB peak RSS; imx test/check passed in 574.94/95.70
+  seconds at 6,421,264/695,948-KiB. The first three runs kept swap counters
+  stable; imx check observed one page of system swap-in.
 - Rejected forcing the remaining boundary `writeLiterals` helper inline.
   Scalar/fdeflate output stayed byte-exact and two 41-round CPU-12 A/Bs showed
   `1.020x/1.018x` compressed geomeans, but a 121-round repeat reproduced a
