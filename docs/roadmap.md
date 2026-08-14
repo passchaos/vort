@@ -2296,6 +2296,12 @@ architecture blindly.
   `games `, `release `, `dictionary `, and `information ` through both
   preflight and output decode, balancing the earlier leading-space coverage.
 
+- Extended the Brotli static-dictionary trailing-space transform slice with the
+  `history ` entry. A synthetic compressed frame now resolves transform index 1,
+  copy length 7, and word index 37 through both decoded-size preflight and
+  output decode, broadening transform coverage beyond the existing words/games
+  and release/dictionary examples.
+
 - Refactored the narrow Brotli static-dictionary support into a small
   table-driven `(transform, length, word_index)` map instead of separate
   per-transform branch ladders. The table now also covers `words`, `games`, and

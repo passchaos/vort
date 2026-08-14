@@ -4097,6 +4097,7 @@ const minimal_static_dictionary_entries = [_]StaticDictionaryEntry{
     .{ .transform = 0, .copy_len = 16, .word_index = 52, .word = "large number of " },
     .{ .transform = 1, .copy_len = 5, .word_index = 43, .word = "words " },
     .{ .transform = 1, .copy_len = 5, .word_index = 44, .word = "games " },
+    .{ .transform = 1, .copy_len = 7, .word_index = 37, .word = "history " },
     .{ .transform = 1, .copy_len = 7, .word_index = 170, .word = "release " },
     .{ .transform = 1, .copy_len = 7, .word_index = 369, .word = "english " },
     .{ .transform = 1, .copy_len = 10, .word_index = 205, .word = "dictionary " },
@@ -5923,6 +5924,36 @@ test "br minimal static dictionary trailing-space release transform decodes Node
     const expected = "release ";
     try std.testing.expectEqual(expected.len, try decodedStreamSizeLimited(&encoded, expected.len));
     const decoded = try decodeStreamAllocLimited(std.testing.allocator, &encoded, expected.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+}
+
+test "br minimal static dictionary trailing-space history transform decodes synthetic frame" {
+    const expected = "history ";
+
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writer.writeBits(std.testing.allocator, 1, 1); // ISLAST
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISLASTEMPTY = false
+    try writer.writeBits(std.testing.allocator, 0, 2); // MNIBBLES = 4
+    try writer.writeBits(std.testing.allocator, expected.len - 1, 16);
+    try writeBlockTypeCount(std.testing.allocator, &writer, 1); // NBLTYPESL
+    try writeBlockTypeCount(std.testing.allocator, &writer, 1); // NBLTYPESI
+    try writeBlockTypeCount(std.testing.allocator, &writer, 1); // NBLTYPESD
+    try writer.writeBits(std.testing.allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(std.testing.allocator, 0, 4); // NDIRECT
+    try writer.writeBits(std.testing.allocator, 0, 2); // literal context mode
+    try writeBlockTypeCount(std.testing.allocator, &writer, 1); // NTREESL
+    try writeBlockTypeCount(std.testing.allocator, &writer, 1); // NTREESD
+    try writeSimpleSingleSymbolPrefix(std.testing.allocator, &writer, 256, 0); // unused literal tree
+    try writeSimpleSingleSymbolPrefix(std.testing.allocator, &writer, 704, 133); // insert=0, copy_len=7
+    try writeSimpleSingleSymbolPrefix(std.testing.allocator, &writer, 64, 34); // regular distance range 2045..3068
+    try writer.writeBits(std.testing.allocator, 41, 10); // distance 2086 => transform=1, word_index=37
+
+    try std.testing.expectEqual(expected.len, try decodedStreamSizeLimited(encoded.items, expected.len));
+    const decoded = try decodeStreamAllocLimited(std.testing.allocator, encoded.items, expected.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, expected, decoded);
 }
