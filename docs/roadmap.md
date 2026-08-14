@@ -2764,6 +2764,46 @@ architecture blindly.
   unlikely still left 128-pixel adaptive/Up at `0.89402/0.95655x` in a
   31-round focused run and made several Exoplanet rows negative. Both one-line
   experiments were fully reverted. Do not globally bias this bimodal branch.
+- Re-profiled the committed imx real-corpus runner after the rejected allocator
+  experiments. On indexed Exoplanet Up, Vort zlib represented `46.29%` of
+  complete PNG encode, with `writeZeroRun`/`writeLiterals` at
+  `11.57/8.95%`; RGBA lorem Up attributed `16.46/14.83%` to those helpers.
+  Adler and final container copy were smaller, so the next retained change
+  stayed inside the existing 654-line `png_ultrafast.zig` module.
+- Audited the branch reached when a zero run carries from the preceding u64
+  word into a nonzero boundary word. Across the 30 filtered payloads it occurs
+  1,451,701 times. The encoder already loaded the word, counted its prefix and
+  suffix zero bytes, then rebuilt an interior slice of one through seven
+  literals and entered generic `writeLiterals`. It now right-shifts that
+  existing u64 and reuses the established one-through-seven
+  `writeLiteralPrefix` emitter. Zero scanning, token shape, pair tables,
+  reservoir writes, and Adler output remain unchanged.
+- A complete-stream oracle covers every legal prefix/suffix combination, every
+  interior literal position, and values 1...255 after a carried all-zero word.
+  It compares the optimized stream with the scalar writer; all existing
+  boundary-prefix and fdeflate 0.3.7 goldens remain exact. The 65 focused
+  ReleaseFast tests pass.
+- Fixed CPU-12 alternating old/new corpus runs required all 30 sizes,
+  pixel/encoded checksums, and guards to match. The 21-round result was
+  `1.03968x` geomean / `1.02741x` aggregate with all rows positive. The
+  61-round confirmation measured **`1.03648x` geomean, `1.02991x` aggregate,
+  `1.03338x` adaptive, and `1.03959x` Up**; the minimum row was `1.01027x`
+  and swap-page delta stayed zero.
+- The formal 15-file image-png gate retained 15 raw-byte matches, 60
+  cross-decodes, 15 exact Up filtered payloads, Up size non-regression, and
+  zero swap. Current throughput is `0.947x` geomean / `0.931x` aggregate /
+  `0.957x` median, adaptive `0.889x`, and Up **`1.009x`**; encoded-size
+  geomean is `0.99811x` and median RSS remains `1.046x`. Overall real-corpus
+  parity is not yet reached, but fixed Up now clears parity.
+- Post-change profiles no longer show `writeLiterals` above the 0.5% reporting
+  threshold on indexed Exoplanet Up or RGBA lorem Up; `writeZeroRun` remains
+  the leading named Vort helper. Its short-field and long-token batching
+  variants are already rejected, so future work should not repeat them.
+- Final validation passed Vort `zig build test -j1` in 3:37.19 at
+  4,131,124-KiB peak RSS and `zig build check -j1` in 5:05.93 at
+  694,280-KiB. imx codec tests passed in 28.02 seconds at 607,460-KiB,
+  full test in 10:01.21 at 6,429,236-KiB, and full check in 2:56.88 at
+  700,048-KiB. Every measured validation reported zero swap.
 - Reworked the narrow Brotli static-dictionary slice to resolve identity-word
   addresses relative to the current output length instead of matching only raw
   distance codes. Real Node quality-5 frames now prove additional dictionary

@@ -234,12 +234,23 @@ fn writeInput(
             run = 0;
             if (prefix_zeros != 0) {
                 const suffix_zeros = @clz(word) / 8;
-                try writeLiterals(
-                    allocator,
-                    writer,
-                    chunk[prefix_zeros .. 8 - suffix_zeros],
-                    batch_literals,
-                );
+                if (batch_literals) {
+                    const literal_count: u4 =
+                        @intCast(8 - prefix_zeros - suffix_zeros);
+                    try writeLiteralPrefix(
+                        allocator,
+                        writer,
+                        word >> @intCast(prefix_zeros * 8),
+                        literal_count,
+                    );
+                } else {
+                    try writeLiterals(
+                        allocator,
+                        writer,
+                        chunk[prefix_zeros .. 8 - suffix_zeros],
+                        batch_literals,
+                    );
+                }
                 run = suffix_zeros;
                 continue;
             }
@@ -600,6 +611,56 @@ test "direct boundary literal prefixes match scalar writer" {
                 }
                 chunk[varied_position] = @intCast(value);
                 chunk_index += 1;
+            }
+        }
+    }
+    try std.testing.expectEqual(chunk_count, chunk_index);
+    const encoded = try encodeAlloc(std.testing.allocator, &input);
+    defer std.testing.allocator.free(encoded);
+    const scalar = try encodeAllocWithLiteralPolicy(
+        std.testing.allocator,
+        &input,
+        false,
+    );
+    defer std.testing.allocator.free(scalar);
+    try std.testing.expectEqualSlices(u8, scalar, encoded);
+}
+
+test "direct literals after a carried zero run match scalar writer" {
+    const chunk_count = comptime blk: {
+        var count: usize = 0;
+        for (1..8) |prefix_zeros| {
+            for (0..8 - prefix_zeros) |suffix_zeros| {
+                count += (8 - prefix_zeros - suffix_zeros) * 255;
+            }
+        }
+        break :blk count;
+    };
+    var input: [16 * chunk_count]u8 = undefined;
+    var chunk_index: usize = 0;
+    for (1..8) |prefix_zeros| {
+        for (0..8 - prefix_zeros) |suffix_zeros| {
+            const literal_count = 8 - prefix_zeros - suffix_zeros;
+            for (0..literal_count) |varied_position| {
+                for (1..256) |value| {
+                    const carried_zero_chunk =
+                        input[chunk_index * 16 ..][0..8];
+                    @memset(carried_zero_chunk, 0);
+                    const boundary_chunk =
+                        input[chunk_index * 16 + 8 ..][0..8];
+                    @memset(boundary_chunk, 0);
+                    for (
+                        boundary_chunk[prefix_zeros .. prefix_zeros + literal_count],
+                        0..,
+                    ) |*byte, i| {
+                        byte.* = @intCast(
+                            (chunk_index * 31 + i * 43) % 255 + 1,
+                        );
+                    }
+                    boundary_chunk[prefix_zeros + varied_position] =
+                        @intCast(value);
+                    chunk_index += 1;
+                }
             }
         }
     }
