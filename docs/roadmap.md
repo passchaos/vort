@@ -1649,6 +1649,13 @@ architecture blindly.
   `lz4EncodePureFrameAppend` now let library callers choose the pure Zig LZ4
   writer explicitly without dropping into the `lz4` submodule.
 
+- Exposed single-input stored wrapper size preflight helpers through the root
+  module. `rawStoredDeflateEncodedSize`, `zlibStoredEncodedSize`,
+  `zlibStoredWithDictionaryEncodedSize`, and `gzipStoredEncodedSize` now sit
+  beside the existing chunk/header variants so library callers can allocate
+  exact buffers for raw/zlib/gzip stored encodes without reaching into
+  `deflate.zig`.
+
 - Extended the public Zstd frame encode facade with encoded-bound, append, and
   caller-owned into-slice helpers across level/options variants. Library callers
   no longer need to drop to native-specific APIs or allocate an owned frame just
