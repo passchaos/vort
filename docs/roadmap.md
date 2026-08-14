@@ -2013,3 +2013,29 @@ architecture blindly.
   `0.9994x` compressed, `0.9946x` Up, and `0.9890x` RGBA Up. The complete
   experiment was reverted; do not revisit it without a different zero-run
   representation and the expanded oracle.
+
+- Profiled the six generated ultrafast filtered payloads before changing the
+  remaining literal helper. Across 4,197,376 input bytes there were 414,073
+  complete non-zero words and 110,599 boundary literal calls; every boundary
+  call contained exactly seven literals followed by a one-byte zero run. No
+  all-zero eight-byte words occurred. This justified a narrow shape-specific
+  path rather than another generic literal-table experiment.
+- Added a seven-literal PNG-ultrafast path for words ending in exactly one zero.
+  It derives one literal quad and one literal triple from the u64 already
+  loaded for run detection, reducing four reservoir writes to two. All other
+  suffix lengths retain the existing helper. A 1,785-chunk oracle varies every
+  one of the seven literal positions through byte values `1...255` and compares
+  the complete stream against the scalar writer; fdeflate goldens remain exact.
+- Two CPU-12, 41-round alternating A/Bs improved compressed geomean by
+  `1.066x/1.069x`; the second measured `1.073x` adaptive, `1.066x` Up,
+  `1.001x` stored, and `1.046x` overall. A 121-round repeat measured
+  `1.067x` compressed, `1.074x` adaptive, `1.061x` Up, and `1.001x` stored.
+  Every encoded size, checksum, and guard remained exact; the standalone
+  `writeLiterals` symbol disappeared from the post-change profile.
+- The refreshed imx/image-png gate reports `1.011x` overall, `1.006x`
+  adaptive, `0.925x` Up, `1.110x` stored, `0.964x` compressed-only, and
+  `0.966x` RSS. Overall and adaptive now clear parity on the generated matrix,
+  but Up and individual Luma/RGB rows remain below parity. Final validation
+  passed imx PNG focused tests, full `zig build test -j1` in 3:41.26 at
+  4,125,140-KiB peak RSS, and `zig build check -j1` in 4:21.52 at
+  689,188-KiB peak RSS, both with zero swap.
