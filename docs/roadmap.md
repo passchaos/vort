@@ -3532,3 +3532,9 @@ architecture blindly.
   alloc, scratch, and append flows for split block-planning modes, with root
   tests checking byte parity against top-level split encoders, invalid split-plan
   errors, and decode round trips.
+
+- Extended `ZlibEncoder` with best split and adaptive split zlib helpers,
+  including preset-dictionary variants. The reusable facade now exposes alloc,
+  scratch, and append flows for split block-planning modes, with root tests
+  checking byte parity against top-level split zlib encoders, invalid split-plan
+  errors, and strict/dictionary decode round trips.

@@ -5107,6 +5107,7 @@ pub fn encodeZlibBestSplitWithDictionaryAlloc(allocator: std.mem.Allocator, inpu
 }
 
 pub fn encodeZlibBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
+    if (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len) return error.InvalidBlockPlan;
     if (usesStoredFastPath(input, options)) return encodeZlibStoredAlloc(allocator, input);
     const one_shot = try encodeZlibBestAlloc(allocator, input, options);
     errdefer allocator.free(one_shot);
@@ -5115,6 +5116,7 @@ pub fn encodeZlibBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []c
 }
 
 pub fn encodeZlibBestAdaptiveSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
+    if (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len) return error.InvalidBlockPlan;
     if (usesStoredFastPath(input, options)) return encodeZlibStoredWithDictionaryAlloc(allocator, input, dictionary);
     const one_shot = try encodeZlibBestWithDictionaryAlloc(allocator, input, dictionary, options);
     errdefer allocator.free(one_shot);
@@ -6071,6 +6073,22 @@ pub const ZlibEncoder = struct {
         return try encodeZlibBestWithDictionaryAlloc(self.allocator, input, dictionary, options);
     }
 
+    pub fn encodeBestSplitAlloc(self: *ZlibEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+        return try encodeZlibBestSplitAlloc(self.allocator, input, block_len, options);
+    }
+
+    pub fn encodeBestSplitWithDictionaryAlloc(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+        return try encodeZlibBestSplitWithDictionaryAlloc(self.allocator, input, dictionary, block_len, options);
+    }
+
+    pub fn encodeBestAdaptiveSplitAlloc(self: *ZlibEncoder, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
+        return try encodeZlibBestAdaptiveSplitAlloc(self.allocator, input, options, split_options);
+    }
+
+    pub fn encodeBestAdaptiveSplitWithDictionaryAlloc(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
+        return try encodeZlibBestAdaptiveSplitWithDictionaryAlloc(self.allocator, input, dictionary, options, split_options);
+    }
+
     pub fn encodeLevelAlloc(self: *ZlibEncoder, input: []const u8, level: u4) ![]u8 {
         return try encodeZlibLevelAlloc(self.allocator, input, level);
     }
@@ -6140,6 +6158,30 @@ pub const ZlibEncoder = struct {
     pub fn encodeBestWithDictionaryScratch(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]const u8 {
         self.scratch.clearRetainingCapacity();
         _ = try self.encodeBestWithDictionaryAppend(&self.scratch, input, dictionary, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestSplitScratch(self: *ZlibEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestSplitAppend(&self.scratch, input, block_len, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestSplitWithDictionaryScratch(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestSplitWithDictionaryAppend(&self.scratch, input, dictionary, block_len, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestAdaptiveSplitScratch(self: *ZlibEncoder, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestAdaptiveSplitAppend(&self.scratch, input, options, split_options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestAdaptiveSplitWithDictionaryScratch(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestAdaptiveSplitWithDictionaryAppend(&self.scratch, input, dictionary, options, split_options);
         return self.scratch.items;
     }
 
@@ -6219,6 +6261,38 @@ pub const ZlibEncoder = struct {
 
     pub fn encodeBestWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
         const encoded = try self.encodeBestWithDictionaryAlloc(input, dictionary, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestSplitAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+        const encoded = try self.encodeBestSplitAlloc(input, block_len, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestSplitWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+        const encoded = try self.encodeBestSplitWithDictionaryAlloc(input, dictionary, block_len, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestAdaptiveSplitAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
+        const encoded = try self.encodeBestAdaptiveSplitAlloc(input, options, split_options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestAdaptiveSplitWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
+        const encoded = try self.encodeBestAdaptiveSplitWithDictionaryAlloc(input, dictionary, options, split_options);
         defer self.allocator.free(encoded);
         const start = out.items.len;
         try out.appendSlice(self.allocator, encoded);

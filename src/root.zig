@@ -7136,6 +7136,46 @@ test "root zlib encoder reuses stored scratch" {
     try std.testing.expectEqual(best_expected.len, try encoder.encodeBestAppend(&best_appended, payload, best_options));
     try std.testing.expectEqualSlices(u8, best_expected, best_appended.items);
 
+    const split_block_len: usize = 29;
+    const best_split_expected = try encodeZlibBestSplitAlloc(std.testing.allocator, payload, split_block_len, best_options);
+    defer std.testing.allocator.free(best_split_expected);
+    const best_split_owned = try encoder.encodeBestSplitAlloc(payload, split_block_len, best_options);
+    defer std.testing.allocator.free(best_split_owned);
+    try std.testing.expectEqualSlices(u8, best_split_expected, best_split_owned);
+    const best_split_scratch = try encoder.encodeBestSplitScratch(payload, split_block_len, best_options);
+    try std.testing.expectEqualSlices(u8, best_split_expected, best_split_scratch);
+    const best_split_decoded = try decodeZlibAllocExactSize(std.testing.allocator, best_split_scratch, payload.len);
+    defer std.testing.allocator.free(best_split_decoded);
+    try std.testing.expectEqualSlices(u8, payload, best_split_decoded);
+    var best_split_appended: std.ArrayList(u8) = .empty;
+    defer best_split_appended.deinit(std.testing.allocator);
+    try best_split_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(best_split_expected.len, try encoder.encodeBestSplitAppend(&best_split_appended, payload, split_block_len, best_options));
+    try std.testing.expectEqualSlices(u8, best_split_expected, best_split_appended.items["prefix:".len..]);
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.encodeBestSplitAlloc(payload, 0, best_options));
+
+    const adaptive_split_options: AdaptiveSplitOptions = .{
+        .min_block_len = 16,
+        .max_block_len = 32,
+        .sample_len = 8,
+        .search_step = 8,
+    };
+    const best_adaptive_expected = try encodeZlibBestAdaptiveSplitAlloc(std.testing.allocator, payload, best_options, adaptive_split_options);
+    defer std.testing.allocator.free(best_adaptive_expected);
+    const best_adaptive_owned = try encoder.encodeBestAdaptiveSplitAlloc(payload, best_options, adaptive_split_options);
+    defer std.testing.allocator.free(best_adaptive_owned);
+    try std.testing.expectEqualSlices(u8, best_adaptive_expected, best_adaptive_owned);
+    const best_adaptive_scratch = try encoder.encodeBestAdaptiveSplitScratch(payload, best_options, adaptive_split_options);
+    try std.testing.expectEqualSlices(u8, best_adaptive_expected, best_adaptive_scratch);
+    const best_adaptive_decoded = try decodeZlibAllocExactSize(std.testing.allocator, best_adaptive_scratch, payload.len);
+    defer std.testing.allocator.free(best_adaptive_decoded);
+    try std.testing.expectEqualSlices(u8, payload, best_adaptive_decoded);
+    var best_adaptive_appended: std.ArrayList(u8) = .empty;
+    defer best_adaptive_appended.deinit(std.testing.allocator);
+    try std.testing.expectEqual(best_adaptive_expected.len, try encoder.encodeBestAdaptiveSplitAppend(&best_adaptive_appended, payload, best_options, adaptive_split_options));
+    try std.testing.expectEqualSlices(u8, best_adaptive_expected, best_adaptive_appended.items);
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.encodeBestAdaptiveSplitAlloc(payload, best_options, .{ .min_block_len = 0 }));
+
     const level_expected = try encodeZlibLevelAlloc(std.testing.allocator, payload, 1);
     defer std.testing.allocator.free(level_expected);
     const level_owned = try encoder.encodeLevelAlloc(payload, 1);
@@ -7173,6 +7213,45 @@ test "root zlib encoder reuses stored scratch" {
     defer best_dict_appended.deinit(std.testing.allocator);
     try std.testing.expectEqual(best_dict_expected.len, try encoder.encodeBestWithDictionaryAppend(&best_dict_appended, payload, preset_dictionary, dict_options));
     try std.testing.expectEqualSlices(u8, best_dict_expected, best_dict_appended.items);
+
+    const best_dict_split_expected = try encodeZlibBestSplitWithDictionaryAlloc(std.testing.allocator, payload, preset_dictionary, 19, dict_options);
+    defer std.testing.allocator.free(best_dict_split_expected);
+    const best_dict_split_owned = try encoder.encodeBestSplitWithDictionaryAlloc(payload, preset_dictionary, 19, dict_options);
+    defer std.testing.allocator.free(best_dict_split_owned);
+    try std.testing.expectEqualSlices(u8, best_dict_split_expected, best_dict_split_owned);
+    const best_dict_split_scratch = try encoder.encodeBestSplitWithDictionaryScratch(payload, preset_dictionary, 19, dict_options);
+    try std.testing.expectEqualSlices(u8, best_dict_split_expected, best_dict_split_scratch);
+    const best_dict_split_decoded = try decodeZlibAllocWithDictionaryExactSize(std.testing.allocator, best_dict_split_scratch, preset_dictionary, payload.len);
+    defer std.testing.allocator.free(best_dict_split_decoded);
+    try std.testing.expectEqualSlices(u8, payload, best_dict_split_decoded);
+    var best_dict_split_appended: std.ArrayList(u8) = .empty;
+    defer best_dict_split_appended.deinit(std.testing.allocator);
+    try std.testing.expectEqual(best_dict_split_expected.len, try encoder.encodeBestSplitWithDictionaryAppend(&best_dict_split_appended, payload, preset_dictionary, 19, dict_options));
+    try std.testing.expectEqualSlices(u8, best_dict_split_expected, best_dict_split_appended.items);
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.encodeBestSplitWithDictionaryAlloc(payload, preset_dictionary, 0, dict_options));
+
+    const dict_adaptive_split_options: AdaptiveSplitOptions = .{
+        .min_block_len = 16,
+        .max_block_len = 32,
+        .sample_len = 8,
+        .search_step = 8,
+    };
+    const best_dict_adaptive_expected = try encodeZlibBestAdaptiveSplitWithDictionaryAlloc(std.testing.allocator, payload, preset_dictionary, dict_options, dict_adaptive_split_options);
+    defer std.testing.allocator.free(best_dict_adaptive_expected);
+    const best_dict_adaptive_owned = try encoder.encodeBestAdaptiveSplitWithDictionaryAlloc(payload, preset_dictionary, dict_options, dict_adaptive_split_options);
+    defer std.testing.allocator.free(best_dict_adaptive_owned);
+    try std.testing.expectEqualSlices(u8, best_dict_adaptive_expected, best_dict_adaptive_owned);
+    const best_dict_adaptive_scratch = try encoder.encodeBestAdaptiveSplitWithDictionaryScratch(payload, preset_dictionary, dict_options, dict_adaptive_split_options);
+    try std.testing.expectEqualSlices(u8, best_dict_adaptive_expected, best_dict_adaptive_scratch);
+    const best_dict_adaptive_decoded = try decodeZlibAllocWithDictionaryExactSize(std.testing.allocator, best_dict_adaptive_scratch, preset_dictionary, payload.len);
+    defer std.testing.allocator.free(best_dict_adaptive_decoded);
+    try std.testing.expectEqualSlices(u8, payload, best_dict_adaptive_decoded);
+    var best_dict_adaptive_appended: std.ArrayList(u8) = .empty;
+    defer best_dict_adaptive_appended.deinit(std.testing.allocator);
+    try best_dict_adaptive_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(best_dict_adaptive_expected.len, try encoder.encodeBestAdaptiveSplitWithDictionaryAppend(&best_dict_adaptive_appended, payload, preset_dictionary, dict_options, dict_adaptive_split_options));
+    try std.testing.expectEqualSlices(u8, best_dict_adaptive_expected, best_dict_adaptive_appended.items["prefix:".len..]);
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.encodeBestAdaptiveSplitWithDictionaryAlloc(payload, preset_dictionary, dict_options, .{ .min_block_len = 32, .max_block_len = 16 }));
 
     const level_dict_expected = try encodeZlibLevelWithDictionaryAlloc(std.testing.allocator, payload, preset_dictionary, 1);
     defer std.testing.allocator.free(level_dict_expected);
