@@ -2000,6 +2000,22 @@ architecture blindly.
   larger scalar `hash.Adler32.update` sample belongs to imx's stored-PNG helper,
   not the ultrafast zlib encoder. Adler changes were therefore rejected as the
   wrong next layer rather than optimizing the misleading aggregate symbol.
+- Rejected an incremental PNG-ultrafast encoder intended to let imx avoid its
+  complete filtered-image allocation and second payload scan. The state kept
+  eight-byte input grouping across arbitrary updates, continued zero runs
+  across PNG row boundaries, and maintained an incremental Adler footer.
+  Every split point, one-byte updates, variable row updates, the scalar writer,
+  fdeflate goldens, and all 30 real-corpus encoded size/checksum/guard tuples
+  agreed byte-for-byte. Despite that, a CPU-12 21-round imx old/new A/B
+  measured only `0.92936x` adaptive, `0.89383x` Up, `0.91142x` overall
+  geomean, and `0.95060x` aggregate. A second version combined each filter byte
+  and row into one update and added a scalar/vector-verified deferred Adler
+  state that reduces at the normal 5,552-byte boundary instead of per update;
+  it still measured `0.92723x` adaptive, `0.88581x` Up, `0.90628x` overall,
+  and `0.94998x` aggregate. Both versions were fully reverted. The contiguous
+  one-shot loop's compiler optimization and locality are more valuable than
+  avoiding that intermediate scan in this design; do not repeat per-row
+  streaming without retaining the one-shot loop shape.
 - Rejected forcing the remaining boundary `writeLiterals` helper inline.
   Scalar/fdeflate output stayed byte-exact and two 41-round CPU-12 A/Bs showed
   `1.020x/1.018x` compressed geomeans, but a 121-round repeat reproduced a
