@@ -2042,6 +2042,17 @@ architecture blindly.
   one page of system swap-in while check was stable. imx full test/check passed
   in 570.19/64.34 seconds at 6,418,192/693,776-KiB peak RSS with stable swap
   counters.
+- Tested batching eight 64-byte Adler folds into one 512-byte u32-vector
+  weighted sum, aiming to reduce horizontal reductions while preserving the
+  existing 5,552-byte modulo boundary. New differential coverage matched Zig
+  std at 64/512/5,552 boundaries, four input alignments, and an all-`0xff`
+  NMAX worst case; all 17 checksum tests and the external checksum differential
+  passed. The ReleaseFast checksum benchmark nevertheless fell from about
+  `23.65` to `10.57 GiB/s`. LLVM already lowers the 64-byte expression to
+  efficient AVX2/VNNI `vpsadbw`/`vpdpbusd`; the direct 512-byte u32 weighting
+  destroyed that code shape. The experiment was fully reverted before any PNG
+  corpus run. Do not retry wide u32 vector weights; a future Adler attempt must
+  retain narrow-lane dot-product lowering.
 - Rejected forcing the remaining boundary `writeLiterals` helper inline.
   Scalar/fdeflate output stayed byte-exact and two 41-round CPU-12 A/Bs showed
   `1.020x/1.018x` compressed geomeans, but a 121-round repeat reproduced a
