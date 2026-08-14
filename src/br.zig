@@ -204,7 +204,7 @@ const LiteralHistory = struct {
     // decisions. The actual decoder can look back through the full output
     // buffer; this bounded preflight history intentionally grows in audited
     // compatibility slices as we add coverage for farther Brotli distances.
-    tail: [512]u8 = @splat(0),
+    tail: [1024]u8 = @splat(0),
     tail_len: usize = 0,
     tail_start: usize = 0,
     known: bool = true,
@@ -5527,6 +5527,40 @@ test "br minimal compressed stream keeps literal context after distance-two-fift
     try writer.writeBits(std.testing.allocator, 1, 1); // c
 
     const expected = "ab" ++ ("a" ** 255) ++ "abc";
+    try std.testing.expectEqual(@as(usize, expected.len), try decodedStreamSize(encoded.items));
+    const summary = try summarizeStream(encoded.items);
+    try std.testing.expectEqual(@as(usize, expected.len), summary.decoded_bytes);
+    try std.testing.expect(summary.uses_compressed_meta_blocks);
+    try std.testing.expectError(error.OutputLimitExceeded, decodedStreamSizeLimited(encoded.items, expected.len - 1));
+    var into: [expected.len]u8 = undefined;
+    try std.testing.expectEqual(@as(usize, expected.len), try decodeStreamInto(encoded.items, &into));
+    try std.testing.expectEqualSlices(u8, expected, &into);
+    const decoded = try decodeStreamAllocLimited(std.testing.allocator, encoded.items, expected.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+}
+
+test "br minimal compressed stream keeps literal context after distance-five-thirteen copy" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writer.writeBits(std.testing.allocator, 1, 1); // ISLAST
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISLASTEMPTY = false
+    try writer.writeBits(std.testing.allocator, 0, 2); // MNIBBLES = 4
+    try writer.writeBits(std.testing.allocator, 515, 16); // MLEN - 1
+    try writeMinimalCompressedHeaderForContextAfterDistanceFiveThirteenCopy(std.testing.allocator, &writer);
+    try writer.writeBits(std.testing.allocator, 1, 1); // command 464
+    try writer.writeBits(std.testing.allocator, 191, 8); // insert length 513
+    try writer.writeBits(std.testing.allocator, 0, 1); // a
+    try writer.writeBits(std.testing.allocator, 1, 1); // b
+    var i: usize = 0;
+    while (i < 511) : (i += 1) try writer.writeBits(std.testing.allocator, 0, 1); // a
+    try writer.writeBits(std.testing.allocator, 4, 8); // distance 513 extra bits
+    try writer.writeBits(std.testing.allocator, 0, 1); // command 8
+    try writer.writeBits(std.testing.allocator, 1, 1); // c
+
+    const expected = "ab" ++ ("a" ** 511) ++ "abc";
     try std.testing.expectEqual(@as(usize, expected.len), try decodedStreamSize(encoded.items));
     const summary = try summarizeStream(encoded.items);
     try std.testing.expectEqual(@as(usize, expected.len), summary.decoded_bytes);
@@ -12378,6 +12412,34 @@ fn writeMinimalCompressedHeaderForContextAfterDistanceTwoFiftySevenCopy(allocato
     try writer.writeBits(allocator, 8, alphabetBits(704));
 
     try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 28);
+}
+
+fn writeMinimalCompressedHeaderForContextAfterDistanceFiveThirteenCopy(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 0, 4); // NDIRECT
+    try writer.writeBits(allocator, 0, 2); // literal context mode = LSB6
+    try writeBlockTypeCount(allocator, writer, 2); // NTREESL
+    try writeLiteralContextMapForB(allocator, writer);
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESD
+
+    try writer.writeBits(allocator, 1, 2); // simple literal prefix
+    try writer.writeBits(allocator, 1, 2); // NSYM = 2
+    try writer.writeBits(allocator, 'a', alphabetBits(256));
+    try writer.writeBits(allocator, 'b', alphabetBits(256));
+    try writer.writeBits(allocator, 1, 2); // simple literal prefix
+    try writer.writeBits(allocator, 1, 2); // NSYM = 2
+    try writer.writeBits(allocator, 'a', alphabetBits(256));
+    try writer.writeBits(allocator, 'c', alphabetBits(256));
+
+    try writer.writeBits(allocator, 1, 2); // simple insert-copy prefix
+    try writer.writeBits(allocator, 1, 2); // NSYM = 2
+    try writer.writeBits(allocator, 464, alphabetBits(704));
+    try writer.writeBits(allocator, 8, alphabetBits(704));
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 30);
 }
 
 fn writeMinimalCompressedHeaderForLiteralContextFiveTrees(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {

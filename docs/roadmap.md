@@ -2175,6 +2175,12 @@ architecture blindly.
   context, ensuring allocator-returning, summary, limited-size, and caller-buffer
   decode paths agree without materializing full output during preflight.
 
+- Expanded Brotli decoded-size/summary preflight's recent literal history window
+  to 1024 bytes. A compressed context-selected literal regression frame now
+  copies with distance 513 and then decodes another literal from the copied `b`
+  context, extending the same no-full-output preflight parity to the next
+  regular-distance range.
+
 - Added the first narrow Brotli static-dictionary decode slice. A real Node
   quality-5 frame for `hello brotli hello brotli` starts with a copy from
   distance 720 before any bytes have been emitted; Vort now resolves that
