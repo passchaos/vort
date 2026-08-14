@@ -2749,6 +2749,21 @@ architecture blindly.
   scanner remains a valid future candidate only if build-time feature
   partitioning or stronger function-placement control can keep it out of the
   ordinary encoder's release layout.
+- Audited Zig 0.16's standard-memory search as a possible no-new-loop route to
+  the same optimization. `std.mem.findNone(u8, bytes, &.{0})` / `findNonePos`
+  use a scalar nested loop; a local ReleaseFast object confirmed that
+  first-nonzero search compiles to one byte compare per iteration. In contrast,
+  `findScalar` has a vector fast path but expresses the opposite query. The
+  standard helper was therefore rejected before production benchmarking rather
+  than replacing the existing u64 loop with a byte-at-a-time scan.
+- Also tested layout-only hints on the unchanged `word == 0` branch. Real
+  payloads have a 64.14% aggregate zero-word ratio, but distributions range from
+  below 2% on Kodak to above 90% on Exoplanet/Transparency. Marking zero likely
+  improved the 21-round 30-payload geomean by `1.03560x` with 29/30 rows
+  positive, yet regressed the 128-pixel adaptive row to `0.92109x`. Marking it
+  unlikely still left 128-pixel adaptive/Up at `0.89402/0.95655x` in a
+  31-round focused run and made several Exoplanet rows negative. Both one-line
+  experiments were fully reverted. Do not globally bias this bimodal branch.
 - Reworked the narrow Brotli static-dictionary slice to resolve identity-word
   addresses relative to the current output length instead of matching only raw
   distance codes. Real Node quality-5 frames now prove additional dictionary
