@@ -1644,6 +1644,11 @@ architecture blindly.
   External zstd/LZ4 tools remain validation inputs for differential probes, not
   runtime support paths.
 
+- Exposed the dependency-free LZ4 pure-frame encode helpers through the root
+  module. `lz4EncodePureFrameAlloc`, `lz4EncodePureFrameWithOptionsAlloc`, and
+  `lz4EncodePureFrameAppend` now let library callers choose the pure Zig LZ4
+  writer explicitly without dropping into the `lz4` submodule.
+
 - Extended the public Zstd frame encode facade with encoded-bound, append, and
   caller-owned into-slice helpers across level/options variants. Library callers
   no longer need to drop to native-specific APIs or allocate an owned frame just

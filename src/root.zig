@@ -168,6 +168,9 @@ pub const lz4EncodeFrameAlloc = lz4.encodeFrameAlloc;
 pub const lz4EncodeFrameWithLevelAlloc = lz4.encodeFrameWithLevelAlloc;
 pub const lz4EncodeFrameWithOptionsAlloc = lz4.encodeFrameWithOptionsAlloc;
 pub const lz4EncodeFrameWithLevelAndOptionsAlloc = lz4.encodeFrameWithLevelAndOptionsAlloc;
+pub const lz4EncodePureFrameAlloc = lz4.encodePureFrameAlloc;
+pub const lz4EncodePureFrameWithOptionsAlloc = lz4.encodePureFrameWithOptionsAlloc;
+pub const lz4EncodePureFrameAppend = lz4.encodePureFrameAppend;
 pub const lz4EncodeNativeFrameAlloc = lz4.encodeNativeFrameAlloc;
 pub const lz4EncodeNativeFrameWithOptionsAlloc = lz4.encodeNativeFrameWithOptionsAlloc;
 pub const lz4EncodeNativeFrameAppend = lz4.encodeNativeFrameAppend;
@@ -1947,6 +1950,9 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4EncodeFrameWithLevelAlloc;
     _ = lz4EncodeFrameWithOptionsAlloc;
     _ = lz4EncodeFrameWithLevelAndOptionsAlloc;
+    _ = lz4EncodePureFrameAlloc;
+    _ = lz4EncodePureFrameWithOptionsAlloc;
+    _ = lz4EncodePureFrameAppend;
     _ = lz4EncodeNativeFrameAlloc;
     _ = lz4EncodeNativeFrameWithOptionsAlloc;
     _ = lz4EncodeNativeFrameAppend;
@@ -3389,6 +3395,26 @@ test "root lz4 frame options round trip" {
     try std.testing.expectEqualSlices(u8, payload, &lib_chunked_into);
     try std.testing.expectError(error.OutputTooSmall, lz4DecodeFrameChunksIntoExactSize(&lib_chunks, lib_join, lib_chunked_into[0 .. lib_chunked_into.len - 1], payload.len));
     try std.testing.expectError(error.SizeMismatch, lz4DecodeFrameChunksIntoExactSize(&lib_chunks, lib_join, &lib_chunked_into, payload.len - 1));
+    const pure_encoded = try lz4EncodePureFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(pure_encoded);
+    const pure_decoded = try lz4DecodeFrameAlloc(std.testing.allocator, pure_encoded);
+    defer std.testing.allocator.free(pure_decoded);
+    try std.testing.expectEqualSlices(u8, payload, pure_decoded);
+    const pure_with_options = try lz4EncodePureFrameWithOptionsAlloc(std.testing.allocator, payload, .{
+        .include_content_size = false,
+        .content_checksum = false,
+        .block_size_id = .max64kb,
+    });
+    defer std.testing.allocator.free(pure_with_options);
+    const pure_with_options_decoded = try lz4DecodeFrameAlloc(std.testing.allocator, pure_with_options);
+    defer std.testing.allocator.free(pure_with_options_decoded);
+    try std.testing.expectEqualSlices(u8, payload, pure_with_options_decoded);
+    var pure_appended: std.ArrayList(u8) = .empty;
+    defer pure_appended.deinit(std.testing.allocator);
+    try lz4EncodePureFrameAppend(std.testing.allocator, &pure_appended, payload, .{});
+    const pure_appended_decoded = try lz4DecodeFrameAlloc(std.testing.allocator, pure_appended.items);
+    defer std.testing.allocator.free(pure_appended_decoded);
+    try std.testing.expectEqualSlices(u8, payload, pure_appended_decoded);
     const native_encoded = try lz4EncodeNativeFrameAlloc(std.testing.allocator, payload);
     defer std.testing.allocator.free(native_encoded);
     const native_with_options = try lz4EncodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, .{
