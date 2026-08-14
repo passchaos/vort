@@ -6994,6 +6994,23 @@ test "root raw deflate encoder reuses stored scratch" {
     defer std.testing.allocator.free(dynamic_decoded);
     try std.testing.expectEqualSlices(u8, payload, dynamic_decoded);
 
+    const dynamic_split_expected = try encodeRawDynamicSplitAlloc(std.testing.allocator, payload, 23, dynamic_options);
+    defer std.testing.allocator.free(dynamic_split_expected);
+    const dynamic_split_owned = try encoder.encodeDynamicSplitAlloc(payload, 23, dynamic_options);
+    defer std.testing.allocator.free(dynamic_split_owned);
+    try std.testing.expectEqualSlices(u8, dynamic_split_expected, dynamic_split_owned);
+    const dynamic_split_scratch = try encoder.encodeDynamicSplitScratch(payload, 23, dynamic_options);
+    try std.testing.expectEqualSlices(u8, dynamic_split_expected, dynamic_split_scratch);
+    const dynamic_split_decoded = try decodeRawDeflateAllocExactSize(std.testing.allocator, dynamic_split_scratch, payload.len);
+    defer std.testing.allocator.free(dynamic_split_decoded);
+    try std.testing.expectEqualSlices(u8, payload, dynamic_split_decoded);
+    var dynamic_split_appended: std.ArrayList(u8) = .empty;
+    defer dynamic_split_appended.deinit(std.testing.allocator);
+    try dynamic_split_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(dynamic_split_expected.len, try encoder.encodeDynamicSplitAppend(&dynamic_split_appended, payload, 23, dynamic_options));
+    try std.testing.expectEqualSlices(u8, dynamic_split_expected, dynamic_split_appended.items["prefix:".len..]);
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.encodeDynamicSplitAlloc(payload, 0, dynamic_options));
+
     const dynamic_dict_expected = try encodeRawDynamicWithDictionaryAlloc(std.testing.allocator, dict_payload, preset_dictionary, dynamic_options);
     defer std.testing.allocator.free(dynamic_dict_expected);
     const dynamic_dict_owned = try encoder.encodeDynamicWithDictionaryAlloc(dict_payload, preset_dictionary, dynamic_options);
