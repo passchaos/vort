@@ -2181,6 +2181,13 @@ architecture blindly.
   context, extending the same no-full-output preflight parity to the next
   regular-distance range.
 
+- Improved Brotli decoded-size/summary preflight for copies beyond its bounded
+  recent-history window. If a later literal block is context-independent because
+  all 64 literal contexts select the same tree, preflight now continues decoding
+  instead of returning `UnsupportedBrotliFeature`; a distance-1025 compressed
+  regression frame covers decoded-size, summary, limited, and caller-buffer
+  decode parity.
+
 - Added the first narrow Brotli static-dictionary decode slice. A real Node
   quality-5 frame for `hello brotli hello brotli` starts with a copy from
   distance 720 before any bytes have been emitted; Vort now resolves that
