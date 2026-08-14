@@ -3550,3 +3550,9 @@ architecture blindly.
   split block planning, with root tests checking byte parity against the
   top-level dynamic split encoder, invalid block-length errors, and decode round
   trips.
+
+- Extended `RawDeflateEncoder` with fixed split raw deflate helpers. The
+  reusable facade now exposes alloc, scratch, and append flows for forced
+  fixed-Huffman split block planning, with root tests checking byte parity
+  against the top-level fixed split encoder, invalid block-length errors, and
+  decode round trips.

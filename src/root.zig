@@ -6815,6 +6815,23 @@ test "root raw deflate encoder reuses stored scratch" {
     try std.testing.expectEqual(fixed_options_expected.len, try encoder.encodeFixedWithOptionsAppend(&fixed_options_appended, payload, fixed_options));
     try std.testing.expectEqualSlices(u8, fixed_options_expected, fixed_options_appended.items);
 
+    const fixed_split_expected = try encodeRawFixedSplitAlloc(std.testing.allocator, payload, 23, fixed_options);
+    defer std.testing.allocator.free(fixed_split_expected);
+    const fixed_split_owned = try encoder.encodeFixedSplitAlloc(payload, 23, fixed_options);
+    defer std.testing.allocator.free(fixed_split_owned);
+    try std.testing.expectEqualSlices(u8, fixed_split_expected, fixed_split_owned);
+    const fixed_split_scratch = try encoder.encodeFixedSplitScratch(payload, 23, fixed_options);
+    try std.testing.expectEqualSlices(u8, fixed_split_expected, fixed_split_scratch);
+    const fixed_split_decoded = try decodeRawDeflateAllocExactSize(std.testing.allocator, fixed_split_scratch, payload.len);
+    defer std.testing.allocator.free(fixed_split_decoded);
+    try std.testing.expectEqualSlices(u8, payload, fixed_split_decoded);
+    var fixed_split_appended: std.ArrayList(u8) = .empty;
+    defer fixed_split_appended.deinit(std.testing.allocator);
+    try fixed_split_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(fixed_split_expected.len, try encoder.encodeFixedSplitAppend(&fixed_split_appended, payload, 23, fixed_options));
+    try std.testing.expectEqualSlices(u8, fixed_split_expected, fixed_split_appended.items["prefix:".len..]);
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.encodeFixedSplitAlloc(payload, 0, fixed_options));
+
     const best_options = optionsForCompressionLevel(.fastest);
     const best_expected = try encodeRawBestAlloc(std.testing.allocator, payload, best_options);
     defer std.testing.allocator.free(best_expected);

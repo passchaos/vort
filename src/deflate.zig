@@ -5759,6 +5759,10 @@ pub const RawDeflateEncoder = struct {
         return try encodeRawFixedWithDictionaryAlloc(self.allocator, input, dictionary, options);
     }
 
+    pub fn encodeFixedSplitAlloc(self: *RawDeflateEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+        return try encodeRawFixedSplitAlloc(self.allocator, input, block_len, options);
+    }
+
     pub fn encodeBestAlloc(self: *RawDeflateEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
         return try encodeRawBestAlloc(self.allocator, input, options);
     }
@@ -5832,6 +5836,12 @@ pub const RawDeflateEncoder = struct {
     pub fn encodeFixedWithDictionaryScratch(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]const u8 {
         self.scratch.clearRetainingCapacity();
         _ = try self.encodeFixedWithDictionaryAppend(&self.scratch, input, dictionary, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeFixedSplitScratch(self: *RawDeflateEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeFixedSplitAppend(&self.scratch, input, block_len, options);
         return self.scratch.items;
     }
 
@@ -5929,6 +5939,14 @@ pub const RawDeflateEncoder = struct {
 
     pub fn encodeFixedWithDictionaryAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
         const encoded = try self.encodeFixedWithDictionaryAlloc(input, dictionary, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeFixedSplitAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+        const encoded = try self.encodeFixedSplitAlloc(input, block_len, options);
         defer self.allocator.free(encoded);
         const start = out.items.len;
         try out.appendSlice(self.allocator, encoded);
