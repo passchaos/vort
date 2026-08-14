@@ -7458,7 +7458,7 @@ fn emitSequenceHuffmanLiteralsSection(
 
     var compressed: std.ArrayList(u8) = .empty;
     defer compressed.deinit(allocator);
-    try emitHuffmanLiteralsSectionWithPlan(allocator, &compressed, literals.items, plan, huffman_tree.items, false);
+    try emitHuffmanLiteralsSectionWithPlan(allocator, &compressed, literals.items, plan, huffman_tree.items, false) orelse return false;
 
     const raw_header_len = try literalsHeaderLen(info.regenerated_len);
     const raw_len = std.math.add(usize, raw_header_len, info.payload_len) catch return error.IntegerOverflow;
@@ -7559,9 +7559,12 @@ fn sequenceHuffmanLiteralsSectionLen(
         tail_start,
         info.regenerated_len,
         plan,
-    );
+    ) orelse return null;
     const compressed_size = std.math.add(usize, tree_len, streams_len) catch return error.IntegerOverflow;
-    const header_len = try huffmanLiteralsHeaderLen(info.regenerated_len, compressed_size);
+    const header_len = huffmanLiteralsHeaderLen(info.regenerated_len, compressed_size) catch |err| switch (err) {
+        error.UnsupportedZstdFeature => return null,
+        else => return err,
+    };
     return std.math.add(usize, header_len, compressed_size) catch return error.IntegerOverflow;
 }
 
@@ -7622,7 +7625,7 @@ fn smallHuffmanLiteralStreamsSerializedLenFromSequence(
     tail_start: usize,
     regenerated_len: usize,
     plan: SmallHuffmanLiteralPlan,
-) Error!usize {
+) Error!?usize {
     var bit_counts: [4]usize = .{ 0, 0, 0, 0 };
     var literal_index: usize = 0;
     const segment_len = if (regenerated_len <= 1023) regenerated_len else (regenerated_len + 3) / 4;
@@ -7644,7 +7647,7 @@ fn smallHuffmanLiteralStreamsSerializedLenFromSequence(
     var len: usize = 6;
     for (bit_counts) |bits| {
         const stream_len = (bits + 1 + 7) / 8;
-        if (stream_len > std.math.maxInt(u16)) return error.UnsupportedZstdFeature;
+        if (stream_len > std.math.maxInt(u16)) return null;
         len = std.math.add(usize, len, stream_len) catch return error.IntegerOverflow;
     }
     return len;
@@ -8544,7 +8547,7 @@ fn emitSmallHuffmanLiteralBlock(allocator: std.mem.Allocator, out: *std.ArrayLis
 
     var payload: std.ArrayList(u8) = .empty;
     defer payload.deinit(allocator);
-    try emitHuffmanLiteralsSectionWithPlan(allocator, &payload, block, plan, huffman_tree.items, reuse_previous_tree);
+    try emitHuffmanLiteralsSectionWithPlan(allocator, &payload, block, plan, huffman_tree.items, reuse_previous_tree) orelse return false;
     try payload.append(allocator, 0); // sequence_count=0: this block is literals-only.
 
     if (payload.items.len >= block.len) return false;
@@ -8636,13 +8639,13 @@ fn emitHuffmanLiteralsSectionWithPlan(
     plan: SmallHuffmanLiteralPlan,
     huffman_tree: []const u8,
     reuse_previous_tree: bool,
-) Error!void {
+) Error!?void {
     if (literals.len <= 1023) {
         var stream: std.ArrayList(u8) = .empty;
         defer stream.deinit(allocator);
         try emitSmallHuffmanStream(allocator, &stream, literals, plan);
         const compressed_size = huffman_tree.len + stream.items.len;
-        try emitHuffmanLiteralsHeader(allocator, out, literals.len, compressed_size, reuse_previous_tree);
+        try emitHuffmanLiteralsHeader(allocator, out, literals.len, compressed_size, reuse_previous_tree) orelse return null;
         try out.appendSlice(allocator, huffman_tree);
         try out.appendSlice(allocator, stream.items);
     } else {
@@ -8670,8 +8673,8 @@ fn emitHuffmanLiteralsSectionWithPlan(
             streams[0].items.len + streams[1].items.len + streams[2].items.len + streams[3].items.len;
         if (streams[0].items.len > std.math.maxInt(u16) or
             streams[1].items.len > std.math.maxInt(u16) or
-            streams[2].items.len > std.math.maxInt(u16)) return error.UnsupportedZstdFeature;
-        try emitHuffmanLiteralsHeader(allocator, out, literals.len, compressed_size, reuse_previous_tree);
+            streams[2].items.len > std.math.maxInt(u16)) return null;
+        try emitHuffmanLiteralsHeader(allocator, out, literals.len, compressed_size, reuse_previous_tree) orelse return null;
         try out.appendSlice(allocator, huffman_tree);
         var stream_lengths: [6]u8 = undefined;
         std.mem.writeInt(u16, stream_lengths[0..2], @intCast(streams[0].items.len), .little);
@@ -9752,7 +9755,7 @@ fn emitHuffmanLiteralsHeader(
     regenerated_size: usize,
     compressed_size: usize,
     treeless: bool,
-) Error!void {
+) Error!?void {
     if (compressed_size == 0) return error.CorruptFrame;
     const kind_bits: u8 = if (treeless) 0x03 else 0x02;
     if (regenerated_size <= 0x3ff and compressed_size <= 0x3ff) {
@@ -9773,9 +9776,7 @@ fn emitHuffmanLiteralsHeader(
         try out.append(allocator, @truncate(value >> 12));
         try out.append(allocator, @truncate(value >> 20));
         try out.append(allocator, @truncate(value >> 28));
-    } else {
-        return error.UnsupportedZstdFeature;
-    }
+    } else return null;
 }
 
 fn emitCompressedLiteralsHeader(
@@ -9784,7 +9785,7 @@ fn emitCompressedLiteralsHeader(
     regenerated_size: usize,
     compressed_size: usize,
 ) Error!void {
-    return try emitHuffmanLiteralsHeader(allocator, out, regenerated_size, compressed_size, false);
+    _ = try emitHuffmanLiteralsHeader(allocator, out, regenerated_size, compressed_size, false) orelse return error.UnsupportedZstdFeature;
 }
 
 fn emitRawBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!void {
@@ -12280,6 +12281,30 @@ test "zstd Huffman literal headers reject zero compressed size as corrupt" {
     try std.testing.expectError(error.CorruptFrame, huffmanLiteralsHeaderLen(1, 0));
     try std.testing.expectError(error.CorruptFrame, emitHuffmanLiteralsHeader(std.testing.allocator, &out, 1, 0, false));
     try std.testing.expectError(error.CorruptFrame, emitHuffmanLiteralsHeader(std.testing.allocator, &out, 1, 0, true));
+    try std.testing.expectEqual(@as(usize, 0), out.items.len);
+
+    try std.testing.expectError(error.UnsupportedZstdFeature, huffmanLiteralsHeaderLen(0x4_0000, 1));
+    try std.testing.expectEqual(@as(?void, null), try emitHuffmanLiteralsHeader(std.testing.allocator, &out, 0x4_0000, 1, false));
+    try std.testing.expectEqual(@as(usize, 0), out.items.len);
+
+    const payload = try std.testing.allocator.alloc(u8, 180_000);
+    defer std.testing.allocator.free(payload);
+    @memset(payload, 'a');
+    var plan = SmallHuffmanLiteralPlan{
+        .len = 1,
+        .max_symbol = 'a',
+        .max_bit_count = 11,
+    };
+    plan.symbols[0] = 'a';
+    plan.weights[0] = 0;
+    try std.testing.expectEqual(@as(?usize, null), try smallHuffmanLiteralStreamsSerializedLenFromSequence(
+        payload,
+        &.{},
+        &.{},
+        0,
+        payload.len,
+        plan,
+    ));
     try std.testing.expectEqual(@as(usize, 0), out.items.len);
 }
 

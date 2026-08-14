@@ -1666,6 +1666,12 @@ architecture blindly.
   output, matching the existing allocator-returning and append limited behavior
   without adding CLI surface.
 
+- Tightened Zstd Huffman-literals candidate handling. Oversized Huffman literal
+  headers or four-stream length fields now decline the compressed-literals
+  candidate and fall back to raw literals instead of failing the whole encode
+  with `UnsupportedZstdFeature`, preserving correctness while keeping the
+  candidate encoder bounded by the wire-format limits.
+
 - Added a dependency-free Brotli `br` bootstrap module for stored/uncompressed
   streams. `src/br.zig` emits RFC-valid WBITS=16 streams with uncompressed
   meta-blocks plus final empty terminators, decodes the same stored subset with
