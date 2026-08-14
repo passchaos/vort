@@ -1229,6 +1229,8 @@ pub const encodeRawFixedWithOptionsAlloc = deflate.encodeRawFixedWithOptionsAllo
 pub const encodeRawFixedWithOptionsAppend = deflate.encodeRawFixedWithOptionsAppend;
 pub const RawDeflateEncoder = deflate.RawDeflateEncoder;
 pub const RawDeflateDecoder = deflate.RawDeflateDecoder;
+pub const DeflateDecodeResult = deflate.DecodeResult;
+pub const DeflateOwnedDecodeResult = deflate.OwnedDecodeResult;
 pub const RawDeflateProbeResult = deflate.RawDeflateProbeResult;
 pub const DecodeProbeResult = deflate.DecodeProbeResult;
 pub const CompressionOptions = deflate.CompressionOptions;
@@ -1261,13 +1263,16 @@ pub const encodeRawStoredDeflateAppend = deflate.encodeRawStoredAppend;
 pub const decodeRawStoredDeflateAlloc = deflate.decodeRawStoredAlloc;
 pub const decodeRawStoredDeflateAllocExactSize = deflate.decodeRawStoredAllocExactSize;
 pub const decodeRawStoredDeflateAllocLimited = deflate.decodeRawStoredAllocLimited;
+pub const decodeRawStoredDeflateAllocPartial = deflate.decodeRawStoredAllocPartial;
 pub const decodeRawFixed = deflate.decodeRawFixed;
 pub const decodeRawFixedAlloc = deflate.decodeRawFixedAllocStrict;
+pub const decodeRawFixedAllocPartial = deflate.decodeRawFixedAlloc;
 pub const decodeRawDeflate = deflate.decodeRawAuto;
 pub const decodeRawDeflateWithDictionary = deflate.decodeRawAutoWithDictionary;
 pub const decodeRawDeflateChunks = deflate.decodeRawChunks;
 pub const decodeRawDeflateChunksWithDictionary = deflate.decodeRawChunksWithDictionary;
 pub const decodeRawDeflateAlloc = deflate.decodeRawAutoAlloc;
+pub const decodeRawDeflateAllocPartial = deflate.decodeRawAutoAllocPartial;
 pub const decodeRawDeflateAllocExactSize = deflate.decodeRawAutoAllocExactSize;
 pub const decodeRawDeflateAllocLimited = deflate.decodeRawAutoAllocLimited;
 pub const decodeRawDeflateAllocWithDictionary = deflate.decodeRawAutoAllocWithDictionary;
@@ -1304,6 +1309,7 @@ pub const probeRawDeflateChunksWithDictionary = deflate.probeRawChunksWithDictio
 pub const probeRawDeflateChunksExactSize = deflate.probeRawChunksExactSize;
 pub const probeRawDeflateChunksWithDictionaryExactSize = deflate.probeRawChunksWithDictionaryExactSize;
 pub const decodeRawDynamicAlloc = deflate.decodeRawDynamicAllocStrict;
+pub const decodeRawDynamicAllocPartial = deflate.decodeRawDynamicAlloc;
 pub const encodeZlibStored = deflate.encodeZlibStored;
 pub const zlibStoredEncodedSize = deflate.zlibStoredEncodedSize;
 pub const zlibStoredWithDictionaryEncodedSize = deflate.zlibStoredWithDictionaryEncodedSize;
@@ -6565,6 +6571,8 @@ test "root exports chunked compatibility decode helpers" {
     _ = ZlibEncoder;
     _ = GzipEncoder;
     _ = RawDeflateDecoder;
+    _ = DeflateDecodeResult;
+    _ = DeflateOwnedDecodeResult;
     _ = RawDeflateProbeResult;
     _ = DecodeProbeResult;
     _ = parseRawDeflateHeaderInfoFromChunks;
@@ -6606,6 +6614,10 @@ test "root exports chunked compatibility decode helpers" {
     _ = encodeRawStoredDeflateChunks;
     _ = encodeRawStoredDeflateChunksAlloc;
     _ = encodeRawStoredDeflateChunksAppend;
+    _ = decodeRawStoredDeflateAllocPartial;
+    _ = decodeRawFixedAllocPartial;
+    _ = decodeRawDynamicAllocPartial;
+    _ = decodeRawDeflateAllocPartial;
 
     _ = decodeZlibChunks;
     _ = decodeZlibChunksWithDictionary;
@@ -6868,6 +6880,46 @@ test "root raw deflate append decode helpers preserve prefixes" {
     try std.testing.expectEqual(payload.len, try decodeRawDeflateChunksAppendLimited(std.testing.allocator, &appended, &chunks, join, payload.len));
     try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, appended.items);
     try std.testing.expectError(error.OutputLimitExceeded, decodeRawDeflateChunksAppendLimited(std.testing.allocator, &appended, &chunks, join, payload.len - 1));
+}
+
+test "root raw deflate partial alloc helpers report consumed input" {
+    const trailing = "trailing bytes";
+
+    const stored = try encodeRawStoredDeflateAlloc(std.testing.allocator, "stored partial payload");
+    defer std.testing.allocator.free(stored);
+    const stored_with_trailing = try std.mem.concat(std.testing.allocator, u8, &.{ stored, trailing });
+    defer std.testing.allocator.free(stored_with_trailing);
+    const stored_partial = try decodeRawStoredDeflateAllocPartial(std.testing.allocator, stored_with_trailing);
+    defer stored_partial.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, stored.len), stored_partial.input_read);
+    try std.testing.expectEqualSlices(u8, "stored partial payload", stored_partial.bytes);
+    try std.testing.expectError(error.TrailingData, decodeRawStoredDeflateAlloc(std.testing.allocator, stored_with_trailing));
+
+    const fixed = try encodeRawFixedDeflateAlloc(std.testing.allocator, "fixed partial payload");
+    defer std.testing.allocator.free(fixed);
+    const fixed_with_trailing = try std.mem.concat(std.testing.allocator, u8, &.{ fixed, trailing });
+    defer std.testing.allocator.free(fixed_with_trailing);
+    const fixed_partial = try decodeRawFixedAllocPartial(std.testing.allocator, fixed_with_trailing);
+    defer fixed_partial.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, fixed.len), fixed_partial.input_read);
+    try std.testing.expectEqualSlices(u8, "fixed partial payload", fixed_partial.bytes);
+    try std.testing.expectError(error.TrailingData, decodeRawFixedAlloc(std.testing.allocator, fixed_with_trailing));
+
+    const dynamic = try encodeRawDynamicLiteralAlloc(std.testing.allocator, "dynamic partial payload");
+    defer std.testing.allocator.free(dynamic);
+    const dynamic_with_trailing = try std.mem.concat(std.testing.allocator, u8, &.{ dynamic, trailing });
+    defer std.testing.allocator.free(dynamic_with_trailing);
+    const dynamic_partial = try decodeRawDynamicAllocPartial(std.testing.allocator, dynamic_with_trailing);
+    defer dynamic_partial.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, dynamic.len), dynamic_partial.input_read);
+    try std.testing.expectEqualSlices(u8, "dynamic partial payload", dynamic_partial.bytes);
+    try std.testing.expectError(error.TrailingData, decodeRawDynamicAlloc(std.testing.allocator, dynamic_with_trailing));
+
+    const auto_partial = try decodeRawDeflateAllocPartial(std.testing.allocator, dynamic_with_trailing);
+    defer auto_partial.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, dynamic.len), auto_partial.input_read);
+    try std.testing.expectEqualSlices(u8, "dynamic partial payload", auto_partial.bytes);
+    try std.testing.expectError(error.TrailingData, decodeRawDeflateAlloc(std.testing.allocator, dynamic_with_trailing));
 }
 
 test "root stored deflate wrapper append encode helpers preserve prefixes" {

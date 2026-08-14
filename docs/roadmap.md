@@ -1656,6 +1656,12 @@ architecture blindly.
   exact buffers for raw/zlib/gzip stored encodes without reaching into
   `deflate.zig`.
 
+- Exposed root-level raw deflate partial allocator decode helpers and their
+  owned-result type. `decodeRawStoredDeflateAllocPartial`,
+  `decodeRawFixedAllocPartial`, `decodeRawDynamicAllocPartial`, and
+  `decodeRawDeflateAllocPartial` let library callers decode the first raw
+  member and inspect `input_read` before deciding how to handle trailing bytes.
+
 - Extended the public Zstd frame encode facade with encoded-bound, append, and
   caller-owned into-slice helpers across level/options variants. Library callers
   no longer need to drop to native-specific APIs or allocate an owned frame just
