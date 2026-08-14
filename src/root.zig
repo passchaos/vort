@@ -1268,23 +1268,41 @@ pub const encodeZlibStoredChunks = deflate.encodeZlibStoredChunks;
 pub const encodeZlibStoredWithDictionaryChunks = deflate.encodeZlibStoredWithDictionaryChunks;
 pub const encodeZlibStoredWithDictionary = deflate.encodeZlibStoredWithDictionary;
 pub const encodeZlibFixedAlloc = deflate.encodeZlibFixedAlloc;
+pub const encodeZlibFixedAppend = deflate.encodeZlibFixedAppend;
 pub const encodeZlibFixedWithDictionaryAlloc = deflate.encodeZlibFixedWithDictionaryAlloc;
+pub const encodeZlibFixedWithDictionaryAppend = deflate.encodeZlibFixedWithDictionaryAppend;
 pub const encodeZlibFixedSplitAlloc = deflate.encodeZlibFixedSplitAlloc;
+pub const encodeZlibFixedSplitAppend = deflate.encodeZlibFixedSplitAppend;
 pub const encodeZlibFixedSplitWithDictionaryAlloc = deflate.encodeZlibFixedSplitWithDictionaryAlloc;
+pub const encodeZlibFixedSplitWithDictionaryAppend = deflate.encodeZlibFixedSplitWithDictionaryAppend;
 pub const encodeZlibBestAlloc = deflate.encodeZlibBestAlloc;
+pub const encodeZlibBestAppend = deflate.encodeZlibBestAppend;
 pub const encodeZlibBestWithDictionaryAlloc = deflate.encodeZlibBestWithDictionaryAlloc;
+pub const encodeZlibBestWithDictionaryAppend = deflate.encodeZlibBestWithDictionaryAppend;
 pub const encodeZlibLevelAlloc = deflate.encodeZlibLevelAlloc;
+pub const encodeZlibLevelAppend = deflate.encodeZlibLevelAppend;
 pub const encodeZlibLevelWithDictionaryAlloc = deflate.encodeZlibLevelWithDictionaryAlloc;
+pub const encodeZlibLevelWithDictionaryAppend = deflate.encodeZlibLevelWithDictionaryAppend;
 pub const encodeZlibBestSplitAlloc = deflate.encodeZlibBestSplitAlloc;
+pub const encodeZlibBestSplitAppend = deflate.encodeZlibBestSplitAppend;
 pub const encodeZlibBestSplitWithDictionaryAlloc = deflate.encodeZlibBestSplitWithDictionaryAlloc;
+pub const encodeZlibBestSplitWithDictionaryAppend = deflate.encodeZlibBestSplitWithDictionaryAppend;
 pub const encodeZlibBestAdaptiveSplitAlloc = deflate.encodeZlibBestAdaptiveSplitAlloc;
+pub const encodeZlibBestAdaptiveSplitAppend = deflate.encodeZlibBestAdaptiveSplitAppend;
 pub const encodeZlibBestAdaptiveSplitWithDictionaryAlloc = deflate.encodeZlibBestAdaptiveSplitWithDictionaryAlloc;
+pub const encodeZlibBestAdaptiveSplitWithDictionaryAppend = deflate.encodeZlibBestAdaptiveSplitWithDictionaryAppend;
 pub const encodeZlibDynamicLiteralAlloc = deflate.encodeZlibDynamicLiteralAlloc;
+pub const encodeZlibDynamicLiteralAppend = deflate.encodeZlibDynamicLiteralAppend;
 pub const encodeZlibDynamicWithOptionsAlloc = deflate.encodeZlibDynamicWithOptionsAlloc;
+pub const encodeZlibDynamicWithOptionsAppend = deflate.encodeZlibDynamicWithOptionsAppend;
 pub const encodeZlibDynamicWithDictionaryAlloc = deflate.encodeZlibDynamicWithDictionaryAlloc;
+pub const encodeZlibDynamicWithDictionaryAppend = deflate.encodeZlibDynamicWithDictionaryAppend;
 pub const encodeZlibDynamicSplitAlloc = deflate.encodeZlibDynamicSplitAlloc;
+pub const encodeZlibDynamicSplitAppend = deflate.encodeZlibDynamicSplitAppend;
 pub const encodeZlibDynamicSplitWithDictionaryAlloc = deflate.encodeZlibDynamicSplitWithDictionaryAlloc;
+pub const encodeZlibDynamicSplitWithDictionaryAppend = deflate.encodeZlibDynamicSplitWithDictionaryAppend;
 pub const encodeZlibFixedWithOptionsAlloc = deflate.encodeZlibFixedWithOptionsAlloc;
+pub const encodeZlibFixedWithOptionsAppend = deflate.encodeZlibFixedWithOptionsAppend;
 pub const ZlibHeaderInfo = deflate.ZlibHeaderInfo;
 pub const ZlibStreamInfo = deflate.ZlibStreamInfo;
 pub const ZlibDecodeOptions = deflate.ZlibDecodeOptions;
@@ -6935,6 +6953,174 @@ test "root raw deflate non-stored append encode helpers preserve prefixes" {
     const dict_decoded = try decodeRawDeflateAllocWithDictionaryExactSize(std.testing.allocator, dynamic_dict_split_appended.items[prefix.len..], preset_dictionary, dict_payload.len);
     defer std.testing.allocator.free(dict_decoded);
     try std.testing.expectEqualSlices(u8, dict_payload, dict_decoded);
+}
+
+test "root zlib non-stored append encode helpers preserve prefixes" {
+    const prefix = "prefix:";
+    const payload = "root zlib non-stored append encode payload " ** 2;
+    const preset_dictionary = "root zlib non-stored append dictionary";
+    const fixed_options = optionsForCompressionLevel(.fast);
+    const dynamic_options = optionsForCompressionLevel(.default);
+    const best_options = optionsForCompressionLevel(.fastest);
+    const adaptive_split_options: AdaptiveSplitOptions = .{
+        .min_block_len = 16,
+        .max_block_len = 32,
+        .sample_len = 8,
+        .search_step = 8,
+    };
+
+    const fixed_expected = try encodeZlibFixedAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(fixed_expected);
+    var fixed_appended: std.ArrayList(u8) = .empty;
+    defer fixed_appended.deinit(std.testing.allocator);
+    try fixed_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(fixed_expected.len, try encodeZlibFixedAppend(std.testing.allocator, &fixed_appended, payload));
+    try std.testing.expectEqualSlices(u8, fixed_expected, fixed_appended.items[prefix.len..]);
+
+    const fixed_options_expected = try encodeZlibFixedWithOptionsAlloc(std.testing.allocator, payload, fixed_options);
+    defer std.testing.allocator.free(fixed_options_expected);
+    var fixed_options_appended: std.ArrayList(u8) = .empty;
+    defer fixed_options_appended.deinit(std.testing.allocator);
+    try fixed_options_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(fixed_options_expected.len, try encodeZlibFixedWithOptionsAppend(std.testing.allocator, &fixed_options_appended, payload, fixed_options));
+    try std.testing.expectEqualSlices(u8, fixed_options_expected, fixed_options_appended.items[prefix.len..]);
+
+    const fixed_split_expected = try encodeZlibFixedSplitAlloc(std.testing.allocator, payload, 23, fixed_options);
+    defer std.testing.allocator.free(fixed_split_expected);
+    var fixed_split_appended: std.ArrayList(u8) = .empty;
+    defer fixed_split_appended.deinit(std.testing.allocator);
+    try fixed_split_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(fixed_split_expected.len, try encodeZlibFixedSplitAppend(std.testing.allocator, &fixed_split_appended, payload, 23, fixed_options));
+    try std.testing.expectEqualSlices(u8, fixed_split_expected, fixed_split_appended.items[prefix.len..]);
+    try std.testing.expectError(error.InvalidBlockPlan, encodeZlibFixedSplitAppend(std.testing.allocator, &fixed_split_appended, payload, 0, fixed_options));
+
+    const fixed_dict_expected = try encodeZlibFixedWithDictionaryAlloc(std.testing.allocator, payload, preset_dictionary, fixed_options);
+    defer std.testing.allocator.free(fixed_dict_expected);
+    var fixed_dict_appended: std.ArrayList(u8) = .empty;
+    defer fixed_dict_appended.deinit(std.testing.allocator);
+    try fixed_dict_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(fixed_dict_expected.len, try encodeZlibFixedWithDictionaryAppend(std.testing.allocator, &fixed_dict_appended, payload, preset_dictionary, fixed_options));
+    try std.testing.expectEqualSlices(u8, fixed_dict_expected, fixed_dict_appended.items[prefix.len..]);
+
+    const fixed_dict_split_expected = try encodeZlibFixedSplitWithDictionaryAlloc(std.testing.allocator, payload, preset_dictionary, 19, fixed_options);
+    defer std.testing.allocator.free(fixed_dict_split_expected);
+    var fixed_dict_split_appended: std.ArrayList(u8) = .empty;
+    defer fixed_dict_split_appended.deinit(std.testing.allocator);
+    try fixed_dict_split_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(fixed_dict_split_expected.len, try encodeZlibFixedSplitWithDictionaryAppend(std.testing.allocator, &fixed_dict_split_appended, payload, preset_dictionary, 19, fixed_options));
+    try std.testing.expectEqualSlices(u8, fixed_dict_split_expected, fixed_dict_split_appended.items[prefix.len..]);
+
+    const best_expected = try encodeZlibBestAlloc(std.testing.allocator, payload, best_options);
+    defer std.testing.allocator.free(best_expected);
+    var best_appended: std.ArrayList(u8) = .empty;
+    defer best_appended.deinit(std.testing.allocator);
+    try best_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(best_expected.len, try encodeZlibBestAppend(std.testing.allocator, &best_appended, payload, best_options));
+    try std.testing.expectEqualSlices(u8, best_expected, best_appended.items[prefix.len..]);
+
+    const best_split_expected = try encodeZlibBestSplitAlloc(std.testing.allocator, payload, 29, best_options);
+    defer std.testing.allocator.free(best_split_expected);
+    var best_split_appended: std.ArrayList(u8) = .empty;
+    defer best_split_appended.deinit(std.testing.allocator);
+    try best_split_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(best_split_expected.len, try encodeZlibBestSplitAppend(std.testing.allocator, &best_split_appended, payload, 29, best_options));
+    try std.testing.expectEqualSlices(u8, best_split_expected, best_split_appended.items[prefix.len..]);
+
+    const best_adaptive_expected = try encodeZlibBestAdaptiveSplitAlloc(std.testing.allocator, payload, best_options, adaptive_split_options);
+    defer std.testing.allocator.free(best_adaptive_expected);
+    var best_adaptive_appended: std.ArrayList(u8) = .empty;
+    defer best_adaptive_appended.deinit(std.testing.allocator);
+    try best_adaptive_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(best_adaptive_expected.len, try encodeZlibBestAdaptiveSplitAppend(std.testing.allocator, &best_adaptive_appended, payload, best_options, adaptive_split_options));
+    try std.testing.expectEqualSlices(u8, best_adaptive_expected, best_adaptive_appended.items[prefix.len..]);
+
+    const best_dict_expected = try encodeZlibBestWithDictionaryAlloc(std.testing.allocator, payload, preset_dictionary, best_options);
+    defer std.testing.allocator.free(best_dict_expected);
+    var best_dict_appended: std.ArrayList(u8) = .empty;
+    defer best_dict_appended.deinit(std.testing.allocator);
+    try best_dict_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(best_dict_expected.len, try encodeZlibBestWithDictionaryAppend(std.testing.allocator, &best_dict_appended, payload, preset_dictionary, best_options));
+    try std.testing.expectEqualSlices(u8, best_dict_expected, best_dict_appended.items[prefix.len..]);
+
+    const best_dict_split_expected = try encodeZlibBestSplitWithDictionaryAlloc(std.testing.allocator, payload, preset_dictionary, 19, best_options);
+    defer std.testing.allocator.free(best_dict_split_expected);
+    var best_dict_split_appended: std.ArrayList(u8) = .empty;
+    defer best_dict_split_appended.deinit(std.testing.allocator);
+    try best_dict_split_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(best_dict_split_expected.len, try encodeZlibBestSplitWithDictionaryAppend(std.testing.allocator, &best_dict_split_appended, payload, preset_dictionary, 19, best_options));
+    try std.testing.expectEqualSlices(u8, best_dict_split_expected, best_dict_split_appended.items[prefix.len..]);
+
+    const best_dict_adaptive_expected = try encodeZlibBestAdaptiveSplitWithDictionaryAlloc(std.testing.allocator, payload, preset_dictionary, best_options, adaptive_split_options);
+    defer std.testing.allocator.free(best_dict_adaptive_expected);
+    var best_dict_adaptive_appended: std.ArrayList(u8) = .empty;
+    defer best_dict_adaptive_appended.deinit(std.testing.allocator);
+    try best_dict_adaptive_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(best_dict_adaptive_expected.len, try encodeZlibBestAdaptiveSplitWithDictionaryAppend(std.testing.allocator, &best_dict_adaptive_appended, payload, preset_dictionary, best_options, adaptive_split_options));
+    try std.testing.expectEqualSlices(u8, best_dict_adaptive_expected, best_dict_adaptive_appended.items[prefix.len..]);
+
+    const level_expected = try encodeZlibLevelAlloc(std.testing.allocator, payload, 1);
+    defer std.testing.allocator.free(level_expected);
+    var level_appended: std.ArrayList(u8) = .empty;
+    defer level_appended.deinit(std.testing.allocator);
+    try level_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(level_expected.len, try encodeZlibLevelAppend(std.testing.allocator, &level_appended, payload, 1));
+    try std.testing.expectEqualSlices(u8, level_expected, level_appended.items[prefix.len..]);
+    try std.testing.expectError(error.InvalidBlockPlan, encodeZlibLevelAppend(std.testing.allocator, &level_appended, payload, 10));
+
+    const level_dict_expected = try encodeZlibLevelWithDictionaryAlloc(std.testing.allocator, payload, preset_dictionary, 1);
+    defer std.testing.allocator.free(level_dict_expected);
+    var level_dict_appended: std.ArrayList(u8) = .empty;
+    defer level_dict_appended.deinit(std.testing.allocator);
+    try level_dict_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(level_dict_expected.len, try encodeZlibLevelWithDictionaryAppend(std.testing.allocator, &level_dict_appended, payload, preset_dictionary, 1));
+    try std.testing.expectEqualSlices(u8, level_dict_expected, level_dict_appended.items[prefix.len..]);
+
+    const dynamic_literal_expected = try encodeZlibDynamicLiteralAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(dynamic_literal_expected);
+    var dynamic_literal_appended: std.ArrayList(u8) = .empty;
+    defer dynamic_literal_appended.deinit(std.testing.allocator);
+    try dynamic_literal_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(dynamic_literal_expected.len, try encodeZlibDynamicLiteralAppend(std.testing.allocator, &dynamic_literal_appended, payload));
+    try std.testing.expectEqualSlices(u8, dynamic_literal_expected, dynamic_literal_appended.items[prefix.len..]);
+
+    const dynamic_expected = try encodeZlibDynamicWithOptionsAlloc(std.testing.allocator, payload, dynamic_options);
+    defer std.testing.allocator.free(dynamic_expected);
+    var dynamic_appended: std.ArrayList(u8) = .empty;
+    defer dynamic_appended.deinit(std.testing.allocator);
+    try dynamic_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(dynamic_expected.len, try encodeZlibDynamicWithOptionsAppend(std.testing.allocator, &dynamic_appended, payload, dynamic_options));
+    try std.testing.expectEqualSlices(u8, dynamic_expected, dynamic_appended.items[prefix.len..]);
+
+    const dynamic_split_expected = try encodeZlibDynamicSplitAlloc(std.testing.allocator, payload, 23, dynamic_options);
+    defer std.testing.allocator.free(dynamic_split_expected);
+    var dynamic_split_appended: std.ArrayList(u8) = .empty;
+    defer dynamic_split_appended.deinit(std.testing.allocator);
+    try dynamic_split_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(dynamic_split_expected.len, try encodeZlibDynamicSplitAppend(std.testing.allocator, &dynamic_split_appended, payload, 23, dynamic_options));
+    try std.testing.expectEqualSlices(u8, dynamic_split_expected, dynamic_split_appended.items[prefix.len..]);
+
+    const dynamic_dict_expected = try encodeZlibDynamicWithDictionaryAlloc(std.testing.allocator, payload, preset_dictionary, dynamic_options);
+    defer std.testing.allocator.free(dynamic_dict_expected);
+    var dynamic_dict_appended: std.ArrayList(u8) = .empty;
+    defer dynamic_dict_appended.deinit(std.testing.allocator);
+    try dynamic_dict_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(dynamic_dict_expected.len, try encodeZlibDynamicWithDictionaryAppend(std.testing.allocator, &dynamic_dict_appended, payload, preset_dictionary, dynamic_options));
+    try std.testing.expectEqualSlices(u8, dynamic_dict_expected, dynamic_dict_appended.items[prefix.len..]);
+
+    const dynamic_dict_split_expected = try encodeZlibDynamicSplitWithDictionaryAlloc(std.testing.allocator, payload, preset_dictionary, 19, dynamic_options);
+    defer std.testing.allocator.free(dynamic_dict_split_expected);
+    var dynamic_dict_split_appended: std.ArrayList(u8) = .empty;
+    defer dynamic_dict_split_appended.deinit(std.testing.allocator);
+    try dynamic_dict_split_appended.appendSlice(std.testing.allocator, prefix);
+    try std.testing.expectEqual(dynamic_dict_split_expected.len, try encodeZlibDynamicSplitWithDictionaryAppend(std.testing.allocator, &dynamic_dict_split_appended, payload, preset_dictionary, 19, dynamic_options));
+    try std.testing.expectEqualSlices(u8, dynamic_dict_split_expected, dynamic_dict_split_appended.items[prefix.len..]);
+
+    const decoded = try decodeZlibAllocExactSize(std.testing.allocator, dynamic_split_appended.items[prefix.len..], payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    const dict_decoded = try decodeZlibAllocWithDictionaryExactSize(std.testing.allocator, dynamic_dict_split_appended.items[prefix.len..], preset_dictionary, payload.len);
+    defer std.testing.allocator.free(dict_decoded);
+    try std.testing.expectEqualSlices(u8, payload, dict_decoded);
 }
 
 test "root raw deflate encoder reuses stored scratch" {

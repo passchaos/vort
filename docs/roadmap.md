@@ -3581,3 +3581,9 @@ architecture blindly.
   level, dynamic, split, adaptive split, and preset-dictionary modes, with root
   tests checking byte parity against allocator-returning encoders, invalid-plan
   propagation, and decode round trips.
+
+- Added top-level zlib append encode helpers beyond stored blocks. Zlib callers
+  now have prefix-preserving append convenience for fixed, best, zlib level,
+  dynamic, split, adaptive split, and preset-dictionary modes, with root tests
+  checking byte parity against allocator-returning encoders, invalid-plan
+  propagation, and strict/dictionary decode round trips.

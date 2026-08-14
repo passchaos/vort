@@ -5118,6 +5118,78 @@ pub fn encodeZlibStoredWithDictionaryChunksAppend(allocator: std.mem.Allocator, 
     return written;
 }
 
+pub fn encodeZlibFixedAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) !usize {
+    return encodeZlibFixedWithOptionsAppend(allocator, out, input, .{});
+}
+
+pub fn encodeZlibFixedWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibFixedWithOptionsAlloc(allocator, input, options));
+}
+
+pub fn encodeZlibFixedWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibFixedWithDictionaryAlloc(allocator, input, dictionary, options));
+}
+
+pub fn encodeZlibFixedSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibFixedSplitAlloc(allocator, input, block_len, options));
+}
+
+pub fn encodeZlibFixedSplitWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibFixedSplitWithDictionaryAlloc(allocator, input, dictionary, block_len, options));
+}
+
+pub fn encodeZlibBestAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibBestAlloc(allocator, input, options));
+}
+
+pub fn encodeZlibBestWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibBestWithDictionaryAlloc(allocator, input, dictionary, options));
+}
+
+pub fn encodeZlibBestSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibBestSplitAlloc(allocator, input, block_len, options));
+}
+
+pub fn encodeZlibBestSplitWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibBestSplitWithDictionaryAlloc(allocator, input, dictionary, block_len, options));
+}
+
+pub fn encodeZlibBestAdaptiveSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibBestAdaptiveSplitAlloc(allocator, input, options, split_options));
+}
+
+pub fn encodeZlibBestAdaptiveSplitWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibBestAdaptiveSplitWithDictionaryAlloc(allocator, input, dictionary, options, split_options));
+}
+
+pub fn encodeZlibLevelAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, level: u4) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibLevelAlloc(allocator, input, level));
+}
+
+pub fn encodeZlibLevelWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, level: u4) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibLevelWithDictionaryAlloc(allocator, input, dictionary, level));
+}
+
+pub fn encodeZlibDynamicLiteralAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibDynamicLiteralAlloc(allocator, input));
+}
+
+pub fn encodeZlibDynamicWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibDynamicWithOptionsAlloc(allocator, input, options));
+}
+
+pub fn encodeZlibDynamicWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibDynamicWithDictionaryAlloc(allocator, input, dictionary, options));
+}
+
+pub fn encodeZlibDynamicSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibDynamicSplitAlloc(allocator, input, block_len, options));
+}
+
+pub fn encodeZlibDynamicSplitWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibDynamicSplitWithDictionaryAlloc(allocator, input, dictionary, block_len, options));
+}
+
 fn encodeZlibStoredSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize) ![]u8 {
     return encodeZlibStoredSplitDirectAlloc(allocator, input, null, block_len);
 }
