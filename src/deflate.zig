@@ -4,6 +4,7 @@ const bitstream = @import("bitstream.zig");
 const huffman = @import("huffman.zig");
 const lz77 = @import("lz77.zig");
 const core = @import("core.zig");
+const png_ultrafast = @import("png_ultrafast.zig");
 
 const png = @import("png.zig");
 
@@ -5189,6 +5190,16 @@ pub fn encodeZlibBestAlloc(allocator: std.mem.Allocator, input: []const u8, opti
         allocator.free(fallback);
     }
     return encoded;
+}
+
+/// Encode one zlib stream with the static PNG-trained Huffman model used by
+/// fdeflate-style ultra-fast encoders. Only zero-byte runs become back
+/// references; all other bytes are literals.
+pub fn encodeZlibPngUltraFastAlloc(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+) ![]u8 {
+    return png_ultrafast.encodeAlloc(allocator, input);
 }
 
 pub fn encodeZlibBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
@@ -16662,4 +16673,23 @@ test "adaptive split skips full-window search for small production inputs" {
     const gzip_adaptive = try encodeGzipBestAdaptiveSplitAlloc(std.testing.allocator, input, options, options.split_options);
     defer std.testing.allocator.free(gzip_adaptive);
     try std.testing.expectEqualSlices(u8, gzip_one_shot, gzip_adaptive);
+}
+
+test "PNG ultrafast zlib streams round trip through general decoder" {
+    const inputs = [_][]const u8{
+        "",
+        "hello, world",
+        &([_]u8{0} ** 900),
+        &([_]u8{ 1, 0, 0, 0, 2, 3, 0, 4, 0, 0, 5 } ** 113),
+    };
+    for (inputs) |input| {
+        const encoded = try encodeZlibPngUltraFastAlloc(
+            std.testing.allocator,
+            input,
+        );
+        defer std.testing.allocator.free(encoded);
+        const decoded = try decodeZlibAlloc(std.testing.allocator, encoded);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, input, decoded);
+    }
 }

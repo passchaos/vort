@@ -946,6 +946,7 @@ pub const encodeZlibStoredWithDictionary = deflate.encodeZlibStoredWithDictionar
 pub const encodeZlibFixedAlloc = deflate.encodeZlibFixedAlloc;
 pub const encodeZlibFixedWithDictionaryAlloc = deflate.encodeZlibFixedWithDictionaryAlloc;
 pub const encodeZlibBestAlloc = deflate.encodeZlibBestAlloc;
+pub const encodeZlibPngUltraFastAlloc = deflate.encodeZlibPngUltraFastAlloc;
 pub const encodeZlibBestWithDictionaryAlloc = deflate.encodeZlibBestWithDictionaryAlloc;
 pub const encodeZlibLevelAlloc = deflate.encodeZlibLevelAlloc;
 pub const encodeZlibLevelWithDictionaryAlloc = deflate.encodeZlibLevelWithDictionaryAlloc;
