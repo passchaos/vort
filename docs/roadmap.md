@@ -2039,3 +2039,40 @@ architecture blindly.
   passed imx PNG focused tests, full `zig build test -j1` in 3:41.26 at
   4,125,140-KiB peak RSS, and `zig build check -j1` in 4:21.52 at
   689,188-KiB peak RSS, both with zero swap.
+
+- Built a temporary same-scope filtered-payload comparison against fdeflate
+  0.3.7 after the generated full-PNG gate reached overall parity. Both sides
+  allocate, encode, and release in the timer, while file I/O and full checksum
+  validation stay outside. Across the six adaptive/Up payloads, all zlib bytes,
+  checksums, and guards match exactly. A CPU-12, 41-round alternating run
+  measured Vort/fdeflate at `0.918x` geomean, `0.892x` Up, and `0.946x`
+  adaptive. RGB adaptive reached `1.032x` and RGBA adaptive `0.998x`; the two
+  Luma payloads remained the largest gap at about `0.82x`. This establishes
+  that the remaining generated compressed-only gap is mainly inside the
+  ultrafast encoder rather than PNG chunk/filter wrappers.
+- Hardware counters on the no-zero Luma Up payload showed Vort executing fewer
+  instructions than fdeflate (`12.66B` versus `13.55B`) but spending more
+  cycles (`2.68B` versus `2.25B`), with roughly `239k` versus `50k` cache
+  misses and IPC around `4.72` versus `6.03`. The 512-KiB pair table therefore
+  trades instruction count for a longer memory/dependency path. Exact
+  `toOwnedSlice` shrinking was inspected but `SmpAllocator.remap` represented
+  only about `0.07%`, so output ownership was not the main gap.
+- Rejected several measured alternatives to that pair table. A 256-entry
+  packed code/length table reduced RSS to about `0.903x image-png` but measured
+  `0.875x` compressed throughput, with every compressed row 10--15% slower.
+  Separate u16-code/u8-length tables, matching fdeflate's source layout, raised
+  Luma cycles by about 19% and instructions by about 27%. Software-prefetching
+  four future pair entries raised cycles by about 9% and instructions by 14%,
+  while loading all four current entries before either reservoir write raised
+  cycles by about 2%. None reduced measured cache misses enough to offset their
+  extra instructions; all were fully reverted.
+- Real-payload frequency analysis also rejected narrow constant-code guesses.
+  Pair lengths `(12,12)` represented only `0.1%`; the leading combinations
+  were `(3,6)`, `(3,3)`, `(3,2)`, and `(2,3)`. Exact pairs were highly
+  concentrated, and repeated-byte words covered 92.3% of Luma Up, but a
+  repeated-octet branch measured `0.973x` compressed and caused large
+  full-matrix regressions despite a 1% isolated Luma gain. Direct single-zero
+  emission likewise measured `0.989x` Up. Both were reverted. Future
+  pure-literal work should use a materially different table/layout or
+  target-specific gather strategy and must pass the complete matrix, not only
+  a favorable isolated payload.
