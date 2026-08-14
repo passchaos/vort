@@ -41,6 +41,9 @@ pub const crc32cSlice32 = checksum.crc32cSlice32;
 pub const crc32cBest = checksum.crc32cBest;
 pub const crc32cCombine = checksum.crc32cCombine;
 
+pub const BrotliError = br.Error;
+pub const brotliMaxUncompressedMetaBlockLen = br.max_uncompressed_meta_block_len;
+pub const brotliDefaultWindowBits = br.default_window_bits;
 pub const brEncodedStoredStreamBound = br.encodedStoredStreamBound;
 pub const brEncodedStoredStreamBoundWithOptions = br.encodedStoredStreamBoundWithOptions;
 pub const brEncodedStoredStreamChunksBound = br.encodedStoredStreamChunksBound;
@@ -107,6 +110,8 @@ pub const brProbeStreamChunks = br.probeStreamChunks;
 pub const brProbeStreamChunksLimited = br.probeStreamChunksLimited;
 pub const brProbeStreamChunksExactSize = br.probeStreamChunksExactSize;
 
+pub const SnappyError = snappy.Error;
+pub const snappyMaxUncompressedChunkLen = snappy.max_uncompressed_chunk_len;
 pub const snappyEncodeBlockAlloc = snappy.encodeBlockAlloc;
 pub const snappyEncodeBlockAppend = snappy.encodeBlockAppend;
 pub const snappyEncodeBlockInto = snappy.encodeBlockInto;
@@ -164,6 +169,8 @@ pub const snappyDecodeFrameChunksIntoExactSize = snappy.decodeFrameChunksIntoExa
 pub const snappyDecodedFrameChunksSize = snappy.decodedFrameChunksSize;
 pub const snappyDecodedFrameChunksSizeLimited = snappy.decodedFrameChunksSizeLimited;
 
+pub const Lz4Error = lz4.Error;
+pub const lz4DefaultCompressionLevel = lz4.default_compression_level;
 pub const lz4EncodeFrameAlloc = lz4.encodeFrameAlloc;
 pub const lz4EncodeFrameWithLevelAlloc = lz4.encodeFrameWithLevelAlloc;
 pub const lz4EncodeFrameWithOptionsAlloc = lz4.encodeFrameWithOptionsAlloc;
@@ -500,6 +507,8 @@ pub const lz4SummarizeBlockWithPrefix = lz4.summarizeBlockWithPrefix;
 pub const lz4SummarizeBlockWithPrefixLimited = lz4.summarizeBlockWithPrefixLimited;
 pub const lz4EncodedBlockBound = lz4.encodedBlockBound;
 
+pub const ZstdError = zstd.Error;
+pub const zstdDefaultCompressionLevel = zstd.default_compression_level;
 pub const zstdEncodeFrameAlloc = zstd.encodeFrameAlloc;
 pub const zstdEncodeFrameWithLevelAlloc = zstd.encodeFrameWithLevelAlloc;
 pub const zstdEncodeFrameWithOptionsAlloc = zstd.encodeFrameWithOptionsAlloc;
@@ -976,6 +985,8 @@ pub const zstdDecodedNativeConcatenatedFrameChunksSizeWithDictionarySet = zstd.d
 pub const zstdDecodedNativeConcatenatedFrameChunksSizeLimitedWithDictionarySet = zstd.decodedNativeConcatenatedFrameChunksSizeLimitedWithDictionarySet;
 
 pub const Error = core.Error;
+pub const DeflateError = deflate.Error;
+pub const maxStoredDeflateBlockLen = deflate.max_stored_block_len;
 pub const FrameInfo = core.FrameInfo;
 pub const Progress = core.Progress;
 pub const StepResult = core.StepResult;
@@ -1833,6 +1844,9 @@ test "root exports lz4 and zstd codec helpers" {
     _ = decodeDictionaryPatchInto;
     _ = decodeDictionaryPatchAlloc;
 
+    _ = BrotliError;
+    try std.testing.expectEqual(@as(usize, 1 << 24), brotliMaxUncompressedMetaBlockLen);
+    try std.testing.expectEqual(@as(u5, 16), brotliDefaultWindowBits);
     _ = brEncodedStoredStreamBound;
     _ = brEncodedStoredStreamBoundWithOptions;
     _ = brEncodedStoredStreamChunksBound;
@@ -1899,6 +1913,8 @@ test "root exports lz4 and zstd codec helpers" {
     _ = brProbeStreamChunksLimited;
     _ = brProbeStreamChunksExactSize;
 
+    _ = SnappyError;
+    try std.testing.expectEqual(@as(usize, 64 * 1024), snappyMaxUncompressedChunkLen);
     _ = snappyEncodeBlockAlloc;
     _ = snappyEncodeBlockAppend;
     _ = snappyEncodeBlockInto;
@@ -1956,6 +1972,8 @@ test "root exports lz4 and zstd codec helpers" {
     _ = snappyDecodedFrameChunksSize;
     _ = snappyDecodedFrameChunksSizeLimited;
 
+    _ = Lz4Error;
+    try std.testing.expectEqual(@as(c_int, 10), lz4DefaultCompressionLevel);
     _ = lz4EncodeFrameAlloc;
     _ = lz4EncodeFrameWithLevelAlloc;
     _ = lz4EncodeFrameWithOptionsAlloc;
@@ -2286,6 +2304,8 @@ test "root exports lz4 and zstd codec helpers" {
     _ = lz4SummarizeBlockWithPrefixLimited;
     _ = lz4EncodedBlockBound;
 
+    _ = ZstdError;
+    try std.testing.expectEqual(@as(c_int, 1), zstdDefaultCompressionLevel);
     _ = zstdEncodeFrameAlloc;
     _ = zstdEncodeFrameWithLevelAlloc;
     _ = zstdEncodeFrameWithOptionsAlloc;
@@ -6571,6 +6591,8 @@ test "root exports chunked compatibility decode helpers" {
     _ = ZlibEncoder;
     _ = GzipEncoder;
     _ = RawDeflateDecoder;
+    _ = DeflateError;
+    try std.testing.expectEqual(@as(usize, std.math.maxInt(u16)), maxStoredDeflateBlockLen);
     _ = DeflateDecodeResult;
     _ = DeflateOwnedDecodeResult;
     _ = RawDeflateProbeResult;

@@ -1662,6 +1662,11 @@ architecture blindly.
   `decodeRawDeflateAllocPartial` let library callers decode the first raw
   member and inspect `input_read` before deciding how to handle trailing bytes.
 
+- Exposed root-level codec error/constant aliases for library preflight and
+  allocation logic. Deflate, Brotli, Snappy, LZ4, and Zstd callers can now read
+  the relevant error sets, stored/meta/chunk size limits, and default
+  compression levels from the root facade instead of importing submodules.
+
 - Extended the public Zstd frame encode facade with encoded-bound, append, and
   caller-owned into-slice helpers across level/options variants. Library callers
   no longer need to drop to native-specific APIs or allocate an owned frame just
