@@ -3718,6 +3718,14 @@ pub const NativeFrameBlockSummary = struct {
     payload_bytes: usize = 0,
 };
 
+pub const BlockSummary = struct {
+    decoded_bytes: usize = 0,
+    literal_count: usize = 0,
+    literal_bytes: usize = 0,
+    match_count: usize = 0,
+    match_bytes: usize = 0,
+};
+
 pub const NativeSkippableFrameHeader = struct {
     skippable_id: u4,
     payload_offset: usize,
@@ -3725,9 +3733,30 @@ pub const NativeSkippableFrameHeader = struct {
     next_frame_offset: usize,
 };
 
+pub const NativeStreamSummaryErrorPhase = enum {
+    magic,
+    frame_header,
+    frame_body,
+    frame_checksum,
+    skippable_header,
+    skippable_payload,
+    stream,
+    frame,
+};
+
+pub const NativeStreamSummaryErrorDiagnostics = struct {
+    phase: NativeStreamSummaryErrorPhase = .stream,
+    offset: usize = 0,
+};
+
 pub const NativeStreamSummary = struct {
     frame_count: usize = 0,
     skippable_frame_count: usize = 0,
+    content_size_frame_count: usize = 0,
+    checksum_frame_count: usize = 0,
+    block_checksum_frame_count: usize = 0,
+    dictionary_id_frame_count: usize = 0,
+    declared_content_bytes: u64 = 0,
     block_count: usize = 0,
     compressed_block_count: usize = 0,
     raw_block_count: usize = 0,
@@ -3958,33 +3987,118 @@ pub fn inspectNativeSkippableFrame(frame: []const u8) Error!NativeSkippableFrame
 }
 
 pub fn summarizeNativeStream(frames: []const u8) Error!NativeStreamSummary {
+    var diagnostics: NativeStreamSummaryErrorDiagnostics = .{};
+    return summarizeNativeStreamWithDiagnostics(frames, &diagnostics);
+}
+
+pub fn summarizeNativeStreamWithDiagnostics(frames: []const u8, diagnostics: *NativeStreamSummaryErrorDiagnostics) Error!NativeStreamSummary {
+    diagnostics.* = .{};
     var offset: usize = 0;
     var summary: NativeStreamSummary = .{};
     while (offset < frames.len) {
-        if (frames.len - offset < 4) return error.TruncatedFrame;
+        if (frames.len - offset < 4) {
+            diagnostics.* = .{ .phase = .magic, .offset = frames.len };
+            return error.TruncatedFrame;
+        }
         const magic = std.mem.readInt(u32, frames[offset..][0..4], .little);
         if (magic == frame_magic_u32) {
             const start = offset;
-            const end = try findFrameEnd(frames, &offset);
-            const frame_summary = try summarizeNativeFrameBlocks(frames[start..end]);
+            const end = findFrameEndWithDiagnostics(frames, &offset, diagnostics) catch |err| {
+                return err;
+            };
+            const header = inspectNativeFrameHeader(frames[start..end]) catch |err| {
+                diagnostics.* = .{ .phase = .frame_header, .offset = start };
+                return err;
+            };
+            if (header.expected_content_size) |content_size| {
+                summary.content_size_frame_count += 1;
+                summary.declared_content_bytes = std.math.add(u64, summary.declared_content_bytes, content_size) catch return error.IntegerOverflow;
+            }
+            if (header.content_checksum) summary.checksum_frame_count += 1;
+            if (header.block_checksum) summary.block_checksum_frame_count += 1;
+            if (header.dictionary_id != null) summary.dictionary_id_frame_count += 1;
+            const frame_summary = summarizeNativeFrameBlocks(frames[start..end]) catch |err| {
+                diagnostics.* = .{ .phase = nativeSummaryFrameErrorPhase(err, frames[start..end]), .offset = frames.len };
+                return err;
+            };
             summary.frame_count += 1;
             summary.block_count = std.math.add(usize, summary.block_count, frame_summary.block_count) catch return error.IntegerOverflow;
             summary.compressed_block_count = std.math.add(usize, summary.compressed_block_count, frame_summary.compressed_block_count) catch return error.IntegerOverflow;
             summary.raw_block_count = std.math.add(usize, summary.raw_block_count, frame_summary.raw_block_count) catch return error.IntegerOverflow;
             summary.payload_bytes = std.math.add(usize, summary.payload_bytes, frame_summary.payload_bytes) catch return error.IntegerOverflow;
         } else if (magic >= skippable_magic_min and magic <= skippable_magic_max) {
-            if (frames.len - offset < 8) return error.TruncatedFrame;
+            if (frames.len - offset < 8) {
+                diagnostics.* = .{ .phase = .skippable_header, .offset = frames.len };
+                return error.TruncatedFrame;
+            }
             const skip_len: usize = @intCast(std.mem.readInt(u32, frames[offset + 4 ..][0..4], .little));
             offset += 8;
-            if (frames.len - offset < skip_len) return error.TruncatedFrame;
+            if (frames.len - offset < skip_len) {
+                diagnostics.* = .{ .phase = .skippable_payload, .offset = frames.len };
+                return error.TruncatedFrame;
+            }
             summary.skippable_frame_count += 1;
             summary.skippable_payload_bytes = std.math.add(usize, summary.skippable_payload_bytes, skip_len) catch return error.IntegerOverflow;
             offset += skip_len;
         } else {
+            diagnostics.* = .{ .phase = .magic, .offset = offset };
             return error.CorruptFrame;
         }
     }
     return summary;
+}
+
+fn nativeSummaryFrameErrorPhase(err: anyerror, frame: []const u8) NativeStreamSummaryErrorPhase {
+    if (frame.len < 7) return .frame_header;
+    return switch (err) {
+        error.TruncatedFrame => .frame_body,
+        else => .frame,
+    };
+}
+
+fn findFrameEndWithDiagnostics(frames: []const u8, offset: *usize, diagnostics: *NativeStreamSummaryErrorDiagnostics) Error!usize {
+    const frame_start = offset.*;
+    const header = parseFrameHeader(frames[offset.*..]) catch |err| {
+        diagnostics.* = .{ .phase = .frame_header, .offset = frames.len };
+        return err;
+    };
+    var local = header.payload_offset;
+    while (true) {
+        if (frames.len - offset.* - local < 4) {
+            diagnostics.* = .{ .phase = .frame_body, .offset = frames.len };
+            return error.TruncatedFrame;
+        }
+        const block_header_offset = offset.* + local;
+        const block_header = std.mem.readInt(u32, frames[block_header_offset..][0..4], .little);
+        local += 4;
+        if (block_header == 0) break;
+        const block_len: usize = @intCast(block_header & 0x7fff_ffff);
+        if (block_len > header.block_size_max) {
+            diagnostics.* = .{ .phase = .frame, .offset = block_header_offset };
+            return error.CorruptFrame;
+        }
+        if (frames.len - offset.* - local < block_len) {
+            diagnostics.* = .{ .phase = .frame_body, .offset = frames.len };
+            return error.TruncatedFrame;
+        }
+        local += block_len;
+        if (header.block_checksum) {
+            if (frames.len - offset.* - local < 4) {
+                diagnostics.* = .{ .phase = .frame_body, .offset = frames.len };
+                return error.TruncatedFrame;
+            }
+            local += 4;
+        }
+    }
+    if (header.content_checksum) {
+        if (frames.len - offset.* - local < 4) {
+            diagnostics.* = .{ .phase = .frame_checksum, .offset = frames.len };
+            return error.TruncatedFrame;
+        }
+        local += 4;
+    }
+    offset.* = frame_start + local;
+    return offset.*;
 }
 
 fn findFrameEnd(frames: []const u8, offset: *usize) Error!usize {
@@ -4181,6 +4295,44 @@ fn compressedBlockDecodedSizeLimitedWithHistory(
         total = try checkedAddWithinLimit(total, match_len, max_output_len);
     }
     return total;
+}
+
+fn summarizeBlockWithHistoryLimited(
+    block: []const u8,
+    initial_len: usize,
+    history_start: usize,
+    max_output_len: usize,
+) Error!BlockSummary {
+    if (history_start > initial_len) return error.InvalidMatch;
+    var offset: usize = 0;
+    var total = initial_len;
+    var summary: BlockSummary = .{};
+    while (offset < block.len) {
+        const token = block[offset];
+        offset += 1;
+        var literal_len: usize = token >> 4;
+        if (literal_len == 15) literal_len = try checkedAdd(literal_len, try readLengthExtension(block, &offset));
+        if (block.len - offset < literal_len) return error.TruncatedFrame;
+        total = try checkedAddWithinLimit(total, literal_len, max_output_len);
+        if (literal_len != 0) {
+            summary.literal_count += 1;
+            summary.literal_bytes = try checkedAdd(summary.literal_bytes, literal_len);
+        }
+        offset += literal_len;
+        if (offset == block.len) break;
+
+        if (block.len - offset < 2) return error.TruncatedFrame;
+        const match_offset = std.mem.readInt(u16, block[offset..][0..2], .little);
+        offset += 2;
+        if (match_offset == 0 or match_offset > total - history_start) return error.InvalidMatch;
+        var match_len: usize = (token & 0x0f) + 4;
+        if ((token & 0x0f) == 15) match_len = try checkedAdd(match_len, try readLengthExtension(block, &offset));
+        total = try checkedAddWithinLimit(total, match_len, max_output_len);
+        summary.match_count += 1;
+        summary.match_bytes = try checkedAdd(summary.match_bytes, match_len);
+    }
+    summary.decoded_bytes = total - initial_len;
+    return summary;
 }
 
 fn descriptorChecksum(descriptor: []const u8) u8 {
@@ -4870,6 +5022,14 @@ pub fn decodedBlockSizeLimited(input: []const u8, max_output_len: usize) Error!u
     return try compressedBlockDecodedSizeLimited(input, 0, max_output_len);
 }
 
+pub fn summarizeBlock(input: []const u8) Error!BlockSummary {
+    return try summarizeBlockLimited(input, std.math.maxInt(usize));
+}
+
+pub fn summarizeBlockLimited(input: []const u8, max_output_len: usize) Error!BlockSummary {
+    return try summarizeBlockWithHistoryLimited(input, 0, 0, max_output_len);
+}
+
 pub fn decodedBlockSizeWithPrefix(input: []const u8, prefix: []const u8) Error!usize {
     return try decodedBlockSizeWithPrefixLimited(input, prefix, std.math.maxInt(usize));
 }
@@ -4882,6 +5042,19 @@ pub fn decodedBlockSizeWithPrefixLimited(input: []const u8, prefix: []const u8, 
         std.math.add(usize, capped_prefix_len, max_output_len) catch return error.IntegerOverflow;
     const total = try compressedBlockDecodedSizeLimitedWithHistory(input, capped_prefix_len, 0, total_limit);
     return total - capped_prefix_len;
+}
+
+pub fn summarizeBlockWithPrefix(input: []const u8, prefix: []const u8) Error!BlockSummary {
+    return try summarizeBlockWithPrefixLimited(input, prefix, std.math.maxInt(usize));
+}
+
+pub fn summarizeBlockWithPrefixLimited(input: []const u8, prefix: []const u8, max_output_len: usize) Error!BlockSummary {
+    const capped_prefix_len = @min(prefix.len, max_block_history_len);
+    const total_limit = if (max_output_len == std.math.maxInt(usize))
+        std.math.maxInt(usize)
+    else
+        std.math.add(usize, capped_prefix_len, max_output_len) catch return error.IntegerOverflow;
+    return try summarizeBlockWithHistoryLimited(input, capped_prefix_len, 0, total_limit);
 }
 
 fn decodeBlockInto(

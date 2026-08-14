@@ -1,0 +1,583 @@
+{
+  "artifact_count": 72,
+  "artifacts": [
+    {
+      "first_heading": "# Brotli static dictionary candidate report",
+      "heading_count": 4,
+      "name": "vort-br-static-dictionary-candidates-upstream.md",
+      "signature": "3447d9692eb6f430",
+      "table_row_count": 100,
+      "table_separator_count": 3
+    },
+    {
+      "first_heading": "# Brotli static dictionary candidate report",
+      "heading_count": 4,
+      "name": "vort-br-static-dictionary-candidates-upstream1024.md",
+      "signature": "3447d9692eb6f430",
+      "table_row_count": 100,
+      "table_separator_count": 3
+    },
+    {
+      "first_heading": "# Brotli static dictionary candidate report",
+      "heading_count": 4,
+      "name": "vort-br-static-dictionary-candidates-upstream128.md",
+      "signature": "3447d9692eb6f430",
+      "table_row_count": 100,
+      "table_separator_count": 3
+    },
+    {
+      "first_heading": "# Brotli static dictionary candidate report",
+      "heading_count": 4,
+      "name": "vort-br-static-dictionary-candidates-upstream2048.md",
+      "signature": "3447d9692eb6f430",
+      "table_row_count": 100,
+      "table_separator_count": 3
+    },
+    {
+      "first_heading": "# Brotli static dictionary candidate report",
+      "heading_count": 4,
+      "name": "vort-br-static-dictionary-candidates-upstream256.md",
+      "signature": "3447d9692eb6f430",
+      "table_row_count": 100,
+      "table_separator_count": 3
+    },
+    {
+      "first_heading": "# Brotli static dictionary candidate report",
+      "heading_count": 4,
+      "name": "vort-br-static-dictionary-candidates-upstream4096.md",
+      "signature": "3447d9692eb6f430",
+      "table_row_count": 100,
+      "table_separator_count": 3
+    },
+    {
+      "first_heading": "# Brotli static dictionary candidate report",
+      "heading_count": 4,
+      "name": "vort-br-static-dictionary-candidates-upstream512.md",
+      "signature": "3447d9692eb6f430",
+      "table_row_count": 100,
+      "table_separator_count": 3
+    },
+    {
+      "first_heading": "# Brotli static dictionary candidate report",
+      "heading_count": 4,
+      "name": "vort-br-static-dictionary-candidates-upstream80.md",
+      "signature": "3447d9692eb6f430",
+      "table_row_count": 100,
+      "table_separator_count": 3
+    },
+    {
+      "first_heading": "# Brotli static dictionary candidate report",
+      "heading_count": 4,
+      "name": "vort-br-static-dictionary-candidates-upstream8192-current.md",
+      "signature": "3447d9692eb6f430",
+      "table_row_count": 100,
+      "table_separator_count": 3
+    },
+    {
+      "first_heading": "# Brotli static dictionary candidate report",
+      "heading_count": 4,
+      "name": "vort-br-static-dictionary-candidates-upstream8192.md",
+      "signature": "3447d9692eb6f430",
+      "table_row_count": 100,
+      "table_separator_count": 3
+    },
+    {
+      "first_heading": "# Brotli static dictionary candidate report",
+      "heading_count": 4,
+      "name": "vort-br-static-dictionary-candidates.md",
+      "signature": "3447d9692eb6f430",
+      "table_row_count": 99,
+      "table_separator_count": 3
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-full.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 297,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 345,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream1024-0-1024.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream1024-1024-2048.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream1024-2048-3072.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream1024-3072-4096.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1045,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream1024-4096-5120.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream1024-5120-6144.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream1024-6144-tail.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 290,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 3,
+      "name": "vort-br-static-dictionary-node-probe-upstream128.md",
+      "signature": "985c00dc3da1c353",
+      "table_row_count": 1071,
+      "table_separator_count": 2
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-12281-tail.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 194,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-6137-7161.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream256.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1833,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-12223-13247.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-23487-tail.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 21,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream512.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 3369,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 3,
+      "name": "vort-br-static-dictionary-node-probe-upstream80.md",
+      "signature": "985c00dc3da1c353",
+      "table_row_count": 783,
+      "table_separator_count": 2
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream8192-30244-31268-final.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream8192-30244-31268-reindexed.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream8192-30244-31268.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream8192-31268-32292-closure.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream8192-31268-32292-final.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream8192-31268-32292-reindexed.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream8192-31268-32292.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream8192-32292-33316-closure.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream8192-32292-33316-final.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream8192-32292-33316-reindexed.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream8192-32292-33316.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream8192-33316-34340-final.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream8192-33316-34340-reindexed.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream8192-33316-34340.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream8192-34340-35364-closure.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream8192-34340-35364-current.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream8192-34340-35364-final.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream8192-34340-35364-reindexed.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream8192-34340-35364.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream8192-35364-36388-closure.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream8192-35364-36388-final.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream8192-35364-36388-reindexed.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe-upstream8192-35364-36388.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 1039,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 1,
+      "name": "vort-br-static-dictionary-node-probe-wide.md",
+      "signature": "909acee8daa4f8e5",
+      "table_row_count": 162,
+      "table_separator_count": 1
+    },
+    {
+      "first_heading": "# Brotli static dictionary Node probe",
+      "heading_count": 5,
+      "name": "vort-br-static-dictionary-node-probe.md",
+      "signature": "b03afb2e3ad02e17",
+      "table_row_count": 62,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Brotli static dictionary subset",
+      "heading_count": 1,
+      "name": "vort-br-static-dictionary-report.md",
+      "signature": "94a4c9ede50adfa3",
+      "table_row_count": 2721,
+      "table_separator_count": 2
+    },
+    {
+      "first_heading": "# Chunked zlib decode benchmark",
+      "heading_count": 1,
+      "name": "vort-chunked-zlib-bench-report.md",
+      "signature": "07c530d43892dfe1",
+      "table_row_count": 10,
+      "table_separator_count": 1
+    },
+    {
+      "first_heading": "# Vort dashboard index",
+      "heading_count": 6,
+      "name": "vort-dashboard-index-lz4-summary.md",
+      "signature": "7c7c3347c411aced",
+      "table_row_count": 7,
+      "table_separator_count": 1
+    },
+    {
+      "first_heading": "# Vort dashboard index",
+      "heading_count": 6,
+      "name": "vort-dashboard-index-summary-fields.md",
+      "signature": "7c7c3347c411aced",
+      "table_row_count": 7,
+      "table_separator_count": 1
+    },
+    {
+      "first_heading": "# Vort dashboard strict smoke",
+      "heading_count": 5,
+      "name": "vort-dashboard-strict-smoke.md",
+      "signature": "b7817460f5625b12",
+      "table_row_count": 755,
+      "table_separator_count": 4
+    },
+    {
+      "first_heading": "# Deflate decode stage report",
+      "heading_count": 2,
+      "name": "vort-deflate-decode-stage-report.md",
+      "signature": "e52412b494474915",
+      "table_row_count": 31,
+      "table_separator_count": 2
+    },
+    {
+      "first_heading": "# Deflate wrapper fuzz corpus report",
+      "heading_count": 4,
+      "name": "vort-deflate-wrapper-fuzz-corpus.md",
+      "signature": "750dd43329780e6a",
+      "table_row_count": 100,
+      "table_separator_count": 3
+    },
+    {
+      "first_heading": "# Vort header inspect smoke",
+      "heading_count": 14,
+      "name": "vort-header-inspect-smoke.md",
+      "signature": "5aa102970c994e7b",
+      "table_row_count": 96,
+      "table_separator_count": 11
+    },
+    {
+      "first_heading": "# Huffman length-limit report",
+      "heading_count": 2,
+      "name": "vort-huffman-length-report.md",
+      "signature": "7efb2847103e27e1",
+      "table_row_count": 54,
+      "table_separator_count": 2
+    },
+    {
+      "first_heading": "# Vort compression level report",
+      "heading_count": 2,
+      "name": "vort-level-report.md",
+      "signature": "7d44de913888f518",
+      "table_row_count": 55,
+      "table_separator_count": 2
+    },
+    {
+      "first_heading": "# Native allocation report",
+      "heading_count": 1,
+      "name": "vort-native-allocation-report.md",
+      "signature": "a282a7f5482cdbef",
+      "table_row_count": 59,
+      "table_separator_count": 1
+    },
+    {
+      "first_heading": "# Native codec probes",
+      "heading_count": 4,
+      "name": "vort-native-codec-probes.md",
+      "signature": "9352bda09803252e",
+      "table_row_count": 30,
+      "table_separator_count": 3
+    },
+    {
+      "first_heading": "# Deflate wrapper fuzz corpus report",
+      "heading_count": 4,
+      "name": "vort-native-fuzz-corpus.md",
+      "signature": "750dd43329780e6a",
+      "table_row_count": 33,
+      "table_separator_count": 3
+    },
+    {
+      "first_heading": "# PNG scratch footprint report",
+      "heading_count": 1,
+      "name": "vort-png-scratch-report.md",
+      "signature": "0344c3bff9522ea0",
+      "table_row_count": 8,
+      "table_separator_count": 1
+    },
+    {
+      "first_heading": "# Sidecar corrupt-payload smoke report",
+      "heading_count": 1,
+      "name": "vort-sidecar-corrupt-smoke.md",
+      "signature": "2d7fb45757e2bc08",
+      "table_row_count": 10,
+      "table_separator_count": 1
+    },
+    {
+      "first_heading": "# relaxed wrapper decode report",
+      "heading_count": 1,
+      "name": "vort-zlib-relaxed-report.md",
+      "signature": "8c557ee70100c4a5",
+      "table_row_count": 13,
+      "table_separator_count": 1
+    },
+    {
+      "first_heading": "# Vort native block length sweep vs zstd",
+      "heading_count": 3,
+      "name": "vort-zstd-compare-block-sweep.md",
+      "signature": "b5e1b17a62a4bbd8",
+      "table_row_count": 24,
+      "table_separator_count": 2
+    },
+    {
+      "first_heading": "# Vort vs zstd size and decode smoke",
+      "heading_count": 1,
+      "name": "vort-zstd-compare-standard.md",
+      "signature": "79e47a797b74e6aa",
+      "table_row_count": 6,
+      "table_separator_count": 1
+    },
+    {
+      "first_heading": "# Vort vs zstd size and decode smoke",
+      "heading_count": 1,
+      "name": "vort-zstd-compare.md",
+      "signature": "79e47a797b74e6aa",
+      "table_row_count": 5,
+      "table_separator_count": 1
+    }
+  ],
+  "schema": "vort.dashboard_markdown_heading_manifest",
+  "schema_version": 1
+}

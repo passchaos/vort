@@ -245,6 +245,20 @@ fn checkFrameRoundTrips(allocator: std.mem.Allocator, case: Case) !void {
         .block_checksum = true,
     });
     defer allocator.free(native_frame);
+    const native_stream_summary = try vort.lz4SummarizeNativeStream(native_frame);
+    if (native_stream_summary.frame_count != 1) return error.Lz4ProbeMismatch;
+    if (native_stream_summary.block_count == 0 and case.payload.len != 0) return error.Lz4ProbeMismatch;
+    if (native_stream_summary.skippable_frame_count != 0) return error.Lz4ProbeMismatch;
+    if (native_stream_summary.content_size_frame_count != 1) return error.Lz4ProbeMismatch;
+    if (native_stream_summary.declared_content_bytes != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    if (native_stream_summary.checksum_frame_count != 1) return error.Lz4ProbeMismatch;
+    if (native_stream_summary.block_checksum_frame_count != 1) return error.Lz4ProbeMismatch;
+    if (native_stream_summary.dictionary_id_frame_count != 0) return error.Lz4ProbeMismatch;
+    if (native_stream_summary.payload_bytes == 0 and case.payload.len != 0) return error.Lz4ProbeMismatch;
+    const native_block_summary = try vort.lz4SummarizeNativeFrameBlocks(native_frame);
+    if (native_block_summary.block_count != native_stream_summary.block_count) return error.Lz4ProbeMismatch;
+    if (native_block_summary.compressed_block_count != native_stream_summary.compressed_block_count) return error.Lz4ProbeMismatch;
+    if (native_block_summary.raw_block_count != native_stream_summary.raw_block_count) return error.Lz4ProbeMismatch;
     const lib_decoded = try vort.lz4DecodeFrameAlloc(allocator, native_frame);
     defer allocator.free(lib_decoded);
     try expectPayload(case, lib_decoded);
@@ -364,6 +378,9 @@ fn checkBlockRoundTrip(allocator: std.mem.Allocator, case: Case) !void {
     defer allocator.free(block);
     const decoded_len = try vort.lz4DecodedBlockSize(block);
     if (decoded_len != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    const summary = try vort.lz4SummarizeBlock(block);
+    if (summary.decoded_bytes != case.payload.len) return error.Lz4ProbeSizeMismatch;
+    if (summary.literal_bytes + summary.match_bytes != case.payload.len) return error.Lz4ProbeSizeMismatch;
     const decoded = try vort.lz4DecodeBlockAlloc(allocator, block, case.payload.len);
     defer allocator.free(decoded);
     try expectPayload(case, decoded);
@@ -1290,7 +1307,26 @@ fn checkSkippableOnlyStream(allocator: std.mem.Allocator) !void {
     const summary = try vort.lz4SummarizeNativeStream(skip);
     if (summary.frame_count != 0) return error.Lz4ProbeMismatch;
     if (summary.skippable_frame_count != 1) return error.Lz4ProbeMismatch;
+    if (summary.content_size_frame_count != 0) return error.Lz4ProbeMismatch;
+    if (summary.checksum_frame_count != 0) return error.Lz4ProbeMismatch;
+    if (summary.block_checksum_frame_count != 0) return error.Lz4ProbeMismatch;
+    if (summary.dictionary_id_frame_count != 0) return error.Lz4ProbeMismatch;
+    if (summary.declared_content_bytes != 0) return error.Lz4ProbeSizeMismatch;
     if (summary.skippable_payload_bytes != "metadata-only".len) return error.Lz4ProbeSizeMismatch;
+
+    var summary_diagnostics: vort.Lz4NativeStreamSummaryErrorDiagnostics = .{};
+    if (vort.lz4SummarizeNativeStreamWithDiagnostics(skip[0 .. skip.len - 2], &summary_diagnostics)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != error.TruncatedFrame) return err;
+    if (summary_diagnostics.phase != .skippable_payload) return error.Lz4ProbeMismatch;
+    if (summary_diagnostics.offset != skip.len - 2) return error.Lz4ProbeSizeMismatch;
+
+    var bad_magic_diagnostics: vort.Lz4NativeStreamSummaryErrorDiagnostics = .{};
+    if (vort.lz4SummarizeNativeStreamWithDiagnostics("bad-lz4", &bad_magic_diagnostics)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != error.CorruptFrame) return err;
+    if (bad_magic_diagnostics.phase != .magic) return error.Lz4ProbeMismatch;
+    if (bad_magic_diagnostics.offset != 0) return error.Lz4ProbeSizeMismatch;
 
     var iterator = vort.lz4IterateNativeStream(skip);
     const element = (try iterator.next()) orelse return error.Lz4ProbeMismatch;
@@ -2044,6 +2080,10 @@ fn checkSkippableChecksumAndTrailingStreams(allocator: std.mem.Allocator) !usize
 
     const checksum_summary = try vort.lz4SummarizeNativeStream(checksum_stream);
     if (checksum_summary.skippable_frame_count != 1 or checksum_summary.frame_count != 1) return error.Lz4ProbeMismatch;
+    if (checksum_summary.checksum_frame_count != 1) return error.Lz4ProbeMismatch;
+    if (checksum_summary.block_checksum_frame_count != 0) return error.Lz4ProbeMismatch;
+    if (checksum_summary.content_size_frame_count != 0) return error.Lz4ProbeMismatch;
+    if (checksum_summary.declared_content_bytes != 0) return error.Lz4ProbeSizeMismatch;
     if (try vort.lz4DecodedNativeConcatenatedFrameSize(checksum_stream) != checksum_payload.len) return error.Lz4ProbeSizeMismatch;
     var checksum_output: [checksum_payload.len]u8 = undefined;
     if (vort.lz4DecodeNativeConcatenatedFrameInto(checksum_stream, &checksum_output)) |_| {
@@ -2258,6 +2298,12 @@ fn checkInvalidFrameChecksumsAndTrailing(allocator: std.mem.Allocator) !usize {
     defer allocator.free(truncated_content_checksum);
     try expectNativeFrameDecodeAndSizeError(allocator, truncated_content_checksum, error.TruncatedFrame);
     try expectNativeStreamErrorAfterFirstFrame(allocator, truncated_content_checksum, null, error.TruncatedFrame);
+    var checksum_summary_diagnostics: vort.Lz4NativeStreamSummaryErrorDiagnostics = .{};
+    if (vort.lz4SummarizeNativeStreamWithDiagnostics(truncated_content_checksum, &checksum_summary_diagnostics)) |_| {
+        return error.Lz4ProbeExpectedFrameError;
+    } else |err| if (@as(anyerror, err) != error.TruncatedFrame) return err;
+    if (checksum_summary_diagnostics.phase != .frame_checksum) return error.Lz4ProbeMismatch;
+    if (checksum_summary_diagnostics.offset != truncated_content_checksum.len) return error.Lz4ProbeSizeMismatch;
     checked += 1;
 
     var wrong_content_tail: [8]u8 = undefined;

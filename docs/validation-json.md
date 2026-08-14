@@ -614,6 +614,21 @@ Important fields:
 - `schema_version`: `1`
 - `ok`: whether the smoke passed
 - `checked_schemas`: schemas successfully parsed
+- `observed_schemas`, `observed_schema_count`: schemas observed in retained
+  validation JSON artifacts during the smoke
+- `unchecked_observed_schemas`, `unchecked_observed_schema_count`: observed
+  schemas not present in `checked_schemas`; dashboard health requires this to be
+  empty
+- `json_artifact_count`, `json_artifact_parsed_count`,
+  `json_artifact_schema_count`, `json_artifact_manifest_validated_count`: JSON
+  artifact-level manifest audit counts for retained `zig-out` JSON files
+- `json_artifact_excluded_count`, `json_artifact_excluded_names`: intentional
+  exclusions such as stale self-output snapshots that are inventoried but not
+  part of the current validation smoke contract; the shared manifest fixes the
+  allowed exclusion names
+- `json_artifact_parse_failed`, `json_artifact_missing_schema`,
+  `json_artifact_manifest_failed_names`: artifact-level audit drift lists; parse,
+  missing-schema, and manifest-validation failures are hard health gates
 - `cli_success_ok`, `cli_failure_ok`, `cli_failure_hint`
 - `report_rows`, `corrupt_rows`
 
@@ -628,6 +643,7 @@ Example:
     "vort.validation_report",
     "vort.sidecar_verify_report",
     "vort.sidecar_corrupt_smoke_report",
+    "vort.br_static_dictionary_required_coverage",
     "vort.dashboard_strict_expected_modes",
     "vort.dashboard_strict_validation_reasons",
     "vort.dashboard_strict_smoke",
@@ -647,16 +663,125 @@ Example:
     "vort.header_inspect_smoke",
     "vort.header_inspect_required_workflows",
     "vort.validation_json_docs_negative_smoke",
+    "vort.lz4_native_stream_summary",
+    "vort.lz4_native_stream_summary_error",
     "vort.raw_deflate_header_info",
     "vort.wrapped_deflate_header_info",
+    "vort.zstd_native_stream_summary",
+    "vort.zstd_native_stream_summary_error",
     "vort.zlib_header_info",
+    "vort.zlib_relaxed_report",
+    "vort.zlib_relaxed_report_gate",
+    "vort.zstd_compare_gate",
+    "vort.zstd_compare_block_sweep_gate",
+    "vort.native_allocation_report",
+    "vort.native_allocation_smoke",
+    "vort.native_allocation_negative_smoke",
+    "vort.native_tier_range_bench_gate",
+    "vort.validation_json_smoke",
     "vort.gzip_header_info"
   ],
+  "observed_schema_count": 7,
+  "observed_schemas": [
+    "vort.validation_report",
+    "vort.sidecar_verify_report",
+    "vort.sidecar_corrupt_smoke_report",
+    "vort.zlib_relaxed_report",
+    "vort.zlib_relaxed_report_gate",
+    "vort.zstd_compare_gate",
+    "vort.validation_json_smoke"
+  ],
+  "unchecked_observed_schema_count": 0,
+  "unchecked_observed_schemas": [],
+  "json_artifact_count": 10,
+  "json_artifact_excluded_count": 2,
+  "json_artifact_excluded_names": [
+    "vort-dashboard-index.json",
+    "vort-validation-json-smoke.json"
+  ],
+  "json_artifact_parsed_count": 10,
+  "json_artifact_schema_count": 10,
+  "json_artifact_parse_failed_count": 0,
+  "json_artifact_parse_failed": [],
+  "json_artifact_missing_schema_count": 0,
+  "json_artifact_missing_schema": [],
+  "json_artifact_manifest_validated_count": 9,
+  "json_artifact_manifest_failed_count": 1,
+  "json_artifact_manifest_failed_names": [
+    "legacy-probe.json"
+  ],
+  "json_artifact_manifest_accounting_mismatch": 0,
   "cli_success_ok": true,
   "cli_failure_ok": false,
   "cli_failure_hint": "payload_corrupt",
   "report_rows": 1,
   "corrupt_rows": 8
+}
+```
+
+## `vort.dashboard_csv_header_manifest`
+
+Consumed by:
+
+```sh
+python3 tools/dashboard_index.py --csv-header-manifest tools/dashboard_csv_header_manifest.json
+```
+
+This schema pins expected CSV artifact header layouts. Each row records the
+artifact name, expected column count, and a stable hash of the ordered header
+columns. Dashboard health compares retained CSV artifacts against this manifest
+so column additions, removals, reordering, or unknown CSV artifacts become
+visible layout drift.
+
+Example:
+
+```json
+{
+  "schema": "vort.dashboard_csv_header_manifest",
+  "schema_version": 1,
+  "artifact_count": 1,
+  "artifacts": [
+    {
+      "name": "vort-example.csv",
+      "column_count": 2,
+      "signature": "0123456789abcdef"
+    }
+  ]
+}
+```
+
+## `vort.dashboard_markdown_heading_manifest`
+
+Consumed by:
+
+```sh
+python3 tools/dashboard_index.py --markdown-heading-manifest tools/dashboard_markdown_heading_manifest.json
+```
+
+This schema pins expected Markdown artifact layouts. Each row records the
+artifact name, heading count, first heading, a stable hash of the ordered
+heading lines, and table/separator row counts. Dashboard health compares
+retained Markdown artifacts against this manifest so missing, renamed,
+reordered, table-count-drifted, or unknown Markdown layouts become visible
+drift.
+
+Example:
+
+```json
+{
+  "schema": "vort.dashboard_markdown_heading_manifest",
+  "schema_version": 1,
+  "artifact_count": 1,
+  "artifacts": [
+    {
+      "name": "vort-example.md",
+      "heading_count": 1,
+      "first_heading": "# Example",
+      "signature": "0123456789abcdef",
+      "table_row_count": 2,
+      "table_separator_count": 1
+    }
+  ]
 }
 ```
 
@@ -771,6 +896,475 @@ Example:
       "validation_step_present": true,
       "consumer_exists": true,
       "validation_json_smoke_checked": true,
+      "matched": true
+    }
+  ]
+}
+```
+
+## `vort.br_static_dictionary_candidate_report`
+
+Produced by:
+
+```sh
+zig build run-br-static-dictionary-candidate-report
+zig build run-br-static-dictionary-candidate-report-smoke
+zig build run-br-static-dictionary-candidate-report-upstream80 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-candidate-report-upstream128 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-candidate-report-upstream256 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-candidate-report-upstream512 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-candidate-report-upstream1024 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-candidate-report-upstream2048 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-candidate-report-upstream4096 -- --brotli-common-dir <path>
+```
+
+This schema reports additional Brotli static-dictionary tuples that can be
+derived from the current source anchors and the minimal transform subset already
+understood by Vort. It can also use a local upstream Brotli `common/` checkout
+with a bounded `--source-limit` to include more raw dictionary words in the
+candidate pool; `run-br-static-dictionary-candidate-report-upstream80` is an
+opt-in retained report for a local source-limit 80 slice, with an analogous
+`upstream128`, `upstream256`, `upstream512`, `upstream1024`, `upstream2048`, and `upstream4096` steps for
+larger local slices. It is a planning artifact for expanding coverage from source
+data rather than hand-picking tuple literals. The report includes transform-kind
+and copy-length summaries so generated backlog size is visible without scanning
+every candidate row.
+
+Example:
+
+```json
+{
+  "schema": "vort.br_static_dictionary_candidate_report",
+  "schema_version": 1,
+  "source_mode": "anchors",
+  "source_limit": 0,
+  "source_entry_count": 64,
+  "anchor_raw_word_count": 50,
+  "upstream_raw_word_count": 0,
+  "raw_word_count": 50,
+  "transform_count": 6,
+  "candidate_count": 1,
+  "kind_rows": [
+    {
+      "transform_kind": "affix_identity",
+      "candidate_count": 1
+    }
+  ],
+  "length_rows": [
+    {
+      "copy_len": 7,
+      "candidate_count": 1
+    }
+  ],
+  "candidates": [
+    {
+      "transform": 1,
+      "copy_len": 7,
+      "word_index": 37,
+      "raw_word": "history",
+      "transformed_word": "history ",
+      "transform_kind": "affix_identity"
+    }
+  ]
+}
+```
+
+## `vort.br_static_dictionary_candidate_upstream_smoke`
+
+Produced by:
+
+```sh
+zig build run-br-static-dictionary-candidate-upstream-smoke
+python3 tools/br_static_dictionary_candidate_upstream_smoke.py --summary zig-out/vort-br-static-dictionary-candidate-upstream-smoke.json --json zig-out/vort-br-static-dictionary-candidates-upstream.json
+```
+
+This schema summarizes a portable smoke for candidate-report upstream mode. The
+smoke creates a tiny temporary Brotli `common/` fixture, asks the candidate
+report to merge a bounded set of raw dictionary words from that fixture, and
+checks that known transformed candidates appear in the generated report. The
+build step also retains the generated upstream candidate JSON/Markdown artifacts
+for dashboard review.
+
+Example:
+
+```json
+{
+  "schema": "vort.br_static_dictionary_candidate_upstream_smoke",
+  "schema_version": 1,
+  "ok": true,
+  "source_mode": "upstream",
+  "source_limit": 8,
+  "source_entry_count": 83,
+  "anchor_raw_word_count": 63,
+  "upstream_raw_word_count": 8,
+  "raw_word_count": 71,
+  "candidate_count": 343,
+  "stdout": "br_static_dictionary_candidate_report=ok source_entries=83 raw_words=71 candidates=343"
+}
+```
+
+## `vort.br_static_dictionary_source_anchors`
+
+Consumed by:
+
+```sh
+zig build run-br-static-dictionary-source-audit
+python3 tools/br_static_dictionary_source_audit.py --anchors tools/br_static_dictionary_source_anchors.json
+```
+
+This schema ties every retained Brotli static-dictionary tuple to the raw RFC
+dictionary word it came from and the small transform operation currently
+implemented by Vort. The audit script cross-checks these anchors against
+`src/br.zig`; when a local upstream Brotli checkout is available it can also
+verify the raw words and transformed outputs against `common/dictionary_inc.h`
+and `common/transform.c`.
+
+Example:
+
+```json
+{
+  "schema": "vort.br_static_dictionary_source_anchors",
+  "schema_version": 1,
+  "entry_count": 1,
+  "source": "RFC 7932 Brotli static dictionary data as exposed by upstream common/dictionary_inc.h and common/transform.c",
+  "entries": [
+    {
+      "transform": 9,
+      "copy_len": 7,
+      "word_index": 37,
+      "raw_word": "history",
+      "transformed_word": "History",
+      "transform_kind": "uppercase_first"
+    }
+  ]
+}
+```
+
+## `vort.br_static_dictionary_source_audit`
+
+Produced by:
+
+```sh
+zig build run-br-static-dictionary-source-audit
+python3 tools/br_static_dictionary_source_audit.py --summary zig-out/vort-br-static-dictionary-source-audit.json
+```
+
+This schema summarizes the source-anchor audit for the retained Brotli
+static-dictionary subset. It reports whether the Zig decoder table and anchor
+fixture agree, whether the generated Zig table matches `src/br.zig`, how many
+transforms and lengths are covered, and whether an optional local upstream
+Brotli source checkout was used for byte-level verification.
+
+Example:
+
+```json
+{
+  "schema": "vort.br_static_dictionary_source_audit",
+  "schema_version": 1,
+  "ok": true,
+  "entry_count": 64,
+  "anchor_count": 64,
+  "transform_count": 6,
+  "length_count": 8,
+  "operation_counts": {
+    "affix_identity": 9,
+    "identity": 47,
+    "omit_last_1": 3,
+    "uppercase_first": 5
+  },
+  "generated_table_matches_source": true,
+  "generated_zig_bytes": 5242,
+  "generated_zig_path": "zig-out/vort-br-static-dictionary-generated.zig",
+  "source_checked": false,
+  "source_dir": ""
+}
+```
+
+## `vort.br_static_dictionary_source_audit_negative_smoke`
+
+Produced by:
+
+```sh
+zig build run-br-static-dictionary-source-audit-negative-smoke
+python3 tools/br_static_dictionary_source_audit_negative_smoke.py --summary zig-out/vort-br-static-dictionary-source-audit-negative-smoke.json
+```
+
+This schema summarizes negative fixtures for the Brotli static-dictionary
+source-anchor audit. Each case mutates the anchor fixture, the parsed Zig source,
+or the optional upstream Brotli source path and verifies that the audit fails
+with the expected diagnostic instead of accepting drift silently.
+
+Example:
+
+```json
+{
+  "schema": "vort.br_static_dictionary_source_audit_negative_smoke",
+  "schema_version": 1,
+  "ok": true,
+  "case_count": 1,
+  "cases": [
+    {
+      "name": "generated_order_mismatch",
+      "expected_output": "generated Zig table order/content differs",
+      "returncode": 1,
+      "matched": true
+    }
+  ]
+}
+```
+
+## `vort.br_static_dictionary_node_probe`
+
+Produced by:
+
+```sh
+zig build run-br-static-dictionary-node-probe
+zig build run-br-static-dictionary-node-probe-wide
+zig build run-br-static-dictionary-node-probe-full
+zig build run-br-static-dictionary-node-probe-upstream
+zig build run-br-static-dictionary-node-probe-upstream80 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream128 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream256 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream512 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream1024-0-1024 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream1024-1024-2048 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream1024-2048-3072 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream1024-3072-4096 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream1024-4096-5120 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream1024-5120-6144 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream1024-6144-tail -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream2048-6137-7161 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream2048-7161-8185 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream2048-8185-9209 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream2048-9209-10233 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream2048-10233-11257 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream2048-11257-12281 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream2048-12281-tail -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream4096-12223-13247 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream4096-13247-14271 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream4096-14271-15295 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream4096-15295-16319 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream4096-16319-17343 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream4096-17343-18367 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream4096-18367-19391 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream4096-19391-20415 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream4096-20415-21439 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream4096-21439-22463 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream4096-22463-23487 -- --brotli-common-dir <path>
+zig build run-br-static-dictionary-node-probe-upstream4096-23487-tail -- --brotli-common-dir <path>
+python3 tools/br_static_dictionary_node_probe.py <vort-cli> --json zig-out/vort-br-static-dictionary-node-probe.json --start-index 0 --limit 48
+python3 tools/br_static_dictionary_node_probe.py <vort-cli> --json /tmp/probe.json --start-index 1024 --limit 1024
+```
+
+This schema records a bounded Node-backed probe over generated Brotli
+static-dictionary candidates. For each candidate payload, Node emits a Brotli
+quality-5 frame and Vort attempts to decode that exact frame, so future coverage
+work can distinguish candidates already accepted by the current decoder from
+Node-generated frames that still require new source tuples or transforms. The
+standard build step requires all default probed frames to decode successfully;
+the wide step raises the retained probe prefix to 160 candidates, and the full
+step probes every generated candidate and now fails if any default full-probe
+candidate remains a size winner, making unpromoted high-value candidates visible
+in routine validation. The upstream step probes the portable upstream-candidate
+fixture generated by
+`run-br-static-dictionary-candidate-upstream-smoke`; the upstream80 step probes
+a local upstream source-limit 80 slice when a Brotli checkout path is supplied,
+and `upstream128` / `upstream256` / `upstream512` repeat the same flow for larger local slices, while the `upstream1024-*` steps probe large source-limit 1024 reports in 1024-row windows (`0-1024`, `1024-2048`, `2048-3072`, `3072-4096`, `4096-5120`, `5120-6144`, and the final `6144-tail`); the `upstream2048-*` steps continue from the first changed candidate index in windows (`6137-7161`, `7161-8185`, `8185-9209`, `9209-10233`, `10233-11257`, `11257-12281`, and `12281-tail`). The `upstream256` and `upstream512` probes also fail on unpromoted size winners once their current source-limit slices are clean. The report also summarizes
+probed rows by transform kind and by compressed-size class, and lists the
+`smaller` rows separately, and copies the candidate report source metadata so
+high-value candidates can be triaged without scanning every candidate row or
+inferring which source slice produced the probe.
+
+Example:
+
+```json
+{
+  "schema": "vort.br_static_dictionary_node_probe",
+  "schema_version": 1,
+  "ok": true,
+  "candidate_count": 296,
+  "candidate_source_mode": "anchors",
+  "candidate_source_limit": 0,
+  "candidate_source_entry_count": 83,
+  "candidate_anchor_raw_word_count": 63,
+  "candidate_upstream_raw_word_count": 0,
+  "candidate_raw_word_count": 63,
+  "all_candidates": false,
+  "start_index": 0,
+  "limit": 1,
+  "quality": 5,
+  "lgwin": 10,
+  "probed_count": 1,
+  "node_decode_successes": 1,
+  "vort_decode_successes": 1,
+  "vort_decode_failures": 0,
+  "kind_rows": [
+    {
+      "transform_kind": "affix_identity",
+      "probed_count": 1,
+      "node_decode_successes": 1,
+      "vort_decode_successes": 1,
+      "vort_decode_failures": 0
+    }
+  ],
+  "size_rows": [
+    {
+      "size_class": "larger",
+      "probed_count": 1
+    }
+  ],
+  "size_winner_count": 0,
+  "size_winner_rows": [],
+  "rows": [
+    {
+      "index": 0,
+      "transform": 1,
+      "copy_len": 5,
+      "word_index": 35,
+      "raw_word": "about",
+      "candidate_word": "about ",
+      "transform_kind": "affix_identity",
+      "quality": 5,
+      "lgwin": 10,
+      "payload_bytes": 6,
+      "br_bytes": 11,
+      "size_delta_bytes": 5,
+      "size_class": "larger",
+      "br_hex": "2114000461626f75742003",
+      "node_ok": true,
+      "vort_ok": true,
+      "classification": "vort_accepts_node_frame",
+      "error": ""
+    }
+  ]
+}
+```
+
+## `vort.br_static_dictionary_required_coverage`
+
+Consumed by:
+
+```sh
+zig build run-br-static-dictionary-report-smoke
+python3 tools/br_static_dictionary_report_smoke.py --required tools/br_static_dictionary_required_coverage.json
+```
+
+This schema stores the representative Brotli static-dictionary tuples that the
+coverage smoke must find in the generated report. Keeping these tuples in data
+lets coverage requirements grow without editing the smoke script.
+
+Example:
+
+```json
+{
+  "schema": "vort.br_static_dictionary_required_coverage",
+  "schema_version": 1,
+  "entries": [
+    {
+      "transform": 0,
+      "copy_len": 16,
+      "word_index": 52,
+      "word": "large number of ",
+      "reason": "representative identity dictionary tuple",
+      "source_case": "node-static-dictionary-large-number-of-q5-lgwin10",
+      "category": "phrase"
+    }
+  ]
+}
+```
+
+## `vort.br_static_dictionary_report`
+
+Produced by:
+
+```sh
+zig build run-br-static-dictionary-report-dashboard
+zig build run-br-static-dictionary-report-smoke
+```
+
+This schema describes the retained Brotli static-dictionary subset currently
+implemented by Vort. Each entry identifies a supported RFC transform index, copy
+length, dictionary word index, transformed word byte length, and transformed
+word bytes. Dashboard aggregate health cross-checks this JSON against the CSV,
+Markdown summary, and negative smoke artifact before static-dictionary coverage
+is considered healthy. The report is intentionally a subset manifest rather than
+a claim of complete Brotli dictionary support.
+
+Example:
+
+```json
+{
+  "schema": "vort.br_static_dictionary_report",
+  "schema_version": 1,
+  "entry_count": 2,
+  "transform_count": 2,
+  "length_count": 1,
+  "category_counts": {
+    "identity": 1,
+    "transform": 1,
+    "phrase": 0
+  },
+  "matrix_rows": [
+    {
+      "transform": 0,
+      "identity": 1,
+      "transform_entries": 0,
+      "phrase": 0,
+      "total": 1
+    },
+    {
+      "transform": 12,
+      "identity": 0,
+      "transform_entries": 1,
+      "phrase": 0,
+      "total": 1
+    }
+  ],
+  "entries": [
+    {
+      "transform": 0,
+      "copy_len": 5,
+      "word_index": 43,
+      "word_bytes": 5,
+      "word": "words"
+    },
+    {
+      "transform": 12,
+      "copy_len": 5,
+      "word_index": 43,
+      "word_bytes": 4,
+      "word": "word"
+    }
+  ]
+}
+```
+
+## `vort.br_static_dictionary_report_negative_smoke`
+
+Produced by:
+
+```sh
+zig build run-br-static-dictionary-report-negative-smoke
+python3 tools/br_static_dictionary_report_negative_smoke.py --summary zig-out/vort-br-static-dictionary-report-negative-smoke.json
+```
+
+This schema summarizes negative fixtures for the Brotli static-dictionary report
+smoke. Each case intentionally corrupts one report invariant and records whether
+the validator failed with the expected diagnostic.
+
+Example:
+
+```json
+{
+  "schema": "vort.br_static_dictionary_report_negative_smoke",
+  "schema_version": 1,
+  "ok": true,
+  "case_count": 1,
+  "cases": [
+    {
+      "name": "invalid_category",
+      "expected_output": "category invalid",
+      "returncode": 1,
       "matched": true
     }
   ]
@@ -1063,7 +1657,9 @@ zig build run-deflate-wrapper-fuzz-corpus-dashboard
 This schema summarizes the hex-sample fuzz corpus harness when it is run in
 artifact mode. The fixed dashboard step currently retains the raw/zlib/gzip
 wrapper corpus so exact malformed-input error expectations are visible in the
-main dashboard index.
+main dashboard index. Dashboard aggregate health also cross-checks retained
+Markdown summary/sample rows against the JSON report, and the native corpus
+health additionally verifies its coverage-smoke matched rows.
 
 Important fields:
 
@@ -1305,18 +1901,22 @@ raw/zlib/gzip decode vectors, dynamic/adaptive encode vectors, preset-dictionary
 decode/encode vectors, file-command vectors, and expected-failure checks visible
 to dashboard health gates without parsing console text. `large_file_payloads`
 counts corpus entries routed through file-based CLI commands so the harness does
-not depend on platform-specific per-argument limits. Schema version `2` makes
-that coverage count required for healthy reports.
+not depend on platform-specific per-argument limits. `file_hex_encode_cases`
+counts raw/zlib/gzip file-to-hex encoder outputs decoded by Python so the
+dashboard can distinguish file-transport coverage from command-specific
+file-hex encoder coverage. Schema version `3` makes both coverage counts
+required for healthy reports.
 
 Example:
 
 ```json
 {
   "schema": "vort.python_zlib_diff_smoke",
-  "schema_version": 2,
+  "schema_version": 3,
   "ok": true,
   "payloads": 11,
   "large_file_payloads": 1,
+  "file_hex_encode_cases": 3,
   "match_heavy_payloads": 3,
   "dynamic_payloads": 3,
   "dictionary_cases": 3,
@@ -1339,12 +1939,17 @@ python3 tools/native_codec_probes_dashboard.py --json zig-out/vort-native-codec-
 ```
 
 This schema summarizes the library-level native LZ4/Zstd probes, retains the
-case counts from the frame and dictionary probe executables, adds a
+case counts from the frame and dictionary probe executables, and the dashboard
+aggregate health cross-checks the retained Markdown tables against the JSON
+coverage/capability/probe rows. It adds a
 `coverage` list keyed by codec (`lz4`/`zstd`) and surface (`frame`/`dictionary`),
 and adds a `capabilities` list for cross-cutting library behaviors such as
 lib-generated frames, incremental drains, chunked split input, reusable chunked
 decoder drains, dictionaries, dictionary training, malformed input, checksums,
-Huffman literals, sequence tables, and block APIs.
+Huffman literals, sequence tables, and block APIs. Each probe row also records
+`timed_out` and `timeout_seconds`; the dashboard treats a timeout as a failed
+probe and still writes JSON/Markdown artifacts so CI failures show which probe
+exceeded its budget.
 
 Example:
 
@@ -1356,11 +1961,11 @@ Example:
   "capability_count": 16,
   "coverage_count": 4,
   "probe_count": 4,
-  "total_cases": 257,
+  "total_cases": 386,
   "capabilities": [
     {
       "capability": "lib-generated",
-      "cases": 126,
+      "cases": 187,
       "ok": true,
       "ok_probe_count": 2,
       "present": true,
@@ -1368,7 +1973,7 @@ Example:
     },
     {
       "capability": "native-generated",
-      "cases": 221,
+      "cases": 350,
       "ok": true,
       "ok_probe_count": 2,
       "present": true,
@@ -1376,7 +1981,7 @@ Example:
     },
     {
       "capability": "incremental",
-      "cases": 135,
+      "cases": 204,
       "ok": true,
       "ok_probe_count": 4,
       "present": true,
@@ -1384,7 +1989,7 @@ Example:
     },
     {
       "capability": "chunked",
-      "cases": 131,
+      "cases": 200,
       "ok": true,
       "ok_probe_count": 4,
       "present": true,
@@ -1392,7 +1997,7 @@ Example:
     },
     {
       "capability": "reusable-chunked",
-      "cases": 128,
+      "cases": 197,
       "ok": true,
       "ok_probe_count": 2,
       "present": true,
@@ -1408,7 +2013,7 @@ Example:
     },
     {
       "capability": "dictionary",
-      "cases": 139,
+      "cases": 149,
       "ok": true,
       "ok_probe_count": 3,
       "present": true,
@@ -1424,7 +2029,7 @@ Example:
     },
     {
       "capability": "dictionary-set",
-      "cases": 111,
+      "cases": 121,
       "ok": true,
       "ok_probe_count": 3,
       "present": true,
@@ -1432,7 +2037,7 @@ Example:
     },
     {
       "capability": "skippable",
-      "cases": 221,
+      "cases": 350,
       "ok": true,
       "ok_probe_count": 2,
       "present": true,
@@ -1440,7 +2045,7 @@ Example:
     },
     {
       "capability": "malformed",
-      "cases": 223,
+      "cases": 352,
       "ok": true,
       "ok_probe_count": 3,
       "present": true,
@@ -1448,7 +2053,7 @@ Example:
     },
     {
       "capability": "checksum",
-      "cases": 228,
+      "cases": 357,
       "ok": true,
       "ok_probe_count": 4,
       "present": true,
@@ -1456,7 +2061,7 @@ Example:
     },
     {
       "capability": "bounded-limits",
-      "cases": 225,
+      "cases": 354,
       "ok": true,
       "ok_probe_count": 4,
       "present": true,
@@ -1464,7 +2069,7 @@ Example:
     },
     {
       "capability": "huffman",
-      "cases": 118,
+      "cases": 237,
       "ok": true,
       "ok_probe_count": 1,
       "present": true,
@@ -1472,7 +2077,7 @@ Example:
     },
     {
       "capability": "sequence-tables",
-      "cases": 125,
+      "cases": 244,
       "ok": true,
       "ok_probe_count": 2,
       "present": true,
@@ -1480,7 +2085,7 @@ Example:
     },
     {
       "capability": "block",
-      "cases": 103,
+      "cases": 113,
       "ok": true,
       "ok_probe_count": 1,
       "present": true,
@@ -1489,7 +2094,7 @@ Example:
   ],
   "coverage": [
     {
-      "cases": 103,
+      "cases": 113,
       "codec": "lz4",
       "ok": true,
       "ok_probe_count": 1,
@@ -1507,7 +2112,7 @@ Example:
       "surface": "dictionary"
     },
     {
-      "cases": 118,
+      "cases": 237,
       "codec": "zstd",
       "ok": true,
       "ok_probe_count": 1,
@@ -1531,9 +2136,11 @@ Example:
       "executable": "zig-out/bin/lz4-native-probe",
       "ok": true,
       "returncode": 0,
-      "cases": 103,
+      "timed_out": false,
+      "timeout_seconds": 120.0,
+      "cases": 113,
       "marker": "lz4_native_probe",
-      "output": "lz4_native_probe_ok cases=103\nlz4_native_probe_coverage capability=block cases=103\nlz4_native_probe_coverage capability=bounded-limits cases=103\nlz4_native_probe_coverage capability=checksum cases=103\nlz4_native_probe_coverage capability=chunked cases=63\nlz4_native_probe_coverage capability=reusable-chunked cases=63\nlz4_native_probe_coverage capability=dictionary cases=103\nlz4_native_probe_coverage capability=dictionary-set cases=103\nlz4_native_probe_coverage capability=incremental cases=63\nlz4_native_probe_coverage capability=lib-generated cases=63\nlz4_native_probe_coverage capability=malformed cases=103\nlz4_native_probe_coverage capability=native-generated cases=103\nlz4_native_probe_coverage capability=skippable cases=103\n",
+      "output": "lz4_native_probe_ok cases=113\nlz4_native_probe_coverage capability=block cases=113\nlz4_native_probe_coverage capability=bounded-limits cases=113\nlz4_native_probe_coverage capability=checksum cases=113\nlz4_native_probe_coverage capability=chunked cases=63\nlz4_native_probe_coverage capability=reusable-chunked cases=63\nlz4_native_probe_coverage capability=dictionary cases=113\nlz4_native_probe_coverage capability=dictionary-set cases=113\nlz4_native_probe_coverage capability=incremental cases=63\nlz4_native_probe_coverage capability=lib-generated cases=63\nlz4_native_probe_coverage capability=malformed cases=113\nlz4_native_probe_coverage capability=native-generated cases=113\nlz4_native_probe_coverage capability=skippable cases=113\n",
       "reported_capabilities": [
         "block",
         "bounded-limits",
@@ -1549,18 +2156,18 @@ Example:
         "skippable"
       ],
       "reported_capability_cases": {
-        "block": 103,
-        "bounded-limits": 103,
-        "checksum": 103,
+        "block": 113,
+        "bounded-limits": 113,
+        "checksum": 113,
         "chunked": 63,
-        "dictionary": 103,
-        "dictionary-set": 103,
+        "dictionary": 113,
+        "dictionary-set": 113,
         "incremental": 63,
         "lib-generated": 63,
-        "malformed": 103,
-        "native-generated": 103,
+        "malformed": 113,
+        "native-generated": 113,
         "reusable-chunked": 63,
-        "skippable": 103
+        "skippable": 113
       },
       "reported_capability_count": 12
     },
@@ -1569,6 +2176,8 @@ Example:
       "executable": "zig-out/bin/lz4-native-dictionary-probe",
       "ok": true,
       "returncode": 0,
+      "timed_out": false,
+      "timeout_seconds": 120.0,
       "cases": 11,
       "marker": "lz4_native_dictionary_probe",
       "output": "lz4_native_dictionary_probe_ok cases=11\nlz4_native_dictionary_probe_coverage capability=bounded-limits cases=1\nlz4_native_dictionary_probe_coverage capability=checksum cases=3\nlz4_native_dictionary_probe_coverage capability=chunked cases=1\nlz4_native_dictionary_probe_coverage capability=dictionary cases=11\nlz4_native_dictionary_probe_coverage capability=dictionary-training cases=1\nlz4_native_dictionary_probe_coverage capability=dictionary-set cases=4\nlz4_native_dictionary_probe_coverage capability=incremental cases=3\n",
@@ -1577,8 +2186,8 @@ Example:
         "checksum",
         "chunked",
         "dictionary",
-        "dictionary-training",
         "dictionary-set",
+        "dictionary-training",
         "incremental"
       ],
       "reported_capability_cases": {
@@ -1586,8 +2195,8 @@ Example:
         "checksum": 3,
         "chunked": 1,
         "dictionary": 11,
-        "dictionary-training": 1,
         "dictionary-set": 4,
+        "dictionary-training": 1,
         "incremental": 3
       },
       "reported_capability_count": 7
@@ -1597,9 +2206,11 @@ Example:
       "executable": "zig-out/bin/zstd-native-frame-probe",
       "ok": true,
       "returncode": 0,
-      "cases": 118,
+      "timed_out": false,
+      "timeout_seconds": 120.0,
+      "cases": 237,
       "marker": "zstd_native_frame_probe",
-      "output": "zstd_native_frame_probe_ok cases=118\nzstd_native_frame_probe_coverage capability=bounded-limits cases=118\nzstd_native_frame_probe_coverage capability=checksum cases=118\nzstd_native_frame_probe_coverage capability=chunked cases=65\nzstd_native_frame_probe_coverage capability=reusable-chunked cases=65\nzstd_native_frame_probe_coverage capability=fse-repeat cases=5\nzstd_native_frame_probe_coverage capability=huffman cases=118\nzstd_native_frame_probe_coverage capability=incremental cases=65\nzstd_native_frame_probe_coverage capability=lib-generated cases=63\nzstd_native_frame_probe_coverage capability=malformed cases=118\nzstd_native_frame_probe_coverage capability=native-generated cases=118\nzstd_native_frame_probe_coverage capability=sequence-tables cases=118\nzstd_native_frame_probe_coverage capability=skippable cases=118\n",
+      "output": "zstd_native_frame_probe_ok cases=237\nzstd_native_frame_probe_coverage capability=bounded-limits cases=237\nzstd_native_frame_probe_coverage capability=checksum cases=237\nzstd_native_frame_probe_coverage capability=chunked cases=134\nzstd_native_frame_probe_coverage capability=reusable-chunked cases=134\nzstd_native_frame_probe_coverage capability=fse-repeat cases=5\nzstd_native_frame_probe_coverage capability=huffman cases=237\nzstd_native_frame_probe_coverage capability=incremental cases=134\nzstd_native_frame_probe_coverage capability=lib-generated cases=124\nzstd_native_frame_probe_coverage capability=malformed cases=237\nzstd_native_frame_probe_coverage capability=native-generated cases=237\nzstd_native_frame_probe_coverage capability=sequence-tables cases=237\nzstd_native_frame_probe_coverage capability=skippable cases=237\n",
       "reported_capabilities": [
         "bounded-limits",
         "checksum",
@@ -1615,18 +2226,18 @@ Example:
         "skippable"
       ],
       "reported_capability_cases": {
-        "bounded-limits": 118,
-        "checksum": 118,
-        "chunked": 65,
+        "bounded-limits": 237,
+        "checksum": 237,
+        "chunked": 134,
         "fse-repeat": 5,
-        "huffman": 118,
-        "incremental": 65,
-        "lib-generated": 63,
-        "malformed": 118,
-        "native-generated": 118,
-        "reusable-chunked": 65,
-        "sequence-tables": 118,
-        "skippable": 118
+        "huffman": 237,
+        "incremental": 134,
+        "lib-generated": 124,
+        "malformed": 237,
+        "native-generated": 237,
+        "reusable-chunked": 134,
+        "sequence-tables": 237,
+        "skippable": 237
       },
       "reported_capability_count": 12
     },
@@ -1635,6 +2246,8 @@ Example:
       "executable": "zig-out/bin/zstd-native-dictionary-probe",
       "ok": true,
       "returncode": 0,
+      "timed_out": false,
+      "timeout_seconds": 120.0,
       "cases": 25,
       "marker": "zstd_native_dictionary_probe",
       "output": "zstd_native_dictionary_probe_ok cases=25\nzstd_native_dictionary_probe_coverage capability=bounded-limits cases=3\nzstd_native_dictionary_probe_coverage capability=checksum cases=4\nzstd_native_dictionary_probe_coverage capability=chunked cases=2\nzstd_native_dictionary_probe_coverage capability=dictionary cases=25\nzstd_native_dictionary_probe_coverage capability=dictionary-training cases=1\nzstd_native_dictionary_probe_coverage capability=dictionary-set cases=4\nzstd_native_dictionary_probe_coverage capability=fse-repeat cases=3\nzstd_native_dictionary_probe_coverage capability=incremental cases=4\nzstd_native_dictionary_probe_coverage capability=malformed cases=2\nzstd_native_dictionary_probe_coverage capability=sequence-tables cases=7\n",
@@ -1643,8 +2256,8 @@ Example:
         "checksum",
         "chunked",
         "dictionary",
-        "dictionary-training",
         "dictionary-set",
+        "dictionary-training",
         "fse-repeat",
         "incremental",
         "malformed",
@@ -1655,8 +2268,8 @@ Example:
         "checksum": 4,
         "chunked": 2,
         "dictionary": 25,
-        "dictionary-training": 1,
         "dictionary-set": 4,
+        "dictionary-training": 1,
         "fse-repeat": 3,
         "incremental": 4,
         "malformed": 2,
@@ -1665,6 +2278,246 @@ Example:
       "reported_capability_count": 10
     }
   ]
+}
+```
+
+## `vort.native_summary_error_dashboard`
+
+Produced by:
+
+```sh
+zig build run-native-summary-error-dashboard
+```
+
+This retained artifact records representative structured error JSON emitted by
+the LZ4 and Zstd native summary CLIs. It aggregates error and phase counts plus
+offset ranges so dashboards can track whether malformed-stream failures are
+covered without scraping process error traces.
+
+Example:
+
+```json
+{
+  "schema": "vort.native_summary_error_dashboard",
+  "schema_version": 1,
+  "ok": true,
+  "case_count": 1,
+  "lz4_case_count": 1,
+  "zstd_case_count": 0,
+  "error_counts": {
+    "ChecksumMismatch": 1,
+    "CorruptFrame": 1
+  },
+  "phase_counts": {
+    "magic": 1
+  },
+  "lz4_error_counts": {
+    "CorruptFrame": 1
+  },
+  "zstd_error_counts": {},
+  "lz4_phase_counts": {
+    "magic": 1
+  },
+  "zstd_phase_counts": {},
+  "required_codec_phases": {
+    "lz4": ["magic", "frame_header", "skippable_payload", "frame_body", "frame_checksum", "frame"],
+    "zstd": ["magic", "frame_header", "skippable_payload", "frame_body", "frame_checksum", "frame"]
+  },
+  "offset_min": 0,
+  "offset_max": 0,
+  "lz4_offset_min": 0,
+  "lz4_offset_max": 0,
+  "zstd_offset_min": 0,
+  "zstd_offset_max": 0,
+  "phase_offset_ranges": {
+    "magic": {
+      "min": 0,
+      "max": 0
+    }
+  },
+  "cases": [
+    {
+      "name": "lz4_bad_magic",
+      "codec": "lz4",
+      "schema": "vort.lz4_native_stream_summary_error",
+      "schema_version": 1,
+      "ok": false,
+      "compressed_bytes": 7,
+      "error": "CorruptFrame",
+      "phase": "magic",
+      "offset": 0
+    }
+  ]
+}
+```
+
+## `vort.native_summary_error_negative_smoke`
+
+Produced by:
+
+```sh
+zig build run-native-summary-error-negative-smoke
+```
+
+This retained smoke proves that native summary error dashboard aggregates are
+not accepted when `case_count`, `error_counts`, `phase_counts`,
+`phase_offset_ranges`, per-codec offset ranges, per-codec error/phase counts,
+per-case schema/ok invariants drift away from the `cases` payload, case names
+are duplicated, or a required codec/phase combination is missing.
+
+Example:
+
+```json
+{
+  "schema": "vort.native_summary_error_negative_smoke",
+  "schema_version": 1,
+  "ok": true,
+  "case_count": 1,
+  "cases": [
+    {
+      "name": "bad_error_counts",
+      "expected_failure": true,
+      "expected_error": "error_counts mismatch",
+      "actual_error": "error_counts mismatch: expected {'CorruptFrame': 1}, got {'CorruptFrame': 2}",
+      "matched": true
+    }
+  ]
+}
+```
+
+## `vort.lz4_native_stream_summary`
+
+Produced by:
+
+```sh
+zig build run -- summary-lz4-native-file /tmp/vort-readme.lz4 json
+```
+
+This schema is the machine-readable form of the LZ4 native stream summary CLI.
+It reports data-frame, skippable-frame, checksum-frame, block-checksum-frame,
+Dictionary_ID-frame, content-size-frame, declared content-byte, block-type,
+compressed-payload, and skippable-payload counts without decoding the stream
+payload. The retained dashboard fixture includes a hand-built Dictionary_ID
+raw-block frame with a block checksum so dashboard health checks keep optional
+LZ4 frame metadata covered even before the public CLI exposes a dictionary-aware
+LZ4 encoder command.
+
+Example:
+
+```json
+{
+  "schema": "vort.lz4_native_stream_summary",
+  "schema_version": 1,
+  "compressed_bytes": 64,
+  "frame_count": 2,
+  "skippable_frame_count": 1,
+  "content_size_frame_count": 2,
+  "checksum_frame_count": 2,
+  "block_checksum_frame_count": 0,
+  "dictionary_id_frame_count": 0,
+  "declared_content_bytes": 6,
+  "block_count": 2,
+  "compressed_block_count": 0,
+  "raw_block_count": 2,
+  "payload_bytes": 6,
+  "skippable_payload_bytes": 16
+}
+```
+
+## `vort.lz4_native_stream_summary_error`
+
+Produced by:
+
+```sh
+zig build run -- summary-lz4-native-file /tmp/bad.lz4 json
+```
+
+This schema is emitted to stdout with a non-zero exit status when the LZ4 native
+stream summary CLI is asked for JSON output and encounters malformed or
+truncated input. It lets black-box probes and future dashboards consume the
+summary failure as structured data rather than scraping Zig error traces. The
+`phase` and `offset` fields provide a coarse parser location for triage; `phase`
+is one of `magic`, `frame_header`, `frame_body`, `frame_checksum`,
+`skippable_header`, `skippable_payload`, `stream`, or `frame`.
+
+Example:
+
+```json
+{
+  "schema": "vort.lz4_native_stream_summary_error",
+  "schema_version": 1,
+  "ok": false,
+  "compressed_bytes": 7,
+  "error": "CorruptFrame",
+  "phase": "magic",
+  "offset": 0
+}
+```
+
+## `vort.zstd_native_stream_summary`
+
+Produced by:
+
+```sh
+zig build run-zstd-native-summary-dashboard
+zig build run -- summary-zstd-native-file /tmp/vort-readme.zst json
+```
+
+This schema is the machine-readable form of the Zstd native stream summary CLI.
+It reports data-frame, skippable-frame, checksum-frame, Dictionary_ID-frame,
+content-size-frame, declared content-byte, block-type, compressed-payload, and
+skippable-payload counts without decoding the stream payload.
+
+Example:
+
+```json
+{
+  "schema": "vort.zstd_native_stream_summary",
+  "schema_version": 1,
+  "compressed_bytes": 64,
+  "frame_count": 3,
+  "skippable_frame_count": 1,
+  "checksum_frame_count": 1,
+  "dictionary_id_frame_count": 1,
+  "content_size_frame_count": 3,
+  "declared_content_bytes": 9,
+  "block_count": 3,
+  "compressed_block_count": 0,
+  "rle_block_count": 0,
+  "raw_block_count": 3,
+  "payload_bytes": 9,
+  "skippable_payload_bytes": 16
+}
+```
+
+## `vort.zstd_native_stream_summary_error`
+
+Produced by:
+
+```sh
+zig build run -- summary-zstd-native-file /tmp/bad.zst json
+```
+
+This schema is emitted to stdout with a non-zero exit status when the Zstd native
+stream summary CLI is asked for JSON output and encounters malformed or
+truncated input. It mirrors the LZ4 summary error schema so native-summary
+probes can validate both success and failure paths without relying on stderr
+formatting. The `phase` and `offset` fields provide a coarse parser location
+for triage; `phase` is one of `magic`, `frame_header`, `frame_body`,
+`frame_checksum`, `skippable_header`, `skippable_payload`, `stream`, or
+`frame`.
+
+Example:
+
+```json
+{
+  "schema": "vort.zstd_native_stream_summary_error",
+  "schema_version": 1,
+  "ok": false,
+  "compressed_bytes": 7,
+  "error": "InvalidMagic",
+  "phase": "magic",
+  "offset": 0
 }
 ```
 
@@ -1683,6 +2536,26 @@ generation fails when the header inspect artifact is absent, reports `ok=false`,
 or has missing required workflows. With `--strict-validation-health`, generation
 fails whenever the aggregate `validation_healthy` field is false and reports the
 `validation_unhealthy_reasons` list with specific missing/failed artifact or coverage reasons.
+The generated Markdown index also includes `Dashboard artifact inventory`, `Validation unhealthy reasons`,
+`Producer and smoke-gate coverage`, `Dashboard strict mode coverage`, `Dashboard
+configuration coverage`, `Validation JSON schema coverage`, `Header
+inspect coverage`, `Sidecar corrupt smoke coverage`, `Huffman length oracle
+coverage`, `Native allocation coverage`, `Python zlib differential coverage`,
+`Decode-stage smoke coverage`, `Fuzz corpus coverage`, `Native stream summary
+coverage`, `Deflate extra-bit benchmark coverage`, `Dictionary decode benchmark coverage`,
+`PNG scanline benchmark coverage`, `Chunked zlib benchmark coverage`,
+`PNG streaming zlib benchmark coverage`, `Deflate dynamic decode profile coverage`,
+`Native library benchmark coverage`, `Native tier corpus discovery`,
+`Native codec probe coverage`, `Native codec
+probe executables`, `Native summary error codec coverage`, and `Native summary error phase offsets` tables
+so artifact inventory, aggregate validation health, producer/smoke-gate coverage, dashboard strict
+gate coverage, dashboard configuration guardrails, validation schema smoke coverage, header-format coverage, corrupt-sidecar rejection coverage,
+sidecar corrupt Markdown/JSON row and count drift checks, Huffman optimality, zstd comparison gate coverage, deflate extra-bit benchmark coverage, dictionary decode benchmark coverage, PNG scanline benchmark coverage, chunked zlib benchmark coverage, PNG streaming zlib benchmark coverage, deflate dynamic decode profile coverage, native library benchmark coverage, native fuzz corpus coverage and summary/floor drift, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility exact/floor coverage, native allocation coverage, zlib differential coverage,
+decode-stage error matching, fuzz corpus summary/floor matching, native stream metadata
+coverage, native tier corpus discovery, codec probe status, LZ4/Zstd
+structured-error counts, phase counts, required phases, missing phases, and phase
+offset ranges are visible during dashboard review without opening the retained
+JSON artifacts.
 Current unhealthy reason values are:
 
 - `missing_producer_steps`
@@ -1694,18 +2567,78 @@ Current unhealthy reason values are:
 - `missing_dashboard_strict_artifact`
 - `dashboard_strict_failed`
 - `missing_dashboard_strict_modes`
+- `missing_dashboard_configuration_artifact`
+- `dashboard_configuration_failed`
+- `missing_validation_json_smoke_artifact`
+- `validation_json_failed`
+- `missing_validation_json_docs_negative_artifact`
+- `validation_json_docs_negative_failed`
 - `missing_sidecar_corrupt_artifact`
 - `sidecar_corrupt_failed`
 - `missing_huffman_length_artifact`
 - `huffman_length_failed`
+- `missing_checksum_bench_artifact`
+- `checksum_bench_failed`
+- `missing_chunk_cursor_bench_artifact`
+- `chunk_cursor_bench_failed`
+- `missing_deflate_match_copy_bench_artifact`
+- `deflate_match_copy_bench_failed`
+- `missing_deflate_huffman_build_bench_artifact`
+- `deflate_huffman_build_bench_failed`
+- `missing_deflate_huffman_lookup_bench_artifact`
+- `deflate_huffman_lookup_bench_failed`
+- `missing_deflate_chunked_huffman_bench_artifact`
+- `deflate_chunked_huffman_bench_failed`
+- `missing_deflate_extra_bits_bench_artifact`
+- `deflate_extra_bits_bench_failed`
+- `missing_dictionary_decode_bench_artifact`
+- `dictionary_decode_bench_failed`
+- `missing_png_scanline_bench_artifact`
+- `png_scanline_bench_failed`
+- `missing_chunked_zlib_bench_artifact`
+- `chunked_zlib_bench_failed`
+- `missing_png_streaming_zlib_bench_artifact`
+- `png_streaming_zlib_bench_failed`
+- `missing_deflate_dynamic_decode_profile_artifact`
+- `deflate_dynamic_decode_profile_failed`
 - `missing_fuzz_corpus_artifact`
 - `fuzz_corpus_failed`
 - `missing_fuzz_coverage_artifact`
 - `fuzz_coverage_failed`
+- `missing_native_fuzz_corpus_artifact`
+- `native_fuzz_corpus_failed`
+- `missing_native_fuzz_coverage_artifact`
+- `native_fuzz_coverage_failed`
+- `missing_png_scratch_artifact`
+- `png_scratch_failed`
+- `missing_zlib_relaxed_artifact`
+- `zlib_relaxed_failed`
+- `missing_snappy_report_artifact`
+- `snappy_report_failed`
+- `missing_native_allocation_artifact`
+- `native_allocation_failed`
+- `missing_native_library_bench_artifact`
+- `native_library_bench_failed`
 - `missing_decode_stage_artifact`
 - `decode_stage_failed`
 - `missing_python_zlib_diff_artifact`
 - `python_zlib_diff_failed`
+- `missing_native_codec_probes_artifact`
+- `native_codec_probes_failed`
+- `missing_zstd_compare_artifact`
+- `zstd_compare_failed`
+- `missing_br_static_dictionary_artifact`
+- `br_static_dictionary_failed`
+- `missing_native_summary_error_dashboard_artifact`
+- `native_summary_error_dashboard_undercovered`
+- `missing_native_summary_error_negative_artifact`
+- `native_summary_error_negative_failed`
+- `missing_lz4_native_summary_artifact`
+- `lz4_native_summary_undercovered`
+- `missing_zstd_native_summary_artifact`
+- `zstd_native_summary_undercovered`
+- `missing_native_tier_range_artifact`
+- `native_tier_range_failed`
 - `missing_native_tier_corpus_discovery_artifact`
 - `native_tier_corpus_discovery_failed`
 
@@ -1724,11 +2657,40 @@ Top-level fields:
 - `smoke_gate_required_missing`
 - `validation_healthy`
 - `validation_unhealthy_reasons`
-- `native_tier_range_*` fields summarize direct-API seekability tier range benchmark summaries.
+- `sidecar_corrupt_*` fields summarize corrupt-payload smoke JSON coverage and
+  now require the retained Markdown table to match every JSON `items` row
+  (`case`, metadata/full booleans, error name, stream bytes, and sidecar bytes)
+  before aggregate validation health can pass.
+- `native_tier_range_*` fields summarize direct-API seekability tier range benchmark summaries,
+  including the gate JSON summaries, required CSV row/shape/throughput
+  coverage fields (`native_tier_range_csv_*`), and summary-vs-CSV drift
+  counters for duplicate/unknown `(source, fixture, tier)` CSV pairs, rows,
+  fixtures, tiers, CSV paths, per-tier stream/index totals, and per-tier
+  minimum throughput floors.
 - `native_tier_corpus_discovery_*` fields summarize standard-corpus discovery
-  inputs for the native tier range benchmark and now participate in aggregate
-  `validation_healthy`.
+  inputs for the native tier range benchmark, including drift counters that
+  cross-check selected cases and byte sizes against the standard-corpus summary
+  and CSV companion, and now participate in aggregate `validation_healthy`.
 - `header_inspect_present`, `header_inspect_ok`, `header_inspect_healthy`,
+  `header_inspect_markdown_present`, `header_inspect_report_rows`,
+  `header_inspect_negative_item_rows`, `header_inspect_command_coverage_rows`,
+  `header_inspect_workflow_coverage_rows`,
+  `header_inspect_required_workflow_rows`, `header_inspect_help_workflow_rows`,
+  `header_inspect_report_count_mismatch`,
+  `header_inspect_duplicate_case_names`,
+  `header_inspect_duplicate_negative_names`,
+  `header_inspect_duplicate_command_coverage_rows`,
+  `header_inspect_duplicate_workflow_coverage_rows`,
+  `header_inspect_duplicate_required_workflow_rows`,
+  `header_inspect_duplicate_help_workflow_rows`,
+  `header_inspect_command_coverage_missing_rows`,
+  `header_inspect_command_coverage_unknown_rows`,
+  `header_inspect_command_coverage_mismatch`,
+  `header_inspect_negative_error_count_mismatch`,
+  `header_inspect_missing_workflow_drift`,
+  `header_inspect_help_required_workflow_mismatch`,
+  `header_inspect_markdown_rows`,
+  `header_inspect_markdown_matched`, `header_inspect_markdown_unmatched`,
   `header_inspect_case_count`, `header_inspect_raw_cases`,
   `header_inspect_zlib_cases`, `header_inspect_gzip_cases`,
   `header_inspect_negative_cases`, `header_inspect_raw_negative_cases`,
@@ -1741,49 +2703,580 @@ Top-level fields:
   `header_inspect_missing_workflow_count`,
   `header_inspect_missing_workflows`
 - `dashboard_strict_present`, `dashboard_strict_ok`, `dashboard_strict_healthy`,
-  `dashboard_strict_check_count`, `dashboard_strict_mode_count`,
+  `dashboard_strict_check_count`, `dashboard_strict_check_rows`,
+  `dashboard_strict_mode_count`, `dashboard_strict_mode_count_rows`,
   `dashboard_strict_expected_failure_count`, `dashboard_strict_matched_count`,
-  `dashboard_strict_expected_mode_count`, `dashboard_strict_missing_mode_count`,
-  `dashboard_strict_missing_checks`, `dashboard_strict_missing_expected_failures`,
-  `dashboard_strict_missing_matched`, `dashboard_strict_missing_modes`
+  `dashboard_strict_expected_mode_count`, `dashboard_strict_expected_mode_rows`,
+  `dashboard_strict_mode_requirement_rows`,
+  `dashboard_strict_validation_reason_rows`,
+  `dashboard_strict_report_count_mismatch`,
+  `dashboard_strict_missing_mode_count`, `dashboard_strict_missing_checks`,
+  `dashboard_strict_missing_expected_failures`,
+  `dashboard_strict_missing_matched`, `dashboard_strict_missing_modes`,
+  `dashboard_strict_markdown_present`, `dashboard_strict_markdown_rows`,
+  `dashboard_strict_markdown_matched`, `dashboard_strict_markdown_unmatched`
+- `dashboard_configuration_healthy`, `dashboard_config_index_present`,
+  `dashboard_config_index_ok`, `dashboard_config_index_config_count`,
+  `dashboard_config_index_config_rows`, `dashboard_config_index_matched`,
+  `dashboard_config_index_unmatched`, `dashboard_config_index_count_mismatch`,
+  `dashboard_config_index_row_unmatched`,
+  `dashboard_config_index_negative_present`,
+  `dashboard_config_index_negative_ok`,
+  `dashboard_config_index_negative_case_count`,
+  `dashboard_config_index_negative_rows`,
+  `dashboard_config_index_negative_matched`,
+  `dashboard_config_index_negative_unmatched`,
+  `dashboard_config_index_negative_count_mismatch`,
+  `dashboard_config_index_negative_row_unmatched`,
+  `dashboard_category_negative_present`, `dashboard_category_negative_ok`,
+  `dashboard_category_negative_case_count`, `dashboard_category_negative_rows`,
+  `dashboard_category_negative_matched`,
+  `dashboard_category_negative_unmatched`,
+  `dashboard_category_negative_count_mismatch`,
+  `dashboard_category_negative_row_unmatched`,
+  `dashboard_producers_required_present`,
+  `dashboard_producers_required_ok`,
+  `dashboard_producers_required_artifact_count`,
+  `dashboard_producers_required_rows`,
+  `dashboard_producers_required_matched`,
+  `dashboard_producers_required_unmatched`,
+  `dashboard_producers_required_count_mismatch`,
+  `dashboard_producers_required_row_unmatched`,
+  `dashboard_producers_required_smoke_gate_count`,
+  `dashboard_producers_negative_present`, `dashboard_producers_negative_ok`,
+  `dashboard_producers_negative_case_count`, `dashboard_producers_negative_rows`,
+  `dashboard_producers_negative_matched`,
+  `dashboard_producers_negative_unmatched`,
+  `dashboard_producers_negative_count_mismatch`,
+  `dashboard_producers_negative_row_unmatched`
+- `non_json_artifact_healthy`, `csv_artifact_count`,
+  `csv_artifact_parsed_count`, `csv_artifact_data_rows`,
+  `csv_artifact_header_cell_count`, `csv_artifact_header_signature_count`,
+  `csv_artifact_header_signatures`, `csv_header_manifest_count`,
+  `csv_header_manifest_matched`, `csv_header_missing`, `csv_header_unknown`,
+  `csv_header_column_mismatch`, `csv_header_signature_mismatch`,
+  `csv_artifact_parse_failed`,
+  `csv_artifact_empty`, `csv_artifact_blank_headers`,
+  `csv_artifact_duplicate_headers`, `csv_artifact_no_data_rows`,
+  `csv_artifact_ragged_rows`,
+  `markdown_artifact_count`,
+  `markdown_artifact_read_count`, `markdown_artifact_read_failed`,
+  `markdown_artifact_empty`, `markdown_artifact_marker_missing`,
+  `markdown_artifact_heading_missing`,
+  `markdown_artifact_heading_not_first`,
+  `markdown_artifact_table_missing`,
+  `markdown_artifact_table_separator_missing`,
+  `markdown_heading_manifest_count`, `markdown_heading_manifest_matched`,
+  `markdown_heading_manifest_missing`, `markdown_heading_manifest_unknown`,
+  `markdown_heading_count_mismatch`, `markdown_first_heading_mismatch`,
+  `markdown_heading_signature_mismatch`,
+  `markdown_table_count_mismatch`, `markdown_table_separator_count_mismatch`
+- `validation_json_present`, `validation_json_ok`, `validation_json_healthy`,
+  `validation_json_checked_schema_count`,
+  `validation_json_checked_schema_unique_count`,
+  `validation_json_checked_schema_duplicate_count`,
+  `validation_json_observed_schema_count`,
+  `validation_json_observed_schema_rows`,
+  `validation_json_observed_schema_count_mismatch`,
+  `validation_json_unchecked_observed_schema_count`,
+  `validation_json_unchecked_observed_schema_rows`,
+  `validation_json_unchecked_observed_schema_count_mismatch`,
+  `validation_json_unchecked_observed_schemas`,
+  `validation_json_json_artifact_count`,
+  `validation_json_json_artifact_excluded_count`,
+  `validation_json_json_artifact_excluded_rows`,
+  `validation_json_json_artifact_excluded_count_mismatch`,
+  `validation_json_json_artifact_excluded_names`,
+  `validation_json_json_artifact_parsed_count`,
+  `validation_json_json_artifact_schema_count`,
+  `validation_json_json_artifact_parse_failed_count`,
+  `validation_json_json_artifact_parse_failed`,
+  `validation_json_json_artifact_missing_schema_count`,
+  `validation_json_json_artifact_missing_schema`,
+  `validation_json_json_artifact_manifest_validated_count`,
+  `validation_json_json_artifact_manifest_failed_count`,
+  `validation_json_json_artifact_manifest_failed_names`,
+  `validation_json_json_artifact_manifest_accounting_mismatch`,
+  `validation_json_cli_success_ok`,
+  `validation_json_cli_failure_ok`, `validation_json_cli_failure_hint`,
+  `validation_json_report_rows`, `validation_json_corrupt_rows`,
+  `validation_json_docs_negative_present`,
+  `validation_json_docs_negative_ok`,
+  `validation_json_docs_negative_case_count`,
+  `validation_json_docs_negative_rows`,
+  `validation_json_docs_negative_matched`,
+  `validation_json_docs_negative_unmatched`,
+  `validation_json_docs_negative_count_mismatch`,
+  `validation_json_docs_negative_row_unmatched`
 - `sidecar_corrupt_present`, `sidecar_corrupt_healthy`,
   `sidecar_corrupt_rows`, `sidecar_corrupt_metadata_ok_rows`,
   `sidecar_corrupt_full_rejected_rows`,
   `sidecar_corrupt_metadata_failed_rows`,
-  `sidecar_corrupt_full_not_rejected_rows`
+  `sidecar_corrupt_full_not_rejected_rows`,
+  `sidecar_corrupt_item_rows`, `sidecar_corrupt_item_count_mismatch`,
+  `sidecar_corrupt_item_malformed_rows`,
+  `sidecar_corrupt_item_duplicate_cases`,
+  `sidecar_corrupt_markdown_present`, `sidecar_corrupt_markdown_rows`,
+  `sidecar_corrupt_markdown_matched`, `sidecar_corrupt_markdown_unmatched`,
+  `sidecar_corrupt_markdown_malformed_rows`,
+  `sidecar_corrupt_markdown_duplicate_cases`,
+  `sidecar_corrupt_markdown_unknown_cases`
 - `huffman_length_present`, `huffman_length_healthy`,
   `huffman_length_row_count`, `huffman_length_optimal_rows`,
   `huffman_length_non_optimal_rows`, `huffman_length_malformed_rows`,
+  `huffman_length_blank_case_rows`, `huffman_length_duplicate_cases`,
   `huffman_length_worst_gap_bits`,
   `huffman_length_package_merge_optimal_rows`,
   `huffman_length_package_merge_non_optimal_rows`,
-  `huffman_length_package_merge_worst_gap_bits`
+  `huffman_length_package_merge_worst_gap_bits`,
+  `huffman_length_markdown_present`,
+  `huffman_length_markdown_summary_rows`,
+  `huffman_length_markdown_matched`,
+  `huffman_length_markdown_unmatched`,
+  `huffman_length_markdown_case_rows`,
+  `huffman_length_markdown_case_matched`,
+  `huffman_length_markdown_case_unmatched`
+- `level_report_present`, `level_report_healthy`,
+  `level_report_rows`, `level_report_expected_rows`,
+  `level_report_positive_rows`, `level_report_shape_rows`,
+  `level_report_token_accounting_rows`, `level_report_ratio_rows`,
+  `level_report_roundtrip_rows`, `level_report_missing_pairs`,
+  `level_report_duplicate_pairs`, `level_report_unknown_pairs`,
+  `level_report_markdown_present`, `level_report_markdown_summary_rows`,
+  `level_report_markdown_matched`, `level_report_markdown_unmatched`,
+  `level_report_markdown_detail_rows`,
+  `level_report_markdown_detail_matched`,
+  `level_report_markdown_detail_unmatched`
+- `dynamic_plan_present`, `dynamic_plan_healthy`,
+  `dynamic_plan_source_count`, `dynamic_plan_expected_source_count`,
+  `dynamic_plan_rows`, `dynamic_plan_expected_rows`,
+  `dynamic_plan_positive_rows`, `dynamic_plan_token_accounting_rows`,
+  `dynamic_plan_histogram_rows`, `dynamic_plan_ratio_rows`,
+  `dynamic_plan_slack_rows`, `dynamic_plan_wrapper_rows`,
+  `dynamic_plan_malformed_rows`, `dynamic_plan_missing_sources`,
+  `dynamic_plan_missing_paths`, `dynamic_plan_duplicate_paths`,
+  `dynamic_plan_unknown_paths`
+- `checksum_bench_present`, `checksum_bench_healthy`,
+  `checksum_bench_rows`, `checksum_bench_expected_rows`,
+  `checksum_bench_positive_rows`, `checksum_bench_workload_rows`,
+  `checksum_bench_throughput_rows`, `checksum_bench_crc32_mix_groups`,
+  `checksum_bench_crc32c_mix_groups`, `checksum_bench_missing_algorithms`,
+  `checksum_bench_duplicate_algorithms`, `checksum_bench_unknown_algorithms`
+- `chunk_cursor_bench_present`, `chunk_cursor_bench_healthy`,
+  `chunk_cursor_bench_rows`, `chunk_cursor_bench_expected_rows`,
+  `chunk_cursor_bench_positive_rows`, `chunk_cursor_bench_shape_rows`,
+  `chunk_cursor_bench_throughput_rows`,
+  `chunk_cursor_bench_checksum_matched_cases`,
+  `chunk_cursor_bench_missing_pairs`, `chunk_cursor_bench_duplicate_pairs`,
+  `chunk_cursor_bench_unknown_pairs`
+- `deflate_match_copy_bench_present`, `deflate_match_copy_bench_healthy`,
+  `deflate_match_copy_bench_rows`, `deflate_match_copy_bench_expected_rows`,
+  `deflate_match_copy_bench_positive_rows`,
+  `deflate_match_copy_bench_expected_class_rows`,
+  `deflate_match_copy_bench_output_bytes_rows`,
+  `deflate_match_copy_bench_throughput_rows`,
+  `deflate_match_copy_bench_checksum_matched_cases`,
+  `deflate_match_copy_bench_missing_pairs`,
+  `deflate_match_copy_bench_duplicate_pairs`,
+  `deflate_match_copy_bench_unknown_pairs`
+- `deflate_huffman_build_bench_present`,
+  `deflate_huffman_build_bench_healthy`, `deflate_huffman_build_bench_rows`,
+  `deflate_huffman_build_bench_expected_rows`,
+  `deflate_huffman_build_bench_positive_rows`,
+  `deflate_huffman_build_bench_lookup_rows`,
+  `deflate_huffman_build_bench_throughput_rows`,
+  `deflate_huffman_build_bench_checksum_variant_cases`,
+  `deflate_huffman_build_bench_missing_pairs`,
+  `deflate_huffman_build_bench_duplicate_pairs`,
+  `deflate_huffman_build_bench_unknown_pairs`
+- `deflate_huffman_lookup_bench_present`,
+  `deflate_huffman_lookup_bench_healthy`,
+  `deflate_huffman_lookup_bench_rows`,
+  `deflate_huffman_lookup_bench_expected_rows`,
+  `deflate_huffman_lookup_bench_positive_rows`,
+  `deflate_huffman_lookup_bench_lookup_rows`,
+  `deflate_huffman_lookup_bench_throughput_rows`,
+  `deflate_huffman_lookup_bench_checksum_matched_cases`,
+  `deflate_huffman_lookup_bench_missing_pairs`,
+  `deflate_huffman_lookup_bench_duplicate_pairs`,
+  `deflate_huffman_lookup_bench_unknown_pairs`
+- `deflate_chunked_huffman_bench_present`,
+  `deflate_chunked_huffman_bench_healthy`,
+  `deflate_chunked_huffman_bench_rows`,
+  `deflate_chunked_huffman_bench_expected_rows`,
+  `deflate_chunked_huffman_bench_positive_rows`,
+  `deflate_chunked_huffman_bench_shape_rows`,
+  `deflate_chunked_huffman_bench_buffered_zero_chunk_rows`,
+  `deflate_chunked_huffman_bench_chunk_count_rows`,
+  `deflate_chunked_huffman_bench_throughput_rows`,
+  `deflate_chunked_huffman_bench_checksum_matched_cases`,
+  `deflate_chunked_huffman_bench_missing_pairs`,
+  `deflate_chunked_huffman_bench_duplicate_pairs`,
+  `deflate_chunked_huffman_bench_unknown_pairs`
+- `deflate_extra_bits_bench_present`,
+  `deflate_extra_bits_bench_healthy`,
+  `deflate_extra_bits_bench_rows`,
+  `deflate_extra_bits_bench_expected_rows`,
+  `deflate_extra_bits_bench_positive_rows`,
+  `deflate_extra_bits_bench_shape_rows`,
+  `deflate_extra_bits_bench_throughput_rows`,
+  `deflate_extra_bits_bench_checksum_matched_cases`,
+  `deflate_extra_bits_bench_paired_checksum_rows`,
+  `deflate_extra_bits_bench_expected_paired_checksum_rows`,
+  `deflate_extra_bits_bench_missing_pairs`,
+  `deflate_extra_bits_bench_duplicate_pairs`,
+  `deflate_extra_bits_bench_unknown_pairs`
+- `dictionary_decode_bench_present`,
+  `dictionary_decode_bench_healthy`, `dictionary_decode_bench_rows`,
+  `dictionary_decode_bench_expected_rows`,
+  `dictionary_decode_bench_positive_rows`,
+  `dictionary_decode_bench_shape_rows`,
+  `dictionary_decode_bench_output_size_rows`,
+  `dictionary_decode_bench_throughput_rows`,
+  `dictionary_decode_bench_checksum_matched_payloads`,
+  `dictionary_decode_bench_missing_pairs`,
+  `dictionary_decode_bench_duplicate_pairs`,
+  `dictionary_decode_bench_unknown_pairs`
+- `png_scanline_bench_present`, `png_scanline_bench_healthy`,
+  `png_scanline_bench_rows`, `png_scanline_bench_expected_rows`,
+  `png_scanline_bench_positive_rows`, `png_scanline_bench_shape_rows`,
+  `png_scanline_bench_io_match_rows`,
+  `png_scanline_bench_throughput_rows`,
+  `png_scanline_bench_checksum_matched_bpps`,
+  `png_scanline_bench_missing_pairs`,
+  `png_scanline_bench_duplicate_pairs`,
+  `png_scanline_bench_unknown_pairs`
+- `chunked_zlib_bench_present`, `chunked_zlib_bench_healthy`,
+  `chunked_zlib_bench_rows`, `chunked_zlib_bench_expected_rows`,
+  `chunked_zlib_bench_positive_rows`, `chunked_zlib_bench_shape_rows`,
+  `chunked_zlib_bench_chunk_count_rows`, `chunked_zlib_bench_ratio_rows`,
+  `chunked_zlib_bench_missing_cases`, `chunked_zlib_bench_duplicate_cases`,
+  `chunked_zlib_bench_unknown_cases`,
+  `chunked_zlib_bench_markdown_present`,
+  `chunked_zlib_bench_markdown_rows`,
+  `chunked_zlib_bench_markdown_matched`,
+  `chunked_zlib_bench_markdown_unmatched`
+- `png_streaming_zlib_bench_present`, `png_streaming_zlib_bench_healthy`,
+  `png_streaming_zlib_bench_rows`,
+  `png_streaming_zlib_bench_expected_rows`,
+  `png_streaming_zlib_bench_positive_rows`,
+  `png_streaming_zlib_bench_shape_rows`,
+  `png_streaming_zlib_bench_image_size_rows`,
+  `png_streaming_zlib_bench_chunk_count_rows`,
+  `png_streaming_zlib_bench_ratio_rows`,
+  `png_streaming_zlib_bench_missing_cases`,
+  `png_streaming_zlib_bench_duplicate_cases`,
+  `png_streaming_zlib_bench_unknown_cases`
+- `deflate_dynamic_decode_profile_present`,
+  `deflate_dynamic_decode_profile_healthy`,
+  `deflate_dynamic_decode_profile_rows`,
+  `deflate_dynamic_decode_profile_required_rows`,
+  `deflate_dynamic_decode_profile_positive_rows`,
+  `deflate_dynamic_decode_profile_histogram_rows`,
+  `deflate_dynamic_decode_profile_lookup_rows`,
+  `deflate_dynamic_decode_profile_match_class_rows`,
+  `deflate_dynamic_decode_profile_ratio_rows`,
+  `deflate_dynamic_decode_profile_chunked_window_rows`,
+  `deflate_dynamic_decode_profile_missing_cases`,
+  `deflate_dynamic_decode_profile_duplicate_cases`
+- `native_library_bench_present`, `native_library_bench_healthy`,
+  `native_library_bench_rows`, `native_library_bench_expected_rows`,
+  `native_library_bench_positive_rows`,
+  `native_library_bench_throughput_rows`,
+  `native_library_bench_iteration_rows`,
+  `native_library_bench_improvement_checks`,
+  `native_library_bench_expected_improvement_checks`,
+  `native_library_bench_missing_pairs`,
+  `native_library_bench_duplicate_pairs`,
+  `native_library_bench_unknown_pairs`
 - `fuzz_corpus_present`, `fuzz_corpus_ok`,
   `fuzz_corpus_coverage_present`, `fuzz_corpus_coverage_ok`,
-  `fuzz_corpus_healthy`, `fuzz_corpus_cases`,
+  `fuzz_corpus_markdown_present`, `fuzz_corpus_healthy`,
+  `fuzz_corpus_cases`, `fuzz_corpus_accepted`, `fuzz_corpus_rejected`,
+  `fuzz_corpus_report_rows`, `fuzz_corpus_report_count_mismatch`,
   `fuzz_corpus_matched_rows`, `fuzz_corpus_unmatched_rows`,
   `fuzz_corpus_exact_error_expectations`,
   `fuzz_corpus_mode_count_rows`, `fuzz_corpus_error_count_rows`,
   `fuzz_corpus_coverage_mode_requirements`,
-  `fuzz_corpus_coverage_error_requirements`
+  `fuzz_corpus_coverage_error_requirements`,
+  `fuzz_corpus_coverage_mode_matched`,
+  `fuzz_corpus_coverage_error_matched`,
+  `fuzz_corpus_coverage_unmatched`,
+  `fuzz_corpus_mode_summary_mismatch`,
+  `fuzz_corpus_mode_summary_missing_modes`,
+  `fuzz_corpus_mode_summary_duplicate_modes`,
+  `fuzz_corpus_mode_summary_unknown_modes`,
+  `fuzz_corpus_error_summary_mismatch`,
+  `fuzz_corpus_error_summary_missing_pairs`,
+  `fuzz_corpus_error_summary_duplicate_pairs`,
+  `fuzz_corpus_error_summary_unknown_pairs`, `fuzz_corpus_markdown_rows`,
+  `fuzz_corpus_markdown_matched`, `fuzz_corpus_markdown_unmatched`
 - `decode_stage_present`, `decode_stage_ok`, `decode_stage_healthy`,
   `decode_stage_rows`, `decode_stage_error_rows`,
-  `decode_stage_matched_error_rows`, `decode_stage_unmatched_error_rows`
+  `decode_stage_report_rows`, `decode_stage_error_item_rows`,
+  `decode_stage_report_count_mismatch`,
+  `decode_stage_matched_error_rows`, `decode_stage_unmatched_error_rows`,
+  `decode_stage_csv_present`, `decode_stage_csv_rows`,
+  `decode_stage_csv_positive_rows`, `decode_stage_csv_header_rows`,
+  `decode_stage_csv_dynamic_rows`, `decode_stage_csv_fixed_rows`,
+  `decode_stage_csv_stored_rows`, `decode_stage_csv_missing_cases`,
+  `decode_stage_csv_duplicate_cases`, `decode_stage_csv_unknown_cases`,
+  `decode_stage_markdown_present`, `decode_stage_markdown_rows`,
+  `decode_stage_markdown_matched`, `decode_stage_markdown_unmatched`
+- `native_fuzz_corpus_present`, `native_fuzz_corpus_coverage_present`,
+  `native_fuzz_corpus_markdown_present`, `native_fuzz_corpus_healthy`,
+  `native_fuzz_corpus_cases`, `native_fuzz_corpus_accepted`,
+  `native_fuzz_corpus_rejected`, `native_fuzz_corpus_report_rows`,
+  `native_fuzz_corpus_report_count_mismatch`,
+  `native_fuzz_corpus_matched_rows`, `native_fuzz_corpus_unmatched_rows`,
+  `native_fuzz_corpus_exact_error_expectations`,
+  `native_fuzz_corpus_mode_count_rows`, `native_fuzz_corpus_error_count_rows`,
+  `native_fuzz_corpus_coverage_mode_requirements`,
+  `native_fuzz_corpus_coverage_error_requirements`,
+  `native_fuzz_corpus_coverage_mode_matched`,
+  `native_fuzz_corpus_coverage_error_matched`,
+  `native_fuzz_corpus_coverage_unmatched`,
+  `native_fuzz_corpus_mode_summary_mismatch`,
+  `native_fuzz_corpus_mode_summary_missing_modes`,
+  `native_fuzz_corpus_mode_summary_duplicate_modes`,
+  `native_fuzz_corpus_mode_summary_unknown_modes`,
+  `native_fuzz_corpus_error_summary_mismatch`,
+  `native_fuzz_corpus_error_summary_missing_pairs`,
+  `native_fuzz_corpus_error_summary_duplicate_pairs`,
+  `native_fuzz_corpus_error_summary_unknown_pairs`,
+  `native_fuzz_corpus_markdown_rows`,
+  `native_fuzz_corpus_markdown_matched`,
+  `native_fuzz_corpus_markdown_unmatched`
+- `br_static_dictionary_present`,
+  `br_static_dictionary_candidate_markdown_present`,
+  `br_static_dictionary_candidate_markdown_summary_rows`,
+  `br_static_dictionary_candidate_markdown_matched`,
+  `br_static_dictionary_candidate_markdown_unmatched`,
+  `br_static_dictionary_candidate_markdown_sample_rows`,
+  `br_static_dictionary_candidate_markdown_sample_matched`,
+  `br_static_dictionary_candidate_markdown_sample_unmatched`,
+  `br_static_dictionary_upstream_present`,
+  `br_static_dictionary_upstream_report_present`,
+  `br_static_dictionary_upstream_report_candidate_count`,
+  `br_static_dictionary_upstream_report_raw_word_count`,
+  `br_static_dictionary_upstream_report_upstream_raw_word_count`,
+  `br_static_dictionary_upstream_markdown_present`,
+  `br_static_dictionary_upstream_markdown_summary_rows`,
+  `br_static_dictionary_upstream_markdown_matched`,
+  `br_static_dictionary_upstream_markdown_unmatched`,
+  `br_static_dictionary_upstream_markdown_sample_rows`,
+  `br_static_dictionary_upstream_markdown_sample_matched`,
+  `br_static_dictionary_upstream_markdown_sample_unmatched`,
+  `br_static_dictionary_node_present`,
+  `br_static_dictionary_node_markdown_present`,
+  `br_static_dictionary_node_markdown_summary_rows`,
+  `br_static_dictionary_node_markdown_matched`,
+  `br_static_dictionary_node_markdown_unmatched`,
+  `br_static_dictionary_node_markdown_rows`,
+  `br_static_dictionary_node_markdown_matched_rows`,
+  `br_static_dictionary_node_markdown_unmatched_rows`,
+  `br_static_dictionary_audit_present`,
+  `br_static_dictionary_negative_present`, `br_static_dictionary_healthy`,
+  `br_static_dictionary_candidate_count`, `br_static_dictionary_raw_word_count`,
+  `br_static_dictionary_upstream_candidate_count`,
+  `br_static_dictionary_upstream_raw_word_count`,
+  `br_static_dictionary_node_probed_count`,
+  `br_static_dictionary_node_decode_successes`,
+  `br_static_dictionary_node_size_winner_count`,
+  `br_static_dictionary_audit_entry_count`,
+  `br_static_dictionary_audit_anchor_count`,
+  `br_static_dictionary_audit_generated_zig_bytes`,
+  `br_static_dictionary_negative_case_count`,
+  `br_static_dictionary_negative_rows`,
+  `br_static_dictionary_negative_matched`,
+  `br_static_dictionary_negative_count_mismatch`,
+  `br_static_dictionary_negative_unmatched`,
+  `br_static_dictionary_report_present`,
+  `br_static_dictionary_report_csv_present`,
+  `br_static_dictionary_report_markdown_present`,
+  `br_static_dictionary_report_negative_present`,
+  `br_static_dictionary_core_healthy`,
+  `br_static_dictionary_report_healthy`,
+  `br_static_dictionary_report_entry_count`,
+  `br_static_dictionary_report_json_entries`,
+  `br_static_dictionary_report_transform_count`,
+  `br_static_dictionary_report_length_count`,
+  `br_static_dictionary_report_identity_count`,
+  `br_static_dictionary_report_transform_entry_count`,
+  `br_static_dictionary_report_phrase_count`,
+  `br_static_dictionary_report_category_total`,
+  `br_static_dictionary_report_category_mismatch_rows`,
+  `br_static_dictionary_report_matrix_rows`,
+  `br_static_dictionary_report_matrix_total`,
+  `br_static_dictionary_report_matrix_mismatch_rows`,
+  `br_static_dictionary_report_csv_rows`,
+  `br_static_dictionary_report_csv_matched`,
+  `br_static_dictionary_report_csv_unmatched`,
+  `br_static_dictionary_report_markdown_summary_rows`,
+  `br_static_dictionary_report_markdown_matched`,
+  `br_static_dictionary_report_markdown_unmatched`,
+  `br_static_dictionary_report_markdown_matrix_rows`,
+  `br_static_dictionary_report_markdown_matrix_matched`,
+  `br_static_dictionary_report_markdown_matrix_unmatched`,
+  `br_static_dictionary_report_markdown_entry_rows`,
+  `br_static_dictionary_report_markdown_entry_matched`,
+  `br_static_dictionary_report_markdown_entry_unmatched`,
+  `br_static_dictionary_report_negative_case_count`,
+  `br_static_dictionary_report_negative_rows`,
+  `br_static_dictionary_report_negative_matched`,
+  `br_static_dictionary_report_negative_count_mismatch`,
+  `br_static_dictionary_report_negative_unmatched`
+- `png_scratch_present`, `png_scratch_markdown_present`,
+  `png_scratch_healthy`, `png_scratch_case_count`,
+  `png_scratch_report_rows`, `png_scratch_report_count_mismatch`,
+  `png_scratch_missing_cases`, `png_scratch_duplicate_cases`,
+  `png_scratch_unknown_cases`,
+  `png_scratch_row_consistent_count`, `png_scratch_row_inconsistent_count`,
+  `png_scratch_adam7_cases`, `png_scratch_stored_achieved`,
+  `png_scratch_fixed_achieved`, `png_scratch_total_zlib_scratch`,
+  `png_scratch_total_streaming_savings`, `png_scratch_max_working_scratch`,
+  `png_scratch_max_streaming_working_scratch`,
+  `png_scratch_max_fixed_dynamic_streaming_working_scratch`,
+  `png_scratch_min_streaming_ratio`, `png_scratch_markdown_rows`,
+  `png_scratch_markdown_matched`, `png_scratch_markdown_unmatched`
+- `zlib_relaxed_present`, `zlib_relaxed_markdown_present`,
+  `zlib_relaxed_healthy`, `zlib_relaxed_gate_present`,
+  `zlib_relaxed_gate_ok`, `zlib_relaxed_gate_check_count`,
+  `zlib_relaxed_gate_expected_checks`,
+  `zlib_relaxed_gate_passed_count`, `zlib_relaxed_gate_failed_checks`,
+  `zlib_relaxed_gate_report_matched`,
+  `zlib_relaxed_gate_report_unmatched`,
+  `zlib_relaxed_gate_missing_checks`, `zlib_relaxed_gate_extra_checks`,
+  `zlib_relaxed_gate_recomputed_passed_count`,
+  `zlib_relaxed_gate_recomputed_failed_count`,
+  `zlib_relaxed_gate_check_rule_mismatch`,
+  `zlib_relaxed_gate_exact_mismatch_count`,
+  `zlib_relaxed_gate_floor_shortfall_count`,
+  `zlib_relaxed_strict_rejections`, `zlib_relaxed_successes`,
+  `zlib_relaxed_dictionary_successes`,
+  `zlib_relaxed_concatenated_successes`,
+  `zlib_relaxed_decoder_successes`, `zlib_relaxed_limited_rejections`,
+  `gzip_relaxed_strict_rejections`, `gzip_relaxed_successes`,
+  `gzip_relaxed_concatenated_successes`, `gzip_relaxed_decoder_successes`,
+  `gzip_relaxed_limited_rejections`, `zlib_relaxed_markdown_rows`,
+  `zlib_relaxed_markdown_matched`, `zlib_relaxed_markdown_unmatched`,
+  `zlib_relaxed_markdown_malformed_rows`,
+  `zlib_relaxed_markdown_duplicate_metrics`,
+  `zlib_relaxed_markdown_unknown_metrics`,
+  `zlib_relaxed_markdown_value_mismatches`
+- `snappy_report_present`, `snappy_report_healthy`, `snappy_report_rows`,
+  `snappy_report_expected_rows`, `snappy_report_positive_timing_rows`,
+  `snappy_report_ratio_rows`, `snappy_report_throughput_rows`,
+  `snappy_report_repetitive_shrunk_rows`,
+  `snappy_report_framed_overhead_matched_cases`,
+  `snappy_report_reusable_size_matched_cases`,
+  `snappy_report_reusable_checksum_matched_cases`,
+  `snappy_report_missing_pairs`, `snappy_report_duplicate_pairs`,
+  `snappy_report_unknown_pairs`
+- `zstd_compare_present`, `zstd_compare_standard_present`,
+  `zstd_compare_block_sweep_present`, `zstd_compare_healthy`,
+  `zstd_compare_rows`, `zstd_compare_standard_rows`,
+  `zstd_compare_block_sweep_rows`, `zstd_compare_native_ratio`,
+  `zstd_compare_native_stream_ratio`, `zstd_compare_standard_native_ratio`,
+  `zstd_compare_standard_native_stream_ratio`, `zstd_compare_decode_vs_zstd`,
+  `zstd_compare_standard_decode_vs_zstd`, `zstd_compare_best_block_len`,
+  `zstd_compare_best_range_decode_mib_s`,
+  `zstd_compare_best_range_decode_full_input_mib_s`,
+  `zstd_compare_csv_present_count`,
+  `zstd_compare_csv_expected_present_count`, `zstd_compare_csv_rows`,
+  `zstd_compare_csv_expected_rows`, `zstd_compare_csv_matched_rows`,
+  `zstd_compare_csv_unmatched_rows`,
+  `zstd_compare_csv_duplicate_identities`,
+  `zstd_compare_markdown_present_count`,
+  `zstd_compare_markdown_expected_present_count`,
+  `zstd_compare_markdown_summary_rows`, `zstd_compare_markdown_matched`,
+  `zstd_compare_markdown_unmatched`, `zstd_compare_markdown_detail_rows`,
+  `zstd_compare_markdown_detail_matched`,
+  `zstd_compare_markdown_detail_unmatched`
+- `native_allocation_present`, `native_allocation_smoke_present`,
+  `native_allocation_negative_present`, `native_allocation_markdown_present`,
+  `native_allocation_healthy`, `native_allocation_report_case_count`,
+  `native_allocation_report_rows`,
+  `native_allocation_report_count_mismatch`,
+  `native_allocation_report_balanced_rows`,
+  `native_allocation_report_duplicate_cases`,
+  `native_allocation_report_duplicate_case_names`,
+  `native_allocation_report_unbalanced_rows`,
+  `native_allocation_required_zero_allocation_cases`,
+  `native_allocation_zero_allocation_matched`,
+  `native_allocation_zero_duplicate_cases`,
+  `native_allocation_zero_report_matched`,
+  `native_allocation_zero_report_unmatched`,
+  `native_allocation_required_budget_cases`,
+  `native_allocation_budget_matched`,
+  `native_allocation_budget_duplicate_cases`,
+  `native_allocation_budget_report_matched`,
+  `native_allocation_budget_report_unmatched`,
+  `native_allocation_smoke_classified_cases`,
+  `native_allocation_smoke_classification_overlap`,
+  `native_allocation_smoke_classification_missing`,
+  `native_allocation_smoke_classification_extra`,
+  `native_allocation_negative_case_count`,
+  `native_allocation_negative_matched`,
+  `native_allocation_negative_duplicate_names`,
+  `native_allocation_negative_unmatched`, `native_allocation_markdown_rows`,
+  `native_allocation_markdown_matched`,
+  `native_allocation_markdown_unmatched`,
+  `native_allocation_markdown_malformed_rows`,
+  `native_allocation_markdown_duplicate_cases`,
+  `native_allocation_markdown_unknown_cases`
 - `python_zlib_diff_present`, `python_zlib_diff_ok`,
   `python_zlib_diff_healthy`, `python_zlib_diff_payloads`,
   `python_zlib_diff_large_file_payloads`,
+  `python_zlib_diff_inline_payloads`,
+  `python_zlib_diff_large_file_payload_overflow`,
+  `python_zlib_diff_file_hex_encode_cases`,
   `python_zlib_diff_match_heavy_payloads`,
   `python_zlib_diff_dynamic_payloads`, `python_zlib_diff_dictionary_cases`,
   `python_zlib_diff_zlib_dict_encode_cases`,
   `python_zlib_diff_raw_dict_encode_cases`,
+  `python_zlib_diff_dictionary_encode_cases`,
   `python_zlib_diff_malformed_wrapper_cases`,
-  `python_zlib_diff_malformed_deflate_cases`, `python_zlib_diff_cli_successes`,
-  `python_zlib_diff_expected_failures`
+  `python_zlib_diff_malformed_deflate_cases`, `python_zlib_diff_malformed_cases`,
+  `python_zlib_diff_cli_successes`, `python_zlib_diff_expected_failures`,
+  `python_zlib_diff_cli_total_outcomes`,
+  `python_zlib_diff_file_hex_expected_cases`,
+  `python_zlib_diff_file_hex_case_mismatch`,
+  `python_zlib_diff_cli_success_floor`, `python_zlib_diff_cli_success_shortfall`,
+  `python_zlib_diff_expected_failure_floor`,
+  `python_zlib_diff_expected_failure_shortfall`,
+  `python_zlib_diff_cli_outcome_floor`,
+  `python_zlib_diff_cli_outcome_shortfall`,
+  `python_zlib_diff_payload_cli_success_expected`,
+  `python_zlib_diff_cli_success_expected`,
+  `python_zlib_diff_expected_failure_expected`,
+  `python_zlib_diff_cli_total_expected`,
+  `python_zlib_diff_cli_success_exact_mismatch`,
+  `python_zlib_diff_expected_failure_exact_mismatch`,
+  `python_zlib_diff_cli_outcome_exact_mismatch`
 - `native_codec_probes_present`, `native_codec_probes_ok`,
-  `native_codec_probes_healthy`, `native_codec_probes_probe_count`,
+  `native_codec_probes_markdown_present`, `native_codec_probes_healthy`,
+  `native_codec_probes_probe_count`, `native_codec_probes_probe_rows`,
   `native_codec_probes_ok_probe_count`,
+  `native_codec_probes_timed_out_probes`,
+  `native_codec_probes_probe_case_sum`,
+  `native_codec_probes_probe_count_mismatch`,
+  `native_codec_probes_probe_case_sum_mismatch`,
+  `native_codec_probes_missing_required_probes`,
+  `native_codec_probes_duplicate_probe_rows`,
+  `native_codec_probes_coverage_count`, `native_codec_probes_coverage_rows`,
+  `native_codec_probes_coverage_ok_rows`,
+  `native_codec_probes_coverage_case_sum`,
+  `native_codec_probes_coverage_count_mismatch`,
+  `native_codec_probes_missing_required_coverage`,
+  `native_codec_probes_duplicate_coverage_rows`,
   `native_codec_probes_capability_count`,
+  `native_codec_probes_capability_rows`,
   `native_codec_probes_ok_capability_count`,
+  `native_codec_probes_capability_count_mismatch`,
+  `native_codec_probes_capability_row_unhealthy`,
+  `native_codec_probes_missing_required_capabilities`,
+  `native_codec_probes_duplicate_capability_rows`,
   `native_codec_probes_lib_generated_cases`,
   `native_codec_probes_incremental_cases`,
   `native_codec_probes_chunked_cases`,
@@ -1791,7 +3284,84 @@ Top-level fields:
   `native_codec_probes_fse_repeat_cases`,
   `native_codec_probes_dictionary_cases`,
   `native_codec_probes_malformed_cases`,
-  `native_codec_probes_total_cases`
+  `native_codec_probes_total_cases`,
+  `native_codec_probes_zstd_frame_cases`,
+  `native_codec_probes_zstd_dictionary_cases`,
+  `native_codec_probes_markdown_rows`,
+  `native_codec_probes_markdown_matched`,
+  `native_codec_probes_markdown_unmatched`
+- `native_summary_error_present`, `native_summary_error_healthy`,
+  `native_summary_error_case_count`, `native_summary_error_case_rows`,
+  `native_summary_error_case_count_mismatch`,
+  `native_summary_error_lz4_case_count`,
+  `native_summary_error_zstd_case_count`,
+  `native_summary_error_codec_case_count_mismatch`,
+  `native_summary_error_checksum_mismatch_count`,
+  `native_summary_error_corrupt_frame_count`,
+  `native_summary_error_truncated_frame_count`,
+  `native_summary_error_magic_phase_count`,
+  `native_summary_error_skippable_payload_phase_count`,
+  `native_summary_error_frame_body_phase_count`,
+  `native_summary_error_frame_checksum_phase_count`,
+  `native_summary_error_frame_phase_count`,
+  `native_summary_error_error_counts`, `native_summary_error_phase_counts`,
+  `native_summary_error_lz4_error_counts`, `native_summary_error_zstd_error_counts`,
+  `native_summary_error_lz4_phase_counts`, `native_summary_error_zstd_phase_counts`,
+  `native_summary_error_offset_min`, `native_summary_error_offset_max`,
+  `native_summary_error_lz4_offset_min`, `native_summary_error_lz4_offset_max`,
+  `native_summary_error_zstd_offset_min`, `native_summary_error_zstd_offset_max`,
+  `native_summary_error_error_count_mismatch`,
+  `native_summary_error_phase_count_mismatch`,
+  `native_summary_error_codec_error_count_mismatch`,
+  `native_summary_error_codec_phase_count_mismatch`,
+  `native_summary_error_offset_range_mismatch`,
+  `native_summary_error_phase_offset_ranges`,
+  `native_summary_error_required_codec_phases`,
+  `native_summary_error_lz4_missing_phases`,
+  `native_summary_error_zstd_missing_phases`
+- `native_summary_error_negative_present`,
+  `native_summary_error_negative_healthy`,
+  `native_summary_error_negative_case_count`,
+  `native_summary_error_negative_rows`,
+  `native_summary_error_negative_count_mismatch`,
+  `native_summary_error_negative_matched`,
+  `native_summary_error_negative_expected_failures`
+- `lz4_native_summary_present`, `lz4_native_summary_healthy`,
+  `lz4_native_summary_frame_count`,
+  `lz4_native_summary_skippable_frame_count`,
+  `lz4_native_summary_checksum_frame_count`,
+  `lz4_native_summary_block_checksum_frame_count`,
+  `lz4_native_summary_dictionary_id_frame_count`,
+  `lz4_native_summary_content_size_frame_count`,
+  `lz4_native_summary_declared_content_bytes`,
+  `lz4_native_summary_block_count`, `lz4_native_summary_raw_block_count`,
+  `lz4_native_summary_compressed_block_count`,
+  `lz4_native_summary_compressed_bytes`,
+  `lz4_native_summary_payload_bytes`,
+  `lz4_native_summary_skippable_payload_bytes`,
+  `lz4_native_summary_block_count_mismatch`,
+  `lz4_native_summary_declared_payload_slack_bytes`,
+  `lz4_native_summary_metadata_frame_overflow`,
+  `lz4_native_summary_checksum_frame_overflow`,
+  `lz4_native_summary_block_checksum_frame_overflow`
+- `zstd_native_summary_present`, `zstd_native_summary_healthy`,
+  `zstd_native_summary_frame_count`,
+  `zstd_native_summary_skippable_frame_count`,
+  `zstd_native_summary_checksum_frame_count`,
+  `zstd_native_summary_dictionary_id_frame_count`,
+  `zstd_native_summary_content_size_frame_count`,
+  `zstd_native_summary_declared_content_bytes`,
+  `zstd_native_summary_block_count`, `zstd_native_summary_raw_block_count`,
+  `zstd_native_summary_rle_block_count`,
+  `zstd_native_summary_compressed_block_count`,
+  `zstd_native_summary_compressed_bytes`,
+  `zstd_native_summary_payload_bytes`,
+  `zstd_native_summary_skippable_payload_bytes`,
+  `zstd_native_summary_block_count_mismatch`,
+  `zstd_native_summary_declared_payload_slack_bytes`,
+  `zstd_native_summary_metadata_frame_overflow`,
+  `zstd_native_summary_checksum_frame_overflow`,
+  `zstd_native_summary_block_checksum_frame_overflow`
 - `artifacts`
 
 Each artifact includes:
@@ -1825,17 +3395,70 @@ Example:
   "validation_unhealthy_reasons": [
     "missing_header_inspect_artifact",
     "missing_dashboard_strict_artifact",
+    "missing_dashboard_configuration_artifact",
+    "missing_validation_json_smoke_artifact",
+    "missing_validation_json_docs_negative_artifact",
     "missing_sidecar_corrupt_artifact",
     "missing_huffman_length_artifact",
+    "missing_checksum_bench_artifact",
+    "missing_chunk_cursor_bench_artifact",
+    "missing_deflate_match_copy_bench_artifact",
+    "missing_deflate_huffman_build_bench_artifact",
+    "missing_deflate_huffman_lookup_bench_artifact",
+    "missing_deflate_chunked_huffman_bench_artifact",
+    "missing_deflate_extra_bits_bench_artifact",
+    "missing_dictionary_decode_bench_artifact",
+    "missing_png_scanline_bench_artifact",
+    "missing_chunked_zlib_bench_artifact",
+    "missing_png_streaming_zlib_bench_artifact",
+    "missing_deflate_dynamic_decode_profile_artifact",
     "missing_fuzz_corpus_artifact",
     "missing_fuzz_coverage_artifact",
+    "missing_native_fuzz_corpus_artifact",
+    "missing_native_fuzz_coverage_artifact",
+    "missing_png_scratch_artifact",
+    "missing_zlib_relaxed_artifact",
+    "missing_snappy_report_artifact",
+    "missing_native_allocation_artifact",
+    "missing_native_library_bench_artifact",
     "missing_decode_stage_artifact",
     "missing_python_zlib_diff_artifact",
+    "missing_native_codec_probes_artifact",
+    "missing_zstd_compare_artifact",
+    "missing_br_static_dictionary_artifact",
+    "missing_native_summary_error_dashboard_artifact",
+    "missing_native_summary_error_negative_artifact",
+    "missing_lz4_native_summary_artifact",
+    "missing_zstd_native_summary_artifact",
+    "missing_native_tier_range_artifact",
     "missing_native_tier_corpus_discovery_artifact"
   ],
   "header_inspect_present": false,
   "header_inspect_ok": false,
   "header_inspect_healthy": false,
+  "header_inspect_markdown_present": false,
+  "header_inspect_report_rows": 0,
+  "header_inspect_negative_item_rows": 0,
+  "header_inspect_command_coverage_rows": 0,
+  "header_inspect_workflow_coverage_rows": 0,
+  "header_inspect_required_workflow_rows": 0,
+  "header_inspect_help_workflow_rows": 0,
+  "header_inspect_report_count_mismatch": 0,
+  "header_inspect_duplicate_case_names": [],
+  "header_inspect_duplicate_negative_names": [],
+  "header_inspect_duplicate_command_coverage_rows": [],
+  "header_inspect_duplicate_workflow_coverage_rows": [],
+  "header_inspect_duplicate_required_workflow_rows": [],
+  "header_inspect_duplicate_help_workflow_rows": [],
+  "header_inspect_command_coverage_missing_rows": [],
+  "header_inspect_command_coverage_unknown_rows": [],
+  "header_inspect_command_coverage_mismatch": 0,
+  "header_inspect_negative_error_count_mismatch": 0,
+  "header_inspect_missing_workflow_drift": 0,
+  "header_inspect_help_required_workflow_mismatch": 0,
+  "header_inspect_markdown_rows": 0,
+  "header_inspect_markdown_matched": 0,
+  "header_inspect_markdown_unmatched": 0,
   "header_inspect_case_count": 0,
   "header_inspect_raw_cases": 0,
   "header_inspect_zlib_cases": 0,
@@ -1859,15 +3482,145 @@ Example:
   "dashboard_strict_ok": false,
   "dashboard_strict_healthy": false,
   "dashboard_strict_check_count": 0,
+  "dashboard_strict_check_rows": 0,
   "dashboard_strict_mode_count": 0,
+  "dashboard_strict_mode_count_rows": 0,
   "dashboard_strict_expected_failure_count": 0,
   "dashboard_strict_matched_count": 0,
   "dashboard_strict_expected_mode_count": 0,
+  "dashboard_strict_expected_mode_rows": 0,
+  "dashboard_strict_mode_requirement_rows": 0,
+  "dashboard_strict_validation_reason_rows": 0,
+  "dashboard_strict_report_count_mismatch": 0,
   "dashboard_strict_missing_mode_count": 0,
   "dashboard_strict_missing_checks": 0,
   "dashboard_strict_missing_expected_failures": 0,
   "dashboard_strict_missing_matched": 0,
   "dashboard_strict_missing_modes": [],
+  "dashboard_strict_markdown_present": false,
+  "dashboard_strict_markdown_rows": 0,
+  "dashboard_strict_markdown_matched": 0,
+  "dashboard_strict_markdown_unmatched": 0,
+  "dashboard_configuration_healthy": false,
+  "dashboard_config_index_present": false,
+  "dashboard_config_index_ok": false,
+  "dashboard_config_index_config_count": 0,
+  "dashboard_config_index_config_rows": 0,
+  "dashboard_config_index_matched": 0,
+  "dashboard_config_index_unmatched": 0,
+  "dashboard_config_index_count_mismatch": 0,
+  "dashboard_config_index_row_unmatched": 0,
+  "dashboard_config_index_negative_present": false,
+  "dashboard_config_index_negative_ok": false,
+  "dashboard_config_index_negative_case_count": 0,
+  "dashboard_config_index_negative_rows": 0,
+  "dashboard_config_index_negative_matched": 0,
+  "dashboard_config_index_negative_unmatched": 0,
+  "dashboard_config_index_negative_count_mismatch": 0,
+  "dashboard_config_index_negative_row_unmatched": 0,
+  "dashboard_category_negative_present": false,
+  "dashboard_category_negative_ok": false,
+  "dashboard_category_negative_case_count": 0,
+  "dashboard_category_negative_rows": 0,
+  "dashboard_category_negative_matched": 0,
+  "dashboard_category_negative_unmatched": 0,
+  "dashboard_category_negative_count_mismatch": 0,
+  "dashboard_category_negative_row_unmatched": 0,
+  "dashboard_producers_required_present": false,
+  "dashboard_producers_required_ok": false,
+  "dashboard_producers_required_artifact_count": 0,
+  "dashboard_producers_required_rows": 0,
+  "dashboard_producers_required_matched": 0,
+  "dashboard_producers_required_unmatched": 0,
+  "dashboard_producers_required_count_mismatch": 0,
+  "dashboard_producers_required_row_unmatched": 0,
+  "dashboard_producers_required_smoke_gate_count": 0,
+  "dashboard_producers_negative_present": false,
+  "dashboard_producers_negative_ok": false,
+  "dashboard_producers_negative_case_count": 0,
+  "dashboard_producers_negative_rows": 0,
+  "dashboard_producers_negative_matched": 0,
+  "dashboard_producers_negative_unmatched": 0,
+  "dashboard_producers_negative_count_mismatch": 0,
+  "dashboard_producers_negative_row_unmatched": 0,
+  "non_json_artifact_healthy": false,
+  "csv_artifact_count": 0,
+  "csv_artifact_parsed_count": 0,
+  "csv_artifact_data_rows": 0,
+  "csv_artifact_header_cell_count": 0,
+  "csv_artifact_header_signature_count": 0,
+  "csv_artifact_header_signatures": [],
+  "csv_header_manifest_count": 0,
+  "csv_header_manifest_matched": 0,
+  "csv_header_missing": [],
+  "csv_header_unknown": [],
+  "csv_header_column_mismatch": [],
+  "csv_header_signature_mismatch": [],
+  "csv_artifact_parse_failed": [],
+  "csv_artifact_empty": [],
+  "csv_artifact_blank_headers": [],
+  "csv_artifact_duplicate_headers": [],
+  "csv_artifact_no_data_rows": [],
+  "csv_artifact_ragged_rows": [],
+  "markdown_artifact_count": 0,
+  "markdown_artifact_read_count": 0,
+  "markdown_artifact_read_failed": [],
+  "markdown_artifact_empty": [],
+  "markdown_artifact_marker_missing": [],
+  "markdown_artifact_heading_missing": [],
+  "markdown_artifact_heading_not_first": [],
+  "markdown_artifact_table_missing": [],
+  "markdown_artifact_table_separator_missing": [],
+  "markdown_heading_manifest_count": 0,
+  "markdown_heading_manifest_matched": 0,
+  "markdown_heading_manifest_missing": [],
+  "markdown_heading_manifest_unknown": [],
+  "markdown_heading_count_mismatch": [],
+  "markdown_first_heading_mismatch": [],
+  "markdown_heading_signature_mismatch": [],
+  "markdown_table_count_mismatch": [],
+  "markdown_table_separator_count_mismatch": [],
+  "validation_json_present": false,
+  "validation_json_ok": false,
+  "validation_json_healthy": false,
+  "validation_json_checked_schema_count": 0,
+  "validation_json_checked_schema_unique_count": 0,
+  "validation_json_checked_schema_duplicate_count": 0,
+  "validation_json_observed_schema_count": 0,
+  "validation_json_observed_schema_rows": 0,
+  "validation_json_observed_schema_count_mismatch": 0,
+  "validation_json_unchecked_observed_schema_count": 0,
+  "validation_json_unchecked_observed_schema_rows": 0,
+  "validation_json_unchecked_observed_schema_count_mismatch": 0,
+  "validation_json_unchecked_observed_schemas": [],
+  "validation_json_json_artifact_count": 0,
+  "validation_json_json_artifact_excluded_count": 0,
+  "validation_json_json_artifact_excluded_rows": 0,
+  "validation_json_json_artifact_excluded_count_mismatch": 0,
+  "validation_json_json_artifact_excluded_names": [],
+  "validation_json_json_artifact_parsed_count": 0,
+  "validation_json_json_artifact_schema_count": 0,
+  "validation_json_json_artifact_parse_failed_count": 0,
+  "validation_json_json_artifact_parse_failed": [],
+  "validation_json_json_artifact_missing_schema_count": 0,
+  "validation_json_json_artifact_missing_schema": [],
+  "validation_json_json_artifact_manifest_validated_count": 0,
+  "validation_json_json_artifact_manifest_failed_count": 0,
+  "validation_json_json_artifact_manifest_failed_names": [],
+  "validation_json_json_artifact_manifest_accounting_mismatch": 0,
+  "validation_json_cli_success_ok": false,
+  "validation_json_cli_failure_ok": false,
+  "validation_json_cli_failure_hint": "",
+  "validation_json_report_rows": 0,
+  "validation_json_corrupt_rows": 0,
+  "validation_json_docs_negative_present": false,
+  "validation_json_docs_negative_ok": false,
+  "validation_json_docs_negative_case_count": 0,
+  "validation_json_docs_negative_rows": 0,
+  "validation_json_docs_negative_matched": 0,
+  "validation_json_docs_negative_unmatched": 0,
+  "validation_json_docs_negative_count_mismatch": 0,
+  "validation_json_docs_negative_row_unmatched": 0,
   "sidecar_corrupt_present": false,
   "sidecar_corrupt_healthy": false,
   "sidecar_corrupt_rows": 0,
@@ -1875,22 +3628,241 @@ Example:
   "sidecar_corrupt_full_rejected_rows": 0,
   "sidecar_corrupt_metadata_failed_rows": 0,
   "sidecar_corrupt_full_not_rejected_rows": 0,
+  "sidecar_corrupt_item_rows": 0,
+  "sidecar_corrupt_item_count_mismatch": 0,
+  "sidecar_corrupt_item_malformed_rows": 0,
+  "sidecar_corrupt_item_duplicate_cases": [],
+  "sidecar_corrupt_markdown_present": false,
+  "sidecar_corrupt_markdown_rows": 0,
+  "sidecar_corrupt_markdown_matched": 0,
+  "sidecar_corrupt_markdown_unmatched": 0,
+  "sidecar_corrupt_markdown_malformed_rows": 0,
+  "sidecar_corrupt_markdown_duplicate_cases": [],
+  "sidecar_corrupt_markdown_unknown_cases": [],
   "huffman_length_present": false,
   "huffman_length_healthy": false,
   "huffman_length_row_count": 0,
   "huffman_length_optimal_rows": 0,
   "huffman_length_non_optimal_rows": 0,
   "huffman_length_malformed_rows": 0,
+  "huffman_length_blank_case_rows": 0,
+  "huffman_length_duplicate_cases": [],
   "huffman_length_worst_gap_bits": 0,
   "huffman_length_package_merge_optimal_rows": 0,
   "huffman_length_package_merge_non_optimal_rows": 0,
   "huffman_length_package_merge_worst_gap_bits": 0,
+  "huffman_length_markdown_present": false,
+  "huffman_length_markdown_summary_rows": 0,
+  "huffman_length_markdown_matched": 0,
+  "huffman_length_markdown_unmatched": 0,
+  "huffman_length_markdown_case_rows": 0,
+  "huffman_length_markdown_case_matched": 0,
+  "huffman_length_markdown_case_unmatched": 0,
+  "level_report_present": false,
+  "level_report_healthy": false,
+  "level_report_rows": 0,
+  "level_report_expected_rows": 0,
+  "level_report_positive_rows": 0,
+  "level_report_shape_rows": 0,
+  "level_report_token_accounting_rows": 0,
+  "level_report_ratio_rows": 0,
+  "level_report_roundtrip_rows": 0,
+  "level_report_missing_pairs": [],
+  "level_report_duplicate_pairs": [],
+  "level_report_unknown_pairs": [],
+  "level_report_markdown_present": false,
+  "level_report_markdown_summary_rows": 0,
+  "level_report_markdown_matched": 0,
+  "level_report_markdown_unmatched": 0,
+  "level_report_markdown_detail_rows": 0,
+  "level_report_markdown_detail_matched": 0,
+  "level_report_markdown_detail_unmatched": 0,
+  "dynamic_plan_present": false,
+  "dynamic_plan_healthy": false,
+  "dynamic_plan_source_count": 0,
+  "dynamic_plan_expected_source_count": 0,
+  "dynamic_plan_rows": 0,
+  "dynamic_plan_expected_rows": 0,
+  "dynamic_plan_positive_rows": 0,
+  "dynamic_plan_token_accounting_rows": 0,
+  "dynamic_plan_histogram_rows": 0,
+  "dynamic_plan_ratio_rows": 0,
+  "dynamic_plan_slack_rows": 0,
+  "dynamic_plan_wrapper_rows": 0,
+  "dynamic_plan_malformed_rows": 0,
+  "dynamic_plan_missing_sources": [],
+  "dynamic_plan_missing_paths": [],
+  "dynamic_plan_duplicate_paths": [],
+  "dynamic_plan_unknown_paths": [],
+  "checksum_bench_present": false,
+  "checksum_bench_healthy": false,
+  "checksum_bench_rows": 0,
+  "checksum_bench_expected_rows": 0,
+  "checksum_bench_positive_rows": 0,
+  "checksum_bench_workload_rows": 0,
+  "checksum_bench_throughput_rows": 0,
+  "checksum_bench_crc32_mix_groups": 0,
+  "checksum_bench_crc32c_mix_groups": 0,
+  "checksum_bench_missing_algorithms": [],
+  "checksum_bench_duplicate_algorithms": [],
+  "checksum_bench_unknown_algorithms": [],
+  "chunk_cursor_bench_present": false,
+  "chunk_cursor_bench_healthy": false,
+  "chunk_cursor_bench_rows": 0,
+  "chunk_cursor_bench_expected_rows": 0,
+  "chunk_cursor_bench_positive_rows": 0,
+  "chunk_cursor_bench_shape_rows": 0,
+  "chunk_cursor_bench_throughput_rows": 0,
+  "chunk_cursor_bench_checksum_matched_cases": 0,
+  "chunk_cursor_bench_missing_pairs": [],
+  "chunk_cursor_bench_duplicate_pairs": [],
+  "chunk_cursor_bench_unknown_pairs": [],
+  "deflate_match_copy_bench_present": false,
+  "deflate_match_copy_bench_healthy": false,
+  "deflate_match_copy_bench_rows": 0,
+  "deflate_match_copy_bench_expected_rows": 0,
+  "deflate_match_copy_bench_positive_rows": 0,
+  "deflate_match_copy_bench_expected_class_rows": 0,
+  "deflate_match_copy_bench_output_bytes_rows": 0,
+  "deflate_match_copy_bench_throughput_rows": 0,
+  "deflate_match_copy_bench_checksum_matched_cases": 0,
+  "deflate_match_copy_bench_missing_pairs": [],
+  "deflate_match_copy_bench_duplicate_pairs": [],
+  "deflate_match_copy_bench_unknown_pairs": [],
+  "deflate_huffman_build_bench_present": false,
+  "deflate_huffman_build_bench_healthy": false,
+  "deflate_huffman_build_bench_rows": 0,
+  "deflate_huffman_build_bench_expected_rows": 0,
+  "deflate_huffman_build_bench_positive_rows": 0,
+  "deflate_huffman_build_bench_lookup_rows": 0,
+  "deflate_huffman_build_bench_throughput_rows": 0,
+  "deflate_huffman_build_bench_checksum_variant_cases": 0,
+  "deflate_huffman_build_bench_missing_pairs": [],
+  "deflate_huffman_build_bench_duplicate_pairs": [],
+  "deflate_huffman_build_bench_unknown_pairs": [],
+  "deflate_huffman_lookup_bench_present": false,
+  "deflate_huffman_lookup_bench_healthy": false,
+  "deflate_huffman_lookup_bench_rows": 0,
+  "deflate_huffman_lookup_bench_expected_rows": 0,
+  "deflate_huffman_lookup_bench_positive_rows": 0,
+  "deflate_huffman_lookup_bench_lookup_rows": 0,
+  "deflate_huffman_lookup_bench_throughput_rows": 0,
+  "deflate_huffman_lookup_bench_checksum_matched_cases": 0,
+  "deflate_huffman_lookup_bench_missing_pairs": [],
+  "deflate_huffman_lookup_bench_duplicate_pairs": [],
+  "deflate_huffman_lookup_bench_unknown_pairs": [],
+  "deflate_chunked_huffman_bench_present": false,
+  "deflate_chunked_huffman_bench_healthy": false,
+  "deflate_chunked_huffman_bench_rows": 0,
+  "deflate_chunked_huffman_bench_expected_rows": 0,
+  "deflate_chunked_huffman_bench_positive_rows": 0,
+  "deflate_chunked_huffman_bench_shape_rows": 0,
+  "deflate_chunked_huffman_bench_buffered_zero_chunk_rows": 0,
+  "deflate_chunked_huffman_bench_chunk_count_rows": 0,
+  "deflate_chunked_huffman_bench_throughput_rows": 0,
+  "deflate_chunked_huffman_bench_checksum_matched_cases": 0,
+  "deflate_chunked_huffman_bench_missing_pairs": [],
+  "deflate_chunked_huffman_bench_duplicate_pairs": [],
+  "deflate_chunked_huffman_bench_unknown_pairs": [],
+  "deflate_extra_bits_bench_present": false,
+  "deflate_extra_bits_bench_healthy": false,
+  "deflate_extra_bits_bench_rows": 0,
+  "deflate_extra_bits_bench_expected_rows": 0,
+  "deflate_extra_bits_bench_positive_rows": 0,
+  "deflate_extra_bits_bench_shape_rows": 0,
+  "deflate_extra_bits_bench_throughput_rows": 0,
+  "deflate_extra_bits_bench_checksum_matched_cases": 0,
+  "deflate_extra_bits_bench_paired_checksum_rows": 0,
+  "deflate_extra_bits_bench_expected_paired_checksum_rows": 0,
+  "deflate_extra_bits_bench_missing_pairs": [],
+  "deflate_extra_bits_bench_duplicate_pairs": [],
+  "deflate_extra_bits_bench_unknown_pairs": [],
+  "dictionary_decode_bench_present": false,
+  "dictionary_decode_bench_healthy": false,
+  "dictionary_decode_bench_rows": 0,
+  "dictionary_decode_bench_expected_rows": 0,
+  "dictionary_decode_bench_positive_rows": 0,
+  "dictionary_decode_bench_shape_rows": 0,
+  "dictionary_decode_bench_output_size_rows": 0,
+  "dictionary_decode_bench_throughput_rows": 0,
+  "dictionary_decode_bench_checksum_matched_payloads": 0,
+  "dictionary_decode_bench_missing_pairs": [],
+  "dictionary_decode_bench_duplicate_pairs": [],
+  "dictionary_decode_bench_unknown_pairs": [],
+  "png_scanline_bench_present": false,
+  "png_scanline_bench_healthy": false,
+  "png_scanline_bench_rows": 0,
+  "png_scanline_bench_expected_rows": 0,
+  "png_scanline_bench_positive_rows": 0,
+  "png_scanline_bench_shape_rows": 0,
+  "png_scanline_bench_io_match_rows": 0,
+  "png_scanline_bench_throughput_rows": 0,
+  "png_scanline_bench_checksum_matched_bpps": 0,
+  "png_scanline_bench_missing_pairs": [],
+  "png_scanline_bench_duplicate_pairs": [],
+  "png_scanline_bench_unknown_pairs": [],
+  "chunked_zlib_bench_present": false,
+  "chunked_zlib_bench_healthy": false,
+  "chunked_zlib_bench_rows": 0,
+  "chunked_zlib_bench_expected_rows": 0,
+  "chunked_zlib_bench_positive_rows": 0,
+  "chunked_zlib_bench_shape_rows": 0,
+  "chunked_zlib_bench_chunk_count_rows": 0,
+  "chunked_zlib_bench_ratio_rows": 0,
+  "chunked_zlib_bench_missing_cases": [],
+  "chunked_zlib_bench_duplicate_cases": [],
+  "chunked_zlib_bench_unknown_cases": [],
+  "chunked_zlib_bench_markdown_present": false,
+  "chunked_zlib_bench_markdown_rows": 0,
+  "chunked_zlib_bench_markdown_matched": 0,
+  "chunked_zlib_bench_markdown_unmatched": 0,
+  "png_streaming_zlib_bench_present": false,
+  "png_streaming_zlib_bench_healthy": false,
+  "png_streaming_zlib_bench_rows": 0,
+  "png_streaming_zlib_bench_expected_rows": 0,
+  "png_streaming_zlib_bench_positive_rows": 0,
+  "png_streaming_zlib_bench_shape_rows": 0,
+  "png_streaming_zlib_bench_image_size_rows": 0,
+  "png_streaming_zlib_bench_chunk_count_rows": 0,
+  "png_streaming_zlib_bench_ratio_rows": 0,
+  "png_streaming_zlib_bench_missing_cases": [],
+  "png_streaming_zlib_bench_duplicate_cases": [],
+  "png_streaming_zlib_bench_unknown_cases": [],
+  "deflate_dynamic_decode_profile_present": false,
+  "deflate_dynamic_decode_profile_healthy": false,
+  "deflate_dynamic_decode_profile_rows": 0,
+  "deflate_dynamic_decode_profile_required_rows": 0,
+  "deflate_dynamic_decode_profile_positive_rows": 0,
+  "deflate_dynamic_decode_profile_histogram_rows": 0,
+  "deflate_dynamic_decode_profile_lookup_rows": 0,
+  "deflate_dynamic_decode_profile_match_class_rows": 0,
+  "deflate_dynamic_decode_profile_ratio_rows": 0,
+  "deflate_dynamic_decode_profile_chunked_window_rows": 0,
+  "deflate_dynamic_decode_profile_missing_cases": [],
+  "deflate_dynamic_decode_profile_duplicate_cases": [],
+  "native_library_bench_present": false,
+  "native_library_bench_healthy": false,
+  "native_library_bench_rows": 0,
+  "native_library_bench_expected_rows": 0,
+  "native_library_bench_positive_rows": 0,
+  "native_library_bench_throughput_rows": 0,
+  "native_library_bench_iteration_rows": 0,
+  "native_library_bench_improvement_checks": 0,
+  "native_library_bench_expected_improvement_checks": 0,
+  "native_library_bench_missing_pairs": [],
+  "native_library_bench_duplicate_pairs": [],
+  "native_library_bench_unknown_pairs": [],
   "fuzz_corpus_present": false,
   "fuzz_corpus_ok": false,
   "fuzz_corpus_coverage_present": false,
   "fuzz_corpus_coverage_ok": false,
+  "fuzz_corpus_markdown_present": false,
   "fuzz_corpus_healthy": false,
   "fuzz_corpus_cases": 0,
+  "fuzz_corpus_accepted": 0,
+  "fuzz_corpus_rejected": 0,
+  "fuzz_corpus_report_rows": 0,
+  "fuzz_corpus_report_count_mismatch": 0,
   "fuzz_corpus_matched_rows": 0,
   "fuzz_corpus_unmatched_rows": 0,
   "fuzz_corpus_exact_error_expectations": 0,
@@ -1898,34 +3870,357 @@ Example:
   "fuzz_corpus_error_count_rows": 0,
   "fuzz_corpus_coverage_mode_requirements": 0,
   "fuzz_corpus_coverage_error_requirements": 0,
+  "fuzz_corpus_coverage_mode_matched": 0,
+  "fuzz_corpus_coverage_error_matched": 0,
+  "fuzz_corpus_coverage_unmatched": 0,
+  "fuzz_corpus_mode_summary_mismatch": 0,
+  "fuzz_corpus_mode_summary_missing_modes": [],
+  "fuzz_corpus_mode_summary_duplicate_modes": [],
+  "fuzz_corpus_mode_summary_unknown_modes": [],
+  "fuzz_corpus_error_summary_mismatch": 0,
+  "fuzz_corpus_error_summary_missing_pairs": [],
+  "fuzz_corpus_error_summary_duplicate_pairs": [],
+  "fuzz_corpus_error_summary_unknown_pairs": [],
+  "fuzz_corpus_markdown_rows": 0,
+  "fuzz_corpus_markdown_matched": 0,
+  "fuzz_corpus_markdown_unmatched": 0,
   "decode_stage_present": false,
   "decode_stage_ok": false,
   "decode_stage_healthy": false,
   "decode_stage_rows": 0,
   "decode_stage_error_rows": 0,
+  "decode_stage_report_rows": 0,
+  "decode_stage_error_item_rows": 0,
+  "decode_stage_report_count_mismatch": 0,
   "decode_stage_matched_error_rows": 0,
   "decode_stage_unmatched_error_rows": 0,
+  "decode_stage_csv_present": false,
+  "decode_stage_csv_rows": 0,
+  "decode_stage_csv_positive_rows": 0,
+  "decode_stage_csv_header_rows": 0,
+  "decode_stage_csv_dynamic_rows": 0,
+  "decode_stage_csv_fixed_rows": 0,
+  "decode_stage_csv_stored_rows": 0,
+  "decode_stage_csv_missing_cases": [],
+  "decode_stage_csv_duplicate_cases": [],
+  "decode_stage_csv_unknown_cases": [],
+  "decode_stage_markdown_present": false,
+  "decode_stage_markdown_rows": 0,
+  "decode_stage_markdown_matched": 0,
+  "decode_stage_markdown_unmatched": 0,
+  "native_fuzz_corpus_present": false,
+  "native_fuzz_corpus_coverage_present": false,
+  "native_fuzz_corpus_markdown_present": false,
+  "native_fuzz_corpus_healthy": false,
+  "native_fuzz_corpus_cases": 0,
+  "native_fuzz_corpus_accepted": 0,
+  "native_fuzz_corpus_rejected": 0,
+  "native_fuzz_corpus_report_rows": 0,
+  "native_fuzz_corpus_report_count_mismatch": 0,
+  "native_fuzz_corpus_matched_rows": 0,
+  "native_fuzz_corpus_unmatched_rows": 0,
+  "native_fuzz_corpus_exact_error_expectations": 0,
+  "native_fuzz_corpus_mode_count_rows": 0,
+  "native_fuzz_corpus_error_count_rows": 0,
+  "native_fuzz_corpus_coverage_mode_requirements": 0,
+  "native_fuzz_corpus_coverage_error_requirements": 0,
+  "native_fuzz_corpus_coverage_mode_matched": 0,
+  "native_fuzz_corpus_coverage_error_matched": 0,
+  "native_fuzz_corpus_coverage_unmatched": 0,
+  "native_fuzz_corpus_mode_summary_mismatch": 0,
+  "native_fuzz_corpus_mode_summary_missing_modes": [],
+  "native_fuzz_corpus_mode_summary_duplicate_modes": [],
+  "native_fuzz_corpus_mode_summary_unknown_modes": [],
+  "native_fuzz_corpus_error_summary_mismatch": 0,
+  "native_fuzz_corpus_error_summary_missing_pairs": [],
+  "native_fuzz_corpus_error_summary_duplicate_pairs": [],
+  "native_fuzz_corpus_error_summary_unknown_pairs": [],
+  "native_fuzz_corpus_markdown_rows": 0,
+  "native_fuzz_corpus_markdown_matched": 0,
+  "native_fuzz_corpus_markdown_unmatched": 0,
+  "br_static_dictionary_present": false,
+  "br_static_dictionary_candidate_markdown_present": false,
+  "br_static_dictionary_candidate_markdown_summary_rows": 0,
+  "br_static_dictionary_candidate_markdown_matched": 0,
+  "br_static_dictionary_candidate_markdown_unmatched": 0,
+  "br_static_dictionary_candidate_markdown_sample_rows": 0,
+  "br_static_dictionary_candidate_markdown_sample_matched": 0,
+  "br_static_dictionary_candidate_markdown_sample_unmatched": 0,
+  "br_static_dictionary_upstream_present": false,
+  "br_static_dictionary_upstream_report_present": false,
+  "br_static_dictionary_upstream_report_candidate_count": 0,
+  "br_static_dictionary_upstream_report_raw_word_count": 0,
+  "br_static_dictionary_upstream_report_upstream_raw_word_count": 0,
+  "br_static_dictionary_upstream_markdown_present": false,
+  "br_static_dictionary_upstream_markdown_summary_rows": 0,
+  "br_static_dictionary_upstream_markdown_matched": 0,
+  "br_static_dictionary_upstream_markdown_unmatched": 0,
+  "br_static_dictionary_upstream_markdown_sample_rows": 0,
+  "br_static_dictionary_upstream_markdown_sample_matched": 0,
+  "br_static_dictionary_upstream_markdown_sample_unmatched": 0,
+  "br_static_dictionary_node_present": false,
+  "br_static_dictionary_node_markdown_present": false,
+  "br_static_dictionary_node_markdown_summary_rows": 0,
+  "br_static_dictionary_node_markdown_matched": 0,
+  "br_static_dictionary_node_markdown_unmatched": 0,
+  "br_static_dictionary_node_markdown_rows": 0,
+  "br_static_dictionary_node_markdown_matched_rows": 0,
+  "br_static_dictionary_node_markdown_unmatched_rows": 0,
+  "br_static_dictionary_audit_present": false,
+  "br_static_dictionary_negative_present": false,
+  "br_static_dictionary_healthy": false,
+  "br_static_dictionary_candidate_count": 0,
+  "br_static_dictionary_raw_word_count": 0,
+  "br_static_dictionary_upstream_candidate_count": 0,
+  "br_static_dictionary_upstream_raw_word_count": 0,
+  "br_static_dictionary_node_probed_count": 0,
+  "br_static_dictionary_node_decode_successes": 0,
+  "br_static_dictionary_node_size_winner_count": 0,
+  "br_static_dictionary_audit_entry_count": 0,
+  "br_static_dictionary_audit_anchor_count": 0,
+  "br_static_dictionary_audit_generated_zig_bytes": 0,
+  "br_static_dictionary_negative_case_count": 0,
+  "br_static_dictionary_negative_rows": 0,
+  "br_static_dictionary_negative_matched": 0,
+  "br_static_dictionary_negative_count_mismatch": 0,
+  "br_static_dictionary_negative_unmatched": 0,
+  "br_static_dictionary_report_present": false,
+  "br_static_dictionary_report_csv_present": false,
+  "br_static_dictionary_report_markdown_present": false,
+  "br_static_dictionary_report_negative_present": false,
+  "br_static_dictionary_core_healthy": false,
+  "br_static_dictionary_report_healthy": false,
+  "br_static_dictionary_report_entry_count": 0,
+  "br_static_dictionary_report_json_entries": 0,
+  "br_static_dictionary_report_transform_count": 0,
+  "br_static_dictionary_report_length_count": 0,
+  "br_static_dictionary_report_identity_count": 0,
+  "br_static_dictionary_report_transform_entry_count": 0,
+  "br_static_dictionary_report_phrase_count": 0,
+  "br_static_dictionary_report_category_total": 0,
+  "br_static_dictionary_report_category_mismatch_rows": 0,
+  "br_static_dictionary_report_matrix_rows": 0,
+  "br_static_dictionary_report_matrix_total": 0,
+  "br_static_dictionary_report_matrix_mismatch_rows": 0,
+  "br_static_dictionary_report_csv_rows": 0,
+  "br_static_dictionary_report_csv_matched": 0,
+  "br_static_dictionary_report_csv_unmatched": 0,
+  "br_static_dictionary_report_markdown_summary_rows": 0,
+  "br_static_dictionary_report_markdown_matched": 0,
+  "br_static_dictionary_report_markdown_unmatched": 0,
+  "br_static_dictionary_report_markdown_matrix_rows": 0,
+  "br_static_dictionary_report_markdown_matrix_matched": 0,
+  "br_static_dictionary_report_markdown_matrix_unmatched": 0,
+  "br_static_dictionary_report_markdown_entry_rows": 0,
+  "br_static_dictionary_report_markdown_entry_matched": 0,
+  "br_static_dictionary_report_markdown_entry_unmatched": 0,
+  "br_static_dictionary_report_negative_case_count": 0,
+  "br_static_dictionary_report_negative_rows": 0,
+  "br_static_dictionary_report_negative_matched": 0,
+  "br_static_dictionary_report_negative_count_mismatch": 0,
+  "br_static_dictionary_report_negative_unmatched": 0,
+  "png_scratch_present": false,
+  "png_scratch_markdown_present": false,
+  "png_scratch_healthy": false,
+  "png_scratch_case_count": 0,
+  "png_scratch_report_rows": 0,
+  "png_scratch_report_count_mismatch": 0,
+  "png_scratch_missing_cases": [],
+  "png_scratch_duplicate_cases": [],
+  "png_scratch_unknown_cases": [],
+  "png_scratch_row_consistent_count": 0,
+  "png_scratch_row_inconsistent_count": 0,
+  "png_scratch_adam7_cases": 0,
+  "png_scratch_stored_achieved": 0,
+  "png_scratch_fixed_achieved": 0,
+  "png_scratch_total_zlib_scratch": 0,
+  "png_scratch_total_streaming_savings": 0,
+  "png_scratch_max_working_scratch": 0,
+  "png_scratch_max_streaming_working_scratch": 0,
+  "png_scratch_max_fixed_dynamic_streaming_working_scratch": 0,
+  "png_scratch_min_streaming_ratio": 0,
+  "png_scratch_markdown_rows": 0,
+  "png_scratch_markdown_matched": 0,
+  "png_scratch_markdown_unmatched": 0,
+  "zlib_relaxed_present": false,
+  "zlib_relaxed_markdown_present": false,
+  "zlib_relaxed_healthy": false,
+  "zlib_relaxed_gate_present": false,
+  "zlib_relaxed_gate_ok": false,
+  "zlib_relaxed_gate_check_count": 0,
+  "zlib_relaxed_gate_expected_checks": 0,
+  "zlib_relaxed_gate_passed_count": 0,
+  "zlib_relaxed_gate_failed_checks": [],
+  "zlib_relaxed_gate_report_matched": 0,
+  "zlib_relaxed_gate_report_unmatched": 0,
+  "zlib_relaxed_gate_missing_checks": 0,
+  "zlib_relaxed_gate_extra_checks": 0,
+  "zlib_relaxed_gate_recomputed_passed_count": 0,
+  "zlib_relaxed_gate_recomputed_failed_count": 0,
+  "zlib_relaxed_gate_check_rule_mismatch": 0,
+  "zlib_relaxed_gate_exact_mismatch_count": 0,
+  "zlib_relaxed_gate_floor_shortfall_count": 0,
+  "zlib_relaxed_strict_rejections": 0,
+  "zlib_relaxed_successes": 0,
+  "zlib_relaxed_dictionary_successes": 0,
+  "zlib_relaxed_concatenated_successes": 0,
+  "zlib_relaxed_decoder_successes": 0,
+  "zlib_relaxed_limited_rejections": 0,
+  "gzip_relaxed_strict_rejections": 0,
+  "gzip_relaxed_successes": 0,
+  "gzip_relaxed_concatenated_successes": 0,
+  "gzip_relaxed_decoder_successes": 0,
+  "gzip_relaxed_limited_rejections": 0,
+  "zlib_relaxed_markdown_rows": 0,
+  "zlib_relaxed_markdown_matched": 0,
+  "zlib_relaxed_markdown_unmatched": 0,
+  "zlib_relaxed_markdown_malformed_rows": 0,
+  "zlib_relaxed_markdown_duplicate_metrics": [],
+  "zlib_relaxed_markdown_unknown_metrics": [],
+  "zlib_relaxed_markdown_value_mismatches": [],
+  "snappy_report_present": false,
+  "snappy_report_healthy": false,
+  "snappy_report_rows": 0,
+  "snappy_report_expected_rows": 0,
+  "snappy_report_positive_timing_rows": 0,
+  "snappy_report_ratio_rows": 0,
+  "snappy_report_throughput_rows": 0,
+  "snappy_report_repetitive_shrunk_rows": 0,
+  "snappy_report_framed_overhead_matched_cases": 0,
+  "snappy_report_reusable_size_matched_cases": 0,
+  "snappy_report_reusable_checksum_matched_cases": 0,
+  "snappy_report_missing_pairs": [],
+  "snappy_report_duplicate_pairs": [],
+  "snappy_report_unknown_pairs": [],
+  "zstd_compare_present": false,
+  "zstd_compare_standard_present": false,
+  "zstd_compare_block_sweep_present": false,
+  "zstd_compare_healthy": false,
+  "zstd_compare_rows": 0,
+  "zstd_compare_standard_rows": 0,
+  "zstd_compare_block_sweep_rows": 0,
+  "zstd_compare_native_ratio": 0.0,
+  "zstd_compare_native_stream_ratio": 0.0,
+  "zstd_compare_standard_native_ratio": 0.0,
+  "zstd_compare_standard_native_stream_ratio": 0.0,
+  "zstd_compare_decode_vs_zstd": 0.0,
+  "zstd_compare_standard_decode_vs_zstd": 0.0,
+  "zstd_compare_best_block_len": 0,
+  "zstd_compare_best_range_decode_mib_s": 0.0,
+  "zstd_compare_best_range_decode_full_input_mib_s": 0.0,
+  "zstd_compare_csv_present_count": 0,
+  "zstd_compare_csv_expected_present_count": 0,
+  "zstd_compare_csv_rows": 0,
+  "zstd_compare_csv_expected_rows": 0,
+  "zstd_compare_csv_matched_rows": 0,
+  "zstd_compare_csv_unmatched_rows": 0,
+  "zstd_compare_csv_duplicate_identities": [],
+  "zstd_compare_markdown_present_count": 0,
+  "zstd_compare_markdown_expected_present_count": 0,
+  "zstd_compare_markdown_summary_rows": 0,
+  "zstd_compare_markdown_matched": 0,
+  "zstd_compare_markdown_unmatched": 0,
+  "zstd_compare_markdown_detail_rows": 0,
+  "zstd_compare_markdown_detail_matched": 0,
+  "zstd_compare_markdown_detail_unmatched": 0,
+  "native_allocation_present": false,
+  "native_allocation_smoke_present": false,
+  "native_allocation_negative_present": false,
+  "native_allocation_markdown_present": false,
+  "native_allocation_healthy": false,
+  "native_allocation_report_case_count": 0,
+  "native_allocation_report_rows": 0,
+  "native_allocation_report_count_mismatch": 0,
+  "native_allocation_report_balanced_rows": 0,
+  "native_allocation_report_duplicate_cases": 0,
+  "native_allocation_report_duplicate_case_names": [],
+  "native_allocation_report_unbalanced_rows": 0,
+  "native_allocation_required_zero_allocation_cases": 0,
+  "native_allocation_zero_allocation_matched": 0,
+  "native_allocation_zero_duplicate_cases": [],
+  "native_allocation_zero_report_matched": 0,
+  "native_allocation_zero_report_unmatched": 0,
+  "native_allocation_required_budget_cases": 0,
+  "native_allocation_budget_matched": 0,
+  "native_allocation_budget_duplicate_cases": [],
+  "native_allocation_budget_report_matched": 0,
+  "native_allocation_budget_report_unmatched": 0,
+  "native_allocation_smoke_classified_cases": 0,
+  "native_allocation_smoke_classification_overlap": 0,
+  "native_allocation_smoke_classification_missing": 0,
+  "native_allocation_smoke_classification_extra": 0,
+  "native_allocation_negative_case_count": 0,
+  "native_allocation_negative_matched": 0,
+  "native_allocation_negative_duplicate_names": [],
+  "native_allocation_negative_unmatched": 0,
+  "native_allocation_markdown_rows": 0,
+  "native_allocation_markdown_matched": 0,
+  "native_allocation_markdown_unmatched": 0,
+  "native_allocation_markdown_malformed_rows": 0,
+  "native_allocation_markdown_duplicate_cases": [],
+  "native_allocation_markdown_unknown_cases": [],
   "python_zlib_diff_present": false,
   "python_zlib_diff_ok": false,
   "python_zlib_diff_healthy": false,
   "python_zlib_diff_payloads": 0,
   "python_zlib_diff_large_file_payloads": 0,
+  "python_zlib_diff_inline_payloads": 0,
+  "python_zlib_diff_large_file_payload_overflow": 0,
+  "python_zlib_diff_file_hex_encode_cases": 0,
   "python_zlib_diff_match_heavy_payloads": 0,
   "python_zlib_diff_dynamic_payloads": 0,
   "python_zlib_diff_dictionary_cases": 0,
   "python_zlib_diff_zlib_dict_encode_cases": 0,
   "python_zlib_diff_raw_dict_encode_cases": 0,
+  "python_zlib_diff_dictionary_encode_cases": 0,
   "python_zlib_diff_malformed_wrapper_cases": 0,
   "python_zlib_diff_malformed_deflate_cases": 0,
+  "python_zlib_diff_malformed_cases": 0,
   "python_zlib_diff_cli_successes": 0,
   "python_zlib_diff_expected_failures": 0,
+  "python_zlib_diff_cli_total_outcomes": 0,
+  "python_zlib_diff_file_hex_expected_cases": 0,
+  "python_zlib_diff_file_hex_case_mismatch": 0,
+  "python_zlib_diff_cli_success_floor": 0,
+  "python_zlib_diff_cli_success_shortfall": 0,
+  "python_zlib_diff_expected_failure_floor": 0,
+  "python_zlib_diff_expected_failure_shortfall": 0,
+  "python_zlib_diff_cli_outcome_floor": 0,
+  "python_zlib_diff_cli_outcome_shortfall": 0,
+  "python_zlib_diff_payload_cli_success_expected": 0,
+  "python_zlib_diff_cli_success_expected": 0,
+  "python_zlib_diff_expected_failure_expected": 0,
+  "python_zlib_diff_cli_total_expected": 0,
+  "python_zlib_diff_cli_success_exact_mismatch": 0,
+  "python_zlib_diff_expected_failure_exact_mismatch": 0,
+  "python_zlib_diff_cli_outcome_exact_mismatch": 0,
   "native_codec_probes_present": false,
   "native_codec_probes_ok": false,
+  "native_codec_probes_markdown_present": false,
   "native_codec_probes_healthy": false,
   "native_codec_probes_probe_count": 0,
+  "native_codec_probes_probe_rows": 0,
   "native_codec_probes_ok_probe_count": 0,
+  "native_codec_probes_timed_out_probes": 0,
+  "native_codec_probes_probe_case_sum": 0,
+  "native_codec_probes_probe_count_mismatch": 0,
+  "native_codec_probes_probe_case_sum_mismatch": 0,
+  "native_codec_probes_missing_required_probes": 0,
+  "native_codec_probes_duplicate_probe_rows": 0,
+  "native_codec_probes_coverage_count": 0,
+  "native_codec_probes_coverage_rows": 0,
+  "native_codec_probes_coverage_ok_rows": 0,
+  "native_codec_probes_coverage_case_sum": 0,
+  "native_codec_probes_coverage_count_mismatch": 0,
+  "native_codec_probes_missing_required_coverage": 0,
+  "native_codec_probes_duplicate_coverage_rows": 0,
   "native_codec_probes_capability_count": 0,
+  "native_codec_probes_capability_rows": 0,
   "native_codec_probes_ok_capability_count": 0,
+  "native_codec_probes_capability_count_mismatch": 0,
+  "native_codec_probes_capability_row_unhealthy": 0,
+  "native_codec_probes_missing_required_capabilities": 0,
+  "native_codec_probes_duplicate_capability_rows": 0,
   "native_codec_probes_lib_generated_cases": 0,
   "native_codec_probes_incremental_cases": 0,
   "native_codec_probes_chunked_cases": 0,
@@ -1934,6 +4229,95 @@ Example:
   "native_codec_probes_dictionary_cases": 0,
   "native_codec_probes_malformed_cases": 0,
   "native_codec_probes_total_cases": 0,
+  "native_codec_probes_zstd_frame_cases": 0,
+  "native_codec_probes_zstd_dictionary_cases": 0,
+  "native_codec_probes_markdown_rows": 0,
+  "native_codec_probes_markdown_matched": 0,
+  "native_codec_probes_markdown_unmatched": 0,
+  "native_summary_error_present": false,
+  "native_summary_error_healthy": false,
+  "native_summary_error_case_count": 0,
+  "native_summary_error_case_rows": 0,
+  "native_summary_error_case_count_mismatch": 0,
+  "native_summary_error_lz4_case_count": 0,
+  "native_summary_error_zstd_case_count": 0,
+  "native_summary_error_codec_case_count_mismatch": 0,
+  "native_summary_error_checksum_mismatch_count": 0,
+  "native_summary_error_corrupt_frame_count": 0,
+  "native_summary_error_truncated_frame_count": 0,
+  "native_summary_error_magic_phase_count": 0,
+  "native_summary_error_skippable_payload_phase_count": 0,
+  "native_summary_error_frame_body_phase_count": 0,
+  "native_summary_error_frame_checksum_phase_count": 0,
+  "native_summary_error_frame_phase_count": 0,
+  "native_summary_error_error_counts": {},
+  "native_summary_error_phase_counts": {},
+  "native_summary_error_lz4_error_counts": {},
+  "native_summary_error_zstd_error_counts": {},
+  "native_summary_error_lz4_phase_counts": {},
+  "native_summary_error_zstd_phase_counts": {},
+  "native_summary_error_offset_min": 0,
+  "native_summary_error_offset_max": 0,
+  "native_summary_error_lz4_offset_min": 0,
+  "native_summary_error_lz4_offset_max": 0,
+  "native_summary_error_zstd_offset_min": 0,
+  "native_summary_error_zstd_offset_max": 0,
+  "native_summary_error_error_count_mismatch": 0,
+  "native_summary_error_phase_count_mismatch": 0,
+  "native_summary_error_codec_error_count_mismatch": 0,
+  "native_summary_error_codec_phase_count_mismatch": 0,
+  "native_summary_error_offset_range_mismatch": 0,
+  "native_summary_error_phase_offset_ranges": {},
+  "native_summary_error_required_codec_phases": {},
+  "native_summary_error_lz4_missing_phases": [],
+  "native_summary_error_zstd_missing_phases": [],
+  "native_summary_error_negative_present": false,
+  "native_summary_error_negative_healthy": false,
+  "native_summary_error_negative_case_count": 0,
+  "native_summary_error_negative_rows": 0,
+  "native_summary_error_negative_count_mismatch": 0,
+  "native_summary_error_negative_matched": 0,
+  "native_summary_error_negative_expected_failures": 0,
+  "lz4_native_summary_present": false,
+  "lz4_native_summary_healthy": false,
+  "lz4_native_summary_frame_count": 0,
+  "lz4_native_summary_skippable_frame_count": 0,
+  "lz4_native_summary_checksum_frame_count": 0,
+  "lz4_native_summary_block_checksum_frame_count": 0,
+  "lz4_native_summary_dictionary_id_frame_count": 0,
+  "lz4_native_summary_content_size_frame_count": 0,
+  "lz4_native_summary_declared_content_bytes": 0,
+  "lz4_native_summary_block_count": 0,
+  "lz4_native_summary_raw_block_count": 0,
+  "lz4_native_summary_compressed_block_count": 0,
+  "lz4_native_summary_compressed_bytes": 0,
+  "lz4_native_summary_payload_bytes": 0,
+  "lz4_native_summary_skippable_payload_bytes": 0,
+  "lz4_native_summary_block_count_mismatch": 0,
+  "lz4_native_summary_declared_payload_slack_bytes": 0,
+  "lz4_native_summary_metadata_frame_overflow": 0,
+  "lz4_native_summary_checksum_frame_overflow": 0,
+  "lz4_native_summary_block_checksum_frame_overflow": 0,
+  "zstd_native_summary_present": false,
+  "zstd_native_summary_healthy": false,
+  "zstd_native_summary_frame_count": 0,
+  "zstd_native_summary_skippable_frame_count": 0,
+  "zstd_native_summary_checksum_frame_count": 0,
+  "zstd_native_summary_dictionary_id_frame_count": 0,
+  "zstd_native_summary_content_size_frame_count": 0,
+  "zstd_native_summary_declared_content_bytes": 0,
+  "zstd_native_summary_block_count": 0,
+  "zstd_native_summary_raw_block_count": 0,
+  "zstd_native_summary_rle_block_count": 0,
+  "zstd_native_summary_compressed_block_count": 0,
+  "zstd_native_summary_compressed_bytes": 0,
+  "zstd_native_summary_payload_bytes": 0,
+  "zstd_native_summary_skippable_payload_bytes": 0,
+  "zstd_native_summary_block_count_mismatch": 0,
+  "zstd_native_summary_declared_payload_slack_bytes": 0,
+  "zstd_native_summary_metadata_frame_overflow": 0,
+  "zstd_native_summary_checksum_frame_overflow": 0,
+  "zstd_native_summary_block_checksum_frame_overflow": 0,
   "native_tier_range_present": true,
   "native_tier_range_healthy": true,
   "native_tier_range_summary_count": 3,
@@ -1941,6 +4325,16 @@ Example:
   "native_tier_range_rows": 24,
   "native_tier_range_fixture_count": 8,
   "native_tier_range_enforced_count": 1,
+  "native_tier_range_csv_present_count": 3,
+  "native_tier_range_csv_healthy_count": 3,
+  "native_tier_range_csv_rows": 24,
+  "native_tier_range_csv_positive_rows": 24,
+  "native_tier_range_csv_shape_rows": 24,
+  "native_tier_range_csv_throughput_rows": 24,
+  "native_tier_range_csv_missing_sources": [],
+  "native_tier_range_csv_missing_pairs": [],
+  "native_tier_range_csv_duplicate_pairs": [],
+  "native_tier_range_csv_unknown_pairs": [],
   "native_tier_range_built_in_summary_count": 1,
   "native_tier_range_project_files_summary_count": 1,
   "native_tier_range_standard_corpus_summary_count": 1,
@@ -1952,6 +4346,16 @@ Example:
   "native_tier_range_custom_rows": 0,
   "native_tier_range_legacy_rows": 0,
   "native_tier_range_missing_sources": [],
+  "native_tier_range_source_count_mismatch": 0,
+  "native_tier_range_summary_csv_row_mismatch": 0,
+  "native_tier_range_summary_csv_fixture_mismatch": 0,
+  "native_tier_range_summary_csv_tier_mismatch": 0,
+  "native_tier_range_summary_csv_path_mismatch": 0,
+  "native_tier_range_summary_csv_stream_bytes_mismatch": 0,
+  "native_tier_range_summary_csv_index_entries_mismatch": 0,
+  "native_tier_range_summary_csv_min_range_mismatch": 0,
+  "native_tier_range_summary_csv_min_full_mismatch": 0,
+  "native_tier_range_summary_csv_mismatch_total": 0,
   "native_tier_corpus_discovery_present": false,
   "native_tier_corpus_discovery_ok": false,
   "native_tier_corpus_discovery_healthy": false,
@@ -1965,6 +4369,12 @@ Example:
   "native_tier_corpus_discovery_selected_cases": [],
   "native_tier_corpus_discovery_csv": "",
   "native_tier_corpus_discovery_missing_reason": "missing_discovery_artifact",
+  "native_tier_corpus_discovery_selected_case_mismatch": 0,
+  "native_tier_corpus_discovery_csv_path_mismatch": 0,
+  "native_tier_corpus_discovery_summary_fixture_mismatch": 0,
+  "native_tier_corpus_discovery_csv_fixture_mismatch": 0,
+  "native_tier_corpus_discovery_csv_byte_mismatch": 0,
+  "native_tier_corpus_discovery_mismatch_total": 0,
   "native_tier_range_source_details": [
     {
       "source": "built_in",
@@ -2114,16 +4524,28 @@ Example:
   "schema_version": 1,
   "expected_modes": [
     {
-      "mode": "strict-header-inspect",
-      "min_checks": 3,
-      "min_expected_failures": 3,
-      "min_matched": 3
+      "mode": "dashboard-markdown",
+      "min_checks": 20,
+      "min_expected_failures": 0,
+      "min_matched": 20
+    },
+    {
+      "mode": "strict-validation-health",
+      "min_checks": 545,
+      "min_expected_failures": 545,
+      "min_matched": 545
+    },
+    {
+      "mode": "non-json-artifact-health",
+      "min_checks": 22,
+      "min_expected_failures": 22,
+      "min_matched": 22
     },
     {
       "mode": "native-tier-range-health",
-      "min_checks": 3,
-      "min_expected_failures": 0,
-      "min_matched": 3
+      "min_checks": 28,
+      "min_expected_failures": 28,
+      "min_matched": 28
     }
   ]
 }
@@ -2154,9 +4576,34 @@ Example:
   "schema_version": 1,
   "expected_reasons": [
     {
-      "reason": "missing_dashboard_strict_modes",
-      "check": "validation_missing_dashboard_strict_modes",
-      "fixture": "missing_dashboard_strict_modes"
+      "reason": "missing_lz4_native_summary_artifact",
+      "check": "validation_missing_lz4_native_summary_artifact",
+      "fixture": "missing_lz4_native_summary_artifact"
+    },
+    {
+      "reason": "lz4_native_summary_undercovered",
+      "check": "validation_lz4_native_summary_undercovered",
+      "fixture": "lz4_native_summary_undercovered"
+    },
+    {
+      "reason": "missing_zstd_native_summary_artifact",
+      "check": "validation_missing_zstd_native_summary_artifact",
+      "fixture": "missing_zstd_native_summary_artifact"
+    },
+    {
+      "reason": "missing_dashboard_configuration_artifact",
+      "check": "validation_missing_dashboard_configuration_artifact",
+      "fixture": "missing_dashboard_configuration_artifact"
+    },
+    {
+      "reason": "dashboard_configuration_failed",
+      "check": "validation_dashboard_configuration_failed",
+      "fixture": "dashboard_configuration_failed"
+    },
+    {
+      "reason": "missing_validation_json_smoke_artifact",
+      "check": "validation_missing_validation_json_smoke_artifact",
+      "fixture": "missing_validation_json_smoke_artifact"
     }
   ]
 }
@@ -2173,8 +4620,8 @@ python3 tools/dashboard_strict_smoke.py --summary zig-out/vort-dashboard-strict-
 
 This schema summarizes positive and negative smoke checks for dashboard strict
 modes: producer coverage, smoke-gate coverage, header-inspection health,
-native-tier range health-field coverage, and aggregate validation-health
-failures. Each check records the expected output
+non-JSON artifact layout/manifest-drift coverage for CSV files, CSV headers, Markdown files, Markdown headings, and Markdown tables, native-tier range health-field coverage, dashboard Markdown review-surface
+coverage, and aggregate validation-health failures. Each check records the expected output
 marker, actual truncated output, original output length, truncation limit/flag,
 and process return code for CI diagnostics. `mode_counts` groups checks by
 strict mode for a compact dashboard overview, while `expected_modes` defines the
@@ -2184,10 +4631,22 @@ actual/minimum/delta values, and `missing_modes` reports unmet requirements.
 each `vort.dashboard_index.validation_unhealthy_reasons` enum value so new
 aggregate health reasons must be backed by real failing dashboard inputs before
 the smoke artifact can pass. The expected reason/check/fixture matrix lives in
-`tools/dashboard_strict_validation_reasons.json`; the `strict-validation-health`
-mode minimums must cover every configured reason, currently 23. A synthetic long-output check
-keeps the truncation path covered so `actual_output_truncated=true` is exercised
-in CI.
+`tools/dashboard_strict_validation_reasons.json`; the retained
+`strict-validation-health` mode minimums must cover every configured reason,
+currently 88, plus direct validation JSON smoke/docs-negative, zlib relaxed gate/report/Markdown drift, Snappy report CSV drift, PNG scratch report/Markdown drift, checksum/chunk-cursor/deflate match-copy/Huffman-build/lookup/chunked-Huffman/extra-bit/dictionary-decode/PNG-scanline/chunked-zlib/PNG-streaming-zlib benchmark CSV drift, deflate dynamic decode profile CSV drift, native library benchmark CSV/compression/decode/generated-compression, match-budget, sequence-Huffman, dictionary, trained-dictionary, dictionary-set, reusable/direct/fallback/chunked/chunked-append/exact/reusable-exact dictionary improvement drift, zstd comparison gate/data-row/CSV/Markdown drift, Python zlib differential counter drift, native summary error error/phase floor and counter drift, LZ4/Zstd native stream summary floor/counter/metadata-overflow drift, decode-stage unmatched-error and CSV positive/header/block-type drift, native-tier CSV row/summary mismatch drift, native-tier corpus discovery field drift, dashboard strict self-health count/Markdown drift, dashboard configuration meta-smoke drift, validation JSON schema/artifact/docs-negative drift, Brotli static-dictionary field drift, and header-inspect health regression checks. Dashboard aggregate health also reads the retained
+`vort-dashboard-strict-smoke.md` companion and requires its mode, requirement,
+validation-reason, and check rows to match the JSON counts before
+`dashboard_strict_healthy` can pass. The `dashboard-markdown` mode verifies that important human-facing
+sections, including artifact inventory, aggregate validation health, producer/smoke-gate
+coverage, dashboard strict gate coverage, dashboard configuration coverage, validation JSON schema coverage, header inspect coverage, corrupt-sidecar
+rejection coverage, Huffman optimality/gap coverage, compression level positive-row/Markdown coverage, dynamic plan source/positive-row CSV coverage, deflate extra-bit benchmark coverage, dictionary decode benchmark coverage, PNG scanline benchmark coverage, chunked zlib benchmark coverage, PNG streaming zlib benchmark coverage, deflate dynamic decode profile coverage, native library benchmark coverage, zstd comparison gate coverage, native fuzz corpus coverage and summary/floor drift, static dictionary coverage, PNG scratch coverage, zlib relaxed compatibility exact/floor coverage, native allocation coverage, Python zlib
+differential floor coverage, decode-stage error matching, fuzz corpus summary/floor matching, native
+stream metadata coverage, native tier corpus discovery, native summary error
+codec/phase-offset tables, native codec probe coverage/capability/floor tables, and
+the native-tier range source table, remain present in the generated dashboard
+index. The abbreviated example below shows a
+one-reason slice. A synthetic long-output check keeps the truncation path
+covered so `actual_output_truncated=true` is exercised in CI.
 
 Example:
 
@@ -2196,9 +4655,9 @@ Example:
   "schema": "vort.dashboard_strict_smoke",
   "schema_version": 1,
   "ok": true,
-  "check_count": 4,
-  "mode_count": 2,
-  "expected_mode_count": 2,
+  "check_count": 532,
+  "mode_count": 5,
+  "expected_mode_count": 5,
   "missing_mode_count": 0,
   "validation_unhealthy_reason_count": 1,
   "expected_modes": [
@@ -2209,10 +4668,28 @@ Example:
       "min_matched": 1
     },
     {
-      "mode": "native-tier-range-health",
-      "min_checks": 3,
+      "mode": "dashboard-markdown",
+      "min_checks": 20,
       "min_expected_failures": 0,
-      "min_matched": 3
+      "min_matched": 20
+    },
+    {
+      "mode": "strict-validation-health",
+      "min_checks": 545,
+      "min_expected_failures": 545,
+      "min_matched": 545
+    },
+    {
+      "mode": "non-json-artifact-health",
+      "min_checks": 22,
+      "min_expected_failures": 22,
+      "min_matched": 22
+    },
+    {
+      "mode": "native-tier-range-health",
+      "min_checks": 28,
+      "min_expected_failures": 28,
+      "min_matched": 28
     }
   ],
   "missing_modes": [],
@@ -2230,15 +4707,51 @@ Example:
       "missing_matched": 0
     },
     {
-      "mode": "native-tier-range-health",
-      "checks": 3,
-      "min_checks": 3,
+      "mode": "dashboard-markdown",
+      "checks": 23,
+      "min_checks": 20,
       "missing_checks": 0,
       "expected_failures": 0,
       "min_expected_failures": 0,
       "missing_expected_failures": 0,
-      "matched": 3,
-      "min_matched": 3,
+      "matched": 23,
+      "min_matched": 20,
+      "missing_matched": 0
+    },
+    {
+      "mode": "strict-validation-health",
+      "checks": 458,
+      "min_checks": 545,
+      "missing_checks": 87,
+      "expected_failures": 458,
+      "min_expected_failures": 545,
+      "missing_expected_failures": 87,
+      "matched": 458,
+      "min_matched": 545,
+      "missing_matched": 87
+    },
+    {
+      "mode": "non-json-artifact-health",
+      "checks": 22,
+      "min_checks": 22,
+      "missing_checks": 0,
+      "expected_failures": 22,
+      "min_expected_failures": 22,
+      "missing_expected_failures": 0,
+      "matched": 22,
+      "min_matched": 22,
+      "missing_matched": 0
+    },
+    {
+      "mode": "native-tier-range-health",
+      "checks": 18,
+      "min_checks": 18,
+      "missing_checks": 0,
+      "expected_failures": 18,
+      "min_expected_failures": 18,
+      "missing_expected_failures": 0,
+      "matched": 18,
+      "min_matched": 18,
       "missing_matched": 0
     }
   ],
@@ -2250,49 +4763,31 @@ Example:
       "matched": 1
     },
     {
-      "mode": "native-tier-range-health",
-      "checks": 3,
+      "mode": "dashboard-markdown",
+      "checks": 23,
       "expected_failures": 0,
-      "matched": 3
+      "matched": 23
+    },
+    {
+      "mode": "strict-validation-health",
+      "checks": 458,
+      "expected_failures": 458,
+      "matched": 458
+    },
+    {
+      "mode": "non-json-artifact-health",
+      "checks": 22,
+      "expected_failures": 22,
+      "matched": 22
+    },
+    {
+      "mode": "native-tier-range-health",
+      "checks": 28,
+      "expected_failures": 28,
+      "matched": 28
     }
   ],
   "checks": [
-    {
-      "name": "missing_native_tier_range_summary",
-      "mode": "native-tier-range-health",
-      "expected_failure": false,
-      "expected_output": "dashboard_index=",
-      "actual_output": "dashboard_index=ok",
-      "actual_output_bytes": 18,
-      "actual_output_limit": 240,
-      "actual_output_truncated": false,
-      "returncode": 0,
-      "matched": true
-    },
-    {
-      "name": "failed_native_tier_range_summary",
-      "mode": "native-tier-range-health",
-      "expected_failure": false,
-      "expected_output": "dashboard_index=",
-      "actual_output": "dashboard_index=ok",
-      "actual_output_bytes": 18,
-      "actual_output_limit": 240,
-      "actual_output_truncated": false,
-      "returncode": 0,
-      "matched": true
-    },
-    {
-      "name": "missing_native_tier_range_source",
-      "mode": "native-tier-range-health",
-      "expected_failure": false,
-      "expected_output": "dashboard_index=",
-      "actual_output": "dashboard_index=ok",
-      "actual_output_bytes": 18,
-      "actual_output_limit": 240,
-      "actual_output_truncated": false,
-      "returncode": 0,
-      "matched": true
-    },
     {
       "name": "all_strict_ok",
       "mode": "all",
@@ -2304,12 +4799,6384 @@ Example:
       "actual_output_truncated": false,
       "returncode": 0,
       "matched": true
+    },
+    {
+      "name": "dashboard_artifact_inventory_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "dashboard artifact inventory markdown table",
+      "actual_output": "0:ok",
+      "actual_output_bytes": 4,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "validation_unhealthy_reasons_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "validation unhealthy reasons markdown table",
+      "actual_output": "0:ok",
+      "actual_output_bytes": 4,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "producer_smoke_gate_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "producer smoke gate markdown table",
+      "actual_output": "0:ok",
+      "actual_output_bytes": 4,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "dashboard_strict_mode_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "dashboard strict mode markdown table",
+      "actual_output": "0:ok",
+      "actual_output_bytes": 4,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "dashboard_strict_check_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_strict_mode_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_strict_expected_mode_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_strict_missing_mode_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=missing_dashboard_strict_modes",
+      "actual_output": "dashboard_index_validation_unhealthy=missing_dashboard_strict_modes\n",
+      "actual_output_bytes": 67,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_strict_validation_reason_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_strict_unmatched_check_row",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_strict_validation_reason_rows_missing",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_strict_missing_checks_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_strict_missing_expected_failures_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_strict_missing_matched_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_strict_markdown_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_strict_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_strict_markdown_missing",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=missing_dashboard_strict_artifact",
+      "actual_output": "dashboard_index_validation_unhealthy=missing_dashboard_strict_artifact\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_configuration_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "dashboard configuration markdown table",
+      "actual_output": "0:ok",
+      "actual_output_bytes": 4,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "dashboard_config_index_ok_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed\n",
+      "actual_output_bytes": 68,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_config_index_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed\n",
+      "actual_output_bytes": 68,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_config_index_row_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed\n",
+      "actual_output_bytes": 68,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_config_index_negative_ok_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed\n",
+      "actual_output_bytes": 68,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_config_index_negative_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed\n",
+      "actual_output_bytes": 68,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_config_index_negative_row_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed\n",
+      "actual_output_bytes": 68,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_category_negative_ok_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed\n",
+      "actual_output_bytes": 68,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_category_negative_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed\n",
+      "actual_output_bytes": 68,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_category_negative_row_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed\n",
+      "actual_output_bytes": 68,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_producers_required_ok_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed\n",
+      "actual_output_bytes": 68,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_producers_required_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed\n",
+      "actual_output_bytes": 68,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_producers_required_row_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed\n",
+      "actual_output_bytes": 68,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_producers_required_smoke_gate_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed\n",
+      "actual_output_bytes": 68,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_producers_negative_ok_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed\n",
+      "actual_output_bytes": 68,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_producers_negative_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed\n",
+      "actual_output_bytes": 68,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dashboard_producers_negative_row_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dashboard_configuration_failed\n",
+      "actual_output_bytes": 68,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_json_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "validation json schema markdown table",
+      "actual_output": "0:ok",
+      "actual_output_bytes": 4,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "validation_json_checked_schema_missing",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=validation_json_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=validation_json_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_json_checked_schema_duplicate",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=validation_json_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=validation_json_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_json_observed_schema_rows_missing",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=validation_json_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=validation_json_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_json_unchecked_observed_schema_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=validation_json_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=validation_json_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_json_artifact_excluded_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=validation_json_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=validation_json_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_json_artifact_count_zero",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=validation_json_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=validation_json_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_json_artifact_excluded_zero",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=validation_json_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=validation_json_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_json_artifact_parsed_zero",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=validation_json_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=validation_json_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_json_artifact_schema_zero",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=validation_json_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=validation_json_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_json_artifact_manifest_validated_zero",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=validation_json_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=validation_json_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_json_cli_success_failed",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=validation_json_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=validation_json_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_json_cli_failure_unexpected_ok",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=validation_json_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=validation_json_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_json_cli_failure_hint_missing",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=validation_json_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=validation_json_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_json_report_rows_missing",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=validation_json_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=validation_json_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_json_corrupt_rows_missing",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=validation_json_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=validation_json_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_json_docs_negative_ok_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=validation_json_docs_negative_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=validation_json_docs_negative_failed\n",
+      "actual_output_bytes": 75,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_json_docs_negative_count_zero",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=validation_json_docs_negative_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=validation_json_docs_negative_failed\n",
+      "actual_output_bytes": 75,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_summary_success_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "native summary success markdown table",
+      "actual_output": "0:ok",
+      "actual_output_bytes": 4,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_markdown_tables",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "native summary error markdown tables",
+      "actual_output": "0:ok",
+      "actual_output_bytes": 4,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "native_tier_range_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "native tier range markdown table",
+      "actual_output": "0:ok",
+      "actual_output_bytes": 4,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "native_tier_discovery_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "native tier discovery markdown table",
+      "actual_output": "0:ok",
+      "actual_output_bytes": 4,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probe_markdown_tables",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "native codec probe markdown tables",
+      "actual_output": "0:ok",
+      "actual_output_bytes": 4,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "header_inspect_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "header inspect markdown table",
+      "actual_output": "0:ok",
+      "actual_output_bytes": 4,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "sidecar_corrupt_missing_markdown",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=missing_sidecar_corrupt_artifact",
+      "actual_output": "dashboard_index_validation_unhealthy=missing_sidecar_corrupt_artifact\\n",
+      "actual_output_bytes": 71,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "sidecar_corrupt_rows_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed\\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "sidecar_corrupt_markdown_row_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed\\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "sidecar_corrupt_item_metadata_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed\\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "sidecar_corrupt_item_full_rejected_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed\\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "sidecar_corrupt_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "sidecar corrupt markdown table",
+      "actual_output": "0:ok",
+      "actual_output_bytes": 4,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "huffman_length_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "huffman length markdown table",
+      "actual_output": "0:ok",
+      "actual_output_bytes": 4,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "zstd_compare_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "zstd compare markdown table",
+      "actual_output": "0:ok",
+      "actual_output_bytes": 4,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "native fuzz corpus markdown table",
+      "actual_output": "0:ok",
+      "actual_output_bytes": 4,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "static_dictionary_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "static dictionary markdown table",
+      "actual_output": "0:ok",
+      "actual_output_bytes": 4,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "png_scratch_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "png scratch markdown table",
+      "actual_output": "0:ok",
+      "actual_output_bytes": 4,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "zlib relaxed markdown table",
+      "actual_output": "0:ok",
+      "actual_output_bytes": 4,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "native_allocation_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "native allocation markdown table",
+      "actual_output": "0:ok",
+      "actual_output_bytes": 4,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "python zlib diff markdown table",
+      "actual_output": "0:ok",
+      "actual_output_bytes": 4,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "decode_stage_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "decode stage markdown table",
+      "actual_output": "0:ok",
+      "actual_output_bytes": 4,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "fuzz_corpus_markdown_table",
+      "mode": "dashboard-markdown",
+      "expected_failure": false,
+      "expected_output": "fuzz corpus markdown table",
+      "actual_output": "0:ok",
+      "actual_output_bytes": 4,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 0,
+      "matched": true
+    },
+    {
+      "name": "header_inspect_report_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "header_inspect_duplicate_case",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "header_inspect_markdown_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "header_inspect_command_coverage_missing",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "header_inspect_command_coverage_unknown",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "header_inspect_command_coverage_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "header_inspect_negative_error_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "header_inspect_help_required_workflow_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "header_inspect_duplicate_negative",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "header_inspect_duplicate_command_coverage",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "header_inspect_duplicate_workflow_coverage",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "header_inspect_duplicate_required_workflow",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "header_inspect_duplicate_help_workflow",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "header_inspect_missing_workflow_drift",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=header_inspect_undercovered\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "sidecar_corrupt_item_malformed",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed\n",
+      "actual_output_bytes": 60,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "sidecar_corrupt_item_duplicate",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed\n",
+      "actual_output_bytes": 60,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "sidecar_corrupt_markdown_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed\n",
+      "actual_output_bytes": 60,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "sidecar_corrupt_markdown_malformed",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed\n",
+      "actual_output_bytes": 60,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "sidecar_corrupt_markdown_duplicate",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed\n",
+      "actual_output_bytes": 60,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "sidecar_corrupt_markdown_unknown",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed\n",
+      "actual_output_bytes": 60,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "sidecar_corrupt_metadata_failed_count",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed\n",
+      "actual_output_bytes": 60,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "sidecar_corrupt_full_not_rejected_count",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed\n",
+      "actual_output_bytes": 60,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "sidecar_corrupt_item_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=sidecar_corrupt_failed\n",
+      "actual_output_bytes": 60,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "huffman_length_missing_markdown",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=missing_huffman_length_artifact",
+      "actual_output": "dashboard_index_validation_unhealthy=missing_huffman_length_artifact\\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "huffman_length_worst_gap_bits",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=huffman_length_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=huffman_length_failed\\n",
+      "actual_output_bytes": 60,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "huffman_length_package_merge_worst_gap_bits",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=huffman_length_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=huffman_length_failed\\n",
+      "actual_output_bytes": 60,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "huffman_length_malformed_row",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=huffman_length_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=huffman_length_failed\n",
+      "actual_output_bytes": 59,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "huffman_length_blank_case",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=huffman_length_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=huffman_length_failed\n",
+      "actual_output_bytes": 59,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "huffman_length_duplicate_case",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=huffman_length_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=huffman_length_failed\n",
+      "actual_output_bytes": 59,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "huffman_length_non_optimal_row",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=huffman_length_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=huffman_length_failed\n",
+      "actual_output_bytes": 59,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "huffman_length_markdown_summary_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=huffman_length_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=huffman_length_failed\n",
+      "actual_output_bytes": 59,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "huffman_length_markdown_case_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=huffman_length_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=huffman_length_failed\n",
+      "actual_output_bytes": 59,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "level_report_missing_markdown",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=level_report_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=level_report_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "level_report_non_positive_row",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=level_report_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=level_report_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "level_report_missing_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=level_report_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=level_report_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "level_report_duplicate_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=level_report_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=level_report_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "level_report_unknown_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=level_report_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=level_report_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "level_report_token_accounting_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=level_report_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=level_report_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "level_report_ratio_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=level_report_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=level_report_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "level_report_roundtrip_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=level_report_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=level_report_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "level_report_markdown_summary_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=level_report_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=level_report_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "level_report_markdown_detail_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=level_report_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=level_report_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dynamic_plan_missing_source",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=missing_dynamic_plan_artifact",
+      "actual_output": "dashboard_index_validation_unhealthy=missing_dynamic_plan_artifact\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dynamic_plan_positive_row_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dynamic_plan_missing_path",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dynamic_plan_duplicate_path",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dynamic_plan_unknown_path",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dynamic_plan_malformed_row",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dynamic_plan_token_accounting_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dynamic_plan_histogram_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dynamic_plan_ratio_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dynamic_plan_slack_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dynamic_plan_wrapper_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dynamic_plan_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "fuzz_corpus_ok_failed",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed\\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "fuzz_corpus_mode_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed\\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "fuzz_corpus_exact_error_expectations_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed\\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "fuzz_corpus_mode_count_rows_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed\\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "fuzz_corpus_error_count_rows_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed\\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "fuzz_corpus_mode_summary_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed\\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "fuzz_corpus_mode_summary_missing",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed\\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "fuzz_corpus_mode_summary_duplicate",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed\\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "fuzz_corpus_error_summary_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed\\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "fuzz_corpus_error_summary_missing",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed\\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "fuzz_corpus_error_summary_duplicate",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed\\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "fuzz_corpus_coverage_ok_failed",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=fuzz_coverage_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=fuzz_coverage_failed\\n",
+      "actual_output_bytes": 59,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "fuzz_corpus_coverage_mode_requirement_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=fuzz_coverage_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=fuzz_coverage_failed\\n",
+      "actual_output_bytes": 59,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "fuzz_corpus_coverage_error_requirement_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=fuzz_coverage_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=fuzz_coverage_failed\\n",
+      "actual_output_bytes": 59,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "fuzz_corpus_report_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed\n",
+      "actual_output_bytes": 56,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "fuzz_corpus_matched_rows_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed\n",
+      "actual_output_bytes": 56,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "fuzz_corpus_coverage_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=fuzz_coverage_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=fuzz_coverage_failed\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "fuzz_corpus_markdown_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=fuzz_corpus_failed\n",
+      "actual_output_bytes": 56,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "decode_stage_report_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=decode_stage_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=decode_stage_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "decode_stage_error_match_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=decode_stage_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=decode_stage_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "decode_stage_unmatched_error_row_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=decode_stage_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=decode_stage_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "decode_stage_csv_positive_row_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=decode_stage_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=decode_stage_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "decode_stage_csv_header_row_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=decode_stage_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=decode_stage_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "decode_stage_csv_dynamic_row_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=decode_stage_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=decode_stage_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "decode_stage_csv_fixed_row_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=decode_stage_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=decode_stage_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "decode_stage_csv_stored_row_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=decode_stage_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=decode_stage_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "decode_stage_csv_missing_case",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=decode_stage_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=decode_stage_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "decode_stage_csv_duplicate_case",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=decode_stage_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=decode_stage_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "decode_stage_csv_unknown_case",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=decode_stage_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=decode_stage_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "decode_stage_markdown_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=decode_stage_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=decode_stage_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_ok_failed",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_mode_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_exact_error_expectations_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_mode_count_rows_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_error_count_rows_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_mode_summary_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_mode_summary_missing",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_mode_summary_duplicate",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_error_summary_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_error_summary_missing",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_error_summary_duplicate",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_coverage_ok_failed",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_coverage_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_coverage_failed\\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_coverage_mode_requirement_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_coverage_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_coverage_failed\\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_coverage_error_requirement_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_coverage_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_coverage_failed\\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_report_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_matched_rows_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_coverage_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_coverage_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_coverage_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_fuzz_corpus_markdown_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_fuzz_corpus_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_gate_ok_false",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_dictionary_success_exact_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_limited_rejection_exact_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_gzip_strict_rejection_exact_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_gzip_decoder_success_exact_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_gzip_limited_rejection_exact_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_zlib_concatenated_floor_shortfall",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_zlib_decoder_floor_shortfall",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_gzip_relaxed_floor_shortfall",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_gzip_concatenated_floor_shortfall",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_missing_gate",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=missing_zlib_relaxed_artifact",
+      "actual_output": "dashboard_index_validation_unhealthy=missing_zlib_relaxed_artifact\n",
+      "actual_output_bytes": 68,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_missing_markdown",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=missing_zlib_relaxed_artifact",
+      "actual_output": "dashboard_index_validation_unhealthy=missing_zlib_relaxed_artifact\n",
+      "actual_output_bytes": 68,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_gate_missing_check",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_gate_extra_check",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_gate_rule_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_report_exact_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_report_floor_shortfall",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_markdown_value_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_markdown_duplicate_metric",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_markdown_unknown_metric",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zlib_relaxed_markdown_malformed_metric",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zlib_relaxed_failed\n",
+      "actual_output_bytes": 58,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "snappy_report_missing_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=snappy_report_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=snappy_report_failed\n",
+      "actual_output_bytes": 59,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "snappy_report_duplicate_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=snappy_report_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=snappy_report_failed\n",
+      "actual_output_bytes": 59,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "snappy_report_unknown_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=snappy_report_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=snappy_report_failed\n",
+      "actual_output_bytes": 59,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "snappy_report_positive_timing_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=snappy_report_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=snappy_report_failed\n",
+      "actual_output_bytes": 59,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "snappy_report_ratio_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=snappy_report_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=snappy_report_failed\n",
+      "actual_output_bytes": 59,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "snappy_report_throughput_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=snappy_report_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=snappy_report_failed\n",
+      "actual_output_bytes": 59,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "snappy_report_repetitive_not_shrunk",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=snappy_report_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=snappy_report_failed\n",
+      "actual_output_bytes": 59,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "snappy_report_framed_overhead_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=snappy_report_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=snappy_report_failed\n",
+      "actual_output_bytes": 59,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "snappy_report_reusable_checksum_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=snappy_report_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=snappy_report_failed\n",
+      "actual_output_bytes": 59,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "png_scratch_missing_markdown",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=missing_png_scratch_artifact",
+      "actual_output": "dashboard_index_validation_unhealthy=missing_png_scratch_artifact\n",
+      "actual_output_bytes": 67,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "png_scratch_report_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=png_scratch_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=png_scratch_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "png_scratch_missing_case",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=png_scratch_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=png_scratch_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "png_scratch_duplicate_case",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=png_scratch_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=png_scratch_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "png_scratch_unknown_case",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=png_scratch_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=png_scratch_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "png_scratch_row_inconsistent",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=png_scratch_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=png_scratch_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "png_scratch_stored_not_achieved",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=png_scratch_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=png_scratch_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "png_scratch_fixed_not_achieved",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=png_scratch_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=png_scratch_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "png_scratch_streaming_savings_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=png_scratch_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=png_scratch_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "png_scratch_markdown_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=png_scratch_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=png_scratch_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "checksum_bench_missing_algorithm",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=checksum_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=checksum_bench_failed\n",
+      "actual_output_bytes": 60,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "checksum_bench_duplicate_algorithm",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=checksum_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=checksum_bench_failed\n",
+      "actual_output_bytes": 60,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "checksum_bench_unknown_algorithm",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=checksum_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=checksum_bench_failed\n",
+      "actual_output_bytes": 60,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "checksum_bench_positive_row_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=checksum_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=checksum_bench_failed\n",
+      "actual_output_bytes": 60,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "checksum_bench_workload_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=checksum_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=checksum_bench_failed\n",
+      "actual_output_bytes": 60,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "checksum_bench_throughput_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=checksum_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=checksum_bench_failed\n",
+      "actual_output_bytes": 60,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "checksum_bench_crc32_mix_group_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=checksum_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=checksum_bench_failed\n",
+      "actual_output_bytes": 60,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "checksum_bench_crc32c_mix_group_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=checksum_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=checksum_bench_failed\n",
+      "actual_output_bytes": 60,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "chunk_cursor_bench_missing_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "chunk_cursor_bench_duplicate_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "chunk_cursor_bench_unknown_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "chunk_cursor_bench_positive_row_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "chunk_cursor_bench_shape_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "chunk_cursor_bench_throughput_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "chunk_cursor_bench_checksum_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=chunk_cursor_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_match_copy_bench_missing_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_match_copy_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_match_copy_bench_failed\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_match_copy_bench_duplicate_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_match_copy_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_match_copy_bench_failed\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_match_copy_bench_unknown_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_match_copy_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_match_copy_bench_failed\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_match_copy_bench_positive_row_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_match_copy_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_match_copy_bench_failed\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_match_copy_bench_class_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_match_copy_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_match_copy_bench_failed\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_match_copy_bench_output_bytes_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_match_copy_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_match_copy_bench_failed\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_match_copy_bench_throughput_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_match_copy_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_match_copy_bench_failed\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_match_copy_bench_checksum_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_match_copy_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_match_copy_bench_failed\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_huffman_build_bench_missing_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_huffman_build_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_huffman_build_bench_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_huffman_build_bench_duplicate_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_huffman_build_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_huffman_build_bench_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_huffman_build_bench_unknown_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_huffman_build_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_huffman_build_bench_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_huffman_build_bench_positive_row_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_huffman_build_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_huffman_build_bench_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_huffman_build_bench_lookup_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_huffman_build_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_huffman_build_bench_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_huffman_build_bench_throughput_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_huffman_build_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_huffman_build_bench_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_huffman_build_bench_checksum_variant_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_huffman_build_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_huffman_build_bench_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_huffman_lookup_bench_missing_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_huffman_lookup_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_huffman_lookup_bench_failed\n",
+      "actual_output_bytes": 74,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_huffman_lookup_bench_duplicate_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_huffman_lookup_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_huffman_lookup_bench_failed\n",
+      "actual_output_bytes": 74,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_huffman_lookup_bench_unknown_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_huffman_lookup_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_huffman_lookup_bench_failed\n",
+      "actual_output_bytes": 74,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_huffman_lookup_bench_positive_row_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_huffman_lookup_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_huffman_lookup_bench_failed\n",
+      "actual_output_bytes": 74,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_huffman_lookup_bench_lookup_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_huffman_lookup_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_huffman_lookup_bench_failed\n",
+      "actual_output_bytes": 74,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_huffman_lookup_bench_throughput_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_huffman_lookup_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_huffman_lookup_bench_failed\n",
+      "actual_output_bytes": 74,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_huffman_lookup_bench_checksum_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_huffman_lookup_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_huffman_lookup_bench_failed\n",
+      "actual_output_bytes": 74,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_chunked_huffman_bench_missing_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_chunked_huffman_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_chunked_huffman_bench_failed\n",
+      "actual_output_bytes": 75,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_chunked_huffman_bench_duplicate_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_chunked_huffman_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_chunked_huffman_bench_failed\n",
+      "actual_output_bytes": 75,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_chunked_huffman_bench_unknown_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_chunked_huffman_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_chunked_huffman_bench_failed\n",
+      "actual_output_bytes": 75,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_chunked_huffman_bench_positive_row_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_chunked_huffman_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_chunked_huffman_bench_failed\n",
+      "actual_output_bytes": 75,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_chunked_huffman_bench_shape_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_chunked_huffman_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_chunked_huffman_bench_failed\n",
+      "actual_output_bytes": 75,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_chunked_huffman_bench_buffered_chunk_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_chunked_huffman_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_chunked_huffman_bench_failed\n",
+      "actual_output_bytes": 75,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_chunked_huffman_bench_chunk_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_chunked_huffman_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_chunked_huffman_bench_failed\n",
+      "actual_output_bytes": 75,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_chunked_huffman_bench_throughput_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_chunked_huffman_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_chunked_huffman_bench_failed\n",
+      "actual_output_bytes": 75,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_chunked_huffman_bench_checksum_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_chunked_huffman_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_chunked_huffman_bench_failed\n",
+      "actual_output_bytes": 75,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_extra_bits_bench_missing_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_extra_bits_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_extra_bits_bench_failed\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_extra_bits_bench_duplicate_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_extra_bits_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_extra_bits_bench_failed\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_extra_bits_bench_unknown_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_extra_bits_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_extra_bits_bench_failed\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_extra_bits_bench_positive_row_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_extra_bits_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_extra_bits_bench_failed\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_extra_bits_bench_shape_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_extra_bits_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_extra_bits_bench_failed\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_extra_bits_bench_throughput_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_extra_bits_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_extra_bits_bench_failed\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_extra_bits_bench_checksum_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_extra_bits_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_extra_bits_bench_failed\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_extra_bits_bench_paired_checksum_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_extra_bits_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_extra_bits_bench_failed\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dictionary_decode_bench_missing_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dictionary_decode_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dictionary_decode_bench_failed\n",
+      "actual_output_bytes": 69,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dictionary_decode_bench_duplicate_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dictionary_decode_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dictionary_decode_bench_failed\n",
+      "actual_output_bytes": 69,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dictionary_decode_bench_unknown_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dictionary_decode_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dictionary_decode_bench_failed\n",
+      "actual_output_bytes": 69,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dictionary_decode_bench_positive_row_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dictionary_decode_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dictionary_decode_bench_failed\n",
+      "actual_output_bytes": 69,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dictionary_decode_bench_output_size_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dictionary_decode_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dictionary_decode_bench_failed\n",
+      "actual_output_bytes": 69,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dictionary_decode_bench_throughput_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dictionary_decode_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dictionary_decode_bench_failed\n",
+      "actual_output_bytes": 69,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "dictionary_decode_bench_checksum_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=dictionary_decode_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=dictionary_decode_bench_failed\n",
+      "actual_output_bytes": 69,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "png_scanline_bench_missing_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=png_scanline_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=png_scanline_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "png_scanline_bench_duplicate_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=png_scanline_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=png_scanline_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "png_scanline_bench_unknown_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=png_scanline_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=png_scanline_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "png_scanline_bench_positive_row_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=png_scanline_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=png_scanline_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "png_scanline_bench_io_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=png_scanline_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=png_scanline_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "png_scanline_bench_throughput_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=png_scanline_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=png_scanline_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "png_scanline_bench_checksum_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=png_scanline_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=png_scanline_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "chunked_zlib_bench_missing_markdown",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=missing_chunked_zlib_bench_artifact",
+      "actual_output": "dashboard_index_validation_unhealthy=missing_chunked_zlib_bench_artifact\n",
+      "actual_output_bytes": 74,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "chunked_zlib_bench_missing_case",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=chunked_zlib_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=chunked_zlib_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "chunked_zlib_bench_duplicate_case",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=chunked_zlib_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=chunked_zlib_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "chunked_zlib_bench_unknown_case",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=chunked_zlib_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=chunked_zlib_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "chunked_zlib_bench_positive_row_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=chunked_zlib_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=chunked_zlib_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "chunked_zlib_bench_shape_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=chunked_zlib_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=chunked_zlib_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "chunked_zlib_bench_chunk_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=chunked_zlib_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=chunked_zlib_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "chunked_zlib_bench_ratio_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=chunked_zlib_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=chunked_zlib_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "chunked_zlib_bench_markdown_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=chunked_zlib_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=chunked_zlib_bench_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "png_streaming_zlib_bench_missing_case",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=png_streaming_zlib_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=png_streaming_zlib_bench_failed\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "png_streaming_zlib_bench_duplicate_case",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=png_streaming_zlib_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=png_streaming_zlib_bench_failed\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "png_streaming_zlib_bench_unknown_case",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=png_streaming_zlib_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=png_streaming_zlib_bench_failed\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "png_streaming_zlib_bench_positive_row_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=png_streaming_zlib_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=png_streaming_zlib_bench_failed\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "png_streaming_zlib_bench_shape_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=png_streaming_zlib_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=png_streaming_zlib_bench_failed\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "png_streaming_zlib_bench_image_size_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=png_streaming_zlib_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=png_streaming_zlib_bench_failed\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "png_streaming_zlib_bench_chunk_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=png_streaming_zlib_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=png_streaming_zlib_bench_failed\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "png_streaming_zlib_bench_ratio_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=png_streaming_zlib_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=png_streaming_zlib_bench_failed\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_dynamic_decode_profile_missing_case",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_dynamic_decode_profile_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_dynamic_decode_profile_failed\n",
+      "actual_output_bytes": 75,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_dynamic_decode_profile_duplicate_case",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_dynamic_decode_profile_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_dynamic_decode_profile_failed\n",
+      "actual_output_bytes": 75,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_dynamic_decode_profile_positive_row_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_dynamic_decode_profile_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_dynamic_decode_profile_failed\n",
+      "actual_output_bytes": 75,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_dynamic_decode_profile_histogram_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_dynamic_decode_profile_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_dynamic_decode_profile_failed\n",
+      "actual_output_bytes": 75,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_dynamic_decode_profile_lookup_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_dynamic_decode_profile_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_dynamic_decode_profile_failed\n",
+      "actual_output_bytes": 75,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_dynamic_decode_profile_match_class_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_dynamic_decode_profile_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_dynamic_decode_profile_failed\n",
+      "actual_output_bytes": 75,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_dynamic_decode_profile_ratio_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_dynamic_decode_profile_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_dynamic_decode_profile_failed\n",
+      "actual_output_bytes": 75,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "deflate_dynamic_decode_profile_chunked_window_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=deflate_dynamic_decode_profile_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=deflate_dynamic_decode_profile_failed\n",
+      "actual_output_bytes": 75,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_case_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered\n",
+      "actual_output_bytes": 81,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_codec_case_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered\n",
+      "actual_output_bytes": 81,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_error_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered\n",
+      "actual_output_bytes": 81,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_phase_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered\n",
+      "actual_output_bytes": 81,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_checksum_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered\n",
+      "actual_output_bytes": 82,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_corrupt_frame_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered\n",
+      "actual_output_bytes": 82,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_truncated_frame_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered\n",
+      "actual_output_bytes": 82,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_frame_checksum_phase_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered\n",
+      "actual_output_bytes": 82,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_magic_phase_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered\n",
+      "actual_output_bytes": 82,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_skippable_payload_phase_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered\n",
+      "actual_output_bytes": 82,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_frame_body_phase_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered\n",
+      "actual_output_bytes": 82,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_frame_phase_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered\n",
+      "actual_output_bytes": 82,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_codec_error_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered\n",
+      "actual_output_bytes": 81,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_codec_phase_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered\n",
+      "actual_output_bytes": 81,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_offset_range_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered\n",
+      "actual_output_bytes": 81,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_lz4_missing_phase",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered\n",
+      "actual_output_bytes": 81,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_zstd_missing_phase",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=native_summary_error_dashboard_undercovered\n",
+      "actual_output_bytes": 81,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_negative_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_summary_error_negative_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_summary_error_negative_failed\n",
+      "actual_output_bytes": 74,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_negative_matched_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_summary_error_negative_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_summary_error_negative_failed\n",
+      "actual_output_bytes": 74,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_summary_error_negative_expected_failure_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_summary_error_negative_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_summary_error_negative_failed\n",
+      "actual_output_bytes": 74,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "lz4_native_summary_frame_count_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered\\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "lz4_native_summary_skippable_frame_count_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered\\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "lz4_native_summary_checksum_frame_count_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered\\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "lz4_native_summary_block_checksum_frame_count_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered\\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "lz4_native_summary_dictionary_id_frame_count_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered\\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "lz4_native_summary_content_size_frame_count_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered\\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "lz4_native_summary_declared_content_bytes_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered\\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "lz4_native_summary_block_count_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered\\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "lz4_native_summary_raw_block_count_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered\\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "lz4_native_summary_compressed_bytes_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered\\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "lz4_native_summary_payload_bytes_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered\\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "lz4_native_summary_skippable_payload_bytes_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered\\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_native_summary_frame_count_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered\\n",
+      "actual_output_bytes": 71,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_native_summary_skippable_frame_count_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered\\n",
+      "actual_output_bytes": 71,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_native_summary_checksum_frame_count_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered\\n",
+      "actual_output_bytes": 71,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_native_summary_dictionary_id_frame_count_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered\\n",
+      "actual_output_bytes": 71,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_native_summary_content_size_frame_count_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered\\n",
+      "actual_output_bytes": 71,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_native_summary_declared_content_bytes_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered\\n",
+      "actual_output_bytes": 71,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_native_summary_block_count_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered\\n",
+      "actual_output_bytes": 71,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_native_summary_raw_block_count_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered\\n",
+      "actual_output_bytes": 71,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_native_summary_compressed_bytes_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered\\n",
+      "actual_output_bytes": 71,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_native_summary_payload_bytes_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered\\n",
+      "actual_output_bytes": 71,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_native_summary_skippable_payload_bytes_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered\\n",
+      "actual_output_bytes": 71,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "lz4_native_summary_block_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered\n",
+      "actual_output_bytes": 69,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "lz4_native_summary_declared_payload_slack",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered\n",
+      "actual_output_bytes": 69,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "lz4_native_summary_metadata_frame_overflow",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered\n",
+      "actual_output_bytes": 69,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "lz4_native_summary_content_size_frame_overflow",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered\n",
+      "actual_output_bytes": 69,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "lz4_native_summary_checksum_frame_overflow",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered\n",
+      "actual_output_bytes": 69,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "lz4_native_summary_block_checksum_frame_overflow",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=lz4_native_summary_undercovered\n",
+      "actual_output_bytes": 69,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_native_summary_block_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_native_summary_declared_payload_slack",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_native_summary_metadata_frame_overflow",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_native_summary_content_size_frame_overflow",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_native_summary_checksum_frame_overflow",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_native_summary_undercovered\n",
+      "actual_output_bytes": 70,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_library_bench_missing_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_library_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_library_bench_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_library_bench_duplicate_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_library_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_library_bench_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_library_bench_unknown_pair",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_library_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_library_bench_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_library_bench_positive_row_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_library_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_library_bench_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_library_bench_throughput_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_library_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_library_bench_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_library_bench_iteration_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_library_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_library_bench_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_library_bench_improvement_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_library_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_library_bench_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_library_bench_match_budget_improvement_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_library_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_library_bench_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_library_bench_sequence_huffman_improvement_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_library_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_library_bench_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_library_bench_compression_floor_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_library_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_library_bench_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_library_bench_decode_compression_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_library_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_library_bench_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_library_bench_generated_compression_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_library_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_library_bench_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_library_bench_dictionary_improvement_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_library_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_library_bench_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_library_bench_trained_dictionary_improvement_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_library_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_library_bench_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_library_bench_dictionary_set_improvement_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_library_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_library_bench_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_library_bench_reusable_dictionary_improvement_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_library_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_library_bench_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_library_bench_direct_dictionary_improvement_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_library_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_library_bench_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_library_bench_fallback_dictionary_improvement_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_library_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_library_bench_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_library_bench_chunked_dictionary_improvement_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_library_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_library_bench_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_library_bench_chunked_append_dictionary_improvement_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_library_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_library_bench_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_library_bench_chunked_append_exact_dictionary_improvement_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_library_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_library_bench_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_library_bench_reusable_append_exact_dictionary_improvement_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_library_bench_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_library_bench_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_compare_gate_not_ok",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_compare_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_compare_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_compare_standard_gate_not_ok",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_compare_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_compare_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_compare_sweep_gate_not_ok",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_compare_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_compare_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_compare_data_rows_zero",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_compare_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_compare_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_compare_standard_data_rows_zero",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_compare_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_compare_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_compare_sweep_data_rows_zero",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_compare_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_compare_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_compare_missing_markdown",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_compare_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_compare_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_compare_sweep_path_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_compare_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_compare_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_compare_sweep_block_len_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_compare_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_compare_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_compare_sweep_block_lens_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_compare_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_compare_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_compare_missing_csv",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_compare_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_compare_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_compare_gate_csv_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_compare_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_compare_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_compare_duplicate_identity",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_compare_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_compare_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_compare_sweep_best_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_compare_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_compare_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_compare_markdown_summary_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_compare_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_compare_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "zstd_compare_markdown_detail_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=zstd_compare_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=zstd_compare_failed\n",
+      "actual_output_bytes": 57,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "br_static_candidate_count_zero",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "br_static_candidate_markdown_summary_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "br_static_upstream_ok_failed",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "br_static_upstream_report_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "br_static_upstream_markdown_sample_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "br_static_node_decode_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "br_static_node_markdown_row_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "br_static_audit_anchor_zero",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "br_static_negative_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "br_static_report_entry_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "br_static_report_json_duplicate_entry",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "br_static_report_category_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "br_static_report_matrix_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "br_static_report_csv_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "br_static_report_markdown_summary_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "br_static_report_markdown_matrix_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "br_static_report_markdown_entry_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "br_static_report_negative_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=br_static_dictionary_failed\n",
+      "actual_output_bytes": 66,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_ok_failed",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_payloads_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_large_file_payloads_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_file_hex_encode_cases_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_dictionary_cases_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_raw_dict_encode_undercovered",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_malformed_deflate_missing",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_cli_successes_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_expected_failures_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_large_file_payload_overflow",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_file_hex_case_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_cli_success_shortfall",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_expected_failure_shortfall",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_cli_success_exact_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_expected_failure_exact_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_cli_outcome_exact_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_match_heavy_payload_missing",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_dynamic_payload_missing",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_dictionary_encode_undercovered",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "python_zlib_diff_malformed_wrapper_missing",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=python_zlib_diff_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_allocation_report_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_allocation_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_allocation_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_allocation_report_unbalanced",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_allocation_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_allocation_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_allocation_zero_report_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_allocation_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_allocation_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_allocation_budget_report_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_allocation_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_allocation_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_allocation_markdown_malformed",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_allocation_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_allocation_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_allocation_markdown_unknown",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_allocation_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_allocation_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_allocation_report_duplicate_case",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_allocation_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_allocation_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_allocation_zero_duplicate_case",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_allocation_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_allocation_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_allocation_budget_duplicate_case",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_allocation_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_allocation_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_allocation_negative_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_allocation_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_allocation_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_allocation_markdown_duplicate",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_allocation_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_allocation_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_ok_failed",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_probe_not_ok",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_probe_timed_out",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_coverage_not_ok",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_coverage_case_sum_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_total_cases_zero",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_lib_generated_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_incremental_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_chunked_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_reusable_chunked_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_fse_repeat_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_zstd_frame_cases_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_zstd_dictionary_cases_floor",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 65,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_probe_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_case_sum_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_coverage_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_capability_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_markdown_unmatched",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_missing_required_probe",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_duplicate_probe",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_missing_required_coverage",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_duplicate_coverage",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_capability_unhealthy",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_missing_required_capability",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_codec_probes_duplicate_capability",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_codec_probes_failed\n",
+      "actual_output_bytes": 64,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_missing_lz4_native_summary_artifact",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=missing_lz4_native_summary_artifact",
+      "actual_output": "dashboard_index_validation_unhealthy=missing_lz4_native_summary_artifact",
+      "actual_output_bytes": 74,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_json_docs_negative_row_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=validation_json_docs_negative_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=validation_json_docs_negative_failed\n",
+      "actual_output_bytes": 75,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_json_observed_schema_count_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=validation_json_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=validation_json_failed\n",
+      "actual_output_bytes": 60,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_json_unchecked_observed_schema",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=validation_json_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=validation_json_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_json_artifact_parse_failed",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=validation_json_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=validation_json_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_json_artifact_missing_schema",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=validation_json_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=validation_json_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_json_artifact_manifest_failed",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=validation_json_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=validation_json_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "validation_json_artifact_manifest_accounting_mismatch",
+      "mode": "strict-validation-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=validation_json_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=validation_json_failed\n",
+      "actual_output_bytes": 61,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_csv_artifact_empty",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_csv_artifact_blank_header",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_csv_artifact_duplicate_header",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_csv_artifact_no_data",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_csv_artifact_ragged_row",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_csv_header_manifest_missing",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_csv_header_manifest_unknown",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_csv_header_column_manifest",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_csv_header_signature_manifest",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_markdown_artifact_empty",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_markdown_artifact_marker_missing",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_markdown_artifact_heading_missing",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_markdown_artifact_heading_not_first",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_markdown_artifact_table_missing",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_markdown_artifact_table_separator_missing",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_markdown_heading_manifest_missing",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_markdown_heading_manifest_unknown",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_markdown_heading_count_manifest",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_markdown_first_heading_manifest",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_markdown_heading_signature_manifest",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_markdown_table_count_manifest",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_markdown_table_separator_manifest",
+      "mode": "non-json-artifact-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=non_json_artifact_failed\\n",
+      "actual_output_bytes": 63,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "missing_native_tier_range_summary",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=missing_native_tier_range_artifact",
+      "actual_output": "dashboard_index_validation_unhealthy=missing_native_tier_range_artifact\n",
+      "actual_output_bytes": 72,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "missing_native_tier_range_source",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_range_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_range_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "failed_native_tier_range_summary",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_range_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_range_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_native_tier_range_summary_csv",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_range_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_range_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_range_csv_missing_pair",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_range_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_range_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_range_csv_duplicate_pair",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_range_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_range_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_range_csv_unknown_pair",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_range_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_range_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_range_csv_positive_row_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_range_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_range_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_range_csv_shape_row_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_range_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_range_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_range_csv_throughput_row_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_range_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_range_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_range_summary_csv_row_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_range_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_range_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_range_summary_csv_fixture_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_range_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_range_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_range_summary_csv_tier_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_range_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_range_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_range_summary_csv_path_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_range_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_range_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_range_summary_csv_index_entries_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_range_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_range_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_range_summary_csv_min_range_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_range_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_range_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_range_summary_csv_min_full_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_range_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_range_failed\n",
+      "actual_output_bytes": 62,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_discovery_ok_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_discovery_source_mode_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_discovery_candidate_count_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_discovery_source_count_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_discovery_selected_count_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_discovery_selected_case_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_discovery_csv_path_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_discovery_missing_reason_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_discovery_summary_fixture_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "native_tier_discovery_csv_fixture_mismatch",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
+    },
+    {
+      "name": "mismatched_native_tier_discovery_case",
+      "mode": "native-tier-range-health",
+      "expected_failure": true,
+      "expected_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed",
+      "actual_output": "dashboard_index_validation_unhealthy=native_tier_corpus_discovery_failed\n",
+      "actual_output_bytes": 73,
+      "actual_output_limit": 240,
+      "actual_output_truncated": false,
+      "returncode": 1,
+      "matched": true
     }
   ],
   "validation_unhealthy_reason_checks": [
     {
-      "reason": "missing_dashboard_strict_modes",
-      "check": "validation_missing_dashboard_strict_modes",
+      "reason": "missing_lz4_native_summary_artifact",
+      "check": "validation_missing_lz4_native_summary_artifact",
       "matched": true
     }
   ]
@@ -2478,7 +11345,9 @@ Produced by:
 zig build run-native-allocation-smoke
 ```
 
-This smoke report gates the allocation report by requiring selected
+Dashboard aggregate health also cross-checks the retained Markdown companion
+against the JSON allocation report and verifies that smoke rows still match the
+measured report rows. This smoke report gates the allocation report by requiring selected
 caller-owned/native decode paths to remain zero-allocation, including AnyDecoder,
 ZlibDecoder chunk/dictionary/varied-PNG scanline decode and PNG filter reconstruction,
 the PNG zlib scanline row pipeline, fixed/dynamic contiguous/chunked streaming
@@ -2574,7 +11443,11 @@ zig build run-zlib-relaxed-report-gate
 ```
 
 This schema records direct public-API coverage for relaxed zlib and gzip decode
-options, including strict rejection, relaxed success, dictionary-aware zlib
+options. Dashboard aggregate health cross-checks the retained Markdown metric
+table and the gate checks against the JSON report before relaxed wrapper
+coverage can pass. Dashboard health rejects missing, malformed, duplicate,
+unknown, and value-mismatched Markdown metric rows instead of treating the table
+as broad textual evidence. The report includes strict rejection, relaxed success, dictionary-aware zlib
 decode, zlib/gzip concatenated decode, caller-owned `ZlibDecoder` and
 `GzipDecoder` options coverage, and output-limit rejection behavior.
 
@@ -2595,6 +11468,43 @@ Example:
   "gzip_concatenated_successes": 4,
   "gzip_decoder_successes": 4,
   "gzip_limited_rejections": 1
+}
+```
+
+## `vort.zlib_relaxed_report_gate`
+
+Produced by:
+
+```sh
+zig build run-zlib-relaxed-report-gate
+```
+
+This schema records the retained gate summary for relaxed zlib/gzip decode
+coverage. The shared manifest fixes the exact `checks` keys, requires every
+value to be boolean, and recomputes `ok` as the logical AND of all check values
+so stale, missing, unknown, or non-boolean gate rows cannot validate as healthy.
+
+Example:
+
+```json
+{
+  "schema": "vort.zlib_relaxed_report_gate",
+  "schema_version": 1,
+  "ok": true,
+  "report": "zig-out/vort-zlib-relaxed-report.json",
+  "checks": {
+    "strict_rejections": true,
+    "relaxed_successes": true,
+    "dictionary_successes": true,
+    "zlib_concatenated_successes": true,
+    "zlib_decoder_successes": true,
+    "limited_rejections": true,
+    "gzip_strict_rejections": true,
+    "gzip_relaxed_successes": true,
+    "gzip_concatenated_successes": true,
+    "gzip_decoder_successes": true,
+    "gzip_limited_rejections": true
+  }
 }
 ```
 
@@ -2663,7 +11573,7 @@ zig build run-zstd-compare-standard-releasefast-gate
 ```
 
 This schema records the validation summary for retained `vort-zstd-compare*`
-CSV/Markdown artifacts. The gate checks
+CSV/Markdown artifacts. Dashboard aggregate health also cross-checks the retained CSV/Markdown companions against these gate summaries. The gate checks
 the CSV schema, requires one `TOTAL` aggregate row, verifies the aggregate byte
 and ratio math for raw fixed, single-frame native best, blocked native stream,
 and embedded-index native stream Vort rows, verifies the stream-fragmentation
@@ -2794,9 +11704,12 @@ This schema records the corpus discovery side of the native tier range corpus
 benchmark. It is intentionally separate from `vort.native_tier_range_bench_gate`:
 the bench gate validates CSV shape and throughput, while this artifact explains
 which standard-corpus paths were discovered, which bounded rows were selected,
-and why the CSV was absent when no input cases were available. `source_mode` is
-`discovered` for automatic local standard-corpus discovery and `paths` when the
-caller supplies explicit `--paths`.
+and why the CSV was absent when no input cases were available. Dashboard health
+cross-checks the selected labels and byte sizes against the retained
+standard-corpus summary/CSV pair so stale discovery metadata cannot pass after
+the benchmark matrix changes. `source_mode` is `discovered` for automatic local
+standard-corpus discovery and `paths` when the caller supplies explicit
+`--paths`.
 
 Example:
 
@@ -2842,7 +11755,9 @@ zig build run-png-scratch-report-dashboard
 ```
 
 This report records caller-owned scratch and output footprint baselines for
-representative PNG-like zlib decode paths. It includes non-interlaced and Adam7
+representative PNG-like zlib decode paths. Dashboard aggregate health also
+cross-checks the retained Markdown table against the JSON rows and verifies
+per-row scratch arithmetic. It includes non-interlaced and Adam7
 cases across RGB8, packed indexed rows, and RGBA16 so future incremental inflate
 work can prove peak `zlib_scratch_bytes` reductions against a stable baseline.
 The status columns make the milestone split explicit: stored-deflate scanline

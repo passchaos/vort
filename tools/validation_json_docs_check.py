@@ -34,6 +34,15 @@ TYPE_MAP: dict[str, type | tuple[type, ...]] = {
 }
 
 
+def nested_get(value: dict[str, Any], field: str) -> Any:
+    item: Any = value
+    for part in field.split("."):
+        if not isinstance(item, dict):
+            return None
+        item = item.get(part)
+    return item
+
+
 def load_manifest() -> dict[str, Any]:
     manifest = json.loads(MANIFEST.read_text())
     if manifest.get("schema") != "vort.validation_json_schema_manifest":
@@ -46,14 +55,17 @@ def load_manifest() -> dict[str, Any]:
     return schemas
 
 
-def require_fields(value: dict[str, Any], fields: set[str], label: str) -> None:
-    missing = fields - value.keys()
+def require_fields(value: dict[str, Any], fields: set[str], label: str, optional_fields: set[str] | None = None) -> None:
+    optional = optional_fields or set()
+    missing = fields - optional - value.keys()
     if missing:
         raise AssertionError(f"{label} missing fields: {sorted(missing)}")
 
 
 def require_types(value: dict[str, Any], field_types: dict[str, str], label: str) -> None:
     for field, type_name in field_types.items():
+        if field not in value:
+            continue
         expected = TYPE_MAP.get(type_name)
         if expected is None:
             raise AssertionError(f"{label}.{field} has unknown type spec {type_name!r}")
@@ -67,6 +79,8 @@ def require_types(value: dict[str, Any], field_types: dict[str, str], label: str
 
 def require_enums(value: dict[str, Any], enums: dict[str, list[str]], label: str) -> None:
     for field, allowed_values in enums.items():
+        if field not in value:
+            continue
         allowed = set(allowed_values)
         if value[field] not in allowed:
             raise AssertionError(f"{label}.{field} has unexpected value {value[field]!r}; allowed={sorted(allowed)}")
@@ -201,6 +215,23 @@ def require_dict_key_enums(value: dict[str, Any], dict_key_enums: dict[str, list
         unexpected = sorted(key for key in payload if key not in allowed)
         if unexpected:
             raise AssertionError(f"{label}.{dict_field} has unexpected keys {unexpected!r}; allowed={sorted(allowed)}")
+
+
+def require_dict_value_types(value: dict[str, Any], dict_value_types: dict[str, str], label: str) -> None:
+    for dict_field, type_name in dict_value_types.items():
+        expected = TYPE_MAP.get(type_name)
+        if expected is None:
+            raise AssertionError(f"{label}.{dict_field} has unknown dict value type spec {type_name!r}")
+        payload = value.get(dict_field)
+        if not isinstance(payload, dict):
+            raise AssertionError(f"{label}.{dict_field} must be a dict for value type validation")
+        for key, item in payload.items():
+            if not isinstance(item, expected):
+                raise AssertionError(f"{label}.{dict_field}[{key!r}] expected {type_name}, got {type(item)}")
+            if type_name.startswith("float") and isinstance(item, bool):
+                raise AssertionError(f"{label}.{dict_field}[{key!r}] expected {type_name}, got {type(item)}")
+            if type_name.startswith("int") and isinstance(item, bool):
+                raise AssertionError(f"{label}.{dict_field}[{key!r}] expected {type_name}, got {type(item)}")
 
 
 def condition_matches(value: dict[str, Any], condition: Any, label: str) -> bool:
@@ -364,17 +395,17 @@ def require_boolean_formula_rules(value: dict[str, Any], boolean_formula_rules: 
             raise AssertionError(f"{label}.{target_field}.non_empty_string must be a list of field names")
         expected = True
         for field in all_fields:
-            field_value = value.get(field)
+            field_value = nested_get(value, field)
             if not isinstance(field_value, bool):
                 raise AssertionError(f"{label}.{field} must be a boolean for {target_field} formula")
             expected = expected and field_value
         for field in positive_fields:
-            field_value = value.get(field)
+            field_value = nested_get(value, field)
             if isinstance(field_value, bool) or not isinstance(field_value, int):
                 raise AssertionError(f"{label}.{field} must be an integer for {target_field} formula")
             expected = expected and field_value > 0
         for field in zero_fields:
-            field_value = value.get(field)
+            field_value = nested_get(value, field)
             if isinstance(field_value, bool):
                 raise AssertionError(f"{label}.{field} must be an integer or list for {target_field} formula")
             if isinstance(field_value, int):
@@ -385,12 +416,12 @@ def require_boolean_formula_rules(value: dict[str, Any], boolean_formula_rules: 
                 continue
             raise AssertionError(f"{label}.{field} must be an integer or list for {target_field} formula")
         for field in empty_string_fields:
-            field_value = value.get(field)
+            field_value = nested_get(value, field)
             if not isinstance(field_value, str):
                 raise AssertionError(f"{label}.{field} must be a string for {target_field} formula")
             expected = expected and field_value == ""
         for field in non_empty_string_fields:
-            field_value = value.get(field)
+            field_value = nested_get(value, field)
             if not isinstance(field_value, str):
                 raise AssertionError(f"{label}.{field} must be a string for {target_field} formula")
             expected = expected and field_value != ""
@@ -579,7 +610,8 @@ def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str
     fields = schema_def.get("fields")
     if not isinstance(fields, dict):
         raise AssertionError(f"schema {schema!r} must define fields")
-    require_fields(value, set(fields), schema)
+    optional_fields = set(schema_def.get("optional_fields", []))
+    require_fields(value, set(fields), schema, optional_fields)
     require_types(value, fields, schema)
     require_enums(value, schema_def.get("enums", {}), schema)
     require_field_pairs(value, schema_def.get("field_pairs", {}), schema)
@@ -587,6 +619,7 @@ def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str
     require_dict_sum_rules(value, schema_def.get("dict_sum_rules", {}), schema)
     require_collection_sum_rules(value, schema_def.get("collection_sum_rules", {}), schema)
     require_dict_key_enums(value, schema_def.get("dict_key_enums", {}), schema)
+    require_dict_value_types(value, schema_def.get("dict_value_types", {}), schema)
     require_list_item_enums(value, schema_def.get("list_item_enums", {}), schema)
     require_conditional_fields(value, schema_def.get("conditional_fields", []), schema)
     require_numeric_relations(value, schema_def.get("numeric_relations", []), schema)
@@ -608,6 +641,8 @@ def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str
             schema_def.get("item_field_pairs", {}),
             schema_def.get("item_list_field_pairs", {}),
             schema,
+            False,
+            set(schema_def.get("item_optional_fields", [])),
         )
 
     collections = schema_def.get("collections", {})
@@ -615,6 +650,8 @@ def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str
         if not isinstance(collections, dict):
             raise AssertionError(f"schema {schema!r} collections must be an object")
         for collection_name, collection_def in collections.items():
+            if collection_name in optional_fields and collection_name not in value:
+                continue
             if not isinstance(collection_def, dict):
                 raise AssertionError(f"schema {schema!r} collection {collection_name!r} must be an object")
             item_fields = collection_def.get("fields")
@@ -629,6 +666,7 @@ def validate_value_against_manifest(value: dict[str, Any], schemas_def: dict[str
                 collection_def.get("list_field_pairs", {}),
                 schema,
                 bool(collection_def.get("allow_empty", False)),
+                set(collection_def.get("optional_fields", [])),
             )
 
 
@@ -641,6 +679,7 @@ def validate_item_collection(
     item_list_field_pairs: dict[str, Any],
     schema: str,
     allow_empty: bool = False,
+    optional_fields: set[str] | None = None,
 ) -> None:
     items = value.get(collection_name)
     if not isinstance(items, list):
@@ -651,7 +690,7 @@ def validate_item_collection(
         if not isinstance(item, dict):
             raise AssertionError(f"{schema}.{collection_name}[{index}] must be an object")
         label = f"{schema}.{collection_name}[{index}]"
-        require_fields(item, set(item_fields), label)
+        require_fields(item, set(item_fields), label, optional_fields)
         require_types(item, item_fields, label)
         require_enums(item, item_enums, label)
         require_field_pairs(item, item_field_pairs, label)

@@ -1,0 +1,142 @@
+{
+  "artifact_count": 27,
+  "artifacts": [
+    {
+      "column_count": 5,
+      "name": "vort-br-static-dictionary-report.csv",
+      "signature": "409b0403629b0c58"
+    },
+    {
+      "column_count": 6,
+      "name": "vort-checksum-bench.csv",
+      "signature": "835b9b4fe8e3a16f"
+    },
+    {
+      "column_count": 12,
+      "name": "vort-chunk-cursor-bench.csv",
+      "signature": "6b729e1e1cdfd320"
+    },
+    {
+      "column_count": 19,
+      "name": "vort-chunked-zlib-bench-report-repeat3.csv",
+      "signature": "52887da0410a9498"
+    },
+    {
+      "column_count": 19,
+      "name": "vort-chunked-zlib-bench-report.csv",
+      "signature": "52887da0410a9498"
+    },
+    {
+      "column_count": 13,
+      "name": "vort-deflate-chunked-huffman-bench.csv",
+      "signature": "b81e3fa94b3f0c45"
+    },
+    {
+      "column_count": 72,
+      "name": "vort-deflate-decode-stage-report.csv",
+      "signature": "0f3f4e878439dcdb"
+    },
+    {
+      "column_count": 77,
+      "name": "vort-deflate-dynamic-decode-profile.csv",
+      "signature": "ff766fd696490aef"
+    },
+    {
+      "column_count": 12,
+      "name": "vort-deflate-extra-bits-bench.csv",
+      "signature": "ce70faed770dc375"
+    },
+    {
+      "column_count": 8,
+      "name": "vort-deflate-huffman-build-bench.csv",
+      "signature": "6e296fdc36fbe9ce"
+    },
+    {
+      "column_count": 10,
+      "name": "vort-deflate-huffman-lookup-bench.csv",
+      "signature": "be26ac77f0f0e147"
+    },
+    {
+      "column_count": 11,
+      "name": "vort-deflate-match-copy-bench.csv",
+      "signature": "36252a3aa57ab667"
+    },
+    {
+      "column_count": 13,
+      "name": "vort-dictionary-decode-bench.csv",
+      "signature": "8f20e6e48dad8651"
+    },
+    {
+      "column_count": 70,
+      "name": "vort-dynamic-plan-builtins-report.csv",
+      "signature": "b97c1711853364a8"
+    },
+    {
+      "column_count": 70,
+      "name": "vort-dynamic-plan-report.csv",
+      "signature": "b97c1711853364a8"
+    },
+    {
+      "column_count": 15,
+      "name": "vort-huffman-length-report.csv",
+      "signature": "44f719e6890c0d3f"
+    },
+    {
+      "column_count": 31,
+      "name": "vort-level-report.csv",
+      "signature": "72a9beafdb746f8e"
+    },
+    {
+      "column_count": 11,
+      "name": "vort-native-library-bench.csv",
+      "signature": "61cbd11ed65fffaf"
+    },
+    {
+      "column_count": 14,
+      "name": "vort-native-tier-range-bench.csv",
+      "signature": "7baf7d921f45b418"
+    },
+    {
+      "column_count": 14,
+      "name": "vort-native-tier-range-corpus-bench.csv",
+      "signature": "7baf7d921f45b418"
+    },
+    {
+      "column_count": 14,
+      "name": "vort-native-tier-range-files-bench.csv",
+      "signature": "7baf7d921f45b418"
+    },
+    {
+      "column_count": 9,
+      "name": "vort-png-scanline-bench.csv",
+      "signature": "ea69e6ad5355a549"
+    },
+    {
+      "column_count": 16,
+      "name": "vort-png-streaming-zlib-bench-report-repeat3.csv",
+      "signature": "3dd1e5ba7c64e5d7"
+    },
+    {
+      "column_count": 11,
+      "name": "vort-snappy-report.csv",
+      "signature": "6ca6d00a83e6d5fd"
+    },
+    {
+      "column_count": 31,
+      "name": "vort-zstd-compare-block-sweep.csv",
+      "signature": "026ea3ed693a717a"
+    },
+    {
+      "column_count": 41,
+      "name": "vort-zstd-compare-standard.csv",
+      "signature": "c8b032f728c36c05"
+    },
+    {
+      "column_count": 41,
+      "name": "vort-zstd-compare.csv",
+      "signature": "c8b032f728c36c05"
+    }
+  ],
+  "schema": "vort.dashboard_csv_header_manifest",
+  "schema_version": 1
+}

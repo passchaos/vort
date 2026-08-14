@@ -458,8 +458,41 @@ architecture blindly.
 - [x] Dashboard strict-mode smoke records actual-output truncation limit and truncation flag per check.
 - [x] Dashboard strict-mode smoke records original actual-output length per check.
 - [x] Dashboard strict-mode smoke exercises the actual-output truncation path with a synthetic long-output check.
+- [x] Dashboard strict-mode smoke directly covers dashboard-strict self-health drift, including check/mode/expected-mode/missing-mode/validation-reason count mismatches, unmatched check rows, missing requirement deltas, and retained Markdown missing/unmatched rows.
+- [x] Dashboard strict-mode smoke directly covers dashboard-configuration health drift, including config index, negative config/category smokes, required producer metadata, producer-negative guardrails, count mismatches, unmatched rows, and required smoke-gate coverage loss.
+- [x] Dashboard strict-mode smoke directly covers validation JSON health drift, including checked/observed/unchecked schema drift, JSON artifact count and manifest floors, CLI result invariants, report/corrupt row floors, and docs-negative ok/count drift.
+- [x] Dashboard strict-mode smoke directly covers Brotli static-dictionary health drift, including candidate/upstream/node/audit/negative/report count, CSV, Markdown, category, matrix, and duplicate-entry drift.
+- [x] Dashboard strict-mode smoke directly covers LZ4/Zstd native stream summary floor drift, including frame, skippable, checksum, dictionary, content-size, block, raw-block, compressed-byte, payload-byte, and skippable-payload floors.
+- [x] Dashboard strict-mode smoke directly covers zstd comparison gate and data-row drift, including compare/standard/sweep `ok` flags, data-row floors, missing Markdown companions, and sweep path/block-length metadata mismatches.
 - [x] Dashboard strict-mode smoke covers every validation unhealthy reason with isolated negative fixtures.
 - [x] Dashboard strict-mode validation unhealthy reason matrix is stored in a schema-checked external JSON config.
+- [x] Dashboard strict-mode smoke directly covers native codec probe health drift, including probe ok/timeout/case-floor drift, probe count/case-sum mismatches, missing/duplicate probes, coverage/capability count/missing/duplicate drift, unhealthy capability rows, and Markdown unmatched rows.
+- [x] Dashboard strict-mode smoke directly covers zlib relaxed health drift, including missing gate/Markdown artifacts, gate `ok` drift, gate check missing/extra/rule drift, every report exact/floor metric, and malformed/duplicate/unknown/value-mismatched Markdown metrics.
+- [x] Dashboard strict-mode smoke directly covers Snappy report health drift, including missing/duplicate/unknown mode-case rows, positive timing/ratio/throughput drift, repetitive-ratio regressions, framed-overhead drift, and reusable checksum mismatches.
+- [x] Dashboard strict-mode smoke directly covers PNG scratch health drift, including missing Markdown, report count drift, missing/duplicate/unknown cases, row accounting mismatches, stored/fixed streaming regressions, streaming-savings drift, and Markdown row drift.
+- [x] Dashboard strict-mode smoke directly covers checksum benchmark health drift, including missing/duplicate/unknown algorithms, positive/workload/throughput row drift, and CRC32/CRC32C digest mix-group mismatches.
+- [x] Dashboard strict-mode smoke directly covers chunk cursor benchmark health drift, including missing/duplicate/unknown case-kernel rows, positive/shape/throughput row drift, and checksum mismatches between current and optimized kernels.
+- [x] Dashboard strict-mode smoke directly covers deflate match-copy benchmark health drift, including missing/duplicate/unknown case-kernel rows, positive/class/output/throughput row drift, and checksum mismatches across kernels.
+- [x] Dashboard strict-mode smoke directly covers deflate Huffman build benchmark health drift, including missing/duplicate/unknown case-build rows, positive/lookup/throughput row drift, and checksum variant mismatches.
+- [x] Dashboard strict-mode smoke directly covers deflate Huffman lookup benchmark health drift, including missing/duplicate/unknown case-decoder rows, positive/lookup/throughput row drift, and checksum mismatches across decoders.
+- [x] Dashboard strict-mode smoke directly covers deflate chunked Huffman benchmark health drift, including missing/duplicate/unknown case-reader rows, positive/shape/buffered/chunk-count/throughput row drift, and checksum mismatches across readers.
+- [x] Dashboard strict-mode smoke directly covers deflate extra-bit benchmark health drift, including missing/duplicate/unknown case-reader-kernel rows, positive/shape/throughput row drift, per-case checksum mismatches, and paired-kernel checksum mismatches.
+- [x] Dashboard strict-mode smoke directly covers dictionary decode benchmark health drift, including missing/duplicate/unknown case-format-encoder-mode rows, positive/output-size/throughput row drift, and per-payload checksum mismatches.
+- [x] Dashboard strict-mode smoke directly covers PNG scanline benchmark health drift, including missing/duplicate/unknown stage-bpp rows, positive/I/O/throughput row drift, and per-bpp checksum mismatches.
+- [x] Dashboard strict-mode smoke directly covers chunked zlib benchmark health drift, including missing Markdown, missing/duplicate/unknown cases, positive/shape/chunk-count/ratio row drift, and Markdown row drift.
+- [x] Dashboard strict-mode smoke directly covers PNG streaming zlib benchmark health drift, including missing/duplicate/unknown cases and positive/shape/image-size/chunk-count/ratio row drift.
+- [x] Dashboard strict-mode smoke directly covers native allocation health drift, including report count/unbalanced/duplicate rows, zero/budget smoke mismatches and duplicate cases, negative-smoke unmatched rows, and Markdown malformed/duplicate/unknown rows.
+- [x] Dashboard strict-mode smoke directly covers native fuzz corpus health drift, including report ok/mode/floor drift, summary row drift, report count/matched-row drift, coverage ok/floor/requirement mismatches, and Markdown unmatched rows.
+- [x] Dashboard strict-mode smoke directly covers decode-stage health drift, including report/error count mismatches, internally consistent unmatched error rows, CSV positive/header/fixed/dynamic/stored row drift, CSV missing/duplicate/unknown cases, and Markdown unmatched rows.
+- [x] Dashboard strict-mode smoke directly covers fuzz corpus health drift, including report ok/mode/floor drift, summary row drift, report count/matched-row drift, coverage ok/floor/requirement mismatches, and Markdown unmatched rows.
+- [x] Dashboard strict-mode smoke directly covers dynamic-plan health drift, including missing sources, missing/duplicate/unknown paths, positive row drift, malformed rows, token-accounting mismatches, histogram/ratio drift, and bit-slack/wrapper invariants.
+- [x] Dashboard strict-mode smoke directly covers compression level-report health drift, including missing Markdown, missing/duplicate/unknown rows, positive row drift, token accounting drift, ratio drift, roundtrip checksum drift, and Markdown summary/detail mismatches.
+- [x] Dashboard strict-mode smoke directly covers Huffman length-report health drift, including missing Markdown, malformed/blank/duplicate cases, non-optimal rows, gap-bit drift, and Markdown summary/case mismatches.
+- [x] Dashboard strict-mode smoke directly covers sidecar corrupt health drift, including missing Markdown, row floors, metadata/full rejection count drift, JSON item count/malformed/duplicate drift, Markdown row count drift, and unmatched/malformed/duplicate/unknown Markdown rows.
+- [x] Dashboard strict-mode smoke directly covers header-inspect health drift, including report count mismatches, duplicate case/negative/command/workflow/required/help rows, command coverage missing/unknown/mismatch rows, negative error-count drift, missing-workflow drift, help/required workflow drift, and Markdown unmatched rows.
+- [x] Dashboard strict-mode smoke directly covers Python zlib differential health drift, including top-level ok drift, payload/file/dictionary/malformed floors, raw-dictionary undercoverage, CLI success/failure floors, exact outcome mismatches, and coverage shortfalls.
+- [x] Dashboard strict-mode smoke directly covers validation JSON smoke/docs-negative health drift, including observed-schema count mismatches, unchecked observed schemas, JSON artifact audit parse/missing-schema/manifest/accounting failures, and docs-negative row/count mismatches.
+- [x] Dashboard strict-mode smoke directly covers non-JSON artifact manifest drift, including CSV file layout failures, CSV header membership/column/signature mismatches, Markdown file layout failures, Markdown heading membership/count/first-heading/signature mismatches, and Markdown table-row/separator-row count mismatches.
 - [x] Validation JSON docs negative smoke catches dashboard strict config drift cases.
 - [x] Dashboard producer-map negative smoke catches format, producer-step, and smoke-gate drift cases.
 - [x] Dashboard producer-map required artifact matrix is stored in a schema-checked external JSON config.
@@ -1395,6 +1428,29 @@ architecture blindly.
   report now covers both non-dictionary and dictionary join-scratch chunked
   zlib decoder option paths.
 
+- Added single-stream zlib/gzip append decode helpers for library callers.
+  Zlib now exposes append, exact-size append, and output-limited append variants
+  across dictionary and relaxed-option combinations; gzip exposes the same
+  strict/options matrix. These preserve caller prefixes and reuse the existing
+  wrapper validation paths without adding CLI surface.
+
+- Added split-input zlib/gzip append decode helpers. Zlib chunked append now
+  covers strict, dictionary, relaxed-option, exact-size, and output-limited
+  library workflows without requiring callers to allocate an owned decoded slice
+  first; gzip chunked append mirrors the strict/options/exact/limited matrix via
+  caller-provided compressed join scratch.
+
+- Added concatenated zlib/gzip append decode helpers for library callers. Multi-member
+  zlib and gzip streams now have append, exact-size append, and output-limited
+  append variants that preserve caller prefixes and reuse existing per-member
+  wrapper validation without routing through CLI or forcing an owned decoded
+  slice first.
+
+- Added split-input concatenated zlib/gzip append decode helpers. Chunked
+  multi-member wrapper streams can now append into caller-owned `ArrayList`
+  output with exact-size and output-limited variants while reusing caller-owned
+  compressed join scratch for the compatibility path.
+
 - Added public one-shot `decodeGzipChunks` and `decodeGzipChunksWithOptions`
   helpers for caller-buffer gzip decode from split compressed input. They reuse
   the existing caller-owned compressed join scratch policy (including the
@@ -1420,6 +1476,73 @@ architecture blindly.
   allocator-returning paths reuse caller-provided compressed join scratch before
   dispatching to existing raw inflate APIs, covering exact-size, output-limited,
   and preset-dictionary workflows for split raw streams.
+
+- Added raw deflate append decode helpers for contiguous and split-input
+  library callers. Raw deflate now mirrors the wrapper append surfaces with
+  prefix-preserving append, exact-size append, output-limited append, and
+  preset-dictionary variants without requiring an intermediate owned decoded
+  slice.
+
+- Added a reusable caller-owned raw deflate `RawDeflateDecoder` library facade.
+  It validates/decodes complete raw streams into caller-provided scratch during
+  reset, supports exact-size and split-input reset variants, and drains through
+  bounded `step` calls with snapshots and shared streaming diagnostics.
+
+- Added non-throwing raw deflate probe helpers for contiguous and split-input
+  library callers. The probes decode into caller-owned scratch and return
+  `ok`, decoded byte counts, error names, and streaming diagnostics for support
+  and exact-size preflight without requiring integrations to wrap throwing APIs.
+
+- Added caller-scratch decoded-size helpers for raw deflate contiguous and
+  split-input streams, including preset-dictionary variants. Raw callers now
+  have throwing size preflights to match the wrapper size helper surface.
+
+- Added non-throwing zlib/gzip probe helpers for contiguous and split-input
+  library callers. Wrapper probes reuse caller-owned decoded/compressed scratch
+  and report decoded byte counts, exact-size mismatches, error names, and shared
+  streaming diagnostics without adding CLI surface.
+
+- Added non-throwing concatenated zlib/gzip probe helpers for multi-member
+  wrapper streams, including split-input variants. These probes reuse
+  caller-owned scratch and expose decoded byte counts plus exact-size mismatch
+  diagnostics before callers commit to an append or allocator-returning decode.
+
+- Extended zlib probe helpers across preset-dictionary workflows, including
+  split-input and concatenated streams. Dictionary-aware probes now surface
+  `NeedDictionary` without throwing and preserve the same decoded-byte/exact-size
+  diagnostics as non-dictionary zlib/gzip probes.
+
+- Refined zlib/gzip probe diagnostics with wrapper-aware failure phases. Probe
+  results now distinguish header/dictionary failures, DEFLATE payload failures,
+  footer checksum/trailing-data failures, and output-size/limit failures while
+  retaining the non-throwing API shape.
+
+- Added caller-scratch decoded-size helpers for zlib/gzip single streams and
+  split-input streams, including zlib preset-dictionary variants. These provide
+  throwing size preflights for callers that already manage scratch and do not
+  want to inspect a full probe result.
+
+- Added caller-scratch decoded-size helpers for concatenated zlib/gzip streams,
+  including split-input variants and zlib preset-dictionary workflows. Multi-member
+  callers now have throwing size preflights alongside the non-throwing probe
+  APIs before selecting append, caller-buffer, or allocator-returning decode.
+
+- Extended concatenated zlib/gzip probes with failing member indexes. Multi-member
+  probe failures now report which member failed, while preserving wrapper-aware
+  phases such as footer checksum failures for the offending member.
+
+- Extended the same concatenated zlib/gzip probe failures with member byte
+  offsets, so callers can jump directly to the failing wrapper member in a
+  multi-member stream after a non-throwing preflight.
+
+- Added successful concatenated zlib/gzip probe member counts. Multi-member
+  preflights now report how many wrapper members were consumed, including
+  exact-size and split-input probe variants.
+
+- Extended successful concatenated zlib/gzip probe summaries with total consumed
+  input bytes and the last member's byte offset, giving callers enough member
+  boundary context to pair non-throwing preflight results with their own stream
+  indexes.
 
 - Added zlib stream inspection helpers for split compressed input
   (`inspectZlibStreamFromChunksAlloc*`), reusing caller-provided join scratch
@@ -1521,6 +1644,67 @@ architecture blindly.
   External zstd/LZ4 tools remain validation inputs for differential probes, not
   runtime support paths.
 
+- Exposed the dependency-free LZ4 pure-frame encode helpers through the root
+  module. `lz4EncodePureFrameAlloc`, `lz4EncodePureFrameWithOptionsAlloc`, and
+  `lz4EncodePureFrameAppend` now let library callers choose the pure Zig LZ4
+  writer explicitly without dropping into the `lz4` submodule.
+
+- Exposed single-input stored wrapper size preflight helpers through the root
+  module. `rawStoredDeflateEncodedSize`, `zlibStoredEncodedSize`,
+  `zlibStoredWithDictionaryEncodedSize`, and `gzipStoredEncodedSize` now sit
+  beside the existing chunk/header variants so library callers can allocate
+  exact buffers for raw/zlib/gzip stored encodes without reaching into
+  `deflate.zig`.
+
+- Exposed root-level raw deflate partial allocator decode helpers and their
+  owned-result type. `decodeRawStoredDeflateAllocPartial`,
+  `decodeRawFixedAllocPartial`, `decodeRawDynamicAllocPartial`, and
+  `decodeRawDeflateAllocPartial` let library callers decode the first raw
+  member and inspect `input_read` before deciding how to handle trailing bytes.
+
+- Exposed root-level codec error/constant aliases for library preflight and
+  allocation logic. Deflate, Brotli, Snappy, LZ4, and Zstd callers can now read
+  the relevant error sets, stored/meta/chunk size limits, and default
+  compression levels from the root facade instead of importing submodules.
+
+- Exposed root-level raw deflate token encoders. Library callers that already
+  own `Lz77Token` streams can now call `encodeRawFixedTokensAlloc` and
+  `encodeRawDynamicTokensAlloc` from the root module, with root tests proving
+  token-level fixed/dynamic streams round trip through the public raw decoder.
+
+- Extended the public Zstd frame encode facade with encoded-bound, append, and
+  caller-owned into-slice helpers across level/options variants. Library callers
+  no longer need to drop to native-specific APIs or allocate an owned frame just
+  to write into existing buffers.
+
+- Extended the same public Zstd encode facade with dictionary-aware bound,
+  allocator, append, and into-slice helpers. Callers using explicit
+  `NativeDictionary` values can stay on the top-level frame API instead of
+  dropping to native-specific entrypoints for basic dictionary workflows.
+
+- Extended the Zstd encode facade again with dictionary-set helpers, including
+  bound, allocator, append, and into-slice variants keyed by `Dictionary_ID`.
+  Top-level frame encoding now covers both single dictionaries and checked
+  dictionary catalogs without requiring native-specific entrypoints.
+
+- Added output-limited caller-buffer Zstd decode helpers across the public,
+  raw/RLE, native, and concatenated frame facades, including split-input,
+  preset-dictionary, dictionary-set, and reusable decoder variants. These
+  limited `into` paths preflight decoded size before mutating caller-owned
+  output, matching the existing allocator-returning and append limited behavior
+  without adding CLI surface.
+
+- Tightened Zstd Huffman-literals candidate handling. Oversized Huffman literal
+  headers or four-stream length fields now decline the compressed-literals
+  candidate and fall back to raw literals instead of failing the whole encode
+  with `UnsupportedZstdFeature`, preserving correctness while keeping the
+  candidate encoder bounded by the wire-format limits.
+
+- Tightened Zstd predefined sequence-table planning. When the candidate planner
+  is asked to score a symbol table larger than its bounded internal state array,
+  it now declines the predefined candidate instead of failing the whole encode
+  with `UnsupportedZstdFeature`; a focused unit test covers the fallback.
+
 - Added a dependency-free Brotli `br` bootstrap module for stored/uncompressed
   streams. `src/br.zig` emits RFC-valid WBITS=16 streams with uncompressed
   meta-blocks plus final empty terminators, decodes the same stored subset with
@@ -1528,12 +1712,73 @@ architecture blindly.
   is intentionally a first compatibility slice, not full Brotli Huffman/LZ77
   support yet.
 
+- Extended the public Brotli stream facade with exact-size allocator, append,
+  and into helpers plus split-input chunked decode/size helpers. These reuse the
+  existing dependency-free Brotli parser through caller-owned compressed scratch
+  so known-size and fragmented-input callers no longer need private preflight or
+  coalescing code while the codec remains clearly scoped to the current Brotli
+  subset.
+
+- Added output-limited caller-buffer Brotli decode helpers for contiguous and
+  split-input streams. `decodeStreamIntoLimited` and
+  `decodeStreamChunksIntoLimited` preflight decoded size against the caller's
+  policy before mutating the output buffer, bringing the Brotli into-slice API
+  in line with existing allocator-returning and append limited variants without
+  adding CLI surface.
+
+- Exposed Brotli compressed-subset support limits through a library
+  introspection API. `compressedSupportLimits` reports the current bounded
+  literal/command/distance block and context-tree capacities, so callers can
+  make fallback decisions without depending on private constants or CLI probes.
+
+- Exposed the Brotli `PrefixCode` type factory through the root module as
+  `BrotliPrefixCode`, keeping the root facade complete for library users that
+  build small compatibility probes around the public Brotli prefix decoder.
+
+- Added a reusable caller-owned Brotli `StreamDecoder` library facade. It
+  validates/decodes the current supported Brotli subset into caller-provided
+  output scratch during reset, then drains through bounded `step` calls with
+  snapshots and shared streaming diagnostics. This closes the immediate
+  library-interface gap without adding CLI surface or hiding allocations.
+
+- Added a Brotli `StreamSummary` library preflight API for contiguous and
+  split-input streams. It reports window bits, decoded bytes, meta-block counts
+  by kind, metadata bytes, and output-limit failures without materializing
+  decoded output, giving library callers a cheap capability/capacity probe for
+  the current Brotli subset.
+
+- Added diagnostics-bearing Brotli summary entrypoints for contiguous and
+  split-input streams. `StreamSummaryDiagnostics` reports the failing phase,
+  byte offset, and meta-block index for truncated window bits, metadata blocks,
+  compressed-block unsupported features, padding/trailing-data failures, and
+  output-limit rejections without adding CLI surface.
+
+- Added non-throwing Brotli stream probe helpers for contiguous and split-input
+  callers. The probe returns `ok`, optional `StreamSummary`, `error_name`, and
+  diagnostics in one value, so library integrations can preflight support and
+  capacity without wrapping the throwing summary APIs themselves.
+
+- Added exact-size Brotli stream probe variants for contiguous and split-input
+  library callers. Known-size integrations now get a non-throwing `SizeMismatch`
+  result that preserves the parsed `StreamSummary` and marks the diagnostic
+  phase as output-size validation.
+
+- Extended Brotli `StreamSummary` with capability flags and static-dictionary
+  counters. Library callers can now distinguish stored-only streams from
+  metadata-bearing, compressed, and minimal static-dictionary streams before
+  deciding which decode path or fallback policy to use.
+
 - Added a dependency-free Snappy raw block module. `src/snappy.zig` covers the
   raw block varint length header, literal tags, copy1/copy2/copy4 decode,
   decoded-size preflight, output limits, caller-owned output, allocator-returning
   helpers, and a literal-compatible encoder. The CLI and
   `run-snappy-block-cli-probe` cover hex and file workflows without depending on
   a system Snappy library. Framed Snappy streams remain a follow-up format slice.
+
+- Exposed the Snappy raw-block limited summary helper through the root module.
+  `snappySummarizeBlockLimited` now lets library callers preflight raw-block
+  decoded-size policy and tag statistics without allocating or dropping to the
+  `snappy` submodule.
 
 - Extended the dependency-free Snappy module to framed streams. The frame path
   writes the stream identifier plus checked uncompressed chunks, decodes
@@ -1562,6 +1807,188 @@ architecture blindly.
   framed encodes. The Snappy report now carries reusable raw/framed rows and the
   gate requires their encoded sizes to match the one-shot rows, keeping the
   reusable path covered without letting it drift from public one-shot behavior.
+
+- Added split-input Snappy decode helpers for both raw blocks and framed
+  streams. Library callers can now preflight, decode into caller buffers, append
+  to existing output, or allocate with limits from `[]const []const u8` chunks
+  using caller-provided compressed scratch, matching the chunked convenience
+  shape already available for deflate and LZ4 without adding hidden buffering.
+
+- Added exact-size Snappy decode helpers across raw block, framed stream, and
+  split-input variants. Callers that know the expected output length can now
+  reject size drift before allocation/append and keep existing output buffers
+  unchanged on mismatch, matching the exact-size API shape used by LZ4 and
+  deflate wrapper decoders.
+
+- Added Snappy encoded-bound helpers for raw blocks and framed streams.
+  `snappyEncodedBlockBound` and `snappyEncodedFrameBound` let callers size
+  caller-owned encode buffers before using `snappyEncode*Into`, with tests
+  proving the bounds cover one-shot output for literal and compressed frames.
+
+- Added Snappy framed-stream summary helpers. `snappySummarizeFrame` and the
+  split-input variant validate chunk structure/checksums while reporting stream
+  identifiers, compressed/uncompressed chunks, skippable payload bytes, and total
+  decoded bytes before callers materialize output.
+
+- Exposed Snappy framed-stream summaries through the CLI as
+  `summary-snappy-frame-hex` and `summary-snappy-frame-file`, and extended the
+  black-box Snappy CLI probe to validate compressed, skippable, concatenated,
+  and file summary rows.
+
+- Added Snappy raw-block summary helpers and CLI commands. The block summary
+  validates Snappy tokens while reporting literal/copy token counts and bytes,
+  with split-input and file/hex CLI probe coverage for encoded and known-copy
+  blocks.
+
+- Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
+  stream summary API, and extended the LZ4 native probe to assert block/stream
+  summary consistency for generated native frames. The black-box
+  `run-lz4-native-summary-cli-probe` smoke now checks the user-facing summary
+  text/JSON fields for single-frame and concatenated/skippable streams, including
+  the frame-level checksum/content-size/Dictionary_ID metadata counters and
+  malformed/truncated failure paths. The LZ4 library now exposes
+  `lz4SummarizeNativeStreamWithDiagnostics` so CLI JSON errors use parser
+  phase/offset diagnostics reported by the summary API rather than CLI-only
+  inference; the phase value is backed by a public enum, and checksum-truncation
+  offsets are reported at the exact failing byte. The retained
+  `run-lz4-native-summary-dashboard` step writes
+  `zig-out/vort-lz4-native-stream-summary.json` for dashboard indexing. A shared
+  `run-native-summary-error-dashboard` artifact now retains representative
+  structured LZ4/Zstd summary error JSON plus error/phase counts, and
+  `run-native-summary-error-negative-smoke` verifies those aggregate counts fail
+  on drift.
+
+- Added LZ4 raw-block summary helpers and CLI commands, including prefix-history
+  variants. The summary validates block token structure while reporting decoded
+  bytes, literal token/byte counts, and match token/byte counts.
+
+- Added explicit gzip concatenated decode CLI aliases (`decode-gzip-concat-hex`
+  and `decode-gzip-concat-file`) and extended the gzip CLI differential smoke to
+  cover both aliases. The existing `decode-gzip-*` commands remain compatible
+  and continue to decode concatenated members.
+
+- Added raw/gzip file-to-hex best encoder CLI commands (`encode-raw-best-file-hex`
+  and `encode-gzip-best-file-hex`) to match the existing zlib file-hex helper,
+  and extended the Python zlib differential smoke to decode all three file-hex
+  outputs with Python's raw/zlib/gzip modes. The retained smoke/dashboard
+  schema now records `file_hex_encode_cases`, so raw/zlib/gzip file-to-hex
+  coverage is a first-class health gate instead of an unreported assertion.
+
+- Bounded native LZ4/Zstd codec probe runtime for Debug dashboard/CI smoke.
+  Zstd frame lib-generated coverage now uses the raw/RLE compatibility writer
+  for the generated decode/API matrix, while hand-authored frame fixtures retain
+  compressed-block, Huffman, sequence-table, and repeat-mode coverage. The Zstd
+  dictionary probe now keeps the expensive dictionary Huffman/sequence-table
+  writer shapes as fixed fixtures, so the probe still validates dictionary
+  requirement, compressed literals, FSE-Huffman weights, sequence-table inspect,
+  and decode behavior without repeating bootstrap match-planning work on every
+  smoke run. The native codec probe dashboard now also enforces a per-probe
+  timeout and records `timed_out`/`timeout_seconds` in retained JSON/Markdown,
+  so future probe-runtime regressions fail with a specific artifact instead of
+  hanging CI indefinitely. Dashboard validation now also exposes a top-level
+  timed-out-probe count and requires Zstd frame/dictionary probe case counts, so
+  broad capability totals cannot hide timeout regressions or accidental loss of
+  the public Zstd sequence-table/repeat-offset fixtures.
+
+- Extended the public Zstd native frame probe with a concatenated stream that
+  places two skippable metadata frames between two data frames. The fixture
+  validates stream summary counts, iterator order, concatenated size preflight,
+  allocator exact-size decode, caller-buffer decode, and output-limit errors so
+  multiple adjacent skippables remain covered through library APIs rather than
+  only via single-skippable smoke.
+
+- Added `summary-zstd-native-file` to the CLI smoke surface. It prints the
+  existing library-level Zstd native stream summary fields (data frames,
+  skippable frames, checksum-bearing frames, Dictionary_ID-bearing frames,
+  content-size-bearing frames, declared content bytes, block type counts,
+  compressed payload bytes, and skippable payload bytes), matching
+  the LZ4 native summary command and making concatenated/skippable Zstd stream
+  layout visible without decoding. The
+  command supports text and `vort.zstd_native_stream_summary` JSON output. The
+  new `run-zstd-native-summary-cli-probe` black-box smoke encodes single-frame
+  and concatenated/skippable streams through the CLI, checks both text and JSON
+  summary fields, verifies malformed/truncated failure paths, and uses
+  `zstdSummarizeNativeStreamWithDiagnostics` for parser phase/offset context in
+  JSON errors, with phase values backed by a public enum and checksum-truncation
+  offsets reported at the exact failing byte. It runs in `ci-smoke`. The retained
+  `run-zstd-native-summary-dashboard` step now writes
+  `zig-out/vort-zstd-native-stream-summary.json` and is indexed by the dashboard
+  producer/category manifests. Dashboard strict validation now treats missing or
+  undercovered Zstd native stream summary artifacts as aggregate validation
+  health failures with dedicated negative fixtures.
+
+- Extended the public Zstd native frame probe with valid non-single-segment
+  frames that exercise the two-, four-, and eight-byte content-size field
+  encodings with RLE blocks. This keeps the non-single-segment
+  `Frame_Content_Size` header paths covered through public inspect, size,
+  summary, and decode APIs rather than only through single-segment content-size
+  fixtures.
+
+- Tightened Zstd native encoded-frame bound helpers to mirror the writer's
+  shortest single-segment `Frame_Content_Size` width instead of reserving an
+  eight-byte content-size field for every size-bearing frame. Caller-owned
+  encode buffers now get exact bounds for raw/RLE small and medium frames, while
+  dictionary IDs, no-content-size window descriptors, checksums, and large
+  widths remain covered by the same helper.
+
+- Promoted the tightened Zstd native encoded-bound behavior into the public
+  frame probe. The probe now checks exact raw/RLE caller-owned encode bounds for
+  one-, two-, and four-byte single-segment content-size fields, no-content-size
+  window descriptors, and Dictionary_ID header bytes so dashboard counts catch
+  future bound/writer drift.
+
+- Added public single-segment Zstd frame fixtures for two-, four-, and eight-byte
+  `Frame_Content_Size` fields with RLE blocks. These pin the larger
+  single-segment content-size header widths through inspect, block summary,
+  decoded-size, limit, and caller-owned decode APIs without requiring huge
+  output allocations.
+
+- Added public Zstd frame fixtures for one-, two-, and four-byte `Dictionary_ID`
+  fields. Each fixture verifies inspect offsets, missing-dictionary diagnostics,
+  dictionary-aware size preflight, output limits, and caller-owned decode so
+  header field-width regressions are visible without relying only on internal
+  unit tests.
+
+- Added public Zstd frame fixtures for explicitly present but zero-valued one-,
+  two-, and four-byte `Dictionary_ID` fields. The probe verifies that header
+  inspection preserves the payload offset while size preflight and caller-owned
+  decode treat ID zero as dictionary-free instead of returning `NeedDictionary`.
+
+- Added a no-content-size Zstd frame fixture with a non-default 1536-byte
+  `Window_Descriptor` and an RLE block. This covers window decoding beyond the
+  1 KiB descriptor through header inspect, bounded decoded-size preflight, and
+  caller-owned decode without adding a large fixture payload.
+
+- Added a malformed no-content-size Zstd frame fixture that ends before the
+  required `Window_Descriptor` byte. The public header, size, decode, summary,
+  and stream-iterator APIs now agree on `TruncatedFrame` for this header-length
+  boundary.
+
+- Promoted Zstd frame descriptor bit 4 acceptance into the public frame probe.
+  The fixture keeps the true reserved bit 3 rejection separate while proving
+  that the unused neighboring bit can still decode through inspect, size, and
+  caller-owned output APIs like reference decoders.
+
+- Added a handcrafted Zstd checksum-success fixture beside the existing mismatch
+  and truncated-checksum cases. The public frame probe now exercises checksum
+  presence, decoded-size preflight, allocator decode, and caller-owned decode
+  for a valid raw/RLE frame without depending on the generated encoder path.
+
+- Added a no-content-size multi-block Zstd checksum-success fixture beside the
+  existing mismatch and truncated-checksum variants. This pins successful
+  checksum validation for frames whose decoded length must be discovered from
+  blocks rather than the frame header.
+
+- Promoted the extended two-byte zero `Sequence_Count` compressed-block form into
+  the public Zstd frame probe. The fixture validates block-mode inspection,
+  decoded-size preflight, and caller-owned decode for a legal sequence-free
+  compressed block whose count is not encoded in the single-byte short form.
+
+- Extended LZ4 native stream summaries with frame-level metadata counts for
+  content-size fields, content checksums, block checksums, Dictionary_ID fields,
+  and the total declared content bytes. The LZ4 native probe now checks those
+  fields for ordinary data frames, skippable-only streams, and checksum-mismatch
+  streams so summary drift is visible through public APIs.
 
 - Extended the dependency-free Brotli stored-stream slice to all RFC 7932 stream
   window-bit encodings (`WBITS=10...24`). The default remains `WBITS=16`, but
@@ -1745,16 +2172,41 @@ architecture blindly.
   command block types and walks through the fifth type, with matching Zig and
   Node-backed CLI differential coverage.
 
+- Raised the minimal Brotli command block-type / insert-copy-tree retention
+  limit to 32. A compressed command-switch frame now declares 17 command block
+  types, walks through tree index 16, and verifies decoded-size and output
+  decode agree on the widened table.
+
 - Added five-block-type coverage for Brotli literal and distance block
   switching. The compressed literal-switch smoke walks to the fifth literal block
   type, while the distance-switch smoke walks to the fifth distance block type
   and selects its distance tree. Both frames are covered by Zig tests and the
   Node-backed CLI differential smoke.
 
+- Raised the minimal Brotli distance block-type retention limit to 32. A
+  compressed distance-block-switch frame now declares 17 distance block types,
+  walks through block type 16, and selects the corresponding distance tree and
+  context-map slice through decoded-size and output decode.
+
+- Raised the minimal Brotli literal block-type retention limit to 32. A
+  compressed literal-block-switch frame now declares 17 literal block types,
+  walks through block type 16, and selects the corresponding literal tree and
+  context-map slice through decoded-size and output decode.
+
 - Added fifth-distance-context-tree coverage for Brotli compressed decode. The
   distance context map can now be proven to select tree index four for copy-length
   context one (`copy_len = 3`), with both Zig tests and the Node-backed CLI
   differential smoke decoding the same frame.
+
+- Raised the minimal Brotli distance context-tree retention limit to 32. A
+  compressed copy frame now declares 17 distance trees and selects tree index 16
+  for the copy-length-three distance context, matching the recent literal-tree
+  capacity increase for broader compressed-block compatibility.
+
+- Raised the minimal Brotli literal context-tree retention limit to 32. A
+  compressed UTF8 literal-context frame now declares 17 literal trees and selects
+  tree index 16 through context ID 56, extending coverage beyond the previous
+  16-tree ceiling while keeping the bounded table representation explicit.
 
 - Expanded Brotli decoded-size preflight's recent literal history window to 64
   bytes. A compressed context-selected literal frame now copies with distance 33
@@ -1794,6 +2246,25 @@ architecture blindly.
   the copied `b` context, keeping allocator-returning decode preflight aligned
   with the full-output decode path. Zig tests and the Node-backed CLI
   differential smoke cover both frames.
+
+- Expanded Brotli decoded-size/summary preflight's recent literal history window
+  to 512 bytes. A compressed context-selected literal regression frame now copies
+  with distance 257 and then decodes another literal from the copied `b`
+  context, ensuring allocator-returning, summary, limited-size, and caller-buffer
+  decode paths agree without materializing full output during preflight.
+
+- Expanded Brotli decoded-size/summary preflight's recent literal history window
+  to 1024 bytes. A compressed context-selected literal regression frame now
+  copies with distance 513 and then decodes another literal from the copied `b`
+  context, extending the same no-full-output preflight parity to the next
+  regular-distance range.
+
+- Improved Brotli decoded-size/summary preflight for copies beyond its bounded
+  recent-history window. If a later literal block is context-independent because
+  all 64 literal contexts select the same tree, preflight now continues decoding
+  instead of returning `UnsupportedBrotliFeature`; a distance-1025 compressed
+  regression frame covers decoded-size, summary, limited, and caller-buffer
+  decode parity.
 
 - Added the first narrow Brotli static-dictionary decode slice. A real Node
   quality-5 frame for `hello brotli hello brotli` starts with a copy from
@@ -2181,3 +2652,1432 @@ architecture blindly.
   raw, cross-decode, Up-filtered-payload, size, and zero-swap gates pass. Vort
   full test/check passed in 221.77/317.92 seconds at
   4,124,900/687,300-KiB peak RSS with stable swap counters.
+- Reworked the narrow Brotli static-dictionary slice to resolve identity-word
+  addresses relative to the current output length instead of matching only raw
+  distance codes. Real Node quality-5 frames now prove additional dictionary
+  stems/words (`about`, `press`, `dictionary`, and `information`) through both
+  decoded-size preflight and output decode, while transformed dictionary entries
+  remain explicitly unsupported until the full transform table is implemented.
+
+- Added another identity-word batch to the Brotli static-dictionary slice.
+  Node quality-5 frames now cover `release`, `expression`, and `depression`
+  through unit tests and the CLI differential smoke, exercising 7-byte and
+  10-byte dictionary buckets beyond the earlier 5/10/11-byte examples.
+
+- Added the first Brotli static-dictionary transform slice. The decoder now
+  recognizes RFC transform index 12 (`OMIT_LAST_1`) for the known `words` stem,
+  allowing a real Node quality-5 `wordpress` frame to decode through both
+  size preflight and output paths while the broader transform table remains
+  intentionally unsupported.
+
+- Added a second Brotli static-dictionary transform slice for RFC transform
+  index 6 (leading-space identity). Node-accepted synthetic frames now cover
+  ` words`, ` games`, and ` release`, giving the preflight/output decoder and
+  CLI differential smoke transform coverage beyond bare omit-last behavior.
+
+- Added uppercase identity entries to the Brotli static-dictionary slice. Real
+  Node quality-5 frames for `Dictionary` and `Information` now decode through
+  the same preflight/output dictionary path, covering uppercase dictionary words
+  that Node emits directly before broader transform-table support lands.
+
+- Added a Brotli static-dictionary trailing-space transform slice for RFC
+  transform index 1. Node-accepted synthetic frames now cover `words `,
+  `games `, `release `, `dictionary `, and `information ` through both
+  preflight and output decode, balancing the earlier leading-space coverage.
+
+- Extended the Brotli static-dictionary trailing-space transform slice with the
+  `history ` entry. A synthetic compressed frame now resolves transform index 1,
+  copy length 7, and word index 37 through both decoded-size preflight and
+  output decode, broadening transform coverage beyond the existing words/games
+  and release/dictionary examples.
+
+- Refactored the narrow Brotli static-dictionary support into a small
+  table-driven `(transform, length, word_index)` map instead of separate
+  per-transform branch ladders. The table now also covers `words`, `games`, and
+  `games -> game` (`OMIT_LAST_1`) with Node-accepted synthetic frames, keeping
+  the growing subset easier to audit before importing the full dictionary.
+
+
+- Added another real Node quality-5 identity-word batch to the Brotli static
+  dictionary table: `internet`, `language`, `available`, `important`,
+  `different`, and `government`. These cover 8/9/10-byte dictionary buckets
+  with generated Node frames in the CLI differential smoke.
+
+- Added the first real Brotli `UPPERCASE_FIRST` static-dictionary transform
+  entries (RFC transform index 9) to the table. Node-accepted synthetic frames
+  now cover `Content`, `History`, `English`, `Dictionary`, and `Information`,
+  proving transformed uppercase-first output separately from Node's uppercase
+  identity entries.
+
+- Added `run-br-static-dictionary-report`, a small coverage report for the
+  current Brotli static-dictionary subset. It validates duplicate/invalid table
+  entries, emits transform/length/word-index CSV rows, prints aggregate counts,
+  and is compiled by `zig build check` plus run by CI smoke so future dictionary
+  slices have an auditable manifest.
+
+- Extended `run-br-static-dictionary-report` with JSON and Markdown outputs in
+  addition to CSV. The report now creates parent directories for output paths,
+  emits schema/version metadata in JSON, and keeps the default stdout CSV path
+  for quick terminal inspection.
+
+- Added `run-br-static-dictionary-report-smoke`, a focused gate for the Brotli
+  static dictionary coverage artifacts. It cross-checks CSV/JSON/Markdown row
+  counts, required transform/word tuples, duplicate keys, byte counts, and now
+  serves as the required dashboard smoke gate for the report artifacts.
+
+- Added another real Node quality-5 identity-word batch to the Brotli static
+  dictionary table, covering `system`, `number`, `public`, `history`,
+  `English`, `through`, `another`, `because`, `between`, `example`, `however`,
+  `children`, and `American`. The CLI differential smoke now exercises these
+  6/7/8-byte dictionary buckets directly.
+
+- Added another Node quality-5 Brotli static-dictionary batch covering
+  `examples`, `history.`, `one another`, `to another`, and `however, `. This
+  extends the table beyond bare identity words into additional punctuation and
+  phrase-style transform outputs observed from Node's encoder.
+
+- Added Node quality-5 Brotli phrase entries for `one of the ` and `number of `,
+  extending the static-dictionary subset with two common space-terminated
+  multi-word outputs and differential CLI coverage.
+
+- Strengthened the Brotli static-dictionary report smoke so required coverage
+  now includes representative phrase entries (`number of `, `one of the `) and
+  the `one an` omit-last tuple used by Node's `one another` frame.
+
+- Added the Node quality-5 Brotli phrase entry `large number of ` to the static
+  dictionary subset, extending retained phrase coverage into the 16-byte bucket
+  with CLI differential validation.
+
+
+- Strengthened the Brotli static-dictionary report smoke with the 16-byte
+  `large number of ` phrase tuple so the longer retained phrase bucket cannot
+  silently regress.
+
+- Moved the Brotli static-dictionary report smoke's required coverage tuples into
+  `tools/br_static_dictionary_required_coverage.json`, documented the new schema,
+  and made both positive and negative smoke tests read the same config so future
+  coverage growth no longer requires editing tuple lists in multiple scripts.
+
+- Extended the Brotli static-dictionary report negative smoke with a duplicate
+  required-coverage tuple fixture, proving the external required coverage config
+  is validated rather than accepted blindly.
+
+
+- Added `reason` and `source_case` metadata to each Brotli static-dictionary
+  required coverage tuple, and taught the smoke to reject missing metadata so
+  required rows explain both why they exist and which case introduced them.
+
+- Taught the Brotli static-dictionary report smoke to verify each required
+  coverage tuple's `source_case` against `tools/br_literal_cli_diff.py`, and
+  added a negative fixture for stale source-case references.
+
+- Added a `category` field to Brotli static-dictionary required coverage tuples
+  (`identity`, `transform`, or `phrase`) and taught the smoke/schema checks to
+  reject unknown categories, making coverage intent easier to review.
+
+
+- Extended the Brotli static-dictionary coverage report with category-count
+  summaries for identity, transform, and phrase entries, and taught the report
+  smoke to cross-check the JSON and Markdown counts against the entry rows.
+
+
+- Added a transform/category matrix to the Brotli static-dictionary coverage
+  report and smoke checks, so dashboard artifacts show how identity, transform,
+  and phrase entries are distributed per transform index.
+
+
+- Extended the Brotli static-dictionary report negative smoke with an
+  `invalid_category` fixture, proving required coverage category values are
+  constrained to the documented `identity` / `transform` / `phrase` set.
+
+- Added another Node quality-5 Brotli common-phrase batch to the static
+  dictionary subset: `of the `, `from the `, `those who`, and `in order to`.
+  Unit tests, the Node-backed CLI differential smoke, and the required coverage
+  config now pin these identity phrase tuples so the report/dashboard artifacts
+  continue to expose phrase growth.
+
+- Added `run-br-static-dictionary-source-audit` and a source-anchor fixture for
+  the retained Brotli static-dictionary subset. The audit ties every supported
+  `(transform, length, word_index)` tuple back to its raw dictionary word and
+  minimal transform kind, and can optionally verify those anchors against a
+  local upstream Brotli `common/dictionary_inc.h` / `common/transform.c` checkout,
+  and emits a generated Zig table fragment that must match `src/br.zig` before
+  the project moves from hand-picked tuples to generated dictionary data. A
+  companion negative smoke now mutates anchors, source rows, generated-order
+  expectations, and optional upstream source paths to prove the audit fails on
+  drift rather than merely producing a happy-path artifact.
+
+
+- Added a Brotli static-dictionary candidate report that derives not-yet-enabled
+  tuples from the current source anchors and supported transform subset. The
+  retained JSON/Markdown artifacts expose concrete follow-up rows such as
+  trailing-space and uppercase-first candidates, giving future coverage growth a
+  generated backlog instead of another purely manual search pass.
+
+- Promoted the first candidate-report batch into real Brotli static-dictionary
+  decode coverage. Node quality-5 frames now cover lowercase `english`,
+  `english `, ` english`, and `english.`, with source
+  anchors and required coverage updated so generated candidates feed back into
+  the decoder table.
+
+- Extended the same candidate-probe workflow to the remaining short Node
+  quality-5 misses discovered from the generated report. Several requested
+  transformed payloads were encoded by Node as different identity dictionary
+  words (for example `Through`, `Another`, `Language`, `Government`, and
+  `One of the `), so the table now records those actual source tuples along
+  with a focused unit batch and required-coverage metadata.
+
+- Added `run-br-static-dictionary-node-probe`, a bounded Node-backed report that
+  compresses generated dictionary-candidate payloads with Brotli quality 5 and
+  checks whether Vort decodes the exact frames. The retained JSON/Markdown
+  artifacts turn candidate triage into machine-readable evidence instead of a
+  one-off shell loop.
+
+- Added `run-br-static-dictionary-node-probe-wide`, an opt-in 160-candidate
+  sweep, and made the default Node probe fail if any probed Node frame is no
+  longer accepted by Vort. This keeps the candidate backlog measurable without
+  forcing the wider sweep into every smoke path.
+
+- Added `run-br-static-dictionary-node-probe-full` after the generated candidate
+  set reached a clean full sweep. The full step uses the candidate report count
+  instead of a magic numeric limit, while the default and wide probes remain
+  cheaper checkpoints for routine validation.
+
+- Extended the Brotli Node probe report with transform-kind summary rows, so the
+  default, wide, and full probe artifacts show how many affix, uppercase, and
+  omit-last candidates were exercised and accepted without manually scanning the
+  per-candidate table.
+
+- Extended the Brotli Node probe rows with payload/compressed byte counts and a
+  smaller/equal/larger size classification, plus a size summary table in
+  Markdown/JSON. Candidate probe artifacts can now identify not only whether
+  Vort accepts Node frames, but also whether Node achieved a size win for each
+  generated candidate payload.
+
+- Copied candidate-report source metadata into Brotli Node probe artifacts.
+  Probe JSON/Markdown now records whether rows came from anchors or upstream
+  slices, plus source limits and raw-word counts, so retained probe artifacts are
+  self-describing even when compared outside their generating build step.
+
+- Added explicit size-winner rows to the Brotli Node probe report. The JSON and
+  Markdown artifacts now list every candidate whose Node Brotli frame is smaller
+  than the original payload, sorted by byte savings, so high-value dictionary
+  imports can be selected directly from the report.
+
+- Promoted the first size-winning Brotli candidate rows into decoder coverage:
+  ` large number of `, ` information`, `  Information`, `large number of  `,
+  and ` government`. These rows came directly from `size_winner_rows` and now
+  have Node quality-5 differential cases, source anchors, and required coverage
+  metadata.
+
+- Added a no-size-winner gate to `run-br-static-dictionary-node-probe-full`.
+  After promoting the first size-winning rows, the full anchor-derived probe now
+  fails if future generated candidates become smaller than their payloads until
+  they are either promoted or intentionally investigated.
+
+- Extended the no-size-winner gate to the opt-in `upstream256` Node probe after
+  the current source-limit 256 slice reached zero remaining size winners. This
+  gives the larger official-dictionary prefix the same explicit backlog guard as
+  the anchor-derived full probe.
+
+- Extended the same no-size-winner gate to the opt-in `upstream512` Node probe
+  after the current source-limit 512 slice also reached zero remaining size
+  winners. Both larger upstream slices now fail if newly generated candidates
+  create a size-winning backlog without explicit promotion or investigation.
+
+- Extended the Brotli static-dictionary candidate report with an optional
+  upstream-source mode. When a local Brotli `common/` checkout is supplied with
+  `--source-limit`, the report merges bounded official dictionary raw words into
+  the anchor-derived candidate pool and records source-limit / anchor / upstream
+  raw-word counts, creating a controlled path toward larger generated imports.
+
+- Added transform-kind and copy-length summaries to the Brotli candidate report,
+  so anchor and upstream candidate artifacts expose the distribution of affix,
+  uppercase, omit-last, and length buckets before selecting the next import
+  slice.
+
+- Added a portable upstream-mode smoke for the Brotli candidate report. The
+  smoke builds a tiny temporary `common/dictionary_inc.h` fixture, proves
+  upstream raw words are merged into the candidate pool, and now retains the
+  generated upstream candidate JSON/Markdown artifacts so this import path is
+  both tested and visible in dashboard review without depending on a local
+  checkout path.
+
+- Added `run-br-static-dictionary-node-probe-upstream`, completing the portable
+  upstream-candidate chain. The fixture-derived upstream candidates are now
+  compressed by Node and decoded by Vort, with retained JSON/Markdown probe
+  artifacts proving the generated import path remains executable end to end.
+
+- Added opt-in `upstream80` candidate and Node-probe steps for local Brotli
+  checkouts. With `-- --brotli-common-dir <path>`, the source-limit 80 candidate
+  pool produced 775 generated candidates and the Node/Vort probe accepted all
+  775 frames locally, giving the larger official-dictionary slice a reproducible
+  retained artifact path.
+
+- Added the next opt-in `upstream128` slice for local Brotli checkouts. The
+  source-limit 128 candidate pool produced 1063 generated candidates locally and
+  the Node/Vort probe accepted all 1063 frames, extending the reproducible
+  upstream import evidence beyond the first 80 raw dictionary words.
+
+- Added the opt-in `upstream256` slice for local Brotli checkouts. The
+  source-limit 256 candidate pool produced 1831 generated candidates locally and
+  the Node/Vort probe accepted all 1831 frames, further expanding generated
+  upstream import evidence while keeping the larger sweep out of default smoke.
+
+- Added the opt-in `upstream512` slice for local Brotli checkouts. The
+  source-limit 512 candidate pool produced 3367 generated candidates locally and
+  the Node/Vort probe accepted all 3367 frames, doubling the covered official
+  dictionary prefix while keeping the long-running sweep explicit.
+
+- Added a lightweight opt-in `upstream1024` candidate-report slice for local
+  Brotli checkouts. The source-limit 1024 report produced 6426 generated
+  candidates locally, exposing the next official-dictionary prefix distribution
+  without immediately requiring the much longer Node/Vort probe.
+
+- Added `--start-index` support to the Brotli Node probe and the first five
+  opt-in upstream1024 probe windows (`0-1024`, `1024-2048`, `2048-3072`,
+  `3072-4096`, and `4096-5120`). This lets large upstream candidate reports be
+  validated in bounded chunks instead of requiring one very long all-candidate
+  probe.
+
+- Promoted the first upstream1024 window failures into decoder coverage. The
+  `5120-6144` probe exposed seven leading-space 5-byte words (` first`,
+  ` video`, ` light`, ` world`, ` media`, ` white`, and ` close`). Node encodes
+  those concrete frames as one literal space plus identity dictionary words, so
+  the actual source tuples (`first`, `video`, `light`, `world`, `media`,
+  `white`, `close`) are now in the static dictionary table with source anchors
+  and leading-space Node differential cases.
+
+- Added the upstream1024 `5120-6144` Node/Vort probe window to `build.zig`,
+  dashboard producer metadata, required-artifact metadata, and validation JSON
+  docs. The window now has the same opt-in artifact path as earlier 1024-row
+  probe slices instead of requiring a one-off script invocation.
+
+- Probed and promoted the upstream1024 final `6144-tail` Node/Vort window. The
+  tail contains the remaining 275 generated candidates, and the formal gate now
+  requires both Vort decode success and no compressed-size winners so future
+  upstream1024 candidate drift is visible.
+
+- Started the upstream2048 Brotli static-dictionary expansion from the first
+  incremental 1024-row probe. The first uncovered Node frame was ` money`, which
+  again used a literal leading space plus the identity source tuple `money`; that
+  tuple is now anchored and covered by both unit and CLI differential tests.
+
+- Continued the upstream2048 tail probe and promoted the first five 6-byte
+  identity-source misses (`&quot;`, `domain`, `common`, `master`, and `banner`).
+  Their direct and leading-space Node frames now keep the minimal static
+  dictionary aligned with actual encoder output while the full dictionary import
+  remains future work.
+
+- Backfilled the upstream2048 insertion-window gap that appeared before the old
+  upstream1024 tail boundary. The window produced 36 leading-space 5-byte
+  identity-source misses (`black` through `again` with sparse official word
+  indexes); these Node frames now have source anchors, required coverage, CLI
+  differential cases, and direct unit coverage.
+
+- Added opt-in upstream2048 candidate-report and Node/Vort probe build steps,
+  plus dashboard producer/category metadata and validation JSON docs. The
+  incremental windows start at candidate index 6137, where source-limit 2048
+  first diverges from the upstream1024 candidate ordering, and cover through the
+  current 12461-candidate tail with no Vort failures or size winners.
+
+- Started the upstream4096 Brotli static-dictionary expansion. The first changed
+  candidate window begins at index 12223 and exposed 126 additional 6-byte
+  identity source words; their observed Node frames are now pinned in unit
+  coverage while source anchors keep the imported subset tied to upstream data.
+
+- Continued upstream4096 with the next 1024-row candidate window starting at
+  index 13247. The Node probe exposed 117 more actual identity source tuples,
+  including 7-byte alternatives selected for some 6-byte transformed payloads;
+  those observed frames are now pinned by unit coverage and source anchors.
+
+- Continued upstream4096 again with the 14271-15295 candidate window. The Node
+  probe exposed 104 additional actual identity source tuples, mostly 6-byte
+  leading-space payloads plus a few 7-byte alternatives; these are now captured
+  in the static dictionary subset and unit-frame coverage.
+
+- Continued upstream4096 with the 15295-16319 candidate window. The probe
+  exposed 125 unique actual identity tuples, including CJK/non-ASCII 6-byte
+  dictionary words and a few shorter alternate identities selected by Node; the
+  observed frames now extend the static dictionary subset and unit coverage.
+
+- Continued upstream4096 with the 16319-17343 candidate window. The probe
+  exposed another 125 actual identity tuples dominated by CJK 6-byte dictionary
+  words; these observed frames now extend the source-anchored subset and unit
+  coverage.
+
+- Continued upstream4096 with the 17343-18367 candidate window. The probe
+  exposed 110 more actual identity tuples in the same CJK-heavy 6-byte slice,
+  and those observed frames are now covered by source anchors and unit tests.
+
+- Continued upstream4096 with the 18367-19391 candidate window. The probe
+  exposed another 110 actual identity tuples from the CJK-heavy 6-byte range;
+  these observed frames are now source-anchored and covered by unit tests.
+
+- Continued upstream4096 with the 19391-20415 candidate window. The probe
+  exposed 119 additional actual identity tuples in the CJK-heavy 6-byte range;
+  their observed Node frames are now source-anchored and unit-tested.
+
+- Continued upstream4096 with the 20415-21439 candidate window. The probe
+  exposed 90 more actual identity tuples as the source-limit 4096 slice moves
+  from CJK dictionary entries into Latin/Spanish words; the observed frames are
+  now source-anchored and unit-tested.
+
+- Continued upstream4096 with the 21439-22463 candidate window. The probe
+  exposed 87 actual identity tuples spanning Latin/Spanish, Russian, and Hindi
+  6-byte dictionary entries; the observed frames are now source-anchored and
+  unit-tested.
+
+- Continued upstream4096 with the 22463-23487 candidate window. The probe
+  exposed 69 unique actual identity tuples, covering late Arabic 6-byte words
+  and the first early 7-byte identity entries in this larger source slice.
+
+- Added opt-in upstream4096 candidate-report and Node/Vort probe build steps,
+  plus dashboard producer/category metadata and validation JSON docs. The formal
+  windows start at candidate index 12223, where source-limit 4096 first diverges
+  from the upstream2048 candidate ordering, and cover through the current
+  23494-candidate tail with no Vort failures or size winners.
+
+- Ran the full generated-candidate Node probe and resolved its remaining five
+  failures by adding the shared ` numbers` identity tuple. The full probe now
+  has a concrete source row for Node frames that encode ` numbers`, ` numbers `,
+  `  numbers`, and ` numbers.` through the same static dictionary address.
+
+- Started the upstream8192 Brotli static-dictionary expansion at the first
+  changed candidate window (`23076..24100`). The Node probe exposed 156 actual
+  identity tuples, mostly 7-byte English dictionary words plus several 8-byte
+  identity alternatives selected for affix-equivalent payloads; all 506 observed
+  failing frames are now pinned by source anchors and unit coverage.
+
+- Continued upstream8192 with the next 1024-row candidate window starting at
+  index 24100. The probe exposed 101 actual identity tuples, mostly 7-byte
+  English/markup words plus a handful of 8-byte identity alternatives selected
+  by Node for affix-equivalent payloads; the original 356 failing frames plus
+  reindexed-tail frames are source-anchored and unit-tested.
+
+- Continued upstream8192 with the 25124-26148 candidate window. The probe
+  exposed 89 actual identity tuples, dominated by 7-byte English and markup
+  words plus a few alternate-length identities selected by Node; the observed
+  failing frames are source-anchored and unit-tested.
+
+- Continued upstream8192 with the 26148-27172 candidate window. The probe exposed 81 actual identity tuples, mostly 7-byte English/markup words
+  plus a few 8-byte alternates selected by Node for transformed payloads; the
+  initial 304 failing frames and reindexed-tail frames are source-anchored and
+  unit-tested.
+
+- Continued upstream8192 with the 27172-28196 candidate window. The probe exposed 94 actual identity tuples, primarily 7-byte dictionary
+  words plus a couple of 8-byte alternates selected by Node; the initial 365
+  failing frames and reindexed-tail frames are source-anchored and unit-tested.
+
+- Continued upstream8192 with the 28196-29220 candidate window. The probe exposed 79 actual identity tuples, mostly 7-byte words with one
+  8-byte alternate selected by Node; the initial 220 failing frames and
+  reindexed-tail frames are source-anchored and unit-tested.
+
+- Continued upstream8192 with the 29220-30244 candidate window. The initial
+  probe exposed 69 actual identity tuples, almost all 7-byte words plus
+  one 8-byte alternate selected by Node; the observed failing frames are
+  source-anchored and unit-tested.
+
+- Continued upstream8192 with the 30244-31268 candidate window. The initial
+  probe and reindexed tail exposed 70 actual identity tuples: 67 direct
+  7-byte words and three alternate 5-, 6-, and 8-byte addresses selected by
+  Node. All 138 unique observed failing frames are source-anchored and
+  unit-tested; the reindexed 1024-row window now has no Vort failures.
+
+- Continued upstream8192 with the 31268-32292 candidate window. The initial
+  probe and reindexed tail exposed 65 actual identity tuples: 61 direct
+  7-byte words and four alternate 5-, 6-, and 8-byte addresses selected by
+  Node. All 124 unique observed failing frames are source-anchored and
+  unit-tested; the reindexed 1024-row window now has no Vort failures. Static
+  dictionary Markdown reports now render embedded control bytes as visible
+  escapes, so CRLF-bearing dictionary words remain valid single table rows.
+
+- Continued upstream8192 with the 32292-33316 candidate window. The initial
+  probe and reindexed tail exposed 73 direct 7-byte identity tuples and 145
+  unique failing Node frames; all observed addresses are source-anchored and
+  unit-tested, and the reindexed 1024-row window now has no Vort failures.
+
+- Continued upstream8192 with the 33316-34340 candidate window. The initial
+  probe and reindexed tail exposed 75 direct identity tuples (72 7-byte and
+  three 8-byte words) and 153 unique failing Node frames; all observed
+  addresses are source-anchored and unit-tested, and the reindexed 1024-row
+  window now has no Vort failures.
+
+- Continued upstream8192 with the 34340-35364 candidate window. The initial
+  probe and reindexed tail exposed 136 actual addresses: 127 direct 8-byte
+  identity tuples and nine alternate 9-byte identity/omit-last-one tuples
+  selected by Node. All 501 unique failing frames are source-anchored and
+  unit-tested, and the reindexed 1024-row window now has no Vort failures.
+
+- Restored dashboard producer completeness for existing exploratory artifacts
+  without adding any new compression-format scope. `dashboard_producers.json`
+  now records reproducible fallback producer commands for manual Brotli
+  upstream8192/static-dictionary and alternate dashboard-index artifacts, and
+  exact producer metadata for the optional Snappy report CSV. The current
+  `zig-out` dashboard strict run now reports zero missing producer steps and an
+  aggregate healthy validation state while keeping Snappy classified as benchmark
+  evidence.
+
+- Tightened aggregate dashboard validation health for existing validation
+  artifacts without adding new compression-format scope. Native fuzz corpus,
+  PNG scratch, zlib relaxed compatibility, and native allocation dashboards now
+  participate directly in `validation_healthy`, each has fine-grained missing
+  and failed unhealthy reasons, and `dashboard_strict_smoke.py` exercises all 53
+  strict-validation-health reasons with isolated fixtures.
+
+- Completed the dashboard health-field coverage audit for current retained
+  artifacts. `native_tier_range_healthy` now participates in aggregate
+  `validation_healthy`, has missing/failed strict-validation reasons, and the
+  schema manifest now leaves no top-level `*_healthy` dashboard field outside the
+  validation formula or its own boolean formula. The strict smoke covers 55
+  validation-health reasons with isolated fixtures.
+
+- Tightened native tier range direct strict-smoke coverage for row-level CSV and
+  summary-vs-CSV drift. The native-tier mode now has isolated negative fixtures
+  for missing/duplicate/unknown `(source, fixture, tier)` pairs, positive row,
+  shape, throughput formula checks, and each summary mismatch counter for rows,
+  fixtures, tiers, paths, index totals, and minimum range/full-input throughput.
+
+- Tightened native tier corpus-discovery strict-smoke coverage with isolated
+  negative fixtures for `ok`, source-mode, candidate/source/selected counts,
+  malformed selected cases, CSV path, missing-reason, summary fixture, CSV
+  fixture, and CSV byte drift. Discovery health now has direct evidence for the
+  report/summary/CSV linkage instead of relying only on a byte mismatch smoke.
+
+- Tightened dashboard strict-smoke self-health by adding isolated fixtures for
+  JSON count drift, unmatched check rows, validation-reason row loss, missing
+  requirement deltas, missing-mode count drift, and retained Markdown
+  missing/unmatched rows. `dashboard_strict_healthy` now also requires zero
+  requirement deltas and at least one retained validation-reason row.
+
+- Tightened dashboard-configuration strict-smoke direct drift coverage for all
+  retained meta-smoke artifact families: config index, config negative, category
+  negative, producers-required, and producers-negative. Isolated fixtures now
+  fail aggregate health for `ok` drift, count mismatches, unmatched rows, and
+  required-smoke-gate count loss before `dashboard_configuration_healthy` can
+  pass.
+
+- Tightened validation JSON strict-smoke direct drift coverage for schema lists,
+  observed/unchecked schema accounting, JSON artifact inventory counts, manifest
+  validation floors, CLI success/failure expectations, report/corrupt rows, and
+  docs-negative `ok`/count loss. These fixtures keep validation JSON health from
+  relying only on broad parse/missing-schema failures.
+
+- Tightened Brotli static-dictionary strict-smoke direct drift coverage for the
+  existing candidate, upstream, Node probe, source-audit, negative-smoke, and
+  retained report artifacts without adding new compression-format scope. The
+  strict validation gate now has isolated fixtures for candidate/upstream count
+  drift, Markdown summary/sample/row drift, Node decode-count drift, audit
+  anchor loss, negative-smoke count drift, report entry/category/matrix/CSV
+  mismatches, duplicate JSON entries, and report Markdown/negative-smoke drift.
+
+- Tightened LZ4/Zstd native stream summary strict-smoke direct drift coverage for
+  existing retained summary artifacts without adding codec scope. The strict
+  validation gate now isolates every positive floor in the summary health formula:
+  frame, skippable-frame, checksum-frame, dictionary-id, content-size,
+  declared-content, block, raw-block, compressed-byte, payload-byte, and
+  skippable-payload coverage, plus the LZ4-only block-checksum floor.
+
+- Tightened zstd comparison strict-smoke direct drift coverage for existing
+  compare, standard-suite, and block-sweep artifacts without changing comparison
+  scope. The strict validation gate now isolates failed gate `ok` flags,
+  zero-data-row floors that still have internally consistent CSV/Markdown rows,
+  missing Markdown companions, and block-sweep path/block-length metadata drift.
+
+- Tightened native codec probe strict-smoke direct drift coverage for existing
+  LZ4/Zstd probe dashboard artifacts without adding codec scope. The strict
+  validation gate now isolates top-level `ok` drift, per-probe `ok` and timeout
+  drift, coverage row `ok` and case-sum drift, total-case floors, key capability
+  case floors, and Zstd frame/dictionary probe case floors.
+
+- Tightened native fuzz corpus strict-smoke direct drift coverage for the
+  existing retained native fuzz report and coverage-smoke artifacts without
+  adding codec scope. The strict validation gate now isolates report `ok` and
+  mode drift, exact-error and summary-row floors, mode/error summary mismatch,
+  missing, and duplicate rows, plus coverage `ok` and mode/error requirement
+  floors before native fuzz coverage can pass.
+
+- Promoted the existing Snappy report CSV from dashboard inventory metadata to
+  aggregate validation health without adding new compression-format scope. The
+  dashboard now parses `vort-snappy-report.csv`, validates the 20-row
+  raw/framed/reusable matrix, positive timing, repetitive compression, and
+  reusable-size stability, and exposes missing/failed Snappy report reasons in
+  strict-validation-health. `run-validation-json-dashboard` and
+  `run-dashboard-index` now depend on `run-snappy-report-gate` so clean
+  dashboards retain the CSV before enforcing aggregate health.
+
+- Promoted the existing checksum benchmark CSV into aggregate dashboard
+  validation health. The dashboard now parses `vort-checksum-bench.csv`, checks
+  the 21 expected Adler/CRC32/CRC32C algorithm rows, workload size/iteration
+  consistency, positive throughput rows, and CRC32/CRC32C digest-mix agreement;
+  strict-validation-health now includes missing/failed checksum benchmark
+  reasons, and validation/dashboard steps depend on the checksum bench gate so
+  clean dashboards retain the CSV before enforcing aggregate health.
+
+- Promoted the existing chunk cursor microbenchmark CSV into aggregate dashboard
+  validation health. The dashboard now parses `vort-chunk-cursor-bench.csv`,
+  validates the 8-row read/copy and current/skip-empty kernel matrix, checks
+  chunk shape metadata and positive timing rows, and exposes missing/failed
+  chunk-cursor benchmark reasons in strict-validation-health. Validation JSON
+  dashboard generation now depends on `run-chunk-cursor-bench-gate` so clean
+  dashboard runs retain the CSV before aggregate health is enforced.
+
+- Promoted the existing deflate match-copy microbenchmark CSV into aggregate
+  dashboard validation health. The dashboard now parses
+  `vort-deflate-match-copy-bench.csv`, validates the 21-row case/kernel matrix,
+  class coverage, and positive timing/checksum rows, and exposes missing/failed
+  match-copy benchmark reasons in strict-validation-health. Validation JSON
+  dashboard generation now depends on `run-deflate-match-copy-bench-gate` so
+  clean dashboard runs retain the CSV before aggregate health is enforced.
+
+- Promoted the existing deflate Huffman table-build microbenchmark CSV into
+  aggregate dashboard validation health. The dashboard now parses
+  `vort-deflate-huffman-build-bench.csv`, validates the 14-row case/build
+  matrix, lookup-bit metadata, and positive timing/checksum rows, and exposes
+  missing/failed Huffman-build benchmark reasons in strict-validation-health.
+  Validation JSON dashboard generation now depends on
+  `run-deflate-huffman-build-bench-gate` so clean dashboard runs retain the CSV
+  before aggregate health is enforced.
+
+- Promoted the existing deflate Huffman lookup microbenchmark CSV into
+  aggregate dashboard validation health. The dashboard now parses
+  `vort-deflate-huffman-lookup-bench.csv`, validates the 21-row case/decoder
+  matrix, lookup-bit metadata, and positive symbol-throughput/checksum rows, and
+  exposes missing/failed Huffman-lookup benchmark reasons in
+  strict-validation-health. Validation JSON dashboard generation now depends on
+  `run-deflate-huffman-lookup-bench-gate` so clean dashboard runs retain the CSV
+  before aggregate health is enforced.
+
+- Promoted the existing deflate chunked-Huffman microbenchmark CSV into
+  aggregate dashboard validation health. The dashboard now parses
+  `vort-deflate-chunked-huffman-bench.csv`, validates the 57-row case/reader
+  matrix, decoder/lookup/chunk-shape metadata, buffered zero-chunk rows, and
+  positive symbol-throughput/checksum rows, and exposes missing/failed
+  chunked-Huffman benchmark reasons in strict-validation-health. Validation JSON
+  dashboard generation now depends on `run-deflate-chunked-huffman-bench-gate`
+  so clean dashboard runs retain the CSV before aggregate health is enforced.
+- Promoted `run-deflate-extra-bits-bench-gate` into dashboard aggregate validation health: the dashboard now checks the 105-row extra-bit CSV shape, positive timing fields, expected case/reader/kernel coverage, and paired checksum equivalence for staged/current and fused/current rows, with strict missing/failed reasons plus schema/docs smoke coverage.
+- Promoted `run-dictionary-decode-bench-gate` into dashboard aggregate validation health: the dashboard now checks the 18 preset-dictionary decode rows across raw/zlib, dynamic/fixed/best encoders, alloc/exact/into modes, positive throughput fields, and output-size accounting, with strict missing/failed reasons plus schema/docs smoke coverage.
+- Promoted `run-png-scanline-bench-gate` into dashboard aggregate validation health: the dashboard now checks the 30 PNG scanline reconstruction rows across none/sub/up/average/paeth filters and 1/2/3/4/6/8 byte-per-pixel variants, positive timing fields, and input/output byte accounting, with strict missing/failed reasons plus schema/docs smoke coverage.
+- Promoted `run-chunked-zlib-bench-report-gate` into dashboard aggregate validation health: the dashboard now checks the 8 repeat3 contiguous/join/direct/exact chunked zlib rows, expected PNG-like case shapes and direct strategies, positive throughput/ratio fields, chunk-count accounting including empty-chunk layouts, and ratio consistency, with strict missing/failed reasons plus schema/docs smoke coverage.
+- Promoted `run-png-streaming-zlib-bench-report-gate` into dashboard aggregate validation health: the dashboard now checks the 10 repeat3 PNG streaming zlib rows, expected filter/pattern geometry, positive contiguous/chunked throughput fields, row/image byte accounting, and chunked-over-contiguous ratio consistency, with strict missing/failed reasons plus schema/docs smoke coverage.
+- Promoted `run-deflate-dynamic-decode-profile-gate` into dashboard aggregate validation health: the dashboard now checks the required README/roadmap/chunked-window dynamic profile rows, histogram and lookup consistency, match-class accounting, and the chunked-window match-heavy/non-overlap invariants, with strict missing/failed reasons plus schema/docs smoke coverage.
+- Promoted `run-native-library-bench-gate` into dashboard aggregate validation health: the dashboard now checks the 93-row native LZ4/Zstd public-library benchmark matrix, positive timing/throughput fields, single iteration count, computed throughput consistency, dictionary/chain/budget/sequence size-improvement checks, and compressed lib-generated/decode rows, with producer/category registration plus strict missing/failed reasons and schema/docs smoke coverage.
+- Tightened native tier range dashboard health by parsing the three required CSV artifacts (`vort-native-tier-range-bench.csv`, `vort-native-tier-range-files-bench.csv`, and `vort-native-tier-range-corpus-bench.csv`) in addition to their gate JSON summaries; aggregate health now checks row presence, tier/block shape, positive timing fields, range bounds, and recomputed range/full-input throughput consistency.
+- Tightened zlib relaxed dashboard health by requiring `vort-zlib-relaxed-report-gate.json` beside the report JSON; aggregate health now checks gate presence, `ok=true`, all 11 gate checks passing, and no failed gate checks before relaxed zlib/gzip compatibility is considered healthy.
+- Tightened deflate decode-stage dashboard health by parsing `vort-deflate-decode-stage-report.csv` beside the JSON report; aggregate health now checks the 10 built-in timing rows, positive decode/checksum throughput fields, fixed/dynamic/stored header shapes, and missing-case drift before decode-stage health can pass.
+- Promoted the existing compression level CSV/Markdown report into dashboard aggregate validation health. The dashboard now parses `vort-level-report.csv`, validates the 48-row built-in case/level/strategy matrix, token accounting, recomputed ratio fields, round-trip CRC evidence, and Markdown best-row summary drift before `validation_healthy` can pass. Strict validation now exposes missing/failed level-report reasons, and validation JSON dashboard generation depends on `run-level-report-dashboard` so clean dashboard runs retain both report artifacts.
+- Tightened Brotli static-dictionary dashboard health by consuming the retained `vort-br-static-dictionary-report.{csv,json,md}` and `vort-br-static-dictionary-report-negative-smoke.json` artifacts in addition to the candidate/node/source-audit smokes. Aggregate health now cross-checks JSON entry counts, transform/length/category/matrix totals, CSV row identity, Markdown summary drift, and report negative-smoke matches before static-dictionary coverage can pass.
+- Promoted the existing dynamic-plan CSV reports into dashboard aggregate validation health. The dashboard now parses both `vort-dynamic-plan-report.csv` and `vort-dynamic-plan-builtins-report.csv`, validates the README/roadmap plus built-in path coverage, token accounting, histogram widths, recomputed ratio fields, bit-boundary slack, and zlib-wrapper byte accounting, with strict missing/failed reasons plus schema/docs smoke coverage.
+- Tightened zstd compare dashboard health by cross-checking the retained
+  `vort-zstd-compare*.csv` and `vort-zstd-compare*.md` companions against the
+  three gate JSON summaries. Aggregate health now verifies compare/standard
+  TOTAL rows, block-sweep row counts and best-block metrics, Markdown metadata
+  and summary snippets, and the validation/dashboard build steps now depend on
+  the compare gates so clean dashboard runs retain all companion artifacts.
+- Tightened native allocation dashboard health by consuming the retained
+  `vort-native-allocation-report.md` companion alongside the report, smoke, and
+  negative-smoke JSON. Aggregate health now verifies report row/count balance,
+  allocation/free byte balance, zero-allocation and budget smoke rows against
+  measured report rows, negative-smoke matches, and Markdown table drift before
+  native allocation coverage can pass.
+- Tightened native codec probe dashboard health by requiring the retained
+  `vort-native-codec-probes.md` companion beside the JSON summary. Aggregate
+  health now cross-checks Markdown coverage, capability, and executable rows
+  against the JSON probe data, verifies coverage case totals against total
+  cases, and exposes Markdown drift counters in the validation dashboard.
+- Tightened native fuzz corpus dashboard health by requiring the retained
+  `vort-native-fuzz-corpus.md` companion beside the JSON report and coverage
+  smoke. Aggregate health now cross-checks Markdown mode/error/sample rows,
+  report item counts, accepted/rejected/matched totals, and coverage-smoke
+  matched mode/error requirements before native fuzz coverage can pass.
+- Tightened PNG scratch dashboard health by requiring the retained
+  `vort-png-scratch-report.md` companion beside the JSON report. Aggregate
+  health now cross-checks every Markdown row against JSON scratch metrics,
+  verifies per-row scratch/total arithmetic, and exposes row-consistency plus
+  Markdown drift counters before PNG scratch coverage can pass.
+- Tightened zlib relaxed dashboard health by requiring the retained
+  `vort-zlib-relaxed-report.md` companion beside the report and gate JSON.
+  Aggregate health now cross-checks Markdown metric rows and gate check names
+  against the JSON report, and exposes gate/report plus Markdown drift counters
+  before relaxed wrapper coverage can pass.
+- Tightened sidecar corrupt-payload dashboard health by requiring the retained
+  `vort-sidecar-corrupt-smoke.md` companion beside the JSON report. Aggregate
+  health now cross-checks every Markdown row against JSON `items` case names,
+  metadata/full rejection booleans, error names, and stream/sidecar byte counts,
+  and exposes item-count plus Markdown drift counters before corrupt-payload
+  validation coverage can pass.
+- Tightened deflate wrapper fuzz corpus dashboard health by requiring the
+  retained `vort-deflate-wrapper-fuzz-corpus.md` companion beside the JSON
+  report and coverage smoke. Aggregate health now cross-checks Markdown
+  metadata, mode/error summaries, and sample rows against the JSON corpus
+  report, verifies coverage-smoke matched requirements, and exposes report,
+  coverage, and Markdown drift counters before wrapper fuzz coverage can pass.
+- Tightened header-inspect dashboard health by requiring the retained
+  `vort-header-inspect-smoke.md` companion beside the JSON smoke. Aggregate
+  health now cross-checks JSON row totals for successes, negatives, command and
+  workflow coverage, required/help workflows, and Markdown format/command/
+  workflow/success/failure rows before header-inspect coverage can pass.
+- Tightened decode-stage dashboard health by requiring the retained
+  `vort-deflate-decode-stage-report.md` companion beside the JSON and CSV
+  reports. Aggregate health now cross-checks timing/error item counts,
+  malformed/error-path Markdown rows, and the retained Markdown table snippets
+  before decode-stage coverage can pass.
+- Tightened dashboard strict smoke dashboard health by requiring the retained
+  `vort-dashboard-strict-smoke.md` companion beside the JSON summary.
+  Aggregate health now cross-checks strict check rows, mode counts, expected
+  mode requirements, validation-unhealthy reason rows, and Markdown snippets
+  before dashboard-strict coverage can pass.
+- Tightened Huffman length oracle dashboard health by requiring the retained
+  `vort-huffman-length-report.md` table rows to match every CSV oracle row.
+  Aggregate health now exposes Markdown case-row matched/unmatched counters in
+  addition to the existing summary counters before Huffman length coverage can
+  pass.
+- Tightened compression level dashboard health by requiring the retained
+  `vort-level-report.md` detail table to match every CSV level/strategy row.
+  Aggregate health now exposes Markdown detail-row matched/unmatched counters
+  alongside the existing best-row summary checks before level-report coverage
+  can pass.
+- Tightened chunked zlib dashboard health by requiring the retained
+  `vort-chunked-zlib-bench-report.md` rows to match the repeat3 CSV gate rows.
+  The dashboard generation step now writes the CSV/Markdown pair together, and
+  aggregate health exposes Markdown matched/unmatched counters before chunked
+  zlib benchmark coverage can pass.
+- Tightened zstd compare dashboard health by requiring the retained
+  `vort-zstd-compare*.md` tables to match every CSV compare/standard/block-sweep
+  row, not just metadata and TOTAL snippets. Aggregate health now exposes
+  Markdown detail-row matched/unmatched counters before zstd compare coverage
+  can pass.
+- Tightened Brotli static-dictionary candidate dashboard health by requiring
+  the retained `vort-br-static-dictionary-candidates.md` summary and sampled
+  candidate rows to match the canonical JSON report. Aggregate health now
+  exposes candidate Markdown summary/sample matched-unmatched counters before
+  static-dictionary core coverage can pass.
+- Tightened Brotli static-dictionary node-probe dashboard health by requiring
+  the retained `vort-br-static-dictionary-node-probe.md` summary and candidate
+  rows to match the canonical JSON probe. Aggregate health now exposes node
+  Markdown summary/row matched-unmatched counters before static-dictionary core
+  coverage can pass.
+- Tightened Brotli static-dictionary report Markdown dashboard health by requiring
+  the retained `vort-br-static-dictionary-report.md` matrix and entry rows to
+  match the canonical JSON report. Aggregate health now exposes report
+  Markdown matrix/entry matched-unmatched counters before report coverage can
+  pass.
+- Tightened Brotli static-dictionary upstream candidate dashboard health by
+  requiring the retained `vort-br-static-dictionary-candidates-upstream.json`
+  and Markdown companion to match the upstream smoke summary. Core static
+  dictionary health now exposes upstream report and Markdown matched-unmatched
+  counters before coverage can pass.
+- Tightened native stream summary dashboard health by checking retained LZ4
+  and Zstd summary JSON for block-count consistency, declared-content slack,
+  and impossible metadata/checksum frame overflows. Dashboard health now exposes
+  mismatch/slack/overflow counters before native summary coverage can pass.
+
+- Added direct dashboard strict-smoke drift coverage for LZ4/Zstd native stream
+  summaries. The strict validation gate now exercises block-count mismatches,
+  declared payload slack, metadata/checksum-frame overflows, and LZ4
+  block-checksum overflow so native stream summary health cannot rely only on
+  aggregate undercovered fixtures.
+- Tightened LZ4/Zstd native stream summary strict-smoke direct overflow
+  coverage for content-size metadata. The strict validation gate now isolates
+  impossible content-size frame counts separately from dictionary metadata
+  overflow while preserving checksum and block-checksum overflow counters.
+- Tightened dashboard configuration health by requiring config, category,
+  required-producer, and producer-negative smoke row counts to match their
+  declared counts and by exposing count-mismatch/row-unmatched counters in the
+  dashboard manifest and Markdown summary.
+- Tightened validation-JSON dashboard health by requiring checked schemas to
+  be unique, CLI failure smoke to retain a recoverability hint, and docs-negative
+  smoke rows to match their declared case count. Dashboard health now exposes
+  schema duplicate and docs-negative row/count mismatch counters.
+- Tightened Python zlib differential dashboard health by deriving expected
+  file-hex, dictionary, malformed, and CLI outcome floors from the retained
+  summary. Dashboard health now exposes mismatch and shortfall counters before
+  the differential smoke can pass.
+- Tightened native tier range dashboard health by cross-checking each retained
+  summary JSON against its CSV companion for source cardinality, row/fixture/tier
+  coverage, CSV path, per-tier stream/index totals, and per-tier minimum range
+  and full-input throughput. Dashboard health now exposes summary-vs-CSV mismatch
+  counters before native tier range coverage can pass.
+- Tightened native tier corpus discovery dashboard health by cross-checking the
+  retained discovery JSON selected labels and byte sizes against the standard
+  corpus range summary and CSV companion. Dashboard health now exposes discovery
+  mismatch counters before corpus-discovery coverage can pass.
+- Tightened Snappy benchmark dashboard health by recomputing ratio and encode/decode
+  throughput from the retained CSV rows and by requiring reusable raw/framed
+  outputs to preserve both size and checksum per fixture. Dashboard health now
+  exposes ratio, throughput, and reusable-checksum counters before Snappy coverage
+  can pass.
+- Tightened checksum benchmark dashboard health by recomputing throughput from
+  bytes, iterations, and elapsed time for every retained CSV row. Dashboard
+  health now exposes throughput-row counters before checksum benchmark coverage
+  can pass.
+- Tightened chunk cursor benchmark dashboard health by recomputing bytes/s and
+  MiB/s from payload bytes, iterations, and elapsed time, and by requiring the
+  current and skip-empty kernels to preserve per-case checksums. Dashboard health
+  now exposes throughput-row and checksum-match counters before chunk cursor
+  coverage can pass.
+- Tightened deflate match-copy benchmark dashboard health by validating expected
+  class labels, recomputing output bytes and throughput from each CSV row, and
+  requiring all kernels for each case to preserve checksums. Dashboard health now
+  exposes output-byte, throughput, and checksum-match counters before match-copy
+  coverage can pass.
+- Tightened deflate Huffman build benchmark dashboard health by recomputing
+  builds/s from iterations and elapsed time and by requiring each case's table
+  builder variants to retain distinct non-zero checksums. Dashboard health now
+  exposes throughput-row and checksum-variant counters before Huffman build
+  coverage can pass.
+- Tightened deflate Huffman lookup benchmark dashboard health by recomputing
+  symbols/s and MiB/s from each CSV row and by requiring all decoder variants for
+  each case to preserve the same non-zero checksum. Dashboard health now exposes
+  throughput-row and checksum-match counters before Huffman lookup coverage can
+  pass.
+- Tightened deflate chunked Huffman benchmark dashboard health by recomputing
+  symbols/s and MiB/s from each CSV row, requiring chunk counts to match the
+  per-iteration compressed input size, and requiring all reader variants for each
+  case to preserve the same non-zero checksum. Dashboard health now exposes
+  chunk-count, throughput-row, and checksum-match counters before chunked Huffman
+  coverage can pass.
+- Tightened deflate extra-bit benchmark dashboard health by recomputing reads/s
+  and MiB/s from each CSV row and by requiring every case's reader/kernel rows to
+  preserve a shared non-zero checksum. Dashboard health now exposes
+  throughput-row and checksum-match counters before extra-bit coverage can pass.
+- Tightened dictionary decode benchmark dashboard health by recomputing decode
+  MiB/s from output bytes and elapsed time and by requiring each payload family
+  to keep a shared non-zero checksum across raw/zlib, encoder, and allocation
+  modes. Dashboard health now exposes throughput-row and checksum-payload
+  counters before dictionary decode coverage can pass.
+- Tightened PNG scanline benchmark dashboard health by recomputing output MiB/s
+  from output bytes and elapsed time and by requiring each byte-per-pixel group
+  to keep a shared non-zero checksum across all filter stages. Dashboard health
+  now exposes throughput-row and checksum-bpp counters before scanline coverage
+  can pass.
+- Tightened PNG streaming zlib benchmark dashboard health by requiring reported
+  chunk counts to match the zlib payload length and chunk size. Dashboard health
+  now exposes a chunk-count counter before streaming zlib benchmark coverage can
+  pass.
+- Tightened deflate dynamic decode profile dashboard health by recomputing lookup
+  coverage, fast-miss, match-class byte, and per-match/per-byte extra-bit ratios
+  from the CSV counters. Dashboard health now exposes a ratio-row counter before
+  dynamic decode profile coverage can pass.
+- Tightened native allocation dashboard health by requiring zero-allocation and
+  budget smoke rows to classify every report case exactly once, with no overlap,
+  missing report cases, or extra smoke-only cases. Dashboard health now exposes
+  smoke-classification counters before native allocation coverage can pass.
+- Tightened native summary error dashboard health by recomputing aggregate error,
+  phase, per-codec count, and offset-range summaries from the retained case rows.
+  Dashboard health now exposes aggregate-drift counters before native summary
+  malformed-stream coverage can pass.
+- Tightened native stream summary dashboard health by requiring declared content
+  bytes to match decoded payload bytes exactly for retained LZ4 and Zstd
+  summaries. Schema relations now reject declared/payload slack before native
+  stream summary coverage can pass.
+- Tightened native summary error negative-smoke dashboard health by requiring
+  retained negative rows to match the declared case count and to be both matched
+  and expected-failure rows. Dashboard health now exposes negative row/count
+  drift counters before malformed-summary guardrail coverage can pass.
+
+- Added direct dashboard strict-smoke drift coverage for native summary error
+  dashboards. The strict validation gate now exercises case/codec/error/phase
+  count mismatches, codec-specific count drift, offset-range drift, missing
+  required codec phases, and negative-smoke count/matched/expected-failure drift
+  so native malformed-summary health cannot hide aggregate counter regressions.
+- Tightened native summary error strict-smoke direct drift coverage for retained
+  malformed-stream floor requirements. The strict validation gate now moves
+  concrete cases between error classes while keeping aggregate counters
+  internally consistent, isolating checksum and corrupt-frame floor regressions
+  from the existing count-mismatch checks.
+- Extended native summary error strict-smoke floor coverage to truncated-frame
+  and frame-checksum phase floors. The new fixtures keep error/phase aggregates,
+  codec-specific aggregates, offset ranges, and required-phase metadata
+  internally consistent so these floor regressions cannot hide behind existing
+  mismatch checks.
+- Completed the remaining native summary error phase-floor direct coverage for
+  magic, skippable-payload, frame-body, and frame phases. The strict validation
+  gate now isolates every aggregate phase floor while keeping phase counts,
+  codec phase counts, offset ranges, and required-phase metadata consistent.
+- Tightened Brotli static-dictionary negative-smoke dashboard health by requiring
+  both source-audit and report guardrail rows to match declared case counts with
+  no unmatched rows. Dashboard health now exposes row/count drift counters before
+  static-dictionary guardrail coverage can pass.
+- Tightened native codec probe dashboard health by requiring declared
+  probe/capability/coverage counts to match retained rows, probe case sums to
+  match total cases, and required probe labels, coverage pairs, and capability
+  keys to be present exactly once. Dashboard health now exposes row/count/key
+  drift counters before native codec probe coverage can pass.
+- Tightened Python zlib differential dashboard health by recomputing exact
+  CLI success, expected-failure, and total outcome counts from the retained
+  payload, file-transport, dictionary, dynamic, and malformed coverage counters.
+  Dashboard health now exposes exact outcome mismatch counters before zlib
+  differential coverage can pass.
+
+- Added direct dashboard strict-smoke drift coverage for Python zlib differential
+  health. The strict validation gate now exercises large-file payload overflow,
+  file-hex count drift, CLI success/failure shortfalls, exact outcome mismatches,
+  missing match-heavy/dynamic payload coverage, dictionary-encode undercoverage,
+  and malformed-wrapper coverage loss so `python_zlib_diff_failed` cannot hide
+  differential summary counter regressions behind its aggregate fixture.
+
+- Tightened Python zlib differential strict-smoke direct drift coverage for the
+  retained black-box differential smoke without changing compatibility scope. The
+  strict validation gate now isolates top-level `ok` drift, payload and
+  large-file floors, file-hex floors, dictionary and raw-dictionary encode
+  floors, malformed-deflate coverage loss, and CLI success/failure floors before
+  the differential summary can pass.
+
+- Tightened zlib/gzip relaxed-wrapper dashboard health by recomputing the
+  retained gate's exact and floor rules from report counters instead of trusting
+  gate booleans alone. Dashboard health now exposes missing/extra gate checks,
+  recomputed pass/fail counts, rule drift, exact mismatch, and floor shortfall
+  counters before relaxed-wrapper compatibility coverage can pass.
+
+- Tightened Snappy report dashboard health by exposing duplicate and unknown
+  mode/case pairs plus framed-overhead parity across one-shot and reusable
+  paths. Dashboard health now rejects pair drift and framed/raw size drift before
+  Snappy CSV coverage can pass.
+
+- Tightened checksum benchmark dashboard health by exposing duplicate and
+  unknown algorithm rows alongside missing algorithms. Dashboard health now
+  rejects checksum CSV algorithm drift before checksum benchmark coverage can
+  pass.
+
+- Tightened chunk cursor benchmark dashboard health by exposing duplicate and
+  unknown `(case, kernel)` rows alongside missing pairs. Dashboard health now
+  rejects chunk cursor CSV pair drift before cursor benchmark coverage can pass.
+
+- Tightened deflate match-copy benchmark dashboard health by exposing duplicate
+  and unknown `(case, kernel)` rows alongside missing pairs. Dashboard health now
+  rejects match-copy CSV pair drift before benchmark coverage can pass.
+
+- Tightened deflate Huffman build benchmark dashboard health by exposing
+  duplicate and unknown `(case, build)` rows alongside missing pairs. Dashboard
+  health now rejects Huffman build CSV pair drift before benchmark coverage can
+  pass.
+
+- Tightened deflate Huffman lookup benchmark dashboard health by exposing
+  duplicate and unknown `(case, decoder)` rows alongside missing pairs. Dashboard
+  health now rejects Huffman lookup CSV pair drift before benchmark coverage can
+  pass.
+
+- Tightened deflate chunked Huffman benchmark dashboard health by exposing
+  duplicate and unknown `(case, reader)` rows alongside missing pairs. Dashboard
+  health now rejects chunked Huffman CSV pair drift before benchmark coverage can
+  pass.
+
+- Tightened deflate extra-bit benchmark dashboard health by exposing duplicate
+  and unknown `(case, reader, kernel)` rows alongside missing pairs. Dashboard
+  health now rejects extra-bit CSV pair drift before benchmark coverage can pass.
+
+- Tightened dictionary decode benchmark dashboard health by exposing duplicate
+  and unknown `(case, format, encoder, mode)` rows alongside missing pairs.
+  Dashboard health now rejects dictionary decode CSV pair drift before benchmark
+  coverage can pass.
+
+- Tightened PNG scanline benchmark dashboard health by exposing duplicate and
+  unknown `(stage, bpp)` rows alongside missing pairs. Dashboard health now
+  rejects PNG scanline CSV pair drift before benchmark coverage can pass.
+
+- Tightened native library benchmark dashboard health by exposing duplicate and
+  unknown `(codec, mode, case)` rows alongside missing pairs. Dashboard health
+  now rejects native library CSV pair drift before benchmark coverage can pass.
+
+- Added direct dashboard strict-smoke drift coverage for native library benchmark
+  health. The strict validation gate now exercises missing/duplicate/unknown
+  `(codec, mode, case)` rows plus positive-row, throughput, iteration, and
+  compression-improvement mismatches so `native_library_bench_failed` coverage
+  cannot hide field-level CSV drift.
+- Tightened native library benchmark strict-smoke improvement coverage by
+  isolating a Zstd match-budget row that no longer improves over its zero-budget
+  baseline while keeping positive timing, throughput, and iteration accounting
+  valid.
+- Tightened native library benchmark strict-smoke improvement coverage by
+  isolating a Zstd sequence-Huffman-literals row that no longer improves over
+  its plain baseline while keeping positive timing, throughput, and iteration
+  accounting valid.
+- Tightened native library benchmark strict-smoke improvement coverage by
+  isolating a compression-floor regression for the retained high-byte Zstd row.
+  The new fixture keeps positive timing, throughput, and iteration accounting
+  valid while forcing the row to stop compressing below its input size.
+- Tightened native library benchmark strict-smoke compression coverage by
+  isolating a decode-mode retained row that no longer compresses below its input
+  size while keeping positive timing, throughput, and iteration accounting
+  valid.
+- Tightened native library benchmark strict-smoke compression coverage by
+  isolating a library-generated retained row that no longer compresses below its
+  input size while keeping positive timing, throughput, and iteration accounting
+  valid.
+- Tightened native library benchmark strict-smoke dictionary improvement
+  coverage by isolating an LZ4 dictionary row that no longer improves over its
+  plain baseline while leaving positive timing, throughput, and iteration
+  accounting intact.
+- Extended native library benchmark strict-smoke dictionary coverage to a Zstd
+  trained-dictionary improvement pair. The retained row now has an isolated
+  negative fixture that keeps positive timing, throughput, and iteration
+  accounting valid while removing the trained-dictionary size win.
+- Extended native library benchmark strict-smoke dictionary coverage to a Zstd
+  dictionary-set improvement pair. The retained row now has an isolated negative
+  fixture that keeps non-improvement accounting valid while removing the
+  dictionary-set size win over its plain baseline.
+- Extended native library benchmark strict-smoke dictionary coverage to a
+  reusable LZ4 dictionary-set improvement pair. The new negative fixture keeps
+  the benchmark row otherwise healthy while removing the reusable dictionary
+  size win over its plain baseline.
+- Extended native library benchmark strict-smoke dictionary coverage to a Zstd
+  direct dictionary-set improvement pair. The fixture keeps positive timing,
+  throughput, and iteration accounting healthy while removing the direct
+  dictionary-set size win over its plain baseline.
+- Extended native library benchmark strict-smoke dictionary coverage to a Zstd
+  fallback dictionary-set improvement pair. The fixture keeps all non-improvement
+  row accounting valid while removing the fallback dictionary-set size win over
+  its plain baseline.
+- Extended native library benchmark strict-smoke dictionary coverage to a Zstd
+  chunked dictionary-set improvement pair. The fixture keeps positive timing,
+  throughput, and iteration accounting healthy while removing the chunked
+  dictionary-set size win over its plain baseline.
+- Extended native library benchmark strict-smoke dictionary coverage to an LZ4
+  chunked-append dictionary-set improvement pair. The fixture keeps the row's
+  non-improvement accounting healthy while removing the append dictionary-set
+  size win over its plain baseline.
+- Extended native library benchmark strict-smoke dictionary coverage to a Zstd
+  chunked-append-exact dictionary-set improvement pair. The fixture preserves
+  positive timing, throughput, and iteration accounting while removing the exact
+  append dictionary-set size win over its plain baseline.
+- Extended native library benchmark strict-smoke dictionary coverage to a Zstd
+  reusable-append-exact dictionary-set improvement pair. The fixture keeps the
+  benchmark row otherwise healthy while removing the reusable exact append
+  dictionary-set size win over its plain baseline.
+
+- Tightened native tier range CSV dashboard health by deriving expected
+  `(fixture, tier)` rows from each source's JSON summary and exposing duplicate
+  and unknown source-qualified pairs alongside missing pairs. Dashboard health
+  now rejects row-level native tier CSV drift before summary/CSV aggregate
+  coverage can pass.
+
+- Tightened deflate decode-stage CSV dashboard health by exposing duplicate and
+  unknown `case` rows alongside missing cases. Dashboard health now rejects
+  decode-stage CSV case drift before timing/header coverage can pass.
+
+- Tightened decode-stage strict-smoke direct drift coverage for the remaining
+  field-level dashboard invariants. Isolated fixtures now fail aggregate health
+  for internally consistent unmatched error rows, non-positive CSV throughput,
+  malformed dynamic headers, and missing fixed/dynamic/stored block-type
+  coverage before broader decode-stage health can pass.
+
+- Tightened chunked zlib benchmark dashboard health by exposing duplicate and
+  unknown `case` rows alongside missing cases. Dashboard health now rejects
+  chunked zlib CSV case drift before benchmark and Markdown coverage can pass.
+
+- Tightened PNG streaming zlib benchmark dashboard health by exposing duplicate
+  and unknown `case` rows alongside missing cases. Dashboard health now rejects
+  PNG streaming CSV case drift before benchmark coverage can pass.
+
+- Tightened deflate dynamic decode profile dashboard health by exposing duplicate
+  required `case` rows alongside missing cases while still allowing additional
+  profiling rows. Dashboard health now rejects required profile case drift before
+  decode-profile coverage can pass.
+
+- Added direct dashboard strict-smoke drift coverage for deflate dynamic decode
+  profile health. The strict validation gate now exercises missing/duplicate
+  required profile cases plus positive-row, histogram, lookup, match-class,
+  ratio-accounting, and chunked-window-shape mismatches, so aggregate
+  `deflate_dynamic_decode_profile_failed` coverage cannot hide field-level CSV
+  drift.
+
+- Tightened compression level report dashboard health by exposing duplicate and
+  unknown `(case, level, strategy)` rows alongside missing pairs. Dashboard
+  health now rejects level report CSV pair drift before Markdown and row
+  accounting coverage can pass.
+
+- Tightened dynamic plan dashboard health by exposing duplicate and unknown
+  `(source, path)` rows alongside missing sources/paths. Dashboard health now
+  rejects dynamic-plan CSV path drift before token, histogram, ratio, and wrapper
+  accounting coverage can pass.
+
+- Tightened deflate wrapper fuzz corpus dashboard health by recomputing
+  `mode_counts` and `error_counts` from row-level `items`, exposing missing,
+  duplicate, unknown, and mismatched summary rows. Dashboard health now rejects
+  stale fuzz summary aggregates before coverage and Markdown checks can pass.
+
+- Tightened deflate wrapper fuzz corpus strict-smoke direct drift coverage for
+  existing retained wrapper fuzz artifacts without adding format scope. The
+  strict validation gate now isolates report `ok` and mode drift,
+  exact-error and summary-row floors, mode/error summary mismatch, missing, and
+  duplicate rows, plus coverage `ok` and mode/error requirement floors before
+  wrapper fuzz coverage can pass.
+
+- Tightened native fuzz corpus dashboard health by applying the same row-level
+  recomputation to native `mode_counts` and `error_counts`, exposing missing,
+  duplicate, unknown, and mismatched summary rows. Dashboard health now rejects
+  stale native fuzz summary aggregates before coverage and Markdown checks can
+  pass.
+
+- Tightened header inspect dashboard health by exposing duplicate successful,
+  negative, command, workflow, required-workflow, and help-workflow rows, and by
+  recomputing command coverage, negative error counts, missing workflows, and
+  help-vs-required workflow drift. Dashboard health now rejects stale or
+  duplicated header inspect aggregates before Markdown coverage can pass.
+
+- Tightened PNG scratch dashboard health by pinning the expected scratch case
+  matrix and exposing missing, duplicate, and unknown case rows. Dashboard health
+  now rejects stale or drifted PNG scratch report cases before scratch accounting
+  and Markdown coverage can pass.
+
+- Tightened sidecar corrupt smoke dashboard health by exposing malformed and
+  duplicate JSON item rows plus malformed, duplicate, and unknown Markdown rows.
+  Dashboard health now rejects sidecar row drift before corrupt-payload coverage
+  can pass.
+
+- Tightened sidecar corrupt strict-smoke direct drift coverage for the existing
+  corrupt-payload JSON/Markdown artifacts without adding format scope. The
+  strict validation gate now isolates missing Markdown companions, zero-row
+  report floors, Markdown row-count loss, and item metadata/full-rejection count
+  drift before corrupt-payload coverage can pass.
+
+- Tightened Huffman length oracle dashboard health by exposing blank and
+  duplicate CSV case rows alongside malformed/cost checks. Dashboard health now
+  rejects duplicated Huffman oracle case rows before Markdown coverage can pass.
+
+- Tightened Huffman length strict-smoke direct drift coverage for the existing
+  oracle CSV/Markdown artifacts. The strict validation gate now isolates missing
+  Markdown companions, worst-gap drift, and package-merge worst-gap drift in
+  addition to malformed, blank, duplicate, non-optimal, and Markdown row drift.
+
+- Tightened compression level-report strict-smoke direct drift coverage for the
+  existing CSV/Markdown artifacts. The strict validation gate now isolates a
+  missing Markdown companion and non-positive row accounting without relying on
+  token, ratio, roundtrip, or Markdown detail drift to catch those failures.
+
+- Tightened dynamic-plan strict-smoke direct drift coverage for the existing
+  project-file and built-in CSV artifacts. The strict validation gate now
+  isolates missing source artifacts and positive-row drift before token,
+  histogram, ratio, slack, or wrapper invariants are evaluated.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+- Promoted Markdown heading layouts to a hard per-artifact gate by adding
+  `tools/dashboard_markdown_heading_manifest.json` and comparing every retained
+  Markdown artifact against its expected heading count, first heading, and
+  heading hash.
+
+- Extended the Markdown artifact layout manifest to also pin table-row and
+  separator-row counts, so dashboard health now catches retained Markdown
+  reports whose table bodies disappear, duplicate, or otherwise drift while
+  headings remain unchanged.
+
+- Tightened Markdown artifact table auditing by requiring a Markdown separator
+  row in every retained Markdown artifact. Dashboard health now rejects files
+  that contain pipe-delimited text without a real table layout.
+
+- Tightened Markdown artifact layout auditing by requiring every retained
+  Markdown artifact to contain at least one table row. Dashboard health now
+  rejects heading-only or prose-only Markdown artifacts before inventory can pass.
+
+- Tightened Markdown artifact layout auditing by requiring the first non-empty
+  line of every retained Markdown artifact to be a heading. Dashboard health now
+  rejects heading-late Markdown artifacts before inventory can pass.
+
+- Tightened Markdown artifact auditing by requiring each retained Markdown
+  artifact to include a heading. Dashboard health now rejects heading-less
+  Markdown even when the file is readable, non-empty, and contains table markers.
+
+
+
+
+- Promoted CSV header signatures to a hard layout gate by adding
+  `tools/dashboard_csv_header_manifest.json` and comparing every retained CSV
+  artifact against its expected column count and header hash.
+
+- Added CSV header signature inventory to the non-JSON artifact audit. The
+  dashboard now records per-artifact CSV column counts and stable header hashes,
+  establishing the baseline needed for future per-artifact expected-header gates.
+
+- Tightened CSV artifact auditing by rejecting ragged rows whose column count
+  differs from the header. Dashboard health now catches truncated or over-wide
+  CSV data rows across retained CSV artifacts.
+
+- Tightened CSV artifact auditing by requiring at least one data row per retained
+  CSV artifact in addition to unique non-blank headers. Dashboard health now
+  rejects header-only CSV artifacts before artifact inventory can pass.
+
+- Tightened non-JSON artifact auditing by rejecting CSV artifacts with blank or
+  duplicate headers, and fixed the deflate decode-stage CSV header so wrapper
+  timing columns are uniquely named.
+
+- Added a hard dashboard health gate for non-JSON retained artifacts. The
+  dashboard now audits indexed CSV and Markdown artifacts for parse/read failures,
+  empty content, and missing Markdown markers, and strict-validation smoke covers
+  the new `non_json_artifact_failed` reason.
+
+- Locked the validation JSON artifact audit exclusion list behind shared manifest
+  enums and a negative smoke case. Future attempts to exclude an unapproved JSON
+  artifact name now fail schema validation instead of silently shrinking the
+  audit surface.
+
+- Promoted validation JSON artifact manifest failures to a hard dashboard health
+  gate now that the retained artifact backlog is zero. The audit excludes only
+  current-run self outputs and stale dashboard self-snapshots, and any remaining
+  manifest validation failure now makes validation JSON health fail.
+
+- Closed the validation JSON artifact manifest backlog by excluding known
+  dashboard/validation self-output snapshots from the current-run audit and
+  validating every remaining retained `zig-out` JSON artifact against the shared
+  manifest. The dashboard now reports zero artifact manifest failures.
+
+- Reduced the validation JSON artifact manifest backlog by making the shared
+  schema checker understand optional top-level and item fields, then marking
+  older Brotli static-dictionary candidate/probe metadata fields as optional.
+  Current artifact audit failures are limited to the two derived dashboard-index
+  JSON snapshots.
+
+- Added validation JSON artifact-level manifest audit fields. The smoke now
+  records retained `zig-out` JSON artifact parse/schema/manifest validation
+  counts plus failure name lists, and the dashboard exposes the current manifest
+  cleanup backlog instead of relying only on schema-set coverage.
+
+- Tightened validation JSON schema coverage by recording schemas observed in
+  retained `zig-out` JSON artifacts, exposing unchecked observed schemas in the
+  dashboard, and failing validation health when any produced schema is not listed
+  in `vort.validation_json_smoke.checked_schemas`.
+
+- Added shared schema/docs/smoke coverage for the retained zlib relaxed report
+  gate JSON. The manifest now fixes the gate check key set, enforces boolean
+  check values, and recomputes `ok` from nested check values so stale or malformed
+  gate summaries cannot validate as healthy.
+
+- Tightened zlib relaxed dashboard health by parsing retained Markdown metric rows
+  as structured evidence and exposing malformed, duplicate, unknown, and
+  value-mismatched metrics. Dashboard health now rejects relaxed wrapper
+  Markdown drift before gate/report coverage can pass.
+
+- Tightened zlib relaxed strict-smoke direct drift coverage for the existing
+  retained relaxed-wrapper report/gate/Markdown artifacts without adding
+  compatibility scope. The strict validation gate now isolates `ok=false` gate
+  drift, each exact report metric, and each floor metric before relaxed
+  zlib/gzip compatibility coverage can pass.
+
+- Tightened native allocation dashboard health by exposing duplicate report,
+  zero-allocation smoke, budget smoke, and negative smoke identities plus
+  malformed, duplicate, and unknown Markdown rows. Dashboard health now rejects
+  native allocation row drift before allocation balance and smoke coverage can
+  pass.
+
+- Tightened zstd compare dashboard health by exposing duplicate CSV row
+  identities across compare, standard, and block-sweep artifacts. Dashboard
+  health now rejects duplicated zstd-compare CSV identities before aggregate
+  CSV/Markdown drift checks can pass.
+
+- Added direct dashboard strict-smoke drift coverage for zstd compare health.
+  The strict validation gate now exercises missing CSV companions, gate-vs-CSV
+  summary drift, duplicate CSV identities, block-sweep best-row drift, Markdown
+  summary drift, and Markdown detail-row drift so `zstd_compare_failed` cannot
+  hide comparison artifact inconsistencies behind its aggregate fixture.
+
+- Added top-level Zstd dictionary and dictionary-set decode facade helpers for
+  allocator, exact-size, output-limited, append, caller-owned buffer, and decoded
+  size flows. Public `zstd.decodeFrame*` and root `zstdDecodeFrame*` APIs can
+  now round-trip dictionary-compressed frames without callers dropping down to
+  the native-specific decode names.
+
+- Extended the top-level Zstd public decode facade to chunked dictionary and
+  dictionary-set input. Split compressed buffers now have allocator,
+  exact-size, output-limited, append, caller-owned buffer, and decoded-size
+  `zstd.decodeFrameChunks*` / root `zstdDecodeFrameChunks*` helpers matching the
+  contiguous dictionary decode surface.
+
+- Added explicit top-level Zstd concatenated-frame facade aliases for contiguous
+  and chunked decode flows, including dictionary and dictionary-set variants.
+  Public `zstd.decodeConcatenatedFrame*` and root
+  `zstdDecodeConcatenatedFrame*` names now mirror the native concatenated
+  surface without forcing callers to depend on native-specific identifiers.
+
+- Added non-`Native*` Zstd reusable and dictionary facade aliases for public
+  library callers. `zstd.FrameEncoder`, `zstd.FrameDecoder`,
+  `zstd.IncrementalFrameDecoder`, `zstd.Dictionary`, `zstd.DictionarySet`, and
+  top-level train/catalog helpers now expose the same reusable dictionary
+  workflows without requiring applications to name the native-specific types.
+
+- Added public Zstd advanced-encode facade aliases for callers that need
+  `AdvancedFrameOptions` without depending on `encodeNativeFrame*` names.
+  Bound, alloc, append, and caller-owned encode helpers now cover plain,
+  dictionary, and dictionary-set advanced options through `zstd.encodeFrame*`
+  / root `zstdEncodeFrame*` public names.
+
+- Added Brotli stored-stream encoded-size preflight helpers so callers can size
+  exact output buffers before using the caller-owned encode path. The root
+  Brotli stored-stream coverage now checks bound equality, caller-owned encode
+  parity, short-buffer failure, and invalid window/metadata planning errors.
+
+- Added Brotli stored-stream chunked encode helpers for split caller input.
+  Bound, allocator-returning, append, and caller-owned output variants now cover
+  both default and option-bearing stored-stream encodes, with root tests checking
+  round-trip decode, byte parity across alloc/append/into, and short-buffer
+  failure.
+
+- Added a reusable Brotli `StoredStreamEncoder` facade. It exposes alloc,
+  scratch, append, caller-owned, and chunked encode flows while reusing internal
+  scratch between calls, and root tests verify parity against the top-level
+  stored-stream helpers for default and option-bearing encodes.
+
+- Added append-style stored encode helpers for raw deflate, zlib, zlib preset
+  dictionaries, gzip, and metadata-rich gzip headers. The root stored-wrapper
+  smoke now verifies prefix preservation, byte parity with allocator-returning
+  encoders, and decode round trips for each wrapper.
+
+- Added split-input stored encode helpers for raw deflate, zlib, zlib preset
+  dictionaries, gzip, and metadata-rich gzip headers. Chunked bound, caller-owned,
+  allocator-returning, and append helpers now match contiguous stored output
+  while updating zlib Adler-32 and gzip CRC/ISIZE across caller chunks.
+
+- Added a reusable raw-deflate `RawDeflateEncoder` stored facade. It exposes
+  allocator-returning, scratch, append, caller-owned, and chunked stored encode
+  flows while reusing internal scratch, with root coverage verifying byte parity
+  against top-level stored helpers and raw-deflate decode round trips.
+
+- Added a reusable zlib `ZlibEncoder` stored facade. It exposes
+  allocator-returning, scratch, append, caller-owned, dictionary, and chunked
+  stored encode flows while reusing internal scratch, with root coverage
+  verifying parity against top-level zlib stored helpers and dictionary
+  round trips.
+
+- Added a reusable gzip `GzipEncoder` stored facade. It exposes
+  allocator-returning, scratch, append, caller-owned, header-options, and chunked
+  stored encode flows while reusing internal scratch, with root coverage
+  verifying parity against top-level gzip stored helpers and metadata-rich
+  header round trips.
+
+- Extended `RawDeflateEncoder` beyond stored blocks with fixed, option-bearing
+  fixed, best, and zlib-level raw deflate encode helpers. The reusable facade now
+  exposes alloc, scratch, and append flows for these modes, with root tests
+  checking byte parity against the top-level raw deflate encoders.
+
+- Extended `ZlibEncoder` beyond stored blocks with fixed, option-bearing fixed,
+  best, and zlib-level encode helpers. The reusable facade now exposes alloc,
+  scratch, and append flows for these modes, with root tests checking byte parity
+  against the top-level zlib encoders.
+
+- Extended `ZlibEncoder` with preset-dictionary fixed, best, and zlib-level
+  helpers. The reusable facade now exposes alloc, scratch, and append flows for
+  dictionary modes, with root tests checking byte parity against top-level
+  dictionary encoders and dictionary decode round trips.
+
+- Extended `RawDeflateEncoder` with dynamic-literal and option-bearing dynamic
+  raw deflate helpers. The reusable facade now exposes alloc, scratch, and append
+  flows for dynamic modes, with root tests checking byte parity against top-level
+  dynamic encoders and decode round trips.
+
+- Extended `ZlibEncoder` with dynamic-literal and option-bearing dynamic zlib
+  helpers. The reusable facade now exposes alloc, scratch, and append flows for
+  dynamic modes, with root tests checking byte parity against top-level dynamic
+  zlib encoders and decode round trips.
+
+- Extended `ZlibEncoder` with preset-dictionary dynamic zlib helpers. The
+  reusable facade now exposes alloc, scratch, and append flows for dictionary
+  dynamic mode, with root tests checking byte parity against top-level dynamic
+  dictionary encoders and dictionary decode round trips.
+
+- Extended `GzipEncoder` beyond stored blocks with fixed, option-bearing fixed,
+  best, zlib-level, and metadata-rich header encode helpers. The reusable facade
+  now exposes alloc, scratch, and append flows for these modes, with root tests
+  checking byte parity against the top-level gzip encoders and header variants.
+
+- Extended `GzipEncoder` with dynamic-literal, option-bearing dynamic, and
+  metadata-rich dynamic header encode helpers. The reusable facade now exposes
+  alloc, scratch, and append flows for these modes, with root tests checking byte
+  parity against top-level gzip dynamic encoders and decode round trips.
+
+- Extended `RawDeflateEncoder` with preset-dictionary fixed, best, and zlib-level
+  raw deflate helpers. The reusable facade now exposes alloc, scratch, and
+  append flows for dictionary modes, with root tests checking byte parity against
+  top-level dictionary encoders and dictionary decode round trips.
+
+- Extended `RawDeflateEncoder` with preset-dictionary dynamic raw deflate
+  helpers. The reusable facade now exposes alloc, scratch, and append flows for
+  dictionary dynamic mode, with root tests checking byte parity against top-level
+  dynamic dictionary encoders and dictionary decode round trips.
+
+- Extended `RawDeflateEncoder` with best split and adaptive split raw deflate
+  helpers, including preset-dictionary variants. The reusable facade now exposes
+  alloc, scratch, and append flows for split block-planning modes, with root
+  tests checking byte parity against top-level split encoders, invalid split-plan
+  errors, and decode round trips.
+
+- Extended `ZlibEncoder` with best split and adaptive split zlib helpers,
+  including preset-dictionary variants. The reusable facade now exposes alloc,
+  scratch, and append flows for split block-planning modes, with root tests
+  checking byte parity against top-level split zlib encoders, invalid split-plan
+  errors, and strict/dictionary decode round trips.
+
+- Extended `GzipEncoder` with best split and adaptive split gzip helpers,
+  including metadata-rich header variants. The reusable facade now exposes
+  alloc, scratch, and append flows for split block-planning modes, with root
+  tests checking byte parity against top-level split gzip encoders, invalid
+  split-plan errors, and strict decode round trips.
+
+- Extended `RawDeflateEncoder` with dynamic split raw deflate helpers. The
+  reusable facade now exposes alloc, scratch, and append flows for forced dynamic
+  split block planning, with root tests checking byte parity against the
+  top-level dynamic split encoder, invalid block-length errors, and decode round
+  trips.
+
+- Extended `RawDeflateEncoder` with fixed split raw deflate helpers. The
+  reusable facade now exposes alloc, scratch, and append flows for forced
+  fixed-Huffman split block planning, with root tests checking byte parity
+  against the top-level fixed split encoder, invalid block-length errors, and
+  decode round trips.
+
+- Added zlib/gzip dynamic split encode helpers and reusable encoder facades.
+  Zlib and gzip callers now have alloc, scratch, and append flows for forced
+  dynamic-Huffman split block planning, including gzip metadata-rich header
+  variants, with root tests checking top-level parity, invalid block-length
+  errors, and strict decode round trips.
+
+- Added raw/zlib/gzip fixed split dictionary and wrapper encode helpers plus
+  reusable encoder facades. Raw, zlib, and gzip callers now have alloc, scratch,
+  and append flows for forced fixed-Huffman split block planning, including raw
+  and zlib preset-dictionary variants and gzip metadata-rich headers, with root
+  tests checking top-level parity, invalid block-length errors, and decode round
+  trips.
+
+- Added raw/zlib preset-dictionary dynamic split encode helpers and reusable
+  encoder facades. Raw deflate and zlib callers now have alloc, scratch, and
+  append flows for forced dynamic-Huffman split block planning with preset
+  dictionaries, with root tests checking top-level parity, invalid block-length
+  errors, and dictionary decode round trips.
+
+- Added top-level raw deflate append encode helpers beyond stored blocks. Raw
+  callers now have prefix-preserving append convenience for fixed, best, zlib
+  level, dynamic, split, adaptive split, and preset-dictionary modes, with root
+  tests checking byte parity against allocator-returning encoders, invalid-plan
+  propagation, and decode round trips.
+
+- Added top-level zlib append encode helpers beyond stored blocks. Zlib callers
+  now have prefix-preserving append convenience for fixed, best, zlib level,
+  dynamic, split, adaptive split, and preset-dictionary modes, with root tests
+  checking byte parity against allocator-returning encoders, invalid-plan
+  propagation, and strict/dictionary decode round trips.
+
+- Added top-level gzip append encode helpers beyond stored blocks. Gzip callers
+  now have prefix-preserving append convenience for fixed, best, zlib level,
+  dynamic, split, adaptive split, and metadata-rich header modes, with root tests
+  checking byte parity against allocator-returning encoders, invalid-plan
+  propagation, and strict decode round trips.
+
+- Exposed Brotli minimal static-dictionary introspection through the root module.
+  Library callers can now inspect the currently supported dictionary entry subset
+  and copy-length size-bit mapping without reaching into `br.zig`, with root
+  tests pinning representative identity and transformed entries.

@@ -1,0 +1,300 @@
+#!/usr/bin/env python3
+"""Probe Brotli static-dictionary candidates against Node and Vort."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from typing import Any
+
+sys.dont_write_bytecode = True
+
+ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_CANDIDATES = ROOT / "zig-out" / "vort-br-static-dictionary-candidates.json"
+
+
+def run(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(args, check=check, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+
+def node_compress(payload: bytes, quality: int, lgwin: int) -> bytes:
+    script = (
+        "const z=require('zlib');"
+        "const payload=Buffer.from(process.argv[1], 'hex');"
+        "const quality=Number(process.argv[2]);"
+        "const lgwin=Number(process.argv[3]);"
+        "const out=z.brotliCompressSync(payload,{params:{"
+        "[z.constants.BROTLI_PARAM_QUALITY]:quality,"
+        "[z.constants.BROTLI_PARAM_LGWIN]:lgwin"
+        "}});"
+        "process.stdout.write(out);"
+    )
+    return run(["node", "-e", script, payload.hex(), str(quality), str(lgwin)]).stdout
+
+
+def node_decode(payload: bytes) -> bytes:
+    script = (
+        "const z=require('zlib');"
+        "const payload=Buffer.from(process.argv[1], 'hex');"
+        "process.stdout.write(z.brotliDecompressSync(payload));"
+    )
+    return run(["node", "-e", script, payload.hex()]).stdout
+
+
+def load_candidates(path: Path) -> dict[str, Any]:
+    report = json.loads(path.read_text())
+    if report.get("schema") != "vort.br_static_dictionary_candidate_report":
+        raise AssertionError("unexpected candidate report schema")
+    candidates = report.get("candidates")
+    if not isinstance(candidates, list):
+        raise AssertionError("candidate report candidates must be a list")
+    return report
+
+
+
+
+def size_class(payload_bytes: int, br_bytes: int) -> str:
+    if br_bytes < payload_bytes:
+        return "smaller"
+    if br_bytes == payload_bytes:
+        return "equal"
+    return "larger"
+
+def decode_with_vort(cli: Path, compressed: bytes, expected: bytes, root: Path) -> tuple[bool, str]:
+    with tempfile.TemporaryDirectory(prefix="vort-br-node-probe-") as td:
+        tmp = Path(td)
+        br_path = tmp / "candidate.br"
+        out_path = tmp / "candidate.out"
+        br_path.write_bytes(compressed)
+        result = subprocess.run(
+            [str(cli), "decode-br-file-to", str(br_path), str(out_path), str(len(expected))],
+            cwd=root,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        if result.returncode != 0:
+            return False, result.stdout.decode(errors="replace").splitlines()[0] if result.stdout else "vort decode failed"
+        actual = out_path.read_bytes()
+        if actual != expected:
+            return False, "vort output mismatch"
+        return True, ""
+
+
+def probe_candidates(cli: Path, report: dict[str, Any], start_index: int, limit: int, quality: int, lgwin: int) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    end_index = min(start_index + limit, len(report["candidates"]))
+    candidates = report["candidates"][start_index:end_index]
+    for offset, candidate in enumerate(candidates):
+        index = start_index + offset
+        expected = candidate["transformed_word"].encode()
+        compressed = node_compress(expected, quality, lgwin)
+        decoded_by_node = node_decode(compressed)
+        if decoded_by_node != expected:
+            classification = "node_output_mismatch"
+            vort_ok = False
+            error = "node output mismatch"
+        else:
+            vort_ok, error = decode_with_vort(cli, compressed, expected, ROOT)
+            classification = "vort_accepts_node_frame" if vort_ok else "vort_rejects_node_frame"
+        rows.append(
+            {
+                "index": index,
+                "transform": candidate["transform"],
+                "copy_len": candidate["copy_len"],
+                "word_index": candidate["word_index"],
+                "raw_word": candidate["raw_word"],
+                "candidate_word": candidate["transformed_word"],
+                "transform_kind": candidate["transform_kind"],
+                "quality": quality,
+                "lgwin": lgwin,
+                "payload_bytes": len(expected),
+                "br_bytes": len(compressed),
+                "size_delta_bytes": len(compressed) - len(expected),
+                "size_class": size_class(len(expected), len(compressed)),
+                "br_hex": compressed.hex(),
+                "node_ok": decoded_by_node == expected,
+                "vort_ok": vort_ok,
+                "classification": classification,
+                "error": error,
+            }
+        )
+    return rows
+
+
+def kind_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    kinds = sorted({row["transform_kind"] for row in rows})
+    summary: list[dict[str, Any]] = []
+    for kind in kinds:
+        kind_items = [row for row in rows if row["transform_kind"] == kind]
+        summary.append(
+            {
+                "transform_kind": kind,
+                "probed_count": len(kind_items),
+                "node_decode_successes": sum(1 for row in kind_items if row["node_ok"]),
+                "vort_decode_successes": sum(1 for row in kind_items if row["vort_ok"]),
+                "vort_decode_failures": sum(1 for row in kind_items if not row["vort_ok"]),
+            }
+        )
+    return summary
+
+
+
+
+def size_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for cls in ("smaller", "equal", "larger"):
+        items = [row for row in rows if row["size_class"] == cls]
+        result.append({"size_class": cls, "probed_count": len(items)})
+    return result
+
+
+def size_winner_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    winners = [row for row in rows if row["size_class"] == "smaller"]
+    return sorted(winners, key=lambda row: (row["size_delta_bytes"], row["index"]))
+
+
+def build_report(candidate_report: dict[str, Any], rows: list[dict[str, Any]], start_index: int, limit: int, quality: int, lgwin: int) -> dict[str, Any]:
+    return {
+        "schema": "vort.br_static_dictionary_node_probe",
+        "schema_version": 1,
+        "ok": all(row["node_ok"] for row in rows),
+        "candidate_count": candidate_report["candidate_count"],
+        "candidate_source_mode": candidate_report["source_mode"],
+        "candidate_source_limit": candidate_report["source_limit"],
+        "candidate_source_entry_count": candidate_report["source_entry_count"],
+        "candidate_anchor_raw_word_count": candidate_report["anchor_raw_word_count"],
+        "candidate_upstream_raw_word_count": candidate_report["upstream_raw_word_count"],
+        "candidate_raw_word_count": candidate_report["raw_word_count"],
+        "all_candidates": start_index == 0 and len(rows) == candidate_report["candidate_count"],
+        "start_index": start_index,
+        "limit": limit,
+        "quality": quality,
+        "lgwin": lgwin,
+        "probed_count": len(rows),
+        "node_decode_successes": sum(1 for row in rows if row["node_ok"]),
+        "vort_decode_successes": sum(1 for row in rows if row["vort_ok"]),
+        "vort_decode_failures": sum(1 for row in rows if not row["vort_ok"]),
+        "kind_rows": kind_rows(rows),
+        "size_rows": size_rows(rows),
+        "size_winner_count": sum(1 for row in rows if row["size_class"] == "smaller"),
+        "size_winner_rows": size_winner_rows(rows),
+        "rows": rows,
+    }
+
+
+def write_json(path: Path, report: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+
+
+def write_markdown(path: Path, report: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# Brotli static dictionary Node probe",
+        "",
+        f"- Candidate entries: {report['candidate_count']}",
+        f"- Candidate source mode: {report['candidate_source_mode']}",
+        f"- Candidate source limit: {report['candidate_source_limit']}",
+        f"- Candidate raw words: {report['candidate_raw_word_count']}",
+        f"- Probe start index: {report['start_index']}",
+        f"- Probe limit: {report['limit']}",
+        f"- Probed entries: {report['probed_count']}",
+        f"- Node decode successes: {report['node_decode_successes']}",
+        f"- Vort decode successes: {report['vort_decode_successes']}",
+        f"- Vort decode failures: {report['vort_decode_failures']}",
+        f"- Size winners: {report['size_winner_count']}",
+        "",
+        "## Transform-kind summary",
+        "",
+        "| Transform kind | Probed | Node OK | Vort OK | Vort failures |",
+        "| --- | ---: | ---: | ---: | ---: |",
+    ]
+    for row in report["kind_rows"]:
+        lines.append(
+            f"| `{row['transform_kind']}` | {row['probed_count']} | {row['node_decode_successes']} | {row['vort_decode_successes']} | {row['vort_decode_failures']} |"
+        )
+    lines.extend([
+        "",
+        "## Size summary",
+        "",
+        "| Size class | Probed |",
+        "| --- | ---: |",
+    ])
+    for row in report["size_rows"]:
+        lines.append(f"| `{row['size_class']}` | {row['probed_count']} |")
+    lines.extend([
+        "",
+        "## Size winners",
+        "",
+        "| # | Candidate | Payload bytes | Brotli bytes | Delta | Kind |",
+        "| ---: | --- | ---: | ---: | ---: | --- |",
+    ])
+    for row in report["size_winner_rows"]:
+        lines.append(
+            f"| {row['index']} | `{row['candidate_word']}` | {row['payload_bytes']} | {row['br_bytes']} | {row['size_delta_bytes']} | `{row['transform_kind']}` |"
+        )
+    lines.extend([
+        "",
+        "## Candidate rows",
+        "",
+        "| # | Transform | Copy length | Word index | Candidate | Payload bytes | Brotli bytes | Size class | Classification | Error |",
+        "| ---: | ---: | ---: | ---: | --- | ---: | ---: | --- | --- | --- |",
+    ])
+    for row in report["rows"]:
+        lines.append(
+            f"| {row['index']} | {row['transform']} | {row['copy_len']} | {row['word_index']} | `{row['candidate_word']}` | {row['payload_bytes']} | {row['br_bytes']} | `{row['size_class']}` | `{row['classification']}` | `{row['error']}` |"
+        )
+    path.write_text("\n".join(lines) + "\n")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("cli", type=Path, help="built Vort CLI executable")
+    parser.add_argument("--candidates", type=Path, default=DEFAULT_CANDIDATES)
+    parser.add_argument("--json", type=Path)
+    parser.add_argument("--markdown", type=Path)
+    parser.add_argument("--start-index", type=int, default=0, help="first candidate index to probe")
+    parser.add_argument("--limit", type=int, default=48)
+    parser.add_argument("--all-candidates", action="store_true", help="probe every candidate in the candidate report")
+    parser.add_argument("--quality", type=int, default=5)
+    parser.add_argument("--lgwin", type=int, default=10)
+    parser.add_argument("--require-vort-ok", action="store_true", help="fail if any probed Node frame is not accepted by Vort")
+    parser.add_argument("--require-no-size-winners", action="store_true", help="fail if any probed Node frame is smaller than the candidate payload")
+    args = parser.parse_args()
+
+    candidate_report = load_candidates(args.candidates)
+    if args.start_index < 0:
+        raise SystemExit("--start-index must be non-negative")
+    if args.limit < 0:
+        raise SystemExit("--limit must be non-negative")
+    start_index = 0 if args.all_candidates else args.start_index
+    limit = candidate_report["candidate_count"] if args.all_candidates else args.limit
+    rows = probe_candidates(args.cli.resolve(), candidate_report, start_index, limit, args.quality, args.lgwin)
+    report = build_report(candidate_report, rows, start_index, limit, args.quality, args.lgwin)
+    if args.json is not None:
+        write_json(args.json, report)
+    if args.markdown is not None:
+        write_markdown(args.markdown, report)
+    status = "ok"
+    returncode = 0
+    if args.require_vort_ok and report["vort_decode_failures"] != 0:
+        status = "fail"
+        returncode = 1
+    if args.require_no_size_winners and report["size_winner_count"] != 0:
+        status = "fail"
+        returncode = 1
+    print(
+        f"br_static_dictionary_node_probe={status} "
+        f"probed={report['probed_count']} vort_ok={report['vort_decode_successes']} "
+        f"vort_fail={report['vort_decode_failures']}"
+    )
+    return returncode
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

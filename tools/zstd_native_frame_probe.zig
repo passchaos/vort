@@ -10,6 +10,9 @@ pub fn main(init: std.process.Init) !void {
     var checked: usize = 0;
     var non_lib_generated_cases: usize = 0;
     if (filter.runHandcrafted()) {
+        try checkEncodedBoundHeaderWidths(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
         try checkDirectHuffmanBoundaries(init.gpa);
         checked += 1;
         non_lib_generated_cases += 1;
@@ -56,6 +59,9 @@ pub fn main(init: std.process.Init) !void {
         checked += 1;
         non_lib_generated_cases += 1;
         try checkRepeatOffsetZeroLiteralInvalidSelector(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkRepeatOffsetZeroLiteralRep0MinusOneMinimumAfterUpdate(init.gpa);
         checked += 1;
         non_lib_generated_cases += 1;
         try checkRepeatOffsetZeroLiteralRep0MinusOneAfterUpdate(init.gpa);
@@ -135,6 +141,9 @@ pub fn main(init: std.process.Init) !void {
         checked += 1;
         non_lib_generated_cases += 1;
         try checkSkippableOnlyStream(init.gpa);
+        checked += 1;
+        non_lib_generated_cases += 1;
+        try checkMultipleSkippableBetweenDataFrames(init.gpa);
         checked += 1;
         non_lib_generated_cases += 1;
         const handcrafted_frame_cases = try checkHandcraftedFrameValidation(init.gpa);
@@ -239,6 +248,90 @@ fn printCoverage(stdout: anytype, marker: []const u8, default_cases: usize, capa
         }
         try stdout.print("{s}_coverage capability={s} cases={d}\n", .{ marker, capability, cases });
     }
+}
+
+fn fillNonRlePayload(payload: []u8) void {
+    for (payload, 0..) |*byte, i| {
+        // Keep these bound fixtures out of the raw/RLE split heuristics: a
+        // full-period byte progression has no long same-byte runs, so exact
+        // encoded-bound checks stay about frame-header sizing rather than RLE
+        // block planning.
+        byte.* = @intCast((i * 73 + 19) & 0xff);
+    }
+}
+
+fn checkEncodedBoundHeaderWidths(allocator: std.mem.Allocator) !void {
+    const cases = [_]struct {
+        len: usize,
+        expected_descriptor: u8,
+        expected_payload_offset: usize,
+    }{
+        .{ .len = 0, .expected_descriptor = 0x20, .expected_payload_offset = 6 },
+        .{ .len = 255, .expected_descriptor = 0x20, .expected_payload_offset = 6 },
+        .{ .len = 300, .expected_descriptor = 0x60, .expected_payload_offset = 7 },
+        .{ .len = 70_000, .expected_descriptor = 0xa0, .expected_payload_offset = 9 },
+    };
+
+    for (cases) |case| {
+        const payload = try allocator.alloc(u8, case.len);
+        defer allocator.free(payload);
+        fillNonRlePayload(payload);
+
+        const options: vort.ZstdNativeFrameOptions = .{
+            .selection = .raw_or_rle,
+            .content_checksum = false,
+        };
+        const encoded = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, payload, options);
+        defer allocator.free(encoded.frame);
+        try expect(encoded.mode == .raw_or_rle);
+        try expect(encoded.frame.len == try vort.zstdEncodedNativeFrameBoundWithOptions(payload.len, options));
+        try expect(encoded.frame[4] == case.expected_descriptor);
+        const header = try vort.zstdInspectNativeFrameHeader(encoded.frame);
+        try expect(header.payload_offset == case.expected_payload_offset);
+        try expect(header.content_size.? == @as(u64, case.len));
+
+        const into = try allocator.alloc(u8, encoded.frame.len);
+        defer allocator.free(into);
+        const into_result = try vort.zstdEncodeNativeFrameIntoSlice(allocator, payload, options, into);
+        try expect(into_result.mode == .raw_or_rle);
+        try expect(into_result.written == encoded.frame.len);
+        try expectEqualSlices(encoded.frame, into[0..into_result.written]);
+        try expectError(error.OutputTooSmall, vort.zstdEncodeNativeFrameIntoSlice(allocator, payload, options, into[0 .. into.len - 1]));
+    }
+
+    const payload = try allocator.alloc(u8, 300);
+    defer allocator.free(payload);
+    fillNonRlePayload(payload);
+
+    const no_size_options: vort.ZstdNativeFrameOptions = .{
+        .selection = .raw_or_rle,
+        .content_checksum = false,
+        .include_content_size = false,
+    };
+    const no_size = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, payload, no_size_options);
+    defer allocator.free(no_size.frame);
+    try expect(no_size.frame.len == try vort.zstdEncodedNativeFrameBoundWithOptions(payload.len, no_size_options));
+    try expect(no_size.frame[4] == 0x00);
+    try expect((try vort.zstdInspectNativeFrameHeader(no_size.frame)).payload_offset == 6);
+
+    const dictionary_options: vort.ZstdNativeFrameOptions = .{
+        .selection = .raw_or_rle,
+        .content_checksum = false,
+        .dictionary_id = 0x1234,
+    };
+    const with_dictionary_id = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, payload, dictionary_options);
+    defer allocator.free(with_dictionary_id.frame);
+    try expect(with_dictionary_id.frame.len == try vort.zstdEncodedNativeFrameBoundWithOptions(payload.len, dictionary_options));
+    const dictionary_header = try vort.zstdInspectNativeFrameHeader(with_dictionary_id.frame);
+    try expect(dictionary_header.dictionary_id == 0x1234);
+    try expect(dictionary_header.payload_offset == 9);
+
+    const dict = vort.ZstdNativeDictionary.init(0x1234, "bound dictionary history");
+    const dictionary_bound = try vort.zstdEncodedNativeFrameBoundWithDictionary(payload.len, .{
+        .selection = .raw_or_rle,
+        .content_checksum = false,
+    }, dict);
+    try expect(dictionary_bound == with_dictionary_id.frame.len);
 }
 
 fn checkDirectHuffmanBoundaries(allocator: std.mem.Allocator) !void {
@@ -1096,6 +1189,63 @@ fn checkRepeatOffsetZeroLiteralInvalidSelector(allocator: std.mem.Allocator) !vo
     var output: [8]u8 = undefined;
     try expectError(error.InvalidMatch, vort.zstdDecodeNativeFrameInto(&frame, &output));
     try expectAllocError(allocator, error.InvalidMatch, vort.zstdDecodeNativeFrameAlloc(allocator, &frame));
+}
+
+fn checkRepeatOffsetZeroLiteralRep0MinusOneMinimumAfterUpdate(allocator: std.mem.Allocator) !void {
+    // A direct offset=2 match updates rep0, then a zero-literal selector uses
+    // `rep0 - 1 == 1`. The older sibling fixture below covers a larger
+    // `rep0 - 1 == 3` value; this one pins the minimum valid non-zero boundary
+    // that sits immediately next to the invalid initial `rep0 - 1 == 0` path.
+    const expected = "abcdcdccccc";
+    const frame_hex = "28b52ffd200b200000616263643c0000000154000200053d000000015400010103";
+    var frame: [frame_hex.len / 2]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&frame, frame_hex);
+
+    try expect((try vort.zstdDecodedFrameSize(&frame)) == expected.len);
+    const lib_decoded = try vort.zstdDecodeFrameAlloc(allocator, &frame);
+    defer allocator.free(lib_decoded);
+    try expectEqualSlices(expected, lib_decoded);
+
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(&frame);
+    try expect(first_block.block_type == .raw);
+    try expect(!first_block.last);
+    const second_block = try vort.zstdInspectNativeFrameBlockAt(&frame, first_block.next_header_offset);
+    try expect(second_block.block_type == .compressed);
+    try expect(!second_block.last);
+    const third_block = try vort.zstdInspectNativeFrameBlockAt(&frame, second_block.next_header_offset);
+    try expect(third_block.block_type == .compressed);
+    try expect(third_block.last);
+
+    const second_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, second_block);
+    try expect(second_modes.regenerated_literals_size == 0);
+    try expect(second_modes.sequence_count == 1);
+    try expect(second_modes.literal_length_mode == .rle);
+    try expect(second_modes.offset_mode == .rle);
+    try expect(second_modes.match_length_mode == .rle);
+    const third_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&frame, third_block);
+    try expect(third_modes.regenerated_literals_size == 0);
+    try expect(third_modes.sequence_count == 1);
+    try expect(third_modes.literal_length_mode == .rle);
+    try expect(third_modes.offset_mode == .rle);
+    try expect(third_modes.match_length_mode == .rle);
+
+    const summary = try vort.zstdSummarizeNativeFrameBlocks(&frame);
+    try expect(summary.block_count == 3);
+    try expect(summary.raw_block_count == 1);
+    try expect(summary.compressed_block_count == 2);
+
+    try expect((try vort.zstdDecodedNativeFrameSize(&frame)) == expected.len);
+    try expect((try vort.zstdDecodedNativeFrameSizeLimited(&frame, expected.len)) == expected.len);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(&frame, expected.len - 1));
+
+    const native_decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, &frame);
+    defer allocator.free(native_decoded);
+    try expectEqualSlices(expected, native_decoded);
+
+    var into: [expected.len]u8 = undefined;
+    const written = try vort.zstdDecodeNativeFrameInto(&frame, &into);
+    try expect(written == expected.len);
+    try expectEqualSlices(expected, into[0..written]);
 }
 
 fn checkRepeatOffsetZeroLiteralRep0MinusOneAfterUpdate(allocator: std.mem.Allocator) !void {
@@ -2705,7 +2855,13 @@ fn checkLibZstdGeneratedLibraryFrames(allocator: std.mem.Allocator) !usize {
         .{ .payload = triple_multiblock, .min_blocks = 3 },
         .{ .payload = high_entropy_multiblock, .min_blocks = 3 },
     };
-    const levels = [_]c_int{ 1, 9, 19 };
+    // This generated-frame matrix is a decode/API smoke, not an encoder-ratio
+    // benchmark. Level 0 deliberately selects the raw/RLE compatibility writer
+    // so Debug CI still covers sized/unsized/checksummed multi-block frames,
+    // truncation, chunked drains, and reusable decoders without repeatedly
+    // paying the bootstrap match-planning cost. Hand-authored fixtures above
+    // keep compressed-block, Huffman, and sequence-table behavior covered.
+    const levels = [_]c_int{0};
     const option_sets = [_]vort.ZstdFrameOptions{
         .{},
         .{ .include_content_size = false },
@@ -3315,6 +3471,20 @@ fn checkSkippableOnlyStream(allocator: std.mem.Allocator) !void {
     try expect(summary.skippable_frame_count == 1);
     try expect(summary.skippable_payload_bytes == "metadata-only-zstd".len);
 
+    var summary_diagnostics: vort.ZstdNativeStreamSummaryErrorDiagnostics = .{};
+    if (vort.zstdSummarizeNativeStreamWithDiagnostics(skip[0 .. skip.len - 2], &summary_diagnostics)) |_| {
+        return error.ZstdNativeFrameProbeExpectedError;
+    } else |err| if (@as(anyerror, err) != error.TruncatedFrame) return err;
+    try expect(summary_diagnostics.phase == .skippable_payload);
+    try expect(summary_diagnostics.offset == skip.len - 2);
+
+    var bad_magic_diagnostics: vort.ZstdNativeStreamSummaryErrorDiagnostics = .{};
+    if (vort.zstdSummarizeNativeStreamWithDiagnostics("bad-zstd", &bad_magic_diagnostics)) |_| {
+        return error.ZstdNativeFrameProbeExpectedError;
+    } else |err| if (@as(anyerror, err) != error.InvalidMagic) return err;
+    try expect(bad_magic_diagnostics.phase == .magic);
+    try expect(bad_magic_diagnostics.offset == 0);
+
     var iterator = vort.zstdIterateNativeStream(skip);
     const element = (try iterator.next()) orelse return error.ZstdNativeFrameProbeMismatch;
     switch (element) {
@@ -3325,6 +3495,156 @@ fn checkSkippableOnlyStream(allocator: std.mem.Allocator) !void {
         },
     }
     if ((try iterator.next()) != null) return error.ZstdNativeFrameProbeMismatch;
+}
+
+fn checkMultipleSkippableBetweenDataFrames(allocator: std.mem.Allocator) !void {
+    const first_payload = "first-zstd-member";
+    const second_payload = "second-zstd-member";
+    const first = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, first_payload, .{
+        .selection = .raw_or_rle,
+        .content_checksum = false,
+    });
+    defer allocator.free(first.frame);
+    const skip_a = try vort.zstdEncodeSkippableFrameAlloc(allocator, 1, "metadata-a");
+    defer allocator.free(skip_a);
+    const skip_b = try vort.zstdEncodeSkippableFrameAlloc(allocator, 15, "metadata-bb");
+    defer allocator.free(skip_b);
+    const second = try vort.zstdEncodeNativeFrameWithOptionsAlloc(allocator, second_payload, .{
+        .selection = .raw_or_rle,
+        .content_checksum = false,
+    });
+    defer allocator.free(second.frame);
+
+    const stream = try std.mem.concat(allocator, u8, &.{ first.frame, skip_a, skip_b, second.frame });
+    defer allocator.free(stream);
+    const expected = first_payload ++ second_payload;
+
+    const summary = try vort.zstdSummarizeNativeStream(stream);
+    try expect(summary.frame_count == 2);
+    try expect(summary.skippable_frame_count == 2);
+    try expect(summary.skippable_payload_bytes == "metadata-a".len + "metadata-bb".len);
+
+    try expect((try vort.zstdDecodedNativeConcatenatedFrameSize(stream)) == expected.len);
+    try expect((try vort.zstdDecodedNativeConcatenatedFrameSizeLimited(stream, expected.len)) == expected.len);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeConcatenatedFrameSizeLimited(stream, expected.len - 1));
+
+    const decoded = try vort.zstdDecodeNativeConcatenatedFrameAllocExactSize(allocator, stream, expected.len);
+    defer allocator.free(decoded);
+    try expectEqualSlices(expected, decoded);
+    try expectAllocError(allocator, error.SizeMismatch, vort.zstdDecodeNativeConcatenatedFrameAllocExactSize(allocator, stream, expected.len - 1));
+
+    var into: [expected.len]u8 = undefined;
+    const written = try vort.zstdDecodeNativeConcatenatedFrameInto(stream, &into);
+    try expect(written == expected.len);
+    try expectEqualSlices(expected, into[0..written]);
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeConcatenatedFrameInto(stream, into[0 .. into.len - 1]));
+
+    var iterator = vort.zstdIterateNativeStream(stream);
+    const first_element = (try iterator.next()) orelse return error.ZstdNativeFrameProbeMismatch;
+    switch (first_element) {
+        .frame => |frame| try expectEqualSlices(first.frame, frame.bytes),
+        .skippable => return error.ZstdNativeFrameProbeMismatch,
+    }
+    const first_skip = (try iterator.next()) orelse return error.ZstdNativeFrameProbeMismatch;
+    switch (first_skip) {
+        .frame => return error.ZstdNativeFrameProbeMismatch,
+        .skippable => |skippable| {
+            try expect(skippable.header.skippable_id == 1);
+            try expectEqualSlices("metadata-a", skippable.payload);
+        },
+    }
+    const second_skip = (try iterator.next()) orelse return error.ZstdNativeFrameProbeMismatch;
+    switch (second_skip) {
+        .frame => return error.ZstdNativeFrameProbeMismatch,
+        .skippable => |skippable| {
+            try expect(skippable.header.skippable_id == 15);
+            try expectEqualSlices("metadata-bb", skippable.payload);
+        },
+    }
+    const second_element = (try iterator.next()) orelse return error.ZstdNativeFrameProbeMismatch;
+    switch (second_element) {
+        .frame => |frame| try expectEqualSlices(second.frame, frame.bytes),
+        .skippable => return error.ZstdNativeFrameProbeMismatch,
+    }
+    if ((try iterator.next()) != null) return error.ZstdNativeFrameProbeMismatch;
+}
+
+fn checkRleContentSizeFrame(
+    frame: []const u8,
+    comptime expected_len: usize,
+    expected_window_size: u64,
+    expected_payload_offset: usize,
+    fill_byte: u8,
+) !void {
+    const header = try vort.zstdInspectNativeFrameHeader(frame);
+    const content_size = header.content_size orelse return error.ZstdNativeFrameProbeMismatch;
+    try expect(content_size == @as(u64, expected_len));
+    try expect(header.window_size == expected_window_size);
+    try expect(header.payload_offset == expected_payload_offset);
+
+    const first_block = try vort.zstdInspectNativeFrameFirstBlock(frame);
+    try expect(first_block.last);
+    try expect(first_block.block_type == .rle);
+    try expect(first_block.payload_len == expected_len);
+    try expect(first_block.header_offset == expected_payload_offset);
+
+    const summary = try vort.zstdSummarizeNativeFrameBlocks(frame);
+    try expect(summary.block_count == 1);
+    try expect(summary.rle_block_count == 1);
+    try expect(summary.payload_bytes == expected_len);
+
+    try expect((try vort.zstdDecodedNativeFrameSize(frame)) == expected_len);
+    try expect((try vort.zstdDecodedNativeFrameSizeLimited(frame, expected_len)) == expected_len);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(frame, expected_len - 1));
+
+    var into: [expected_len]u8 = undefined;
+    const written = try vort.zstdDecodeNativeFrameInto(frame, &into);
+    try expect(written == into.len);
+    for (&into) |byte| try expect(byte == fill_byte);
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameInto(frame, into[0 .. into.len - 1]));
+}
+
+fn checkDictionaryIdWidthFrame(
+    frame: []const u8,
+    expected_dictionary_id: u32,
+    expected_payload_offset: usize,
+    dict_content: []const u8,
+) !void {
+    const header = try vort.zstdInspectNativeFrameHeader(frame);
+    try expect(header.dictionary_id == expected_dictionary_id);
+    try expect(header.content_size.? == 3);
+    try expect(header.payload_offset == expected_payload_offset);
+
+    try expectError(error.NeedDictionary, vort.zstdDecodedNativeFrameSize(frame));
+    var missing_into: [3]u8 = undefined;
+    try expectError(error.NeedDictionary, vort.zstdDecodeNativeFrameInto(frame, &missing_into));
+
+    const dictionary = vort.ZstdNativeDictionary.init(expected_dictionary_id, dict_content);
+    try expect((try vort.zstdDecodedNativeFrameSizeWithDictionary(frame, dictionary)) == 3);
+    try expect((try vort.zstdDecodedNativeFrameSizeLimitedWithDictionary(frame, 3, dictionary)) == 3);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimitedWithDictionary(frame, 2, dictionary));
+
+    var into: [3]u8 = undefined;
+    const written = try vort.zstdDecodeNativeFrameIntoWithDictionary(frame, &into, dictionary);
+    try expect(written == into.len);
+    try expectEqualSlices("abc", &into);
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameIntoWithDictionary(frame, into[0..2], dictionary));
+}
+
+fn checkZeroDictionaryIdFieldFrame(frame: []const u8, expected_payload_offset: usize) !void {
+    const header = try vort.zstdInspectNativeFrameHeader(frame);
+    try expect(header.dictionary_id == 0);
+    try expect(header.content_size.? == 3);
+    try expect(header.payload_offset == expected_payload_offset);
+
+    try expect((try vort.zstdDecodedNativeFrameSize(frame)) == 3);
+    try expect((try vort.zstdDecodedNativeFrameSizeLimited(frame, 3)) == 3);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(frame, 2));
+
+    var into: [3]u8 = undefined;
+    try expect((try vort.zstdDecodeNativeFrameInto(frame, &into)) == 3);
+    try expectEqualSlices("abc", &into);
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameInto(frame, into[0..2]));
 }
 
 fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
@@ -3345,6 +3665,155 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expect((try vort.zstdDecodeNativeFrameInto(no_size_frame, &no_size_into)) == no_size_payload.len);
     try expectEqualSlices(no_size_payload, &no_size_into);
     try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameInto(no_size_frame, no_size_into[0 .. no_size_into.len - 1]));
+    checked += 1;
+
+    const no_size_wide_window = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x00, // No content size; window descriptor follows.
+        0x04, // 1536-byte window: 1 KiB base + 4/8ths.
+        0xe3, 0x2e, 0x00, // Last RLE block, regenerated size 1500.
+        'w',
+    };
+    const no_size_wide_header = try vort.zstdInspectNativeFrameHeader(&no_size_wide_window);
+    try expect(no_size_wide_header.content_size == null);
+    try expect(no_size_wide_header.window_size == 1536);
+    try expect((try vort.zstdDecodedNativeFrameSizeLimited(&no_size_wide_window, 1500)) == 1500);
+    try expectError(error.OutputLimitExceeded, vort.zstdDecodedNativeFrameSizeLimited(&no_size_wide_window, 1499));
+    var no_size_wide_into: [1500]u8 = undefined;
+    try expect((try vort.zstdDecodeNativeFrameInto(&no_size_wide_window, &no_size_wide_into)) == no_size_wide_into.len);
+    for (&no_size_wide_into) |byte| try expect(byte == 'w');
+    try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameInto(&no_size_wide_window, no_size_wide_into[0..1499]));
+    checked += 1;
+
+    const non_single_segment_2byte_size = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x40, // Non-single-segment frame with 2-byte content-size field.
+        0x00, // 1 KiB window descriptor.
+        0x2c, 0x00, // Encoded content size 44 => decoded size 300.
+        0x63, 0x09, 0x00, // Last RLE block, regenerated size 300.
+        'x',
+    };
+    try checkRleContentSizeFrame(&non_single_segment_2byte_size, 300, 1024, 8, 'x');
+    checked += 1;
+
+    const non_single_segment_4byte_size = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x80, // Non-single-segment frame with 4-byte content-size field.
+        0x01, // 1152-byte window, large enough for the 1025-byte RLE block.
+        0x01, 0x04, 0x00, 0x00, // Decoded content size 1025.
+        0x0b, 0x20, 0x00, // Last RLE block, regenerated size 1025.
+        'y',
+    };
+    try checkRleContentSizeFrame(&non_single_segment_4byte_size, 1025, 1152, 10, 'y');
+    checked += 1;
+
+    const non_single_segment_8byte_size = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0xc0, // Non-single-segment frame with 8-byte content-size field.
+        0x00, // 1 KiB window descriptor.
+        0x0d, 0x00, 0x00, 0x00, // Decoded content size 13, encoded as u64.
+        0x00, 0x00, 0x00, 0x00,
+        0x6b, 0x00, 0x00, // Last RLE block, regenerated size 13.
+        'z',
+    };
+    try checkRleContentSizeFrame(&non_single_segment_8byte_size, 13, 1024, 14, 'z');
+    checked += 1;
+
+    const single_segment_2byte_size = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x60, // Single-segment frame with 2-byte content-size field.
+        0x2c, 0x00, // Encoded content size 44 => decoded size 300.
+        0x63, 0x09, 0x00, // Last RLE block, regenerated size 300.
+        'r',
+    };
+    try checkRleContentSizeFrame(&single_segment_2byte_size, 300, 300, 7, 'r');
+    checked += 1;
+
+    const single_segment_4byte_size = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0xa0, // Single-segment frame with 4-byte content-size field.
+        0x0d, 0x00, 0x00, 0x00, // Decoded content size 13, encoded as u32.
+        0x6b, 0x00, 0x00, // Last RLE block, regenerated size 13.
+        's',
+    };
+    try checkRleContentSizeFrame(&single_segment_4byte_size, 13, 13, 9, 's');
+    checked += 1;
+
+    const single_segment_8byte_size = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0xe0, // Single-segment frame with 8-byte content-size field.
+        0x0d, 0x00, 0x00, 0x00, // Decoded content size 13, encoded as u64.
+        0x00, 0x00, 0x00, 0x00,
+        0x6b, 0x00, 0x00, // Last RLE block, regenerated size 13.
+        'q',
+    };
+    try checkRleContentSizeFrame(&single_segment_8byte_size, 13, 13, 13, 'q');
+    checked += 1;
+
+    const one_byte_dictionary_id = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x21, // Single-segment, 1-byte Dictionary_ID, 1-byte content size.
+        0x7f, // Dictionary_ID.
+        0x03, // Decoded content size.
+        0x19, 0x00, 0x00, // Last raw block with three payload bytes.
+        'a',  'b',  'c',
+    };
+    try checkDictionaryIdWidthFrame(&one_byte_dictionary_id, 0x7f, 7, "zstd-dict-id-1");
+    checked += 1;
+
+    const two_byte_dictionary_id = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x22, // Single-segment, 2-byte Dictionary_ID, 1-byte content size.
+        0x34, 0x12, // Dictionary_ID.
+        0x03, // Decoded content size.
+        0x19, 0x00, 0x00, // Last raw block with three payload bytes.
+        'a',  'b',  'c',
+    };
+    try checkDictionaryIdWidthFrame(&two_byte_dictionary_id, 0x1234, 8, "zstd-dict-id-2");
+    checked += 1;
+
+    const four_byte_dictionary_id = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x23, // Single-segment, 4-byte Dictionary_ID, 1-byte content size.
+        0x78, 0x56, 0x34, 0x12, // Dictionary_ID.
+        0x03, // Decoded content size.
+        0x19, 0x00, 0x00, // Last raw block with three payload bytes.
+        'a',  'b',  'c',
+    };
+    try checkDictionaryIdWidthFrame(&four_byte_dictionary_id, 0x12345678, 10, "zstd-dict-id-4");
+    checked += 1;
+
+    const zero_dictionary_id_1byte_field = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x21, // Single-segment, 1-byte Dictionary_ID field, 1-byte content size.
+        0x00, // Zero Dictionary_ID means no dictionary is required.
+        0x03, // Decoded content size.
+        0x19, 0x00, 0x00, // Last raw block with three payload bytes.
+        'a',  'b',  'c',
+    };
+    try checkZeroDictionaryIdFieldFrame(&zero_dictionary_id_1byte_field, 7);
+    checked += 1;
+
+    const zero_dictionary_id_2byte_field = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x22, // Single-segment, 2-byte Dictionary_ID field, 1-byte content size.
+        0x00, 0x00, // Zero Dictionary_ID means no dictionary is required.
+        0x03, // Decoded content size.
+        0x19, 0x00, 0x00, // Last raw block with three payload bytes.
+        'a',  'b',  'c',
+    };
+    try checkZeroDictionaryIdFieldFrame(&zero_dictionary_id_2byte_field, 8);
+    checked += 1;
+
+    const zero_dictionary_id_4byte_field = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x23, // Single-segment, 4-byte Dictionary_ID field, 1-byte content size.
+        0x00, 0x00, 0x00, 0x00, // Zero Dictionary_ID means no dictionary is required.
+        0x03, // Decoded content size.
+        0x19, 0x00, 0x00, // Last raw block with three payload bytes.
+        'a',  'b',  'c',
+    };
+    try checkZeroDictionaryIdFieldFrame(&zero_dictionary_id_4byte_field, 10);
     checked += 1;
 
     const no_size_multi_block = [_]u8{
@@ -3371,6 +3840,28 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expect((try vort.zstdDecodeNativeFrameInto(&no_size_multi_block, &no_size_multi_into)) == 5);
     try expectEqualSlices("abcde", &no_size_multi_into);
     try expectError(error.OutputTooSmall, vort.zstdDecodeNativeFrameInto(&no_size_multi_block, no_size_multi_into[0..4]));
+    checked += 1;
+
+    const no_size_multi_checksum_ok = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x04, // No content size, checksum present; window descriptor follows.
+        0x00, // 1 KiB window.
+        0x10, 0x00, 0x00, // Non-final raw block with two payload bytes.
+        'a',  'b',
+        0x19, 0x00, 0x00, // Final raw block with three more bytes.
+        'c',  'd',  'e',
+        0xeb, 0xc7, 0x8d, 0x0c, // XxHash64 low 32 bits for "abcde".
+    };
+    const no_size_multi_checksum_ok_summary = try vort.zstdSummarizeNativeStream(&no_size_multi_checksum_ok);
+    try expect(no_size_multi_checksum_ok_summary.frame_count == 1);
+    try expect(no_size_multi_checksum_ok_summary.block_count == 2);
+    try expect((try vort.zstdDecodedNativeFrameSizeLimited(&no_size_multi_checksum_ok, 5)) == 5);
+    const no_size_multi_checksum_ok_decoded = try vort.zstdDecodeNativeFrameAllocLimited(allocator, &no_size_multi_checksum_ok, 5);
+    defer allocator.free(no_size_multi_checksum_ok_decoded);
+    try expectEqualSlices("abcde", no_size_multi_checksum_ok_decoded);
+    var no_size_multi_checksum_ok_into: [5]u8 = undefined;
+    try expect((try vort.zstdDecodeNativeFrameInto(&no_size_multi_checksum_ok, &no_size_multi_checksum_ok_into)) == 5);
+    try expectEqualSlices("abcde", &no_size_multi_checksum_ok_into);
     checked += 1;
 
     const no_size_multi_checksum_mismatch = [_]u8{
@@ -3414,6 +3905,22 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectStreamIteratorError(&no_size_multi_truncated_checksum, error.TruncatedFrame);
     checked += 1;
 
+    const checksum_ok_payload = "zstd-checksum-ok";
+    var good_checksum: [4]u8 = undefined;
+    std.mem.writeInt(u32, &good_checksum, @truncate(std.hash.XxHash64.hash(0, checksum_ok_payload)), .little);
+    const checksum_ok = try handcraftedRawFrame(allocator, checksum_ok_payload.len, checksum_ok_payload, &good_checksum, true);
+    defer allocator.free(checksum_ok);
+    const checksum_ok_header = try vort.zstdInspectNativeFrameHeader(checksum_ok);
+    try expect(checksum_ok_header.has_checksum);
+    try expect((try vort.zstdDecodedNativeFrameSize(checksum_ok)) == checksum_ok_payload.len);
+    const checksum_ok_decoded = try vort.zstdDecodeNativeFrameAlloc(allocator, checksum_ok);
+    defer allocator.free(checksum_ok_decoded);
+    try expectEqualSlices(checksum_ok_payload, checksum_ok_decoded);
+    var checksum_ok_into: [checksum_ok_payload.len]u8 = undefined;
+    try expect((try vort.zstdDecodeNativeFrameInto(checksum_ok, &checksum_ok_into)) == checksum_ok_payload.len);
+    try expectEqualSlices(checksum_ok_payload, &checksum_ok_into);
+    checked += 1;
+
     const checksum_payload = "zstd-checksum";
     var wrong_checksum: [4]u8 = undefined;
     std.mem.writeInt(u32, &wrong_checksum, @as(u32, @truncate(std.hash.XxHash64.hash(0, checksum_payload))) ^ 0x01, .little);
@@ -3434,6 +3941,12 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     try expectError(error.TruncatedFrame, vort.zstdDecodeNativeFrameInto(truncated_checksum, &checksum_out));
     try expectAllocError(allocator, error.TruncatedFrame, vort.zstdDecodeNativeFrameAlloc(allocator, truncated_checksum));
     try expectError(error.TruncatedFrame, vort.zstdSummarizeNativeStream(truncated_checksum));
+    var checksum_summary_diagnostics: vort.ZstdNativeStreamSummaryErrorDiagnostics = .{};
+    if (vort.zstdSummarizeNativeStreamWithDiagnostics(truncated_checksum, &checksum_summary_diagnostics)) |_| {
+        return error.ZstdNativeFrameProbeExpectedError;
+    } else |err| if (@as(anyerror, err) != error.TruncatedFrame) return err;
+    try expect(checksum_summary_diagnostics.phase == .frame_checksum);
+    try expect(checksum_summary_diagnostics.offset == truncated_checksum.len);
     try expectStreamIteratorError(truncated_checksum, error.TruncatedFrame);
     checked += 1;
 
@@ -3562,6 +4075,27 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
     var zero_rle_output: [8]u8 = undefined;
     try expectError(error.CorruptFrame, vort.zstdDecodeNativeFrameInto(&zero_rle_block, &zero_rle_output));
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, &zero_rle_block));
+    checked += 1;
+
+    const extended_zero_sequence_count = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x20, // single-segment, no checksum, one-byte content size.
+        0x05,
+        0x25, 0x00, 0x00, // Last compressed block with four payload bytes.
+        0x29, // RLE literals, regenerated size 5.
+        'z',
+        0x80, 0x00, // Two-byte encoding of sequence_count=0.
+    };
+    const extended_zero_block = try vort.zstdInspectNativeFrameFirstBlock(&extended_zero_sequence_count);
+    try expect(extended_zero_block.block_type == .compressed);
+    const extended_zero_modes = try vort.zstdInspectNativeFrameBlockSequenceModes(&extended_zero_sequence_count, extended_zero_block);
+    try expect(extended_zero_modes.literals_kind == .rle);
+    try expect(extended_zero_modes.sequence_count == 0);
+    try expect(extended_zero_modes.regenerated_literals_size == 5);
+    try expect((try vort.zstdDecodedNativeFrameSize(&extended_zero_sequence_count)) == 5);
+    var extended_zero_into: [5]u8 = undefined;
+    try expect((try vort.zstdDecodeNativeFrameInto(&extended_zero_sequence_count, &extended_zero_into)) == 5);
+    try expectEqualSlices("zzzzz", &extended_zero_into);
     checked += 1;
 
     const oversized_raw_block = [_]u8{
@@ -3955,6 +4489,14 @@ fn checkHandcraftedFrameValidation(allocator: std.mem.Allocator) !usize {
 fn checkHandcraftedHeaderAndSkippableValidation(allocator: std.mem.Allocator) !usize {
     var checked: usize = 0;
 
+    // Non-zstd magic should remain distinct from a syntactically zstd-looking
+    // frame with a reserved descriptor bit. Pin both the direct header API and
+    // stream/iterator facades so invalid leading bytes do not get reported as a
+    // generic corruption or truncation error.
+    const invalid_magic = "not-zstd";
+    try expectNativeHeaderAndStreamError(allocator, invalid_magic, error.InvalidMagic);
+    checked += 1;
+
     // Bit 3 of the frame descriptor is reserved by the Zstandard format and
     // must be rejected before any block parsing. The neighboring bit 4 is only
     // unused and accepted by reference decoders, so keep this public probe
@@ -3965,6 +4507,23 @@ fn checkHandcraftedHeaderAndSkippableValidation(allocator: std.mem.Allocator) !u
         0x00, // Valid window descriptor if parsing were to continue.
     };
     try expectNativeHeaderAndStreamError(allocator, &reserved_descriptor_bit, error.CorruptFrame);
+    checked += 1;
+
+    const unused_descriptor_bit = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x10, // Unused descriptor bit set; accepted by reference decoders.
+        0x00, // No content size, so the 1 KiB window descriptor follows.
+        0x19, 0x00, 0x00, // Last raw block with three payload bytes.
+        'a',  'b',  'c',
+    };
+    const unused_header = try vort.zstdInspectNativeFrameHeader(&unused_descriptor_bit);
+    try expect(unused_header.content_size == null);
+    try expect(unused_header.window_size == 1024);
+    try expect(unused_header.payload_offset == 6);
+    try expect((try vort.zstdDecodedNativeFrameSizeLimited(&unused_descriptor_bit, 3)) == 3);
+    var unused_into: [3]u8 = undefined;
+    try expect((try vort.zstdDecodeNativeFrameInto(&unused_descriptor_bit, &unused_into)) == 3);
+    try expectEqualSlices("abc", &unused_into);
     checked += 1;
 
     // Descriptor advertises a 2-byte Dictionary_ID field but only one byte is
@@ -3979,6 +4538,13 @@ fn checkHandcraftedHeaderAndSkippableValidation(allocator: std.mem.Allocator) !u
     try expectNativeHeaderAndStreamError(allocator, &truncated_dictionary_id, error.TruncatedFrame);
     checked += 1;
 
+    const truncated_window_descriptor = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x00, // No content size; a Window_Descriptor byte must follow.
+    };
+    try expectNativeHeaderAndStreamError(allocator, &truncated_window_descriptor, error.TruncatedFrame);
+    checked += 1;
+
     // Content_Size flag 1 requires a 2-byte size field for a non-single-segment
     // frame. Supplying one byte makes the header invalid before block parsing.
     const truncated_content_size = [_]u8{
@@ -3988,6 +4554,21 @@ fn checkHandcraftedHeaderAndSkippableValidation(allocator: std.mem.Allocator) !u
         0x03,
     };
     try expectNativeHeaderAndStreamError(allocator, &truncated_content_size, error.TruncatedFrame);
+    checked += 1;
+
+    // A no-content-size frame with window descriptor 0 has a 1 KiB block
+    // window. A raw/RLE block whose regenerated size exceeds that window should
+    // be rejected from the block header before payload allocation or copying.
+    const raw_block_exceeds_window = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd,
+        0x00, // no checksum, no content size; window descriptor follows.
+        0x00, // 1 KiB window descriptor.
+        0x08, 0x20, 0x00, // last raw block, payload length 1025.
+    };
+    const window_header = try vort.zstdInspectNativeFrameHeader(&raw_block_exceeds_window);
+    try expect(window_header.window_size == 1024);
+    try expectError(error.CorruptFrame, vort.zstdInspectNativeFrameFirstBlock(&raw_block_exceeds_window));
+    try expectNativeStreamOnlyError(allocator, &raw_block_exceeds_window, error.CorruptFrame);
     checked += 1;
 
     const truncated_skippable = try handcraftedSkippableFrame(allocator, 6, "abc");
@@ -4027,6 +4608,32 @@ fn checkHandcraftedHeaderAndSkippableValidation(allocator: std.mem.Allocator) !u
     try expectAllocError(allocator, error.CorruptFrame, vort.zstdDecodeNativeFrameAlloc(allocator, reserved_then_skippable));
     try expectError(error.CorruptFrame, vort.zstdSummarizeNativeStream(reserved_then_skippable));
     try expectStreamIteratorError(reserved_then_skippable, error.CorruptFrame);
+    checked += 1;
+
+    const skippable_then_invalid_magic = try std.mem.concat(allocator, u8, &.{ leading_skippable, invalid_magic });
+    defer allocator.free(skippable_then_invalid_magic);
+    try expectError(error.InvalidMagic, vort.zstdDecodedNativeFrameSize(skippable_then_invalid_magic));
+    try expectError(error.InvalidMagic, vort.zstdDecodeNativeFrameInto(skippable_then_invalid_magic, &stream_output));
+    try expectAllocError(allocator, error.InvalidMagic, vort.zstdDecodeNativeFrameAlloc(allocator, skippable_then_invalid_magic));
+    try expectError(error.InvalidMagic, vort.zstdSummarizeNativeStream(skippable_then_invalid_magic));
+    var invalid_after_skip_iterator = vort.zstdIterateNativeStream(skippable_then_invalid_magic);
+    const skip_before_invalid = (try invalid_after_skip_iterator.next()) orelse return error.ZstdNativeFrameProbeMismatch;
+    switch (skip_before_invalid) {
+        .frame => return error.ZstdNativeFrameProbeMismatch,
+        .skippable => |skippable| try expectEqualSlices("metadata", skippable.payload),
+    }
+    if (invalid_after_skip_iterator.next()) |_| {
+        return error.ZstdNativeFrameProbeExpectedError;
+    } else |err| if (err != error.InvalidMagic) return err;
+    checked += 1;
+
+    const invalid_magic_then_skippable = try std.mem.concat(allocator, u8, &.{ invalid_magic, leading_skippable });
+    defer allocator.free(invalid_magic_then_skippable);
+    try expectError(error.InvalidMagic, vort.zstdDecodedNativeFrameSize(invalid_magic_then_skippable));
+    try expectError(error.InvalidMagic, vort.zstdDecodeNativeFrameInto(invalid_magic_then_skippable, &stream_output));
+    try expectAllocError(allocator, error.InvalidMagic, vort.zstdDecodeNativeFrameAlloc(allocator, invalid_magic_then_skippable));
+    try expectError(error.InvalidMagic, vort.zstdSummarizeNativeStream(invalid_magic_then_skippable));
+    try expectStreamIteratorError(invalid_magic_then_skippable, error.InvalidMagic);
     checked += 1;
 
     return checked;

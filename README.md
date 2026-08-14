@@ -56,7 +56,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   Vort;
 - raw deflate stored/fixed/dynamic/best encode and stored/fixed/dynamic decode, with zlib/gzip wrappers plus preset-dictionary-aware raw/zlib encode/decode;
 - dependency-free Brotli `br` stored/uncompressed stream encode/decode bootstrap surface with RFC 7932 window bits 10..24 and metadata meta-block skipping;
-- dependency-free Snappy raw block full decode plus greedy match raw/framed encode with reusable encoder state, decoded-size preflight, bounded allocation, masked CRC-32C validation, and skippable framed chunks;
+- dependency-free Snappy raw block full decode plus greedy match raw/framed encode with reusable encoder state, encoded-bound helpers, raw-block and framed-stream summaries, split-input and exact-size decode helpers, decoded-size preflight, bounded allocation, masked CRC-32C validation, and skippable framed chunks;
 - a native `VORT` store frame with skippable frames, concatenated streams, checksum-validated in-memory/serialized frame indexes, frame-index CRC composition, range CRC summaries, caller-owned and batch range decode APIs, and bounded streaming APIs;
 - LZ77 greedy/lazy/optimal parser prototypes, dictionary metadata/training, match-coverage, patch-codec, native dictionary-patch frame, self-contained dictionary streams, native LDM reference frame, and dictionary-/LDM-aware native best-frame prototypes, long-distance match scanner, LDM-aware block planner, CLI smoke surfaces, fuzz corpus harnesses, and benchmark/report entrypoints.
 
@@ -190,6 +190,9 @@ zig build run -- inspect-gzip-deflate-header-file /tmp/vort.gz json
 zig build run -- inspect-gzip-deflate-header-file /tmp/vort-cat.gz json  # first member
 zig build run -- inspect-gzip-deflate-header-file /tmp/vort-cat.gz json 1
 zig build run -- decode-gzip-file /tmp/vort-cat.gz /tmp/vort-gzip-cat.out 11
+zig build run -- encode-raw-best-file-hex README.md default
+zig build run -- encode-zlib-best-file-hex README.md default
+zig build run -- encode-gzip-best-file-hex README.md default
 zig build run -- encode-raw-best-split-hex "abcdefghijklmnopqrstuvwxyz" 7 fast
 zig build run -- encode-raw-dict-best-hex "hello hello hello" "hello " default
 zig build run -- encode-zlib-dict-best-hex "hello hello hello" "hello " default
@@ -217,34 +220,52 @@ zig build run-gzip-diff
 zig build run-python-zlib-diff
 zig build run-python-zlib-diff-dashboard
 zig build run-gzip-cli-diff
+# gzip concatenated decode has explicit aliases as well:
+# decode-gzip-concat-hex / decode-gzip-concat-file
 zig build run-native-codec-probes
 zig build run-native-codec-probes-dashboard
 zig build run-lz4-native-probe
 zig build run-lz4-native-dictionary-probe
+zig build run-lz4-native-summary-cli-probe
+zig build run-lz4-native-summary-dashboard
+zig build run-native-summary-error-dashboard
+zig build run-native-summary-error-negative-smoke
 zig build run-lz4-native-probe -- --path README.md --limit 4096
 zig build run-lz4-native-probe -- --dir docs --max-files 2 --limit 2048
 zig build run -- encode-lz4-native-file README.md /tmp/vort-readme.lz4
+zig build run -- summary-lz4-native-file /tmp/vort-readme.lz4
 zig build run -- decode-lz4-native-file-to /tmp/vort-readme.lz4 /tmp/vort-readme-lz4.out 1048576
 zig build run -- encode-lz4-block-hex 61626361626361626361
+zig build run -- summary-lz4-block-hex 336162630300
 zig build run -- decode-lz4-block-hex 336162630300 10
 zig build run -- encode-lz4-block-prefix-hex 6d6e6f706d6e6f70 6162636465666768696a6b6c6d6e6f70
+zig build run -- summary-lz4-block-prefix-hex 040400 6162636465666768696a6b6c6d6e6f70
 zig build run -- decode-lz4-block-prefix-hex 040400 6162636465666768696a6b6c6d6e6f70 8
 zig build run -- encode-snappy-block-hex 68656c6c6f
 zig build run -- decode-snappy-block-hex 051068656c6c6f 5
+zig build run -- summary-snappy-block-hex 051068656c6c6f
 zig build run -- encode-snappy-block-file README.md /tmp/vort-readme.snappy-block
+zig build run -- summary-snappy-block-file /tmp/vort-readme.snappy-block
 zig build run -- decode-snappy-block-file-to /tmp/vort-readme.snappy-block /tmp/vort-readme-snappy.out 1048576
 zig build run -- encode-snappy-frame-hex 68656c6c6f
 zig build run -- decode-snappy-frame-hex ff060000734e6150705901090000bb1f1c1968656c6c6f 5
+zig build run -- summary-snappy-frame-hex ff060000734e6150705901090000bb1f1c1968656c6c6f
 zig build run -- encode-snappy-frame-file README.md /tmp/vort-readme.sz
+zig build run -- summary-snappy-frame-file /tmp/vort-readme.sz
 zig build run -- decode-snappy-frame-file-to /tmp/vort-readme.sz /tmp/vort-readme-snappy-frame.out 1048576
 zig build run-snappy-block-cli-probe
 zig build run-snappy-report-gate
+# Snappy encoded-bound, summary, split-input, and exact-size helpers are available from the library APIs:
+# snappyEncodedBlockBound / snappySummarizeBlock / snappyDecodedBlockChunksSize / snappyDecodeBlockChunksIntoExactSize and
+# snappyEncodedFrameBound / snappySummarizeFrame / snappyDecodedFrameChunksSize / snappyDecodeFrameChunksIntoExactSize.
 zig build run -- encode-zstd-native-bytes-hex 68656c6c6f auto true true
 zig build run -- encode-zstd-native-file-hex README.md literal_only true true
 zig build run -- encode-zstd-native-file README.md /tmp/vort-readme.zst literal_only true true
 zig build run -- decode-zstd-native-file-to /tmp/vort-readme.zst /tmp/vort-readme.out 1048576
+zig build run -- summary-zstd-native-file /tmp/vort-readme.zst json
 zig build run -- size-zstd-native-hex 28b52ffd240529000068656c6c6fa36d9f88 5
 zig build run-zstd-native-cli-diff
+zig build run-zstd-native-summary-cli-probe
 zig build run-zstd-native-probe
 zig build run-zstd-native-frame-probe
 zig build run-zstd-native-dictionary-probe
@@ -934,6 +955,10 @@ The native LZ4/Zstd APIs are library-first.  CLI commands and probes call the
 same public symbols shown above; applications should use the allocator/append,
 caller-owned slice, reusable scratch, chunked, and incremental decoder APIs
 directly.
+Zstd native encoded-bound helpers now account for the same shortest
+single-segment `Frame_Content_Size` width used by the writer, so callers sizing
+`encode*IntoSlice` buffers do not reserve the old eight-byte content-size worst
+case for small and medium frames.
 
 | Codec | Option / symbol | Default / range | Use when | Tradeoff |
 | --- | --- | --- | --- | --- |
@@ -1020,7 +1045,7 @@ compressed-FSE sequence-table path is covered by
 blocks plus repeated sequence-table reuse, and `run-zstd-native-frame-probe` for
 treeless repeat-Huffman literal reuse, mixed compressed-FSE sequence-table
 layouts (for example OF+ML=FSE with predefined LL), repeat-offset selector variants
-(zero-literal rep1/rep2, positive-literal rep2, invalid `rep0 - 1`, valid cross-block `rep0 - 1` after a direct-offset update plus Repeat_Mode replay, multi-sequence predefined-table state transitions, mixed RLE/predefined sequence modes, and repeated mixed-table modes across blocks, and pure library-level libzstd-generated frame differentials with incremental drains and chunked split-input helpers), and
+(zero-literal rep1/rep2, positive-literal rep2, invalid `rep0 - 1`, valid cross-block `rep0 - 1` including the minimum non-zero boundary after a direct-offset update plus Repeat_Mode replay, multi-sequence predefined-table state transitions, mixed RLE/predefined sequence modes, and repeated mixed-table modes across blocks, and pure library-level libzstd-generated frame differentials with incremental drains and chunked split-input helpers), and
 malformed sequence bitstreams, mixed-table reserved-bit/truncated/short-bitstream paths, and short/corrupt LL/OF/ML compressed-FSE state streams,
 while focused unit tests keep the writer-side ML=FSE construction covered
 without adding the heavier path to the regular native library bench gate.

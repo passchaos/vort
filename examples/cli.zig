@@ -644,6 +644,21 @@ pub fn main(init: std.process.Init) !void {
         else
             try vort.zstdDecodedNativeFrameSize(compressed);
         try stdout.print("zstd_native_compressed_bytes={d} decoded_bytes={d}\n", .{ compressed.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "summary-zstd-native-file")) {
+        const path = args.next() orelse return error.MissingCorpusPath;
+        const output_format = try parseHeaderInspectOutputFormat(args.next());
+        const frame = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(frame);
+        var diagnostics: vort.ZstdNativeStreamSummaryErrorDiagnostics = .{};
+        const summary = vort.zstdSummarizeNativeStreamWithDiagnostics(frame, &diagnostics) catch |err| {
+            if (output_format == .json) {
+                try printNativeSummaryErrorJson(stdout, "vort.zstd_native_stream_summary_error", frame.len, err, .{ .phase = @tagName(diagnostics.phase), .offset = diagnostics.offset });
+                try stdout.flush();
+                std.process.exit(1);
+            }
+            return err;
+        };
+        try printZstdNativeSummary(stdout, frame.len, summary, output_format);
     } else if (std.mem.eql(u8, command, "encode-lz4-native-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -663,6 +678,21 @@ pub fn main(init: std.process.Init) !void {
         else
             try vort.lz4DecodedFrameSize(frame);
         try stdout.print("lz4_native_compressed_bytes={d} decoded_bytes={d}\n", .{ frame.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "summary-lz4-native-file")) {
+        const path = args.next() orelse return error.MissingCorpusPath;
+        const output_format = try parseHeaderInspectOutputFormat(args.next());
+        const frame = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(frame);
+        var diagnostics: vort.Lz4NativeStreamSummaryErrorDiagnostics = .{};
+        const summary = vort.lz4SummarizeNativeStreamWithDiagnostics(frame, &diagnostics) catch |err| {
+            if (output_format == .json) {
+                try printNativeSummaryErrorJson(stdout, "vort.lz4_native_stream_summary_error", frame.len, err, .{ .phase = @tagName(diagnostics.phase), .offset = diagnostics.offset });
+                try stdout.flush();
+                std.process.exit(1);
+            }
+            return err;
+        };
+        try printLz4NativeSummary(stdout, frame.len, summary, output_format);
     } else if (std.mem.eql(u8, command, "decode-lz4-native-file-to")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
@@ -686,6 +716,12 @@ pub fn main(init: std.process.Init) !void {
         else
             try vort.lz4DecodedBlockSize(block);
         try stdout.print("lz4_block_compressed_bytes={d} decoded_bytes={d}\n", .{ block.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "summary-lz4-block-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const block = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(block);
+        const summary = try vort.lz4SummarizeBlock(block);
+        try printLz4BlockSummary(stdout, block.len, summary);
     } else if (std.mem.eql(u8, command, "encode-lz4-block-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const payload = try hexToOwnedBytes(init.gpa, hex);
@@ -717,6 +753,12 @@ pub fn main(init: std.process.Init) !void {
         else
             try vort.snappyDecodedBlockSize(block);
         try stdout.print("snappy_block_compressed_bytes={d} decoded_bytes={d}\n", .{ block.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "summary-snappy-block-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const block = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(block);
+        const summary = try vort.snappySummarizeBlock(block);
+        try printSnappyBlockSummary(stdout, block.len, summary);
     } else if (std.mem.eql(u8, command, "encode-snappy-block-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const payload = try hexToOwnedBytes(init.gpa, hex);
@@ -770,6 +812,12 @@ pub fn main(init: std.process.Init) !void {
         else
             try vort.snappyDecodedBlockSize(block);
         try stdout.print("snappy_block_compressed_bytes={d} decoded_bytes={d}\n", .{ block.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "summary-snappy-block-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const block = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(block);
+        const summary = try vort.snappySummarizeBlock(block);
+        try printSnappyBlockSummary(stdout, block.len, summary);
     } else if (std.mem.eql(u8, command, "size-snappy-frame-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -780,6 +828,12 @@ pub fn main(init: std.process.Init) !void {
         else
             try vort.snappyDecodedFrameSize(frame);
         try stdout.print("snappy_frame_compressed_bytes={d} decoded_bytes={d}\n", .{ frame.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "summary-snappy-frame-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const frame = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(frame);
+        const summary = try vort.snappySummarizeFrame(frame);
+        try printSnappyFrameSummary(stdout, frame.len, summary);
     } else if (std.mem.eql(u8, command, "encode-snappy-frame-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const payload = try hexToOwnedBytes(init.gpa, hex);
@@ -833,6 +887,12 @@ pub fn main(init: std.process.Init) !void {
         else
             try vort.snappyDecodedFrameSize(frame);
         try stdout.print("snappy_frame_compressed_bytes={d} decoded_bytes={d}\n", .{ frame.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "summary-snappy-frame-file")) {
+        const input_path = args.next() orelse return error.MissingCorpusPath;
+        const frame = try std.Io.Dir.cwd().readFileAlloc(init.io, input_path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(frame);
+        const summary = try vort.snappySummarizeFrame(frame);
+        try printSnappyFrameSummary(stdout, frame.len, summary);
     } else if (std.mem.eql(u8, command, "size-lz4-block-prefix-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const prefix_hex = args.next() orelse return error.MissingHexInput;
@@ -846,6 +906,15 @@ pub fn main(init: std.process.Init) !void {
         else
             try vort.lz4DecodedBlockSizeWithPrefix(block, prefix);
         try stdout.print("lz4_block_prefix_compressed_bytes={d} prefix_bytes={d} decoded_bytes={d}\n", .{ block.len, prefix.len, decoded_len });
+    } else if (std.mem.eql(u8, command, "summary-lz4-block-prefix-hex")) {
+        const hex = args.next() orelse return error.MissingHexInput;
+        const prefix_hex = args.next() orelse return error.MissingHexInput;
+        const block = try hexToOwnedBytes(init.gpa, hex);
+        defer init.gpa.free(block);
+        const prefix = try hexToOwnedBytes(init.gpa, prefix_hex);
+        defer init.gpa.free(prefix);
+        const summary = try vort.lz4SummarizeBlockWithPrefix(block, prefix);
+        try printLz4BlockSummary(stdout, block.len, summary);
     } else if (std.mem.eql(u8, command, "encode-lz4-block-prefix-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const prefix_hex = args.next() orelse return error.MissingHexInput;
@@ -873,12 +942,28 @@ pub fn main(init: std.process.Init) !void {
         const written = try vort.lz4DecodeBlockWithPrefixIntoSliceNoAlloc(block, decoded, decoded_len, prefix);
         if (written != decoded_len) return error.SizeMismatch;
         try printDecoded(stdout, "lz4_block_prefix", block.len, decoded);
+    } else if (std.mem.eql(u8, command, "encode-raw-best-file-hex")) {
+        const path = args.next() orelse return error.MissingCorpusPath;
+        const data = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(data);
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeRawBestAlloc(init.gpa, data, options);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-zlib-best-file-hex")) {
         const path = args.next() orelse return error.MissingCorpusPath;
         const data = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
         defer init.gpa.free(data);
         const options = parseCompressionOptions(args.next());
         const encoded = try vort.encodeZlibBestAlloc(init.gpa, data, options);
+        defer init.gpa.free(encoded);
+        try printHex(stdout, encoded);
+    } else if (std.mem.eql(u8, command, "encode-gzip-best-file-hex")) {
+        const path = args.next() orelse return error.MissingCorpusPath;
+        const data = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(128 * 1024 * 1024));
+        defer init.gpa.free(data);
+        const options = parseCompressionOptions(args.next());
+        const encoded = try vort.encodeGzipBestAlloc(init.gpa, data, options);
         defer init.gpa.free(encoded);
         try printHex(stdout, encoded);
     } else if (std.mem.eql(u8, command, "encode-vort-best-file")) {
@@ -1378,7 +1463,7 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(decoded);
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = output_path, .data = decoded });
         try stdout.print("compressed_bytes={d} dictionary_bytes={d} decoded_bytes={d} path={s}\n", .{ compressed.len, dictionary.len, decoded.len, output_path });
-    } else if (std.mem.eql(u8, command, "decode-gzip-file")) {
+    } else if (std.mem.eql(u8, command, "decode-gzip-file") or std.mem.eql(u8, command, "decode-gzip-concat-file")) {
         const input_path = args.next() orelse return error.MissingCorpusPath;
         const output_path = args.next() orelse return error.MissingCorpusPath;
         const max_output_len = try parseOptionalLimit(args.next());
@@ -1497,7 +1582,7 @@ pub fn main(init: std.process.Init) !void {
             try vort.decodeZlibAllocWithDictionary(init.gpa, compressed, dictionary);
         defer init.gpa.free(decoded);
         try printDecoded(stdout, "zlib_dict", compressed.len, decoded);
-    } else if (std.mem.eql(u8, command, "decode-gzip-hex")) {
+    } else if (std.mem.eql(u8, command, "decode-gzip-hex") or std.mem.eql(u8, command, "decode-gzip-concat-hex")) {
         const hex = args.next() orelse return error.MissingHexInput;
         const max_output_len = try parseOptionalLimit(args.next());
         const compressed = try hexToOwnedBytes(init.gpa, hex);
@@ -1576,20 +1661,28 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Preflight dependency-free native-subset Zstandard decoded size
         \\  size-zstd-native-file [path] [max_output]
         \\                              Preflight dependency-free native-subset Zstandard file decoded size
+        \\  summary-zstd-native-file [path] [text|json]
+        \\                              Summarize dependency-free native-subset Zstandard frame/stream blocks
         \\  encode-lz4-native-file <in> <out>
         \\                              Encode file bytes as dependency-free native LZ4 frame
         \\  size-lz4-native-file [path] [max_output]
         \\                              Preflight dependency-free native LZ4 frame decoded size
+        \\  summary-lz4-native-file [path] [text|json]
+        \\                              Summarize dependency-free native LZ4 frame/stream blocks
         \\  decode-lz4-native-file-to <in> <out> [max_output]
         \\                              Decode dependency-free native LZ4 frame to output
         \\  size-lz4-block-hex [hex] [max_output]
         \\                              Preflight LZ4 block decoded size
+        \\  summary-lz4-block-hex [hex]
+        \\                              Summarize LZ4 block literal/match tokens
         \\  encode-lz4-block-hex [hex]
         \\                              Encode LZ4 block
         \\  decode-lz4-block-hex [hex] [max_output]
         \\                              Decode LZ4 block
         \\  size-snappy-block-hex [hex] [max_output]
         \\                              Preflight Snappy raw block decoded size
+        \\  summary-snappy-block-hex [hex]
+        \\                              Summarize Snappy raw block tokens and decoded bytes
         \\  encode-snappy-block-hex [hex]
         \\                              Encode Snappy raw block
         \\  decode-snappy-block-hex [hex] [max_output]
@@ -1600,8 +1693,12 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode Snappy raw block file to output
         \\  size-snappy-block-file [path] [max_output]
         \\                              Preflight Snappy raw block file decoded size
+        \\  summary-snappy-block-file [path]
+        \\                              Summarize Snappy raw block file tokens and decoded bytes
         \\  size-snappy-frame-hex [hex] [max_output]
         \\                              Preflight Snappy framed stream decoded size
+        \\  summary-snappy-frame-hex [hex]
+        \\                              Summarize Snappy framed stream chunks and decoded bytes
         \\  encode-snappy-frame-hex [hex]
         \\                              Encode Snappy framed stream
         \\  decode-snappy-frame-hex [hex] [max_output]
@@ -1612,8 +1709,12 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Decode Snappy framed stream file to output
         \\  size-snappy-frame-file [path] [max_output]
         \\                              Preflight Snappy framed stream file decoded size
+        \\  summary-snappy-frame-file [path]
+        \\                              Summarize Snappy framed stream file chunks and decoded bytes
         \\  size-lz4-block-prefix-hex [hex] [prefix_hex] [max_output]
         \\                              Preflight LZ4 block decoded size with prefix history
+        \\  summary-lz4-block-prefix-hex [hex] [prefix_hex]
+        \\                              Summarize LZ4 block tokens with prefix history
         \\  encode-lz4-block-prefix-hex [hex] [prefix_hex]
         \\                              Encode LZ4 block with prefix history
         \\  decode-lz4-block-prefix-hex [hex] [prefix_hex] [max_output]
@@ -1674,6 +1775,12 @@ fn printHelp(stdout: *std.Io.Writer) !void {
         \\                              Encode raw deflate that may reference preset dictionary history
         \\  encode-zlib-dict-best-hex [text] [dict] [level]
         \\                              Encode a zlib FDICT/DICTID frame requiring a preset dictionary
+        \\  encode-raw-best-file-hex <in> [level]
+        \\                              Encode raw deflate file bytes and print best-block hex
+        \\  encode-zlib-best-file-hex <in> [level]
+        \\                              Encode zlib-compatible file bytes and print best-block hex
+        \\  encode-gzip-best-file-hex <in> [level]
+        \\                              Encode gzip-compatible file bytes and print best-block hex
         \\  encode-vort-best-file <in> <out>
         \\                              Encode one native Vort best frame
         \\  encode-raw-fixed-file <in> <out> [level]
@@ -1757,6 +1864,153 @@ fn printDecoded(stdout: *std.Io.Writer, label: []const u8, compressed_len: usize
         vort.crc32(decoded),
         decoded,
     });
+}
+
+fn printSnappyBlockSummary(stdout: *std.Io.Writer, compressed_len: usize, summary: vort.SnappyBlockSummary) !void {
+    try stdout.print(
+        "snappy_block_compressed_bytes={d} decoded_bytes={d} literals={d} literal_bytes={d} copies={d} copy_bytes={d} copy1={d} copy2={d} copy4={d}\n",
+        .{
+            compressed_len,
+            summary.decoded_bytes,
+            summary.literal_count,
+            summary.literal_bytes,
+            summary.copy_count,
+            summary.copy_bytes,
+            summary.copy1_count,
+            summary.copy2_count,
+            summary.copy4_count,
+        },
+    );
+}
+
+fn printSnappyFrameSummary(stdout: *std.Io.Writer, compressed_len: usize, summary: vort.SnappyFrameSummary) !void {
+    try stdout.print(
+        "snappy_frame_compressed_bytes={d} decoded_bytes={d} stream_identifiers={d} compressed_chunks={d} uncompressed_chunks={d} skippable_chunks={d} skippable_payload_bytes={d} compressed_payload_bytes={d} uncompressed_payload_bytes={d}\n",
+        .{
+            compressed_len,
+            summary.decoded_bytes,
+            summary.stream_identifier_count,
+            summary.compressed_chunk_count,
+            summary.uncompressed_chunk_count,
+            summary.skippable_chunk_count,
+            summary.skippable_payload_bytes,
+            summary.compressed_payload_bytes,
+            summary.uncompressed_payload_bytes,
+        },
+    );
+}
+
+const NativeSummaryErrorContext = struct {
+    phase: []const u8,
+    offset: usize,
+};
+
+fn printNativeSummaryErrorJson(stdout: *std.Io.Writer, schema: []const u8, compressed_len: usize, err: anyerror, context: NativeSummaryErrorContext) !void {
+    try stdout.print("{{\"schema\":\"{s}\",\"schema_version\":1,\"ok\":false,\"compressed_bytes\":{d},\"error\":", .{ schema, compressed_len });
+    try std.json.Stringify.value(@errorName(err), .{}, stdout);
+    try stdout.print(",\"phase\":", .{});
+    try std.json.Stringify.value(context.phase, .{}, stdout);
+    try stdout.print(",\"offset\":{d}}}\n", .{context.offset});
+}
+
+fn printLz4NativeSummary(stdout: *std.Io.Writer, compressed_len: usize, summary: vort.Lz4NativeStreamSummary, output_format: HeaderInspectOutputFormat) !void {
+    if (output_format == .json) return printLz4NativeSummaryJson(stdout, compressed_len, summary);
+    try stdout.print(
+        "lz4_native_compressed_bytes={d} frames={d} skippable_frames={d} content_size_frames={d} checksum_frames={d} block_checksum_frames={d} dictionary_id_frames={d} declared_content_bytes={d} blocks={d} compressed_blocks={d} raw_blocks={d} payload_bytes={d} skippable_payload_bytes={d}\n",
+        .{
+            compressed_len,
+            summary.frame_count,
+            summary.skippable_frame_count,
+            summary.content_size_frame_count,
+            summary.checksum_frame_count,
+            summary.block_checksum_frame_count,
+            summary.dictionary_id_frame_count,
+            summary.declared_content_bytes,
+            summary.block_count,
+            summary.compressed_block_count,
+            summary.raw_block_count,
+            summary.payload_bytes,
+            summary.skippable_payload_bytes,
+        },
+    );
+}
+
+fn printLz4NativeSummaryJson(stdout: *std.Io.Writer, compressed_len: usize, summary: vort.Lz4NativeStreamSummary) !void {
+    try stdout.print(
+        "{{\"schema\":\"vort.lz4_native_stream_summary\",\"schema_version\":1,\"compressed_bytes\":{d},\"frame_count\":{d},\"skippable_frame_count\":{d},\"content_size_frame_count\":{d},\"checksum_frame_count\":{d},\"block_checksum_frame_count\":{d},\"dictionary_id_frame_count\":{d},\"declared_content_bytes\":{d},\"block_count\":{d},\"compressed_block_count\":{d},\"raw_block_count\":{d},\"payload_bytes\":{d},\"skippable_payload_bytes\":{d}}}\n",
+        .{
+            compressed_len,
+            summary.frame_count,
+            summary.skippable_frame_count,
+            summary.content_size_frame_count,
+            summary.checksum_frame_count,
+            summary.block_checksum_frame_count,
+            summary.dictionary_id_frame_count,
+            summary.declared_content_bytes,
+            summary.block_count,
+            summary.compressed_block_count,
+            summary.raw_block_count,
+            summary.payload_bytes,
+            summary.skippable_payload_bytes,
+        },
+    );
+}
+
+fn printZstdNativeSummary(stdout: *std.Io.Writer, compressed_len: usize, summary: vort.ZstdNativeStreamSummary, output_format: HeaderInspectOutputFormat) !void {
+    if (output_format == .json) return printZstdNativeSummaryJson(stdout, compressed_len, summary);
+    try stdout.print(
+        "zstd_native_compressed_bytes={d} frames={d} skippable_frames={d} checksum_frames={d} dictionary_id_frames={d} content_size_frames={d} declared_content_bytes={d} blocks={d} compressed_blocks={d} rle_blocks={d} raw_blocks={d} payload_bytes={d} skippable_payload_bytes={d}\n",
+        .{
+            compressed_len,
+            summary.frame_count,
+            summary.skippable_frame_count,
+            summary.checksum_frame_count,
+            summary.dictionary_id_frame_count,
+            summary.content_size_frame_count,
+            summary.declared_content_bytes,
+            summary.block_count,
+            summary.compressed_block_count,
+            summary.rle_block_count,
+            summary.raw_block_count,
+            summary.payload_bytes,
+            summary.skippable_payload_bytes,
+        },
+    );
+}
+
+fn printZstdNativeSummaryJson(stdout: *std.Io.Writer, compressed_len: usize, summary: vort.ZstdNativeStreamSummary) !void {
+    try stdout.print(
+        "{{\"schema\":\"vort.zstd_native_stream_summary\",\"schema_version\":1,\"compressed_bytes\":{d},\"frame_count\":{d},\"skippable_frame_count\":{d},\"checksum_frame_count\":{d},\"dictionary_id_frame_count\":{d},\"content_size_frame_count\":{d},\"declared_content_bytes\":{d},\"block_count\":{d},\"compressed_block_count\":{d},\"rle_block_count\":{d},\"raw_block_count\":{d},\"payload_bytes\":{d},\"skippable_payload_bytes\":{d}}}\n",
+        .{
+            compressed_len,
+            summary.frame_count,
+            summary.skippable_frame_count,
+            summary.checksum_frame_count,
+            summary.dictionary_id_frame_count,
+            summary.content_size_frame_count,
+            summary.declared_content_bytes,
+            summary.block_count,
+            summary.compressed_block_count,
+            summary.rle_block_count,
+            summary.raw_block_count,
+            summary.payload_bytes,
+            summary.skippable_payload_bytes,
+        },
+    );
+}
+
+fn printLz4BlockSummary(stdout: *std.Io.Writer, compressed_len: usize, summary: vort.Lz4BlockSummary) !void {
+    try stdout.print(
+        "lz4_block_compressed_bytes={d} decoded_bytes={d} literals={d} literal_bytes={d} matches={d} match_bytes={d}\n",
+        .{
+            compressed_len,
+            summary.decoded_bytes,
+            summary.literal_count,
+            summary.literal_bytes,
+            summary.match_count,
+            summary.match_bytes,
+        },
+    );
 }
 
 fn printHex(stdout: *std.Io.Writer, bytes: []const u8) !void {

@@ -2241,6 +2241,654 @@ def main() -> int:
             node_compress((b"Lorem ipsum dolor sit amet, consectetur adipiscing elit. " * 5)[:256], quality=5, lgwin=10),
             (b"Lorem ipsum dolor sit amet, consectetur adipiscing elit. " * 5)[:256],
         ),
+        "node-static-dictionary-about-info-q5-lgwin10": (
+            node_compress(b"about information", quality=5, lgwin=10),
+            b"about information",
+        ),
+        "node-static-dictionary-info-about-q5-lgwin10": (
+            node_compress(b"information about", quality=5, lgwin=10),
+            b"information about",
+        ),
+        "node-static-dictionary-dictionary-about-q5-lgwin10": (
+            node_compress(b"dictionary about", quality=5, lgwin=10),
+            b"dictionary about",
+        ),
+        "node-static-dictionary-press-stem-q5-lgwin10": (
+            node_compress(b"compression about", quality=5, lgwin=10),
+            b"compression about",
+        ),
+        "node-static-dictionary-release-q5-lgwin10": (
+            node_compress(b"press release", quality=5, lgwin=10),
+            b"press release",
+        ),
+        "node-static-dictionary-internet-q5-lgwin10": (
+            node_compress(b"internet", quality=5, lgwin=10),
+            b"internet",
+        ),
+        "node-static-dictionary-language-q5-lgwin10": (
+            node_compress(b"language", quality=5, lgwin=10),
+            b"language",
+        ),
+        "node-static-dictionary-available-q5-lgwin10": (
+            node_compress(b"available", quality=5, lgwin=10),
+            b"available",
+        ),
+        "node-static-dictionary-important-q5-lgwin10": (
+            node_compress(b"important", quality=5, lgwin=10),
+            b"important",
+        ),
+        "node-static-dictionary-different-q5-lgwin10": (
+            node_compress(b"different", quality=5, lgwin=10),
+            b"different",
+        ),
+        "node-static-dictionary-government-q5-lgwin10": (
+            node_compress(b"government", quality=5, lgwin=10),
+            b"government",
+        ),
+        "node-static-dictionary-system-q5-lgwin10": (
+            node_compress(b"system", quality=5, lgwin=10),
+            b"system",
+        ),
+        "node-static-dictionary-number-q5-lgwin10": (
+            node_compress(b"number", quality=5, lgwin=10),
+            b"number",
+        ),
+        "node-static-dictionary-public-q5-lgwin10": (
+            node_compress(b"public", quality=5, lgwin=10),
+            b"public",
+        ),
+        "node-static-dictionary-history-q5-lgwin10": (
+            node_compress(b"history", quality=5, lgwin=10),
+            b"history",
+        ),
+        "node-static-dictionary-english-q5-lgwin10": (
+            node_compress(b"English", quality=5, lgwin=10),
+            b"English",
+        ),
+        "node-static-dictionary-lowercase-english-q5-lgwin10": (
+            node_compress(b"english", quality=5, lgwin=10),
+            b"english",
+        ),
+        "node-static-dictionary-through-q5-lgwin10": (
+            node_compress(b"through", quality=5, lgwin=10),
+            b"through",
+        ),
+        "node-static-dictionary-uppercase-through-q5-lgwin10": (
+            node_compress(b"Through", quality=5, lgwin=10),
+            b"Through",
+        ),
+        "node-static-dictionary-another-q5-lgwin10": (
+            node_compress(b"another", quality=5, lgwin=10),
+            b"another",
+        ),
+        "node-static-dictionary-uppercase-another-q5-lgwin10": (
+            node_compress(b"Another", quality=5, lgwin=10),
+            b"Another",
+        ),
+        "node-static-dictionary-because-q5-lgwin10": (
+            node_compress(b"because", quality=5, lgwin=10),
+            b"because",
+        ),
+        "node-static-dictionary-between-q5-lgwin10": (
+            node_compress(b"between", quality=5, lgwin=10),
+            b"between",
+        ),
+        "node-static-dictionary-example-q5-lgwin10": (
+            node_compress(b"example", quality=5, lgwin=10),
+            b"example",
+        ),
+        "node-static-dictionary-however-q5-lgwin10": (
+            node_compress(b"however", quality=5, lgwin=10),
+            b"however",
+        ),
+        "node-static-dictionary-english-space-q5-lgwin10": (
+            node_compress(b"english ", quality=5, lgwin=10),
+            b"english ",
+        ),
+        "node-static-dictionary-leading-space-english-q5-lgwin10": (
+            node_compress(b" english", quality=5, lgwin=10),
+            b" english",
+        ),
+        "node-static-dictionary-english-dot-q5-lgwin10": (
+            node_compress(b"english.", quality=5, lgwin=10),
+            b"english.",
+        ),
+        "node-static-dictionary-one-and-q5-lgwin10": (
+            node_compress(b"one and", quality=5, lgwin=10),
+            b"one and",
+        ),
+        "node-static-dictionary-leading-space-one-and-q5-lgwin10": (
+            node_compress(b" one and", quality=5, lgwin=10),
+            b" one and",
+        ),
+        "node-static-dictionary-leading-space-language-q5-lgwin10": (
+            node_compress(b" language", quality=5, lgwin=10),
+            b" language",
+        ),
+        "node-static-dictionary-uppercase-language-q5-lgwin10": (
+            node_compress(b"Language", quality=5, lgwin=10),
+            b"Language",
+        ),
+        "node-static-dictionary-america-q5-lgwin10": (
+            node_compress(b"America", quality=5, lgwin=10),
+            b"America",
+        ),
+        "node-static-dictionary-uppercase-history-dot-q5-lgwin10": (
+            node_compress(b"History.", quality=5, lgwin=10),
+            b"History.",
+        ),
+        "node-static-dictionary-uppercase-examples-q5-lgwin10": (
+            node_compress(b"Examples", quality=5, lgwin=10),
+            b"Examples",
+        ),
+        "node-static-dictionary-uppercase-government-q5-lgwin10": (
+            node_compress(b"Government", quality=5, lgwin=10),
+            b"Government",
+        ),
+        "node-static-dictionary-expressio-q5-lgwin10": (
+            node_compress(b"expressio", quality=5, lgwin=10),
+            b"expressio",
+        ),
+        "node-static-dictionary-leading-space-uppercase-information-q5-lgwin10": (
+            node_compress(b" Information", quality=5, lgwin=10),
+            b" Information",
+        ),
+        "node-static-dictionary-uppercase-in-order-to-q5-lgwin10": (
+            node_compress(b"In order to", quality=5, lgwin=10),
+            b"In order to",
+        ),
+        "node-static-dictionary-uppercase-one-of-the-q5-lgwin10": (
+            node_compress(b"One of the ", quality=5, lgwin=10),
+            b"One of the ",
+        ),
+        "node-static-dictionary-large-number-of-no-space-q5-lgwin10": (
+            node_compress(b"large number of", quality=5, lgwin=10),
+            b"large number of",
+        ),
+        "node-static-dictionary-leading-space-numbers-q5-lgwin10": (
+            node_compress(b" numbers", quality=5, lgwin=10),
+            b" numbers",
+        ),
+        "node-static-dictionary-leading-space-numbers-space-q5-lgwin10": (
+            node_compress(b" numbers ", quality=5, lgwin=10),
+            b" numbers ",
+        ),
+        "node-static-dictionary-two-leading-spaces-numbers-q5-lgwin10": (
+            node_compress(b"  numbers", quality=5, lgwin=10),
+            b"  numbers",
+        ),
+        "node-static-dictionary-leading-space-numbers-dot-q5-lgwin10": (
+            node_compress(b" numbers.", quality=5, lgwin=10),
+            b" numbers.",
+        ),
+        "node-static-dictionary-leading-space-large-number-of-q5-lgwin10": (
+            node_compress(b" large number of ", quality=5, lgwin=10),
+            b" large number of ",
+        ),
+        "node-static-dictionary-leading-space-information-q5-lgwin10": (
+            node_compress(b" information", quality=5, lgwin=10),
+            b" information",
+        ),
+        "node-static-dictionary-two-leading-spaces-information-q5-lgwin10": (
+            node_compress(b"  Information", quality=5, lgwin=10),
+            b"  Information",
+        ),
+        "node-static-dictionary-large-number-of-two-spaces-q5-lgwin10": (
+            node_compress(b"large number of  ", quality=5, lgwin=10),
+            b"large number of  ",
+        ),
+        "node-static-dictionary-leading-space-government-q5-lgwin10": (
+            node_compress(b" government", quality=5, lgwin=10),
+            b" government",
+        ),
+        "node-static-dictionary-leading-space-money-q5-lgwin10": (
+            node_compress(b" money", quality=5, lgwin=10),
+            b" money",
+        ),
+        "node-static-dictionary-upstream4096-12223-window": (
+            node_compress(b" remove", quality=5, lgwin=10),
+            b" remove",
+        ),
+        "node-static-dictionary-upstream4096-13247-window": (
+            node_compress(b" called", quality=5, lgwin=10),
+            b" called",
+        ),
+        "node-static-dictionary-upstream4096-14271-window": (
+            node_compress(b" estate", quality=5, lgwin=10),
+            b" estate",
+        ),
+        "node-static-dictionary-upstream4096-15295-window": (
+            node_compress(b" Polski", quality=5, lgwin=10),
+            b" Polski",
+        ),
+        "node-static-dictionary-upstream4096-16319-window": (
+            node_compress(" 招聘".encode("utf-8"), quality=5, lgwin=10),
+            " 招聘".encode("utf-8"),
+        ),
+        "node-static-dictionary-upstream4096-17343-window": (
+            node_compress(" 艺术".encode("utf-8"), quality=5, lgwin=10),
+            " 艺术".encode("utf-8"),
+        ),
+        "node-static-dictionary-upstream4096-18367-window": (
+            node_compress(" 简单".encode("utf-8"), quality=5, lgwin=10),
+            " 简单".encode("utf-8"),
+        ),
+        "node-static-dictionary-upstream4096-19391-window": (
+            node_compress(" 宝贝".encode("utf-8"), quality=5, lgwin=10),
+            " 宝贝".encode("utf-8"),
+        ),
+        "node-static-dictionary-upstream4096-20415-window": (
+            node_compress(" 口价".encode("utf-8"), quality=5, lgwin=10),
+            " 口价".encode("utf-8"),
+        ),
+        "node-static-dictionary-upstream4096-21439-window": (
+            node_compress(" estilo".encode("utf-8"), quality=5, lgwin=10),
+            " estilo".encode("utf-8"),
+        ),
+        "node-static-dictionary-upstream4096-22463-window": (
+            node_compress(" علي".encode("utf-8"), quality=5, lgwin=10),
+            " علي".encode("utf-8"),
+        ),
+        "node-static-dictionary-upstream8192-23076-window": (
+            node_compress(b"success", quality=5, lgwin=10),
+            b"success",
+        ),
+        "node-static-dictionary-upstream8192-24100-window": (
+            node_compress(b"setting", quality=5, lgwin=10),
+            b"setting",
+        ),
+        "node-static-dictionary-upstream8192-25124-window": (
+            node_compress(b"ability", quality=5, lgwin=10),
+            b"ability",
+        ),
+        "node-static-dictionary-upstream8192-26148-window": (
+            node_compress(b"conduct", quality=5, lgwin=10),
+            b"conduct",
+        ),
+        "node-static-dictionary-upstream8192-27172-window": (
+            node_compress(bytes.fromhex("496e646565642c"), quality=5, lgwin=10),
+            bytes.fromhex("496e646565642c"),
+        ),
+        "node-static-dictionary-upstream8192-28196-window": (
+            node_compress(bytes.fromhex("6761696e696e67"), quality=5, lgwin=10),
+            bytes.fromhex("6761696e696e67"),
+        ),
+        "node-static-dictionary-upstream8192-29220-window": (
+            node_compress(bytes.fromhex("66616e74617379"), quality=5, lgwin=10),
+            bytes.fromhex("66616e74617379"),
+        ),
+        "node-static-dictionary-upstream8192-30244-window": (
+            node_compress(bytes.fromhex("2d72696768743a"), quality=5, lgwin=10),
+            bytes.fromhex("2d72696768743a"),
+        ),
+        "node-static-dictionary-upstream8192-31268-window": (
+            node_compress(bytes.fromhex("75622d6c696e6b"), quality=5, lgwin=10),
+            bytes.fromhex("75622d6c696e6b"),
+        ),
+        "node-static-dictionary-upstream8192-32292-window": (
+            node_compress(bytes.fromhex("6261707469736d"), quality=5, lgwin=10),
+            bytes.fromhex("6261707469736d"),
+        ),
+        "node-static-dictionary-upstream8192-33316-window": (
+            node_compress(bytes.fromhex("61206272696566"), quality=5, lgwin=10),
+            bytes.fromhex("61206272696566"),
+        ),
+        "node-static-dictionary-upstream8192-34340-window": (
+            node_compress(bytes.fromhex("7374616e64617264"), quality=5, lgwin=10),
+            bytes.fromhex("7374616e64617264"),
+        ),
+        "node-static-dictionary-leading-space-black-q5-lgwin10": (
+            node_compress(b" black", quality=5, lgwin=10),
+            b" black",
+        ),
+        "node-static-dictionary-leading-space-small-q5-lgwin10": (
+            node_compress(b" small", quality=5, lgwin=10),
+            b" small",
+        ),
+        "node-static-dictionary-leading-space-books-q5-lgwin10": (
+            node_compress(b" books", quality=5, lgwin=10),
+            b" books",
+        ),
+        "node-static-dictionary-leading-space-place-q5-lgwin10": (
+            node_compress(b" place", quality=5, lgwin=10),
+            b" place",
+        ),
+        "node-static-dictionary-leading-space-music-q5-lgwin10": (
+            node_compress(b" music", quality=5, lgwin=10),
+            b" music",
+        ),
+        "node-static-dictionary-leading-space-field-q5-lgwin10": (
+            node_compress(b" field", quality=5, lgwin=10),
+            b" field",
+        ),
+        "node-static-dictionary-leading-space-order-q5-lgwin10": (
+            node_compress(b" order", quality=5, lgwin=10),
+            b" order",
+        ),
+        "node-static-dictionary-leading-space-value-q5-lgwin10": (
+            node_compress(b" value", quality=5, lgwin=10),
+            b" value",
+        ),
+        "node-static-dictionary-leading-space-level-q5-lgwin10": (
+            node_compress(b" level", quality=5, lgwin=10),
+            b" level",
+        ),
+        "node-static-dictionary-leading-space-table-q5-lgwin10": (
+            node_compress(b" table", quality=5, lgwin=10),
+            b" table",
+        ),
+        "node-static-dictionary-leading-space-board-q5-lgwin10": (
+            node_compress(b" board", quality=5, lgwin=10),
+            b" board",
+        ),
+        "node-static-dictionary-leading-space-house-q5-lgwin10": (
+            node_compress(b" house", quality=5, lgwin=10),
+            b" house",
+        ),
+        "node-static-dictionary-leading-space-group-q5-lgwin10": (
+            node_compress(b" group", quality=5, lgwin=10),
+            b" group",
+        ),
+        "node-static-dictionary-leading-space-years-q5-lgwin10": (
+            node_compress(b" years", quality=5, lgwin=10),
+            b" years",
+        ),
+        "node-static-dictionary-leading-space-water-q5-lgwin10": (
+            node_compress(b" water", quality=5, lgwin=10),
+            b" water",
+        ),
+        "node-static-dictionary-leading-space-start-q5-lgwin10": (
+            node_compress(b" start", quality=5, lgwin=10),
+            b" start",
+        ),
+        "node-static-dictionary-leading-space-style-q5-lgwin10": (
+            node_compress(b" style", quality=5, lgwin=10),
+            b" style",
+        ),
+        "node-static-dictionary-leading-space-death-q5-lgwin10": (
+            node_compress(b" death", quality=5, lgwin=10),
+            b" death",
+        ),
+        "node-static-dictionary-leading-space-power-q5-lgwin10": (
+            node_compress(b" power", quality=5, lgwin=10),
+            b" power",
+        ),
+        "node-static-dictionary-leading-space-phone-q5-lgwin10": (
+            node_compress(b" phone", quality=5, lgwin=10),
+            b" phone",
+        ),
+        "node-static-dictionary-leading-space-night-q5-lgwin10": (
+            node_compress(b" night", quality=5, lgwin=10),
+            b" night",
+        ),
+        "node-static-dictionary-leading-space-error-q5-lgwin10": (
+            node_compress(b" error", quality=5, lgwin=10),
+            b" error",
+        ),
+        "node-static-dictionary-leading-space-input-q5-lgwin10": (
+            node_compress(b" input", quality=5, lgwin=10),
+            b" input",
+        ),
+        "node-static-dictionary-leading-space-terms-q5-lgwin10": (
+            node_compress(b" terms", quality=5, lgwin=10),
+            b" terms",
+        ),
+        "node-static-dictionary-leading-space-event-q5-lgwin10": (
+            node_compress(b" event", quality=5, lgwin=10),
+            b" event",
+        ),
+        "node-static-dictionary-leading-space-local-q5-lgwin10": (
+            node_compress(b" local", quality=5, lgwin=10),
+            b" local",
+        ),
+        "node-static-dictionary-leading-space-short-q5-lgwin10": (
+            node_compress(b" short", quality=5, lgwin=10),
+            b" short",
+        ),
+        "node-static-dictionary-leading-space-space-q5-lgwin10": (
+            node_compress(b" space", quality=5, lgwin=10),
+            b" space",
+        ),
+        "node-static-dictionary-leading-space-focus-q5-lgwin10": (
+            node_compress(b" focus", quality=5, lgwin=10),
+            b" focus",
+        ),
+        "node-static-dictionary-leading-space-clear-q5-lgwin10": (
+            node_compress(b" clear", quality=5, lgwin=10),
+            b" clear",
+        ),
+        "node-static-dictionary-leading-space-block-q5-lgwin10": (
+            node_compress(b" block", quality=5, lgwin=10),
+            b" block",
+        ),
+        "node-static-dictionary-leading-space-guide-q5-lgwin10": (
+            node_compress(b" guide", quality=5, lgwin=10),
+            b" guide",
+        ),
+        "node-static-dictionary-leading-space-radio-q5-lgwin10": (
+            node_compress(b" radio", quality=5, lgwin=10),
+            b" radio",
+        ),
+        "node-static-dictionary-leading-space-share-q5-lgwin10": (
+            node_compress(b" share", quality=5, lgwin=10),
+            b" share",
+        ),
+        "node-static-dictionary-leading-space-women-q5-lgwin10": (
+            node_compress(b" women", quality=5, lgwin=10),
+            b" women",
+        ),
+        "node-static-dictionary-leading-space-again-q5-lgwin10": (
+            node_compress(b" again", quality=5, lgwin=10),
+            b" again",
+        ),
+        "node-static-dictionary-quot-q5-lgwin10": (
+            node_compress(b"&quot;", quality=5, lgwin=10),
+            b"&quot;",
+        ),
+        "node-static-dictionary-leading-space-quot-q5-lgwin10": (
+            node_compress(b" &quot;", quality=5, lgwin=10),
+            b" &quot;",
+        ),
+        "node-static-dictionary-domain-q5-lgwin10": (
+            node_compress(b"domain", quality=5, lgwin=10),
+            b"domain",
+        ),
+        "node-static-dictionary-leading-space-domain-q5-lgwin10": (
+            node_compress(b" domain", quality=5, lgwin=10),
+            b" domain",
+        ),
+        "node-static-dictionary-common-q5-lgwin10": (
+            node_compress(b"common", quality=5, lgwin=10),
+            b"common",
+        ),
+        "node-static-dictionary-leading-space-common-q5-lgwin10": (
+            node_compress(b" common", quality=5, lgwin=10),
+            b" common",
+        ),
+        "node-static-dictionary-master-q5-lgwin10": (
+            node_compress(b"master", quality=5, lgwin=10),
+            b"master",
+        ),
+        "node-static-dictionary-leading-space-master-q5-lgwin10": (
+            node_compress(b" master", quality=5, lgwin=10),
+            b" master",
+        ),
+        "node-static-dictionary-banner-q5-lgwin10": (
+            node_compress(b"banner", quality=5, lgwin=10),
+            b"banner",
+        ),
+        "node-static-dictionary-leading-space-banner-q5-lgwin10": (
+            node_compress(b" banner", quality=5, lgwin=10),
+            b" banner",
+        ),
+        "node-static-dictionary-leading-space-first-q5-lgwin10": (
+            node_compress(b" first", quality=5, lgwin=10),
+            b" first",
+        ),
+        "node-static-dictionary-leading-space-video-q5-lgwin10": (
+            node_compress(b" video", quality=5, lgwin=10),
+            b" video",
+        ),
+        "node-static-dictionary-leading-space-light-q5-lgwin10": (
+            node_compress(b" light", quality=5, lgwin=10),
+            b" light",
+        ),
+        "node-static-dictionary-leading-space-world-q5-lgwin10": (
+            node_compress(b" world", quality=5, lgwin=10),
+            b" world",
+        ),
+        "node-static-dictionary-leading-space-media-q5-lgwin10": (
+            node_compress(b" media", quality=5, lgwin=10),
+            b" media",
+        ),
+        "node-static-dictionary-leading-space-white-q5-lgwin10": (
+            node_compress(b" white", quality=5, lgwin=10),
+            b" white",
+        ),
+        "node-static-dictionary-leading-space-close-q5-lgwin10": (
+            node_compress(b" close", quality=5, lgwin=10),
+            b" close",
+        ),
+        "node-static-dictionary-children-q5-lgwin10": (
+            node_compress(b"children", quality=5, lgwin=10),
+            b"children",
+        ),
+        "node-static-dictionary-american-q5-lgwin10": (
+            node_compress(b"American", quality=5, lgwin=10),
+            b"American",
+        ),
+        "node-static-dictionary-examples-q5-lgwin10": (
+            node_compress(b"examples", quality=5, lgwin=10),
+            b"examples",
+        ),
+        "node-static-dictionary-history-dot-q5-lgwin10": (
+            node_compress(b"history.", quality=5, lgwin=10),
+            b"history.",
+        ),
+        "node-static-dictionary-one-another-q5-lgwin10": (
+            node_compress(b"one another", quality=5, lgwin=10),
+            b"one another",
+        ),
+        "node-static-dictionary-to-another-q5-lgwin10": (
+            node_compress(b"to another", quality=5, lgwin=10),
+            b"to another",
+        ),
+        "node-static-dictionary-one-of-the-q5-lgwin10": (
+            node_compress(b"one of the ", quality=5, lgwin=10),
+            b"one of the ",
+        ),
+        "node-static-dictionary-number-of-q5-lgwin10": (
+            node_compress(b"number of ", quality=5, lgwin=10),
+            b"number of ",
+        ),
+        "node-static-dictionary-large-number-of-q5-lgwin10": (
+            node_compress(b"large number of ", quality=5, lgwin=10),
+            b"large number of ",
+        ),
+        "node-static-dictionary-of-the-q5-lgwin10": (
+            node_compress(b"of the ", quality=5, lgwin=10),
+            b"of the ",
+        ),
+        "node-static-dictionary-from-the-q5-lgwin10": (
+            node_compress(b"from the ", quality=5, lgwin=10),
+            b"from the ",
+        ),
+        "node-static-dictionary-those-who-q5-lgwin10": (
+            node_compress(b"those who", quality=5, lgwin=10),
+            b"those who",
+        ),
+        "node-static-dictionary-in-order-to-q5-lgwin10": (
+            node_compress(b"in order to", quality=5, lgwin=10),
+            b"in order to",
+        ),
+        "node-static-dictionary-however-comma-space-q5-lgwin10": (
+            node_compress(b"however, ", quality=5, lgwin=10),
+            b"however, ",
+        ),
+        "node-static-dictionary-expression-q5-lgwin10": (
+            node_compress(b"expression", quality=5, lgwin=10),
+            b"expression",
+        ),
+        "node-static-dictionary-depression-q5-lgwin10": (
+            node_compress(b"depression", quality=5, lgwin=10),
+            b"depression",
+        ),
+        "node-static-dictionary-omit-last-one-wordpress-q5-lgwin10": (
+            node_compress(b"wordpress", quality=5, lgwin=10),
+            b"wordpress",
+        ),
+        "synthetic-static-dictionary-identity-words": (
+            bytes.fromhex("8200000004400c12d603"),
+            b"words",
+        ),
+        "synthetic-static-dictionary-identity-games": (
+            bytes.fromhex("8200000004400c121700"),
+            b"games",
+        ),
+        "synthetic-static-dictionary-omit-last-one-games": (
+            bytes.fromhex("6200000004400c12270c00"),
+            b"game",
+        ),
+        "synthetic-static-dictionary-leading-space-words": (
+            bytes.fromhex("a200000004400c12e50b00"),
+            b" words",
+        ),
+        "synthetic-static-dictionary-leading-space-games": (
+            bytes.fromhex("a200000004400c12250c00"),
+            b" games",
+        ),
+        "synthetic-static-dictionary-leading-space-release": (
+            bytes.fromhex("e200000004401412a72b00"),
+            b" release",
+        ),
+        "synthetic-static-dictionary-trailing-space-words": (
+            bytes.fromhex("a200000004400c12e00b"),
+            b"words ",
+        ),
+        "synthetic-static-dictionary-trailing-space-games": (
+            bytes.fromhex("a200000004400c12200c"),
+            b"games ",
+        ),
+        "synthetic-static-dictionary-trailing-space-release": (
+            bytes.fromhex("e200000004401412a22b"),
+            b"release ",
+        ),
+        "synthetic-static-dictionary-trailing-space-dictionary": (
+            bytes.fromhex("4201000004400013a068"),
+            b"dictionary ",
+        ),
+        "synthetic-static-dictionary-trailing-space-information": (
+            bytes.fromhex("6201000004400013e004"),
+            b"information ",
+        ),
+        "synthetic-static-dictionary-uppercase-first-content": (
+            bytes.fromhex("c200000004401412680202"),
+            b"Content",
+        ),
+        "synthetic-static-dictionary-uppercase-first-history": (
+            bytes.fromhex("c200000004401412680a02"),
+            b"History",
+        ),
+        "synthetic-static-dictionary-uppercase-first-english": (
+            bytes.fromhex("c200000004401412685d02"),
+            b"English",
+        ),
+        "synthetic-static-dictionary-uppercase-first-dictionary": (
+            bytes.fromhex("2201000004400013a66802"),
+            b"Dictionary",
+        ),
+        "synthetic-static-dictionary-uppercase-first-information": (
+            bytes.fromhex("4201000004400013e60402"),
+            b"Information",
+        ),
+        "node-static-dictionary-uppercase-dictionary-q5-lgwin10": (
+            node_compress(b"Dictionary", quality=5, lgwin=10),
+            b"Dictionary",
+        ),
+        "node-static-dictionary-uppercase-information-q5-lgwin10": (
+            node_compress(b"Information", quality=5, lgwin=10),
+            b"Information",
+        ),
         "node-repeat256-q4-lgwin10": (node_compress(b"abcd" * 64, quality=4, lgwin=10), b"abcd" * 64),
         "node-text-q11-lgwin10": (
             node_compress(b"hello brotli hello brotli", quality=11, lgwin=10),

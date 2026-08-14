@@ -30,6 +30,20 @@ const pngScanlinePayloadLen = png.pngScanlinePayloadLen;
 pub const Error = core.Error;
 pub const max_stored_block_len: usize = std.math.maxInt(u16);
 
+pub const RawDeflateProbeResult = struct {
+    ok: bool,
+    decoded_bytes: ?usize = null,
+    diagnostics: core.StreamingDiagnostics = .{ .phase_name = "payload" },
+    error_name: []const u8 = "",
+    member_index: ?usize = null,
+    member_offset: ?usize = null,
+    member_count: ?usize = null,
+    stream_input_bytes: ?usize = null,
+    last_member_offset: ?usize = null,
+};
+
+pub const DecodeProbeResult = RawDeflateProbeResult;
+
 const BlockHeader = struct {
     final: bool,
     block_type: u2,
@@ -953,25 +967,45 @@ fn writeStoredBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, 
 }
 
 pub fn encodeRawFixedSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
-    if (block_len == 0) return error.InvalidBlockPlan;
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
+    try writeFixedSplitBlocks(allocator, &writer, input, null, block_len, options);
+    return writer.toOwnedSlice(allocator);
+}
+
+pub fn encodeRawFixedSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    try writeFixedSplitBlocks(allocator, &writer, input, dictionary, block_len, options);
+    return writer.toOwnedSlice(allocator);
+}
+
+fn writeFixedSplitBlocks(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, input: []const u8, dictionary: ?[]const u8, block_len: usize, options: CompressionOptions) !void {
+    if (block_len == 0) return error.InvalidBlockPlan;
     var offset: usize = 0;
     if (input.len == 0) {
-        const plan = try lz77.hashGreedyPlanAlloc(allocator, "", options.lz77_options);
+        const plan = if (dictionary) |dict|
+            try planTokensWithDictionaryAlloc(allocator, "", dict, options)
+        else
+            try lz77.hashGreedyPlanAlloc(allocator, "", options.lz77_options);
         defer plan.deinit(allocator);
-        try writeFixedTokens(allocator, &writer, plan.tokens, true);
-        return writer.toOwnedSlice(allocator);
+        return writeFixedTokens(allocator, writer, plan.tokens, true);
     }
     while (offset < input.len) {
         const n = @min(block_len, input.len - offset);
+        const chunk = input[offset..][0..n];
         const final = offset + n == input.len;
-        const plan = try planTokensAlloc(allocator, input[offset..][0..n], options);
+        const plan = if (dictionary) |dict|
+            if (offset == 0)
+                try planTokensWithDictionaryAlloc(allocator, chunk, dict, options)
+            else
+                try planTokensAlloc(allocator, chunk, options)
+        else
+            try planTokensAlloc(allocator, chunk, options);
         defer plan.deinit(allocator);
-        try writeFixedTokens(allocator, &writer, plan.tokens, final);
+        try writeFixedTokens(allocator, writer, plan.tokens, final);
         offset += n;
     }
-    return writer.toOwnedSlice(allocator);
 }
 
 pub fn encodeRawDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
@@ -1427,25 +1461,45 @@ fn writeDynamicTokens(allocator: std.mem.Allocator, writer: *bitstream.BitWriter
 }
 
 pub fn encodeRawDynamicSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
-    if (block_len == 0) return error.InvalidBlockPlan;
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);
+    try writeDynamicSplitBlocks(allocator, &writer, input, null, block_len, options);
+    return writer.toOwnedSlice(allocator);
+}
+
+pub fn encodeRawDynamicSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    try writeDynamicSplitBlocks(allocator, &writer, input, dictionary, block_len, options);
+    return writer.toOwnedSlice(allocator);
+}
+
+fn writeDynamicSplitBlocks(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, input: []const u8, dictionary: ?[]const u8, block_len: usize, options: CompressionOptions) !void {
+    if (block_len == 0) return error.InvalidBlockPlan;
     var offset: usize = 0;
     if (input.len == 0) {
-        const plan = try lz77.hashGreedyPlanAlloc(allocator, "", options.lz77_options);
+        const plan = if (dictionary) |dict|
+            try planTokensWithDictionaryAlloc(allocator, "", dict, options)
+        else
+            try lz77.hashGreedyPlanAlloc(allocator, "", options.lz77_options);
         defer plan.deinit(allocator);
-        try writeDynamicTokens(allocator, &writer, plan.tokens, true);
-        return writer.toOwnedSlice(allocator);
+        return writeDynamicTokens(allocator, writer, plan.tokens, true);
     }
     while (offset < input.len) {
         const n = @min(block_len, input.len - offset);
+        const chunk = input[offset..][0..n];
         const final = offset + n == input.len;
-        const plan = try planTokensAlloc(allocator, input[offset..][0..n], options);
+        const plan = if (dictionary) |dict|
+            if (offset == 0)
+                try planTokensWithDictionaryAlloc(allocator, chunk, dict, options)
+            else
+                try planTokensAlloc(allocator, chunk, options)
+        else
+            try planTokensAlloc(allocator, chunk, options);
         defer plan.deinit(allocator);
-        try writeDynamicTokens(allocator, &writer, plan.tokens, final);
+        try writeDynamicTokens(allocator, writer, plan.tokens, final);
         offset += n;
     }
-    return writer.toOwnedSlice(allocator);
 }
 
 fn trimmedCodeLengthAlphabetCount(lengths: *const [19]u4) usize {
@@ -2988,6 +3042,47 @@ pub fn decodeRawAutoAllocWithDictionaryLimited(allocator: std.mem.Allocator, inp
     return result.bytes;
 }
 
+pub fn decodeRawAutoAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) !usize {
+    return decodeRawAutoAppendWithDictionaryLimitedInternal(allocator, out, input, "", null);
+}
+
+pub fn decodeRawAutoAppendWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8) !usize {
+    return decodeRawAutoAppendWithDictionaryLimitedInternal(allocator, out, input, dictionary, null);
+}
+
+pub fn decodeRawAutoAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, expected_output_len: usize) !usize {
+    return decodeRawAutoAppendWithDictionaryExactSize(allocator, out, input, "", expected_output_len);
+}
+
+pub fn decodeRawAutoAppendWithDictionaryExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, expected_output_len: usize) !usize {
+    const decoded = try decodeRawAutoAllocWithDictionaryExactSize(allocator, input, dictionary, expected_output_len);
+    defer allocator.free(decoded);
+    try out.appendSlice(allocator, decoded);
+    return decoded.len;
+}
+
+pub fn decodeRawAutoAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, max_output_len: usize) !usize {
+    return decodeRawAutoAppendWithDictionaryLimitedInternal(allocator, out, input, "", max_output_len);
+}
+
+pub fn decodeRawAutoAppendWithDictionaryLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, max_output_len: usize) !usize {
+    return decodeRawAutoAppendWithDictionaryLimitedInternal(allocator, out, input, dictionary, max_output_len);
+}
+
+fn decodeRawAutoAppendWithDictionaryLimitedInternal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, max_output_len: ?usize) !usize {
+    const start = out.items.len;
+    errdefer out.items.len = start;
+    const absolute_limit = try appendAbsoluteLimit(start, max_output_len);
+    if (try planRawStoredOnlyForFullInput(input)) |stored_plan| {
+        try appendRawStoredOnlyPlanned(allocator, input[0..stored_plan.input_read], out, stored_plan, absolute_limit);
+        return out.items.len - start;
+    }
+    try rejectReservedFirstBlockBeforeAlloc(input);
+    const decoded = try decodeRawAutoAppendPartialWithDictionary(allocator, input, dictionary, out, absolute_limit);
+    if (decoded.input_read != input.len) return error.TrailingData;
+    return out.items.len - start;
+}
+
 pub fn decodeRawChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8) ![]u8 {
     return decodeRawChunksAllocWithOptionalDictionaryLimited(allocator, chunks, compressed_scratch, "", null);
 }
@@ -3011,6 +3106,36 @@ pub fn decodeRawChunksAllocLimited(allocator: std.mem.Allocator, chunks: []const
 
 pub fn decodeRawChunksAllocWithDictionaryLimited(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, max_output_len: usize) ![]u8 {
     return decodeRawChunksAllocWithOptionalDictionaryLimited(allocator, chunks, compressed_scratch, dictionary, max_output_len);
+}
+
+pub fn decodeRawChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8) !usize {
+    return decodeRawChunksAppendWithDictionaryLimitedInternal(allocator, out, chunks, compressed_scratch, "", null);
+}
+
+pub fn decodeRawChunksAppendWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8) !usize {
+    return decodeRawChunksAppendWithDictionaryLimitedInternal(allocator, out, chunks, compressed_scratch, dictionary, null);
+}
+
+pub fn decodeRawChunksAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) !usize {
+    return decodeRawChunksAppendWithDictionaryExactSize(allocator, out, chunks, compressed_scratch, "", expected_output_len);
+}
+
+pub fn decodeRawChunksAppendWithDictionaryExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, expected_output_len: usize) !usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeRawAutoAppendWithDictionaryExactSize(allocator, out, joined, dictionary, expected_output_len);
+}
+
+pub fn decodeRawChunksAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) !usize {
+    return decodeRawChunksAppendWithDictionaryLimitedInternal(allocator, out, chunks, compressed_scratch, "", max_output_len);
+}
+
+pub fn decodeRawChunksAppendWithDictionaryLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, max_output_len: usize) !usize {
+    return decodeRawChunksAppendWithDictionaryLimitedInternal(allocator, out, chunks, compressed_scratch, dictionary, max_output_len);
+}
+
+fn decodeRawChunksAppendWithDictionaryLimitedInternal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, max_output_len: ?usize) !usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeRawAutoAppendWithDictionaryLimitedInternal(allocator, out, joined, dictionary, max_output_len);
 }
 
 fn decodeRawChunksAllocWithOptionalDictionaryLimited(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, max_output_len: ?usize) ![]u8 {
@@ -3142,6 +3267,154 @@ pub fn encodeRawStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![]
     const written = try encodeRawStored(input, out);
     std.debug.assert(written == out.len);
     return out;
+}
+
+pub fn encodeRawStoredAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) !usize {
+    const required = try rawStoredEncodedSize(input.len);
+    const start = out.items.len;
+    try out.ensureUnusedCapacity(allocator, required);
+    const slot = out.addManyAsSliceAssumeCapacity(required);
+    const written = encodeRawStored(input, slot) catch |err| {
+        out.items.len = start;
+        return err;
+    };
+    if (written != required) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
+}
+
+fn appendOwnedEncoded(allocator: std.mem.Allocator, out: *std.ArrayList(u8), encoded: []u8) !usize {
+    defer allocator.free(encoded);
+    const start = out.items.len;
+    try out.appendSlice(allocator, encoded);
+    return out.items.len - start;
+}
+
+pub fn encodeRawFixedAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) !usize {
+    return encodeRawFixedWithOptionsAppend(allocator, out, input, .{});
+}
+
+pub fn encodeRawFixedWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawFixedWithOptionsAlloc(allocator, input, options));
+}
+
+pub fn encodeRawFixedWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawFixedWithDictionaryAlloc(allocator, input, dictionary, options));
+}
+
+pub fn encodeRawFixedSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawFixedSplitAlloc(allocator, input, block_len, options));
+}
+
+pub fn encodeRawFixedSplitWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawFixedSplitWithDictionaryAlloc(allocator, input, dictionary, block_len, options));
+}
+
+pub fn encodeRawBestAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawBestAlloc(allocator, input, options));
+}
+
+pub fn encodeRawBestWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawBestWithDictionaryAlloc(allocator, input, dictionary, options));
+}
+
+pub fn encodeRawBestSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawBestSplitAlloc(allocator, input, block_len, options));
+}
+
+pub fn encodeRawBestSplitWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawBestSplitWithDictionaryAlloc(allocator, input, dictionary, block_len, options));
+}
+
+pub fn encodeRawBestAdaptiveSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawBestAdaptiveSplitAlloc(allocator, input, options, split_options));
+}
+
+pub fn encodeRawBestAdaptiveSplitWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawBestAdaptiveSplitWithDictionaryAlloc(allocator, input, dictionary, options, split_options));
+}
+
+pub fn encodeRawLevelAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, level: u4) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawLevelAlloc(allocator, input, level));
+}
+
+pub fn encodeRawLevelWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, level: u4) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawLevelWithDictionaryAlloc(allocator, input, dictionary, level));
+}
+
+pub fn encodeRawDynamicLiteralAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawDynamicLiteralAlloc(allocator, input));
+}
+
+pub fn encodeRawDynamicWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawDynamicWithOptionsAlloc(allocator, input, options));
+}
+
+pub fn encodeRawDynamicWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawDynamicWithDictionaryAlloc(allocator, input, dictionary, options));
+}
+
+pub fn encodeRawDynamicSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawDynamicSplitAlloc(allocator, input, block_len, options));
+}
+
+pub fn encodeRawDynamicSplitWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeRawDynamicSplitWithDictionaryAlloc(allocator, input, dictionary, block_len, options));
+}
+
+pub fn rawStoredChunksEncodedSize(chunks: []const []const u8) Error!usize {
+    return rawStoredEncodedSize(try chunksTotalLen(chunks));
+}
+
+pub fn encodeRawStoredChunks(chunks: []const []const u8, output: []u8) Error!usize {
+    const total_len = try chunksTotalLen(chunks);
+    const required = try rawStoredEncodedSize(total_len);
+    if (output.len < required) return error.OutputTooSmall;
+    if (total_len == 0) {
+        writeStoredHeader(true, 0, output[0..5]);
+        return 5;
+    }
+
+    var cursor = try ChunkCursor.init(chunks, total_len, 0);
+    var remaining = total_len;
+    var out_offset: usize = 0;
+    while (remaining != 0) {
+        const block_len = @min(max_stored_block_len, remaining);
+        const final = block_len == remaining;
+        writeStoredHeader(final, @intCast(block_len), output[out_offset..][0..5]);
+        out_offset += 5;
+        try cursor.copyTo(output[out_offset..][0..block_len]);
+        out_offset += block_len;
+        remaining -= block_len;
+    }
+    return out_offset;
+}
+
+pub fn encodeRawStoredChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8) ![]u8 {
+    const required = try rawStoredChunksEncodedSize(chunks);
+    const out = try allocator.alloc(u8, required);
+    errdefer allocator.free(out);
+    const written = try encodeRawStoredChunks(chunks, out);
+    std.debug.assert(written == out.len);
+    return out;
+}
+
+pub fn encodeRawStoredChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8) !usize {
+    const required = try rawStoredChunksEncodedSize(chunks);
+    const start = out.items.len;
+    try out.ensureUnusedCapacity(allocator, required);
+    const slot = out.addManyAsSliceAssumeCapacity(required);
+    const written = encodeRawStoredChunks(chunks, slot) catch |err| {
+        out.items.len = start;
+        return err;
+    };
+    if (written != required) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
 }
 
 fn encodeRawStoredSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize) ![]u8 {
@@ -5083,6 +5356,14 @@ pub fn zlibStoredWithDictionaryEncodedSize(input_len: usize) Error!usize {
     return std.math.add(usize, with_header, 4) catch error.IntegerOverflow;
 }
 
+pub fn zlibStoredChunksEncodedSize(chunks: []const []const u8) Error!usize {
+    return zlibStoredEncodedSize(try chunksTotalLen(chunks));
+}
+
+pub fn zlibStoredWithDictionaryChunksEncodedSize(chunks: []const []const u8) Error!usize {
+    return zlibStoredWithDictionaryEncodedSize(try chunksTotalLen(chunks));
+}
+
 pub fn encodeZlibStored(input: []const u8, output: []u8) Error!usize {
     const required = try zlibStoredEncodedSize(input.len);
     if (output.len < required) return error.OutputTooSmall;
@@ -5094,6 +5375,16 @@ pub fn encodeZlibStored(input: []const u8, output: []u8) Error!usize {
     return footer_offset + 4;
 }
 
+pub fn encodeZlibStoredChunks(chunks: []const []const u8, output: []u8) Error!usize {
+    const required = try zlibStoredChunksEncodedSize(chunks);
+    if (output.len < required) return error.OutputTooSmall;
+    writeZlibHeader(output[0..2], null);
+    const raw_written = try encodeRawStoredChunks(chunks, output[2 .. required - 4]);
+    const footer_offset = 2 + raw_written;
+    std.mem.writeInt(u32, output[footer_offset..][0..4], adler32Chunks(chunks), .big);
+    return footer_offset + 4;
+}
+
 pub fn encodeZlibStoredWithDictionary(input: []const u8, output: []u8, dictionary: []const u8) Error!usize {
     const required = try zlibStoredWithDictionaryEncodedSize(input.len);
     if (output.len < required) return error.OutputTooSmall;
@@ -5102,6 +5393,16 @@ pub fn encodeZlibStoredWithDictionary(input: []const u8, output: []u8, dictionar
     const raw_written = try encodeRawStored(input, output[6 .. required - 4]);
     const footer_offset = 6 + raw_written;
     std.mem.writeInt(u32, output[footer_offset..][0..4], checksum.adler32(input), .big);
+    return footer_offset + 4;
+}
+
+pub fn encodeZlibStoredWithDictionaryChunks(chunks: []const []const u8, output: []u8, dictionary: []const u8) Error!usize {
+    const required = try zlibStoredWithDictionaryChunksEncodedSize(chunks);
+    if (output.len < required) return error.OutputTooSmall;
+    writeZlibHeader(output[0..6], dictionary);
+    const raw_written = try encodeRawStoredChunks(chunks, output[6 .. required - 4]);
+    const footer_offset = 6 + raw_written;
+    std.mem.writeInt(u32, output[footer_offset..][0..4], adler32Chunks(chunks), .big);
     return footer_offset + 4;
 }
 
@@ -5121,6 +5422,160 @@ pub fn encodeZlibStoredWithDictionaryAlloc(allocator: std.mem.Allocator, input: 
     const written = try encodeZlibStoredWithDictionary(input, out, dictionary);
     std.debug.assert(written == out.len);
     return out;
+}
+
+pub fn encodeZlibStoredAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) !usize {
+    const required = try zlibStoredEncodedSize(input.len);
+    const start = out.items.len;
+    try out.ensureUnusedCapacity(allocator, required);
+    const slot = out.addManyAsSliceAssumeCapacity(required);
+    const written = encodeZlibStored(input, slot) catch |err| {
+        out.items.len = start;
+        return err;
+    };
+    if (written != required) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
+}
+
+pub fn encodeZlibStoredWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8) !usize {
+    const required = try zlibStoredWithDictionaryEncodedSize(input.len);
+    const start = out.items.len;
+    try out.ensureUnusedCapacity(allocator, required);
+    const slot = out.addManyAsSliceAssumeCapacity(required);
+    const written = encodeZlibStoredWithDictionary(input, slot, dictionary) catch |err| {
+        out.items.len = start;
+        return err;
+    };
+    if (written != required) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
+}
+
+pub fn encodeZlibStoredChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8) ![]u8 {
+    const required = try zlibStoredChunksEncodedSize(chunks);
+    const out = try allocator.alloc(u8, required);
+    errdefer allocator.free(out);
+    const written = try encodeZlibStoredChunks(chunks, out);
+    std.debug.assert(written == out.len);
+    return out;
+}
+
+pub fn encodeZlibStoredWithDictionaryChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, dictionary: []const u8) ![]u8 {
+    const required = try zlibStoredWithDictionaryChunksEncodedSize(chunks);
+    const out = try allocator.alloc(u8, required);
+    errdefer allocator.free(out);
+    const written = try encodeZlibStoredWithDictionaryChunks(chunks, out, dictionary);
+    std.debug.assert(written == out.len);
+    return out;
+}
+
+pub fn encodeZlibStoredChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8) !usize {
+    const required = try zlibStoredChunksEncodedSize(chunks);
+    const start = out.items.len;
+    try out.ensureUnusedCapacity(allocator, required);
+    const slot = out.addManyAsSliceAssumeCapacity(required);
+    const written = encodeZlibStoredChunks(chunks, slot) catch |err| {
+        out.items.len = start;
+        return err;
+    };
+    if (written != required) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
+}
+
+pub fn encodeZlibStoredWithDictionaryChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, dictionary: []const u8) !usize {
+    const required = try zlibStoredWithDictionaryChunksEncodedSize(chunks);
+    const start = out.items.len;
+    try out.ensureUnusedCapacity(allocator, required);
+    const slot = out.addManyAsSliceAssumeCapacity(required);
+    const written = encodeZlibStoredWithDictionaryChunks(chunks, slot, dictionary) catch |err| {
+        out.items.len = start;
+        return err;
+    };
+    if (written != required) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
+}
+
+pub fn encodeZlibFixedAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) !usize {
+    return encodeZlibFixedWithOptionsAppend(allocator, out, input, .{});
+}
+
+pub fn encodeZlibFixedWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibFixedWithOptionsAlloc(allocator, input, options));
+}
+
+pub fn encodeZlibFixedWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibFixedWithDictionaryAlloc(allocator, input, dictionary, options));
+}
+
+pub fn encodeZlibFixedSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibFixedSplitAlloc(allocator, input, block_len, options));
+}
+
+pub fn encodeZlibFixedSplitWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibFixedSplitWithDictionaryAlloc(allocator, input, dictionary, block_len, options));
+}
+
+pub fn encodeZlibBestAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibBestAlloc(allocator, input, options));
+}
+
+pub fn encodeZlibBestWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibBestWithDictionaryAlloc(allocator, input, dictionary, options));
+}
+
+pub fn encodeZlibBestSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibBestSplitAlloc(allocator, input, block_len, options));
+}
+
+pub fn encodeZlibBestSplitWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibBestSplitWithDictionaryAlloc(allocator, input, dictionary, block_len, options));
+}
+
+pub fn encodeZlibBestAdaptiveSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibBestAdaptiveSplitAlloc(allocator, input, options, split_options));
+}
+
+pub fn encodeZlibBestAdaptiveSplitWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibBestAdaptiveSplitWithDictionaryAlloc(allocator, input, dictionary, options, split_options));
+}
+
+pub fn encodeZlibLevelAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, level: u4) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibLevelAlloc(allocator, input, level));
+}
+
+pub fn encodeZlibLevelWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, level: u4) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibLevelWithDictionaryAlloc(allocator, input, dictionary, level));
+}
+
+pub fn encodeZlibDynamicLiteralAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibDynamicLiteralAlloc(allocator, input));
+}
+
+pub fn encodeZlibDynamicWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibDynamicWithOptionsAlloc(allocator, input, options));
+}
+
+pub fn encodeZlibDynamicWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibDynamicWithDictionaryAlloc(allocator, input, dictionary, options));
+}
+
+pub fn encodeZlibDynamicSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibDynamicSplitAlloc(allocator, input, block_len, options));
+}
+
+pub fn encodeZlibDynamicSplitWithDictionaryAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeZlibDynamicSplitWithDictionaryAlloc(allocator, input, dictionary, block_len, options));
 }
 
 fn encodeZlibStoredSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize) ![]u8 {
@@ -5156,6 +5611,22 @@ pub fn encodeZlibFixedWithDictionaryAlloc(allocator: std.mem.Allocator, input: [
     return encodeZlibFixedTokensAlloc(allocator, input, dictionary, plan.tokens);
 }
 
+pub fn encodeZlibFixedSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    return encodeZlibFixedSplitDirectAlloc(allocator, input, null, block_len, options);
+}
+
+pub fn encodeZlibFixedSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    return encodeZlibFixedSplitDirectAlloc(allocator, input, dictionary, block_len, options);
+}
+
+fn encodeZlibFixedSplitDirectAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    const header_len = try writeWrappedDeflatePrefix(allocator, &writer, dictionary);
+    try writeFixedSplitBlocks(allocator, &writer, input, dictionary, block_len, options);
+    return finishZlibFrame(allocator, &writer, input, header_len);
+}
+
 pub fn encodeZlibDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     const plan = try lz77.literalPlanAlloc(allocator, input);
     defer plan.deinit(allocator);
@@ -5172,6 +5643,22 @@ pub fn encodeZlibDynamicWithDictionaryAlloc(allocator: std.mem.Allocator, input:
     const plan = try planTokensWithDictionaryAlloc(allocator, input, dictionary, options);
     defer plan.deinit(allocator);
     return encodeZlibDynamicTokensAlloc(allocator, input, dictionary, plan.tokens);
+}
+
+pub fn encodeZlibDynamicSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    return encodeZlibDynamicSplitDirectAlloc(allocator, input, null, block_len, options);
+}
+
+pub fn encodeZlibDynamicSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    return encodeZlibDynamicSplitDirectAlloc(allocator, input, dictionary, block_len, options);
+}
+
+fn encodeZlibDynamicSplitDirectAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    const header_len = try writeWrappedDeflatePrefix(allocator, &writer, dictionary);
+    try writeDynamicSplitBlocks(allocator, &writer, input, dictionary, block_len, options);
+    return finishZlibFrame(allocator, &writer, input, header_len);
 }
 
 pub fn encodeZlibBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
@@ -5241,6 +5728,7 @@ pub fn encodeZlibBestSplitWithDictionaryAlloc(allocator: std.mem.Allocator, inpu
 }
 
 pub fn encodeZlibBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
+    if (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len) return error.InvalidBlockPlan;
     if (usesStoredFastPath(input, options)) return encodeZlibStoredAlloc(allocator, input);
     const one_shot = try encodeZlibBestAlloc(allocator, input, options);
     errdefer allocator.free(one_shot);
@@ -5249,6 +5737,7 @@ pub fn encodeZlibBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []c
 }
 
 pub fn encodeZlibBestAdaptiveSplitWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
+    if (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len) return error.InvalidBlockPlan;
     if (usesStoredFastPath(input, options)) return encodeZlibStoredWithDictionaryAlloc(allocator, input, dictionary);
     const one_shot = try encodeZlibBestWithDictionaryAlloc(allocator, input, dictionary, options);
     errdefer allocator.free(one_shot);
@@ -5844,6 +6333,1492 @@ fn chunksTotalLen(chunks: []const []const u8) Error!usize {
         total = std.math.add(usize, total, chunk.len) catch return error.IntegerOverflow;
     }
     return total;
+}
+
+fn adler32Chunks(chunks: []const []const u8) u32 {
+    var adler = checksum.Adler32.init();
+    for (chunks) |chunk| adler.update(chunk);
+    return adler.digest();
+}
+
+fn crc32Chunks(chunks: []const []const u8) u32 {
+    var crc = checksum.Crc32.init();
+    for (chunks) |chunk| crc.update(chunk);
+    return crc.digest();
+}
+
+pub const RawDeflateEncoder = struct {
+    allocator: std.mem.Allocator,
+    scratch: std.ArrayList(u8) = .empty,
+
+    pub fn init(allocator: std.mem.Allocator) RawDeflateEncoder {
+        return .{ .allocator = allocator };
+    }
+
+    pub fn deinit(self: *RawDeflateEncoder) void {
+        self.scratch.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn encodeStoredAlloc(self: *RawDeflateEncoder, input: []const u8) ![]u8 {
+        return try encodeRawStoredAlloc(self.allocator, input);
+    }
+
+    pub fn encodeStoredChunksAlloc(self: *RawDeflateEncoder, chunks: []const []const u8) ![]u8 {
+        return try encodeRawStoredChunksAlloc(self.allocator, chunks);
+    }
+
+    pub fn encodeFixedAlloc(self: *RawDeflateEncoder, input: []const u8) ![]u8 {
+        return try self.encodeFixedWithOptionsAlloc(input, .{});
+    }
+
+    pub fn encodeFixedWithOptionsAlloc(self: *RawDeflateEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
+        return try encodeRawFixedWithOptionsAlloc(self.allocator, input, options);
+    }
+
+    pub fn encodeFixedWithDictionaryAlloc(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
+        return try encodeRawFixedWithDictionaryAlloc(self.allocator, input, dictionary, options);
+    }
+
+    pub fn encodeFixedSplitAlloc(self: *RawDeflateEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+        return try encodeRawFixedSplitAlloc(self.allocator, input, block_len, options);
+    }
+
+    pub fn encodeFixedSplitWithDictionaryAlloc(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+        return try encodeRawFixedSplitWithDictionaryAlloc(self.allocator, input, dictionary, block_len, options);
+    }
+
+    pub fn encodeBestAlloc(self: *RawDeflateEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
+        return try encodeRawBestAlloc(self.allocator, input, options);
+    }
+
+    pub fn encodeBestWithDictionaryAlloc(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
+        return try encodeRawBestWithDictionaryAlloc(self.allocator, input, dictionary, options);
+    }
+
+    pub fn encodeBestSplitAlloc(self: *RawDeflateEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+        return try encodeRawBestSplitAlloc(self.allocator, input, block_len, options);
+    }
+
+    pub fn encodeBestSplitWithDictionaryAlloc(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+        return try encodeRawBestSplitWithDictionaryAlloc(self.allocator, input, dictionary, block_len, options);
+    }
+
+    pub fn encodeBestAdaptiveSplitAlloc(self: *RawDeflateEncoder, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
+        return try encodeRawBestAdaptiveSplitAlloc(self.allocator, input, options, split_options);
+    }
+
+    pub fn encodeBestAdaptiveSplitWithDictionaryAlloc(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
+        return try encodeRawBestAdaptiveSplitWithDictionaryAlloc(self.allocator, input, dictionary, options, split_options);
+    }
+
+    pub fn encodeLevelAlloc(self: *RawDeflateEncoder, input: []const u8, level: u4) ![]u8 {
+        return try encodeRawLevelAlloc(self.allocator, input, level);
+    }
+
+    pub fn encodeLevelWithDictionaryAlloc(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, level: u4) ![]u8 {
+        return try encodeRawLevelWithDictionaryAlloc(self.allocator, input, dictionary, level);
+    }
+
+    pub fn encodeDynamicLiteralAlloc(self: *RawDeflateEncoder, input: []const u8) ![]u8 {
+        return try encodeRawDynamicLiteralAlloc(self.allocator, input);
+    }
+
+    pub fn encodeDynamicWithOptionsAlloc(self: *RawDeflateEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
+        return try encodeRawDynamicWithOptionsAlloc(self.allocator, input, options);
+    }
+
+    pub fn encodeDynamicWithDictionaryAlloc(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
+        return try encodeRawDynamicWithDictionaryAlloc(self.allocator, input, dictionary, options);
+    }
+
+    pub fn encodeDynamicSplitAlloc(self: *RawDeflateEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+        return try encodeRawDynamicSplitAlloc(self.allocator, input, block_len, options);
+    }
+
+    pub fn encodeDynamicSplitWithDictionaryAlloc(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+        return try encodeRawDynamicSplitWithDictionaryAlloc(self.allocator, input, dictionary, block_len, options);
+    }
+
+    pub fn encodeStoredScratch(self: *RawDeflateEncoder, input: []const u8) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeStoredAppend(&self.scratch, input);
+        return self.scratch.items;
+    }
+
+    pub fn encodeStoredChunksScratch(self: *RawDeflateEncoder, chunks: []const []const u8) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeStoredChunksAppend(&self.scratch, chunks);
+        return self.scratch.items;
+    }
+
+    pub fn encodeFixedScratch(self: *RawDeflateEncoder, input: []const u8) ![]const u8 {
+        return try self.encodeFixedWithOptionsScratch(input, .{});
+    }
+
+    pub fn encodeFixedWithOptionsScratch(self: *RawDeflateEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeFixedWithOptionsAppend(&self.scratch, input, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeFixedWithDictionaryScratch(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeFixedWithDictionaryAppend(&self.scratch, input, dictionary, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeFixedSplitScratch(self: *RawDeflateEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeFixedSplitAppend(&self.scratch, input, block_len, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeFixedSplitWithDictionaryScratch(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeFixedSplitWithDictionaryAppend(&self.scratch, input, dictionary, block_len, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestScratch(self: *RawDeflateEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestAppend(&self.scratch, input, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestWithDictionaryScratch(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestWithDictionaryAppend(&self.scratch, input, dictionary, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestSplitScratch(self: *RawDeflateEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestSplitAppend(&self.scratch, input, block_len, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestSplitWithDictionaryScratch(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestSplitWithDictionaryAppend(&self.scratch, input, dictionary, block_len, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestAdaptiveSplitScratch(self: *RawDeflateEncoder, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestAdaptiveSplitAppend(&self.scratch, input, options, split_options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestAdaptiveSplitWithDictionaryScratch(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestAdaptiveSplitWithDictionaryAppend(&self.scratch, input, dictionary, options, split_options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeLevelScratch(self: *RawDeflateEncoder, input: []const u8, level: u4) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeLevelAppend(&self.scratch, input, level);
+        return self.scratch.items;
+    }
+
+    pub fn encodeLevelWithDictionaryScratch(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, level: u4) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeLevelWithDictionaryAppend(&self.scratch, input, dictionary, level);
+        return self.scratch.items;
+    }
+
+    pub fn encodeDynamicLiteralScratch(self: *RawDeflateEncoder, input: []const u8) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeDynamicLiteralAppend(&self.scratch, input);
+        return self.scratch.items;
+    }
+
+    pub fn encodeDynamicWithOptionsScratch(self: *RawDeflateEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeDynamicWithOptionsAppend(&self.scratch, input, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeDynamicWithDictionaryScratch(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeDynamicWithDictionaryAppend(&self.scratch, input, dictionary, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeDynamicSplitScratch(self: *RawDeflateEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeDynamicSplitAppend(&self.scratch, input, block_len, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeDynamicSplitWithDictionaryScratch(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeDynamicSplitWithDictionaryAppend(&self.scratch, input, dictionary, block_len, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeStoredAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
+        return try encodeRawStoredAppend(self.allocator, out, input);
+    }
+
+    pub fn encodeStoredChunksAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), chunks: []const []const u8) !usize {
+        return try encodeRawStoredChunksAppend(self.allocator, out, chunks);
+    }
+
+    pub fn encodeFixedAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
+        return try self.encodeFixedWithOptionsAppend(out, input, .{});
+    }
+
+    pub fn encodeFixedWithOptionsAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+        const encoded = try self.encodeFixedWithOptionsAlloc(input, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeFixedWithDictionaryAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
+        const encoded = try self.encodeFixedWithDictionaryAlloc(input, dictionary, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeFixedSplitAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+        const encoded = try self.encodeFixedSplitAlloc(input, block_len, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeFixedSplitWithDictionaryAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+        const encoded = try self.encodeFixedSplitWithDictionaryAlloc(input, dictionary, block_len, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+        const encoded = try self.encodeBestAlloc(input, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestWithDictionaryAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
+        const encoded = try self.encodeBestWithDictionaryAlloc(input, dictionary, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestSplitAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+        const encoded = try self.encodeBestSplitAlloc(input, block_len, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestSplitWithDictionaryAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+        const encoded = try self.encodeBestSplitWithDictionaryAlloc(input, dictionary, block_len, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestAdaptiveSplitAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
+        const encoded = try self.encodeBestAdaptiveSplitAlloc(input, options, split_options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestAdaptiveSplitWithDictionaryAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
+        const encoded = try self.encodeBestAdaptiveSplitWithDictionaryAlloc(input, dictionary, options, split_options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeLevelAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, level: u4) !usize {
+        const encoded = try self.encodeLevelAlloc(input, level);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeLevelWithDictionaryAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, level: u4) !usize {
+        const encoded = try self.encodeLevelWithDictionaryAlloc(input, dictionary, level);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeDynamicLiteralAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
+        const encoded = try self.encodeDynamicLiteralAlloc(input);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeDynamicWithOptionsAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+        const encoded = try self.encodeDynamicWithOptionsAlloc(input, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeDynamicWithDictionaryAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
+        const encoded = try self.encodeDynamicWithDictionaryAlloc(input, dictionary, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeDynamicSplitAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+        const encoded = try self.encodeDynamicSplitAlloc(input, block_len, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeDynamicSplitWithDictionaryAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+        const encoded = try self.encodeDynamicSplitWithDictionaryAlloc(input, dictionary, block_len, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeStoredIntoSlice(self: *RawDeflateEncoder, input: []const u8, output: []u8) !usize {
+        _ = self;
+        return try encodeRawStored(input, output);
+    }
+
+    pub fn encodeStoredChunksIntoSlice(self: *RawDeflateEncoder, chunks: []const []const u8, output: []u8) !usize {
+        _ = self;
+        return try encodeRawStoredChunks(chunks, output);
+    }
+};
+
+pub const ZlibEncoder = struct {
+    allocator: std.mem.Allocator,
+    scratch: std.ArrayList(u8) = .empty,
+
+    pub fn init(allocator: std.mem.Allocator) ZlibEncoder {
+        return .{ .allocator = allocator };
+    }
+
+    pub fn deinit(self: *ZlibEncoder) void {
+        self.scratch.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn encodeStoredAlloc(self: *ZlibEncoder, input: []const u8) ![]u8 {
+        return try encodeZlibStoredAlloc(self.allocator, input);
+    }
+
+    pub fn encodeStoredWithDictionaryAlloc(self: *ZlibEncoder, input: []const u8, dictionary: []const u8) ![]u8 {
+        return try encodeZlibStoredWithDictionaryAlloc(self.allocator, input, dictionary);
+    }
+
+    pub fn encodeStoredChunksAlloc(self: *ZlibEncoder, chunks: []const []const u8) ![]u8 {
+        return try encodeZlibStoredChunksAlloc(self.allocator, chunks);
+    }
+
+    pub fn encodeStoredChunksWithDictionaryAlloc(self: *ZlibEncoder, chunks: []const []const u8, dictionary: []const u8) ![]u8 {
+        return try encodeZlibStoredWithDictionaryChunksAlloc(self.allocator, chunks, dictionary);
+    }
+
+    pub fn encodeFixedAlloc(self: *ZlibEncoder, input: []const u8) ![]u8 {
+        return try self.encodeFixedWithOptionsAlloc(input, .{});
+    }
+
+    pub fn encodeFixedWithOptionsAlloc(self: *ZlibEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
+        return try encodeZlibFixedWithOptionsAlloc(self.allocator, input, options);
+    }
+
+    pub fn encodeFixedWithDictionaryAlloc(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
+        return try encodeZlibFixedWithDictionaryAlloc(self.allocator, input, dictionary, options);
+    }
+
+    pub fn encodeFixedSplitAlloc(self: *ZlibEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+        return try encodeZlibFixedSplitAlloc(self.allocator, input, block_len, options);
+    }
+
+    pub fn encodeFixedSplitWithDictionaryAlloc(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+        return try encodeZlibFixedSplitWithDictionaryAlloc(self.allocator, input, dictionary, block_len, options);
+    }
+
+    pub fn encodeBestAlloc(self: *ZlibEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
+        return try encodeZlibBestAlloc(self.allocator, input, options);
+    }
+
+    pub fn encodeBestWithDictionaryAlloc(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
+        return try encodeZlibBestWithDictionaryAlloc(self.allocator, input, dictionary, options);
+    }
+
+    pub fn encodeBestSplitAlloc(self: *ZlibEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+        return try encodeZlibBestSplitAlloc(self.allocator, input, block_len, options);
+    }
+
+    pub fn encodeBestSplitWithDictionaryAlloc(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+        return try encodeZlibBestSplitWithDictionaryAlloc(self.allocator, input, dictionary, block_len, options);
+    }
+
+    pub fn encodeBestAdaptiveSplitAlloc(self: *ZlibEncoder, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
+        return try encodeZlibBestAdaptiveSplitAlloc(self.allocator, input, options, split_options);
+    }
+
+    pub fn encodeBestAdaptiveSplitWithDictionaryAlloc(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
+        return try encodeZlibBestAdaptiveSplitWithDictionaryAlloc(self.allocator, input, dictionary, options, split_options);
+    }
+
+    pub fn encodeLevelAlloc(self: *ZlibEncoder, input: []const u8, level: u4) ![]u8 {
+        return try encodeZlibLevelAlloc(self.allocator, input, level);
+    }
+
+    pub fn encodeLevelWithDictionaryAlloc(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, level: u4) ![]u8 {
+        return try encodeZlibLevelWithDictionaryAlloc(self.allocator, input, dictionary, level);
+    }
+
+    pub fn encodeDynamicLiteralAlloc(self: *ZlibEncoder, input: []const u8) ![]u8 {
+        return try encodeZlibDynamicLiteralAlloc(self.allocator, input);
+    }
+
+    pub fn encodeDynamicWithOptionsAlloc(self: *ZlibEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
+        return try encodeZlibDynamicWithOptionsAlloc(self.allocator, input, options);
+    }
+
+    pub fn encodeDynamicWithDictionaryAlloc(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
+        return try encodeZlibDynamicWithDictionaryAlloc(self.allocator, input, dictionary, options);
+    }
+
+    pub fn encodeDynamicSplitAlloc(self: *ZlibEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+        return try encodeZlibDynamicSplitAlloc(self.allocator, input, block_len, options);
+    }
+
+    pub fn encodeDynamicSplitWithDictionaryAlloc(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+        return try encodeZlibDynamicSplitWithDictionaryAlloc(self.allocator, input, dictionary, block_len, options);
+    }
+
+    pub fn encodeStoredScratch(self: *ZlibEncoder, input: []const u8) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeStoredAppend(&self.scratch, input);
+        return self.scratch.items;
+    }
+
+    pub fn encodeStoredWithDictionaryScratch(self: *ZlibEncoder, input: []const u8, dictionary: []const u8) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeStoredWithDictionaryAppend(&self.scratch, input, dictionary);
+        return self.scratch.items;
+    }
+
+    pub fn encodeStoredChunksScratch(self: *ZlibEncoder, chunks: []const []const u8) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeStoredChunksAppend(&self.scratch, chunks);
+        return self.scratch.items;
+    }
+
+    pub fn encodeStoredChunksWithDictionaryScratch(self: *ZlibEncoder, chunks: []const []const u8, dictionary: []const u8) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeStoredChunksWithDictionaryAppend(&self.scratch, chunks, dictionary);
+        return self.scratch.items;
+    }
+
+    pub fn encodeFixedScratch(self: *ZlibEncoder, input: []const u8) ![]const u8 {
+        return try self.encodeFixedWithOptionsScratch(input, .{});
+    }
+
+    pub fn encodeFixedWithOptionsScratch(self: *ZlibEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeFixedWithOptionsAppend(&self.scratch, input, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeFixedWithDictionaryScratch(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeFixedWithDictionaryAppend(&self.scratch, input, dictionary, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeFixedSplitScratch(self: *ZlibEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeFixedSplitAppend(&self.scratch, input, block_len, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeFixedSplitWithDictionaryScratch(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeFixedSplitWithDictionaryAppend(&self.scratch, input, dictionary, block_len, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestScratch(self: *ZlibEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestAppend(&self.scratch, input, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestWithDictionaryScratch(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestWithDictionaryAppend(&self.scratch, input, dictionary, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestSplitScratch(self: *ZlibEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestSplitAppend(&self.scratch, input, block_len, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestSplitWithDictionaryScratch(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestSplitWithDictionaryAppend(&self.scratch, input, dictionary, block_len, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestAdaptiveSplitScratch(self: *ZlibEncoder, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestAdaptiveSplitAppend(&self.scratch, input, options, split_options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestAdaptiveSplitWithDictionaryScratch(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestAdaptiveSplitWithDictionaryAppend(&self.scratch, input, dictionary, options, split_options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeLevelScratch(self: *ZlibEncoder, input: []const u8, level: u4) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeLevelAppend(&self.scratch, input, level);
+        return self.scratch.items;
+    }
+
+    pub fn encodeLevelWithDictionaryScratch(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, level: u4) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeLevelWithDictionaryAppend(&self.scratch, input, dictionary, level);
+        return self.scratch.items;
+    }
+
+    pub fn encodeDynamicLiteralScratch(self: *ZlibEncoder, input: []const u8) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeDynamicLiteralAppend(&self.scratch, input);
+        return self.scratch.items;
+    }
+
+    pub fn encodeDynamicWithOptionsScratch(self: *ZlibEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeDynamicWithOptionsAppend(&self.scratch, input, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeDynamicWithDictionaryScratch(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeDynamicWithDictionaryAppend(&self.scratch, input, dictionary, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeDynamicSplitScratch(self: *ZlibEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeDynamicSplitAppend(&self.scratch, input, block_len, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeDynamicSplitWithDictionaryScratch(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeDynamicSplitWithDictionaryAppend(&self.scratch, input, dictionary, block_len, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeStoredAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
+        return try encodeZlibStoredAppend(self.allocator, out, input);
+    }
+
+    pub fn encodeStoredWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8) !usize {
+        return try encodeZlibStoredWithDictionaryAppend(self.allocator, out, input, dictionary);
+    }
+
+    pub fn encodeStoredChunksAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), chunks: []const []const u8) !usize {
+        return try encodeZlibStoredChunksAppend(self.allocator, out, chunks);
+    }
+
+    pub fn encodeStoredChunksWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), chunks: []const []const u8, dictionary: []const u8) !usize {
+        return try encodeZlibStoredWithDictionaryChunksAppend(self.allocator, out, chunks, dictionary);
+    }
+
+    pub fn encodeFixedAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
+        return try self.encodeFixedWithOptionsAppend(out, input, .{});
+    }
+
+    pub fn encodeFixedWithOptionsAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+        const encoded = try self.encodeFixedWithOptionsAlloc(input, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeFixedWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
+        const encoded = try self.encodeFixedWithDictionaryAlloc(input, dictionary, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeFixedSplitAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+        const encoded = try self.encodeFixedSplitAlloc(input, block_len, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeFixedSplitWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+        const encoded = try self.encodeFixedSplitWithDictionaryAlloc(input, dictionary, block_len, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+        const encoded = try self.encodeBestAlloc(input, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
+        const encoded = try self.encodeBestWithDictionaryAlloc(input, dictionary, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestSplitAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+        const encoded = try self.encodeBestSplitAlloc(input, block_len, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestSplitWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+        const encoded = try self.encodeBestSplitWithDictionaryAlloc(input, dictionary, block_len, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestAdaptiveSplitAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
+        const encoded = try self.encodeBestAdaptiveSplitAlloc(input, options, split_options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestAdaptiveSplitWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
+        const encoded = try self.encodeBestAdaptiveSplitWithDictionaryAlloc(input, dictionary, options, split_options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeLevelAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, level: u4) !usize {
+        const encoded = try self.encodeLevelAlloc(input, level);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeLevelWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, level: u4) !usize {
+        const encoded = try self.encodeLevelWithDictionaryAlloc(input, dictionary, level);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeDynamicLiteralAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
+        const encoded = try self.encodeDynamicLiteralAlloc(input);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeDynamicWithOptionsAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+        const encoded = try self.encodeDynamicWithOptionsAlloc(input, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeDynamicWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
+        const encoded = try self.encodeDynamicWithDictionaryAlloc(input, dictionary, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeDynamicSplitAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+        const encoded = try self.encodeDynamicSplitAlloc(input, block_len, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeDynamicSplitWithDictionaryAppend(self: *ZlibEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+        const encoded = try self.encodeDynamicSplitWithDictionaryAlloc(input, dictionary, block_len, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeStoredIntoSlice(self: *ZlibEncoder, input: []const u8, output: []u8) !usize {
+        _ = self;
+        return try encodeZlibStored(input, output);
+    }
+
+    pub fn encodeStoredWithDictionaryIntoSlice(self: *ZlibEncoder, input: []const u8, dictionary: []const u8, output: []u8) !usize {
+        _ = self;
+        return try encodeZlibStoredWithDictionary(input, output, dictionary);
+    }
+
+    pub fn encodeStoredChunksIntoSlice(self: *ZlibEncoder, chunks: []const []const u8, output: []u8) !usize {
+        _ = self;
+        return try encodeZlibStoredChunks(chunks, output);
+    }
+
+    pub fn encodeStoredChunksWithDictionaryIntoSlice(self: *ZlibEncoder, chunks: []const []const u8, dictionary: []const u8, output: []u8) !usize {
+        _ = self;
+        return try encodeZlibStoredWithDictionaryChunks(chunks, output, dictionary);
+    }
+};
+
+pub const GzipEncoder = struct {
+    allocator: std.mem.Allocator,
+    scratch: std.ArrayList(u8) = .empty,
+
+    pub fn init(allocator: std.mem.Allocator) GzipEncoder {
+        return .{ .allocator = allocator };
+    }
+
+    pub fn deinit(self: *GzipEncoder) void {
+        self.scratch.deinit(self.allocator);
+        self.* = undefined;
+    }
+
+    pub fn encodeStoredAlloc(self: *GzipEncoder, input: []const u8) ![]u8 {
+        return try encodeGzipStoredAlloc(self.allocator, input);
+    }
+
+    pub fn encodeStoredWithHeaderAlloc(self: *GzipEncoder, input: []const u8, header_options: GzipHeaderOptions) ![]u8 {
+        return try encodeGzipStoredWithHeaderAlloc(self.allocator, input, header_options);
+    }
+
+    pub fn encodeStoredChunksAlloc(self: *GzipEncoder, chunks: []const []const u8) ![]u8 {
+        return try encodeGzipStoredChunksAlloc(self.allocator, chunks);
+    }
+
+    pub fn encodeStoredChunksWithHeaderAlloc(self: *GzipEncoder, chunks: []const []const u8, header_options: GzipHeaderOptions) ![]u8 {
+        return try encodeGzipStoredChunksWithHeaderAlloc(self.allocator, chunks, header_options);
+    }
+
+    pub fn encodeFixedAlloc(self: *GzipEncoder, input: []const u8) ![]u8 {
+        return try self.encodeFixedWithOptionsAlloc(input, .{});
+    }
+
+    pub fn encodeFixedWithOptionsAlloc(self: *GzipEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
+        return try self.encodeFixedWithHeaderAlloc(input, options, .{});
+    }
+
+    pub fn encodeFixedWithHeaderAlloc(self: *GzipEncoder, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
+        return try encodeGzipFixedWithHeaderAlloc(self.allocator, input, options, header_options);
+    }
+
+    pub fn encodeFixedSplitAlloc(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+        return try self.encodeFixedSplitWithHeaderAlloc(input, block_len, options, .{});
+    }
+
+    pub fn encodeFixedSplitWithHeaderAlloc(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
+        return try encodeGzipFixedSplitWithHeaderAlloc(self.allocator, input, block_len, options, header_options);
+    }
+
+    pub fn encodeBestAlloc(self: *GzipEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
+        return try self.encodeBestWithHeaderAlloc(input, options, .{});
+    }
+
+    pub fn encodeBestWithHeaderAlloc(self: *GzipEncoder, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
+        return try encodeGzipBestWithHeaderAlloc(self.allocator, input, options, header_options);
+    }
+
+    pub fn encodeBestSplitAlloc(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+        return try self.encodeBestSplitWithHeaderAlloc(input, block_len, options, .{});
+    }
+
+    pub fn encodeBestSplitWithHeaderAlloc(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
+        return try encodeGzipBestSplitWithHeaderAlloc(self.allocator, input, block_len, options, header_options);
+    }
+
+    pub fn encodeBestAdaptiveSplitAlloc(self: *GzipEncoder, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
+        return try self.encodeBestAdaptiveSplitWithHeaderAlloc(input, options, split_options, .{});
+    }
+
+    pub fn encodeBestAdaptiveSplitWithHeaderAlloc(self: *GzipEncoder, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions, header_options: GzipHeaderOptions) ![]u8 {
+        return try encodeGzipBestAdaptiveSplitWithHeaderAlloc(self.allocator, input, options, split_options, header_options);
+    }
+
+    pub fn encodeLevelAlloc(self: *GzipEncoder, input: []const u8, level: u4) ![]u8 {
+        return try self.encodeLevelWithHeaderAlloc(input, level, .{});
+    }
+
+    pub fn encodeLevelWithHeaderAlloc(self: *GzipEncoder, input: []const u8, level: u4, header_options: GzipHeaderOptions) ![]u8 {
+        return try encodeGzipLevelWithHeaderAlloc(self.allocator, input, level, header_options);
+    }
+
+    pub fn encodeDynamicLiteralAlloc(self: *GzipEncoder, input: []const u8) ![]u8 {
+        return try self.encodeDynamicLiteralWithHeaderAlloc(input, .{});
+    }
+
+    pub fn encodeDynamicLiteralWithHeaderAlloc(self: *GzipEncoder, input: []const u8, header_options: GzipHeaderOptions) ![]u8 {
+        return try encodeGzipDynamicLiteralWithHeaderAlloc(self.allocator, input, header_options);
+    }
+
+    pub fn encodeDynamicWithOptionsAlloc(self: *GzipEncoder, input: []const u8, options: CompressionOptions) ![]u8 {
+        return try self.encodeDynamicWithHeaderAlloc(input, options, .{});
+    }
+
+    pub fn encodeDynamicWithHeaderAlloc(self: *GzipEncoder, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
+        return try encodeGzipDynamicWithHeaderAlloc(self.allocator, input, options, header_options);
+    }
+
+    pub fn encodeDynamicSplitAlloc(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+        return try self.encodeDynamicSplitWithHeaderAlloc(input, block_len, options, .{});
+    }
+
+    pub fn encodeDynamicSplitWithHeaderAlloc(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
+        return try encodeGzipDynamicSplitWithHeaderAlloc(self.allocator, input, block_len, options, header_options);
+    }
+
+    pub fn encodeStoredScratch(self: *GzipEncoder, input: []const u8) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeStoredAppend(&self.scratch, input);
+        return self.scratch.items;
+    }
+
+    pub fn encodeStoredWithHeaderScratch(self: *GzipEncoder, input: []const u8, header_options: GzipHeaderOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeStoredWithHeaderAppend(&self.scratch, input, header_options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeStoredChunksScratch(self: *GzipEncoder, chunks: []const []const u8) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeStoredChunksAppend(&self.scratch, chunks);
+        return self.scratch.items;
+    }
+
+    pub fn encodeStoredChunksWithHeaderScratch(self: *GzipEncoder, chunks: []const []const u8, header_options: GzipHeaderOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeStoredChunksWithHeaderAppend(&self.scratch, chunks, header_options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeFixedScratch(self: *GzipEncoder, input: []const u8) ![]const u8 {
+        return try self.encodeFixedWithOptionsScratch(input, .{});
+    }
+
+    pub fn encodeFixedWithOptionsScratch(self: *GzipEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
+        return try self.encodeFixedWithHeaderScratch(input, options, .{});
+    }
+
+    pub fn encodeFixedWithHeaderScratch(self: *GzipEncoder, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeFixedWithHeaderAppend(&self.scratch, input, options, header_options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeFixedSplitScratch(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
+        return try self.encodeFixedSplitWithHeaderScratch(input, block_len, options, .{});
+    }
+
+    pub fn encodeFixedSplitWithHeaderScratch(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeFixedSplitWithHeaderAppend(&self.scratch, input, block_len, options, header_options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestScratch(self: *GzipEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
+        return try self.encodeBestWithHeaderScratch(input, options, .{});
+    }
+
+    pub fn encodeBestWithHeaderScratch(self: *GzipEncoder, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestWithHeaderAppend(&self.scratch, input, options, header_options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestSplitScratch(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
+        return try self.encodeBestSplitWithHeaderScratch(input, block_len, options, .{});
+    }
+
+    pub fn encodeBestSplitWithHeaderScratch(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestSplitWithHeaderAppend(&self.scratch, input, block_len, options, header_options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestAdaptiveSplitScratch(self: *GzipEncoder, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]const u8 {
+        return try self.encodeBestAdaptiveSplitWithHeaderScratch(input, options, split_options, .{});
+    }
+
+    pub fn encodeBestAdaptiveSplitWithHeaderScratch(self: *GzipEncoder, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions, header_options: GzipHeaderOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestAdaptiveSplitWithHeaderAppend(&self.scratch, input, options, split_options, header_options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeLevelScratch(self: *GzipEncoder, input: []const u8, level: u4) ![]const u8 {
+        return try self.encodeLevelWithHeaderScratch(input, level, .{});
+    }
+
+    pub fn encodeLevelWithHeaderScratch(self: *GzipEncoder, input: []const u8, level: u4, header_options: GzipHeaderOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeLevelWithHeaderAppend(&self.scratch, input, level, header_options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeDynamicLiteralScratch(self: *GzipEncoder, input: []const u8) ![]const u8 {
+        return try self.encodeDynamicLiteralWithHeaderScratch(input, .{});
+    }
+
+    pub fn encodeDynamicLiteralWithHeaderScratch(self: *GzipEncoder, input: []const u8, header_options: GzipHeaderOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeDynamicLiteralWithHeaderAppend(&self.scratch, input, header_options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeDynamicWithOptionsScratch(self: *GzipEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
+        return try self.encodeDynamicWithHeaderScratch(input, options, .{});
+    }
+
+    pub fn encodeDynamicWithHeaderScratch(self: *GzipEncoder, input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeDynamicWithHeaderAppend(&self.scratch, input, options, header_options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeDynamicSplitScratch(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
+        return try self.encodeDynamicSplitWithHeaderScratch(input, block_len, options, .{});
+    }
+
+    pub fn encodeDynamicSplitWithHeaderScratch(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeDynamicSplitWithHeaderAppend(&self.scratch, input, block_len, options, header_options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeStoredAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
+        return try encodeGzipStoredAppend(self.allocator, out, input);
+    }
+
+    pub fn encodeStoredWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, header_options: GzipHeaderOptions) !usize {
+        return try encodeGzipStoredWithHeaderAppend(self.allocator, out, input, header_options);
+    }
+
+    pub fn encodeStoredChunksAppend(self: *GzipEncoder, out: *std.ArrayList(u8), chunks: []const []const u8) !usize {
+        return try encodeGzipStoredChunksAppend(self.allocator, out, chunks);
+    }
+
+    pub fn encodeStoredChunksWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), chunks: []const []const u8, header_options: GzipHeaderOptions) !usize {
+        return try encodeGzipStoredChunksWithHeaderAppend(self.allocator, out, chunks, header_options);
+    }
+
+    pub fn encodeFixedAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
+        return try self.encodeFixedWithOptionsAppend(out, input, .{});
+    }
+
+    pub fn encodeFixedWithOptionsAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+        return try self.encodeFixedWithHeaderAppend(out, input, options, .{});
+    }
+
+    pub fn encodeFixedWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+        const encoded = try self.encodeFixedWithHeaderAlloc(input, options, header_options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeFixedSplitAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+        return try self.encodeFixedSplitWithHeaderAppend(out, input, block_len, options, .{});
+    }
+
+    pub fn encodeFixedSplitWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+        const encoded = try self.encodeFixedSplitWithHeaderAlloc(input, block_len, options, header_options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+        return try self.encodeBestWithHeaderAppend(out, input, options, .{});
+    }
+
+    pub fn encodeBestWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+        const encoded = try self.encodeBestWithHeaderAlloc(input, options, header_options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestSplitAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+        return try self.encodeBestSplitWithHeaderAppend(out, input, block_len, options, .{});
+    }
+
+    pub fn encodeBestSplitWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+        const encoded = try self.encodeBestSplitWithHeaderAlloc(input, block_len, options, header_options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestAdaptiveSplitAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
+        return try self.encodeBestAdaptiveSplitWithHeaderAppend(out, input, options, split_options, .{});
+    }
+
+    pub fn encodeBestAdaptiveSplitWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions, header_options: GzipHeaderOptions) !usize {
+        const encoded = try self.encodeBestAdaptiveSplitWithHeaderAlloc(input, options, split_options, header_options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeLevelAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, level: u4) !usize {
+        return try self.encodeLevelWithHeaderAppend(out, input, level, .{});
+    }
+
+    pub fn encodeLevelWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, level: u4, header_options: GzipHeaderOptions) !usize {
+        const encoded = try self.encodeLevelWithHeaderAlloc(input, level, header_options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeDynamicLiteralAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8) !usize {
+        return try self.encodeDynamicLiteralWithHeaderAppend(out, input, .{});
+    }
+
+    pub fn encodeDynamicLiteralWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, header_options: GzipHeaderOptions) !usize {
+        const encoded = try self.encodeDynamicLiteralWithHeaderAlloc(input, header_options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeDynamicWithOptionsAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+        return try self.encodeDynamicWithHeaderAppend(out, input, options, .{});
+    }
+
+    pub fn encodeDynamicWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+        const encoded = try self.encodeDynamicWithHeaderAlloc(input, options, header_options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeDynamicSplitAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+        return try self.encodeDynamicSplitWithHeaderAppend(out, input, block_len, options, .{});
+    }
+
+    pub fn encodeDynamicSplitWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+        const encoded = try self.encodeDynamicSplitWithHeaderAlloc(input, block_len, options, header_options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeStoredIntoSlice(self: *GzipEncoder, input: []const u8, output: []u8) !usize {
+        _ = self;
+        return try encodeGzipStored(input, output);
+    }
+
+    pub fn encodeStoredWithHeaderIntoSlice(self: *GzipEncoder, input: []const u8, header_options: GzipHeaderOptions, output: []u8) !usize {
+        _ = self;
+        return try encodeGzipStoredWithHeader(input, output, header_options);
+    }
+
+    pub fn encodeStoredChunksIntoSlice(self: *GzipEncoder, chunks: []const []const u8, output: []u8) !usize {
+        _ = self;
+        return try encodeGzipStoredChunks(chunks, output);
+    }
+
+    pub fn encodeStoredChunksWithHeaderIntoSlice(self: *GzipEncoder, chunks: []const []const u8, header_options: GzipHeaderOptions, output: []u8) !usize {
+        _ = self;
+        return try encodeGzipStoredChunksWithHeader(chunks, output, header_options);
+    }
+};
+
+/// Reusable, caller-owned raw DEFLATE decoder facade.
+///
+/// Like the zlib/gzip wrapper decoders below, this facade validates and decodes a
+/// complete raw DEFLATE stream into caller-provided scratch during `reset*`; the
+/// `step` API then drains that scratch through bounded caller output buffers.
+/// Keeping this thin wrapper allocation-free gives raw users the same reusable
+/// library shape as wrapper callers while the lower-level inflater remains the
+/// single source of format behavior.
+pub const RawDeflateDecoder = struct {
+    decoded: []const u8 = &.{},
+    frame_len: usize = 0,
+    offset: usize = 0,
+    done: bool = false,
+    last_error_name: []const u8 = "",
+    last_recoverability_hint: RecoverabilityHint = .none,
+
+    pub const RecoverabilityHint = enum {
+        none,
+        corrupt_header,
+        truncated_input,
+        payload_corrupt,
+        retry_with_dictionary,
+    };
+
+    pub const Snapshot = struct {
+        output_written: usize,
+        expected_output_len: usize,
+        payload_remaining: usize,
+        done: bool,
+        last_error_name: []const u8,
+        recoverability_hint: RecoverabilityHint,
+    };
+
+    pub fn init(input: []const u8, scratch: []u8) Error!RawDeflateDecoder {
+        var self = RawDeflateDecoder{};
+        try self.reset(input, scratch);
+        return self;
+    }
+
+    pub fn initExactSize(input: []const u8, scratch: []u8, expected_output_len: usize) Error!RawDeflateDecoder {
+        var self = RawDeflateDecoder{};
+        try self.resetExactSize(input, scratch, expected_output_len);
+        return self;
+    }
+
+    pub fn initWithDictionary(input: []const u8, dictionary: []const u8, scratch: []u8) Error!RawDeflateDecoder {
+        var self = RawDeflateDecoder{};
+        try self.resetWithDictionary(input, dictionary, scratch);
+        return self;
+    }
+
+    pub fn initWithDictionaryExactSize(input: []const u8, dictionary: []const u8, scratch: []u8, expected_output_len: usize) Error!RawDeflateDecoder {
+        var self = RawDeflateDecoder{};
+        try self.resetWithDictionaryExactSize(input, dictionary, scratch, expected_output_len);
+        return self;
+    }
+
+    pub fn initFromChunks(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!RawDeflateDecoder {
+        var self = RawDeflateDecoder{};
+        try self.resetFromChunks(chunks, compressed_scratch, output_scratch);
+        return self;
+    }
+
+    pub fn initFromChunksExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!RawDeflateDecoder {
+        var self = RawDeflateDecoder{};
+        try self.resetFromChunksExactSize(chunks, compressed_scratch, output_scratch, expected_output_len);
+        return self;
+    }
+
+    pub fn initFromChunksWithDictionary(chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!RawDeflateDecoder {
+        var self = RawDeflateDecoder{};
+        try self.resetFromChunksWithDictionary(chunks, dictionary, compressed_scratch, output_scratch);
+        return self;
+    }
+
+    pub fn initFromChunksWithDictionaryExactSize(chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!RawDeflateDecoder {
+        var self = RawDeflateDecoder{};
+        try self.resetFromChunksWithDictionaryExactSize(chunks, dictionary, compressed_scratch, output_scratch, expected_output_len);
+        return self;
+    }
+
+    pub fn reset(self: *RawDeflateDecoder, input: []const u8, scratch: []u8) Error!void {
+        return self.resetWithDictionary(input, "", scratch);
+    }
+
+    pub fn resetExactSize(self: *RawDeflateDecoder, input: []const u8, scratch: []u8, expected_output_len: usize) Error!void {
+        return self.resetWithDictionaryExactSize(input, "", scratch, expected_output_len);
+    }
+
+    pub fn resetWithDictionary(self: *RawDeflateDecoder, input: []const u8, dictionary: []const u8, scratch: []u8) Error!void {
+        const decoded = decodeRawAutoWithDictionary(input, dictionary, scratch) catch |err| {
+            self.recordError(err);
+            return err;
+        };
+        if (decoded.input_read != input.len) {
+            self.recordError(error.TrailingData);
+            return error.TrailingData;
+        }
+        self.installDecoded(input.len, scratch, decoded.output_written);
+    }
+
+    pub fn resetWithDictionaryExactSize(self: *RawDeflateDecoder, input: []const u8, dictionary: []const u8, scratch: []u8, expected_output_len: usize) Error!void {
+        if (scratch.len < expected_output_len) {
+            self.recordError(error.OutputTooSmall);
+            return error.OutputTooSmall;
+        }
+        self.resetWithDictionary(input, dictionary, scratch[0..expected_output_len]) catch |err| switch (err) {
+            error.OutputTooSmall => {
+                self.recordError(error.SizeMismatch);
+                return error.SizeMismatch;
+            },
+            else => return err,
+        };
+        if (self.decoded.len != expected_output_len) {
+            self.recordError(error.SizeMismatch);
+            return error.SizeMismatch;
+        }
+    }
+
+    pub fn resetFromChunks(self: *RawDeflateDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!void {
+        return self.resetFromChunksWithDictionary(chunks, "", compressed_scratch, output_scratch);
+    }
+
+    pub fn resetFromChunksExactSize(self: *RawDeflateDecoder, chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!void {
+        return self.resetFromChunksWithDictionaryExactSize(chunks, "", compressed_scratch, output_scratch, expected_output_len);
+    }
+
+    pub fn resetFromChunksWithDictionary(self: *RawDeflateDecoder, chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!void {
+        const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+            self.recordError(err);
+            return err;
+        };
+        return self.resetWithDictionary(joined, dictionary, output_scratch);
+    }
+
+    pub fn resetFromChunksWithDictionaryExactSize(self: *RawDeflateDecoder, chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) Error!void {
+        const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+            self.recordError(err);
+            return err;
+        };
+        return self.resetWithDictionaryExactSize(joined, dictionary, output_scratch, expected_output_len);
+    }
+
+    pub fn snapshot(self: *const RawDeflateDecoder) Snapshot {
+        return .{
+            .output_written = self.offset,
+            .expected_output_len = self.decoded.len,
+            .payload_remaining = self.decoded.len - self.offset,
+            .done = self.done,
+            .last_error_name = self.last_error_name,
+            .recoverability_hint = self.last_recoverability_hint,
+        };
+    }
+
+    pub fn diagnostics(self: *const RawDeflateDecoder) core.StreamingDiagnostics {
+        const snap = self.snapshot();
+        return .{
+            .phase_name = if (snap.done) "done" else "payload",
+            .frame_input_read = if (snap.done) self.frame_len else null,
+            .output_written = snap.output_written,
+            .expected_output_len = snap.expected_output_len,
+            .payload_remaining = snap.payload_remaining,
+            .last_error_name = snap.last_error_name,
+            .last_error_phase_name = if (snap.last_error_name.len == 0) "" else "payload",
+            .recoverability_hint_name = hintName(snap.recoverability_hint),
+        };
+    }
+
+    pub fn step(self: *RawDeflateDecoder, output: []u8) Error!core.StepResult {
+        if (self.done) return .{ .status = .done };
+        if (output.len == 0) return .{ .status = .need_output };
+        const remaining = self.decoded[self.offset..];
+        const n = @min(output.len, remaining.len);
+        @memcpy(output[0..n], remaining[0..n]);
+        self.offset += n;
+        if (self.offset == self.decoded.len) self.done = true;
+        return .{
+            .progress = .{ .input_read = if (self.done) self.frame_len else 0, .output_written = n },
+            .status = if (self.done) .done else .need_output,
+        };
+    }
+
+    fn installDecoded(self: *RawDeflateDecoder, frame_len: usize, scratch: []u8, written: usize) void {
+        self.* = .{
+            .decoded = scratch[0..written],
+            .frame_len = frame_len,
+        };
+    }
+
+    fn recordError(self: *RawDeflateDecoder, err: Error) void {
+        self.last_error_name = @errorName(err);
+        self.last_recoverability_hint = switch (err) {
+            error.InvalidDeflateBlockType, error.InvalidDynamicBlockHeader, error.InvalidHuffmanCode => .corrupt_header,
+            error.TruncatedFrame => .truncated_input,
+            error.NeedDictionary, error.InvalidDictionaryTraining => .retry_with_dictionary,
+            else => .payload_corrupt,
+        };
+    }
+
+    fn hintName(hint: RecoverabilityHint) []const u8 {
+        return switch (hint) {
+            .none => "none",
+            .corrupt_header => "corrupt_header",
+            .truncated_input => "truncated_input",
+            .payload_corrupt => "payload_corrupt",
+            .retry_with_dictionary => "retry_with_dictionary",
+        };
+    }
+};
+
+pub fn decodedRawAutoSize(input: []const u8, scratch: []u8) Error!usize {
+    return decodedRawAutoSizeWithDictionary(input, "", scratch);
+}
+
+pub fn decodedRawAutoSizeWithDictionary(input: []const u8, dictionary: []const u8, scratch: []u8) Error!usize {
+    const decoder = try RawDeflateDecoder.initWithDictionary(input, dictionary, scratch);
+    return decoder.decoded.len;
+}
+
+pub fn decodedRawChunksSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!usize {
+    return decodedRawChunksSizeWithDictionary(chunks, compressed_scratch, "", output_scratch);
+}
+
+pub fn decodedRawChunksSizeWithDictionary(chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, output_scratch: []u8) Error!usize {
+    const decoder = try RawDeflateDecoder.initFromChunksWithDictionary(chunks, dictionary, compressed_scratch, output_scratch);
+    return decoder.decoded.len;
+}
+
+pub fn probeRawAuto(input: []const u8, scratch: []u8) RawDeflateProbeResult {
+    return probeRawAutoWithDictionary(input, "", scratch);
+}
+
+pub fn probeRawAutoWithDictionary(input: []const u8, dictionary: []const u8, scratch: []u8) RawDeflateProbeResult {
+    var decoder = RawDeflateDecoder{};
+    decoder.resetWithDictionary(input, dictionary, scratch) catch |err| {
+        return .{
+            .ok = false,
+            .diagnostics = decoder.diagnostics(),
+            .error_name = @errorName(err),
+        };
+    };
+    return .{
+        .ok = true,
+        .decoded_bytes = decoder.decoded.len,
+        .diagnostics = decoder.diagnostics(),
+    };
+}
+
+pub fn probeRawAutoExactSize(input: []const u8, scratch: []u8, expected_output_len: usize) RawDeflateProbeResult {
+    return probeRawAutoWithDictionaryExactSize(input, "", scratch, expected_output_len);
+}
+
+pub fn probeRawAutoWithDictionaryExactSize(input: []const u8, dictionary: []const u8, scratch: []u8, expected_output_len: usize) RawDeflateProbeResult {
+    var decoder = RawDeflateDecoder{};
+    decoder.resetWithDictionary(input, dictionary, scratch) catch |err| {
+        return .{
+            .ok = false,
+            .diagnostics = decoder.diagnostics(),
+            .error_name = @errorName(err),
+        };
+    };
+    if (decoder.decoded.len != expected_output_len) {
+        return .{
+            .ok = false,
+            .decoded_bytes = decoder.decoded.len,
+            .diagnostics = .{
+                .phase_name = "output_size",
+                .output_written = decoder.decoded.len,
+                .expected_output_len = expected_output_len,
+                .payload_remaining = 0,
+                .last_error_name = @errorName(error.SizeMismatch),
+                .last_error_phase_name = "output_size",
+                .recoverability_hint_name = "payload_corrupt",
+            },
+            .error_name = @errorName(error.SizeMismatch),
+        };
+    }
+    return .{
+        .ok = true,
+        .decoded_bytes = decoder.decoded.len,
+        .diagnostics = decoder.diagnostics(),
+    };
+}
+
+pub fn probeRawChunks(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) RawDeflateProbeResult {
+    return probeRawChunksWithDictionary(chunks, compressed_scratch, "", output_scratch);
+}
+
+pub fn probeRawChunksWithDictionary(chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, output_scratch: []u8) RawDeflateProbeResult {
+    const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+        return .{
+            .ok = false,
+            .diagnostics = .{
+                .phase_name = "input",
+                .last_error_name = @errorName(err),
+                .last_error_phase_name = "input",
+                .recoverability_hint_name = "payload_corrupt",
+            },
+            .error_name = @errorName(err),
+        };
+    };
+    return probeRawAutoWithDictionary(joined, dictionary, output_scratch);
+}
+
+pub fn probeRawChunksExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) RawDeflateProbeResult {
+    return probeRawChunksWithDictionaryExactSize(chunks, compressed_scratch, "", output_scratch, expected_output_len);
+}
+
+pub fn probeRawChunksWithDictionaryExactSize(chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, output_scratch: []u8, expected_output_len: usize) RawDeflateProbeResult {
+    const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+        return .{
+            .ok = false,
+            .diagnostics = .{
+                .phase_name = "input",
+                .last_error_name = @errorName(err),
+                .last_error_phase_name = "input",
+                .recoverability_hint_name = "payload_corrupt",
+            },
+            .error_name = @errorName(err),
+        };
+    };
+    return probeRawAutoWithDictionaryExactSize(joined, dictionary, output_scratch, expected_output_len);
 }
 
 pub fn pngIdatChunksScratchLen(chunks: []const []const u8) Error!usize {
@@ -6548,6 +8523,470 @@ pub const ZlibDecoder = struct {
         };
     }
 };
+
+fn probeResultFromDecoder(decoder: anytype, comptime Decoder: type, err: anyerror) DecodeProbeResult {
+    var diagnostics = decoder.diagnostics();
+    diagnostics.phase_name = probeErrorPhaseName(Decoder, err);
+    diagnostics.last_error_phase_name = diagnostics.phase_name;
+    return .{
+        .ok = false,
+        .diagnostics = diagnostics,
+        .error_name = @errorName(err),
+    };
+}
+
+fn probeErrorPhaseName(comptime Decoder: type, err: anyerror) []const u8 {
+    if (Decoder == ZlibDecoder and (err == error.BadZlibHeader or err == error.NeedDictionary)) return "header";
+    if (Decoder == GzipDecoder and err == error.BadGzipHeader) return "header";
+    return switch (err) {
+        error.ChecksumMismatch, error.TrailingData => "footer",
+        error.OutputTooSmall, error.SizeMismatch, error.OutputLimitExceeded => "output",
+        else => "payload",
+    };
+}
+
+fn probeOutputSizeMismatch(decoded_len: usize, expected_output_len: usize) DecodeProbeResult {
+    return .{
+        .ok = false,
+        .decoded_bytes = decoded_len,
+        .diagnostics = .{
+            .phase_name = "output_size",
+            .output_written = decoded_len,
+            .expected_output_len = expected_output_len,
+            .payload_remaining = 0,
+            .last_error_name = @errorName(error.SizeMismatch),
+            .last_error_phase_name = "output_size",
+            .recoverability_hint_name = "payload_corrupt",
+        },
+        .error_name = @errorName(error.SizeMismatch),
+    };
+}
+
+const ProbeMemberLocation = struct {
+    index: usize,
+    offset: usize,
+};
+
+fn withProbeMemberLocation(result: DecodeProbeResult, location: ?ProbeMemberLocation) DecodeProbeResult {
+    var with_location = result;
+    if (location) |loc| {
+        with_location.member_index = loc.index;
+        with_location.member_offset = loc.offset;
+    }
+    return with_location;
+}
+
+const ProbeMemberSummary = struct {
+    count: usize,
+    input_bytes: usize,
+    last_offset: usize,
+};
+
+fn withProbeMemberCount(result: DecodeProbeResult, summary: ?ProbeMemberSummary) DecodeProbeResult {
+    var with_summary = result;
+    if (summary) |s| {
+        with_summary.member_count = s.count;
+        with_summary.stream_input_bytes = s.input_bytes;
+        with_summary.last_member_offset = s.last_offset;
+    }
+    return with_summary;
+}
+
+fn zlibProbeFailureMemberIndex(input: []const u8, dictionary: ?[]const u8, scratch: []u8, options: ZlibDecodeOptions) ?ProbeMemberLocation {
+    var offset: usize = 0;
+    var member_index: usize = 0;
+    while (offset < input.len) : (member_index += 1) {
+        const header = parseZlibHeader(input[offset..], dictionary) catch {
+            if (options.allow_trailing_data and offset != 0) return null;
+            return .{ .index = member_index, .offset = offset };
+        };
+        const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
+        const raw_offset = offset + header.data_offset;
+        const raw_input = input[raw_offset..];
+        if (raw_input.len == 0) return .{ .index = member_index, .offset = offset };
+        const raw = decodeRawAutoWithDictionary(raw_input, raw_dictionary, scratch) catch return .{ .index = member_index, .offset = offset };
+        const footer_offset = raw_offset + raw.input_read;
+        const actual_adler = if (options.ignore_adler) 0 else checksum.adler32(scratch[0..raw.output_written]);
+        validateZlibFooterPartialWithOptions(input, footer_offset, actual_adler, options) catch return .{ .index = member_index, .offset = offset };
+        offset = footer_offset + 4;
+    }
+    return null;
+}
+
+fn zlibProbeMemberCount(input: []const u8, dictionary: ?[]const u8, scratch: []u8, options: ZlibDecodeOptions) ?ProbeMemberSummary {
+    var offset: usize = 0;
+    var count: usize = 0;
+    var last_offset: usize = 0;
+    while (offset < input.len) : (count += 1) {
+        last_offset = offset;
+        const header = parseZlibHeader(input[offset..], dictionary) catch {
+            if (options.allow_trailing_data and offset != 0) return .{ .count = count, .input_bytes = offset, .last_offset = last_offset };
+            return null;
+        };
+        const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
+        const raw_offset = offset + header.data_offset;
+        const raw_input = input[raw_offset..];
+        if (raw_input.len == 0) return null;
+        const raw = decodeRawAutoWithDictionary(raw_input, raw_dictionary, scratch) catch return null;
+        const footer_offset = raw_offset + raw.input_read;
+        const actual_adler = if (options.ignore_adler) 0 else checksum.adler32(scratch[0..raw.output_written]);
+        validateZlibFooterPartialWithOptions(input, footer_offset, actual_adler, options) catch return null;
+        offset = footer_offset + 4;
+    }
+    return .{ .count = count, .input_bytes = input.len, .last_offset = last_offset };
+}
+
+fn gzipProbeFailureMemberIndex(input: []const u8, scratch: []u8, options: GzipDecodeOptions) ?ProbeMemberLocation {
+    var offset: usize = 0;
+    var member_index: usize = 0;
+    while (offset < input.len) : (member_index += 1) {
+        const data_offset = parseGzipHeader(input[offset..]) catch {
+            if (options.allow_trailing_data and offset != 0) return null;
+            return .{ .index = member_index, .offset = offset };
+        };
+        const raw_offset = offset + data_offset;
+        const raw_input = input[raw_offset..];
+        if (raw_input.len == 0) return .{ .index = member_index, .offset = offset };
+        const raw = decodeRawAuto(raw_input, scratch) catch return .{ .index = member_index, .offset = offset };
+        const footer_offset = raw_offset + raw.input_read;
+        const member_payload = scratch[0..raw.output_written];
+        const actual_crc = if (options.ignore_crc32) 0 else checksum.crc32Best(member_payload);
+        validateGzipFooterPartialWithOptions(input, footer_offset, actual_crc, member_payload.len, options) catch return .{ .index = member_index, .offset = offset };
+        offset = footer_offset + 8;
+    }
+    return null;
+}
+
+fn gzipProbeMemberCount(input: []const u8, scratch: []u8, options: GzipDecodeOptions) ?ProbeMemberSummary {
+    var offset: usize = 0;
+    var count: usize = 0;
+    var last_offset: usize = 0;
+    while (offset < input.len) : (count += 1) {
+        last_offset = offset;
+        const data_offset = parseGzipHeader(input[offset..]) catch {
+            if (options.allow_trailing_data and offset != 0) return .{ .count = count, .input_bytes = offset, .last_offset = last_offset };
+            return null;
+        };
+        const raw_offset = offset + data_offset;
+        const raw_input = input[raw_offset..];
+        if (raw_input.len == 0) return null;
+        const raw = decodeRawAuto(raw_input, scratch) catch return null;
+        const footer_offset = raw_offset + raw.input_read;
+        const member_payload = scratch[0..raw.output_written];
+        const actual_crc = if (options.ignore_crc32) 0 else checksum.crc32Best(member_payload);
+        validateGzipFooterPartialWithOptions(input, footer_offset, actual_crc, member_payload.len, options) catch return null;
+        offset = footer_offset + 8;
+    }
+    return .{ .count = count, .input_bytes = input.len, .last_offset = last_offset };
+}
+
+pub fn probeZlib(input: []const u8, scratch: []u8) DecodeProbeResult {
+    return probeZlibWithOptions(input, scratch, .{});
+}
+
+pub fn probeZlibWithDictionary(input: []const u8, dictionary: []const u8, scratch: []u8) DecodeProbeResult {
+    return probeZlibWithDictionaryAndOptions(input, dictionary, scratch, .{});
+}
+
+pub fn probeZlibWithOptions(input: []const u8, scratch: []u8, options: ZlibDecodeOptions) DecodeProbeResult {
+    return probeZlibWithOptionalDictionaryAndOptions(input, null, scratch, options);
+}
+
+pub fn probeZlibWithDictionaryAndOptions(input: []const u8, dictionary: []const u8, scratch: []u8, options: ZlibDecodeOptions) DecodeProbeResult {
+    return probeZlibWithOptionalDictionaryAndOptions(input, dictionary, scratch, options);
+}
+
+fn probeZlibWithOptionalDictionaryAndOptions(input: []const u8, dictionary: ?[]const u8, scratch: []u8, options: ZlibDecodeOptions) DecodeProbeResult {
+    var decoder = ZlibDecoder{};
+    if (dictionary) |dict| {
+        decoder.resetWithDictionaryAndOptions(input, dict, scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    } else {
+        decoder.resetWithOptions(input, scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    }
+    return .{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() };
+}
+
+pub fn probeZlibExactSize(input: []const u8, scratch: []u8, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibWithOptionsExactSize(input, scratch, .{}, expected_output_len);
+}
+
+pub fn probeZlibWithDictionaryExactSize(input: []const u8, dictionary: []const u8, scratch: []u8, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibWithDictionaryAndOptionsExactSize(input, dictionary, scratch, .{}, expected_output_len);
+}
+
+pub fn probeZlibWithOptionsExactSize(input: []const u8, scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibWithOptionalDictionaryAndOptionsExactSize(input, null, scratch, options, expected_output_len);
+}
+
+pub fn probeZlibWithDictionaryAndOptionsExactSize(input: []const u8, dictionary: []const u8, scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibWithOptionalDictionaryAndOptionsExactSize(input, dictionary, scratch, options, expected_output_len);
+}
+
+fn probeZlibWithOptionalDictionaryAndOptionsExactSize(input: []const u8, dictionary: ?[]const u8, scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) DecodeProbeResult {
+    var decoder = ZlibDecoder{};
+    if (dictionary) |dict| {
+        decoder.resetWithDictionaryAndOptions(input, dict, scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    } else {
+        decoder.resetWithOptions(input, scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    }
+    if (decoder.decoded.len != expected_output_len) return probeOutputSizeMismatch(decoder.decoded.len, expected_output_len);
+    return .{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() };
+}
+
+pub fn probeZlibChunks(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) DecodeProbeResult {
+    return probeZlibChunksWithOptions(chunks, compressed_scratch, output_scratch, .{});
+}
+
+pub fn probeZlibChunksWithDictionary(chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, output_scratch: []u8) DecodeProbeResult {
+    return probeZlibChunksWithDictionaryAndOptions(chunks, compressed_scratch, dictionary, output_scratch, .{});
+}
+
+pub fn probeZlibChunksWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions) DecodeProbeResult {
+    return probeZlibChunksWithOptionalDictionaryAndOptions(chunks, compressed_scratch, null, output_scratch, options);
+}
+
+pub fn probeZlibChunksWithDictionaryAndOptions(chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, output_scratch: []u8, options: ZlibDecodeOptions) DecodeProbeResult {
+    return probeZlibChunksWithOptionalDictionaryAndOptions(chunks, compressed_scratch, dictionary, output_scratch, options);
+}
+
+fn probeZlibChunksWithOptionalDictionaryAndOptions(chunks: []const []const u8, compressed_scratch: []u8, dictionary: ?[]const u8, output_scratch: []u8, options: ZlibDecodeOptions) DecodeProbeResult {
+    var decoder = ZlibDecoder{};
+    if (dictionary) |dict| {
+        decoder.resetFromChunksWithDictionaryAndOptions(chunks, dict, compressed_scratch, output_scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    } else {
+        decoder.resetFromChunksWithOptions(chunks, compressed_scratch, output_scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    }
+    return .{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() };
+}
+
+pub fn probeZlibChunksExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibChunksWithOptionsExactSize(chunks, compressed_scratch, output_scratch, .{}, expected_output_len);
+}
+
+pub fn probeZlibChunksWithDictionaryExactSize(chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, output_scratch: []u8, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibChunksWithDictionaryAndOptionsExactSize(chunks, compressed_scratch, dictionary, output_scratch, .{}, expected_output_len);
+}
+
+pub fn probeZlibChunksWithOptionsExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibChunksWithOptionalDictionaryAndOptionsExactSize(chunks, compressed_scratch, null, output_scratch, options, expected_output_len);
+}
+
+pub fn probeZlibChunksWithDictionaryAndOptionsExactSize(chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibChunksWithOptionalDictionaryAndOptionsExactSize(chunks, compressed_scratch, dictionary, output_scratch, options, expected_output_len);
+}
+
+fn probeZlibChunksWithOptionalDictionaryAndOptionsExactSize(chunks: []const []const u8, compressed_scratch: []u8, dictionary: ?[]const u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) DecodeProbeResult {
+    var decoder = ZlibDecoder{};
+    if (dictionary) |dict| {
+        decoder.resetFromChunksWithDictionaryAndOptions(chunks, dict, compressed_scratch, output_scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    } else {
+        decoder.resetFromChunksWithOptions(chunks, compressed_scratch, output_scratch, options) catch |err| return probeResultFromDecoder(&decoder, ZlibDecoder, err);
+    }
+    if (decoder.decoded.len != expected_output_len) return probeOutputSizeMismatch(decoder.decoded.len, expected_output_len);
+    return .{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() };
+}
+
+pub fn decodedZlibSize(input: []const u8, scratch: []u8) Error!usize {
+    return decodedZlibSizeWithOptions(input, scratch, .{});
+}
+
+pub fn decodedZlibSizeWithOptions(input: []const u8, scratch: []u8, options: ZlibDecodeOptions) Error!usize {
+    const decoder = try ZlibDecoder.initWithOptions(input, scratch, options);
+    return decoder.decoded.len;
+}
+
+pub fn decodedZlibSizeWithDictionary(input: []const u8, dictionary: []const u8, scratch: []u8) Error!usize {
+    return decodedZlibSizeWithDictionaryAndOptions(input, dictionary, scratch, .{});
+}
+
+pub fn decodedZlibSizeWithDictionaryAndOptions(input: []const u8, dictionary: []const u8, scratch: []u8, options: ZlibDecodeOptions) Error!usize {
+    const decoder = try ZlibDecoder.initWithDictionaryAndOptions(input, dictionary, scratch, options);
+    return decoder.decoded.len;
+}
+
+pub fn decodedZlibChunksSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!usize {
+    return decodedZlibChunksSizeWithOptions(chunks, compressed_scratch, output_scratch, .{});
+}
+
+pub fn decodedZlibChunksSizeWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions) Error!usize {
+    const decoder = try ZlibDecoder.initFromChunksWithOptions(chunks, compressed_scratch, output_scratch, options);
+    return decoder.decoded.len;
+}
+
+pub fn decodedZlibChunksSizeWithDictionary(chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!usize {
+    return decodedZlibChunksSizeWithDictionaryAndOptions(chunks, dictionary, compressed_scratch, output_scratch, .{});
+}
+
+pub fn decodedZlibChunksSizeWithDictionaryAndOptions(chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions) Error!usize {
+    const decoder = try ZlibDecoder.initFromChunksWithDictionaryAndOptions(chunks, dictionary, compressed_scratch, output_scratch, options);
+    return decoder.decoded.len;
+}
+
+pub fn decodedZlibConcatenatedSize(input: []const u8, scratch: []u8) Error!usize {
+    return decodedZlibConcatenatedSizeWithOptions(input, scratch, .{});
+}
+
+pub fn decodedZlibConcatenatedSizeWithOptions(input: []const u8, scratch: []u8, options: ZlibDecodeOptions) Error!usize {
+    const decoder = try ZlibDecoder.initConcatenatedWithOptions(input, scratch, options);
+    return decoder.decoded.len;
+}
+
+pub fn decodedZlibConcatenatedSizeWithDictionary(input: []const u8, dictionary: []const u8, scratch: []u8) Error!usize {
+    return decodedZlibConcatenatedSizeWithDictionaryAndOptions(input, dictionary, scratch, .{});
+}
+
+pub fn decodedZlibConcatenatedSizeWithDictionaryAndOptions(input: []const u8, dictionary: []const u8, scratch: []u8, options: ZlibDecodeOptions) Error!usize {
+    const decoder = try ZlibDecoder.initConcatenatedWithDictionaryAndOptions(input, dictionary, scratch, options);
+    return decoder.decoded.len;
+}
+
+pub fn decodedZlibConcatenatedChunksSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!usize {
+    return decodedZlibConcatenatedChunksSizeWithOptions(chunks, compressed_scratch, output_scratch, .{});
+}
+
+pub fn decodedZlibConcatenatedChunksSizeWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions) Error!usize {
+    const decoder = try ZlibDecoder.initConcatenatedFromChunksWithOptions(chunks, compressed_scratch, output_scratch, options);
+    return decoder.decoded.len;
+}
+
+pub fn decodedZlibConcatenatedChunksSizeWithDictionary(chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!usize {
+    return decodedZlibConcatenatedChunksSizeWithDictionaryAndOptions(chunks, dictionary, compressed_scratch, output_scratch, .{});
+}
+
+pub fn decodedZlibConcatenatedChunksSizeWithDictionaryAndOptions(chunks: []const []const u8, dictionary: []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions) Error!usize {
+    const decoder = try ZlibDecoder.initConcatenatedFromChunksWithDictionaryAndOptions(chunks, dictionary, compressed_scratch, output_scratch, options);
+    return decoder.decoded.len;
+}
+
+pub fn probeZlibConcatenated(input: []const u8, scratch: []u8) DecodeProbeResult {
+    return probeZlibConcatenatedWithOptions(input, scratch, .{});
+}
+
+pub fn probeZlibConcatenatedWithDictionary(input: []const u8, dictionary: []const u8, scratch: []u8) DecodeProbeResult {
+    return probeZlibConcatenatedWithDictionaryAndOptions(input, dictionary, scratch, .{});
+}
+
+pub fn probeZlibConcatenatedWithOptions(input: []const u8, scratch: []u8, options: ZlibDecodeOptions) DecodeProbeResult {
+    return probeZlibConcatenatedWithOptionalDictionaryAndOptions(input, null, scratch, options);
+}
+
+pub fn probeZlibConcatenatedWithDictionaryAndOptions(input: []const u8, dictionary: []const u8, scratch: []u8, options: ZlibDecodeOptions) DecodeProbeResult {
+    return probeZlibConcatenatedWithOptionalDictionaryAndOptions(input, dictionary, scratch, options);
+}
+
+fn probeZlibConcatenatedWithOptionalDictionaryAndOptions(input: []const u8, dictionary: ?[]const u8, scratch: []u8, options: ZlibDecodeOptions) DecodeProbeResult {
+    var decoder = ZlibDecoder{};
+    if (dictionary) |dict| {
+        decoder.resetConcatenatedWithDictionaryAndOptions(input, dict, scratch, options) catch |err| return withProbeMemberLocation(probeResultFromDecoder(&decoder, ZlibDecoder, err), zlibProbeFailureMemberIndex(input, dictionary, scratch, options));
+    } else {
+        decoder.resetConcatenatedWithOptions(input, scratch, options) catch |err| return withProbeMemberLocation(probeResultFromDecoder(&decoder, ZlibDecoder, err), zlibProbeFailureMemberIndex(input, dictionary, scratch, options));
+    }
+    return withProbeMemberCount(.{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() }, zlibProbeMemberCount(input, dictionary, scratch, options));
+}
+
+pub fn probeZlibConcatenatedExactSize(input: []const u8, scratch: []u8, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibConcatenatedWithOptionsExactSize(input, scratch, .{}, expected_output_len);
+}
+
+pub fn probeZlibConcatenatedWithDictionaryExactSize(input: []const u8, dictionary: []const u8, scratch: []u8, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibConcatenatedWithDictionaryAndOptionsExactSize(input, dictionary, scratch, .{}, expected_output_len);
+}
+
+pub fn probeZlibConcatenatedWithOptionsExactSize(input: []const u8, scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibConcatenatedWithOptionalDictionaryAndOptionsExactSize(input, null, scratch, options, expected_output_len);
+}
+
+pub fn probeZlibConcatenatedWithDictionaryAndOptionsExactSize(input: []const u8, dictionary: []const u8, scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibConcatenatedWithOptionalDictionaryAndOptionsExactSize(input, dictionary, scratch, options, expected_output_len);
+}
+
+fn probeZlibConcatenatedWithOptionalDictionaryAndOptionsExactSize(input: []const u8, dictionary: ?[]const u8, scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) DecodeProbeResult {
+    var decoder = ZlibDecoder{};
+    if (dictionary) |dict| {
+        decoder.resetConcatenatedWithDictionaryAndOptions(input, dict, scratch, options) catch |err| return withProbeMemberLocation(probeResultFromDecoder(&decoder, ZlibDecoder, err), zlibProbeFailureMemberIndex(input, dictionary, scratch, options));
+    } else {
+        decoder.resetConcatenatedWithOptions(input, scratch, options) catch |err| return withProbeMemberLocation(probeResultFromDecoder(&decoder, ZlibDecoder, err), zlibProbeFailureMemberIndex(input, dictionary, scratch, options));
+    }
+    if (decoder.decoded.len != expected_output_len) return withProbeMemberCount(probeOutputSizeMismatch(decoder.decoded.len, expected_output_len), zlibProbeMemberCount(input, dictionary, scratch, options));
+    return withProbeMemberCount(.{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() }, zlibProbeMemberCount(input, dictionary, scratch, options));
+}
+
+pub fn probeZlibConcatenatedChunks(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) DecodeProbeResult {
+    return probeZlibConcatenatedChunksWithOptions(chunks, compressed_scratch, output_scratch, .{});
+}
+
+pub fn probeZlibConcatenatedChunksWithDictionary(chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, output_scratch: []u8) DecodeProbeResult {
+    return probeZlibConcatenatedChunksWithDictionaryAndOptions(chunks, compressed_scratch, dictionary, output_scratch, .{});
+}
+
+pub fn probeZlibConcatenatedChunksWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions) DecodeProbeResult {
+    return probeZlibConcatenatedChunksWithOptionalDictionaryAndOptions(chunks, compressed_scratch, null, output_scratch, options);
+}
+
+pub fn probeZlibConcatenatedChunksWithDictionaryAndOptions(chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, output_scratch: []u8, options: ZlibDecodeOptions) DecodeProbeResult {
+    return probeZlibConcatenatedChunksWithOptionalDictionaryAndOptions(chunks, compressed_scratch, dictionary, output_scratch, options);
+}
+
+fn probeZlibConcatenatedChunksWithOptionalDictionaryAndOptions(chunks: []const []const u8, compressed_scratch: []u8, dictionary: ?[]const u8, output_scratch: []u8, options: ZlibDecodeOptions) DecodeProbeResult {
+    const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+        return .{
+            .ok = false,
+            .diagnostics = .{
+                .phase_name = "input",
+                .last_error_name = @errorName(err),
+                .last_error_phase_name = "input",
+                .recoverability_hint_name = "payload_corrupt",
+            },
+            .error_name = @errorName(err),
+        };
+    };
+    var decoder = ZlibDecoder{};
+    if (dictionary) |dict| {
+        decoder.resetConcatenatedWithDictionaryAndOptions(joined, dict, output_scratch, options) catch |err| return withProbeMemberLocation(probeResultFromDecoder(&decoder, ZlibDecoder, err), zlibProbeFailureMemberIndex(joined, dictionary, output_scratch, options));
+    } else {
+        decoder.resetConcatenatedWithOptions(joined, output_scratch, options) catch |err| return withProbeMemberLocation(probeResultFromDecoder(&decoder, ZlibDecoder, err), zlibProbeFailureMemberIndex(joined, dictionary, output_scratch, options));
+    }
+    return withProbeMemberCount(.{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() }, zlibProbeMemberCount(joined, dictionary, output_scratch, options));
+}
+
+pub fn probeZlibConcatenatedChunksExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibConcatenatedChunksWithOptionsExactSize(chunks, compressed_scratch, output_scratch, .{}, expected_output_len);
+}
+
+pub fn probeZlibConcatenatedChunksWithDictionaryExactSize(chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, output_scratch: []u8, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibConcatenatedChunksWithDictionaryAndOptionsExactSize(chunks, compressed_scratch, dictionary, output_scratch, .{}, expected_output_len);
+}
+
+pub fn probeZlibConcatenatedChunksWithOptionsExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibConcatenatedChunksWithOptionalDictionaryAndOptionsExactSize(chunks, compressed_scratch, null, output_scratch, options, expected_output_len);
+}
+
+pub fn probeZlibConcatenatedChunksWithDictionaryAndOptionsExactSize(chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) DecodeProbeResult {
+    return probeZlibConcatenatedChunksWithOptionalDictionaryAndOptionsExactSize(chunks, compressed_scratch, dictionary, output_scratch, options, expected_output_len);
+}
+
+fn probeZlibConcatenatedChunksWithOptionalDictionaryAndOptionsExactSize(chunks: []const []const u8, compressed_scratch: []u8, dictionary: ?[]const u8, output_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) DecodeProbeResult {
+    const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+        return .{
+            .ok = false,
+            .diagnostics = .{
+                .phase_name = "input",
+                .last_error_name = @errorName(err),
+                .last_error_phase_name = "input",
+                .recoverability_hint_name = "payload_corrupt",
+            },
+            .error_name = @errorName(err),
+        };
+    };
+    var decoder = ZlibDecoder{};
+    if (dictionary) |dict| {
+        decoder.resetConcatenatedWithDictionaryAndOptions(joined, dict, output_scratch, options) catch |err| return withProbeMemberLocation(probeResultFromDecoder(&decoder, ZlibDecoder, err), zlibProbeFailureMemberIndex(joined, dictionary, output_scratch, options));
+    } else {
+        decoder.resetConcatenatedWithOptions(joined, output_scratch, options) catch |err| return withProbeMemberLocation(probeResultFromDecoder(&decoder, ZlibDecoder, err), zlibProbeFailureMemberIndex(joined, dictionary, output_scratch, options));
+    }
+    if (decoder.decoded.len != expected_output_len) return withProbeMemberCount(probeOutputSizeMismatch(decoder.decoded.len, expected_output_len), zlibProbeMemberCount(joined, dictionary, output_scratch, options));
+    return withProbeMemberCount(.{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() }, zlibProbeMemberCount(joined, dictionary, output_scratch, options));
+}
 
 /// PNG-oriented zlib row pipeline built from caller-owned buffers.
 ///
@@ -9854,6 +12293,104 @@ pub fn decodeZlibAllocWithDictionaryAndOptionsLimited(allocator: std.mem.Allocat
     return decodeZlibAllocWithOptionalDictionaryAndOptionsLimited(allocator, input, dictionary, options, max_output_len);
 }
 
+pub fn decodeZlibAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) !usize {
+    return decodeZlibAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, input, null, .{}, null);
+}
+
+pub fn decodeZlibAppendWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8) !usize {
+    return decodeZlibAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, input, dictionary, .{}, null);
+}
+
+pub fn decodeZlibAppendWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: ZlibDecodeOptions) !usize {
+    return decodeZlibAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, input, null, options, null);
+}
+
+pub fn decodeZlibAppendWithDictionaryAndOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: ZlibDecodeOptions) !usize {
+    return decodeZlibAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, input, dictionary, options, null);
+}
+
+pub fn decodeZlibAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, expected_output_len: usize) !usize {
+    return decodeZlibAppendWithOptionalDictionaryAndOptionsExactSize(allocator, out, input, null, .{}, expected_output_len);
+}
+
+pub fn decodeZlibAppendWithDictionaryExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, expected_output_len: usize) !usize {
+    return decodeZlibAppendWithOptionalDictionaryAndOptionsExactSize(allocator, out, input, dictionary, .{}, expected_output_len);
+}
+
+pub fn decodeZlibAppendWithOptionsExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: ZlibDecodeOptions, expected_output_len: usize) !usize {
+    return decodeZlibAppendWithOptionalDictionaryAndOptionsExactSize(allocator, out, input, null, options, expected_output_len);
+}
+
+pub fn decodeZlibAppendWithDictionaryAndOptionsExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: ZlibDecodeOptions, expected_output_len: usize) !usize {
+    return decodeZlibAppendWithOptionalDictionaryAndOptionsExactSize(allocator, out, input, dictionary, options, expected_output_len);
+}
+
+pub fn decodeZlibAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, max_output_len: usize) !usize {
+    return decodeZlibAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, input, null, .{}, max_output_len);
+}
+
+pub fn decodeZlibAppendWithDictionaryLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, max_output_len: usize) !usize {
+    return decodeZlibAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, input, dictionary, .{}, max_output_len);
+}
+
+pub fn decodeZlibAppendWithOptionsLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: ZlibDecodeOptions, max_output_len: usize) !usize {
+    return decodeZlibAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, input, null, options, max_output_len);
+}
+
+pub fn decodeZlibAppendWithDictionaryAndOptionsLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: ZlibDecodeOptions, max_output_len: usize) !usize {
+    return decodeZlibAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, input, dictionary, options, max_output_len);
+}
+
+fn appendAbsoluteLimit(start_len: usize, max_output_len: ?usize) Error!?usize {
+    const limit = max_output_len orelse return null;
+    return std.math.add(usize, start_len, limit) catch return error.IntegerOverflow;
+}
+
+fn decodeZlibAppendWithOptionalDictionaryAndOptionsLimited(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    input: []const u8,
+    dictionary: ?[]const u8,
+    options: ZlibDecodeOptions,
+    max_output_len: ?usize,
+) !usize {
+    const start = out.items.len;
+    errdefer out.items.len = start;
+    const absolute_limit = try appendAbsoluteLimit(start, max_output_len);
+    const header = try parseZlibHeader(input, dictionary);
+    const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
+    const raw_input = input[header.data_offset..];
+    if (raw_input.len != 0 and isStoredBlockHeaderByte(raw_input[0])) {
+        if (try planRawStoredOnly(raw_input)) |stored_plan| {
+            try validateZlibStoredPlanBeforeAlloc(input, header.data_offset, stored_plan, options);
+            try appendRawStoredOnlyPlanned(allocator, raw_input[0..stored_plan.input_read], out, stored_plan, absolute_limit);
+            return out.items.len - start;
+        }
+    }
+    try rejectReservedFirstBlockBeforeAlloc(raw_input);
+
+    const before_member = out.items.len;
+    const raw = try decodeRawAutoAppendPartialWithDictionary(allocator, raw_input, raw_dictionary, out, absolute_limit);
+    const footer_offset = header.data_offset + raw.input_read;
+    const actual_adler = if (options.ignore_adler) 0 else checksum.adler32(out.items[before_member..]);
+    try validateZlibFooterWithOptions(input, footer_offset, actual_adler, options);
+    return out.items.len - start;
+}
+
+fn decodeZlibAppendWithOptionalDictionaryAndOptionsExactSize(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    input: []const u8,
+    dictionary: ?[]const u8,
+    options: ZlibDecodeOptions,
+    expected_output_len: usize,
+) !usize {
+    const decoded = try decodeZlibAllocWithOptionalDictionaryAndOptionsExactSize(allocator, input, dictionary, options, expected_output_len);
+    defer allocator.free(decoded);
+    try out.appendSlice(allocator, decoded);
+    return decoded.len;
+}
+
 pub fn decodeZlibChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8) ![]u8 {
     return decodeZlibChunksAllocWithOptionalDictionaryAndOptionsLimited(allocator, chunks, null, .{}, null);
 }
@@ -9900,6 +12437,54 @@ pub fn decodeZlibChunksAllocWithOptionsLimited(allocator: std.mem.Allocator, chu
 
 pub fn decodeZlibChunksAllocWithDictionaryAndOptionsLimited(allocator: std.mem.Allocator, chunks: []const []const u8, dictionary: []const u8, options: ZlibDecodeOptions, max_output_len: usize) ![]u8 {
     return decodeZlibChunksAllocWithOptionalDictionaryAndOptionsLimited(allocator, chunks, dictionary, options, max_output_len);
+}
+
+pub fn decodeZlibChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8) !usize {
+    return decodeZlibChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, chunks, null, .{}, null);
+}
+
+pub fn decodeZlibChunksAppendWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, dictionary: []const u8) !usize {
+    return decodeZlibChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, chunks, dictionary, .{}, null);
+}
+
+pub fn decodeZlibChunksAppendWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, options: ZlibDecodeOptions) !usize {
+    return decodeZlibChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, chunks, null, options, null);
+}
+
+pub fn decodeZlibChunksAppendWithDictionaryAndOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, dictionary: []const u8, options: ZlibDecodeOptions) !usize {
+    return decodeZlibChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, chunks, dictionary, options, null);
+}
+
+pub fn decodeZlibChunksAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, expected_output_len: usize) !usize {
+    return decodeZlibChunksAppendWithOptionalDictionaryAndOptionsExactSize(allocator, out, chunks, null, .{}, expected_output_len);
+}
+
+pub fn decodeZlibChunksAppendWithDictionaryExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, dictionary: []const u8, expected_output_len: usize) !usize {
+    return decodeZlibChunksAppendWithOptionalDictionaryAndOptionsExactSize(allocator, out, chunks, dictionary, .{}, expected_output_len);
+}
+
+pub fn decodeZlibChunksAppendWithOptionsExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, options: ZlibDecodeOptions, expected_output_len: usize) !usize {
+    return decodeZlibChunksAppendWithOptionalDictionaryAndOptionsExactSize(allocator, out, chunks, null, options, expected_output_len);
+}
+
+pub fn decodeZlibChunksAppendWithDictionaryAndOptionsExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, dictionary: []const u8, options: ZlibDecodeOptions, expected_output_len: usize) !usize {
+    return decodeZlibChunksAppendWithOptionalDictionaryAndOptionsExactSize(allocator, out, chunks, dictionary, options, expected_output_len);
+}
+
+pub fn decodeZlibChunksAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, max_output_len: usize) !usize {
+    return decodeZlibChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, chunks, null, .{}, max_output_len);
+}
+
+pub fn decodeZlibChunksAppendWithDictionaryLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, dictionary: []const u8, max_output_len: usize) !usize {
+    return decodeZlibChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, chunks, dictionary, .{}, max_output_len);
+}
+
+pub fn decodeZlibChunksAppendWithOptionsLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, options: ZlibDecodeOptions, max_output_len: usize) !usize {
+    return decodeZlibChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, chunks, null, options, max_output_len);
+}
+
+pub fn decodeZlibChunksAppendWithDictionaryAndOptionsLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, dictionary: []const u8, options: ZlibDecodeOptions, max_output_len: usize) !usize {
+    return decodeZlibChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, chunks, dictionary, options, max_output_len);
 }
 
 pub fn decodeZlibConcatenated(input: []const u8, output: []u8) Error!usize {
@@ -10011,6 +12596,119 @@ pub fn decodeZlibConcatenatedAllocWithDictionaryAndOptionsExactSize(allocator: s
     return decodeZlibConcatenatedAllocWithOptionalDictionaryAndOptionsExactSize(allocator, input, dictionary, options, expected_output_len);
 }
 
+pub fn decodeZlibConcatenatedAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) !usize {
+    return decodeZlibConcatenatedAppendLimitedInternal(allocator, out, input, null, .{}, null);
+}
+
+pub fn decodeZlibConcatenatedAppendWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8) !usize {
+    return decodeZlibConcatenatedAppendLimitedInternal(allocator, out, input, dictionary, .{}, null);
+}
+
+pub fn decodeZlibConcatenatedAppendWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: ZlibDecodeOptions) !usize {
+    return decodeZlibConcatenatedAppendLimitedInternal(allocator, out, input, null, options, null);
+}
+
+pub fn decodeZlibConcatenatedAppendWithDictionaryAndOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: ZlibDecodeOptions) !usize {
+    return decodeZlibConcatenatedAppendLimitedInternal(allocator, out, input, dictionary, options, null);
+}
+
+pub fn decodeZlibConcatenatedAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, expected_output_len: usize) !usize {
+    return decodeZlibConcatenatedAppendWithOptionalDictionaryAndOptionsExactSize(allocator, out, input, null, .{}, expected_output_len);
+}
+
+pub fn decodeZlibConcatenatedAppendWithDictionaryExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, expected_output_len: usize) !usize {
+    return decodeZlibConcatenatedAppendWithOptionalDictionaryAndOptionsExactSize(allocator, out, input, dictionary, .{}, expected_output_len);
+}
+
+pub fn decodeZlibConcatenatedAppendWithOptionsExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: ZlibDecodeOptions, expected_output_len: usize) !usize {
+    return decodeZlibConcatenatedAppendWithOptionalDictionaryAndOptionsExactSize(allocator, out, input, null, options, expected_output_len);
+}
+
+pub fn decodeZlibConcatenatedAppendWithDictionaryAndOptionsExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: ZlibDecodeOptions, expected_output_len: usize) !usize {
+    return decodeZlibConcatenatedAppendWithOptionalDictionaryAndOptionsExactSize(allocator, out, input, dictionary, options, expected_output_len);
+}
+
+pub fn decodeZlibConcatenatedAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, max_output_len: usize) !usize {
+    return decodeZlibConcatenatedAppendLimitedInternal(allocator, out, input, null, .{}, max_output_len);
+}
+
+pub fn decodeZlibConcatenatedAppendWithDictionaryLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, max_output_len: usize) !usize {
+    return decodeZlibConcatenatedAppendLimitedInternal(allocator, out, input, dictionary, .{}, max_output_len);
+}
+
+pub fn decodeZlibConcatenatedAppendWithOptionsLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: ZlibDecodeOptions, max_output_len: usize) !usize {
+    return decodeZlibConcatenatedAppendLimitedInternal(allocator, out, input, null, options, max_output_len);
+}
+
+pub fn decodeZlibConcatenatedAppendWithDictionaryAndOptionsLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: ZlibDecodeOptions, max_output_len: usize) !usize {
+    return decodeZlibConcatenatedAppendLimitedInternal(allocator, out, input, dictionary, options, max_output_len);
+}
+
+pub fn decodeZlibConcatenatedChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8) !usize {
+    return decodeZlibConcatenatedChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, chunks, compressed_scratch, null, .{}, null);
+}
+
+pub fn decodeZlibConcatenatedChunksAppendWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8) !usize {
+    return decodeZlibConcatenatedChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, chunks, compressed_scratch, dictionary, .{}, null);
+}
+
+pub fn decodeZlibConcatenatedChunksAppendWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, options: ZlibDecodeOptions) !usize {
+    return decodeZlibConcatenatedChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, chunks, compressed_scratch, null, options, null);
+}
+
+pub fn decodeZlibConcatenatedChunksAppendWithDictionaryAndOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, options: ZlibDecodeOptions) !usize {
+    return decodeZlibConcatenatedChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, chunks, compressed_scratch, dictionary, options, null);
+}
+
+pub fn decodeZlibConcatenatedChunksAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) !usize {
+    return decodeZlibConcatenatedChunksAppendWithOptionalDictionaryAndOptionsExactSize(allocator, out, chunks, compressed_scratch, null, .{}, expected_output_len);
+}
+
+pub fn decodeZlibConcatenatedChunksAppendWithDictionaryExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, expected_output_len: usize) !usize {
+    return decodeZlibConcatenatedChunksAppendWithOptionalDictionaryAndOptionsExactSize(allocator, out, chunks, compressed_scratch, dictionary, .{}, expected_output_len);
+}
+
+pub fn decodeZlibConcatenatedChunksAppendWithOptionsExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, options: ZlibDecodeOptions, expected_output_len: usize) !usize {
+    return decodeZlibConcatenatedChunksAppendWithOptionalDictionaryAndOptionsExactSize(allocator, out, chunks, compressed_scratch, null, options, expected_output_len);
+}
+
+pub fn decodeZlibConcatenatedChunksAppendWithDictionaryAndOptionsExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, options: ZlibDecodeOptions, expected_output_len: usize) !usize {
+    return decodeZlibConcatenatedChunksAppendWithOptionalDictionaryAndOptionsExactSize(allocator, out, chunks, compressed_scratch, dictionary, options, expected_output_len);
+}
+
+pub fn decodeZlibConcatenatedChunksAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) !usize {
+    return decodeZlibConcatenatedChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, chunks, compressed_scratch, null, .{}, max_output_len);
+}
+
+pub fn decodeZlibConcatenatedChunksAppendWithDictionaryLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, max_output_len: usize) !usize {
+    return decodeZlibConcatenatedChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, chunks, compressed_scratch, dictionary, .{}, max_output_len);
+}
+
+pub fn decodeZlibConcatenatedChunksAppendWithOptionsLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, options: ZlibDecodeOptions, max_output_len: usize) !usize {
+    return decodeZlibConcatenatedChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, chunks, compressed_scratch, null, options, max_output_len);
+}
+
+pub fn decodeZlibConcatenatedChunksAppendWithDictionaryAndOptionsLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: []const u8, options: ZlibDecodeOptions, max_output_len: usize) !usize {
+    return decodeZlibConcatenatedChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator, out, chunks, compressed_scratch, dictionary, options, max_output_len);
+}
+
+fn decodeZlibConcatenatedChunksAppendWithOptionalDictionaryAndOptionsLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: ?[]const u8, options: ZlibDecodeOptions, max_output_len: ?usize) !usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeZlibConcatenatedAppendLimitedInternal(allocator, out, joined, dictionary, options, max_output_len);
+}
+
+fn decodeZlibConcatenatedChunksAppendWithOptionalDictionaryAndOptionsExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: ?[]const u8, options: ZlibDecodeOptions, expected_output_len: usize) !usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeZlibConcatenatedAppendWithOptionalDictionaryAndOptionsExactSize(allocator, out, joined, dictionary, options, expected_output_len);
+}
+
+fn decodeZlibConcatenatedAppendWithOptionalDictionaryAndOptionsExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: ?[]const u8, options: ZlibDecodeOptions, expected_output_len: usize) !usize {
+    const decoded = try decodeZlibConcatenatedAllocWithOptionalDictionaryAndOptionsExactSize(allocator, input, dictionary, options, expected_output_len);
+    defer allocator.free(decoded);
+    try out.appendSlice(allocator, decoded);
+    return decoded.len;
+}
+
 fn decodeZlibConcatenatedAllocWithOptionalDictionaryAndOptionsExactSize(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, options: ZlibDecodeOptions, expected_output_len: usize) ![]u8 {
     if (input.len == 0) return error.TruncatedFrame;
     const header = try parseZlibHeader(input, dictionary);
@@ -10098,6 +12796,51 @@ fn decodeZlibChunksAllocWithOptionalDictionaryAndOptionsExactSize(allocator: std
     return out;
 }
 
+fn decodeZlibChunksAppendWithOptionalDictionaryAndOptionsLimited(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    chunks: []const []const u8,
+    dictionary: ?[]const u8,
+    options: ZlibDecodeOptions,
+    max_output_len: ?usize,
+) !usize {
+    const start = out.items.len;
+    errdefer out.items.len = start;
+    const absolute_limit = try appendAbsoluteLimit(start, max_output_len);
+    const compressed_len = try chunksTotalLen(chunks);
+    const header = try parseZlibHeaderFromChunks(chunks, dictionary);
+    const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
+    const first_deflate_byte = chunkByteAt(chunks, header.data_offset) orelse return error.TruncatedFrame;
+    try rejectReservedFirstBlockBeforeAlloc(&.{first_deflate_byte});
+
+    if (try precheckZlibStoredChunksBeforeAlloc(chunks, compressed_len, header.data_offset, options)) |stored_output_len| {
+        try ensureOutputLimit(start, stored_output_len, absolute_limit);
+    }
+
+    try reserveInflateAppendOutputHint(allocator, out, compressed_len, absolute_limit);
+    var reader = try bitstream.ChunkedSpanBitReader.initAtKnownTotal(chunks, header.data_offset, compressed_len);
+    const before_member = out.items.len;
+    const raw = try decodeRawAutoAppendPartialWithDictionaryFromReader(allocator, &reader, header.data_offset, raw_dictionary, out, absolute_limit);
+    const footer_offset = header.data_offset + raw.input_read;
+    const actual_adler = if (options.ignore_adler) 0 else checksum.adler32(out.items[before_member..]);
+    try validateZlibFooterChunksWithKnownTotal(chunks, compressed_len, footer_offset, actual_adler, options);
+    return out.items.len - start;
+}
+
+fn decodeZlibChunksAppendWithOptionalDictionaryAndOptionsExactSize(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    chunks: []const []const u8,
+    dictionary: ?[]const u8,
+    options: ZlibDecodeOptions,
+    expected_output_len: usize,
+) !usize {
+    const decoded = try decodeZlibChunksAllocWithOptionalDictionaryAndOptionsExactSize(allocator, chunks, dictionary, options, expected_output_len);
+    defer allocator.free(decoded);
+    try out.appendSlice(allocator, decoded);
+    return decoded.len;
+}
+
 fn precheckZlibStoredChunksBeforeAlloc(chunks: []const []const u8, total_len: usize, raw_offset: usize, options: ZlibDecodeOptions) Error!?usize {
     var cursor = try ChunkCursor.init(chunks, total_len, raw_offset);
     var output_len: usize = 0;
@@ -10172,6 +12915,49 @@ fn decodeZlibConcatenatedAllocLimitedInternal(allocator: std.mem.Allocator, inpu
         offset = footer_offset + 4;
     }
     return out.toOwnedSlice(allocator);
+}
+
+fn decodeZlibConcatenatedAppendLimitedInternal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: ?[]const u8, options: ZlibDecodeOptions, max_output_len: ?usize) !usize {
+    if (input.len == 0) return error.TruncatedFrame;
+    const start = out.items.len;
+    errdefer out.items.len = start;
+    const absolute_limit = try appendAbsoluteLimit(start, max_output_len);
+    if (try precheckZlibConcatenatedStoredExact(input, dictionary, options)) |stored_output_len| {
+        try ensureOutputLimit(start, stored_output_len, absolute_limit);
+    }
+
+    var offset: usize = 0;
+    while (offset < input.len) {
+        const header = parseZlibHeader(input[offset..], dictionary) catch |err| {
+            if (options.allow_trailing_data and offset != 0) break;
+            return err;
+        };
+        const raw_dictionary = if (header.uses_dictionary) dictionary.? else "";
+        const raw_offset = offset + header.data_offset;
+        const raw_input = input[raw_offset..];
+        try rejectReservedFirstBlockBeforeAlloc(raw_input);
+
+        if (raw_input.len != 0 and isStoredBlockHeaderByte(raw_input[0])) {
+            if (try planRawStoredOnly(raw_input)) |plan| {
+                const digest = if (options.ignore_adler) blk: {
+                    try appendRawStoredOnlyPlanned(allocator, raw_input[0..plan.input_read], out, plan, absolute_limit);
+                    break :blk @as(u32, 0);
+                } else try appendRawStoredOnlyPlannedWithHash(checksum.Adler32, allocator, raw_input[0..plan.input_read], out, plan, absolute_limit);
+                const footer_offset = raw_offset + plan.input_read;
+                try validateZlibFooterPartialWithOptions(input, footer_offset, digest, options);
+                offset = footer_offset + 4;
+                continue;
+            }
+        }
+
+        const before_member = out.items.len;
+        const raw = try decodeRawAutoAppendPartialWithDictionary(allocator, raw_input, raw_dictionary, out, absolute_limit);
+        const footer_offset = raw_offset + raw.input_read;
+        const actual_adler = if (options.ignore_adler) 0 else checksum.adler32(out.items[before_member..]);
+        try validateZlibFooterPartialWithOptions(input, footer_offset, actual_adler, options);
+        offset = footer_offset + 4;
+    }
+    return out.items.len - start;
 }
 
 fn decodeZlibAllocWithOptionalDictionaryAndOptionsLimited(allocator: std.mem.Allocator, input: []const u8, dictionary: ?[]const u8, options: ZlibDecodeOptions, max_output_len: ?usize) ![]u8 {
@@ -10295,6 +13081,17 @@ pub fn gzipStoredEncodedSizeWithHeader(input_len: usize, header_options: GzipHea
     return std.math.add(usize, with_header, 8) catch error.IntegerOverflow;
 }
 
+pub fn gzipStoredChunksEncodedSize(chunks: []const []const u8) Error!usize {
+    return gzipStoredChunksEncodedSizeWithHeader(chunks, .{});
+}
+
+pub fn gzipStoredChunksEncodedSizeWithHeader(chunks: []const []const u8, header_options: GzipHeaderOptions) Error!usize {
+    const raw_len = try rawStoredChunksEncodedSize(chunks);
+    const header_len = try gzipHeaderEncodedSize(header_options);
+    const with_header = std.math.add(usize, header_len, raw_len) catch return error.IntegerOverflow;
+    return std.math.add(usize, with_header, 8) catch error.IntegerOverflow;
+}
+
 pub fn encodeGzipStored(input: []const u8, output: []u8) Error!usize {
     return encodeGzipStoredWithHeader(input, output, .{});
 }
@@ -10311,6 +13108,23 @@ pub fn encodeGzipStoredWithHeader(input: []const u8, output: []u8, header_option
     return footer_offset + 8;
 }
 
+pub fn encodeGzipStoredChunks(chunks: []const []const u8, output: []u8) Error!usize {
+    return try encodeGzipStoredChunksWithHeader(chunks, output, .{});
+}
+
+pub fn encodeGzipStoredChunksWithHeader(chunks: []const []const u8, output: []u8, header_options: GzipHeaderOptions) Error!usize {
+    const required = try gzipStoredChunksEncodedSizeWithHeader(chunks, header_options);
+    if (output.len < required) return error.OutputTooSmall;
+    const total_len = try chunksTotalLen(chunks);
+
+    const header_len = try writeGzipHeader(output[0..required], header_options);
+    const raw_written = try encodeRawStoredChunks(chunks, output[header_len .. required - 8]);
+    const footer_offset = header_len + raw_written;
+    std.mem.writeInt(u32, output[footer_offset..][0..4], crc32Chunks(chunks), .little);
+    std.mem.writeInt(u32, output[footer_offset + 4 ..][0..4], @truncate(total_len), .little);
+    return footer_offset + 8;
+}
+
 pub fn encodeGzipStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     return encodeGzipStoredWithHeaderAlloc(allocator, input, .{});
 }
@@ -10322,6 +13136,135 @@ pub fn encodeGzipStoredWithHeaderAlloc(allocator: std.mem.Allocator, input: []co
     const written = try encodeGzipStoredWithHeader(input, out, header_options);
     std.debug.assert(written == out.len);
     return out;
+}
+
+pub fn encodeGzipStoredAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) !usize {
+    return try encodeGzipStoredWithHeaderAppend(allocator, out, input, .{});
+}
+
+pub fn encodeGzipStoredWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, header_options: GzipHeaderOptions) !usize {
+    const required = try gzipStoredEncodedSizeWithHeader(input.len, header_options);
+    const start = out.items.len;
+    try out.ensureUnusedCapacity(allocator, required);
+    const slot = out.addManyAsSliceAssumeCapacity(required);
+    const written = encodeGzipStoredWithHeader(input, slot, header_options) catch |err| {
+        out.items.len = start;
+        return err;
+    };
+    if (written != required) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
+}
+
+pub fn encodeGzipStoredChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8) ![]u8 {
+    return try encodeGzipStoredChunksWithHeaderAlloc(allocator, chunks, .{});
+}
+
+pub fn encodeGzipStoredChunksWithHeaderAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, header_options: GzipHeaderOptions) ![]u8 {
+    const required = try gzipStoredChunksEncodedSizeWithHeader(chunks, header_options);
+    const out = try allocator.alloc(u8, required);
+    errdefer allocator.free(out);
+    const written = try encodeGzipStoredChunksWithHeader(chunks, out, header_options);
+    std.debug.assert(written == out.len);
+    return out;
+}
+
+pub fn encodeGzipStoredChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8) !usize {
+    return try encodeGzipStoredChunksWithHeaderAppend(allocator, out, chunks, .{});
+}
+
+pub fn encodeGzipStoredChunksWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, header_options: GzipHeaderOptions) !usize {
+    const required = try gzipStoredChunksEncodedSizeWithHeader(chunks, header_options);
+    const start = out.items.len;
+    try out.ensureUnusedCapacity(allocator, required);
+    const slot = out.addManyAsSliceAssumeCapacity(required);
+    const written = encodeGzipStoredChunksWithHeader(chunks, slot, header_options) catch |err| {
+        out.items.len = start;
+        return err;
+    };
+    if (written != required) {
+        out.items.len = start;
+        return error.SizeMismatch;
+    }
+    return written;
+}
+
+pub fn encodeGzipFixedAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) !usize {
+    return encodeGzipFixedWithOptionsAppend(allocator, out, input, .{});
+}
+
+pub fn encodeGzipFixedWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    return encodeGzipFixedWithHeaderAppend(allocator, out, input, options, .{});
+}
+
+pub fn encodeGzipFixedWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeGzipFixedWithHeaderAlloc(allocator, input, options, header_options));
+}
+
+pub fn encodeGzipFixedSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return encodeGzipFixedSplitWithHeaderAppend(allocator, out, input, block_len, options, .{});
+}
+
+pub fn encodeGzipFixedSplitWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeGzipFixedSplitWithHeaderAlloc(allocator, input, block_len, options, header_options));
+}
+
+pub fn encodeGzipBestAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    return encodeGzipBestWithHeaderAppend(allocator, out, input, options, .{});
+}
+
+pub fn encodeGzipBestWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeGzipBestWithHeaderAlloc(allocator, input, options, header_options));
+}
+
+pub fn encodeGzipBestSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return encodeGzipBestSplitWithHeaderAppend(allocator, out, input, block_len, options, .{});
+}
+
+pub fn encodeGzipBestSplitWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeGzipBestSplitWithHeaderAlloc(allocator, input, block_len, options, header_options));
+}
+
+pub fn encodeGzipBestAdaptiveSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
+    return encodeGzipBestAdaptiveSplitWithHeaderAppend(allocator, out, input, options, split_options, .{});
+}
+
+pub fn encodeGzipBestAdaptiveSplitWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions, header_options: GzipHeaderOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeGzipBestAdaptiveSplitWithHeaderAlloc(allocator, input, options, split_options, header_options));
+}
+
+pub fn encodeGzipLevelAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, level: u4) !usize {
+    return encodeGzipLevelWithHeaderAppend(allocator, out, input, level, .{});
+}
+
+pub fn encodeGzipLevelWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, level: u4, header_options: GzipHeaderOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeGzipLevelWithHeaderAlloc(allocator, input, level, header_options));
+}
+
+pub fn encodeGzipDynamicLiteralAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) !usize {
+    return encodeGzipDynamicLiteralWithHeaderAppend(allocator, out, input, .{});
+}
+
+pub fn encodeGzipDynamicLiteralWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, header_options: GzipHeaderOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeGzipDynamicLiteralWithHeaderAlloc(allocator, input, header_options));
+}
+
+pub fn encodeGzipDynamicWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
+    return encodeGzipDynamicWithHeaderAppend(allocator, out, input, options, .{});
+}
+
+pub fn encodeGzipDynamicWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeGzipDynamicWithHeaderAlloc(allocator, input, options, header_options));
+}
+
+pub fn encodeGzipDynamicSplitAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+    return encodeGzipDynamicSplitWithHeaderAppend(allocator, out, input, block_len, options, .{});
+}
+
+pub fn encodeGzipDynamicSplitWithHeaderAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+    return appendOwnedEncoded(allocator, out, try encodeGzipDynamicSplitWithHeaderAlloc(allocator, input, block_len, options, header_options));
 }
 
 fn encodeGzipStoredSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize) ![]u8 {
@@ -10351,6 +13294,18 @@ pub fn encodeGzipFixedWithHeaderAlloc(allocator: std.mem.Allocator, input: []con
     return encodeGzipFixedTokensWithHeaderAlloc(allocator, input, plan.tokens, header_options);
 }
 
+pub fn encodeGzipFixedSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    return encodeGzipFixedSplitWithHeaderAlloc(allocator, input, block_len, options, .{});
+}
+
+pub fn encodeGzipFixedSplitWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    _ = try writeGzipPrefixWithOptions(allocator, &writer, header_options);
+    try writeFixedSplitBlocks(allocator, &writer, input, null, block_len, options);
+    return finishGzipFrame(allocator, &writer, input);
+}
+
 pub fn encodeGzipDynamicLiteralAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     return encodeGzipDynamicLiteralWithHeaderAlloc(allocator, input, .{});
 }
@@ -10369,6 +13324,18 @@ pub fn encodeGzipDynamicWithHeaderAlloc(allocator: std.mem.Allocator, input: []c
     const plan = try planTokensAlloc(allocator, input, options);
     defer plan.deinit(allocator);
     return encodeGzipDynamicTokensWithHeaderAlloc(allocator, input, plan.tokens, header_options);
+}
+
+pub fn encodeGzipDynamicSplitAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+    return encodeGzipDynamicSplitWithHeaderAlloc(allocator, input, block_len, options, .{});
+}
+
+pub fn encodeGzipDynamicSplitWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
+    var writer = bitstream.BitWriter{};
+    errdefer writer.deinit(allocator);
+    _ = try writeGzipPrefixWithOptions(allocator, &writer, header_options);
+    try writeDynamicSplitBlocks(allocator, &writer, input, null, block_len, options);
+    return finishGzipFrame(allocator, &writer, input);
 }
 
 pub fn encodeGzipBestAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) ![]u8 {
@@ -10416,6 +13383,7 @@ pub fn encodeGzipBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []c
 }
 
 pub fn encodeGzipBestAdaptiveSplitWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions, header_options: GzipHeaderOptions) ![]u8 {
+    if (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len) return error.InvalidBlockPlan;
     if (usesStoredFastPath(input, options)) return encodeGzipStoredWithHeaderAlloc(allocator, input, header_options);
     const one_shot = try encodeGzipBestWithHeaderAlloc(allocator, input, options, header_options);
     errdefer allocator.free(one_shot);
@@ -10683,6 +13651,36 @@ pub fn decodeGzipChunksAllocLimited(allocator: std.mem.Allocator, chunks: []cons
 
 pub fn decodeGzipChunksAllocWithOptionsLimited(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions, max_output_len: usize) ![]u8 {
     return decodeGzipChunksAllocWithOptionsLimitedInternal(allocator, chunks, compressed_scratch, options, max_output_len);
+}
+
+pub fn decodeGzipChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8) !usize {
+    return decodeGzipChunksAppendWithOptionsLimitedInternal(allocator, out, chunks, compressed_scratch, .{}, null);
+}
+
+pub fn decodeGzipChunksAppendWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions) !usize {
+    return decodeGzipChunksAppendWithOptionsLimitedInternal(allocator, out, chunks, compressed_scratch, options, null);
+}
+
+pub fn decodeGzipChunksAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) !usize {
+    return decodeGzipChunksAppendWithOptionsExactSize(allocator, out, chunks, compressed_scratch, .{}, expected_output_len);
+}
+
+pub fn decodeGzipChunksAppendWithOptionsExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) !usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeGzipAppendWithOptionsExactSize(allocator, out, joined, options, expected_output_len);
+}
+
+pub fn decodeGzipChunksAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) !usize {
+    return decodeGzipChunksAppendWithOptionsLimitedInternal(allocator, out, chunks, compressed_scratch, .{}, max_output_len);
+}
+
+pub fn decodeGzipChunksAppendWithOptionsLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions, max_output_len: usize) !usize {
+    return decodeGzipChunksAppendWithOptionsLimitedInternal(allocator, out, chunks, compressed_scratch, options, max_output_len);
+}
+
+fn decodeGzipChunksAppendWithOptionsLimitedInternal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions, max_output_len: ?usize) !usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeGzipAppendWithOptionsLimitedInternal(allocator, out, joined, options, max_output_len);
 }
 
 fn decodeGzipChunksAllocWithOptionsLimitedInternal(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions, max_output_len: ?usize) ![]u8 {
@@ -10967,6 +13965,150 @@ pub const GzipDecoder = struct {
     }
 };
 
+pub fn probeGzip(input: []const u8, scratch: []u8) DecodeProbeResult {
+    return probeGzipWithOptions(input, scratch, .{});
+}
+
+pub fn probeGzipWithOptions(input: []const u8, scratch: []u8, options: GzipDecodeOptions) DecodeProbeResult {
+    var decoder = GzipDecoder{};
+    decoder.resetWithOptions(input, scratch, options) catch |err| return probeResultFromDecoder(&decoder, GzipDecoder, err);
+    return .{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() };
+}
+
+pub fn probeGzipExactSize(input: []const u8, scratch: []u8, expected_output_len: usize) DecodeProbeResult {
+    return probeGzipWithOptionsExactSize(input, scratch, .{}, expected_output_len);
+}
+
+pub fn probeGzipWithOptionsExactSize(input: []const u8, scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) DecodeProbeResult {
+    var decoder = GzipDecoder{};
+    decoder.resetWithOptions(input, scratch, options) catch |err| return probeResultFromDecoder(&decoder, GzipDecoder, err);
+    if (decoder.decoded.len != expected_output_len) return probeOutputSizeMismatch(decoder.decoded.len, expected_output_len);
+    return .{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() };
+}
+
+pub fn probeGzipChunks(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) DecodeProbeResult {
+    return probeGzipChunksWithOptions(chunks, compressed_scratch, output_scratch, .{});
+}
+
+pub fn probeGzipChunksWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: GzipDecodeOptions) DecodeProbeResult {
+    var decoder = GzipDecoder{};
+    decoder.resetFromChunksWithOptions(chunks, compressed_scratch, output_scratch, options) catch |err| return probeResultFromDecoder(&decoder, GzipDecoder, err);
+    return .{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() };
+}
+
+pub fn probeGzipChunksExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) DecodeProbeResult {
+    return probeGzipChunksWithOptionsExactSize(chunks, compressed_scratch, output_scratch, .{}, expected_output_len);
+}
+
+pub fn probeGzipChunksWithOptionsExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) DecodeProbeResult {
+    var decoder = GzipDecoder{};
+    decoder.resetFromChunksWithOptions(chunks, compressed_scratch, output_scratch, options) catch |err| return probeResultFromDecoder(&decoder, GzipDecoder, err);
+    if (decoder.decoded.len != expected_output_len) return probeOutputSizeMismatch(decoder.decoded.len, expected_output_len);
+    return .{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() };
+}
+
+pub fn decodedGzipSize(input: []const u8, scratch: []u8) Error!usize {
+    return decodedGzipSizeWithOptions(input, scratch, .{});
+}
+
+pub fn decodedGzipSizeWithOptions(input: []const u8, scratch: []u8, options: GzipDecodeOptions) Error!usize {
+    const decoder = try GzipDecoder.initWithOptions(input, scratch, options);
+    return decoder.decoded.len;
+}
+
+pub fn decodedGzipChunksSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!usize {
+    return decodedGzipChunksSizeWithOptions(chunks, compressed_scratch, output_scratch, .{});
+}
+
+pub fn decodedGzipChunksSizeWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: GzipDecodeOptions) Error!usize {
+    const decoder = try GzipDecoder.initFromChunksWithOptions(chunks, compressed_scratch, output_scratch, options);
+    return decoder.decoded.len;
+}
+
+pub fn decodedGzipConcatenatedSize(input: []const u8, scratch: []u8) Error!usize {
+    return decodedGzipConcatenatedSizeWithOptions(input, scratch, .{});
+}
+
+pub fn decodedGzipConcatenatedSizeWithOptions(input: []const u8, scratch: []u8, options: GzipDecodeOptions) Error!usize {
+    const decoder = try GzipDecoder.initConcatenatedWithOptions(input, scratch, options);
+    return decoder.decoded.len;
+}
+
+pub fn decodedGzipConcatenatedChunksSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) Error!usize {
+    return decodedGzipConcatenatedChunksSizeWithOptions(chunks, compressed_scratch, output_scratch, .{});
+}
+
+pub fn decodedGzipConcatenatedChunksSizeWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: GzipDecodeOptions) Error!usize {
+    const decoder = try GzipDecoder.initConcatenatedFromChunksWithOptions(chunks, compressed_scratch, output_scratch, options);
+    return decoder.decoded.len;
+}
+
+pub fn probeGzipConcatenated(input: []const u8, scratch: []u8) DecodeProbeResult {
+    return probeGzipConcatenatedWithOptions(input, scratch, .{});
+}
+
+pub fn probeGzipConcatenatedWithOptions(input: []const u8, scratch: []u8, options: GzipDecodeOptions) DecodeProbeResult {
+    var decoder = GzipDecoder{};
+    decoder.resetConcatenatedWithOptions(input, scratch, options) catch |err| return withProbeMemberLocation(probeResultFromDecoder(&decoder, GzipDecoder, err), gzipProbeFailureMemberIndex(input, scratch, options));
+    return withProbeMemberCount(.{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() }, gzipProbeMemberCount(input, scratch, options));
+}
+
+pub fn probeGzipConcatenatedExactSize(input: []const u8, scratch: []u8, expected_output_len: usize) DecodeProbeResult {
+    return probeGzipConcatenatedWithOptionsExactSize(input, scratch, .{}, expected_output_len);
+}
+
+pub fn probeGzipConcatenatedWithOptionsExactSize(input: []const u8, scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) DecodeProbeResult {
+    var decoder = GzipDecoder{};
+    decoder.resetConcatenatedWithOptions(input, scratch, options) catch |err| return withProbeMemberLocation(probeResultFromDecoder(&decoder, GzipDecoder, err), gzipProbeFailureMemberIndex(input, scratch, options));
+    if (decoder.decoded.len != expected_output_len) return withProbeMemberCount(probeOutputSizeMismatch(decoder.decoded.len, expected_output_len), gzipProbeMemberCount(input, scratch, options));
+    return withProbeMemberCount(.{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() }, gzipProbeMemberCount(input, scratch, options));
+}
+
+pub fn probeGzipConcatenatedChunks(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8) DecodeProbeResult {
+    return probeGzipConcatenatedChunksWithOptions(chunks, compressed_scratch, output_scratch, .{});
+}
+
+pub fn probeGzipConcatenatedChunksWithOptions(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: GzipDecodeOptions) DecodeProbeResult {
+    const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+        return .{
+            .ok = false,
+            .diagnostics = .{
+                .phase_name = "input",
+                .last_error_name = @errorName(err),
+                .last_error_phase_name = "input",
+                .recoverability_hint_name = "payload_corrupt",
+            },
+            .error_name = @errorName(err),
+        };
+    };
+    var decoder = GzipDecoder{};
+    decoder.resetConcatenatedWithOptions(joined, output_scratch, options) catch |err| return withProbeMemberLocation(probeResultFromDecoder(&decoder, GzipDecoder, err), gzipProbeFailureMemberIndex(joined, output_scratch, options));
+    return withProbeMemberCount(.{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() }, gzipProbeMemberCount(joined, output_scratch, options));
+}
+
+pub fn probeGzipConcatenatedChunksExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, expected_output_len: usize) DecodeProbeResult {
+    return probeGzipConcatenatedChunksWithOptionsExactSize(chunks, compressed_scratch, output_scratch, .{}, expected_output_len);
+}
+
+pub fn probeGzipConcatenatedChunksWithOptionsExactSize(chunks: []const []const u8, compressed_scratch: []u8, output_scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) DecodeProbeResult {
+    const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+        return .{
+            .ok = false,
+            .diagnostics = .{
+                .phase_name = "input",
+                .last_error_name = @errorName(err),
+                .last_error_phase_name = "input",
+                .recoverability_hint_name = "payload_corrupt",
+            },
+            .error_name = @errorName(err),
+        };
+    };
+    var decoder = GzipDecoder{};
+    decoder.resetConcatenatedWithOptions(joined, output_scratch, options) catch |err| return withProbeMemberLocation(probeResultFromDecoder(&decoder, GzipDecoder, err), gzipProbeFailureMemberIndex(joined, output_scratch, options));
+    if (decoder.decoded.len != expected_output_len) return withProbeMemberCount(probeOutputSizeMismatch(decoder.decoded.len, expected_output_len), gzipProbeMemberCount(joined, output_scratch, options));
+    return withProbeMemberCount(.{ .ok = true, .decoded_bytes = decoder.decoded.len, .diagnostics = decoder.diagnostics() }, gzipProbeMemberCount(joined, output_scratch, options));
+}
+
 pub fn decodeGzipStoredAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     return decodeGzipStoredAllocLimitedInternal(allocator, input, null);
 }
@@ -11048,6 +14190,33 @@ pub fn decodeGzipConcatenatedAllocWithOptionsExactSize(allocator: std.mem.Alloca
     };
     if (written != expected_output_len) return error.SizeMismatch;
     return out;
+}
+
+pub fn decodeGzipConcatenatedAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) !usize {
+    return decodeGzipConcatenatedAppendWithOptionsLimitedInternal(allocator, out, input, .{}, null);
+}
+
+pub fn decodeGzipConcatenatedAppendWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: GzipDecodeOptions) !usize {
+    return decodeGzipConcatenatedAppendWithOptionsLimitedInternal(allocator, out, input, options, null);
+}
+
+pub fn decodeGzipConcatenatedAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, expected_output_len: usize) !usize {
+    return decodeGzipConcatenatedAppendWithOptionsExactSize(allocator, out, input, .{}, expected_output_len);
+}
+
+pub fn decodeGzipConcatenatedAppendWithOptionsExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: GzipDecodeOptions, expected_output_len: usize) !usize {
+    const decoded = try decodeGzipConcatenatedAllocWithOptionsExactSize(allocator, input, options, expected_output_len);
+    defer allocator.free(decoded);
+    try out.appendSlice(allocator, decoded);
+    return decoded.len;
+}
+
+pub fn decodeGzipConcatenatedAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, max_output_len: usize) !usize {
+    return decodeGzipConcatenatedAppendWithOptionsLimitedInternal(allocator, out, input, .{}, max_output_len);
+}
+
+pub fn decodeGzipConcatenatedAppendWithOptionsLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: GzipDecodeOptions, max_output_len: usize) !usize {
+    return decodeGzipConcatenatedAppendWithOptionsLimitedInternal(allocator, out, input, options, max_output_len);
 }
 
 fn precheckGzipConcatenatedStoredExact(input: []const u8, options: GzipDecodeOptions) !?usize {
@@ -11155,6 +14324,36 @@ pub fn decodeGzipConcatenatedChunksAllocWithOptionsLimited(allocator: std.mem.Al
     return decodeGzipConcatenatedChunksAllocWithOptionsLimitedInternal(allocator, chunks, compressed_scratch, options, max_output_len);
 }
 
+pub fn decodeGzipConcatenatedChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8) !usize {
+    return decodeGzipConcatenatedChunksAppendWithOptionsLimitedInternal(allocator, out, chunks, compressed_scratch, .{}, null);
+}
+
+pub fn decodeGzipConcatenatedChunksAppendWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions) !usize {
+    return decodeGzipConcatenatedChunksAppendWithOptionsLimitedInternal(allocator, out, chunks, compressed_scratch, options, null);
+}
+
+pub fn decodeGzipConcatenatedChunksAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) !usize {
+    return decodeGzipConcatenatedChunksAppendWithOptionsExactSize(allocator, out, chunks, compressed_scratch, .{}, expected_output_len);
+}
+
+pub fn decodeGzipConcatenatedChunksAppendWithOptionsExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions, expected_output_len: usize) !usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeGzipConcatenatedAppendWithOptionsExactSize(allocator, out, joined, options, expected_output_len);
+}
+
+pub fn decodeGzipConcatenatedChunksAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) !usize {
+    return decodeGzipConcatenatedChunksAppendWithOptionsLimitedInternal(allocator, out, chunks, compressed_scratch, .{}, max_output_len);
+}
+
+pub fn decodeGzipConcatenatedChunksAppendWithOptionsLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions, max_output_len: usize) !usize {
+    return decodeGzipConcatenatedChunksAppendWithOptionsLimitedInternal(allocator, out, chunks, compressed_scratch, options, max_output_len);
+}
+
+fn decodeGzipConcatenatedChunksAppendWithOptionsLimitedInternal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions, max_output_len: ?usize) !usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return decodeGzipConcatenatedAppendWithOptionsLimitedInternal(allocator, out, joined, options, max_output_len);
+}
+
 fn decodeGzipConcatenatedChunksAllocWithOptionsLimitedInternal(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, options: GzipDecodeOptions, max_output_len: ?usize) ![]u8 {
     const joined = try joinChunks(chunks, compressed_scratch);
     return decodeGzipConcatenatedAllocWithOptionsLimitedInternal(allocator, joined, options, max_output_len);
@@ -11199,6 +14398,46 @@ fn decodeGzipConcatenatedAllocWithOptionsLimitedInternal(allocator: std.mem.Allo
     return out.toOwnedSlice(allocator);
 }
 
+fn decodeGzipConcatenatedAppendWithOptionsLimitedInternal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: GzipDecodeOptions, max_output_len: ?usize) !usize {
+    if (input.len == 0) return error.TruncatedFrame;
+    const start = out.items.len;
+    errdefer out.items.len = start;
+    const absolute_limit = try appendAbsoluteLimit(start, max_output_len);
+    if (try precheckGzipConcatenatedStoredExact(input, options)) |stored_output_len| {
+        try ensureOutputLimit(start, stored_output_len, absolute_limit);
+    }
+
+    var offset: usize = 0;
+    while (offset < input.len) {
+        const data_offset = parseGzipHeader(input[offset..]) catch |err| {
+            if (options.allow_trailing_data and offset != 0) break;
+            return err;
+        };
+        const raw_offset = offset + data_offset;
+        const raw_input = input[raw_offset..];
+        try rejectReservedFirstBlockBeforeAlloc(raw_input);
+        if (try planRawStoredOnly(raw_input)) |plan| {
+            const digest = if (options.ignore_crc32) blk: {
+                try appendRawStoredOnlyPlanned(allocator, raw_input[0..plan.input_read], out, plan, absolute_limit);
+                break :blk @as(u32, 0);
+            } else try appendRawStoredOnlyPlannedWithHash(checksum.Crc32Slice32, allocator, raw_input[0..plan.input_read], out, plan, absolute_limit);
+            const footer_offset = raw_offset + plan.input_read;
+            try validateGzipFooterPartialWithOptions(input, footer_offset, digest, plan.output_len, options);
+            offset = footer_offset + 8;
+            continue;
+        }
+
+        const before_member = out.items.len;
+        const raw = try decodeRawAutoAppendPartialWithDictionary(allocator, raw_input, "", out, absolute_limit);
+        const footer_offset = raw_offset + raw.input_read;
+        const member_payload = out.items[before_member..];
+        const actual_crc = if (options.ignore_crc32) 0 else checksum.crc32Best(member_payload);
+        try validateGzipFooterPartialWithOptions(input, footer_offset, actual_crc, member_payload.len, options);
+        offset = footer_offset + 8;
+    }
+    return out.items.len - start;
+}
+
 pub fn decodeGzipAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {
     return decodeGzipAllocWithOptionsLimitedInternal(allocator, input, .{}, null);
 }
@@ -11213,6 +14452,33 @@ pub fn decodeGzipAllocWithOptions(allocator: std.mem.Allocator, input: []const u
 
 pub fn decodeGzipAllocWithOptionsLimited(allocator: std.mem.Allocator, input: []const u8, options: GzipDecodeOptions, max_output_len: usize) ![]u8 {
     return decodeGzipAllocWithOptionsLimitedInternal(allocator, input, options, max_output_len);
+}
+
+pub fn decodeGzipAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) !usize {
+    return decodeGzipAppendWithOptionsLimitedInternal(allocator, out, input, .{}, null);
+}
+
+pub fn decodeGzipAppendWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: GzipDecodeOptions) !usize {
+    return decodeGzipAppendWithOptionsLimitedInternal(allocator, out, input, options, null);
+}
+
+pub fn decodeGzipAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, expected_output_len: usize) !usize {
+    return decodeGzipAppendWithOptionsExactSize(allocator, out, input, .{}, expected_output_len);
+}
+
+pub fn decodeGzipAppendWithOptionsExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: GzipDecodeOptions, expected_output_len: usize) !usize {
+    const decoded = try decodeGzipAllocWithOptionsExactSize(allocator, input, options, expected_output_len);
+    defer allocator.free(decoded);
+    try out.appendSlice(allocator, decoded);
+    return decoded.len;
+}
+
+pub fn decodeGzipAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, max_output_len: usize) !usize {
+    return decodeGzipAppendWithOptionsLimitedInternal(allocator, out, input, .{}, max_output_len);
+}
+
+pub fn decodeGzipAppendWithOptionsLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: GzipDecodeOptions, max_output_len: usize) !usize {
+    return decodeGzipAppendWithOptionsLimitedInternal(allocator, out, input, options, max_output_len);
 }
 
 pub fn decodeGzipAllocExactSize(allocator: std.mem.Allocator, input: []const u8, expected_output_len: usize) ![]u8 {
@@ -11239,6 +14505,31 @@ pub fn decodeGzipAllocWithOptionsExactSize(allocator: std.mem.Allocator, input: 
     };
     if (written != expected_output_len) return error.SizeMismatch;
     return out;
+}
+
+fn decodeGzipAppendWithOptionsLimitedInternal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: GzipDecodeOptions, max_output_len: ?usize) !usize {
+    const start = out.items.len;
+    errdefer out.items.len = start;
+    const absolute_limit = try appendAbsoluteLimit(start, max_output_len);
+    const data_offset = try parseGzipHeader(input);
+    const raw_input = input[data_offset..];
+    if (raw_input.len == 0) return error.TruncatedFrame;
+    if (isStoredBlockHeaderByte(raw_input[0])) {
+        if (try planRawStoredOnly(raw_input)) |stored_plan| {
+            try validateGzipStoredPlanBeforeAlloc(input, data_offset, stored_plan, options);
+            try appendRawStoredOnlyPlanned(allocator, raw_input[0..stored_plan.input_read], out, stored_plan, absolute_limit);
+            return out.items.len - start;
+        }
+    }
+    try rejectReservedFirstBlockBeforeAlloc(raw_input);
+
+    const before_member = out.items.len;
+    const raw = try decodeRawAutoAppendPartialWithDictionary(allocator, raw_input, "", out, absolute_limit);
+    const footer_offset = data_offset + raw.input_read;
+    const member_payload = out.items[before_member..];
+    const actual_crc = if (options.ignore_crc32) 0 else checksum.crc32Best(member_payload);
+    try validateGzipFooterWithOptions(input, footer_offset, actual_crc, member_payload.len, options);
+    return out.items.len - start;
 }
 
 fn decodeGzipAllocWithOptionsLimitedInternal(allocator: std.mem.Allocator, input: []const u8, options: GzipDecodeOptions, max_output_len: ?usize) ![]u8 {

@@ -110,6 +110,9 @@ pub const NativeFrameOptions = struct {
     match_search_budget: usize = mixed_match_path_search_budget,
 };
 
+pub const FrameSelection = NativeFrameSelection;
+pub const AdvancedFrameOptions = NativeFrameOptions;
+
 pub const NativeDictionary = struct {
     id: u32,
     content: []const u8,
@@ -146,6 +149,8 @@ pub const NativeDictionary = struct {
 };
 
 pub const NativeDictionaryTrainOptions = dictionary_mod.TrainOptions;
+pub const Dictionary = NativeDictionary;
+pub const DictionaryTrainOptions = NativeDictionaryTrainOptions;
 
 pub const OwnedNativeDictionary = struct {
     id: u32,
@@ -171,6 +176,8 @@ pub const OwnedNativeDictionary = struct {
     }
 };
 
+pub const OwnedDictionary = OwnedNativeDictionary;
+
 /// Train an owned native Zstd preset dictionary from representative samples.
 ///
 /// This is a lightweight deterministic trainer rather than zstd's full cover or
@@ -184,6 +191,14 @@ pub fn trainNativeDictionaryAlloc(
 ) Error!OwnedNativeDictionary {
     const content = try dictionary_mod.trainAlloc(allocator, samples, options);
     return .{ .id = NativeDictionary.derivedId(content), .content = content };
+}
+
+pub fn trainDictionaryAlloc(
+    allocator: std.mem.Allocator,
+    samples: []const []const u8,
+    options: DictionaryTrainOptions,
+) Error!OwnedDictionary {
+    return try trainNativeDictionaryAlloc(allocator, samples, options);
 }
 
 /// Caller-supplied preset dictionary catalog used when decoding concatenated
@@ -245,6 +260,8 @@ pub const NativeDictionarySet = struct {
     }
 };
 
+pub const DictionarySet = NativeDictionarySet;
+
 pub const OwnedNativeDictionarySet = struct {
     dictionaries: []NativeDictionary,
 
@@ -256,6 +273,8 @@ pub const OwnedNativeDictionarySet = struct {
         allocator.free(self.dictionaries);
     }
 };
+
+pub const OwnedDictionarySet = OwnedNativeDictionarySet;
 
 /// Allocate and validate a borrowed dictionary catalog from persisted metadata.
 ///
@@ -275,25 +294,41 @@ pub fn nativeDictionarySetFromMetadataAlloc(
     return .{ .dictionaries = dictionaries };
 }
 
+pub fn dictionarySetFromMetadataAlloc(
+    allocator: std.mem.Allocator,
+    metadata: []const dictionary_mod.Metadata,
+    contents: []const []const u8,
+) Error!OwnedDictionarySet {
+    return try nativeDictionarySetFromMetadataAlloc(allocator, metadata, contents);
+}
+
 pub const NativeFrameMode = enum {
     raw_or_rle,
     literal_only,
 };
+
+pub const FrameMode = NativeFrameMode;
 
 pub const NativeFrameEncodeResult = struct {
     frame: []u8,
     mode: NativeFrameMode,
 };
 
+pub const FrameEncodeResult = NativeFrameEncodeResult;
+
 pub const NativeFrameEncodeIntoResult = struct {
     written: usize,
     mode: NativeFrameMode,
 };
 
+pub const FrameEncodeIntoResult = NativeFrameEncodeIntoResult;
+
 pub const NativeFrameEncodeScratchResult = struct {
     frame: []const u8,
     mode: NativeFrameMode,
 };
+
+pub const FrameEncodeScratchResult = NativeFrameEncodeScratchResult;
 
 pub fn encodedNativeFrameBound(input_len: usize) Error!usize {
     return try encodedNativeFrameBoundWithOptions(input_len, .{});
@@ -302,11 +337,7 @@ pub fn encodedNativeFrameBound(input_len: usize) Error!usize {
 pub fn encodedNativeFrameBoundWithOptions(input_len: usize, options: NativeFrameOptions) Error!usize {
     const block_size_max = try nativeBlockSizeMax(options);
     _ = try nativeMatchSearchBudget(options);
-    const dictionary_id_len = nativeDictionaryIdFieldLen(options.dictionary_id);
-    const frame_header_len: usize = if (options.include_content_size)
-        4 + 1 + dictionary_id_len + 8
-    else
-        4 + 1 + 1 + dictionary_id_len;
+    const frame_header_len = try nativeFrameHeaderLen(try checkedUsizeToU64(input_len), options);
     const block_count = if (input_len == 0)
         1
     else
@@ -330,6 +361,28 @@ pub fn encodedNativeFrameBoundWithDictionarySet(input_len: usize, options: Nativ
     return try encodedNativeFrameBoundWithDictionary(input_len, options, dictionary);
 }
 
+fn nativeFrameHeaderLen(content_len: u64, options: NativeFrameOptions) Error!usize {
+    var len: usize = 4 + 1; // magic number plus frame descriptor.
+    if (!options.include_content_size) {
+        // Non-single-segment frames without Frame_Content_Size must carry the
+        // Window_Descriptor byte. When the size is present the writer always
+        // chooses the shorter single-segment form instead.
+        len = std.math.add(usize, len, 1) catch return error.IntegerOverflow;
+    }
+    len = std.math.add(usize, len, nativeDictionaryIdFieldLen(options.dictionary_id)) catch return error.IntegerOverflow;
+    if (options.include_content_size) {
+        len = std.math.add(usize, len, nativeContentSizeFieldLen(content_len)) catch return error.IntegerOverflow;
+    }
+    return len;
+}
+
+fn nativeContentSizeFieldLen(content_len: u64) usize {
+    if (content_len <= 255) return 1;
+    if (content_len <= 256 + std.math.maxInt(u16)) return 2;
+    if (content_len <= std.math.maxInt(u32)) return 4;
+    return 8;
+}
+
 /// Decode a Zstandard frame through Vort's dependency-free native subset.
 ///
 /// The public facade intentionally uses the same pure Zig implementation as
@@ -343,8 +396,32 @@ pub fn decodeFrameAllocLimited(allocator: std.mem.Allocator, frame: []const u8, 
     return try decodeFrameAllocWithLimit(allocator, frame, max_output_len);
 }
 
+pub fn decodeFrameAllocExactSize(allocator: std.mem.Allocator, frame: []const u8, expected_output_len: usize) Error![]u8 {
+    return try decodeNativeFrameAllocExactSize(allocator, frame, expected_output_len);
+}
+
+pub fn decodeFrameAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8) Error!usize {
+    return try decodeNativeFrameAppend(allocator, out, frame);
+}
+
+pub fn decodeFrameAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8, expected_output_len: usize) Error!usize {
+    return try decodeNativeFrameAppendExactSize(allocator, out, frame, expected_output_len);
+}
+
+pub fn decodeFrameAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8, max_output_len: usize) Error!usize {
+    return try decodeNativeFrameAppendLimited(allocator, out, frame, max_output_len);
+}
+
 pub fn decodeFrameInto(frame: []const u8, output: []u8) Error!usize {
     return try decodeNativeFrameInto(frame, output);
+}
+
+pub fn decodeFrameIntoLimited(frame: []const u8, output: []u8, max_output_len: usize) Error!usize {
+    return try decodeNativeFrameIntoLimited(frame, output, max_output_len);
+}
+
+pub fn decodeFrameIntoExactSize(frame: []const u8, output: []u8, expected_output_len: usize) Error!usize {
+    return try decodeNativeFrameIntoExactSize(frame, output, expected_output_len);
 }
 
 pub fn decodedFrameSize(frame: []const u8) Error!usize {
@@ -354,6 +431,306 @@ pub fn decodedFrameSize(frame: []const u8) Error!usize {
 pub fn decodedFrameSizeLimited(frame: []const u8, max_output_len: usize) Error!usize {
     return try decodedNativeFrameSizeLimited(frame, max_output_len);
 }
+
+pub fn decodeFrameChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8) Error![]u8 {
+    return try decodeNativeFrameChunksAlloc(allocator, chunks, compressed_scratch);
+}
+
+pub fn decodeFrameChunksAllocExactSize(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) Error![]u8 {
+    return try decodeNativeFrameChunksAllocExactSize(allocator, chunks, compressed_scratch, expected_output_len);
+}
+
+pub fn decodeFrameChunksAllocLimited(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error![]u8 {
+    return try decodeNativeFrameChunksAllocLimited(allocator, chunks, compressed_scratch, max_output_len);
+}
+
+pub fn decodeFrameChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8) Error!usize {
+    return try decodeNativeFrameChunksAppend(allocator, out, chunks, compressed_scratch);
+}
+
+pub fn decodeFrameChunksAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, expected_output_len: usize) Error!usize {
+    return try decodeNativeFrameChunksAppendExactSize(allocator, out, chunks, compressed_scratch, expected_output_len);
+}
+
+pub fn decodeFrameChunksAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!usize {
+    return try decodeNativeFrameChunksAppendLimited(allocator, out, chunks, compressed_scratch, max_output_len);
+}
+
+pub fn decodeFrameChunksInto(chunks: []const []const u8, compressed_scratch: []u8, output: []u8) Error!usize {
+    return try decodeNativeFrameChunksInto(chunks, compressed_scratch, output);
+}
+
+pub fn decodeFrameChunksIntoLimited(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, max_output_len: usize) Error!usize {
+    return try decodeNativeFrameChunksIntoLimited(chunks, compressed_scratch, output, max_output_len);
+}
+
+pub fn decodeFrameChunksIntoExactSize(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, expected_output_len: usize) Error!usize {
+    return try decodeNativeFrameChunksIntoExactSize(chunks, compressed_scratch, output, expected_output_len);
+}
+
+pub fn decodedFrameChunksSize(chunks: []const []const u8, compressed_scratch: []u8) Error!usize {
+    return try decodedNativeFrameChunksSize(chunks, compressed_scratch);
+}
+
+pub fn decodedFrameChunksSizeLimited(chunks: []const []const u8, compressed_scratch: []u8, max_output_len: usize) Error!usize {
+    return try decodedNativeFrameChunksSizeLimited(chunks, compressed_scratch, max_output_len);
+}
+
+pub fn decodeFrameChunksAllocWithDictionary(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary) Error![]u8 {
+    return try decodeNativeFrameChunksAllocWithDictionary(allocator, chunks, compressed_scratch, dictionary);
+}
+
+pub fn decodeFrameChunksAllocWithDictionaryExactSize(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary, expected_output_len: usize) Error![]u8 {
+    return try decodeNativeFrameChunksAllocWithDictionaryExactSize(allocator, chunks, compressed_scratch, dictionary, expected_output_len);
+}
+
+pub fn decodeFrameChunksAllocWithDictionaryLimited(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary, max_output_len: usize) Error![]u8 {
+    return try decodeNativeFrameChunksAllocWithDictionaryLimited(allocator, chunks, compressed_scratch, dictionary, max_output_len);
+}
+
+pub fn decodeFrameChunksAppendWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary) Error!usize {
+    return try decodeNativeFrameChunksAppendWithDictionary(allocator, out, chunks, compressed_scratch, dictionary);
+}
+
+pub fn decodeFrameChunksAppendExactSizeWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary, expected_output_len: usize) Error!usize {
+    return try decodeNativeFrameChunksAppendExactSizeWithDictionary(allocator, out, chunks, compressed_scratch, dictionary, expected_output_len);
+}
+
+pub fn decodeFrameChunksAppendLimitedWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary, max_output_len: usize) Error!usize {
+    return try decodeNativeFrameChunksAppendLimitedWithDictionary(allocator, out, chunks, compressed_scratch, max_output_len, dictionary);
+}
+
+pub fn decodeFrameChunksIntoWithDictionary(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: NativeDictionary) Error!usize {
+    return try decodeNativeFrameChunksIntoWithDictionary(chunks, compressed_scratch, output, dictionary);
+}
+
+pub fn decodeFrameChunksIntoWithDictionaryLimited(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: NativeDictionary, max_output_len: usize) Error!usize {
+    return try decodeNativeFrameChunksIntoWithDictionaryLimited(chunks, compressed_scratch, output, dictionary, max_output_len);
+}
+
+pub fn decodeFrameChunksIntoWithDictionaryExactSize(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: NativeDictionary, expected_output_len: usize) Error!usize {
+    return try decodeNativeFrameChunksIntoWithDictionaryExactSize(chunks, compressed_scratch, output, dictionary, expected_output_len);
+}
+
+pub fn decodedFrameChunksSizeWithDictionary(chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary) Error!usize {
+    return try decodedNativeFrameChunksSizeWithDictionary(chunks, compressed_scratch, dictionary);
+}
+
+pub fn decodedFrameChunksSizeLimitedWithDictionary(chunks: []const []const u8, compressed_scratch: []u8, dictionary: NativeDictionary, max_output_len: usize) Error!usize {
+    return try decodedNativeFrameChunksSizeLimitedWithDictionary(chunks, compressed_scratch, max_output_len, dictionary);
+}
+
+pub fn decodeFrameChunksAllocWithDictionarySet(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet) Error![]u8 {
+    return try decodeNativeFrameChunksAllocWithDictionarySet(allocator, chunks, compressed_scratch, dictionary_set);
+}
+
+pub fn decodeFrameChunksAllocWithDictionarySetExactSize(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error![]u8 {
+    return try decodeNativeFrameChunksAllocWithDictionarySetExactSize(allocator, chunks, compressed_scratch, dictionary_set, expected_output_len);
+}
+
+pub fn decodeFrameChunksAllocWithDictionarySetLimited(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet, max_output_len: usize) Error![]u8 {
+    return try decodeNativeFrameChunksAllocWithDictionarySetLimited(allocator, chunks, compressed_scratch, dictionary_set, max_output_len);
+}
+
+pub fn decodeFrameChunksAppendWithDictionarySet(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet) Error!usize {
+    return try decodeNativeFrameChunksAppendWithDictionarySet(allocator, out, chunks, compressed_scratch, dictionary_set);
+}
+
+pub fn decodeFrameChunksAppendExactSizeWithDictionarySet(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error!usize {
+    return try decodeNativeFrameChunksAppendExactSizeWithDictionarySet(allocator, out, chunks, compressed_scratch, dictionary_set, expected_output_len);
+}
+
+pub fn decodeFrameChunksAppendLimitedWithDictionarySet(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet, max_output_len: usize) Error!usize {
+    return try decodeNativeFrameChunksAppendLimitedWithDictionarySet(allocator, out, chunks, compressed_scratch, max_output_len, dictionary_set);
+}
+
+pub fn decodeFrameChunksIntoWithDictionarySet(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary_set: NativeDictionarySet) Error!usize {
+    return try decodeNativeFrameChunksIntoWithDictionarySet(chunks, compressed_scratch, output, dictionary_set);
+}
+
+pub fn decodeFrameChunksIntoWithDictionarySetLimited(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary_set: NativeDictionarySet, max_output_len: usize) Error!usize {
+    return try decodeNativeFrameChunksIntoWithDictionarySetLimited(chunks, compressed_scratch, output, dictionary_set, max_output_len);
+}
+
+pub fn decodeFrameChunksIntoWithDictionarySetExactSize(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error!usize {
+    return try decodeNativeFrameChunksIntoWithDictionarySetExactSize(chunks, compressed_scratch, output, dictionary_set, expected_output_len);
+}
+
+pub fn decodedFrameChunksSizeWithDictionarySet(chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet) Error!usize {
+    return try decodedNativeFrameChunksSizeWithDictionarySet(chunks, compressed_scratch, dictionary_set);
+}
+
+pub fn decodedFrameChunksSizeLimitedWithDictionarySet(chunks: []const []const u8, compressed_scratch: []u8, dictionary_set: NativeDictionarySet, max_output_len: usize) Error!usize {
+    return try decodedNativeFrameChunksSizeLimitedWithDictionarySet(chunks, compressed_scratch, max_output_len, dictionary_set);
+}
+
+pub fn decodeFrameAllocWithDictionary(allocator: std.mem.Allocator, frame: []const u8, dictionary: NativeDictionary) Error![]u8 {
+    return try decodeNativeFrameAllocWithDictionary(allocator, frame, dictionary);
+}
+
+pub fn decodeFrameAllocWithDictionaryExactSize(allocator: std.mem.Allocator, frame: []const u8, dictionary: NativeDictionary, expected_output_len: usize) Error![]u8 {
+    return try decodeNativeFrameAllocWithDictionaryExactSize(allocator, frame, dictionary, expected_output_len);
+}
+
+pub fn decodeFrameAllocWithDictionaryLimited(allocator: std.mem.Allocator, frame: []const u8, dictionary: NativeDictionary, max_output_len: usize) Error![]u8 {
+    return try decodeNativeFrameAllocLimitedWithDictionary(allocator, frame, max_output_len, dictionary);
+}
+
+pub fn decodeFrameAppendWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8, dictionary: NativeDictionary) Error!usize {
+    return try decodeNativeFrameAppendWithDictionary(allocator, out, frame, dictionary);
+}
+
+pub fn decodeFrameAppendExactSizeWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8, dictionary: NativeDictionary, expected_output_len: usize) Error!usize {
+    return try decodeNativeFrameAppendExactSizeWithDictionary(allocator, out, frame, dictionary, expected_output_len);
+}
+
+pub fn decodeFrameAppendLimitedWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8, dictionary: NativeDictionary, max_output_len: usize) Error!usize {
+    return try decodeNativeFrameAppendLimitedWithDictionary(allocator, out, frame, max_output_len, dictionary);
+}
+
+pub fn decodeFrameIntoWithDictionary(frame: []const u8, output: []u8, dictionary: NativeDictionary) Error!usize {
+    return try decodeNativeFrameIntoWithDictionary(frame, output, dictionary);
+}
+
+pub fn decodeFrameIntoWithDictionaryLimited(frame: []const u8, output: []u8, dictionary: NativeDictionary, max_output_len: usize) Error!usize {
+    return try decodeNativeFrameIntoWithDictionaryLimited(frame, output, dictionary, max_output_len);
+}
+
+pub fn decodeFrameIntoWithDictionaryExactSize(frame: []const u8, output: []u8, dictionary: NativeDictionary, expected_output_len: usize) Error!usize {
+    return try decodeNativeFrameIntoWithDictionaryExactSize(frame, output, dictionary, expected_output_len);
+}
+
+pub fn decodedFrameSizeWithDictionary(frame: []const u8, dictionary: NativeDictionary) Error!usize {
+    return try decodedNativeFrameSizeWithDictionary(frame, dictionary);
+}
+
+pub fn decodedFrameSizeLimitedWithDictionary(frame: []const u8, dictionary: NativeDictionary, max_output_len: usize) Error!usize {
+    return try decodedNativeFrameSizeLimitedWithDictionary(frame, max_output_len, dictionary);
+}
+
+pub fn decodeFrameAllocWithDictionarySet(allocator: std.mem.Allocator, frame: []const u8, dictionary_set: NativeDictionarySet) Error![]u8 {
+    return try decodeNativeFrameAllocWithDictionarySet(allocator, frame, dictionary_set);
+}
+
+pub fn decodeFrameAllocWithDictionarySetExactSize(allocator: std.mem.Allocator, frame: []const u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error![]u8 {
+    return try decodeNativeFrameAllocWithDictionarySetExactSize(allocator, frame, dictionary_set, expected_output_len);
+}
+
+pub fn decodeFrameAllocWithDictionarySetLimited(allocator: std.mem.Allocator, frame: []const u8, dictionary_set: NativeDictionarySet, max_output_len: usize) Error![]u8 {
+    return try decodeNativeFrameAllocLimitedWithDictionarySet(allocator, frame, max_output_len, dictionary_set);
+}
+
+pub fn decodeFrameAppendWithDictionarySet(allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8, dictionary_set: NativeDictionarySet) Error!usize {
+    return try decodeNativeFrameAppendWithDictionarySet(allocator, out, frame, dictionary_set);
+}
+
+pub fn decodeFrameAppendExactSizeWithDictionarySet(allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error!usize {
+    return try decodeNativeFrameAppendExactSizeWithDictionarySet(allocator, out, frame, dictionary_set, expected_output_len);
+}
+
+pub fn decodeFrameAppendLimitedWithDictionarySet(allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8, dictionary_set: NativeDictionarySet, max_output_len: usize) Error!usize {
+    return try decodeNativeFrameAppendLimitedWithDictionarySet(allocator, out, frame, max_output_len, dictionary_set);
+}
+
+pub fn decodeFrameIntoWithDictionarySet(frame: []const u8, output: []u8, dictionary_set: NativeDictionarySet) Error!usize {
+    return try decodeNativeFrameIntoWithDictionarySet(frame, output, dictionary_set);
+}
+
+pub fn decodeFrameIntoWithDictionarySetLimited(frame: []const u8, output: []u8, dictionary_set: NativeDictionarySet, max_output_len: usize) Error!usize {
+    return try decodeNativeFrameIntoWithDictionarySetLimited(frame, output, dictionary_set, max_output_len);
+}
+
+pub fn decodeFrameIntoWithDictionarySetExactSize(frame: []const u8, output: []u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error!usize {
+    return try decodeNativeFrameIntoWithDictionarySetExactSize(frame, output, dictionary_set, expected_output_len);
+}
+
+pub fn decodedFrameSizeWithDictionarySet(frame: []const u8, dictionary_set: NativeDictionarySet) Error!usize {
+    return try decodedNativeFrameSizeWithDictionarySet(frame, dictionary_set);
+}
+
+pub fn decodedFrameSizeLimitedWithDictionarySet(frame: []const u8, dictionary_set: NativeDictionarySet, max_output_len: usize) Error!usize {
+    return try decodedNativeFrameSizeLimitedWithDictionarySet(frame, max_output_len, dictionary_set);
+}
+
+pub const decodeConcatenatedFrameAlloc = decodeNativeConcatenatedFrameAlloc;
+pub const decodeConcatenatedFrameAllocExactSize = decodeNativeConcatenatedFrameAllocExactSize;
+pub const decodeConcatenatedFrameAllocLimited = decodeNativeConcatenatedFrameAllocLimited;
+pub const decodeConcatenatedFrameAppend = decodeNativeConcatenatedFrameAppend;
+pub const decodeConcatenatedFrameAppendExactSize = decodeNativeConcatenatedFrameAppendExactSize;
+pub const decodeConcatenatedFrameAppendLimited = decodeNativeConcatenatedFrameAppendLimited;
+pub const decodeConcatenatedFrameInto = decodeNativeConcatenatedFrameInto;
+pub const decodeConcatenatedFrameIntoLimited = decodeNativeConcatenatedFrameIntoLimited;
+pub const decodeConcatenatedFrameIntoExactSize = decodeNativeConcatenatedFrameIntoExactSize;
+pub const decodedConcatenatedFrameSize = decodedNativeConcatenatedFrameSize;
+pub const decodedConcatenatedFrameSizeLimited = decodedNativeConcatenatedFrameSizeLimited;
+pub const decodeConcatenatedFrameAllocWithDictionary = decodeNativeConcatenatedFrameAllocWithDictionary;
+pub const decodeConcatenatedFrameAllocWithDictionaryExactSize = decodeNativeConcatenatedFrameAllocWithDictionaryExactSize;
+pub const decodeConcatenatedFrameAllocLimitedWithDictionary = decodeNativeConcatenatedFrameAllocLimitedWithDictionary;
+pub const decodeConcatenatedFrameAppendWithDictionary = decodeNativeConcatenatedFrameAppendWithDictionary;
+pub const decodeConcatenatedFrameAppendExactSizeWithDictionary = decodeNativeConcatenatedFrameAppendExactSizeWithDictionary;
+pub const decodeConcatenatedFrameAppendLimitedWithDictionary = decodeNativeConcatenatedFrameAppendLimitedWithDictionary;
+pub const decodeConcatenatedFrameIntoWithDictionary = decodeNativeConcatenatedFrameIntoWithDictionary;
+pub const decodeConcatenatedFrameIntoWithDictionaryLimited = decodeNativeConcatenatedFrameIntoWithDictionaryLimited;
+pub const decodeConcatenatedFrameIntoWithDictionaryExactSize = decodeNativeConcatenatedFrameIntoWithDictionaryExactSize;
+pub const decodedConcatenatedFrameSizeWithDictionary = decodedNativeConcatenatedFrameSizeWithDictionary;
+pub const decodedConcatenatedFrameSizeLimitedWithDictionary = decodedNativeConcatenatedFrameSizeLimitedWithDictionary;
+pub const decodeConcatenatedFrameAllocWithDictionarySet = decodeNativeConcatenatedFrameAllocWithDictionarySet;
+pub const decodeConcatenatedFrameAllocWithDictionarySetExactSize = decodeNativeConcatenatedFrameAllocWithDictionarySetExactSize;
+pub const decodeConcatenatedFrameAllocLimitedWithDictionarySet = decodeNativeConcatenatedFrameAllocLimitedWithDictionarySet;
+pub const decodeConcatenatedFrameAppendWithDictionarySet = decodeNativeConcatenatedFrameAppendWithDictionarySet;
+pub const decodeConcatenatedFrameAppendExactSizeWithDictionarySet = decodeNativeConcatenatedFrameAppendExactSizeWithDictionarySet;
+pub const decodeConcatenatedFrameAppendLimitedWithDictionarySet = decodeNativeConcatenatedFrameAppendLimitedWithDictionarySet;
+pub const decodeConcatenatedFrameIntoWithDictionarySet = decodeNativeConcatenatedFrameIntoWithDictionarySet;
+pub const decodeConcatenatedFrameIntoWithDictionarySetLimited = decodeNativeConcatenatedFrameIntoWithDictionarySetLimited;
+pub const decodeConcatenatedFrameIntoWithDictionarySetExactSize = decodeNativeConcatenatedFrameIntoWithDictionarySetExactSize;
+pub const decodedConcatenatedFrameSizeWithDictionarySet = decodedNativeConcatenatedFrameSizeWithDictionarySet;
+pub const decodedConcatenatedFrameSizeLimitedWithDictionarySet = decodedNativeConcatenatedFrameSizeLimitedWithDictionarySet;
+pub const decodeConcatenatedFrameChunksAlloc = decodeNativeConcatenatedFrameChunksAlloc;
+pub const decodeConcatenatedFrameChunksAllocExactSize = decodeNativeConcatenatedFrameChunksAllocExactSize;
+pub const decodeConcatenatedFrameChunksAllocLimited = decodeNativeConcatenatedFrameChunksAllocLimited;
+pub const decodeConcatenatedFrameChunksAppend = decodeNativeConcatenatedFrameChunksAppend;
+pub const decodeConcatenatedFrameChunksAppendExactSize = decodeNativeConcatenatedFrameChunksAppendExactSize;
+pub const decodeConcatenatedFrameChunksAppendLimited = decodeNativeConcatenatedFrameChunksAppendLimited;
+pub const decodeConcatenatedFrameChunksInto = decodeNativeConcatenatedFrameChunksInto;
+pub const decodeConcatenatedFrameChunksIntoLimited = decodeNativeConcatenatedFrameChunksIntoLimited;
+pub const decodeConcatenatedFrameChunksIntoExactSize = decodeNativeConcatenatedFrameChunksIntoExactSize;
+pub const decodedConcatenatedFrameChunksSize = decodedNativeConcatenatedFrameChunksSize;
+pub const decodedConcatenatedFrameChunksSizeLimited = decodedNativeConcatenatedFrameChunksSizeLimited;
+pub const decodeConcatenatedFrameChunksAllocWithDictionary = decodeNativeConcatenatedFrameChunksAllocWithDictionary;
+pub const decodeConcatenatedFrameChunksAllocWithDictionaryExactSize = decodeNativeConcatenatedFrameChunksAllocWithDictionaryExactSize;
+pub const decodeConcatenatedFrameChunksAllocWithDictionaryLimited = decodeNativeConcatenatedFrameChunksAllocWithDictionaryLimited;
+pub const decodeConcatenatedFrameChunksAppendWithDictionary = decodeNativeConcatenatedFrameChunksAppendWithDictionary;
+pub const decodeConcatenatedFrameChunksAppendExactSizeWithDictionary = decodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionary;
+pub const decodeConcatenatedFrameChunksAppendLimitedWithDictionary = decodeNativeConcatenatedFrameChunksAppendLimitedWithDictionary;
+pub const decodeConcatenatedFrameChunksIntoWithDictionary = decodeNativeConcatenatedFrameChunksIntoWithDictionary;
+pub const decodeConcatenatedFrameChunksIntoWithDictionaryLimited = decodeNativeConcatenatedFrameChunksIntoWithDictionaryLimited;
+pub const decodeConcatenatedFrameChunksIntoWithDictionaryExactSize = decodeNativeConcatenatedFrameChunksIntoWithDictionaryExactSize;
+pub const decodedConcatenatedFrameChunksSizeWithDictionary = decodedNativeConcatenatedFrameChunksSizeWithDictionary;
+pub const decodedConcatenatedFrameChunksSizeLimitedWithDictionary = decodedNativeConcatenatedFrameChunksSizeLimitedWithDictionary;
+pub const decodeConcatenatedFrameChunksAllocWithDictionarySet = decodeNativeConcatenatedFrameChunksAllocWithDictionarySet;
+pub const decodeConcatenatedFrameChunksAllocWithDictionarySetExactSize = decodeNativeConcatenatedFrameChunksAllocWithDictionarySetExactSize;
+pub const decodeConcatenatedFrameChunksAllocWithDictionarySetLimited = decodeNativeConcatenatedFrameChunksAllocWithDictionarySetLimited;
+pub const decodeConcatenatedFrameChunksAppendWithDictionarySet = decodeNativeConcatenatedFrameChunksAppendWithDictionarySet;
+pub const decodeConcatenatedFrameChunksAppendExactSizeWithDictionarySet = decodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionarySet;
+pub const decodeConcatenatedFrameChunksAppendLimitedWithDictionarySet = decodeNativeConcatenatedFrameChunksAppendLimitedWithDictionarySet;
+pub const decodeConcatenatedFrameChunksIntoWithDictionarySet = decodeNativeConcatenatedFrameChunksIntoWithDictionarySet;
+pub const decodeConcatenatedFrameChunksIntoWithDictionarySetLimited = decodeNativeConcatenatedFrameChunksIntoWithDictionarySetLimited;
+pub const decodeConcatenatedFrameChunksIntoWithDictionarySetExactSize = decodeNativeConcatenatedFrameChunksIntoWithDictionarySetExactSize;
+pub const decodedConcatenatedFrameChunksSizeWithDictionarySet = decodedNativeConcatenatedFrameChunksSizeWithDictionarySet;
+pub const decodedConcatenatedFrameChunksSizeLimitedWithDictionarySet = decodedNativeConcatenatedFrameChunksSizeLimitedWithDictionarySet;
+
+pub const encodedFrameBoundWithAdvancedOptions = encodedNativeFrameBoundWithOptions;
+pub const encodedFrameBoundWithAdvancedOptionsAndDictionary = encodedNativeFrameBoundWithDictionary;
+pub const encodedFrameBoundWithAdvancedOptionsAndDictionarySet = encodedNativeFrameBoundWithDictionarySet;
+pub const encodeFrameWithAdvancedOptionsAlloc = encodeNativeFrameWithOptionsAlloc;
+pub const encodeFrameWithAdvancedOptionsAndDictionaryAlloc = encodeNativeFrameWithDictionaryAlloc;
+pub const encodeFrameWithAdvancedOptionsAndDictionarySetAlloc = encodeNativeFrameWithDictionarySetAlloc;
+pub const encodeFrameAppendWithAdvancedOptions = encodeNativeFrameAppend;
+pub const encodeFrameAppendWithAdvancedOptionsAndDictionary = encodeNativeFrameAppendWithDictionary;
+pub const encodeFrameAppendWithAdvancedOptionsAndDictionarySet = encodeNativeFrameAppendWithDictionarySet;
+pub const encodeFrameIntoSliceWithAdvancedOptions = encodeNativeFrameIntoSlice;
+pub const encodeFrameIntoSliceWithAdvancedOptionsAndDictionary = encodeNativeFrameIntoSliceWithDictionary;
+pub const encodeFrameIntoSliceWithAdvancedOptionsAndDictionarySet = encodeNativeFrameIntoSliceWithDictionarySet;
 
 fn nativeBlockSizeMax(options: NativeFrameOptions) Error!usize {
     if (options.block_size_max == 0 or options.block_size_max > std.compress.zstd.block_size_max) return error.InvalidBlockPlan;
@@ -438,6 +815,10 @@ pub fn decodeRawOrRleFrameIntoExactSize(frame: []const u8, output: []u8, expecte
     return written;
 }
 
+pub fn decodeRawOrRleFrameIntoLimited(frame: []const u8, output: []u8, max_output_len: usize) Error!usize {
+    return try decodeRawOrRleFrameIntoLimitedWithDictionaryInternal(frame, output, max_output_len, null);
+}
+
 pub fn decodeRawOrRleFrameAllocWithDictionary(
     allocator: std.mem.Allocator,
     frame: []const u8,
@@ -477,6 +858,15 @@ pub fn decodeRawOrRleFrameIntoWithDictionaryExactSize(
     };
     if (written != expected_output_len) return error.SizeMismatch;
     return written;
+}
+
+pub fn decodeRawOrRleFrameIntoWithDictionaryLimited(
+    frame: []const u8,
+    output: []u8,
+    dictionary: NativeDictionary,
+    max_output_len: usize,
+) Error!usize {
+    return try decodeRawOrRleFrameIntoLimitedWithDictionaryInternal(frame, output, max_output_len, dictionary);
 }
 
 pub fn decodeRawOrRleFrameAllocWithDictionarySet(
@@ -520,6 +910,22 @@ pub fn decodeRawOrRleFrameIntoWithDictionarySetExactSize(
         else => return err,
     };
     if (written != expected_output_len) return error.SizeMismatch;
+    return written;
+}
+
+pub fn decodeRawOrRleFrameIntoWithDictionarySetLimited(
+    frame: []const u8,
+    output: []u8,
+    dictionary_set: NativeDictionarySet,
+    max_output_len: usize,
+) Error!usize {
+    const decoded_len = try decodedRawOrRleFrameSizeLimitedWithDictionarySet(frame, max_output_len, dictionary_set);
+    if (output.len < decoded_len) return error.OutputTooSmall;
+    const written = decodeRawOrRleFrameIntoWithDictionarySet(frame, output[0..decoded_len], dictionary_set) catch |err| switch (err) {
+        error.OutputTooSmall => return error.SizeMismatch,
+        else => return err,
+    };
+    if (written != decoded_len) return error.SizeMismatch;
     return written;
 }
 
@@ -941,6 +1347,11 @@ pub fn decodeRawOrRleFrameChunksInto(chunks: []const []const u8, compressed_scra
     return try decodeRawOrRleFrameInto(joined, output);
 }
 
+pub fn decodeRawOrRleFrameChunksIntoLimited(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, max_output_len: usize) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeRawOrRleFrameIntoLimited(joined, output, max_output_len);
+}
+
 pub fn decodeRawOrRleFrameChunksIntoExactSize(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, expected_output_len: usize) Error!usize {
     const joined = try joinChunks(chunks, compressed_scratch);
     return try decodeRawOrRleFrameIntoExactSize(joined, output, expected_output_len);
@@ -989,6 +1400,11 @@ pub fn decodeRawOrRleFrameChunksAppendLimitedWithDictionary(allocator: std.mem.A
 pub fn decodeRawOrRleFrameChunksIntoWithDictionary(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: NativeDictionary) Error!usize {
     const joined = try joinChunks(chunks, compressed_scratch);
     return try decodeRawOrRleFrameIntoWithDictionary(joined, output, dictionary);
+}
+
+pub fn decodeRawOrRleFrameChunksIntoWithDictionaryLimited(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: NativeDictionary, max_output_len: usize) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeRawOrRleFrameIntoWithDictionaryLimited(joined, output, dictionary, max_output_len);
 }
 
 pub fn decodeRawOrRleFrameChunksIntoExactSizeWithDictionary(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: NativeDictionary, expected_output_len: usize) Error!usize {
@@ -1041,6 +1457,11 @@ pub fn decodeRawOrRleFrameChunksIntoWithDictionarySet(chunks: []const []const u8
     return try decodeRawOrRleFrameIntoWithDictionarySet(joined, output, dictionary_set);
 }
 
+pub fn decodeRawOrRleFrameChunksIntoWithDictionarySetLimited(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary_set: NativeDictionarySet, max_output_len: usize) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeRawOrRleFrameIntoWithDictionarySetLimited(joined, output, dictionary_set, max_output_len);
+}
+
 pub fn decodeRawOrRleFrameChunksIntoExactSizeWithDictionarySet(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error!usize {
     const joined = try joinChunks(chunks, compressed_scratch);
     return try decodeRawOrRleFrameIntoWithDictionarySetExactSize(joined, output, dictionary_set, expected_output_len);
@@ -1066,6 +1487,26 @@ fn joinChunks(chunks: []const []const u8, compressed_scratch: []u8) Error![]cons
         offset += chunk.len;
     }
     return compressed_scratch[0..total];
+}
+
+fn decodeRawOrRleFrameIntoLimitedWithDictionaryInternal(
+    frame: []const u8,
+    output: []u8,
+    max_output_len: usize,
+    dictionary: ?NativeDictionary,
+) Error!usize {
+    // Keep caller-owned decode policy identical to allocator/append limited
+    // paths: size-preflight first, then decode into the exact output window.
+    // This avoids partially mutating `output` when the stream is valid but
+    // exceeds the caller's declared maximum.
+    const decoded_len = try rawOrRleDecodedSizeLimitedWithDictionary(frame, max_output_len, dictionary);
+    if (output.len < decoded_len) return error.OutputTooSmall;
+    const written = decodeRawOrRleFrameIntoWithDictionaryInternal(frame, output[0..decoded_len], dictionary) catch |err| switch (err) {
+        error.OutputTooSmall => return error.SizeMismatch,
+        else => return err,
+    };
+    if (written != decoded_len) return error.SizeMismatch;
+    return written;
 }
 
 fn decodeRawOrRleFrameIntoWithDictionaryInternal(
@@ -1101,9 +1542,11 @@ pub const decodeNativeFrameAppendExactSize = decodeRawOrRleFrameAppendExactSize;
 pub const decodeNativeFrameAppendLimited = decodeRawOrRleFrameAppendLimited;
 pub const decodeNativeFrameAllocLimited = decodeRawOrRleFrameAllocLimited;
 pub const decodeNativeFrameInto = decodeRawOrRleFrameInto;
+pub const decodeNativeFrameIntoLimited = decodeRawOrRleFrameIntoLimited;
 pub const decodeNativeFrameIntoExactSize = decodeRawOrRleFrameIntoExactSize;
 pub const decodeNativeFrameAllocWithDictionary = decodeRawOrRleFrameAllocWithDictionary;
 pub const decodeNativeFrameAllocWithDictionaryExactSize = decodeRawOrRleFrameAllocWithDictionaryExactSize;
+pub const decodeNativeFrameIntoWithDictionaryLimited = decodeRawOrRleFrameIntoWithDictionaryLimited;
 pub const decodeNativeFrameIntoWithDictionaryExactSize = decodeRawOrRleFrameIntoWithDictionaryExactSize;
 pub const decodeNativeFrameAppendWithDictionary = decodeRawOrRleFrameAppendWithDictionary;
 pub const decodeNativeFrameAppendExactSizeWithDictionary = decodeRawOrRleFrameAppendExactSizeWithDictionary;
@@ -1112,6 +1555,7 @@ pub const decodeNativeFrameAllocLimitedWithDictionary = decodeRawOrRleFrameAlloc
 pub const decodeNativeFrameIntoWithDictionary = decodeRawOrRleFrameIntoWithDictionary;
 pub const decodeNativeFrameAllocWithDictionarySet = decodeRawOrRleFrameAllocWithDictionarySet;
 pub const decodeNativeFrameAllocWithDictionarySetExactSize = decodeRawOrRleFrameAllocWithDictionarySetExactSize;
+pub const decodeNativeFrameIntoWithDictionarySetLimited = decodeRawOrRleFrameIntoWithDictionarySetLimited;
 pub const decodeNativeFrameIntoWithDictionarySetExactSize = decodeRawOrRleFrameIntoWithDictionarySetExactSize;
 pub const decodeNativeFrameAppendWithDictionarySet = decodeRawOrRleFrameAppendWithDictionarySet;
 pub const decodeNativeFrameAppendExactSizeWithDictionarySet = decodeRawOrRleFrameAppendExactSizeWithDictionarySet;
@@ -1125,6 +1569,7 @@ pub const decodeNativeFrameChunksAppend = decodeRawOrRleFrameChunksAppend;
 pub const decodeNativeFrameChunksAppendExactSize = decodeRawOrRleFrameChunksAppendExactSize;
 pub const decodeNativeFrameChunksAppendLimited = decodeRawOrRleFrameChunksAppendLimited;
 pub const decodeNativeFrameChunksInto = decodeRawOrRleFrameChunksInto;
+pub const decodeNativeFrameChunksIntoLimited = decodeRawOrRleFrameChunksIntoLimited;
 pub const decodeNativeFrameChunksIntoExactSize = decodeRawOrRleFrameChunksIntoExactSize;
 pub const decodedNativeFrameChunksSize = decodedRawOrRleFrameChunksSize;
 pub const decodedNativeFrameChunksSizeLimited = decodedRawOrRleFrameChunksSizeLimited;
@@ -1135,6 +1580,7 @@ pub const decodeNativeFrameChunksAppendWithDictionary = decodeRawOrRleFrameChunk
 pub const decodeNativeFrameChunksAppendExactSizeWithDictionary = decodeRawOrRleFrameChunksAppendExactSizeWithDictionary;
 pub const decodeNativeFrameChunksAppendLimitedWithDictionary = decodeRawOrRleFrameChunksAppendLimitedWithDictionary;
 pub const decodeNativeFrameChunksIntoWithDictionary = decodeRawOrRleFrameChunksIntoWithDictionary;
+pub const decodeNativeFrameChunksIntoWithDictionaryLimited = decodeRawOrRleFrameChunksIntoWithDictionaryLimited;
 pub const decodeNativeFrameChunksIntoExactSizeWithDictionary = decodeRawOrRleFrameChunksIntoExactSizeWithDictionary;
 pub const decodeNativeFrameChunksIntoWithDictionaryExactSize = decodeRawOrRleFrameChunksIntoExactSizeWithDictionary;
 pub const decodedNativeFrameChunksSizeWithDictionary = decodedRawOrRleFrameChunksSizeWithDictionary;
@@ -1146,6 +1592,7 @@ pub const decodeNativeFrameChunksAppendWithDictionarySet = decodeRawOrRleFrameCh
 pub const decodeNativeFrameChunksAppendExactSizeWithDictionarySet = decodeRawOrRleFrameChunksAppendExactSizeWithDictionarySet;
 pub const decodeNativeFrameChunksAppendLimitedWithDictionarySet = decodeRawOrRleFrameChunksAppendLimitedWithDictionarySet;
 pub const decodeNativeFrameChunksIntoWithDictionarySet = decodeRawOrRleFrameChunksIntoWithDictionarySet;
+pub const decodeNativeFrameChunksIntoWithDictionarySetLimited = decodeRawOrRleFrameChunksIntoWithDictionarySetLimited;
 pub const decodeNativeFrameChunksIntoExactSizeWithDictionarySet = decodeRawOrRleFrameChunksIntoExactSizeWithDictionarySet;
 pub const decodeNativeFrameChunksIntoWithDictionarySetExactSize = decodeRawOrRleFrameChunksIntoExactSizeWithDictionarySet;
 pub const decodedNativeFrameChunksSizeWithDictionarySet = decodedRawOrRleFrameChunksSizeWithDictionarySet;
@@ -1157,9 +1604,11 @@ pub const decodeNativeConcatenatedFrameAppendExactSize = decodeRawOrRleFrameAppe
 pub const decodeNativeConcatenatedFrameAppendLimited = decodeRawOrRleFrameAppendLimited;
 pub const decodeNativeConcatenatedFrameAllocLimited = decodeRawOrRleFrameAllocLimited;
 pub const decodeNativeConcatenatedFrameInto = decodeRawOrRleFrameInto;
+pub const decodeNativeConcatenatedFrameIntoLimited = decodeRawOrRleFrameIntoLimited;
 pub const decodeNativeConcatenatedFrameIntoExactSize = decodeRawOrRleFrameIntoExactSize;
 pub const decodeNativeConcatenatedFrameAllocWithDictionary = decodeRawOrRleFrameAllocWithDictionary;
 pub const decodeNativeConcatenatedFrameAllocWithDictionaryExactSize = decodeRawOrRleFrameAllocWithDictionaryExactSize;
+pub const decodeNativeConcatenatedFrameIntoWithDictionaryLimited = decodeRawOrRleFrameIntoWithDictionaryLimited;
 pub const decodeNativeConcatenatedFrameIntoWithDictionaryExactSize = decodeRawOrRleFrameIntoWithDictionaryExactSize;
 pub const decodeNativeConcatenatedFrameAppendWithDictionary = decodeRawOrRleFrameAppendWithDictionary;
 pub const decodeNativeConcatenatedFrameAppendExactSizeWithDictionary = decodeRawOrRleFrameAppendExactSizeWithDictionary;
@@ -1168,6 +1617,7 @@ pub const decodeNativeConcatenatedFrameAllocLimitedWithDictionary = decodeRawOrR
 pub const decodeNativeConcatenatedFrameIntoWithDictionary = decodeRawOrRleFrameIntoWithDictionary;
 pub const decodeNativeConcatenatedFrameAllocWithDictionarySet = decodeRawOrRleFrameAllocWithDictionarySet;
 pub const decodeNativeConcatenatedFrameAllocWithDictionarySetExactSize = decodeRawOrRleFrameAllocWithDictionarySetExactSize;
+pub const decodeNativeConcatenatedFrameIntoWithDictionarySetLimited = decodeRawOrRleFrameIntoWithDictionarySetLimited;
 pub const decodeNativeConcatenatedFrameIntoWithDictionarySetExactSize = decodeRawOrRleFrameIntoWithDictionarySetExactSize;
 pub const decodeNativeConcatenatedFrameAppendWithDictionarySet = decodeRawOrRleFrameAppendWithDictionarySet;
 pub const decodeNativeConcatenatedFrameAppendExactSizeWithDictionarySet = decodeRawOrRleFrameAppendExactSizeWithDictionarySet;
@@ -1187,6 +1637,7 @@ pub const decodeNativeConcatenatedFrameChunksAppend = decodeRawOrRleFrameChunksA
 pub const decodeNativeConcatenatedFrameChunksAppendExactSize = decodeRawOrRleFrameChunksAppendExactSize;
 pub const decodeNativeConcatenatedFrameChunksAppendLimited = decodeRawOrRleFrameChunksAppendLimited;
 pub const decodeNativeConcatenatedFrameChunksInto = decodeRawOrRleFrameChunksInto;
+pub const decodeNativeConcatenatedFrameChunksIntoLimited = decodeRawOrRleFrameChunksIntoLimited;
 pub const decodeNativeConcatenatedFrameChunksIntoExactSize = decodeRawOrRleFrameChunksIntoExactSize;
 pub const decodedNativeConcatenatedFrameChunksSize = decodedRawOrRleFrameChunksSize;
 pub const decodedNativeConcatenatedFrameChunksSizeLimited = decodedRawOrRleFrameChunksSizeLimited;
@@ -1197,6 +1648,7 @@ pub const decodeNativeConcatenatedFrameChunksAppendWithDictionary = decodeRawOrR
 pub const decodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionary = decodeRawOrRleFrameChunksAppendExactSizeWithDictionary;
 pub const decodeNativeConcatenatedFrameChunksAppendLimitedWithDictionary = decodeRawOrRleFrameChunksAppendLimitedWithDictionary;
 pub const decodeNativeConcatenatedFrameChunksIntoWithDictionary = decodeRawOrRleFrameChunksIntoWithDictionary;
+pub const decodeNativeConcatenatedFrameChunksIntoWithDictionaryLimited = decodeRawOrRleFrameChunksIntoWithDictionaryLimited;
 pub const decodeNativeConcatenatedFrameChunksIntoExactSizeWithDictionary = decodeRawOrRleFrameChunksIntoExactSizeWithDictionary;
 pub const decodeNativeConcatenatedFrameChunksIntoWithDictionaryExactSize = decodeRawOrRleFrameChunksIntoExactSizeWithDictionary;
 pub const decodedNativeConcatenatedFrameChunksSizeWithDictionary = decodedRawOrRleFrameChunksSizeWithDictionary;
@@ -1208,6 +1660,7 @@ pub const decodeNativeConcatenatedFrameChunksAppendWithDictionarySet = decodeRaw
 pub const decodeNativeConcatenatedFrameChunksAppendExactSizeWithDictionarySet = decodeRawOrRleFrameChunksAppendExactSizeWithDictionarySet;
 pub const decodeNativeConcatenatedFrameChunksAppendLimitedWithDictionarySet = decodeRawOrRleFrameChunksAppendLimitedWithDictionarySet;
 pub const decodeNativeConcatenatedFrameChunksIntoWithDictionarySet = decodeRawOrRleFrameChunksIntoWithDictionarySet;
+pub const decodeNativeConcatenatedFrameChunksIntoWithDictionarySetLimited = decodeRawOrRleFrameChunksIntoWithDictionarySetLimited;
 pub const decodeNativeConcatenatedFrameChunksIntoExactSizeWithDictionarySet = decodeRawOrRleFrameChunksIntoExactSizeWithDictionarySet;
 pub const decodeNativeConcatenatedFrameChunksIntoWithDictionarySetExactSize = decodeRawOrRleFrameChunksIntoExactSizeWithDictionarySet;
 pub const decodedNativeConcatenatedFrameChunksSizeWithDictionarySet = decodedRawOrRleFrameChunksSizeWithDictionarySet;
@@ -1941,6 +2394,8 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 };
 
+pub const IncrementalFrameDecoder = NativeIncrementalFrameDecoder;
+
 pub const NativeFrameDecoder = struct {
     allocator: std.mem.Allocator,
     scratch: std.ArrayList(u8) = .empty,
@@ -2079,6 +2534,11 @@ pub const NativeFrameDecoder = struct {
         return try decodeRawOrRleFrameInto(frame, output);
     }
 
+    pub fn decodeIntoSliceLimited(self: *NativeFrameDecoder, frame: []const u8, output: []u8, max_output_len: usize) Error!usize {
+        _ = self;
+        return try decodeRawOrRleFrameIntoLimited(frame, output, max_output_len);
+    }
+
     pub fn decodeIntoSliceExactSize(self: *NativeFrameDecoder, frame: []const u8, output: []u8, expected_output_len: usize) Error!usize {
         _ = self;
         return try decodeRawOrRleFrameIntoExactSize(frame, output, expected_output_len);
@@ -2089,6 +2549,11 @@ pub const NativeFrameDecoder = struct {
         return try decodeRawOrRleFrameIntoWithDictionary(frame, output, dictionary);
     }
 
+    pub fn decodeIntoSliceWithDictionaryLimited(self: *NativeFrameDecoder, frame: []const u8, output: []u8, dictionary: NativeDictionary, max_output_len: usize) Error!usize {
+        _ = self;
+        return try decodeRawOrRleFrameIntoWithDictionaryLimited(frame, output, dictionary, max_output_len);
+    }
+
     pub fn decodeIntoSliceWithDictionaryExactSize(self: *NativeFrameDecoder, frame: []const u8, output: []u8, dictionary: NativeDictionary, expected_output_len: usize) Error!usize {
         _ = self;
         return try decodeRawOrRleFrameIntoWithDictionaryExactSize(frame, output, dictionary, expected_output_len);
@@ -2097,6 +2562,11 @@ pub const NativeFrameDecoder = struct {
     pub fn decodeIntoSliceWithDictionarySet(self: *NativeFrameDecoder, frame: []const u8, output: []u8, dictionary_set: NativeDictionarySet) Error!usize {
         _ = self;
         return try decodeRawOrRleFrameIntoWithDictionarySet(frame, output, dictionary_set);
+    }
+
+    pub fn decodeIntoSliceWithDictionarySetLimited(self: *NativeFrameDecoder, frame: []const u8, output: []u8, dictionary_set: NativeDictionarySet, max_output_len: usize) Error!usize {
+        _ = self;
+        return try decodeRawOrRleFrameIntoWithDictionarySetLimited(frame, output, dictionary_set, max_output_len);
     }
 
     pub fn decodeIntoSliceWithDictionarySetExactSize(self: *NativeFrameDecoder, frame: []const u8, output: []u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error!usize {
@@ -2173,6 +2643,11 @@ pub const NativeFrameDecoder = struct {
     pub fn decodeChunksIntoSlice(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8) Error!usize {
         _ = self;
         return try decodeRawOrRleFrameChunksInto(chunks, compressed_scratch, output);
+    }
+
+    pub fn decodeChunksIntoSliceLimited(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, max_output_len: usize) Error!usize {
+        _ = self;
+        return try decodeRawOrRleFrameChunksIntoLimited(chunks, compressed_scratch, output, max_output_len);
     }
 
     pub fn decodeChunksIntoSliceExactSize(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, expected_output_len: usize) Error!usize {
@@ -2254,6 +2729,11 @@ pub const NativeFrameDecoder = struct {
     pub fn decodeChunksIntoSliceWithDictionary(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: NativeDictionary) Error!usize {
         _ = self;
         return try decodeRawOrRleFrameChunksIntoWithDictionary(chunks, compressed_scratch, output, dictionary);
+    }
+
+    pub fn decodeChunksIntoSliceWithDictionaryLimited(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: NativeDictionary, max_output_len: usize) Error!usize {
+        _ = self;
+        return try decodeRawOrRleFrameChunksIntoWithDictionaryLimited(chunks, compressed_scratch, output, dictionary, max_output_len);
     }
 
     pub fn decodeChunksIntoSliceWithDictionaryExactSize(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: NativeDictionary, expected_output_len: usize) Error!usize {
@@ -2343,6 +2823,11 @@ pub const NativeFrameDecoder = struct {
         return try decodeRawOrRleFrameChunksIntoWithDictionarySet(chunks, compressed_scratch, output, dictionary_set);
     }
 
+    pub fn decodeChunksIntoSliceWithDictionarySetLimited(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary_set: NativeDictionarySet, max_output_len: usize) Error!usize {
+        _ = self;
+        return try decodeRawOrRleFrameChunksIntoWithDictionarySetLimited(chunks, compressed_scratch, output, dictionary_set, max_output_len);
+    }
+
     pub fn decodeChunksIntoSliceWithDictionarySetExactSize(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error!usize {
         _ = self;
         return try decodeRawOrRleFrameChunksIntoExactSizeWithDictionarySet(chunks, compressed_scratch, output, dictionary_set, expected_output_len);
@@ -2373,6 +2858,7 @@ pub const NativeFrameDecoder = struct {
     pub const decodeConcatenatedAppendExactSize = decodeAppendExactSize;
     pub const decodeConcatenatedAppendLimited = decodeAppendLimited;
     pub const decodeConcatenatedIntoSlice = decodeIntoSlice;
+    pub const decodeConcatenatedIntoSliceLimited = decodeIntoSliceLimited;
     pub const decodeConcatenatedIntoSliceExactSize = decodeIntoSliceExactSize;
     pub const decodeConcatenatedAllocWithDictionary = decodeAllocWithDictionary;
     pub const decodeConcatenatedAllocWithDictionaryExactSize = decodeAllocWithDictionaryExactSize;
@@ -2383,6 +2869,7 @@ pub const NativeFrameDecoder = struct {
     pub const decodeConcatenatedAppendExactSizeWithDictionary = decodeAppendExactSizeWithDictionary;
     pub const decodeConcatenatedAppendLimitedWithDictionary = decodeAppendLimitedWithDictionary;
     pub const decodeConcatenatedIntoSliceWithDictionary = decodeIntoSliceWithDictionary;
+    pub const decodeConcatenatedIntoSliceWithDictionaryLimited = decodeIntoSliceWithDictionaryLimited;
     pub const decodeConcatenatedIntoSliceWithDictionaryExactSize = decodeIntoSliceWithDictionaryExactSize;
     pub const decodeConcatenatedAllocWithDictionarySet = decodeAllocWithDictionarySet;
     pub const decodeConcatenatedAllocWithDictionarySetExactSize = decodeAllocWithDictionarySetExactSize;
@@ -2393,6 +2880,7 @@ pub const NativeFrameDecoder = struct {
     pub const decodeConcatenatedAppendExactSizeWithDictionarySet = decodeAppendExactSizeWithDictionarySet;
     pub const decodeConcatenatedAppendLimitedWithDictionarySet = decodeAppendLimitedWithDictionarySet;
     pub const decodeConcatenatedIntoSliceWithDictionarySet = decodeIntoSliceWithDictionarySet;
+    pub const decodeConcatenatedIntoSliceWithDictionarySetLimited = decodeIntoSliceWithDictionarySetLimited;
     pub const decodeConcatenatedIntoSliceWithDictionarySetExactSize = decodeIntoSliceWithDictionarySetExactSize;
 
     pub fn decodedConcatenatedSize(self: *NativeFrameDecoder, frames: []const u8) Error!usize {
@@ -2469,6 +2957,11 @@ pub const NativeFrameDecoder = struct {
         return try decodeRawOrRleFrameChunksInto(chunks, compressed_scratch, output);
     }
 
+    pub fn decodeConcatenatedChunksIntoSliceLimited(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, max_output_len: usize) Error!usize {
+        _ = self;
+        return try decodeRawOrRleFrameChunksIntoLimited(chunks, compressed_scratch, output, max_output_len);
+    }
+
     pub fn decodeConcatenatedChunksIntoSliceExactSize(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, expected_output_len: usize) Error!usize {
         _ = self;
         return try decodeRawOrRleFrameChunksIntoExactSize(chunks, compressed_scratch, output, expected_output_len);
@@ -2541,6 +3034,11 @@ pub const NativeFrameDecoder = struct {
     pub fn decodeConcatenatedChunksIntoSliceWithDictionary(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: NativeDictionary) Error!usize {
         _ = self;
         return try decodeRawOrRleFrameChunksIntoWithDictionary(chunks, compressed_scratch, output, dictionary);
+    }
+
+    pub fn decodeConcatenatedChunksIntoSliceWithDictionaryLimited(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: NativeDictionary, max_output_len: usize) Error!usize {
+        _ = self;
+        return try decodeRawOrRleFrameChunksIntoWithDictionaryLimited(chunks, compressed_scratch, output, dictionary, max_output_len);
     }
 
     pub fn decodeConcatenatedChunksIntoSliceWithDictionaryExactSize(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary: NativeDictionary, expected_output_len: usize) Error!usize {
@@ -2617,6 +3115,11 @@ pub const NativeFrameDecoder = struct {
         return try decodeRawOrRleFrameChunksIntoWithDictionarySet(chunks, compressed_scratch, output, dictionary_set);
     }
 
+    pub fn decodeConcatenatedChunksIntoSliceWithDictionarySetLimited(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary_set: NativeDictionarySet, max_output_len: usize) Error!usize {
+        _ = self;
+        return try decodeRawOrRleFrameChunksIntoWithDictionarySetLimited(chunks, compressed_scratch, output, dictionary_set, max_output_len);
+    }
+
     pub fn decodeConcatenatedChunksIntoSliceWithDictionarySetExactSize(self: *NativeFrameDecoder, chunks: []const []const u8, compressed_scratch: []u8, output: []u8, dictionary_set: NativeDictionarySet, expected_output_len: usize) Error!usize {
         _ = self;
         return try decodeRawOrRleFrameChunksIntoExactSizeWithDictionarySet(chunks, compressed_scratch, output, dictionary_set, expected_output_len);
@@ -2665,6 +3168,8 @@ pub const NativeFrameDecoder = struct {
     }
 };
 
+pub const FrameDecoder = NativeFrameDecoder;
+
 /// Compress a complete Zstandard frame through Vort's dependency-free native
 /// subset.
 pub fn encodeFrameAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
@@ -2687,6 +3192,161 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
 ) Error![]u8 {
     const result = try encodeNativeFrameWithOptionsAlloc(allocator, input, nativeFrameOptionsForLevel(level, options));
     return result.frame;
+}
+
+pub fn encodedFrameBound(input_len: usize) Error!usize {
+    return try encodedFrameBoundWithLevelAndOptions(input_len, default_compression_level, .{});
+}
+
+pub fn encodedFrameBoundWithLevel(input_len: usize, level: c_int) Error!usize {
+    return try encodedFrameBoundWithLevelAndOptions(input_len, level, .{});
+}
+
+pub fn encodedFrameBoundWithOptions(input_len: usize, options: FrameOptions) Error!usize {
+    return try encodedFrameBoundWithLevelAndOptions(input_len, default_compression_level, options);
+}
+
+pub fn encodedFrameBoundWithLevelAndOptions(input_len: usize, level: c_int, options: FrameOptions) Error!usize {
+    return try encodedNativeFrameBoundWithOptions(input_len, nativeFrameOptionsForLevel(level, options));
+}
+
+pub fn encodeFrameAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) Error!usize {
+    return try encodeFrameAppendWithLevelAndOptions(allocator, out, input, default_compression_level, .{});
+}
+
+pub fn encodeFrameAppendWithLevel(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, level: c_int) Error!usize {
+    return try encodeFrameAppendWithLevelAndOptions(allocator, out, input, level, .{});
+}
+
+pub fn encodeFrameAppendWithOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: FrameOptions) Error!usize {
+    return try encodeFrameAppendWithLevelAndOptions(allocator, out, input, default_compression_level, options);
+}
+
+pub fn encodeFrameAppendWithLevelAndOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, level: c_int, options: FrameOptions) Error!usize {
+    const start = out.items.len;
+    _ = try encodeNativeFrameAppend(allocator, out, input, nativeFrameOptionsForLevel(level, options));
+    return out.items.len - start;
+}
+
+pub fn encodeFrameIntoSlice(allocator: std.mem.Allocator, input: []const u8, output: []u8) Error!usize {
+    return try encodeFrameIntoSliceWithLevelAndOptions(allocator, input, default_compression_level, .{}, output);
+}
+
+pub fn encodeFrameIntoSliceWithLevel(allocator: std.mem.Allocator, input: []const u8, level: c_int, output: []u8) Error!usize {
+    return try encodeFrameIntoSliceWithLevelAndOptions(allocator, input, level, .{}, output);
+}
+
+pub fn encodeFrameIntoSliceWithOptions(allocator: std.mem.Allocator, input: []const u8, options: FrameOptions, output: []u8) Error!usize {
+    return try encodeFrameIntoSliceWithLevelAndOptions(allocator, input, default_compression_level, options, output);
+}
+
+pub fn encodeFrameIntoSliceWithLevelAndOptions(allocator: std.mem.Allocator, input: []const u8, level: c_int, options: FrameOptions, output: []u8) Error!usize {
+    const result = try encodeNativeFrameIntoSlice(allocator, input, nativeFrameOptionsForLevel(level, options), output);
+    return result.written;
+}
+
+pub fn encodedFrameBoundWithDictionary(input_len: usize, dictionary: NativeDictionary) Error!usize {
+    return try encodedFrameBoundWithLevelAndOptionsAndDictionary(input_len, default_compression_level, .{}, dictionary);
+}
+
+pub fn encodedFrameBoundWithOptionsAndDictionary(input_len: usize, options: FrameOptions, dictionary: NativeDictionary) Error!usize {
+    return try encodedFrameBoundWithLevelAndOptionsAndDictionary(input_len, default_compression_level, options, dictionary);
+}
+
+pub fn encodedFrameBoundWithLevelAndOptionsAndDictionary(input_len: usize, level: c_int, options: FrameOptions, dictionary: NativeDictionary) Error!usize {
+    return try encodedNativeFrameBoundWithDictionary(input_len, nativeFrameOptionsForLevel(level, options), dictionary);
+}
+
+pub fn encodeFrameWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: NativeDictionary) Error![]u8 {
+    return try encodeFrameWithLevelAndOptionsAndDictionaryAlloc(allocator, input, default_compression_level, .{}, dictionary);
+}
+
+pub fn encodeFrameWithOptionsAndDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, options: FrameOptions, dictionary: NativeDictionary) Error![]u8 {
+    return try encodeFrameWithLevelAndOptionsAndDictionaryAlloc(allocator, input, default_compression_level, options, dictionary);
+}
+
+pub fn encodeFrameWithLevelAndOptionsAndDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, level: c_int, options: FrameOptions, dictionary: NativeDictionary) Error![]u8 {
+    const result = try encodeNativeFrameWithDictionaryAlloc(allocator, input, nativeFrameOptionsForLevel(level, options), dictionary);
+    return result.frame;
+}
+
+pub fn encodeFrameAppendWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary: NativeDictionary) Error!usize {
+    return try encodeFrameAppendWithLevelAndOptionsAndDictionary(allocator, out, input, default_compression_level, .{}, dictionary);
+}
+
+pub fn encodeFrameAppendWithOptionsAndDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: FrameOptions, dictionary: NativeDictionary) Error!usize {
+    return try encodeFrameAppendWithLevelAndOptionsAndDictionary(allocator, out, input, default_compression_level, options, dictionary);
+}
+
+pub fn encodeFrameAppendWithLevelAndOptionsAndDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, level: c_int, options: FrameOptions, dictionary: NativeDictionary) Error!usize {
+    const start = out.items.len;
+    _ = try encodeNativeFrameAppendWithDictionary(allocator, out, input, nativeFrameOptionsForLevel(level, options), dictionary);
+    return out.items.len - start;
+}
+
+pub fn encodeFrameIntoSliceWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: NativeDictionary, output: []u8) Error!usize {
+    return try encodeFrameIntoSliceWithLevelAndOptionsAndDictionary(allocator, input, default_compression_level, .{}, dictionary, output);
+}
+
+pub fn encodeFrameIntoSliceWithOptionsAndDictionary(allocator: std.mem.Allocator, input: []const u8, options: FrameOptions, dictionary: NativeDictionary, output: []u8) Error!usize {
+    return try encodeFrameIntoSliceWithLevelAndOptionsAndDictionary(allocator, input, default_compression_level, options, dictionary, output);
+}
+
+pub fn encodeFrameIntoSliceWithLevelAndOptionsAndDictionary(allocator: std.mem.Allocator, input: []const u8, level: c_int, options: FrameOptions, dictionary: NativeDictionary, output: []u8) Error!usize {
+    const result = try encodeNativeFrameIntoSliceWithDictionary(allocator, input, nativeFrameOptionsForLevel(level, options), dictionary, output);
+    return result.written;
+}
+
+pub fn encodedFrameBoundWithDictionarySet(input_len: usize, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error!usize {
+    return try encodedFrameBoundWithLevelAndOptionsAndDictionarySet(input_len, default_compression_level, .{}, dictionary_set, dictionary_id);
+}
+
+pub fn encodedFrameBoundWithOptionsAndDictionarySet(input_len: usize, options: FrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error!usize {
+    return try encodedFrameBoundWithLevelAndOptionsAndDictionarySet(input_len, default_compression_level, options, dictionary_set, dictionary_id);
+}
+
+pub fn encodedFrameBoundWithLevelAndOptionsAndDictionarySet(input_len: usize, level: c_int, options: FrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error!usize {
+    return try encodedNativeFrameBoundWithDictionarySet(input_len, nativeFrameOptionsForLevel(level, options), dictionary_set, dictionary_id);
+}
+
+pub fn encodeFrameWithDictionarySetAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error![]u8 {
+    return try encodeFrameWithLevelAndOptionsAndDictionarySetAlloc(allocator, input, default_compression_level, .{}, dictionary_set, dictionary_id);
+}
+
+pub fn encodeFrameWithOptionsAndDictionarySetAlloc(allocator: std.mem.Allocator, input: []const u8, options: FrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error![]u8 {
+    return try encodeFrameWithLevelAndOptionsAndDictionarySetAlloc(allocator, input, default_compression_level, options, dictionary_set, dictionary_id);
+}
+
+pub fn encodeFrameWithLevelAndOptionsAndDictionarySetAlloc(allocator: std.mem.Allocator, input: []const u8, level: c_int, options: FrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error![]u8 {
+    const result = try encodeNativeFrameWithDictionarySetAlloc(allocator, input, nativeFrameOptionsForLevel(level, options), dictionary_set, dictionary_id);
+    return result.frame;
+}
+
+pub fn encodeFrameAppendWithDictionarySet(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error!usize {
+    return try encodeFrameAppendWithLevelAndOptionsAndDictionarySet(allocator, out, input, default_compression_level, .{}, dictionary_set, dictionary_id);
+}
+
+pub fn encodeFrameAppendWithOptionsAndDictionarySet(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: FrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error!usize {
+    return try encodeFrameAppendWithLevelAndOptionsAndDictionarySet(allocator, out, input, default_compression_level, options, dictionary_set, dictionary_id);
+}
+
+pub fn encodeFrameAppendWithLevelAndOptionsAndDictionarySet(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, level: c_int, options: FrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error!usize {
+    const start = out.items.len;
+    _ = try encodeNativeFrameAppendWithDictionarySet(allocator, out, input, nativeFrameOptionsForLevel(level, options), dictionary_set, dictionary_id);
+    return out.items.len - start;
+}
+
+pub fn encodeFrameIntoSliceWithDictionarySet(allocator: std.mem.Allocator, input: []const u8, dictionary_set: NativeDictionarySet, dictionary_id: u32, output: []u8) Error!usize {
+    return try encodeFrameIntoSliceWithLevelAndOptionsAndDictionarySet(allocator, input, default_compression_level, .{}, dictionary_set, dictionary_id, output);
+}
+
+pub fn encodeFrameIntoSliceWithOptionsAndDictionarySet(allocator: std.mem.Allocator, input: []const u8, options: FrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32, output: []u8) Error!usize {
+    return try encodeFrameIntoSliceWithLevelAndOptionsAndDictionarySet(allocator, input, default_compression_level, options, dictionary_set, dictionary_id, output);
+}
+
+pub fn encodeFrameIntoSliceWithLevelAndOptionsAndDictionarySet(allocator: std.mem.Allocator, input: []const u8, level: c_int, options: FrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32, output: []u8) Error!usize {
+    const result = try encodeNativeFrameIntoSliceWithDictionarySet(allocator, input, nativeFrameOptionsForLevel(level, options), dictionary_set, dictionary_id, output);
+    return result.written;
 }
 
 fn nativeFrameOptionsForLevel(level: c_int, options: FrameOptions) NativeFrameOptions {
@@ -3172,6 +3832,8 @@ pub const NativeFrameEncoder = struct {
     }
 };
 
+pub const FrameEncoder = NativeFrameEncoder;
+
 fn forceNativeSelection(options: NativeFrameOptions, selection: NativeFrameSelection) NativeFrameOptions {
     var forced = options;
     forced.selection = selection;
@@ -3205,23 +3867,28 @@ fn emitFrameHeader(
     // the Zstandard format. The previous bootstrap writer always spent eight
     // bytes here, which was easy to inspect but disproportionately expensive
     // for the tiny raw/RLE frames this dependency-free path is meant to cover.
+    const field_size = nativeContentSizeFieldLen(content_len);
     if (content_len <= 255) {
+        std.debug.assert(field_size == 1);
         try out.append(allocator, 0x20 | checksum_flag | dictionary_flag); // fcs=1 byte, single segment
         try emitDictionaryId(allocator, out, options.dictionary_id);
         try out.append(allocator, @intCast(content_len));
     } else if (content_len <= 256 + std.math.maxInt(u16)) {
+        std.debug.assert(field_size == 2);
         try out.append(allocator, 0x60 | checksum_flag | dictionary_flag); // fcs=2 bytes (+256), single segment
         try emitDictionaryId(allocator, out, options.dictionary_id);
         var size_bytes: [2]u8 = undefined;
         std.mem.writeInt(u16, &size_bytes, @intCast(content_len - 256), .little);
         try out.appendSlice(allocator, &size_bytes);
     } else if (content_len <= std.math.maxInt(u32)) {
+        std.debug.assert(field_size == 4);
         try out.append(allocator, 0xa0 | checksum_flag | dictionary_flag); // fcs=4 bytes, single segment
         try emitDictionaryId(allocator, out, options.dictionary_id);
         var size_bytes: [4]u8 = undefined;
         std.mem.writeInt(u32, &size_bytes, @intCast(content_len), .little);
         try out.appendSlice(allocator, &size_bytes);
     } else {
+        std.debug.assert(field_size == 8);
         try out.append(allocator, 0xe0 | checksum_flag | dictionary_flag); // fcs=8 bytes, single segment
         try emitDictionaryId(allocator, out, options.dictionary_id);
         var size_bytes: [8]u8 = undefined;
@@ -3320,9 +3987,29 @@ pub const NativeSkippableFrameHeader = struct {
     next_frame_offset: usize,
 };
 
+pub const NativeStreamSummaryErrorPhase = enum {
+    magic,
+    frame_header,
+    frame_body,
+    frame_checksum,
+    skippable_header,
+    skippable_payload,
+    stream,
+    frame,
+};
+
+pub const NativeStreamSummaryErrorDiagnostics = struct {
+    phase: NativeStreamSummaryErrorPhase = .stream,
+    offset: usize = 0,
+};
+
 pub const NativeStreamSummary = struct {
     frame_count: usize = 0,
     skippable_frame_count: usize = 0,
+    checksum_frame_count: usize = 0,
+    dictionary_id_frame_count: usize = 0,
+    content_size_frame_count: usize = 0,
+    declared_content_bytes: u64 = 0,
     block_count: usize = 0,
     raw_block_count: usize = 0,
     rle_block_count: usize = 0,
@@ -5449,17 +6136,38 @@ pub fn inspectNativeSkippableFrame(frame: []const u8) Error!NativeSkippableFrame
 }
 
 pub fn summarizeNativeStream(frames: []const u8) Error!NativeStreamSummary {
+    var diagnostics: NativeStreamSummaryErrorDiagnostics = .{};
+    return summarizeNativeStreamWithDiagnostics(frames, &diagnostics);
+}
+
+pub fn summarizeNativeStreamWithDiagnostics(frames: []const u8, diagnostics: *NativeStreamSummaryErrorDiagnostics) Error!NativeStreamSummary {
+    diagnostics.* = .{};
     var offset: usize = 0;
     var summary: NativeStreamSummary = .{};
     while (offset < frames.len) {
-        if (frames.len - offset < 4) return error.TruncatedFrame;
+        if (frames.len - offset < 4) {
+            diagnostics.* = .{ .phase = .magic, .offset = frames.len };
+            return error.TruncatedFrame;
+        }
+        const magic_offset = offset;
         const magic = std.mem.readInt(u32, frames[offset..][0..4], .little);
         offset += 4;
         if (magic == frame_magic_u32) {
             const frame_start = offset - 4;
-            const header = try parseRawOrRleFrameHeaderWithOptions(frames, &offset, true);
+            const header = parseRawOrRleFrameHeaderWithOptions(frames, &offset, true) catch |err| {
+                diagnostics.* = .{ .phase = .frame_header, .offset = frames.len };
+                return err;
+            };
+            if (header.has_checksum) summary.checksum_frame_count += 1;
+            if (header.dictionary_id != 0) summary.dictionary_id_frame_count += 1;
+            if (header.content_size) |content_size| {
+                summary.content_size_frame_count += 1;
+                summary.declared_content_bytes = std.math.add(u64, summary.declared_content_bytes, content_size) catch return error.IntegerOverflow;
+            }
             while (true) {
-                const block = try inspectNativeFrameBlockAt(frames[frame_start..], offset - frame_start);
+                const block = inspectNativeFrameBlockAtWithDiagnostics(frames[frame_start..], frame_start, offset - frame_start, diagnostics) catch |err| {
+                    return err;
+                };
                 summary.block_count += 1;
                 switch (block.block_type) {
                     .raw => summary.raw_block_count += 1,
@@ -5471,23 +6179,85 @@ pub fn summarizeNativeStream(frames: []const u8) Error!NativeStreamSummary {
                 if (block.last) break;
             }
             if (header.has_checksum) {
-                if (frames.len - offset < 4) return error.TruncatedFrame;
+                if (frames.len - offset < 4) {
+                    diagnostics.* = .{ .phase = .frame_checksum, .offset = frames.len };
+                    return error.TruncatedFrame;
+                }
                 offset += 4;
             }
             summary.frame_count += 1;
         } else if (magic >= skippable_magic_min and magic <= skippable_magic_max) {
-            if (frames.len - offset < 4) return error.TruncatedFrame;
+            if (frames.len - offset < 4) {
+                diagnostics.* = .{ .phase = .skippable_header, .offset = frames.len };
+                return error.TruncatedFrame;
+            }
             const skip_len: usize = @intCast(std.mem.readInt(u32, frames[offset..][0..4], .little));
             offset += 4;
-            if (frames.len - offset < skip_len) return error.TruncatedFrame;
+            if (frames.len - offset < skip_len) {
+                diagnostics.* = .{ .phase = .skippable_payload, .offset = frames.len };
+                return error.TruncatedFrame;
+            }
             summary.skippable_frame_count += 1;
             summary.skippable_payload_bytes = std.math.add(usize, summary.skippable_payload_bytes, skip_len) catch return error.IntegerOverflow;
             offset += skip_len;
         } else {
+            diagnostics.* = .{ .phase = .magic, .offset = magic_offset };
             return error.InvalidMagic;
         }
     }
     return summary;
+}
+
+fn inspectNativeFrameBlockAtWithDiagnostics(frame: []const u8, frame_start: usize, header_offset: usize, diagnostics: *NativeStreamSummaryErrorDiagnostics) Error!NativeFrameBlockHeader {
+    const header = inspectNativeFrameHeader(frame) catch |err| {
+        diagnostics.* = .{ .phase = .frame_header, .offset = frame_start + frame.len };
+        return err;
+    };
+    if (header_offset < header.payload_offset) {
+        diagnostics.* = .{ .phase = .frame, .offset = frame_start + header_offset };
+        return error.CorruptFrame;
+    }
+    if (frame.len - header_offset < 3) {
+        diagnostics.* = .{ .phase = .frame_body, .offset = frame_start + frame.len };
+        return error.TruncatedFrame;
+    }
+    const block_header = std.mem.readInt(u24, frame[header_offset..][0..3], .little);
+    const block_type_raw = (block_header >> 1) & 0x03;
+    const payload_len: usize = @intCast(block_header >> 3);
+    const block_type: NativeBlockType = switch (block_type_raw) {
+        0 => .raw,
+        1 => .rle,
+        2 => .compressed,
+        else => {
+            diagnostics.* = .{ .phase = .frame, .offset = frame_start + header_offset };
+            return error.CorruptFrame;
+        },
+    };
+    validateBlockSize(header, block_type_raw, payload_len) catch |err| {
+        diagnostics.* = .{ .phase = .frame, .offset = frame_start + header_offset };
+        return err;
+    };
+    const payload_offset = header_offset + 3;
+    const required_payload_len: usize = if (block_type == .rle) 1 else payload_len;
+    if (frame.len - payload_offset < required_payload_len) {
+        diagnostics.* = .{ .phase = .frame_body, .offset = frame_start + frame.len };
+        return error.TruncatedFrame;
+    }
+    return .{
+        .header_offset = header_offset,
+        .payload_offset = payload_offset,
+        .payload_len = payload_len,
+        .block_type = block_type,
+        .last = (block_header & 1) != 0,
+        .next_header_offset = payload_offset + required_payload_len,
+    };
+}
+
+fn nativeSummaryFrameErrorPhase(err: anyerror) NativeStreamSummaryErrorPhase {
+    return switch (err) {
+        error.TruncatedFrame => .frame_body,
+        else => .frame,
+    };
 }
 
 fn findNativeFrameEnd(frames: []const u8, frame_start: usize) Error!usize {
@@ -6688,7 +7458,7 @@ fn emitSequenceHuffmanLiteralsSection(
 
     var compressed: std.ArrayList(u8) = .empty;
     defer compressed.deinit(allocator);
-    try emitHuffmanLiteralsSectionWithPlan(allocator, &compressed, literals.items, plan, huffman_tree.items, false);
+    try emitHuffmanLiteralsSectionWithPlan(allocator, &compressed, literals.items, plan, huffman_tree.items, false) orelse return false;
 
     const raw_header_len = try literalsHeaderLen(info.regenerated_len);
     const raw_len = std.math.add(usize, raw_header_len, info.payload_len) catch return error.IntegerOverflow;
@@ -6789,9 +7559,12 @@ fn sequenceHuffmanLiteralsSectionLen(
         tail_start,
         info.regenerated_len,
         plan,
-    );
+    ) orelse return null;
     const compressed_size = std.math.add(usize, tree_len, streams_len) catch return error.IntegerOverflow;
-    const header_len = try huffmanLiteralsHeaderLen(info.regenerated_len, compressed_size);
+    const header_len = huffmanLiteralsHeaderLen(info.regenerated_len, compressed_size) catch |err| switch (err) {
+        error.UnsupportedZstdFeature => return null,
+        else => return err,
+    };
     return std.math.add(usize, header_len, compressed_size) catch return error.IntegerOverflow;
 }
 
@@ -6852,7 +7625,7 @@ fn smallHuffmanLiteralStreamsSerializedLenFromSequence(
     tail_start: usize,
     regenerated_len: usize,
     plan: SmallHuffmanLiteralPlan,
-) Error!usize {
+) Error!?usize {
     var bit_counts: [4]usize = .{ 0, 0, 0, 0 };
     var literal_index: usize = 0;
     const segment_len = if (regenerated_len <= 1023) regenerated_len else (regenerated_len + 3) / 4;
@@ -6874,7 +7647,7 @@ fn smallHuffmanLiteralStreamsSerializedLenFromSequence(
     var len: usize = 6;
     for (bit_counts) |bits| {
         const stream_len = (bits + 1 + 7) / 8;
-        if (stream_len > std.math.maxInt(u16)) return error.UnsupportedZstdFeature;
+        if (stream_len > std.math.maxInt(u16)) return null;
         len = std.math.add(usize, len, stream_len) catch return error.IntegerOverflow;
     }
     return len;
@@ -7774,7 +8547,7 @@ fn emitSmallHuffmanLiteralBlock(allocator: std.mem.Allocator, out: *std.ArrayLis
 
     var payload: std.ArrayList(u8) = .empty;
     defer payload.deinit(allocator);
-    try emitHuffmanLiteralsSectionWithPlan(allocator, &payload, block, plan, huffman_tree.items, reuse_previous_tree);
+    try emitHuffmanLiteralsSectionWithPlan(allocator, &payload, block, plan, huffman_tree.items, reuse_previous_tree) orelse return false;
     try payload.append(allocator, 0); // sequence_count=0: this block is literals-only.
 
     if (payload.items.len >= block.len) return false;
@@ -7866,13 +8639,13 @@ fn emitHuffmanLiteralsSectionWithPlan(
     plan: SmallHuffmanLiteralPlan,
     huffman_tree: []const u8,
     reuse_previous_tree: bool,
-) Error!void {
+) Error!?void {
     if (literals.len <= 1023) {
         var stream: std.ArrayList(u8) = .empty;
         defer stream.deinit(allocator);
         try emitSmallHuffmanStream(allocator, &stream, literals, plan);
         const compressed_size = huffman_tree.len + stream.items.len;
-        try emitHuffmanLiteralsHeader(allocator, out, literals.len, compressed_size, reuse_previous_tree);
+        try emitHuffmanLiteralsHeader(allocator, out, literals.len, compressed_size, reuse_previous_tree) orelse return null;
         try out.appendSlice(allocator, huffman_tree);
         try out.appendSlice(allocator, stream.items);
     } else {
@@ -7900,8 +8673,8 @@ fn emitHuffmanLiteralsSectionWithPlan(
             streams[0].items.len + streams[1].items.len + streams[2].items.len + streams[3].items.len;
         if (streams[0].items.len > std.math.maxInt(u16) or
             streams[1].items.len > std.math.maxInt(u16) or
-            streams[2].items.len > std.math.maxInt(u16)) return error.UnsupportedZstdFeature;
-        try emitHuffmanLiteralsHeader(allocator, out, literals.len, compressed_size, reuse_previous_tree);
+            streams[2].items.len > std.math.maxInt(u16)) return null;
+        try emitHuffmanLiteralsHeader(allocator, out, literals.len, compressed_size, reuse_previous_tree) orelse return null;
         try out.appendSlice(allocator, huffman_tree);
         var stream_lengths: [6]u8 = undefined;
         std.mem.writeInt(u16, stream_lengths[0..2], @intCast(streams[0].items.len), .little);
@@ -8775,7 +9548,7 @@ const PredefinedSequencePlan = struct {
 
 fn planPredefinedSequenceValues(values: []const usize, symbols: []const SequenceSymbol, min_additional_bits: u8) Error!?PredefinedSequencePlan {
     if (values.len == 0 or values.len > max_bootstrap_sequence_count) return null;
-    if (symbols.len > max_predefined_sequence_states) return error.UnsupportedZstdFeature;
+    if (symbols.len > max_predefined_sequence_states) return null;
 
     var next_choice: [max_bootstrap_sequence_count][max_predefined_sequence_states]usize = undefined;
     for (&next_choice) |*row| @memset(row[0..], max_predefined_sequence_states);
@@ -8982,7 +9755,7 @@ fn emitHuffmanLiteralsHeader(
     regenerated_size: usize,
     compressed_size: usize,
     treeless: bool,
-) Error!void {
+) Error!?void {
     if (compressed_size == 0) return error.CorruptFrame;
     const kind_bits: u8 = if (treeless) 0x03 else 0x02;
     if (regenerated_size <= 0x3ff and compressed_size <= 0x3ff) {
@@ -9003,9 +9776,7 @@ fn emitHuffmanLiteralsHeader(
         try out.append(allocator, @truncate(value >> 12));
         try out.append(allocator, @truncate(value >> 20));
         try out.append(allocator, @truncate(value >> 28));
-    } else {
-        return error.UnsupportedZstdFeature;
-    }
+    } else return null;
 }
 
 fn emitCompressedLiteralsHeader(
@@ -9014,7 +9785,7 @@ fn emitCompressedLiteralsHeader(
     regenerated_size: usize,
     compressed_size: usize,
 ) Error!void {
-    return try emitHuffmanLiteralsHeader(allocator, out, regenerated_size, compressed_size, false);
+    _ = try emitHuffmanLiteralsHeader(allocator, out, regenerated_size, compressed_size, false) orelse return error.UnsupportedZstdFeature;
 }
 
 fn emitRawBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!void {
@@ -9121,6 +9892,82 @@ test "zstd pure Zig facade decoder enforces allocation limits" {
     try std.testing.expectEqual(payload.len, no_size_written);
     try std.testing.expectEqualSlices(u8, payload, no_size_into_buffer[0..no_size_written]);
     try std.testing.expectError(error.OutputTooSmall, decodeFrameInto(no_size, no_size_into_buffer[0 .. payload.len - 1]));
+}
+
+fn fillNonRlePayload(payload: []u8) void {
+    for (payload, 0..) |*byte, i| {
+        // A full-period byte progression avoids the long equal-byte runs that
+        // the raw/RLE writer would intentionally split into RLE blocks. Tests
+        // that assert exact encoded bounds can then reason about one raw block
+        // per configured Zstd block without depending on match heuristics.
+        byte.* = @intCast((i * 73 + 19) & 0xff);
+    }
+}
+
+test "zstd native encoded bound follows emitted frame header widths" {
+    const cases = [_]struct {
+        len: usize,
+        expected_descriptor: u8,
+        expected_payload_offset: usize,
+    }{
+        .{ .len = 0, .expected_descriptor = 0x20, .expected_payload_offset = 6 },
+        .{ .len = 255, .expected_descriptor = 0x20, .expected_payload_offset = 6 },
+        .{ .len = 300, .expected_descriptor = 0x60, .expected_payload_offset = 7 },
+        .{ .len = 70_000, .expected_descriptor = 0xa0, .expected_payload_offset = 9 },
+    };
+
+    for (cases) |case| {
+        const payload = try std.testing.allocator.alloc(u8, case.len);
+        defer std.testing.allocator.free(payload);
+        fillNonRlePayload(payload);
+
+        const options: NativeFrameOptions = .{
+            .selection = .raw_or_rle,
+            .content_checksum = false,
+        };
+        const encoded = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, payload, options);
+        defer std.testing.allocator.free(encoded);
+        const bound = try encodedNativeFrameBoundWithOptions(payload.len, options);
+        try std.testing.expectEqual(encoded.len, bound);
+        try std.testing.expectEqual(case.expected_descriptor, encoded[4]);
+        try std.testing.expectEqual(case.expected_payload_offset, (try inspectNativeFrameHeader(encoded)).payload_offset);
+
+        const into = try std.testing.allocator.alloc(u8, bound);
+        defer std.testing.allocator.free(into);
+        const into_result = try encodeNativeFrameIntoSlice(std.testing.allocator, payload, options, into);
+        try std.testing.expectEqual(NativeFrameMode.raw_or_rle, into_result.mode);
+        try std.testing.expectEqualSlices(u8, encoded, into[0..into_result.written]);
+        try std.testing.expectError(error.OutputTooSmall, encodeNativeFrameIntoSlice(std.testing.allocator, payload, options, into[0 .. into.len - 1]));
+    }
+
+    const payload = try std.testing.allocator.alloc(u8, 300);
+    defer std.testing.allocator.free(payload);
+    fillNonRlePayload(payload);
+
+    const no_size_options: NativeFrameOptions = .{
+        .selection = .raw_or_rle,
+        .content_checksum = false,
+        .include_content_size = false,
+    };
+    const no_size = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, payload, no_size_options);
+    defer std.testing.allocator.free(no_size);
+    try std.testing.expectEqual(no_size.len, try encodedNativeFrameBoundWithOptions(payload.len, no_size_options));
+    try std.testing.expectEqual(@as(u8, 0x00), no_size[4]);
+    try std.testing.expectEqual(@as(usize, 6), (try inspectNativeFrameHeader(no_size)).payload_offset);
+
+    const dictionary_options: NativeFrameOptions = .{
+        .selection = .raw_or_rle,
+        .content_checksum = false,
+        .dictionary_id = 0x1234,
+    };
+    const with_dictionary_id = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, payload, dictionary_options);
+    defer std.testing.allocator.free(with_dictionary_id);
+    try std.testing.expectEqual(with_dictionary_id.len, try encodedNativeFrameBoundWithOptions(payload.len, dictionary_options));
+    const dictionary_header = try inspectNativeFrameHeader(with_dictionary_id);
+    try std.testing.expectEqual(@as(u32, 0x1234), dictionary_header.dictionary_id);
+    try std.testing.expectEqual(@as(usize, 9), dictionary_header.payload_offset);
+
+    try std.testing.expectEqual(@as(usize, 13), try nativeFrameHeaderLen(@as(u64, std.math.maxInt(u32)) + 1, .{}));
 }
 
 test "zstd raw/RLE frame writer round trips through std decompressor" {
@@ -9233,6 +10080,7 @@ test "zstd raw/RLE frame writer round trips through std decompressor" {
     try std.testing.expectEqualSlices(u8, payload, into_buffer[0..into_written]);
     try std.testing.expectError(error.OutputTooSmall, decodeRawOrRleFrameInto(encoded, into_buffer[0 .. into_buffer.len - 1]));
     const raw_bound = try encodedNativeFrameBoundWithOptions(payload.len, .{ .selection = .raw_or_rle });
+    try std.testing.expectEqual(encoded.len, raw_bound);
     const raw_into = try std.testing.allocator.alloc(u8, raw_bound);
     defer std.testing.allocator.free(raw_into);
     const raw_into_written = try encodeRawOrRleFrameIntoSlice(std.testing.allocator, payload, .{}, raw_into);
@@ -9271,6 +10119,14 @@ test "zstd raw/RLE frame writer round trips through std decompressor" {
     try std.testing.expectEqual(@as(usize, 1), rle_summary.block_count);
     try std.testing.expectEqual(@as(usize, 1), rle_summary.rle_block_count);
     try std.testing.expectEqual(repeated.len, rle_summary.payload_bytes);
+    const rle_bound = try encodedNativeFrameBound(repeated.len);
+    try std.testing.expect(rle_encoded.len <= rle_bound);
+    const rle_into = try std.testing.allocator.alloc(u8, rle_bound);
+    defer std.testing.allocator.free(rle_into);
+    const rle_into_result = try encodeNativeFrameIntoSlice(std.testing.allocator, repeated, .{}, rle_into);
+    try std.testing.expectEqual(NativeFrameMode.raw_or_rle, rle_into_result.mode);
+    try std.testing.expectEqualSlices(u8, rle_encoded, rle_into[0..rle_into_result.written]);
+    try std.testing.expectError(error.OutputTooSmall, encodeNativeFrameIntoSlice(std.testing.allocator, repeated, .{}, rle_into[0 .. rle_into_result.written - 1]));
     var rle_into_buffer: [repeated.len]u8 = undefined;
     const rle_into_written = try decodeNativeFrameInto(rle_encoded, &rle_into_buffer);
     try std.testing.expectEqual(repeated.len, rle_into_written);
@@ -10522,6 +11378,7 @@ test "zstd literal-only frame writer falls back when compressed literals expand"
     try std.testing.expectEqualSlices(u8, payload, no_checksum_decoded);
 
     const literal_bound = try encodedNativeFrameBoundWithOptions(payload.len, .{ .selection = .literal_only });
+    try std.testing.expectEqual(encoded.len, literal_bound);
     const literal_into = try std.testing.allocator.alloc(u8, literal_bound);
     defer std.testing.allocator.free(literal_into);
     const literal_into_written = try encodeLiteralOnlyFrameIntoSlice(std.testing.allocator, payload, .{}, literal_into);
@@ -11425,6 +12282,30 @@ test "zstd Huffman literal headers reject zero compressed size as corrupt" {
     try std.testing.expectError(error.CorruptFrame, emitHuffmanLiteralsHeader(std.testing.allocator, &out, 1, 0, false));
     try std.testing.expectError(error.CorruptFrame, emitHuffmanLiteralsHeader(std.testing.allocator, &out, 1, 0, true));
     try std.testing.expectEqual(@as(usize, 0), out.items.len);
+
+    try std.testing.expectError(error.UnsupportedZstdFeature, huffmanLiteralsHeaderLen(0x4_0000, 1));
+    try std.testing.expectEqual(@as(?void, null), try emitHuffmanLiteralsHeader(std.testing.allocator, &out, 0x4_0000, 1, false));
+    try std.testing.expectEqual(@as(usize, 0), out.items.len);
+
+    const payload = try std.testing.allocator.alloc(u8, 180_000);
+    defer std.testing.allocator.free(payload);
+    @memset(payload, 'a');
+    var plan = SmallHuffmanLiteralPlan{
+        .len = 1,
+        .max_symbol = 'a',
+        .max_bit_count = 11,
+    };
+    plan.symbols[0] = 'a';
+    plan.weights[0] = 0;
+    try std.testing.expectEqual(@as(?usize, null), try smallHuffmanLiteralStreamsSerializedLenFromSequence(
+        payload,
+        &.{},
+        &.{},
+        0,
+        payload.len,
+        plan,
+    ));
+    try std.testing.expectEqual(@as(usize, 0), out.items.len);
 }
 
 test "zstd FSE Huffman weight writer rejects invalid weights as corrupt" {
@@ -11675,6 +12556,21 @@ test "zstd sequence emitter supports compressed FSE literal-length table" {
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
     defer std.testing.allocator.free(std_decoded);
     try std.testing.expectEqualSlices(u8, payload.items, std_decoded);
+}
+
+test "zstd predefined sequence planner declines oversized symbol table" {
+    var symbols: [max_predefined_sequence_states + 1]SequenceSymbol = undefined;
+    for (&symbols, 0..) |*symbol, i| {
+        symbol.* = .{
+            .base = i,
+            .additional_bits = 0,
+            .state_bits = 0,
+            .next_state = 0,
+        };
+    }
+
+    const values = [_]usize{0};
+    try std.testing.expectEqual(@as(?PredefinedSequencePlan, null), try planPredefinedSequenceValues(&values, &symbols, 0));
 }
 
 test "zstd sequence emitter supports compressed FSE absolute-offset table" {

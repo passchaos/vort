@@ -1,6 +1,657 @@
 {
   "expected_artifacts": [
     {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-23487-tail.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-23487-tail.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-22463-23487.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-22463-23487.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-21439-22463.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-21439-22463.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-20415-21439.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-20415-21439.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-19391-20415.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-19391-20415.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-18367-19391.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-18367-19391.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-17343-18367.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-17343-18367.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-16319-17343.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-16319-17343.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-15295-16319.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-15295-16319.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-14271-15295.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-14271-15295.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-13247-14271.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-13247-14271.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-12223-13247.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream4096-12223-13247.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-candidates-upstream4096.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-candidates-upstream4096.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-12281-tail.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-12281-tail.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-11257-12281.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-11257-12281.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-10233-11257.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-10233-11257.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-9209-10233.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-9209-10233.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-8185-9209.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-8185-9209.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-7161-8185.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-7161-8185.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-6137-7161.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream2048-6137-7161.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-candidates-upstream2048.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-candidates-upstream2048.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream1024-6144-tail.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream1024-6144-tail.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream1024-5120-6144.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream1024-5120-6144.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream1024-4096-5120.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream1024-4096-5120.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream1024-3072-4096.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream1024-3072-4096.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream1024-2048-3072.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream1024-2048-3072.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream1024-1024-2048.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream1024-1024-2048.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream1024-0-1024.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream1024-0-1024.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-candidates-upstream1024.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-candidates-upstream1024.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream512.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream512.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-candidates-upstream512.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-candidates-upstream512.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream256.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream256.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-candidates-upstream256.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-candidates-upstream256.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream128.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream128.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-candidates-upstream128.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-candidates-upstream128.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream80.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream80.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-candidates-upstream80.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-candidates-upstream80.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-upstream.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-candidates-upstream.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-candidates-upstream.json",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-candidate-upstream-smoke.json",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-full.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-full.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-wide.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe-wide.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe.json",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-node-probe.md",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-candidates.md",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-candidates.json",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-report-negative-smoke.json",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-source-audit.json",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-source-audit-negative-smoke.json",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-report.csv",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-report.json",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "validation",
+      "name": "vort-br-static-dictionary-report.md",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
       "category": "benchmark",
       "name": "vort-checksum-bench.csv",
       "require_present": false,
@@ -17,9 +668,9 @@
     {
       "category": "benchmark",
       "name": "vort-chunked-zlib-bench-report-repeat3.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
     },
     {
       "category": "benchmark",
@@ -31,219 +682,9 @@
     {
       "category": "benchmark",
       "name": "vort-chunked-zlib-bench-report.md",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-deflate-chunked-huffman-bench.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-deflate-extra-bits-bench.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-deflate-huffman-build-bench.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-deflate-huffman-lookup-bench.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-deflate-match-copy-bench.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-png-streaming-zlib-bench-report-repeat3.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-rust-deflate-benchmark-summary-repeat3.md",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-rust-deflate-benchmark-summary.md",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-rust-deflate-decode-bench-repeat3.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-rust-deflate-decode-bench.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-rust-deflate-encode-bench-repeat3.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-rust-deflate-encode-bench.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-zstd-compare-block-sweep.md",
       "require_present": true,
       "require_producer_step": true,
       "require_smoke_gate": true
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-zstd-compare-block-sweep.csv",
-      "require_present": true,
-      "require_producer_step": true,
-      "require_smoke_gate": true
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-zstd-compare-block-sweep-releasefast.md",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-zstd-compare-block-sweep-releasefast.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-zstd-compare.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-zstd-compare-standard.csv",
-      "require_present": true,
-      "require_producer_step": true,
-      "require_smoke_gate": true
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-zstd-compare-standard.md",
-      "require_present": true,
-      "require_producer_step": true,
-      "require_smoke_gate": true
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-zstd-compare-standard-releasefast.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-zstd-compare-standard-releasefast.md",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-zstd-compare.md",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "corpus and ratio",
-      "name": "vort-dictionary-corpus-dashboard.md",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "corpus and ratio",
-      "name": "vort-file-corpus-standard-dashboard.md",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "corpus and ratio",
-      "name": "vort-level-report.csv",
-      "require_present": true,
-      "require_producer_step": true,
-      "require_smoke_gate": true
-    },
-    {
-      "category": "corpus and ratio",
-      "name": "vort-level-report.md",
-      "require_present": true,
-      "require_producer_step": true,
-      "require_smoke_gate": true
-    },
-    {
-      "category": "corpus and ratio",
-      "name": "vort-standard-corpus-dashboard.md",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "native parallel",
-      "name": "vort-native-parallel-dashboard.md",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "native parallel",
-      "name": "vort-native-thread-pool-full-dashboard.md",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
-    },
-    {
-      "category": "other",
-      "name": "vort-deflate-dynamic-decode-profile.csv",
-      "require_present": false,
-      "require_producer_step": false,
-      "require_smoke_gate": false
     },
     {
       "category": "validation",
@@ -295,6 +736,13 @@
       "require_smoke_gate": true
     },
     {
+      "category": "benchmark",
+      "name": "vort-deflate-chunked-huffman-bench.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
       "category": "validation",
       "name": "vort-deflate-decode-stage-report-repeat3.csv",
       "require_present": false,
@@ -323,6 +771,41 @@
       "require_smoke_gate": true
     },
     {
+      "category": "other",
+      "name": "vort-deflate-dynamic-decode-profile.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-deflate-extra-bits-bench.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-deflate-huffman-build-bench.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-deflate-huffman-lookup-bench.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-deflate-match-copy-bench.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
       "category": "validation",
       "name": "vort-deflate-wrapper-fuzz-corpus.json",
       "require_present": true,
@@ -337,8 +820,22 @@
       "require_smoke_gate": true
     },
     {
+      "category": "corpus and ratio",
+      "name": "vort-dictionary-corpus-dashboard.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
       "category": "validation",
       "name": "vort-dynamic-plan-builtins-report.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "corpus and ratio",
+      "name": "vort-file-corpus-standard-dashboard.md",
       "require_present": false,
       "require_producer_step": false,
       "require_smoke_gate": false
@@ -379,6 +876,20 @@
       "require_smoke_gate": true
     },
     {
+      "category": "corpus and ratio",
+      "name": "vort-level-report.csv",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "corpus and ratio",
+      "name": "vort-level-report.md",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
       "category": "validation",
       "name": "vort-native-allocation-negative-smoke.json",
       "require_present": true,
@@ -407,11 +918,130 @@
       "require_smoke_gate": true
     },
     {
+      "category": "benchmark",
+      "name": "vort-native-library-bench.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "native parallel",
+      "name": "vort-native-parallel-dashboard.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "native parallel",
+      "name": "vort-native-thread-pool-full-dashboard.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-native-tier-range-bench-gate.json",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-native-tier-range-bench.csv",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-native-tier-range-corpus-bench-gate.json",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-native-tier-range-corpus-bench.csv",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "corpus and ratio",
+      "name": "vort-native-tier-range-corpus-discovery.json",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-native-tier-range-files-bench-gate.json",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-native-tier-range-files-bench.csv",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-png-streaming-zlib-bench-report-repeat3.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
       "category": "validation",
       "name": "vort-python-zlib-diff-smoke.json",
       "require_present": true,
       "require_producer_step": true,
       "require_smoke_gate": true
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-rust-deflate-benchmark-summary-repeat3.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-rust-deflate-benchmark-summary.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-rust-deflate-decode-bench-repeat3.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-rust-deflate-decode-bench.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-rust-deflate-encode-bench-repeat3.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-rust-deflate-encode-bench.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
     },
     {
       "category": "validation",
@@ -426,6 +1056,13 @@
       "require_present": true,
       "require_producer_step": true,
       "require_smoke_gate": true
+    },
+    {
+      "category": "corpus and ratio",
+      "name": "vort-standard-corpus-dashboard.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
     },
     {
       "category": "validation",
@@ -456,6 +1093,34 @@
       "require_smoke_gate": false
     },
     {
+      "category": "benchmark",
+      "name": "vort-zstd-compare-block-sweep-releasefast.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-zstd-compare-block-sweep-releasefast.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-zstd-compare-block-sweep.csv",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-zstd-compare-block-sweep.md",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
       "category": "validation",
       "name": "vort-zstd-compare-gate.json",
       "require_present": true,
@@ -478,52 +1143,80 @@
     },
     {
       "category": "benchmark",
-      "name": "vort-native-tier-range-bench-gate.json",
-      "require_present": true,
-      "require_producer_step": true,
-      "require_smoke_gate": true
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-native-tier-range-files-bench-gate.json",
-      "require_present": true,
-      "require_producer_step": true,
-      "require_smoke_gate": true
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-native-tier-range-bench.csv",
-      "require_present": true,
-      "require_producer_step": true,
-      "require_smoke_gate": true
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-native-tier-range-files-bench.csv",
-      "require_present": true,
-      "require_producer_step": true,
-      "require_smoke_gate": true
-    },
-    {
-      "category": "benchmark",
-      "name": "vort-native-tier-range-corpus-bench-gate.json",
-      "require_present": true,
-      "require_producer_step": true,
-      "require_smoke_gate": true
-    },
-    {
-      "category": "corpus and ratio",
-      "name": "vort-native-tier-range-corpus-discovery.json",
+      "name": "vort-zstd-compare-standard-releasefast.csv",
       "require_present": false,
       "require_producer_step": false,
       "require_smoke_gate": false
     },
     {
       "category": "benchmark",
-      "name": "vort-native-tier-range-corpus-bench.csv",
+      "name": "vort-zstd-compare-standard-releasefast.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-zstd-compare-standard.csv",
       "require_present": true,
       "require_producer_step": true,
       "require_smoke_gate": true
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-zstd-compare-standard.md",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-zstd-compare.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-zstd-compare.md",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
+    },
+    {
+      "category": "validation",
+      "name": "vort-native-summary-error-dashboard.json",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "validation",
+      "name": "vort-native-summary-error-negative-smoke.json",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "validation",
+      "name": "vort-lz4-native-stream-summary.json",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "validation",
+      "name": "vort-zstd-native-stream-summary.json",
+      "require_present": true,
+      "require_producer_step": true,
+      "require_smoke_gate": true
+    },
+    {
+      "category": "benchmark",
+      "name": "vort-snappy-report.csv",
+      "require_present": false,
+      "require_producer_step": false,
+      "require_smoke_gate": false
     }
   ],
   "schema": "vort.dashboard_category_expected_artifacts",
