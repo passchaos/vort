@@ -62,8 +62,11 @@ pub const BrotliStreamSummary = br.StreamSummary;
 pub const BrotliStreamSummaryDiagnostics = br.StreamSummaryDiagnostics;
 pub const BrotliStreamSummaryErrorPhase = br.StreamSummaryErrorPhase;
 pub const BrotliStreamProbeResult = br.StreamProbeResult;
+pub const BrotliStaticDictionaryEntry = br.StaticDictionaryEntry;
 pub const BrotliStoredStreamEncoder = br.StoredStreamEncoder;
 pub const BrotliStreamDecoder = br.StreamDecoder;
+pub const brMinimalStaticDictionaryCoverage = br.minimalStaticDictionaryCoverage;
+pub const brMinimalStaticDictionarySizeBits = br.minimalStaticDictionarySizeBits;
 pub const brDecodeStreamAlloc = br.decodeStreamAlloc;
 pub const brDecodeStreamAllocExactSize = br.decodeStreamAllocExactSize;
 pub const brDecodeStreamAllocLimited = br.decodeStreamAllocLimited;
@@ -1802,8 +1805,11 @@ test "root exports lz4 and zstd codec helpers" {
     _ = BrotliStreamSummaryDiagnostics;
     _ = BrotliStreamSummaryErrorPhase;
     _ = BrotliStreamProbeResult;
+    _ = BrotliStaticDictionaryEntry;
     _ = BrotliStoredStreamEncoder;
     _ = BrotliStreamDecoder;
+    _ = brMinimalStaticDictionaryCoverage;
+    _ = brMinimalStaticDictionarySizeBits;
     _ = brDecodeStreamAlloc;
     _ = brDecodeStreamAllocExactSize;
     _ = brDecodeStreamAllocLimited;
@@ -2812,6 +2818,27 @@ test "root brotli stream helpers expose exact and chunked decode variants" {
     try std.testing.expectEqual(payload.len, try brDecodeStreamChunksIntoExactSize(&chunks, join, &into, payload.len));
     try std.testing.expectEqualSlices(u8, payload, &into);
     try std.testing.expectError(error.SizeMismatch, brDecodeStreamChunksIntoExactSize(&chunks, join, &into, payload.len - 1));
+}
+
+test "root brotli static dictionary introspection exposes coverage" {
+    const coverage = brMinimalStaticDictionaryCoverage();
+    try std.testing.expect(coverage.len > 0);
+    try std.testing.expectEqual(@as(?u5, 10), brMinimalStaticDictionarySizeBits(5));
+    try std.testing.expectEqual(@as(?u5, 11), brMinimalStaticDictionarySizeBits(6));
+    try std.testing.expectEqual(@as(?u5, null), brMinimalStaticDictionarySizeBits(3));
+
+    var found_hello = false;
+    var found_dictionary_space = false;
+    for (coverage) |entry| {
+        if (entry.transform == 0 and entry.copy_len == 5 and entry.word_index == 719 and std.mem.eql(u8, entry.word, "hello")) {
+            found_hello = true;
+        }
+        if (entry.transform == 1 and entry.copy_len == 10 and entry.word_index == 205 and std.mem.eql(u8, entry.word, "dictionary ")) {
+            found_dictionary_space = true;
+        }
+    }
+    try std.testing.expect(found_hello);
+    try std.testing.expect(found_dictionary_space);
 }
 
 test "root brotli stored stream encoder reuses scratch" {

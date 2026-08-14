@@ -3593,3 +3593,8 @@ architecture blindly.
   dynamic, split, adaptive split, and metadata-rich header modes, with root tests
   checking byte parity against allocator-returning encoders, invalid-plan
   propagation, and strict decode round trips.
+
+- Exposed Brotli minimal static-dictionary introspection through the root module.
+  Library callers can now inspect the currently supported dictionary entry subset
+  and copy-length size-bit mapping without reaching into `br.zig`, with root
+  tests pinning representative identity and transformed entries.
