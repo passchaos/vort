@@ -3538,3 +3538,9 @@ architecture blindly.
   scratch, and append flows for split block-planning modes, with root tests
   checking byte parity against top-level split zlib encoders, invalid split-plan
   errors, and strict/dictionary decode round trips.
+
+- Extended `GzipEncoder` with best split and adaptive split gzip helpers,
+  including metadata-rich header variants. The reusable facade now exposes
+  alloc, scratch, and append flows for split block-planning modes, with root
+  tests checking byte parity against top-level split gzip encoders, invalid
+  split-plan errors, and strict decode round trips.

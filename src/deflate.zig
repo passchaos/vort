@@ -6409,6 +6409,22 @@ pub const GzipEncoder = struct {
         return try encodeGzipBestWithHeaderAlloc(self.allocator, input, options, header_options);
     }
 
+    pub fn encodeBestSplitAlloc(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+        return try self.encodeBestSplitWithHeaderAlloc(input, block_len, options, .{});
+    }
+
+    pub fn encodeBestSplitWithHeaderAlloc(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) ![]u8 {
+        return try encodeGzipBestSplitWithHeaderAlloc(self.allocator, input, block_len, options, header_options);
+    }
+
+    pub fn encodeBestAdaptiveSplitAlloc(self: *GzipEncoder, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
+        return try self.encodeBestAdaptiveSplitWithHeaderAlloc(input, options, split_options, .{});
+    }
+
+    pub fn encodeBestAdaptiveSplitWithHeaderAlloc(self: *GzipEncoder, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions, header_options: GzipHeaderOptions) ![]u8 {
+        return try encodeGzipBestAdaptiveSplitWithHeaderAlloc(self.allocator, input, options, split_options, header_options);
+    }
+
     pub fn encodeLevelAlloc(self: *GzipEncoder, input: []const u8, level: u4) ![]u8 {
         return try self.encodeLevelWithHeaderAlloc(input, level, .{});
     }
@@ -6481,6 +6497,26 @@ pub const GzipEncoder = struct {
         return self.scratch.items;
     }
 
+    pub fn encodeBestSplitScratch(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
+        return try self.encodeBestSplitWithHeaderScratch(input, block_len, options, .{});
+    }
+
+    pub fn encodeBestSplitWithHeaderScratch(self: *GzipEncoder, input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestSplitWithHeaderAppend(&self.scratch, input, block_len, options, header_options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestAdaptiveSplitScratch(self: *GzipEncoder, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]const u8 {
+        return try self.encodeBestAdaptiveSplitWithHeaderScratch(input, options, split_options, .{});
+    }
+
+    pub fn encodeBestAdaptiveSplitWithHeaderScratch(self: *GzipEncoder, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions, header_options: GzipHeaderOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestAdaptiveSplitWithHeaderAppend(&self.scratch, input, options, split_options, header_options);
+        return self.scratch.items;
+    }
+
     pub fn encodeLevelScratch(self: *GzipEncoder, input: []const u8, level: u4) ![]const u8 {
         return try self.encodeLevelWithHeaderScratch(input, level, .{});
     }
@@ -6549,6 +6585,30 @@ pub const GzipEncoder = struct {
 
     pub fn encodeBestWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
         const encoded = try self.encodeBestWithHeaderAlloc(input, options, header_options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestSplitAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+        return try self.encodeBestSplitWithHeaderAppend(out, input, block_len, options, .{});
+    }
+
+    pub fn encodeBestSplitWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions, header_options: GzipHeaderOptions) !usize {
+        const encoded = try self.encodeBestSplitWithHeaderAlloc(input, block_len, options, header_options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestAdaptiveSplitAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
+        return try self.encodeBestAdaptiveSplitWithHeaderAppend(out, input, options, split_options, .{});
+    }
+
+    pub fn encodeBestAdaptiveSplitWithHeaderAppend(self: *GzipEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions, header_options: GzipHeaderOptions) !usize {
+        const encoded = try self.encodeBestAdaptiveSplitWithHeaderAlloc(input, options, split_options, header_options);
         defer self.allocator.free(encoded);
         const start = out.items.len;
         try out.appendSlice(self.allocator, encoded);
@@ -12398,6 +12458,7 @@ pub fn encodeGzipBestAdaptiveSplitAlloc(allocator: std.mem.Allocator, input: []c
 }
 
 pub fn encodeGzipBestAdaptiveSplitWithHeaderAlloc(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions, header_options: GzipHeaderOptions) ![]u8 {
+    if (split_options.min_block_len == 0 or split_options.max_block_len == 0 or split_options.min_block_len > split_options.max_block_len) return error.InvalidBlockPlan;
     if (usesStoredFastPath(input, options)) return encodeGzipStoredWithHeaderAlloc(allocator, input, header_options);
     const one_shot = try encodeGzipBestWithHeaderAlloc(allocator, input, options, header_options);
     errdefer allocator.free(one_shot);

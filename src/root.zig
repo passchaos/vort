@@ -7469,6 +7469,78 @@ test "root gzip encoder reuses stored scratch" {
     try std.testing.expectEqual(best_header_expected.len, try encoder.encodeBestWithHeaderAppend(&best_header_appended, payload, best_options, header_options));
     try std.testing.expectEqualSlices(u8, best_header_expected, best_header_appended.items);
 
+    const split_block_len: usize = 27;
+    const best_split_expected = try encodeGzipBestSplitAlloc(std.testing.allocator, payload, split_block_len, best_options);
+    defer std.testing.allocator.free(best_split_expected);
+    const best_split_owned = try encoder.encodeBestSplitAlloc(payload, split_block_len, best_options);
+    defer std.testing.allocator.free(best_split_owned);
+    try std.testing.expectEqualSlices(u8, best_split_expected, best_split_owned);
+    const best_split_scratch = try encoder.encodeBestSplitScratch(payload, split_block_len, best_options);
+    try std.testing.expectEqualSlices(u8, best_split_expected, best_split_scratch);
+    const best_split_decoded = try decodeGzipAllocExactSize(std.testing.allocator, best_split_scratch, payload.len);
+    defer std.testing.allocator.free(best_split_decoded);
+    try std.testing.expectEqualSlices(u8, payload, best_split_decoded);
+    var best_split_appended: std.ArrayList(u8) = .empty;
+    defer best_split_appended.deinit(std.testing.allocator);
+    try best_split_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(best_split_expected.len, try encoder.encodeBestSplitAppend(&best_split_appended, payload, split_block_len, best_options));
+    try std.testing.expectEqualSlices(u8, best_split_expected, best_split_appended.items["prefix:".len..]);
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.encodeBestSplitAlloc(payload, 0, best_options));
+
+    const best_split_header_expected = try encodeGzipBestSplitWithHeaderAlloc(std.testing.allocator, payload, split_block_len, best_options, header_options);
+    defer std.testing.allocator.free(best_split_header_expected);
+    const best_split_header_owned = try encoder.encodeBestSplitWithHeaderAlloc(payload, split_block_len, best_options, header_options);
+    defer std.testing.allocator.free(best_split_header_owned);
+    try std.testing.expectEqualSlices(u8, best_split_header_expected, best_split_header_owned);
+    const best_split_header_scratch = try encoder.encodeBestSplitWithHeaderScratch(payload, split_block_len, best_options, header_options);
+    try std.testing.expectEqualSlices(u8, best_split_header_expected, best_split_header_scratch);
+    const best_split_header_decoded = try decodeGzipAllocExactSize(std.testing.allocator, best_split_header_scratch, payload.len);
+    defer std.testing.allocator.free(best_split_header_decoded);
+    try std.testing.expectEqualSlices(u8, payload, best_split_header_decoded);
+    var best_split_header_appended: std.ArrayList(u8) = .empty;
+    defer best_split_header_appended.deinit(std.testing.allocator);
+    try std.testing.expectEqual(best_split_header_expected.len, try encoder.encodeBestSplitWithHeaderAppend(&best_split_header_appended, payload, split_block_len, best_options, header_options));
+    try std.testing.expectEqualSlices(u8, best_split_header_expected, best_split_header_appended.items);
+
+    const adaptive_split_options: AdaptiveSplitOptions = .{
+        .min_block_len = 16,
+        .max_block_len = 32,
+        .sample_len = 8,
+        .search_step = 8,
+    };
+    const best_adaptive_expected = try encodeGzipBestAdaptiveSplitAlloc(std.testing.allocator, payload, best_options, adaptive_split_options);
+    defer std.testing.allocator.free(best_adaptive_expected);
+    const best_adaptive_owned = try encoder.encodeBestAdaptiveSplitAlloc(payload, best_options, adaptive_split_options);
+    defer std.testing.allocator.free(best_adaptive_owned);
+    try std.testing.expectEqualSlices(u8, best_adaptive_expected, best_adaptive_owned);
+    const best_adaptive_scratch = try encoder.encodeBestAdaptiveSplitScratch(payload, best_options, adaptive_split_options);
+    try std.testing.expectEqualSlices(u8, best_adaptive_expected, best_adaptive_scratch);
+    const best_adaptive_decoded = try decodeGzipAllocExactSize(std.testing.allocator, best_adaptive_scratch, payload.len);
+    defer std.testing.allocator.free(best_adaptive_decoded);
+    try std.testing.expectEqualSlices(u8, payload, best_adaptive_decoded);
+    var best_adaptive_appended: std.ArrayList(u8) = .empty;
+    defer best_adaptive_appended.deinit(std.testing.allocator);
+    try std.testing.expectEqual(best_adaptive_expected.len, try encoder.encodeBestAdaptiveSplitAppend(&best_adaptive_appended, payload, best_options, adaptive_split_options));
+    try std.testing.expectEqualSlices(u8, best_adaptive_expected, best_adaptive_appended.items);
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.encodeBestAdaptiveSplitAlloc(payload, best_options, .{ .min_block_len = 0 }));
+
+    const best_adaptive_header_expected = try encodeGzipBestAdaptiveSplitWithHeaderAlloc(std.testing.allocator, payload, best_options, adaptive_split_options, header_options);
+    defer std.testing.allocator.free(best_adaptive_header_expected);
+    const best_adaptive_header_owned = try encoder.encodeBestAdaptiveSplitWithHeaderAlloc(payload, best_options, adaptive_split_options, header_options);
+    defer std.testing.allocator.free(best_adaptive_header_owned);
+    try std.testing.expectEqualSlices(u8, best_adaptive_header_expected, best_adaptive_header_owned);
+    const best_adaptive_header_scratch = try encoder.encodeBestAdaptiveSplitWithHeaderScratch(payload, best_options, adaptive_split_options, header_options);
+    try std.testing.expectEqualSlices(u8, best_adaptive_header_expected, best_adaptive_header_scratch);
+    const best_adaptive_header_decoded = try decodeGzipAllocExactSize(std.testing.allocator, best_adaptive_header_scratch, payload.len);
+    defer std.testing.allocator.free(best_adaptive_header_decoded);
+    try std.testing.expectEqualSlices(u8, payload, best_adaptive_header_decoded);
+    var best_adaptive_header_appended: std.ArrayList(u8) = .empty;
+    defer best_adaptive_header_appended.deinit(std.testing.allocator);
+    try best_adaptive_header_appended.appendSlice(std.testing.allocator, "prefix:");
+    try std.testing.expectEqual(best_adaptive_header_expected.len, try encoder.encodeBestAdaptiveSplitWithHeaderAppend(&best_adaptive_header_appended, payload, best_options, adaptive_split_options, header_options));
+    try std.testing.expectEqualSlices(u8, best_adaptive_header_expected, best_adaptive_header_appended.items["prefix:".len..]);
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.encodeBestAdaptiveSplitWithHeaderAlloc(payload, best_options, .{ .min_block_len = 32, .max_block_len = 16 }, header_options));
+
     const level_expected = try encodeGzipLevelAlloc(std.testing.allocator, payload, 1);
     defer std.testing.allocator.free(level_expected);
     const level_owned = try encoder.encodeLevelAlloc(payload, 1);
