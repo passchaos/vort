@@ -2683,6 +2683,23 @@ architecture blindly.
   were fully reverted before the real-corpus/RSS gate. Do not trade global
   release-binary layout for this isolated allocation win; revisit output
   sizing only with a branch-free hint or a caller-provided exact-capacity API.
+- Rejected an unconditional u128 reservoir submission for each complete
+  eight-literal PNG-ultrafast word. Unlike the earlier conditional group-fusion
+  attempts, this prototype always combined all four pair-table entries (up to
+  96 bits) and let a dedicated writer emit one or two complete u64 words in one
+  ArrayList append. A 16,384-case low-level oracle covered every pending
+  reservoir bit count, representative 1...96-bit widths/patterns, split-write
+  state equality, a trailing write, and final byte alignment. The complete-word
+  scalar oracle, 7,140 boundary-prefix oracle, and fdeflate goldens also stayed
+  exact; all 65 focused tests passed.
+- The wider arithmetic was nevertheless much slower than two normal quad
+  writes. A fixed CPU-12, 21-round alternating A/B over all 30 real filtered
+  payloads measured `0.97669x` adaptive, `0.96445x` Up, `0.97055x` overall,
+  and `0.98435x` aggregate. The 128-pixel adaptive/Up rows fell to
+  `0.79114/0.80713x`, and 16/32-pixel rows also regressed. The experiment was
+  fully reverted before complete PNG/reference gates. Do not use generic u128
+  shifts to fuse this hot path; a future wide submission would need native
+  two-word operations with lower overhead than the current pair of u64 writes.
 - Reworked the narrow Brotli static-dictionary slice to resolve identity-word
   addresses relative to the current output length instead of matching only raw
   distance codes. Real Node quality-5 frames now prove additional dictionary
