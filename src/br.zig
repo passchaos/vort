@@ -545,6 +545,20 @@ pub fn decodeStreamInto(stream: []const u8, output: []u8) Error!usize {
     }
 }
 
+pub fn decodeStreamIntoLimited(stream: []const u8, output: []u8, max_output_len: usize) Error!usize {
+    // Match the allocator-returning and append limited APIs: perform the full
+    // Brotli preflight first so callers see `OutputLimitExceeded` before any
+    // mutation when the stream's declared/decoded size is outside policy.
+    const decoded_len = try decodedStreamSizeLimited(stream, max_output_len);
+    if (output.len < decoded_len) return error.OutputTooSmall;
+    const written = decodeStreamInto(stream, output[0..decoded_len]) catch |err| switch (err) {
+        error.OutputTooSmall => return error.SizeMismatch,
+        else => return err,
+    };
+    if (written != decoded_len) return error.SizeMismatch;
+    return written;
+}
+
 pub fn decodeStreamIntoExactSize(stream: []const u8, output: []u8, expected_output_len: usize) Error!usize {
     if (output.len < expected_output_len) return error.OutputTooSmall;
     const decoded_len = try decodedStreamSize(stream);
@@ -733,6 +747,11 @@ pub fn decodeStreamChunksAppendLimited(allocator: std.mem.Allocator, out: *std.A
 pub fn decodeStreamChunksInto(chunks: []const []const u8, compressed_scratch: []u8, output: []u8) Error!usize {
     const joined = try joinChunks(chunks, compressed_scratch);
     return try decodeStreamInto(joined, output);
+}
+
+pub fn decodeStreamChunksIntoLimited(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, max_output_len: usize) Error!usize {
+    const joined = try joinChunks(chunks, compressed_scratch);
+    return try decodeStreamIntoLimited(joined, output, max_output_len);
 }
 
 pub fn decodeStreamChunksIntoExactSize(chunks: []const []const u8, compressed_scratch: []u8, output: []u8, expected_output_len: usize) Error!usize {
@@ -4870,6 +4889,13 @@ test "br stored stream round trips hello with known bytes" {
     var out: [5]u8 = undefined;
     try std.testing.expectEqual(@as(usize, 5), try decodeStreamInto(encoded, &out));
     try std.testing.expectEqualSlices(u8, "hello", &out);
+    @memset(&out, 0xaa);
+    try std.testing.expectEqual(@as(usize, 5), try decodeStreamIntoLimited(encoded, &out, 5));
+    try std.testing.expectEqualSlices(u8, "hello", &out);
+    @memset(&out, 0xaa);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeStreamIntoLimited(encoded, &out, 4));
+    try std.testing.expectEqualSlices(u8, &([_]u8{0xaa} ** 5), &out);
+    try std.testing.expectError(error.OutputTooSmall, decodeStreamIntoLimited(encoded, out[0..4], 5));
 }
 
 test "br stored stream supports all RFC window bits" {

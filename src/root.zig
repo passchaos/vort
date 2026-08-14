@@ -75,6 +75,7 @@ pub const brDecodeStreamAppendExactSize = br.decodeStreamAppendExactSize;
 pub const brDecodeStreamAppendLimited = br.decodeStreamAppendLimited;
 pub const brDecodeStreamInto = br.decodeStreamInto;
 pub const brDecodeStreamIntoExactSize = br.decodeStreamIntoExactSize;
+pub const brDecodeStreamIntoLimited = br.decodeStreamIntoLimited;
 pub const brDecodedStreamSize = br.decodedStreamSize;
 pub const brDecodedStreamSizeLimited = br.decodedStreamSizeLimited;
 pub const brSummarizeStream = br.summarizeStream;
@@ -92,6 +93,7 @@ pub const brDecodeStreamChunksAppendExactSize = br.decodeStreamChunksAppendExact
 pub const brDecodeStreamChunksAppendLimited = br.decodeStreamChunksAppendLimited;
 pub const brDecodeStreamChunksInto = br.decodeStreamChunksInto;
 pub const brDecodeStreamChunksIntoExactSize = br.decodeStreamChunksIntoExactSize;
+pub const brDecodeStreamChunksIntoLimited = br.decodeStreamChunksIntoLimited;
 pub const brDecodedStreamChunksSize = br.decodedStreamChunksSize;
 pub const brDecodedStreamChunksSizeLimited = br.decodedStreamChunksSizeLimited;
 pub const brSummarizeStreamChunks = br.summarizeStreamChunks;
@@ -1818,6 +1820,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = brDecodeStreamAppendLimited;
     _ = brDecodeStreamInto;
     _ = brDecodeStreamIntoExactSize;
+    _ = brDecodeStreamIntoLimited;
     _ = brDecodedStreamSize;
     _ = brDecodedStreamSizeLimited;
     _ = brSummarizeStream;
@@ -1835,6 +1838,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = brDecodeStreamChunksAppendLimited;
     _ = brDecodeStreamChunksInto;
     _ = brDecodeStreamChunksIntoExactSize;
+    _ = brDecodeStreamChunksIntoLimited;
     _ = brDecodedStreamChunksSize;
     _ = brDecodedStreamChunksSizeLimited;
     _ = brSummarizeStreamChunks;
@@ -2760,6 +2764,14 @@ test "root brotli stream helpers expose exact and chunked decode variants" {
     try std.testing.expectError(error.OutputLimitExceeded, brDecodeStreamAppendLimited(std.testing.allocator, &appended, encoded, payload.len - 1));
 
     var into: [payload.len]u8 = undefined;
+    try std.testing.expectEqual(payload.len, try brDecodeStreamInto(encoded, &into));
+    try std.testing.expectEqualSlices(u8, payload, &into);
+    @memset(&into, 0xaa);
+    try std.testing.expectEqual(payload.len, try brDecodeStreamIntoLimited(encoded, &into, payload.len));
+    try std.testing.expectEqualSlices(u8, payload, &into);
+    @memset(&into, 0xaa);
+    try std.testing.expectError(error.OutputLimitExceeded, brDecodeStreamIntoLimited(encoded, &into, payload.len - 1));
+    try std.testing.expectEqualSlices(u8, &([_]u8{0xaa} ** payload.len), &into);
     try std.testing.expectEqual(payload.len, try brDecodeStreamIntoExactSize(encoded, &into, payload.len));
     try std.testing.expectEqualSlices(u8, payload, &into);
     try std.testing.expectError(error.SizeMismatch, brDecodeStreamIntoExactSize(encoded, &into, payload.len - 1));
@@ -2814,6 +2826,12 @@ test "root brotli stream helpers expose exact and chunked decode variants" {
     @memset(&into, 0);
     try std.testing.expectEqual(payload.len, try brDecodeStreamChunksInto(&chunks, join, &into));
     try std.testing.expectEqualSlices(u8, payload, &into);
+    @memset(&into, 0);
+    try std.testing.expectEqual(payload.len, try brDecodeStreamChunksIntoLimited(&chunks, join, &into, payload.len));
+    try std.testing.expectEqualSlices(u8, payload, &into);
+    @memset(&into, 0xaa);
+    try std.testing.expectError(error.OutputLimitExceeded, brDecodeStreamChunksIntoLimited(&chunks, join, &into, payload.len - 1));
+    try std.testing.expectEqualSlices(u8, &([_]u8{0xaa} ** payload.len), &into);
     @memset(&into, 0);
     try std.testing.expectEqual(payload.len, try brDecodeStreamChunksIntoExactSize(&chunks, join, &into, payload.len));
     try std.testing.expectEqualSlices(u8, payload, &into);

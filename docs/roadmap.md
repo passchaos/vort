@@ -1673,6 +1673,13 @@ architecture blindly.
   coalescing code while the codec remains clearly scoped to the current Brotli
   subset.
 
+- Added output-limited caller-buffer Brotli decode helpers for contiguous and
+  split-input streams. `decodeStreamIntoLimited` and
+  `decodeStreamChunksIntoLimited` preflight decoded size against the caller's
+  policy before mutating the output buffer, bringing the Brotli into-slice API
+  in line with existing allocator-returning and append limited variants without
+  adding CLI surface.
+
 - Added a reusable caller-owned Brotli `StreamDecoder` library facade. It
   validates/decodes the current supported Brotli subset into caller-provided
   output scratch during reset, then drains through bounded `step` calls with
