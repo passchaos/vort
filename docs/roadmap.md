@@ -3526,3 +3526,9 @@ architecture blindly.
   helpers. The reusable facade now exposes alloc, scratch, and append flows for
   dictionary dynamic mode, with root tests checking byte parity against top-level
   dynamic dictionary encoders and dictionary decode round trips.
+
+- Extended `RawDeflateEncoder` with best split and adaptive split raw deflate
+  helpers, including preset-dictionary variants. The reusable facade now exposes
+  alloc, scratch, and append flows for split block-planning modes, with root
+  tests checking byte parity against top-level split encoders, invalid split-plan
+  errors, and decode round trips.

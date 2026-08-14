@@ -5765,6 +5765,22 @@ pub const RawDeflateEncoder = struct {
         return try encodeRawBestWithDictionaryAlloc(self.allocator, input, dictionary, options);
     }
 
+    pub fn encodeBestSplitAlloc(self: *RawDeflateEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+        return try encodeRawBestSplitAlloc(self.allocator, input, block_len, options);
+    }
+
+    pub fn encodeBestSplitWithDictionaryAlloc(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]u8 {
+        return try encodeRawBestSplitWithDictionaryAlloc(self.allocator, input, dictionary, block_len, options);
+    }
+
+    pub fn encodeBestAdaptiveSplitAlloc(self: *RawDeflateEncoder, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
+        return try encodeRawBestAdaptiveSplitAlloc(self.allocator, input, options, split_options);
+    }
+
+    pub fn encodeBestAdaptiveSplitWithDictionaryAlloc(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]u8 {
+        return try encodeRawBestAdaptiveSplitWithDictionaryAlloc(self.allocator, input, dictionary, options, split_options);
+    }
+
     pub fn encodeLevelAlloc(self: *RawDeflateEncoder, input: []const u8, level: u4) ![]u8 {
         return try encodeRawLevelAlloc(self.allocator, input, level);
     }
@@ -5822,6 +5838,30 @@ pub const RawDeflateEncoder = struct {
     pub fn encodeBestWithDictionaryScratch(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]const u8 {
         self.scratch.clearRetainingCapacity();
         _ = try self.encodeBestWithDictionaryAppend(&self.scratch, input, dictionary, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestSplitScratch(self: *RawDeflateEncoder, input: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestSplitAppend(&self.scratch, input, block_len, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestSplitWithDictionaryScratch(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestSplitWithDictionaryAppend(&self.scratch, input, dictionary, block_len, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestAdaptiveSplitScratch(self: *RawDeflateEncoder, input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestAdaptiveSplitAppend(&self.scratch, input, options, split_options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeBestAdaptiveSplitWithDictionaryScratch(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeBestAdaptiveSplitWithDictionaryAppend(&self.scratch, input, dictionary, options, split_options);
         return self.scratch.items;
     }
 
@@ -5893,6 +5933,38 @@ pub const RawDeflateEncoder = struct {
 
     pub fn encodeBestWithDictionaryAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
         const encoded = try self.encodeBestWithDictionaryAlloc(input, dictionary, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestSplitAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, block_len: usize, options: CompressionOptions) !usize {
+        const encoded = try self.encodeBestSplitAlloc(input, block_len, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestSplitWithDictionaryAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, block_len: usize, options: CompressionOptions) !usize {
+        const encoded = try self.encodeBestSplitWithDictionaryAlloc(input, dictionary, block_len, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestAdaptiveSplitAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
+        const encoded = try self.encodeBestAdaptiveSplitAlloc(input, options, split_options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeBestAdaptiveSplitWithDictionaryAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions, split_options: AdaptiveSplitOptions) !usize {
+        const encoded = try self.encodeBestAdaptiveSplitWithDictionaryAlloc(input, dictionary, options, split_options);
         defer self.allocator.free(encoded);
         const start = out.items.len;
         try out.appendSlice(self.allocator, encoded);
