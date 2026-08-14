@@ -247,12 +247,31 @@ fn writeInput(
 
         const suffix_zeros = @clz(word) / 8;
         if (suffix_zeros != 0) {
-            try writeLiterals(
-                allocator,
-                writer,
-                chunk[0 .. 8 - suffix_zeros],
-                batch_literals,
-            );
+            if (batch_literals and suffix_zeros == 1) {
+                // Filtered RGB/RGBA rows commonly end each eight-byte word
+                // with exactly one zero. Reuse the word loaded for run
+                // detection and emit its seven literals as one quad plus one
+                // triple instead of reloading a slice and issuing four writes.
+                try writeLiteralQuad(
+                    allocator,
+                    writer,
+                    @truncate(word),
+                    @truncate(word >> 16),
+                );
+                try writeLiteralTriple(
+                    allocator,
+                    writer,
+                    @truncate(word >> 32),
+                    @truncate(word >> 48),
+                );
+            } else {
+                try writeLiterals(
+                    allocator,
+                    writer,
+                    chunk[0 .. 8 - suffix_zeros],
+                    batch_literals,
+                );
+            }
             run = suffix_zeros;
             continue;
         }
@@ -331,6 +350,20 @@ inline fn writeLiteralQuad(
     const bits = (pair0 & 0x00ff_ffff_ffff_ffff) |
         ((pair1 & 0x00ff_ffff_ffff_ffff) << n0);
     try writer.writeBits(allocator, bits, n0 + n1);
+}
+
+inline fn writeLiteralTriple(
+    allocator: std.mem.Allocator,
+    writer: anytype,
+    pair_index: u16,
+    last: u8,
+) !void {
+    const pair = literal_pairs[pair_index];
+    const pair_count: u6 = @truncate(pair >> 56);
+    const last_count: u6 = literal_lengths[last];
+    const bits = (pair & 0x00ff_ffff_ffff_ffff) |
+        (@as(u64, literal_codes[last]) << pair_count);
+    try writer.writeBits(allocator, bits, pair_count + last_count);
 }
 
 fn writeZeroRun(
@@ -457,6 +490,31 @@ test "direct full PNG ultrafast chunks match scalar writer" {
         // Keep every complete chunk off the boundary-zero paths while still
         // exercising short/long trained codes and a scalar tail.
         byte.* = @intCast((i * 73 + 19) % 255 + 1);
+    }
+    const encoded = try encodeAlloc(std.testing.allocator, &input);
+    defer std.testing.allocator.free(encoded);
+    const scalar = try encodeAllocWithLiteralPolicy(
+        std.testing.allocator,
+        &input,
+        false,
+    );
+    defer std.testing.allocator.free(scalar);
+    try std.testing.expectEqualSlices(u8, scalar, encoded);
+}
+
+test "direct seven-literal PNG ultrafast chunks match scalar writer" {
+    var input: [8 * 7 * 255]u8 = undefined;
+    var chunk_index: usize = 0;
+    for (0..7) |varied_position| {
+        for (1..256) |value| {
+            const chunk = input[chunk_index * 8 ..][0..8];
+            for (chunk[0..7], 0..) |*byte, i| {
+                byte.* = @intCast((chunk_index * 29 + i * 47) % 255 + 1);
+            }
+            chunk[varied_position] = @intCast(value);
+            chunk[7] = 0;
+            chunk_index += 1;
+        }
     }
     const encoded = try encodeAlloc(std.testing.allocator, &input);
     defer std.testing.allocator.free(encoded);
