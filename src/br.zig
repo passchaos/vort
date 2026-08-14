@@ -173,7 +173,7 @@ const MinimalCompressedHeader = struct {
 
 const max_distance_alphabet_size = 16 + 120 + (48 << 3);
 const max_context_map_alphabet_size = 256 + 16;
-const max_literal_block_types = 16;
+const max_literal_block_types = 32;
 const max_literal_context_trees = 32;
 const max_command_block_types = 32;
 const max_distance_block_types = 16;
@@ -11363,6 +11363,27 @@ test "br minimal compressed stream switches ninth literal block tree" {
     try std.testing.expectEqualSlices(u8, "aaaaaaaai", decoded);
 }
 
+test "br minimal compressed stream switches seventeenth literal block tree" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, default_window_bits);
+    try writer.writeBits(std.testing.allocator, 1, 1); // ISLAST
+    try writer.writeBits(std.testing.allocator, 0, 1); // ISLASTEMPTY = false
+    try writer.writeBits(std.testing.allocator, 0, 2); // MNIBBLES = 4
+    try writer.writeBits(std.testing.allocator, 16, 16); // MLEN - 1
+    try writeMinimalCompressedHeaderForLiteralBlockSwitchSeventeenTypes(std.testing.allocator, &writer);
+    try writer.writeBits(std.testing.allocator, 3, 2); // insert length 17
+    for (0..16) |_| {
+        try writer.writeBits(std.testing.allocator, 0, 2); // next literal block count = 1
+    }
+
+    try std.testing.expectEqual(@as(usize, 17), try decodedStreamSize(encoded.items));
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, ("a" ** 16) ++ "q", decoded);
+}
+
 test "br minimal compressed stream switches distance block tree" {
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(std.testing.allocator);
@@ -12946,6 +12967,31 @@ fn writeMinimalCompressedHeaderForLiteralBlockSwitchNineTypes(allocator: std.mem
     try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
 }
 
+fn writeMinimalCompressedHeaderForLiteralBlockSwitchSeventeenTypes(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writeBlockTypeCount(allocator, writer, 17); // NBLTYPESL
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 19, 1); // next literal block type
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 26, 0); // block count code
+    try writer.writeBits(allocator, 0, 2); // first literal block count = 1
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 0, 4); // NDIRECT
+    for (0..17) |_| {
+        try writer.writeBits(allocator, 0, 2); // literal context mode
+    }
+    try writeBlockTypeCount(allocator, writer, 17); // NTREESL
+    try writeLiteralBlockSwitchSeventeenTypesContextMap(allocator, writer);
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESD
+
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 'a');
+    for (0..15) |_| {
+        try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 0);
+    }
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, 'q');
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 264);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
+}
+
 fn writeMinimalCompressedHeaderForDistanceBlockSwitch(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
@@ -13465,6 +13511,19 @@ fn writeLiteralBlockSwitchNineTypesContextMap(allocator: std.mem.Allocator, writ
     var i: usize = 0;
     while (i < 576) : (i += 1) {
         try writer.writeBits(allocator, if (i >= 512) 1 else 0, 1);
+    }
+    try writer.writeBits(allocator, 0, 1); // IMTF = false
+}
+
+fn writeLiteralBlockSwitchSeventeenTypesContextMap(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writer.writeBits(allocator, 0, 1); // RLEMAX = 0
+    try writer.writeBits(allocator, 1, 2); // simple context-map prefix
+    try writer.writeBits(allocator, 1, 2); // NSYM = 2
+    try writer.writeBits(allocator, 0, alphabetBits(17));
+    try writer.writeBits(allocator, 16, alphabetBits(17));
+    var i: usize = 0;
+    while (i < 17 * 64) : (i += 1) {
+        try writer.writeBits(allocator, if (i >= 16 * 64) 1 else 0, 1);
     }
     try writer.writeBits(allocator, 0, 1); // IMTF = false
 }

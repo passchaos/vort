@@ -2130,6 +2130,11 @@ architecture blindly.
   and selects its distance tree. Both frames are covered by Zig tests and the
   Node-backed CLI differential smoke.
 
+- Raised the minimal Brotli literal block-type retention limit to 32. A
+  compressed literal-block-switch frame now declares 17 literal block types,
+  walks through block type 16, and selects the corresponding literal tree and
+  context-map slice through decoded-size and output decode.
+
 - Added fifth-distance-context-tree coverage for Brotli compressed decode. The
   distance context map can now be proven to select tree index four for copy-length
   context one (`copy_len = 3`), with both Zig tests and the Node-backed CLI
