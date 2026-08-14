@@ -1993,3 +1993,23 @@ architecture blindly.
   `zig build test -j1` in 3:50.05 at 4,125,540-KiB peak RSS, and
   `zig build check -j1` in 5:03.26 at 688,936-KiB peak RSS, both with zero
   swap.
+
+- Profiled both Adler symbols after the direct-literal optimization. Vort's
+  PNG-ultrafast `checksum.Adler32.update` is already lowered to an AVX2/VNNI
+  64-byte loop and represented only `1.64%` of the full nine-case runner. The
+  larger scalar `hash.Adler32.update` sample belongs to imx's stored-PNG helper,
+  not the ultrafast zlib encoder. Adler changes were therefore rejected as the
+  wrong next layer rather than optimizing the misleading aggregate symbol.
+- Rejected forcing the remaining boundary `writeLiterals` helper inline.
+  Scalar/fdeflate output stayed byte-exact and two 41-round CPU-12 A/Bs showed
+  `1.020x/1.018x` compressed geomeans, but a 121-round repeat reproduced a
+  `0.9877x` Luma-stored row even though that mode does not call the helper.
+  This is an observable release-binary layout tradeoff, so the change was
+  fully reverted instead of accepting the aggregate gain.
+- Rejected batching short zero-run fields into one reservoir write. Expanding
+  the scalar-byte oracle to every run length `1...2048` first caught an
+  incorrect long-run batching boundary at length 1,304. Restricting fusion to
+  runs at most 258 restored exact output, but a 41-round A/B measured
+  `0.9994x` compressed, `0.9946x` Up, and `0.9890x` RGBA Up. The complete
+  experiment was reverted; do not revisit it without a different zero-run
+  representation and the expanded oracle.
