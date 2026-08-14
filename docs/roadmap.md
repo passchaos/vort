@@ -1659,6 +1659,13 @@ architecture blindly.
   Top-level frame encoding now covers both single dictionaries and checked
   dictionary catalogs without requiring native-specific entrypoints.
 
+- Added output-limited caller-buffer Zstd decode helpers across the public,
+  raw/RLE, native, and concatenated frame facades, including split-input,
+  preset-dictionary, dictionary-set, and reusable decoder variants. These
+  limited `into` paths preflight decoded size before mutating caller-owned
+  output, matching the existing allocator-returning and append limited behavior
+  without adding CLI surface.
+
 - Added a dependency-free Brotli `br` bootstrap module for stored/uncompressed
   streams. `src/br.zig` emits RFC-valid WBITS=16 streams with uncompressed
   meta-blocks plus final empty terminators, decodes the same stored subset with
