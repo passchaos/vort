@@ -1703,6 +1703,10 @@ architecture blindly.
   literal/command/distance block and context-tree capacities, so callers can
   make fallback decisions without depending on private constants or CLI probes.
 
+- Exposed the Brotli `PrefixCode` type factory through the root module as
+  `BrotliPrefixCode`, keeping the root facade complete for library users that
+  build small compatibility probes around the public Brotli prefix decoder.
+
 - Added a reusable caller-owned Brotli `StreamDecoder` library facade. It
   validates/decodes the current supported Brotli subset into caller-provided
   output scratch during reset, then drains through bounded `step` calls with

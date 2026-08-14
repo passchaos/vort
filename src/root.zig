@@ -64,6 +64,7 @@ pub const BrotliStreamSummaryErrorPhase = br.StreamSummaryErrorPhase;
 pub const BrotliStreamProbeResult = br.StreamProbeResult;
 pub const BrotliStaticDictionaryEntry = br.StaticDictionaryEntry;
 pub const BrotliCompressedSupportLimits = br.CompressedSupportLimits;
+pub const BrotliPrefixCode = br.PrefixCode;
 pub const BrotliStoredStreamEncoder = br.StoredStreamEncoder;
 pub const BrotliStreamDecoder = br.StreamDecoder;
 pub const brCompressedSupportLimits = br.compressedSupportLimits;
@@ -1841,6 +1842,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = BrotliStreamProbeResult;
     _ = BrotliStaticDictionaryEntry;
     _ = BrotliCompressedSupportLimits;
+    _ = BrotliPrefixCode;
     _ = BrotliStoredStreamEncoder;
     _ = BrotliStreamDecoder;
     _ = brCompressedSupportLimits;
@@ -2921,6 +2923,13 @@ test "root brotli static dictionary introspection exposes coverage" {
     }
     try std.testing.expect(found_hello);
     try std.testing.expect(found_dictionary_space);
+}
+
+test "root brotli prefix code type decodes single symbol" {
+    const Prefix = BrotliPrefixCode(256);
+    const prefix = Prefix{ .single_symbol = 'Z' };
+    var reader = bitstream.BitReader.init(&.{});
+    try std.testing.expectEqual(@as(u16, 'Z'), try prefix.decode(&reader));
 }
 
 test "root brotli stored stream encoder reuses scratch" {
