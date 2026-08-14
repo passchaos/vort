@@ -2666,6 +2666,23 @@ architecture blindly.
   the 128-pixel Up row at `0.96086x`. All three forms were fully reverted.
   Avoid conditional multi-group fusion in this loop unless a branch-free
   representation can preserve the accepted hot-code shape.
+- Rejected raising PNG-ultrafast's initial output capacity to 24 KiB for small
+  filtered payloads. Allocation diagnostics showed the 32-pixel RGBA payloads
+  growing through three/four allocation calls, while a general 24-KiB floor
+  removed those growths and improved a fixed-CPU-12, 61-round alternating
+  focused A/B by `1.00833x` adaptive and `1.01560x` Up. The same floor was
+  neutral for the 16- and 128-pixel rows, but it over-reserved substantially
+  outside the one useful size.
+- Narrowing the floor to only 4--16-KiB inputs retained the 32-pixel gain
+  (`1.01055x` adaptive and `1.01496x` Up) and left encoded checksums/guards
+  exact, but changed release code layout enough to regress the non-matching
+  128-pixel adaptive/Up rows to `0.91927x/0.88956x`. Marking the window
+  unlikely and rebuilding reproduced the failure in a second 61-round run at
+  `0.93226x/0.91861x`, despite the 65-case scalar/golden oracle passing and
+  those 65,536-byte raw inputs never taking the capacity branch. Both forms
+  were fully reverted before the real-corpus/RSS gate. Do not trade global
+  release-binary layout for this isolated allocation win; revisit output
+  sizing only with a branch-free hint or a caller-provided exact-capacity API.
 - Reworked the narrow Brotli static-dictionary slice to resolve identity-word
   addresses relative to the current output length instead of matching only raw
   distance codes. Real Node quality-5 frames now prove additional dictionary
