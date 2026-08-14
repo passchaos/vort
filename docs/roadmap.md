@@ -3521,3 +3521,8 @@ architecture blindly.
   raw deflate helpers. The reusable facade now exposes alloc, scratch, and
   append flows for dictionary modes, with root tests checking byte parity against
   top-level dictionary encoders and dictionary decode round trips.
+
+- Extended `RawDeflateEncoder` with preset-dictionary dynamic raw deflate
+  helpers. The reusable facade now exposes alloc, scratch, and append flows for
+  dictionary dynamic mode, with root tests checking byte parity against top-level
+  dynamic dictionary encoders and dictionary decode round trips.

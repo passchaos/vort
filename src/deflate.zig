@@ -5781,6 +5781,10 @@ pub const RawDeflateEncoder = struct {
         return try encodeRawDynamicWithOptionsAlloc(self.allocator, input, options);
     }
 
+    pub fn encodeDynamicWithDictionaryAlloc(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {
+        return try encodeRawDynamicWithDictionaryAlloc(self.allocator, input, dictionary, options);
+    }
+
     pub fn encodeStoredScratch(self: *RawDeflateEncoder, input: []const u8) ![]const u8 {
         self.scratch.clearRetainingCapacity();
         _ = try self.encodeStoredAppend(&self.scratch, input);
@@ -5842,6 +5846,12 @@ pub const RawDeflateEncoder = struct {
     pub fn encodeDynamicWithOptionsScratch(self: *RawDeflateEncoder, input: []const u8, options: CompressionOptions) ![]const u8 {
         self.scratch.clearRetainingCapacity();
         _ = try self.encodeDynamicWithOptionsAppend(&self.scratch, input, options);
+        return self.scratch.items;
+    }
+
+    pub fn encodeDynamicWithDictionaryScratch(self: *RawDeflateEncoder, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]const u8 {
+        self.scratch.clearRetainingCapacity();
+        _ = try self.encodeDynamicWithDictionaryAppend(&self.scratch, input, dictionary, options);
         return self.scratch.items;
     }
 
@@ -5915,6 +5925,14 @@ pub const RawDeflateEncoder = struct {
 
     pub fn encodeDynamicWithOptionsAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, options: CompressionOptions) !usize {
         const encoded = try self.encodeDynamicWithOptionsAlloc(input, options);
+        defer self.allocator.free(encoded);
+        const start = out.items.len;
+        try out.appendSlice(self.allocator, encoded);
+        return out.items.len - start;
+    }
+
+    pub fn encodeDynamicWithDictionaryAppend(self: *RawDeflateEncoder, out: *std.ArrayList(u8), input: []const u8, dictionary: []const u8, options: CompressionOptions) !usize {
+        const encoded = try self.encodeDynamicWithDictionaryAlloc(input, dictionary, options);
         defer self.allocator.free(encoded);
         const start = out.items.len;
         try out.appendSlice(self.allocator, encoded);
