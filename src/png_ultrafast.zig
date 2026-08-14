@@ -119,7 +119,14 @@ const ReservoirWriter = struct {
 
         var encoded: [8]u8 = undefined;
         std.mem.writeInt(u64, &encoded, self.buffer, .little);
-        try self.bytes.appendSlice(allocator, &encoded);
+        // Most flushes fit the initial/grown allocation. Avoid routing every
+        // eight emitted bytes through ArrayList's generic capacity helper,
+        // while retaining its exact growth and allocation-failure behavior.
+        if (self.bytes.capacity - self.bytes.items.len >= encoded.len) {
+            self.bytes.appendSliceAssumeCapacity(&encoded);
+        } else {
+            try self.bytes.appendSlice(allocator, &encoded);
+        }
         self.bit_count = total - 64;
 
         // The low (64-old_count) bits were just emitted. A shift by 64 is
