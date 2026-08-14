@@ -2162,6 +2162,12 @@ architecture blindly.
   with the full-output decode path. Zig tests and the Node-backed CLI
   differential smoke cover both frames.
 
+- Expanded Brotli decoded-size/summary preflight's recent literal history window
+  to 512 bytes. A compressed context-selected literal regression frame now copies
+  with distance 257 and then decodes another literal from the copied `b`
+  context, ensuring allocator-returning, summary, limited-size, and caller-buffer
+  decode paths agree without materializing full output during preflight.
+
 - Added the first narrow Brotli static-dictionary decode slice. A real Node
   quality-5 frame for `hello brotli hello brotli` starts with a copy from
   distance 720 before any bytes have been emitted; Vort now resolves that
