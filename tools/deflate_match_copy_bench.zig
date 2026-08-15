@@ -1,15 +1,18 @@
 const std = @import("std");
+const overcopy = @import("deflate_match_copy/overcopy.zig");
 
 const Kernel = enum {
     current,
     nonoverlap_first,
     small_unrolled,
+    overcopy16,
 
     fn label(self: Kernel) []const u8 {
         return switch (self) {
             .current => "current",
             .nonoverlap_first => "nonoverlap_first",
             .small_unrolled => "small_unrolled",
+            .overcopy16 => "overcopy16",
         };
     }
 };
@@ -44,7 +47,7 @@ const BenchResult = struct {
     checksum: u64,
 };
 
-const kernels = [_]Kernel{ .current, .nonoverlap_first, .small_unrolled };
+const kernels = [_]Kernel{ .current, .nonoverlap_first, .small_unrolled, .overcopy16 };
 
 const cases = [_]CaseSpec{
     .{ .name = "rle-long", .class = .rle, .length = 258, .distance = 1, .ops_per_iter = 1024 },
@@ -63,6 +66,8 @@ pub fn main(init: std.process.Init) !void {
 
     var csv_path: ?[]const u8 = null;
     var iterations_override: ?usize = null;
+    var case_filter: ?[]const u8 = null;
+    var kernel_filter: ?[]const u8 = null;
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--csv")) {
             csv_path = args.next() orelse return error.MissingReportPath;
@@ -73,6 +78,14 @@ pub fn main(init: std.process.Init) !void {
             if (iterations_override.? == 0) return error.InvalidBlockPlan;
             continue;
         }
+        if (std.mem.eql(u8, arg, "--case")) {
+            case_filter = args.next() orelse return error.MissingReportPath;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--kernel")) {
+            kernel_filter = args.next() orelse return error.MissingReportPath;
+            continue;
+        }
         return error.UnknownArgument;
     }
 
@@ -80,13 +93,22 @@ pub fn main(init: std.process.Init) !void {
     defer csv.deinit();
     try csv.writer.writeAll("case,class,kernel,length,distance,ops_per_iter,iterations,output_bytes,elapsed_ns,output_mib_per_s,checksum\n");
 
+    var emitted_rows: usize = 0;
     for (cases) |case| {
+        if (case_filter) |wanted| {
+            if (!std.mem.eql(u8, wanted, case.name)) continue;
+        }
         const iterations = iterations_override orelse iterationsFor(case.length, case.ops_per_iter);
         for (kernels) |kernel| {
+            if (kernel_filter) |wanted| {
+                if (!std.mem.eql(u8, wanted, kernel.label())) continue;
+            }
             const result = try runCase(init, case, kernel, iterations);
             try writeRow(&csv.writer, case, kernel, iterations, result);
+            emitted_rows += 1;
         }
     }
+    if (emitted_rows == 0) return error.UnknownArgument;
 
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
@@ -110,7 +132,9 @@ fn runCase(init: std.process.Init, case: CaseSpec, kernel: Kernel, iterations: u
     defer init.gpa.free(verify_candidate);
     try runAllOps(verify_current, stride, case, .current);
     try runAllOps(verify_candidate, stride, case, kernel);
-    if (!std.mem.eql(u8, verify_current, verify_candidate)) return error.DecodeLengthMismatch;
+    if (!logicalOutputsEqual(verify_current, verify_candidate, stride, case)) {
+        return error.DecodeLengthMismatch;
+    }
 
     const start = std.Io.Clock.awake.now(init.io);
     var iter: usize = 0;
@@ -119,7 +143,7 @@ fn runCase(init: std.process.Init, case: CaseSpec, kernel: Kernel, iterations: u
         try runAllOps(buffer, stride, case, kernel);
     }
     const elapsed_ns = start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
-    const checksum = sparseChecksum(buffer);
+    const checksum = logicalChecksum(buffer, stride, case);
     std.mem.doNotOptimizeAway(checksum);
 
     return .{
@@ -153,6 +177,7 @@ fn copyKernel(kernel: Kernel, output: []u8, out_offset: usize, length: usize, di
         .current => copyCurrent(output, out_offset, length, distance),
         .nonoverlap_first => copyNonOverlapFirst(output, out_offset, length, distance),
         .small_unrolled => copySmallUnrolled(output, out_offset, length, distance),
+        .overcopy16 => copyOvercopy16(output, out_offset, length, distance),
     };
 }
 
@@ -211,6 +236,20 @@ fn copySmallUnrolled(output: []u8, out_offset: usize, length: usize, distance: u
         return;
     }
     copyOverlappingMatchAt(output, out_offset, length, distance);
+}
+
+fn copyOvercopy16(output: []u8, out_offset: usize, length: usize, distance: usize) !void {
+    if (distance == 0 or distance > out_offset) return error.InvalidMatch;
+    if (out_offset > output.len or output.len - out_offset < length) {
+        return error.OutputTooSmall;
+    }
+    // Keep the established production-shaped RLE and overlapping paths. The
+    // speculative kernel is intentionally isolated to non-overlapping copies
+    // with enough scratch headroom.
+    if (distance < length or output.len - out_offset < length + 15) {
+        return copyCurrent(output, out_offset, length, distance);
+    }
+    overcopy.copyNonOverlapping16(output, out_offset, length, distance);
 }
 
 fn copySmallDistanceMatch(dest: []u8, pattern: []const u8, distance: usize) void {
@@ -342,12 +381,29 @@ fn throughput(bytes: usize, elapsed_ns: i128) f64 {
     return mib / seconds;
 }
 
-fn sparseChecksum(bytes: []const u8) u64 {
-    if (bytes.len == 0) return 0;
-    const stride = @max(@as(usize, 1), bytes.len / 256);
+fn logicalOutputsEqual(a: []const u8, b: []const u8, stride: usize, case: CaseSpec) bool {
+    for (0..case.ops_per_iter) |op| {
+        const out_offset = op * stride + case.distance;
+        if (!std.mem.eql(
+            u8,
+            a[out_offset..][0..case.length],
+            b[out_offset..][0..case.length],
+        )) return false;
+    }
+    return true;
+}
+
+fn logicalChecksum(bytes: []const u8, stride: usize, case: CaseSpec) u64 {
     var sum: u64 = @intCast(bytes.len);
-    var i: usize = 0;
-    while (i < bytes.len) : (i += stride) sum = sum *% 257 +% bytes[i];
+    for (0..case.ops_per_iter) |op| {
+        const out_offset = op * stride + case.distance;
+        const logical = bytes[out_offset..][0..case.length];
+        const sample_stride = @max(@as(usize, 1), logical.len / 4);
+        var i: usize = 0;
+        while (i < logical.len) : (i += sample_stride) {
+            sum = sum *% 257 +% logical[i];
+        }
+    }
     return sum;
 }
 

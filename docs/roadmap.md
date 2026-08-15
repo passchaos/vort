@@ -3398,7 +3398,7 @@ architecture blindly.
 
 - Promoted the existing deflate match-copy microbenchmark CSV into aggregate
   dashboard validation health. The dashboard now parses
-  `vort-deflate-match-copy-bench.csv`, validates the 21-row case/kernel matrix,
+  `vort-deflate-match-copy-bench.csv`, validates the 28-row case/kernel matrix,
   class coverage, and positive timing/checksum rows, and exposes missing/failed
   match-copy benchmark reasons in strict-validation-health. Validation JSON
   dashboard generation now depends on `run-deflate-match-copy-bench-gate` so
@@ -4298,3 +4298,20 @@ architecture blindly.
   stable-style kernel near `1,075 MiB/s`. Do not retry these exact Paeth forms
   unless Zig vector lowering or linker ordering changes materially; pursue a
   different intrinsic/assembly or profile-guided layout strategy instead.
+- Audited Vort's semantic DEFLATE loop against image-png's `fdeflate` 0.3.7
+  backend and isolated speculative 16-byte match copying as the remaining
+  concrete loop-shape difference. The match-copy benchmark now has an
+  `overcopy16` kernel, logical-output oracle/checksum, and case/kernel filters;
+  its dashboard contract expands from 21 to 28 case/kernel rows. Broad
+  screening improved non-overlap lengths 3/6/32 by about `2.59x` / `2.68x` /
+  `2.35x`, but overlap distance 45 and distance 2 fell to about `0.40x` /
+  `0.29x`, so the kernel remains benchmark-only.
+- Rejected an exact-size-only production specialization limited to deep-distance
+  dynamic blocks and short non-overlapping matches. It preserved ordinary
+  caller-buffer suffixes, passed exact-size/sentinel and scalar oracles, and
+  added only a separate `0xcf0` semantic body while existing `0xc90`/`0xcc0`
+  specializations remained unchanged. Nevertheless, nine alternating fixed
+  CPU-6 Fantasy PNG rounds produced an old/new instruction median of
+  `1.028824714x` but a cycle median of only `0.999749144x`; all production and
+  exact-size API changes were reverted rather than accepting instruction-count
+  evidence without a latency win.

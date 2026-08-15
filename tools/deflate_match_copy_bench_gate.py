@@ -23,7 +23,7 @@ EXPECTED_COLUMNS = {
     "output_mib_per_s",
     "checksum",
 }
-EXPECTED_KERNELS = {"current", "nonoverlap_first", "small_unrolled"}
+EXPECTED_KERNELS = {"current", "nonoverlap_first", "small_unrolled", "overcopy16"}
 EXPECTED_CASES = {
     "rle-long",
     "small-distance-long",

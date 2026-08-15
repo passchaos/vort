@@ -1823,11 +1823,11 @@ def write_deflate_match_copy_bench_csv(path: Path, *, healthy: bool = True) -> N
         "overlap-text-like": "overlapping",
         "overlap-distance-heavy": "overlapping",
     }
-    kernels = ("current", "nonoverlap_first", "small_unrolled")
+    kernels = ("current", "nonoverlap_first", "small_unrolled", "overcopy16")
     lines = [",".join(columns)]
     for case, class_name in cases.items():
         for kernel in kernels:
-            if not healthy and case == "overlap-distance-heavy" and kernel == "small_unrolled":
+            if not healthy and case == "overlap-distance-heavy" and kernel == "overcopy16":
                 continue
             length = 258
             ops_per_iter = 1024
@@ -6898,7 +6898,7 @@ def main() -> int:
                     "| category | covered | missing | detail |",
                     "| producer steps | 88/88 | 0 | allowed missing 0 |",
                     "| smoke gates | 88/88 | 0 | required missing 0 |",
-                    "| CSV artifacts | 26/26 | data rows 554, header cells 645, header signatures 22, manifest 26/26, parse failed 0, empty 0, blank headers 0, duplicate headers 0, no-data 0, ragged 0, header drift 0/0/0/0 |",
+                    "| CSV artifacts | 26/26 | data rows 561, header cells 645, header signatures 22, manifest 26/26, parse failed 0, empty 0, blank headers 0, duplicate headers 0, no-data 0, ragged 0, header drift 0/0/0/0 |",
                     "| Markdown artifacts | 20/20 | manifest 20/20, read failed 0, empty 0, marker missing 0, heading missing 0, heading not first 0, table missing 0, separator missing 0, heading drift 0/0/0/0/0, table drift 0/0, healthy `True` |",
                 ],
             )
@@ -7169,8 +7169,8 @@ def main() -> int:
                 [
                     "## Deflate match-copy benchmark coverage",
                     "| category | count | detail |",
-                    "| rows | 21 | expected 21, present `True` |",
-                    "| class rows | 21 | positive/output/throughput rows 21/21/21 |",
+                    "| rows | 28 | expected 28, present `True` |",
+                    "| class rows | 28 | positive/output/throughput rows 28/28/28 |",
                     "| checksum matches | 7 | expected cases 7 |",
                     "| pair drift | 0 | duplicate/unknown 0/0, healthy `True` |",
                 ],
@@ -11450,7 +11450,7 @@ def main() -> int:
             "deflate_match_copy_bench_missing_pair",
             match_copy_missing_pair_result,
             match_copy_missing_pair_manifest,
-            match_copy_missing_pair_manifest["deflate_match_copy_bench_rows"] == 20
+            match_copy_missing_pair_manifest["deflate_match_copy_bench_rows"] == 27
             and match_copy_missing_pair_manifest["deflate_match_copy_bench_missing_pairs"] == ["rle-long:current"],
         )
 
@@ -11463,7 +11463,7 @@ def main() -> int:
             "deflate_match_copy_bench_duplicate_pair",
             match_copy_duplicate_pair_result,
             match_copy_duplicate_pair_manifest,
-            match_copy_duplicate_pair_manifest["deflate_match_copy_bench_rows"] == 22
+            match_copy_duplicate_pair_manifest["deflate_match_copy_bench_rows"] == 29
             and match_copy_duplicate_pair_manifest["deflate_match_copy_bench_duplicate_pairs"] == ["rle-long:current"],
         )
 
@@ -11489,7 +11489,7 @@ def main() -> int:
             "deflate_match_copy_bench_positive_row_mismatch",
             match_copy_positive_result,
             match_copy_positive_manifest,
-            match_copy_positive_manifest["deflate_match_copy_bench_positive_rows"] == 20,
+            match_copy_positive_manifest["deflate_match_copy_bench_positive_rows"] == 27,
         )
 
         match_copy_class_result, match_copy_class_manifest = deflate_match_copy_bench_drift_fixture(
@@ -11501,7 +11501,7 @@ def main() -> int:
             "deflate_match_copy_bench_class_mismatch",
             match_copy_class_result,
             match_copy_class_manifest,
-            match_copy_class_manifest["deflate_match_copy_bench_expected_class_rows"] == 20,
+            match_copy_class_manifest["deflate_match_copy_bench_expected_class_rows"] == 27,
         )
 
         match_copy_output_result, match_copy_output_manifest = deflate_match_copy_bench_drift_fixture(
@@ -11513,7 +11513,7 @@ def main() -> int:
             "deflate_match_copy_bench_output_bytes_mismatch",
             match_copy_output_result,
             match_copy_output_manifest,
-            match_copy_output_manifest["deflate_match_copy_bench_output_bytes_rows"] == 20,
+            match_copy_output_manifest["deflate_match_copy_bench_output_bytes_rows"] == 27,
         )
 
         match_copy_throughput_result, match_copy_throughput_manifest = deflate_match_copy_bench_drift_fixture(
@@ -11525,14 +11525,14 @@ def main() -> int:
             "deflate_match_copy_bench_throughput_mismatch",
             match_copy_throughput_result,
             match_copy_throughput_manifest,
-            match_copy_throughput_manifest["deflate_match_copy_bench_throughput_rows"] == 20,
+            match_copy_throughput_manifest["deflate_match_copy_bench_throughput_rows"] == 27,
         )
 
         match_copy_checksum_result, match_copy_checksum_manifest = deflate_match_copy_bench_drift_fixture(
             root,
             "deflate-match-copy-checksum",
             mutate_csv=lambda rows, fieldnames, csv_path: next(
-                row for row in rows if row["case"] == "rle-long" and row["kernel"] == "small_unrolled"
+                row for row in rows if row["case"] == "rle-long" and row["kernel"] == "overcopy16"
             ).__setitem__("checksum", "54321"),
         )
         append_deflate_match_copy_bench_check(

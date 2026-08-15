@@ -342,3 +342,43 @@ already-existing hot boundary, or profile-guided function ordering—while the
 larger remaining PNG gap still includes Vort's semantic DEFLATE loop. Local
 kernel throughput is not sufficient evidence when a non-target real fixture
 regresses.
+
+## Rejected fdeflate match overcopy integration (2026-08-16)
+
+A source audit against image-png's `fdeflate` 0.3.7 backend found that Vort's
+buffered semantic loop already has the major structural pieces: four-entry
+prefetch, three semantic literal groups per iteration, paired-literal handling,
+unified match-bit consumption, and 16 bytes of input/output fast-loop
+headroom. The remaining concrete difference was fdeflate's speculative
+16-byte match copy.
+
+The focused match-copy benchmark now keeps an `overcopy16` kernel as explicit
+evidence. It snapshots and stores 16 bytes at a time, permits up to 15
+speculative bytes after the logical match, and compares/checksums only logical
+output bytes. `--case` and `--kernel` filters permit fixed-case hardware-counter
+probes without changing the aggregate 28-row CSV contract. Broad ReleaseFast
+screening showed why this cannot replace every production copy:
+
+- non-overlapping lengths 3/6/32 were about `2.59x` / `2.68x` / `2.35x`
+  faster than the current kernel;
+- RLE was only about `1.03x`, overlapping distance 16 was positive, but
+  overlapping distance 45 and distance 2 fell to about `0.40x` and `0.29x`.
+
+A production candidate was therefore narrowed to exact-size zlib output,
+dynamic blocks with distance code widths of at least 12, non-overlapping
+matches, and lengths no greater than 16. Ordinary caller-buffer decode retained
+exact stores, because writing speculative bytes after `output_written` would
+violate its observable suffix contract. The candidate passed scalar match
+oracles and exact-size/oversized-buffer sentinel tests. Code generation also
+stayed isolated: existing semantic specializations remained `0xc90` and
+`0xcc0` bytes, while only the exact-size specialization added a `0xcf0` body.
+
+It was still rejected. On the match-heavy Fantasy PNG fixture, nine alternating
+fixed-CPU-6 `perf stat` rounds showed a very stable instruction improvement:
+the old/new instruction ratio median was `1.028824714x`. The corresponding
+cycle ratio median was only `0.999749144x`, below the required greater-than-one
+gate. One noisy round reinforced that instruction count alone is not enough to
+claim a latency win. The production decoder and exact-size API changes were
+fully reverted before commit; only the reusable benchmark/oracle and this
+negative evidence remain. Do not retry the same short non-overlap
+specialization without a materially different scheduling or copy shape.

@@ -673,7 +673,7 @@ def main() -> int:
         assert len(chunk_cursor_bench_rows) == 8
         with deflate_match_copy_bench_path.open(newline="") as f:
             deflate_match_copy_bench_rows = list(csv.DictReader(f))
-        assert len(deflate_match_copy_bench_rows) == 21
+        assert len(deflate_match_copy_bench_rows) == 28
         with deflate_huffman_build_bench_path.open(newline="") as f:
             deflate_huffman_build_bench_rows = list(csv.DictReader(f))
         assert len(deflate_huffman_build_bench_rows) == 14
@@ -1755,7 +1755,7 @@ def main() -> int:
         assert dashboard["deflate_match_copy_bench_present"] is True
         assert dashboard["deflate_match_copy_bench_healthy"] is True
         assert dashboard["deflate_match_copy_bench_rows"] == len(deflate_match_copy_bench_rows)
-        assert dashboard["deflate_match_copy_bench_expected_rows"] == 21
+        assert dashboard["deflate_match_copy_bench_expected_rows"] == 28
         assert dashboard["deflate_match_copy_bench_positive_rows"] == len(deflate_match_copy_bench_rows)
         assert dashboard["deflate_match_copy_bench_expected_class_rows"] == len(deflate_match_copy_bench_rows)
         assert dashboard["deflate_match_copy_bench_output_bytes_rows"] == len(deflate_match_copy_bench_rows)

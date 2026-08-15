@@ -3610,7 +3610,12 @@ def deflate_match_copy_bench_health(artifacts: list[Path]) -> dict:
         "overlap-text-like": "overlapping",
         "overlap-distance-heavy": "overlapping",
     }
-    expected_kernels = {"current", "nonoverlap_first", "small_unrolled"}
+    expected_kernels = {
+        "current",
+        "nonoverlap_first",
+        "small_unrolled",
+        "overcopy16",
+    }
     expected_pairs = {(case, kernel) for case in expected_cases for kernel in expected_kernels}
     for artifact in artifacts:
         if artifact.name != "vort-deflate-match-copy-bench.csv":
