@@ -242,3 +242,48 @@ For each claim against `zlib`, `zlib-ng`, `zlib-rs`, or `zstd`, record:
 
 Compatibility-format benchmarks and native-format benchmarks must be reported
 separately.
+
+## Adler-32 AVX2 evidence (2026-08-15)
+
+The Adler implementation now lives in `src/checksum/adler.zig` rather than
+continuing to grow the general checksum facade. Portable targets retain the
+64-byte u32-vector reference kernel. AVX2 targets use the same 32-byte narrow
+lane decomposition as `simd-adler32` 0.3.9:
+
+- `VPSADBW` accumulates the first Adler sum;
+- `VPMADDUBSW` and `VPMADDWD` accumulate the weighted second sum;
+- three vector accumulators retain the per-block sum, weighted sum, and
+  cross-block prefix contribution for a complete 5,536-byte chunk;
+- the main loop handles eight 32-byte blocks per turn and performs horizontal
+  reductions only at the chunk boundary.
+
+The AVX2 kernel remains a `noinline` implementation boundary. An earlier inline
+candidate reached high standalone throughput but changed PNG decode code layout
+enough to regress a 128-pixel icon by about 3–5%. Keeping the 0x372-byte kernel
+out of each caller and unrolling internally recovered both locality and checksum
+throughput. `bestAdler32Backend` and the checksum smoke header expose whether the
+compiled target selected `portable` or `avx2`.
+
+On the i9-13900K, Zig 0.16.0 ReleaseFast, fixed CPU 6, nine alternating old/new
+rounds over the existing 1 MiB × 128 checksum workload measured:
+
+- old portable-vector median: `29,392.73 MiB/s`;
+- new AVX2 median: `53,327.73 MiB/s`;
+- paired median/geomean: `1.67798x` / `1.72238x`;
+- worst paired round: `1.45921x`.
+
+The production imx PNG binary was then compared against the committed old
+binary over all 15 image-png fixtures, fixed CPU 6, seven alternating rounds.
+Strict `decode-into` improved from `775.61` to `781.98 MiB/s` by independent
+medians (`1.00821x` aggregate, `1.01063x` fixture geomean, `1.01303x` fixture
+median). The weakest independent fixture medians were `0.99800x` for Lohengrin
+and `0.99854x` for `kodim07`; 15-round focused repeats measured `1.00175x` and
+`1.00700x`. A separate 15-round `paletted-zune` strict repeat measured
+`1.00562x`. This is a strict-checksum improvement, not evidence that PNG decode
+as a whole surpasses image-png.
+
+Correctness evidence includes known zlib vectors, a scalar oracle at
+32/64/256/NMAX boundaries and four input alignments, fragmented streaming
+updates, the all-`0xff` NMAX case, generic x86_64 and AArch64 portable builds,
+Zig standard-library differential checks, and black-box Python zlib/system gzip
+differentials.

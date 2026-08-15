@@ -1,98 +1,15 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const adler = @import("checksum/adler.zig");
 
-/// Largest input chunk used by the Adler-32 reference loop before reducing.
-/// This is the zlib-compatible NMAX bound that keeps the running sums within u32.
-pub const adler32_nmax = 5552;
-pub const adler32_modulus = 65521;
-const adler32_vector_len = 64;
-const adler32_vector_weights: @Vector(adler32_vector_len, u32) = .{ 64, 63, 62, 61, 60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1 };
-const Adler32Bytes = @Vector(adler32_vector_len, u8);
-const Adler32Wide = @Vector(adler32_vector_len, u32);
+pub const adler32_nmax = adler.nmax;
+pub const adler32_modulus = adler.modulus;
+pub const Adler32 = adler.Adler32;
+pub const Adler32Backend = adler.Backend;
 
-const Adler32Fold = struct {
-    sum: u32,
-    weighted: u32,
-};
-
-inline fn foldAdler32Vector(bytes: [adler32_vector_len]u8) Adler32Fold {
-    const bytes_u8: Adler32Bytes = bytes;
-    const values: Adler32Wide = bytes_u8;
-    return .{
-        .sum = @reduce(.Add, values),
-        .weighted = @reduce(.Add, values * adler32_vector_weights),
-    };
+pub fn bestAdler32Backend() Adler32Backend {
+    return adler.bestBackend();
 }
-
-/// Streaming Adler-32 state compatible with zlib's checksum definition.
-pub const Adler32 = struct {
-    a: u32 = 1,
-    b: u32 = 0,
-
-    pub fn init() Adler32 {
-        return .{};
-    }
-
-    pub fn update(self: *Adler32, input: []const u8) void {
-        var index: usize = 0;
-        var a = self.a;
-        var b = self.b;
-        while (index < input.len) {
-            const chunk_len = @min(adler32_nmax, input.len - index);
-            const chunk = input[index..][0..chunk_len];
-            var chunk_index: usize = 0;
-            while (chunk_index + adler32_vector_len * 2 <= chunk.len) : (chunk_index += adler32_vector_len * 2) {
-                const first = foldAdler32Vector(
-                    chunk[chunk_index..][0..adler32_vector_len].*,
-                );
-                const second = foldAdler32Vector(
-                    chunk[chunk_index + adler32_vector_len ..][0..adler32_vector_len].*,
-                );
-                // Preserve two consecutive 64-byte Adler recurrences while
-                // exposing both independent dot products to LLVM at once.
-                // This mirrors zlib-ng's two-block ILP shape without changing
-                // the NMAX reduction boundary or vector arithmetic.
-                b += a * (adler32_vector_len * 2) +
-                    first.weighted +
-                    second.weighted +
-                    first.sum * adler32_vector_len;
-                a += first.sum + second.sum;
-            }
-            while (chunk_index + adler32_vector_len <= chunk.len) : (chunk_index += adler32_vector_len) {
-                const folded = foldAdler32Vector(
-                    chunk[chunk_index..][0..adler32_vector_len].*,
-                );
-                // Adler-32's second sum is a weighted prefix sum. Folding
-                // sixty-four bytes at a time preserves the scalar recurrence:
-                //   b' = b + 64*a + 64*x0 + 63*x1 + ... + 1*x63
-                //   a' = a + x0 + x1 + ... + x63
-                // NMAX still bounds a/b before reduction, so the vectorized
-                // arithmetic remains within u32 just like zlib's scalar loop.
-                b += a * adler32_vector_len + folded.weighted;
-                a += folded.sum;
-            }
-            while (chunk_index < chunk.len) : (chunk_index += 1) {
-                a += chunk[chunk_index];
-                b += a;
-            }
-            a %= adler32_modulus;
-            b %= adler32_modulus;
-            index += chunk_len;
-        }
-        self.a = a;
-        self.b = b;
-    }
-
-    pub fn digest(self: Adler32) u32 {
-        return (self.b << 16) | self.a;
-    }
-
-    pub fn hash(input: []const u8) u32 {
-        var state = Adler32.init();
-        state.update(input);
-        return state.digest();
-    }
-};
 
 /// Table-driven IEEE CRC-32 state used by gzip, zip, and zlib-family tooling.
 pub const Crc32 = struct {
@@ -582,7 +499,7 @@ pub const Crc32CSlice32 = struct {
 };
 
 pub fn adler32(input: []const u8) u32 {
-    return Adler32.hash(input);
+    return adler.hash(input);
 }
 
 /// Combine two already-finalized Adler-32 digests.
@@ -1031,67 +948,6 @@ fn gf2MatrixSquare(square: *[gf2_matrix_dim]u32, matrix: *const [gf2_matrix_dim]
     for (0..gf2_matrix_dim) |index| {
         square[index] = gf2MatrixTimes(matrix, matrix[index]);
     }
-}
-
-test "Adler-32 known zlib vectors" {
-    try std.testing.expectEqual(@as(u32, 0x0000_0001), adler32(""));
-    try std.testing.expectEqual(@as(u32, 0x0062_0062), adler32("a"));
-    try std.testing.expectEqual(@as(u32, 0x024d_0127), adler32("abc"));
-    try std.testing.expectEqual(@as(u32, 0x058c_01f5), adler32("Hello"));
-    try std.testing.expectEqual(@as(u32, 0x11e6_0398), adler32("Wikipedia"));
-    try std.testing.expectEqual(@as(u32, 0x5bdc_0fda), adler32("The quick brown fox jumps over the lazy dog"));
-}
-
-test "Adler-32 streaming matches one-shot across reduction boundary" {
-    var input: [adler32_nmax * 2 + 137]u8 = undefined;
-    for (&input, 0..) |*byte, i| {
-        byte.* = @truncate((i * 131 + 17) & 0xff);
-    }
-
-    var state = Adler32.init();
-    state.update(input[0..1]);
-    state.update(input[1..5553]);
-    state.update(input[5553..]);
-    try std.testing.expectEqual(adler32(&input), state.digest());
-}
-
-test "Adler-32 dual-vector fold matches Zig std at boundaries" {
-    var input: [adler32_nmax * 2 + 257]u8 = undefined;
-    for (&input, 0..) |*byte, i| {
-        byte.* = @truncate(i * 131 + i / 7 + 17);
-    }
-    const lengths = [_]usize{
-        0,
-        1,
-        adler32_vector_len - 1,
-        adler32_vector_len,
-        adler32_vector_len + 1,
-        adler32_vector_len * 2 - 1,
-        adler32_vector_len * 2,
-        adler32_vector_len * 2 + 1,
-        adler32_nmax - 1,
-        adler32_nmax,
-        adler32_nmax + 1,
-        adler32_nmax + adler32_vector_len * 2 - 1,
-        adler32_nmax + adler32_vector_len * 2,
-        input.len - 31,
-    };
-    for ([_]usize{ 0, 1, 7, 31 }) |offset| {
-        for (lengths) |requested_len| {
-            const length = @min(requested_len, input.len - offset);
-            const slice = input[offset..][0..length];
-            try std.testing.expectEqual(
-                std.hash.Adler32.hash(slice),
-                adler32(slice),
-            );
-        }
-    }
-
-    const maximum = [_]u8{255} ** adler32_nmax;
-    try std.testing.expectEqual(
-        std.hash.Adler32.hash(&maximum),
-        adler32(&maximum),
-    );
 }
 
 test "Adler-32 combine matches one-shot and is associative" {

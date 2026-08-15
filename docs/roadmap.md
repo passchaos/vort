@@ -4255,3 +4255,29 @@ architecture blindly.
   Library callers can now inspect the currently supported dictionary entry subset
   and copy-length size-bit mapping without reaching into `br.zig`, with root
   tests pinning representative identity and transformed entries.
+
+- Extracted Adler-32 from the broad `src/checksum.zig` facade into
+  `src/checksum/adler.zig`, reducing the facade from 1,330 to 1,186 lines.
+  The module owns the streaming state, portable 64-byte vector fallback,
+  target-selected AVX2 implementation, scalar oracle, and boundary/fragment
+  tests. `bestAdler32Backend` exposes the compiled backend without changing
+  existing `Adler32` or `adler32` APIs.
+- Added an AVX2 Adler kernel after directly auditing image-png's locked
+  `simd-adler32` 0.3.9 dependency. It keeps sum, weighted sum, and cross-block
+  prefix accumulators in YMM registers across each 5,536-byte chunk and uses
+  `vpsadbw` plus `vpmaddubsw`/`vpmaddwd`, with an eight-block inner unroll and
+  one horizontal reduction per chunk. The kernel stays noinline: the initial
+  inline candidate changed the large PNG decode call graph and regressed a
+  128-pixel icon even though the checksum microbenchmark improved.
+- Nine fixed-CPU-6 alternating checksum rounds moved the 1 MiB workload from
+  `29,392.73` to `53,327.73 MiB/s`, with `1.67798x` paired median,
+  `1.72238x` paired geomean, and `1.45921x` worst round. Seven serial
+  fixed-CPU-6 imx PNG corpus rounds improved strict decode from `775.61` to
+  `781.98 MiB/s`, with `1.00821x` aggregate, `1.01063x` fixture geomean,
+  and `1.01303x` fixture median. Focused 15-round repeats kept Lohengrin,
+  `kodim07`, and `paletted-zune` at `1.00175x`, `1.00700x`, and `1.00562x`
+  medians rather than accepting aggregate evidence over a hidden fixture loss.
+- Adler correctness now covers known zlib vectors, 32/64/256/NMAX boundaries,
+  four alignments, fragmented streaming updates, the all-`0xff` NMAX case,
+  generic x86_64 and AArch64 portable compilation, Zig std differential tests,
+  and Python zlib/system gzip black-box differentials.
