@@ -7,6 +7,7 @@ const core = @import("core.zig");
 const png_ultrafast = @import("png_ultrafast.zig");
 
 const png = @import("png.zig");
+const png_up_dominant = @import("png/up_dominant.zig");
 
 pub const PngFilterMethod = png.PngFilterMethod;
 pub const PngColorType = png.PngColorType;
@@ -11095,6 +11096,26 @@ pub fn decodePngZlibImageWithOptions(
     const output_len = try pngImageOutputLen(info);
     if (output.len < output_len) return error.OutputTooSmall;
     var decoder = try PngZlibScanlineDecoder.initWithInfoAndOptions(input, zlib_scratch, filtered_row_scratch, previous_row_scratch, info, options);
+    if (png_up_dominant.isCandidate(info)) {
+        const specialized = png_up_dominant.tryReconstruct(
+            decoder.zlib.decoded,
+            info,
+            output[0..output_len],
+        ) catch |err| {
+            decoder.zlib.recordError(err);
+            return err;
+        };
+        if (specialized) |result| {
+            decoder.row_index = result.rows;
+            decoder.zlib.offset = decoder.zlib.decoded.len;
+            decoder.zlib.done = true;
+            return .{
+                .rows = result.rows,
+                .output_written = result.output_written,
+                .zlib_input_read = decoder.zlib.frame_len,
+            };
+        }
+    }
     return drainPngZlibImage(&decoder, output[0..output_len]);
 }
 

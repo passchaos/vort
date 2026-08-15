@@ -343,6 +343,47 @@ larger remaining PNG gap still includes Vort's semantic DEFLATE loop. Local
 kernel throughput is not sufficient evidence when a non-target real fixture
 regresses.
 
+## Up-dominant whole-image PNG reconstruction (2026-08-16)
+
+The real 300x300 RGBA8 `Transparency.png` fixture uses filter Up on 274 of
+300 rows (91.3%), with 15 Sub and 11 Paeth rows. Vort's existing Up kernel was
+already a 32-byte vector add, so this change does not duplicate or replace that
+kernel. Instead, a narrow whole-image path avoids the generic filter enum,
+shape, and error-union dispatch on proven Up rows while retaining the generic
+reference path for the mixed rows.
+
+The specialization is isolated in `src/png/up_dominant.zig` rather than growing
+the 20K-line DEFLATE facade. It is considered only for 8-bit RGBA images with
+rows at least 1 KiB and at least 128 rows, then requires rows 1...15 to be Up.
+The real 15-file image-png corpus therefore selects only `Transparency.png`.
+The implementation lives in a dedicated executable section on ELF/Mach-O/COFF;
+the fallback caller remains a narrow noinline boundary.
+
+Independent tests cover the size/color policy, prefix hit and miss, first-row
+non-Up behavior, a 257-byte vector tail, later mixed Paeth and Up rows,
+in-place-safe scalar Up equivalence, and an invalid filter after the accepted
+prefix. The active and disabled-policy ReleaseFast binaries have byte-identical
+`.text` and `.rodata` sections, identical function addresses/sizes, and an
+identically sized 1,257-byte specialization section. Only the comparison value
+inside that isolated section differs.
+
+Thirty-one alternating fixed-CPU-6 active/control rounds over all 15 PNGs show
+the selected `Transparency.png` row at `1.0071x` strict and `1.0072x`
+no-Adler by independent medians. All no-Adler non-selected medians stay within
+`0.9985x...1.0029x`; aggregate throughput is `0.99987x`, fixture geomean
+`1.00077x`, and median `1.00008x`. Separate hardware-counter rounds show the
+specialized path reduces instructions by about 1.3--1.5% and branches by about
+2.1--2.3%; cycles improve about 0.3--0.5%. This is a small targeted win, not a
+claim that PNG decode has reached image-png parity.
+
+Several superficially promising variants were rejected rather than folded into
+the result. A 64-byte two-vector Up loop reduced instructions and branches but
+did not reduce cycles. Two-row and four-row vertical pipelines reduced
+instructions by roughly 3--4% but lengthened the dependency chain and regressed
+cycles/end-to-end time by about 5--7%. Grouping consecutive Up rows without
+vertical vector chaining also increased instruction count and did not beat the
+simpler per-row specialization.
+
 ## Rejected fdeflate match overcopy integration (2026-08-16)
 
 A source audit against image-png's `fdeflate` 0.3.7 backend found that Vort's

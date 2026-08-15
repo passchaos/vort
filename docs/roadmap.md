@@ -4298,6 +4298,24 @@ architecture blindly.
   stable-style kernel near `1,075 MiB/s`. Do not retry these exact Paeth forms
   unless Zig vector lowering or linker ordering changes materially; pursue a
   different intrinsic/assembly or profile-guided layout strategy instead.
+- Added an isolated whole-image reconstruction path for Up-dominant RGBA8 PNGs.
+  A format/size policy plus 15-row Up prefix selects the 91.3%-Up
+  `Transparency.png` workload while all other current image-png fixtures keep
+  the established drainer. The 287-line `png/up_dominant.zig` module owns the
+  policy, direct vector Up loop, mixed-row fallback, executable section, and
+  scalar/malformed tests instead of adding another responsibility to the
+  20K-line DEFLATE facade.
+- Thirty-one fixed-CPU-6 active/control rounds use byte-identical `.text` and
+  `.rodata` binaries and an identically sized isolated section.
+  `Transparency.png` improves `1.0071x` strict / `1.0072x` no-Adler; all
+  no-Adler non-target medians remain in `0.9985x...1.0029x`. Hardware counters
+  reduce instructions by about 1.3--1.5%, branches by 2.1--2.3%, and cycles by
+  0.3--0.5%.
+- Rejected 64-byte horizontal Up unrolling, 2/4-row vertical pipelines, and
+  consecutive-run grouping. The first reduced instructions without reducing
+  cycles; vertical pipelines reduced instructions but regressed cycles/time
+  about 5--7% through longer dependencies; run grouping did not beat the
+  simpler isolated per-row path.
 - Audited Vort's semantic DEFLATE loop against image-png's `fdeflate` 0.3.7
   backend and isolated speculative 16-byte match copying as the remaining
   concrete loop-shape difference. The match-copy benchmark now has an
