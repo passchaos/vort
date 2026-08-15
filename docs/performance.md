@@ -287,3 +287,58 @@ Correctness evidence includes known zlib vectors, a scalar oracle at
 updates, the all-`0xff` NMAX case, generic x86_64 and AArch64 portable builds,
 Zig standard-library differential checks, and black-box Python zlib/system gzip
 differentials.
+
+## Rejected image-png Paeth ports (2026-08-16)
+
+An instruction profile of the 300x300 RGBA8 `Transparency.png` fixture put
+Vort's scanline reconstruction at the top of the remaining PNG decode costs:
+Paeth accounted for about 21.6% of imx instructions, Up for about 8.1%, Sub for
+about 4.6%, and AVX2 Adler for about 7.1%. The corresponding image-png
+`4ab5484` single-fixture profile spent about 20.0% in all PNG unfiltering
+combined. This motivated a direct source and generated-code audit of
+image-png's stable and optional SIMD Paeth paths rather than another DEFLATE
+table-layout experiment.
+
+The stable x86_64 image-png implementation keeps one `[i16; BPP]` left pixel
+and one upper-left pixel and uses the same stb_image threshold predictor already
+present in Vort. The important generated-code difference was image-png's compact
+four-lane word loop versus Vort's larger scalarized call graph. An explicit
+`@Vector(4, i16)` RGBA kernel made Zig 0.16 emit the intended
+`vpmovzxbw`/`vpminsw`/`vpmaxsw`/`vpblendvb`/`vpaddb` sequence. Its
+reconstruction-only results were real:
+
+- 128/32/16-pixel RGBA fixtures improved by about `1.0557x`, `1.1409x`, and
+  `1.2344x` aggregate in a 31-round fixed-CPU-6 run;
+- `Transparency.png`, where only 11 of 300 rows are Paeth, improved about
+  `1.0198x`;
+- a 101-round lorem screenshot confirmation was `1.0115x` aggregate.
+
+It was not accepted. In the complete decoder, inlining or routing all bpp=4
+rows through the new kernel produced repeatable losses on non-target work:
+`Transparency.png` reached only about `0.9974x` in a 101-round confirmation,
+and noinline/all-row variants kept 128-pixel or Transparency rows around
+`0.996x`. Narrow width dispatch recovered roughly `1.04x` on 16/32-pixel icons
+but still moved unrelated code enough to regress wider images. An explicit
+Vort drainer and imx-only dispatch eventually delivered about `1.053x` on both
+small icons, yet the full 15-fixture run exposed RGB Exoplanet and Fantasy at
+`0.9904x` and `0.9932x`; 101 focused rounds confirmed `0.9921x` and
+`0.9920x`. ELF `linksection` isolation moved the new bodies out of `.text`, but
+their unwind metadata still shifted the main text base, so it did not provide a
+clean production boundary.
+
+The image-png optional portable-SIMD bpp=3 implementation was also ported in
+both relevant forms. A pixel-at-a-time four-lane expression generated compact
+XMM predictor instructions but reconstructed Fantasy at only about `728 MiB/s`.
+The closer 48-byte/16-pixel pump, including deferred wide add/store, measured
+about `709 MiB/s`. The committed stable-style Vort kernel is about
+`1,075 MiB/s` on the same fixture. Zig's lowering of the 48-lane temporary and
+predictor staging therefore does not reproduce Rust/LLVM's optional-SIMD win.
+Both ports and all dispatch experiments were fully reverted.
+
+Do not retry these exact shapes unless Zig's vector lowering or linker section
+ordering materially changes. The next Paeth investigation needs a different
+code-generation strategy—most plausibly target intrinsics/assembly in an
+already-existing hot boundary, or profile-guided function ordering—while the
+larger remaining PNG gap still includes Vort's semantic DEFLATE loop. Local
+kernel throughput is not sufficient evidence when a non-target real fixture
+regresses.

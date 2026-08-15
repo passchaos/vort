@@ -4281,3 +4281,20 @@ architecture blindly.
   four alignments, fragmented streaming updates, the all-`0xff` NMAX case,
   generic x86_64 and AArch64 portable compilation, Zig std differential tests,
   and Python zlib/system gzip black-box differentials.
+- Audited image-png `4ab5484` stable and optional-SIMD Paeth implementations
+  against Vort source and ReleaseFast assembly. An explicit four-lane RGBA
+  predictor generated the intended XMM min/max/select loop and substantially
+  improved isolated 16/32/128-pixel reconstruction, but complete decode
+  candidates repeatedly moved non-target fixtures backward. The most isolated
+  imx/Vort dispatch still left RGB Exoplanet and Fantasy at about `0.9921x` and
+  `0.9920x` in 101-round fixed-CPU confirmations; ELF text-section isolation
+  could not prevent unwind metadata from moving the main text base. All
+  production changes were reverted rather than accepting aggregate gains over
+  fixture losses.
+- Rejected image-png's optional bpp=3 SIMD shape under Zig 0.16 as well.
+  Pixel-at-a-time four-lane and 48-byte/16-pixel deferred-store ports both
+  passed scalar/in-place oracles and emitted XMM predictor instructions, but
+  Fantasy reconstruction fell to about `728` / `709 MiB/s` versus the committed
+  stable-style kernel near `1,075 MiB/s`. Do not retry these exact Paeth forms
+  unless Zig vector lowering or linker ordering changes materially; pursue a
+  different intrinsic/assembly or profile-guided layout strategy instead.
