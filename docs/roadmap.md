@@ -4359,6 +4359,15 @@ architecture blindly.
   `0.9955/0.9986/0.9933x`. Branches fell about 1.7%, but bulk stores outweighed
   loop-control savings. The candidate was fully reverted; only a materially
   different out-of-line fill boundary would justify revisiting batch four.
+- Rejected that out-of-line boundary as well. Standalone and production
+  ReleaseFast codegen reduced the noinline fixed fill to a 20-byte tail call
+  into `compiler_rt.memset`; 0...9-pair output/state oracles remained exact,
+  and same-source retention/fencing isolated code plus FDE/jump-table companion
+  metadata. Target strict elapsed/cycles/instructions still collapsed to
+  `0.8862/0.8883/0.8970x`, with no-Adler at
+  `0.8799/0.8871/0.8908x`; non-selected kodim17 stayed neutral. Register
+  save/restore and generic memset control overwhelm the saved pair-loop work.
+  Both inline and noinline decode-side batch-four families are now closed.
 - Retested image-png's four-lane RGBA Paeth source shape behind the new
   Up-dominant executable-section boundary. The isolated scalar/in-place oracle
   and expected XMM loop were correct, and instructions fell 17--19%, but cycles

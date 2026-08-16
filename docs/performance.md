@@ -485,6 +485,28 @@ bulk fill cost more than the saved loop control. The candidate was fully
 reverted. Do not retry inline batch-four filling; any follow-up needs a
 materially different out-of-line bulk-fill code-generation boundary.
 
+That remaining boundary was tested as well. A standalone Zig 0.16 probe and
+the production ReleaseFast artifact both lowered a noinline fixed 1,032-byte
+helper to a 20-byte pointer adjustment followed by a tail jump to
+`compiler_rt.memset`; the semantic loop retained just one call instead of 32
+expanded vector stores. The same zero-through-nine-pair oracle passed. A
+same-source control retained the otherwise dead helper explicitly, while the
+8 KiB fence kept ordinary `.text`, following hot sections, addresses, and
+sizes identical. The three differing `.eh_frame` bytes described only the
+isolated function's FDE end/epilogue positions, and five `.rodata` bytes
+remained inside its proven four-entry computed-jump table.
+
+The out-of-line shape was substantially worse. Thirty-one fixed-CPU-6 rounds
+measured strict elapsed/cycles/instructions at
+`0.8862x/0.8883x/0.8970x`, and no-Adler at
+`0.8799x/0.8871x/0.8908x`; branch ratios were also about `0.918x`.
+Non-selected `kodim17.png` stayed neutral. The call forces the register-heavy
+semantic loop to save/restore live state, while generic memset adds its own
+loop control, overwhelming the four-pair branch reduction. The helper and all
+batching code were fully reverted. Decode-side consecutive-pair batching is
+closed for both inline and noinline fill boundaries unless a future target has
+materially different calling convention or bulk-store support.
+
 The earlier image-png four-lane RGBA Paeth source shape was retested behind the
 new Up-dominant executable-section boundary, which is materially narrower than
 the previously rejected broad dispatches. A scalar oracle covered lengths
