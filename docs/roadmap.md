@@ -4333,6 +4333,24 @@ architecture blindly.
   `0.99952x` paired geomean. The candidate and its oracle were fully reverted;
   do not retry the exact YMM-plus-XMM tail without a different layout/schedule
   that also clears aggregate and worst-real-fixture gates.
+- Audited image-png's incremental `UnfilteringBuffer` and prototyped a distinct
+  direct-history layout for the Up-dominant workload. It reconstructed pixels
+  directly into final output, kept only one residual row plus filter bytes, and
+  recovered old residuals by applying the inverse PNG predictor to completed
+  rows, avoiding both the 360.3 KiB filtered image and a duplicate 32 KiB ring.
+  A read-only parser found 60.6% RLE match bytes, 54.4% in-row Up RLE258 bytes,
+  91.1% target-Up bytes, 95.9% same-filter source/target bytes, and no non-RLE
+  overlapping matches. Literal/RLE/whole-row-boundary/mixed-Paeth/Adler oracles
+  and real strict/no-Adler output checks passed.
+- Rejected that direct-history architecture before a corpus gate. The generic
+  no-Adler sink reached only about `1,167 MiB/s`; a dedicated canonical RLE258
+  sink entry improved it `1.1686x` to about `1,363 MiB/s`, versus about
+  `2,781 MiB/s` for the committed same-layout control (`0.4903x`). The saved
+  scratch pass could not offset residual-history mapping and per-match row
+  reconstruction. The API, imx dispatch, semantic-loop instance, 520-line
+  candidate module, and tests were fully reverted. A future direct-output
+  design must preserve linear-inflater match cost rather than only reduce
+  scratch memory.
 - Added a canonical RLE258 semantic-loop specialization for final dynamic
   blocks with the profiled 12-bit literal / 9-bit distance table shape.
   `Transparency.png` uses one-bit code zero for both length 258 and distance

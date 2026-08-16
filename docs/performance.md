@@ -422,6 +422,48 @@ oracle were fully reverted. Do not retry this exact 16-byte tail shape unless
 the design also removes the observed aggregate/non-target sensitivity; a local
 target win is not sufficient.
 
+A broader image-png-inspired buffering experiment was then tested instead of
+another reconstruction micro-kernel. Rust image-png incrementally inflates into
+an `UnfilteringBuffer`, keeps the immutable 32 KiB DEFLATE lookback, and
+unfilters complete mutable rows in place. Vort's established throughput path
+instead inflates the complete filtered image and then reconstructs into final
+pixels; its bounded streaming path keeps a separate history ring and row
+buffers. The candidate tried a third layout: write reconstructed pixels
+directly to final output, retain one current residual row plus row-filter bytes,
+and recover historical residual bytes by applying the inverse PNG predictor to
+already reconstructed rows. It therefore needed neither a full 360.3 KiB
+filtered image nor a duplicate 32 KiB history ring.
+
+A read-only token-position parser first justified the experiment. It matched
+Python zlib's 360,300-byte output and classified all 1,518 matches in
+`Transparency.png`: 60.6% of match bytes are distance-one RLE, 54.4% are
+258-byte RLE matches entirely inside target Up rows, 91.1% target Up rows, and
+95.9% have the same source/target row filter. There are no non-RLE overlapping
+matches. An isolated sink oracle covered literals, distance-one replay,
+whole-row matches crossing both filter-byte boundaries, later mixed Paeth rows,
+complete output, and strict filtered-stream Adler-32.
+
+The production probe remained deliberately narrow: RGBA8/size policy, one
+final dynamic block, the accepted 12/9-bit canonical-table shape, and the same
+15-row Up prefix. The direct-history sink lived under
+`png/up_dominant/direct.zig` rather than growing the facade, while DEFLATE kept
+only parsing and semantic-loop dispatch. Real strict and no-Adler decodes
+produced the exact expected output. Performance was decisively worse. The first
+generic sink reached only about `1,167 MiB/s` no-Adler. Routing the proven
+two-bit RLE258 pair through a dedicated sink entry improved the candidate by
+`1.1686x`, to about `1,363 MiB/s`, but the committed same-layout control median
+is about `2,781 MiB/s`; the final ratio was only `0.4903x`.
+
+The saved scratch traversal could not compensate for residual-history mapping,
+row-state handling, and reconstruction inside every semantic match. A
+diagnostic counter batch was discarded when the host busy guard fired, but it
+is not needed for the rejection: even the checksum-free end-to-end upper bound
+was roughly half the committed path. The API, imx dispatch, semantic sink
+instance, 520-line candidate module, and tests were fully reverted. Do not
+retry reconstructed-output-as-filtered-history without a representation that
+keeps ordinary RLE/non-overlap match emission as cheap as the current linear
+inflater; merely eliminating the filtered allocation is insufficient.
+
 ## Canonical RLE258 semantic pair (2026-08-16)
 
 The same `Transparency.png` profile exposes a second narrow shape in its single
