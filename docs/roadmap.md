@@ -4368,6 +4368,15 @@ architecture blindly.
   `0.8799/0.8871/0.8908x`; non-selected kodim17 stayed neutral. Register
   save/restore and generic memset control overwhelm the saved pair-loop work.
   Both inline and noinline decode-side batch-four families are now closed.
+- Rejected bounded consecutive-pair grouping while preserving the existing
+  258-byte store schedule. The 0...9-pair oracle matched output and reader
+  state; ReleaseFast reused one YMM broadcast and moved refill/literal lookup
+  to each run boundary. Same-source fenced counters still measured strict
+  elapsed/cycles/instructions at `0.9944/0.9952/0.9960x` and no-Adler at
+  `0.9977/0.9956/0.9954x`. Branches improved about 1.0% and branch misses
+  6--9%, but inner-loop control/register pressure cost more than the saved
+  lookup work. Production code was fully reverted. Exact-tail, inline/noinline
+  batch four, and run grouping close the current RLE258 follow-up family.
 - Retested image-png's four-lane RGBA Paeth source shape behind the new
   Up-dominant executable-section boundary. The isolated scalar/in-place oracle
   and expected XMM loop were correct, and instructions fell 17--19%, but cycles

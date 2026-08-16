@@ -507,6 +507,27 @@ batching code were fully reverted. Decode-side consecutive-pair batching is
 closed for both inline and noinline fill boundaries unless a future target has
 materially different calling convention or bulk-store support.
 
+A final decode-side run-grouping candidate kept every existing 258-byte fill
+unchanged. It processed at most four adjacent pairs in a bounded inner loop,
+reused one repeated-byte broadcast, and moved reservoir refill plus the next
+literal-table lookup to the run boundary. Zero-through-nine-pair differential
+tests covered every run length, remainders, and a run continuing into the next
+outer iteration. ReleaseFast preserved the original eight AVX2 body stores and
+speculative tail per pair, while reusing the YMM value at offsets `+0x102`,
+`+0x202`, and so on.
+
+Same-source 8 KiB-fenced binaries again had identical ordinary `.text`,
+following hot sections, addresses, and sizes; the only shared `.rodata`
+differences were the isolated four-entry jump table. Thirty-one fixed-CPU-6
+rounds rejected the candidate before a corpus gate. Strict
+elapsed/cycles/instructions were `0.9944x/0.9952x/0.9960x`, and no-Adler
+were `0.9977x/0.9956x/0.9954x`. Branches improved about `1.010x` and branch
+misses 6--9%, but the bounded inner-loop/register-pressure cost exceeded the
+saved refill and lookup work. Non-selected `kodim17.png` remained near
+neutral. The candidate was fully reverted. RLE258 store scheduling, exact
+tails, inline/noinline batch four, and consecutive-run grouping are all closed
+on this target; further PNG work must return to a broader profiled bottleneck.
+
 The earlier image-png four-lane RGBA Paeth source shape was retested behind the
 new Up-dominant executable-section boundary, which is materially narrower than
 the previously rejected broad dispatches. A scalar oracle covered lengths
