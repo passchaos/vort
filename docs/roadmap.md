@@ -4316,6 +4316,23 @@ architecture blindly.
   cycles; vertical pipelines reduced instructions but regressed cycles/time
   about 5--7% through longer dependencies; run grouping did not beat the
   simpler isolated per-row path.
+- Rejected a single 16-byte vector tail after the accepted 32-byte Up loop.
+  Scalar/sentinel coverage included standalone and combined vector thresholds
+  through 65 bytes plus 1,199/1,200/1,201-byte real-row boundaries, and
+  same-source terminal reserves kept the isolated section at 1,290 bytes with
+  shared runtime sections/addresses identical. Thirty-one target counter
+  rounds improved strict elapsed/cycles/instructions by
+  `1.00635/1.00858/1.00977x` and no-Adler by
+  `1.00938/1.00912/1.01135x`.
+- The guarded 30-item corpus matrix still rejected that tail.
+  `Transparency.png` improved `1.00982x` strict / `1.00510x` no-Adler and
+  fixture geomeans were slightly positive, but sums of fixture median times
+  regressed to `0.99960x/0.99950x`. A 101-round confirmation cleared the
+  strict indexed-Exoplanet fluctuation, while no-Adler Exoplanet remained at
+  `0.99866x` paired median / `0.99905x` independent medians /
+  `0.99952x` paired geomean. The candidate and its oracle were fully reverted;
+  do not retry the exact YMM-plus-XMM tail without a different layout/schedule
+  that also clears aggregate and worst-real-fixture gates.
 - Added a canonical RLE258 semantic-loop specialization for final dynamic
   blocks with the profiled 12-bit literal / 9-bit distance table shape.
   `Transparency.png` uses one-bit code zero for both length 258 and distance

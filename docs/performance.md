@@ -384,6 +384,44 @@ cycles/end-to-end time by about 5--7%. Grouping consecutive Up rows without
 vertical vector chaining also increased instruction count and did not beat the
 simpler per-row specialization.
 
+A final horizontal-tail candidate kept the accepted 32-byte Up loop and added
+one 16-byte vector add before the scalar remainder. This is the shape LLVM uses
+for the real 1,200-byte `Transparency.png` rows: 37 YMM iterations plus one XMM
+tail, with no scalar bytes. A scalar/sentinel oracle covered the standalone
+15/16/17 and 31/32/33 thresholds, combined YMM/XMM thresholds through 65 bytes,
+and 1,199/1,200/1,201-byte real-row boundaries.
+
+Same-source causal binaries used a benchmark-only terminal reserve in
+`.vort_png_up_dominant`: the active binary retained a one-byte `ret`, while the
+control retained 32 `nop` bytes plus `ret`. Both isolated sections were 1,290
+bytes. All runtime section addresses and metadata matched; shared `.text`,
+`.rodata`, RLE258, indexed-decode, and other allocatable section bytes were
+identical. The only companion difference was three bytes in the isolated
+function's own FDE range/epilogue description; the reserve itself had no FDE.
+
+Thirty-one fixed-CPU-6 target counter rounds were positive. Strict paired
+median elapsed/cycles/instructions improved
+`1.00635x/1.00858x/1.00977x`; no-Adler improved
+`1.00938x/1.00912x/1.01135x`. Non-selected `kodim17.png` remained effectively
+neutral. The corpus gate nevertheless rejected the change. Because unrelated
+Lux/Cangjie builds were recurring, each of the 30 stage/fixture items used its
+own complete 31-round alternating batch; a 50 ms process monitor discarded
+the complete item and restarted it whenever a compiler, generated test runner,
+or low-idle guard appeared. Only after all 15 strict and 15 no-Adler items
+completed did the report become valid.
+
+`Transparency.png` improved `1.00982x` strict and `1.00510x` no-Adler, and
+fixture geomeans were about `1.00046x` / `1.00047x`. However, sums of the 15
+independent fixture median times regressed to `0.99960x` / `0.99950x`.
+The weakest short batches were strict indexed Exoplanet at `0.99615x` and
+no-Adler non-indexed Exoplanet at `0.99424x`. A guarded 101-round confirmation
+cleared the strict row (`1.00093x` paired median), but the no-Adler row remained
+slightly negative: `0.99866x` paired median, `0.99905x` independent-median
+ratio, and `0.99952x` paired geomean. The vector tail and its candidate-only
+oracle were fully reverted. Do not retry this exact 16-byte tail shape unless
+the design also removes the observed aggregate/non-target sensitivity; a local
+target win is not sufficient.
+
 ## Canonical RLE258 semantic pair (2026-08-16)
 
 The same `Transparency.png` profile exposes a second narrow shape in its single
