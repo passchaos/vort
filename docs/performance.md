@@ -422,6 +422,24 @@ Selecting every matching dynamic block isolated the loop but left a small
 multi-block indexed fluctuation; requiring the profitable final 12/9-bit table
 shape keeps the accepted policy to the profiled single-block workload.
 
+Two post-integration follow-ups were also rejected. Enabling the existing
+inline non-overlap `memcpy` branch inside only the isolated RLE258 instance
+slightly reduced instructions and branches, but fixed-CPU-6 counters put
+strict/no-Adler elapsed ratios at about `0.996x/0.990x` and cycles at
+`0.999x/0.998x`; fewer instructions did not improve execution time.
+
+The earlier image-png four-lane RGBA Paeth source shape was retested behind the
+new Up-dominant executable-section boundary, which is materially narrower than
+the previously rejected broad dispatches. A scalar oracle covered lengths
+0...257 plus disjoint and in-place reconstruction, and ReleaseFast generated
+the expected `vpmovzxbw`/`vpminsw`/`vpmaxsw`/`vpblendvb` loop. Same-layout
+active/control counters reduced instructions by 17--19%, but improved cycles by
+only about 0.1--0.6% and elapsed by roughly 0.2--0.7%. The 31-round corpus gate
+then measured only `1.0005x/1.0030x` strict/no-Adler on the target fixture,
+while strict aggregate/geomean regressed to `0.9952x/0.9984x`. The complete
+candidate was reverted. Even under a clean isolated boundary, this dependency-
+bound Zig vector shape does not provide a reliable end-to-end win.
+
 ## Rejected fdeflate match overcopy integration (2026-08-16)
 
 A source audit against image-png's `fdeflate` 0.3.7 backend found that Vort's

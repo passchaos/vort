@@ -4334,6 +4334,16 @@ architecture blindly.
   dispatch. The former regressed unrelated dynamic streams; the latter retained
   multi-block indexed noise. The accepted final-block 12/9-bit policy keeps the
   optimization narrow and evidence-backed.
+- Rejected inline non-overlap `memcpy` inside only the isolated RLE258 loop.
+  Instructions/branches fell slightly, but fixed-core strict/no-Adler elapsed
+  ratios were about `0.996x/0.990x` and cycles `0.999x/0.998x`; the candidate
+  was fully reverted before a corpus gate.
+- Retested image-png's four-lane RGBA Paeth source shape behind the new
+  Up-dominant executable-section boundary. The isolated scalar/in-place oracle
+  and expected XMM loop were correct, and instructions fell 17--19%, but cycles
+  improved at most about 0.6%. Thirty-one corpus rounds left Transparency near
+  neutral (`1.0005x` strict / `1.0030x` no-Adler) and regressed strict
+  aggregate/geomean to `0.9952x/0.9984x`; all production code was reverted.
 - Audited Vort's semantic DEFLATE loop against image-png's `fdeflate` 0.3.7
   backend and isolated speculative 16-byte match copying as the remaining
   concrete loop-shape difference. The match-copy benchmark now has an
