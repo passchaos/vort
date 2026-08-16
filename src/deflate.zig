@@ -5,6 +5,8 @@ const huffman = @import("huffman.zig");
 const lz77 = @import("lz77.zig");
 const core = @import("core.zig");
 const png_ultrafast = @import("png_ultrafast.zig");
+const png_windowed_history =
+    @import("deflate/png/windowed_history.zig");
 const semantic_rle258 = @import("deflate/semantic/rle258.zig");
 
 const png = @import("png.zig");
@@ -31,6 +33,8 @@ const pngScanlinePayloadLen = png.pngScanlinePayloadLen;
 
 pub const Error = core.Error;
 pub const max_stored_block_len: usize = std.math.maxInt(u16);
+pub const png_windowed_rle258_history_scratch_len =
+    png_windowed_history.scratch_len;
 
 pub const RawDeflateProbeResult = struct {
     ok: bool,
@@ -4203,6 +4207,7 @@ noinline fn decodeSemanticDynamicBlockIntoBufferedReader(
         false,
         false,
         false,
+        false,
         reader,
         output,
         initial_out_offset,
@@ -4221,6 +4226,7 @@ noinline fn decodeSemanticDynamicBlockIntoBufferedReaderNonOverlapInline(
         false,
         true,
         false,
+        false,
         reader,
         output,
         initial_out_offset,
@@ -4235,6 +4241,7 @@ noinline fn decodeSemanticDynamicBlockIntoSingleDistanceBufferedReader(
 ) Error!usize {
     return decodeSemanticDynamicBlockIntoLinearMode(
         true,
+        false,
         false,
         false,
         false,
@@ -4253,6 +4260,7 @@ noinline fn decodeSemanticDynamicBlockIntoRle1BufferedReader(
     return decodeSemanticDynamicBlockIntoLinearMode(
         true,
         true,
+        false,
         false,
         false,
         reader,
@@ -4277,6 +4285,55 @@ noinline fn decodeSemanticDynamicBlockIntoRle258BufferedReader(
         false,
         false,
         true,
+        false,
+        reader,
+        output,
+        initial_out_offset,
+        decoder,
+    );
+}
+
+const SemanticLinearStatus = enum { need_output, end_of_block };
+const SemanticLinearStep = struct {
+    output_written: usize,
+    status: SemanticLinearStatus,
+};
+
+fn SemanticLinearResult(comptime resumable: bool) type {
+    return if (resumable) SemanticLinearStep else usize;
+}
+
+inline fn semanticLinearResult(
+    comptime resumable: bool,
+    output_written: usize,
+    status: SemanticLinearStatus,
+) SemanticLinearResult(resumable) {
+    if (comptime resumable) {
+        return .{
+            .output_written = output_written,
+            .status = status,
+        };
+    }
+    std.debug.assert(status == .end_of_block);
+    return output_written;
+}
+
+noinline fn decodeSemanticDynamicBlockIntoRle258Window(
+    noalias reader: *bitstream.BufferedBitReader,
+    noalias output: []u8,
+    initial_out_offset: usize,
+    noalias decoder: *const SemanticDynamicDecoder,
+) linksection(semantic_rle258.text_section) Error!SemanticLinearStep {
+    std.debug.assert(semantic_rle258.shouldUse(
+        decoder.compact_literal,
+        decoder.compact_distance,
+    ));
+    return decodeSemanticDynamicBlockIntoLinearMode(
+        false,
+        false,
+        false,
+        true,
+        true,
         reader,
         output,
         initial_out_offset,
@@ -4289,11 +4346,12 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
     comptime rle1_distance: bool,
     comptime inline_non_overlap: bool,
     comptime rle258_pair: bool,
+    comptime pause_at_output_boundary: bool,
     noalias reader: *bitstream.BufferedBitReader,
     noalias output: []u8,
     initial_out_offset: usize,
     noalias decoder: *const SemanticDynamicDecoder,
-) Error!usize {
+) Error!SemanticLinearResult(pause_at_output_boundary) {
     comptime std.debug.assert(!rle1_distance or single_distance);
     const input = reader.input;
     var bit_buffer = reader.bit_buffer;
@@ -4306,7 +4364,8 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
     // speculative two-byte literal stores and bounded match writes. A smaller
     // headroom keeps short PNG rows and dynamic-block tails out of the compact
     // fallback decoder without changing the public OutputTooSmall boundary.
-    const output_headroom: usize = 16;
+    const output_headroom: usize =
+        if (pause_at_output_boundary) 258 else 16;
     if (out_pos + output_headroom <= output.len and byte_index + 8 <= input.len) {
         refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
     }
@@ -4418,7 +4477,11 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
                 bit_count -= entry_bits;
                 consumed_bits += entry_bits;
                 storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
-                return out_pos;
+                return semanticLinearResult(
+                    pause_at_output_boundary,
+                    out_pos,
+                    .end_of_block,
+                );
             }
             if (symbol > 285) return error.InvalidHuffmanCode;
             const metadata = length_table[symbol - 257];
@@ -4430,7 +4493,11 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             bit_count -= entry_bits;
             consumed_bits += entry_bits;
             storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
-            return out_pos;
+            return semanticLinearResult(
+                pause_at_output_boundary,
+                out_pos,
+                .end_of_block,
+            );
         }
 
         var bits = bit_buffer >> @intCast(entry_bits);
@@ -4523,6 +4590,14 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
     }
 
     storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
+    if (comptime pause_at_output_boundary) {
+        return decodeSemanticTailWindow(
+            reader,
+            decoder,
+            output,
+            out_pos,
+        );
+    }
     // Keep the boundary/tail path on the same semantic primary tables as the
     // hot loop. The older compact Huffman-table fallback was simple but left
     // dynamic-block tails and short PNG rows on a slower decoder shape.
@@ -4546,7 +4621,75 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
                 try copyMatchAt(output, out_pos, length, distance);
                 out_pos += length;
             },
-            .eob => return out_pos,
+            .eob => return semanticLinearResult(
+                pause_at_output_boundary,
+                out_pos,
+                .end_of_block,
+            ),
+        }
+    }
+}
+
+fn decodeSemanticTailWindow(
+    reader: *bitstream.BufferedBitReader,
+    decoder: *const SemanticDynamicDecoder,
+    output: []u8,
+    initial_out_pos: usize,
+) Error!SemanticLinearStep {
+    var out_pos = initial_out_pos;
+    while (true) {
+        // Fast decode may stop because either input or output headroom is low.
+        // Decode each tail token transactionally: commit it in full, commit
+        // zero-output EOB, or restore the exact reservoir if output is short.
+        const saved_reader = reader.*;
+        switch (try decodeSemanticTailSymbol(reader, decoder)) {
+            .literal => |literal| {
+                if (out_pos == output.len) {
+                    reader.* = saved_reader;
+                    return .{
+                        .output_written = out_pos,
+                        .status = .need_output,
+                    };
+                }
+                output[out_pos] = literal;
+                out_pos += 1;
+            },
+            .double_literal => |pair| {
+                if (output.len - out_pos < 2) {
+                    reader.* = saved_reader;
+                    return .{
+                        .output_written = out_pos,
+                        .status = .need_output,
+                    };
+                }
+                output[out_pos] = pair[0];
+                output[out_pos + 1] = pair[1];
+                out_pos += 2;
+            },
+            .length => |length_info| {
+                const length = length_info.base +
+                    try readDeflateExtraBits(
+                        reader,
+                        length_info.extra_bits,
+                    );
+                const distance_symbol =
+                    try decoder.compact_distance.decodeValue(reader);
+                const distance =
+                    try decodeDistance(distance_symbol, reader);
+                if (length > output.len - out_pos) {
+                    reader.* = saved_reader;
+                    return .{
+                        .output_written = out_pos,
+                        .status = .need_output,
+                    };
+                }
+                try copyMatchAt(output, out_pos, length, distance);
+                out_pos += length;
+            },
+            .eob => return .{
+                .output_written = out_pos,
+                .status = .end_of_block,
+            },
         }
     }
 }
@@ -11109,6 +11252,112 @@ pub fn decodePngStreamingZlibImageWithOptions(
     return drainPngStreamingZlibImage(&decoder, output[0..output_len]);
 }
 
+/// Decode the profiled final-block canonical RLE258 shape through the direct
+/// semantic loop while retaining only a bounded contiguous filtered history.
+///
+/// This is an experimental whole-image boundary, not the public row cursor.
+/// The last 32 KiB of filtered bytes remain immutable for DEFLATE references;
+/// older complete PNG rows are reconstructed into final output and discarded.
+/// `history_scratch` must provide two DEFLATE windows (64 KiB), and the input,
+/// history, and output regions must not overlap.
+pub fn decodePngWindowedRle258ZlibImageWithOptions(
+    input: []const u8,
+    history_scratch: []u8,
+    info: PngImageInfo,
+    options: ZlibDecodeOptions,
+    output: []u8,
+) Error!PngImageDecodeResult {
+    const output_len = try pngImageOutputLen(info);
+    if (output.len < output_len) return error.OutputTooSmall;
+    var image = try png_windowed_history.ImageState.init(
+        history_scratch,
+        info,
+        output[0..output_len],
+        !options.ignore_adler,
+    );
+    // The direct loop reads compressed bytes while appending filtered bytes to
+    // the window, then reconstructs released rows into the final image. These
+    // three live regions therefore cannot alias; reject overlap before parsing
+    // so the experimental helper never corrupts input or caller-owned output.
+    if (slicesOverlapForSemanticDecode(input, image.window.scratch) or
+        slicesOverlapForSemanticDecode(input, image.output) or
+        slicesOverlapForSemanticDecode(image.window.scratch, image.output))
+    {
+        return error.UnsupportedDeflateFeature;
+    }
+    const zlib_header = try parseZlibHeader(input, null);
+    var reader = bitstream.BufferedBitReader.init(
+        input[zlib_header.data_offset..],
+    );
+    const header = try readBlockHeader(&reader);
+    if (!header.final or header.block_type != 2) {
+        return error.UnsupportedDeflateFeature;
+    }
+    const parsed =
+        try huffman.parseDynamicLengthsAfterHeader(true, &reader);
+    if (!semantic_rle258.isCandidate(parsed)) {
+        return error.UnsupportedDeflateFeature;
+    }
+    const literal_table_ = try huffman.HuffmanTable(286).init(
+        parsed.literal_lengths[0..parsed.header.hlit],
+    );
+    const distance_table_ = try huffman.HuffmanTable(30).init(
+        parsed.distance_lengths[0..parsed.header.hdist],
+    );
+    var decoder: SemanticDynamicDecoder = undefined;
+    if (!decoder.init(&literal_table_, &distance_table_) or
+        !semantic_rle258.shouldUse(
+            &literal_table_,
+            &distance_table_,
+        ))
+    {
+        return error.UnsupportedDeflateFeature;
+    }
+
+    while (true) {
+        const old_write_pos = image.window.write_pos;
+        const step = try decodeSemanticDynamicBlockIntoRle258Window(
+            &reader,
+            image.decodeOutput(),
+            old_write_pos,
+            &decoder,
+        );
+        const final = step.status == .end_of_block;
+        const released = try image.consumeStep(
+            old_write_pos,
+            step.output_written,
+            final,
+        );
+        if (final) break;
+        if (!released) {
+            // The direct loop stopped with less than one token of output
+            // headroom, but no complete row has left the immutable lookback.
+            // The configured two-window scratch is therefore insufficient for
+            // this row geometry.
+            return error.OutputTooSmall;
+        }
+        try image.compactReleased();
+    }
+
+    try image.finish();
+
+    const footer_offset =
+        zlib_header.data_offset + reader.byteOffset();
+    const actual_adler =
+        if (options.ignore_adler) 0 else image.adlerDigest();
+    try validateZlibFooterWithOptions(
+        input,
+        footer_offset,
+        actual_adler,
+        options,
+    );
+    return .{
+        .rows = image.row_index,
+        .output_written = output_len,
+        .zlib_input_read = footer_offset + 4,
+    };
+}
+
 pub fn decodePngStreamingZlibImageFromChunksDirect(
     chunks: []const []const u8,
     history_scratch: []u8,
@@ -11816,6 +12065,72 @@ test "semantic RLE258 pair shortcut matches generic decode" {
     try std.testing.expectEqual(
         reference_reader.byteOffset(),
         active_reader.byteOffset(),
+    );
+}
+
+test "semantic RLE258 window resumes only at token boundaries" {
+    var literal_lengths: [286]u4 = @splat(0);
+    literal_lengths[285] = 1;
+    literal_lengths[0] = 2;
+    literal_lengths[256] = 2;
+    const literal_table_ =
+        try huffman.HuffmanTable(286).init(&literal_lengths);
+    const distance_lengths = [_]u4{ 1, 1 };
+    const distance_table_ =
+        try huffman.HuffmanTable(30).init(&distance_lengths);
+
+    var decoder: SemanticDynamicDecoder = undefined;
+    try std.testing.expect(decoder.init(
+        &literal_table_,
+        &distance_table_,
+    ));
+
+    // literal zero, three RLE258 pairs, EOB. The first window holds two
+    // complete matches but not the third; retrying from a larger logical
+    // window must consume exactly the same token stream as one-shot decode.
+    const encoded = [_]u8{ 0b0000_0001, 0b0000_0011 } ++
+        ([_]u8{0} ** 15);
+    var window_reader = bitstream.BufferedBitReader.init(&encoded);
+    var output: [775]u8 = undefined;
+    const first = try decodeSemanticDynamicBlockIntoRle258Window(
+        &window_reader,
+        output[0..520],
+        0,
+        &decoder,
+    );
+    try std.testing.expectEqual(SemanticLinearStatus.need_output, first.status);
+    try std.testing.expectEqual(@as(usize, 517), first.output_written);
+
+    const resumed = try decodeSemanticDynamicBlockIntoRle258Window(
+        &window_reader,
+        &output,
+        first.output_written,
+        &decoder,
+    );
+    try std.testing.expectEqual(
+        SemanticLinearStatus.end_of_block,
+        resumed.status,
+    );
+    try std.testing.expectEqual(output.len, resumed.output_written);
+
+    var reference_reader = bitstream.BufferedBitReader.init(&encoded);
+    var reference: [output.len]u8 = undefined;
+    const reference_written =
+        try decodeSemanticDynamicBlockIntoRle258BufferedReader(
+            &reference_reader,
+            &reference,
+            0,
+            &decoder,
+        );
+    try std.testing.expectEqual(reference.len, reference_written);
+    try std.testing.expectEqualSlices(u8, &reference, &output);
+    try std.testing.expectEqual(
+        reference_reader.consumed_bits,
+        window_reader.consumed_bits,
+    );
+    try std.testing.expectEqual(
+        reference_reader.byteOffset(),
+        window_reader.byteOffset(),
     );
 }
 

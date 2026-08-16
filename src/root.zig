@@ -1409,6 +1409,8 @@ pub const parsePngColorType = png_exports.parsePngColorType;
 pub const pngImageInfo = png_exports.pngImageInfo;
 pub const pngImageInfoFromColorType = png_exports.pngImageInfoFromColorType;
 pub const pngIdatChunksScratchLen = png_exports.pngIdatChunksScratchLen;
+pub const png_windowed_rle258_history_scratch_len =
+    png_exports.png_windowed_rle258_history_scratch_len;
 pub const pngAdam7Info = png_exports.pngAdam7Info;
 pub const pngAdam7InfoFromColorType = png_exports.pngAdam7InfoFromColorType;
 pub const pngAdam7DecodeBufferSizes = png_exports.pngAdam7DecodeBufferSizes;
@@ -1421,6 +1423,7 @@ pub const decodePngStoredZlibImageFromChunksDirect = png_exports.decodePngStored
 pub const decodePngStoredZlibImageFromChunksWithOptionsDirect = png_exports.decodePngStoredZlibImageFromChunksWithOptionsDirect;
 pub const decodePngStreamingZlibImage = png_exports.decodePngStreamingZlibImage;
 pub const decodePngStreamingZlibImageWithOptions = png_exports.decodePngStreamingZlibImageWithOptions;
+pub const decodePngWindowedRle258ZlibImageWithOptions = png_exports.decodePngWindowedRle258ZlibImageWithOptions;
 pub const decodePngStreamingZlibImageFromChunksDirect = png_exports.decodePngStreamingZlibImageFromChunksDirect;
 pub const decodePngStreamingZlibImageFromChunksWithOptionsDirect = png_exports.decodePngStreamingZlibImageFromChunksWithOptionsDirect;
 pub const decodePngZlibImage = png_exports.decodePngZlibImage;

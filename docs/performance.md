@@ -734,3 +734,61 @@ current RLE258 boundary. A future 12/9 design must materially change table
 lifetime or storage—for example amortizing construction across repeated
 decodes—rather than allocating and building wider primary tables once per
 image.
+
+## Bounded filtered-history PNG decode (2026-08-17)
+
+The next accepted change addresses the whole-image data flow rather than
+another DEFLATE micro-kernel. image-png's `UnfilteringBuffer` retains the last
+32 KiB of raw filtered output for DEFLATE lookback and reconstructs complete
+rows only after they become mutable. Vort's prior throughput path instead
+inflated all 360,300 filtered bytes for `Transparency.png` before a second
+reconstruction traversal; its bounded streaming path copied every retained
+byte through a separate 32 KiB ring.
+
+Vort now has an experimental whole-image helper for the already-proven final
+dynamic 12/9-bit canonical RLE258 shape. A resumable direct semantic loop
+pauses only at complete token boundaries. It appends into a contiguous 64 KiB
+window, keeps the newest 32 KiB immutable, reconstructs older complete rows
+into final output, and compacts only released row prefixes. Transactional tail
+decode restores the exact bit reservoir when the next literal, literal pair,
+or match does not fit. Strict Adler-32 is accumulated from original filtered
+rows before reconstruction. Input, history, and output overlap is rejected,
+and the public scratch contract is exported as
+`png_windowed_rle258_history_scratch_len`.
+
+This is distinct from the rejected reconstructed-output-as-history design:
+ordinary DEFLATE matches still address raw filtered bytes in one linear
+window. For the 300x300 RGBA8 fixture, bounded history replaces the 360,300
+byte full filtered scratch with 65,536 bytes, removing 294,764 bytes plus the
+complete second filtered-buffer traversal. Unsupported block/table shapes are
+rejected before output is written so imx can fall back to the established
+full-scratch path.
+
+The lifecycle lives in the focused
+`src/deflate/png/windowed_history.zig` module; public contract tests live under
+`src/root_exports/png/`, while only the tightly coupled resumable semantic loop
+remains in the large DEFLATE facade. ReleaseFast tests cover token-boundary
+resume and reader state, whole-row release/compaction, short buffers, ordinary
+tables, overlapping storage, and forged overflowing metadata. A real-fixture
+probe compares strict and no-Adler candidate output against the independent
+ring-streaming reference: all 360,000 bytes match, with CRC32 `2202190348`.
+
+Final same-layout v6 binaries are the same size and have byte-identical
+ordinary `.text`, `.rodata`, `.vort_png_rle258`, and
+`.vort_png_up_dominant` sections. Only the isolated
+`.imx_png_windowed` policy immediate differs. Thirty-one alternating
+fixed-CPU-6 pairs per stage, with interrupted batches restarted from zero,
+measure:
+
+| `Transparency.png` stage | elapsed | cycles | instructions | branches |
+| --- | ---: | ---: | ---: | ---: |
+| strict decode-into | `1.163x` | `1.156x` | `0.802x` | `1.299x` |
+| decode-into no-Adler | `1.197x` | `1.180x` | `0.817x` | `1.358x` |
+
+Ratios are control divided by active paired medians. Active executes roughly
+22--25% more instructions yet takes 15--18% fewer cycles, so this gain comes
+from reduced memory traffic/dependency cost rather than instruction-count
+reduction. The earlier complete 30-item corpus gate measured positive
+strict/no-Adler aggregate ratios of `1.000183x/1.000912x` and fixture
+geomeans of `1.009268x/1.012307x`; non-selected dimensions short-circuit
+before the policy's differing color immediate.

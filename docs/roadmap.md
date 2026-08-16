@@ -4465,3 +4465,29 @@ architecture blindly.
   no-Adler lorem oxipng at `0.996983x`. The wider builder, loop, dispatch, and
   oracle were fully removed. Do not retry a per-image 12/9 table build without
   materially changing table storage or amortizing its lifetime.
+- Added a bounded filtered-history whole-image helper for the accepted final
+  dynamic canonical RLE258 shape. A resumable direct semantic loop keeps the
+  newest 32 KiB of raw filtered bytes immutable inside a contiguous 64 KiB
+  window, reconstructs only complete rows that have left DEFLATE lookback, and
+  compacts only released row prefixes. This preserves cheap linear match
+  emission, unlike the rejected reconstructed-output-as-history architecture.
+- The 300x300 RGBA8 `Transparency.png` path now replaces 360,300 bytes of full
+  filtered scratch with 65,536 bytes, removing 294,764 bytes and the complete
+  second filtered-buffer traversal. Transactional tail decode preserves reader
+  state at output pauses; strict Adler uses original filtered rows. Public
+  contracts reject short/overlapping storage, unsupported tables, and forged
+  overflowing metadata before unsafe use or fallback-visible output.
+- Moved row lifecycle and compaction into
+  `src/deflate/png/windowed_history.zig`, exported an explicit 64 KiB scratch
+  constant, and moved public helper contract tests under
+  `src/root_exports/png/`. Only the resumable token loop remains in the large
+  DEFLATE facade. Real strict/no-Adler output matches the independent streaming
+  reference for all 360,000 bytes at CRC32 `2202190348`.
+- Final v6 active/control binaries are equal-sized with byte-identical ordinary
+  `.text`, `.rodata`, RLE258, and Up-dominant sections. Thirty-one complete
+  fixed-CPU-6 pairs improve strict elapsed/cycles/branches by
+  `1.163/1.156/1.299x` and no-Adler by `1.197/1.180/1.358x`.
+  Instructions regress to `0.802/0.817x` control/active, confirming that the
+  end-to-end win is reduced memory/dependency cost rather than fewer
+  instructions. The prior guarded 30-item corpus remains positive at
+  `1.000183/1.000912x` aggregate and `1.009268/1.012307x` fixture geomean.

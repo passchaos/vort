@@ -1,6 +1,7 @@
 const std = @import("std");
 const deflate = @import("../deflate.zig");
 const png = @import("../png.zig");
+const windowed_tests = @import("png/windowed_tests.zig");
 
 pub const PngAdam7Info = png.PngAdam7Info;
 pub const PngAdam7PassInfo = png.PngAdam7PassInfo;
@@ -25,6 +26,8 @@ pub const parsePngColorType = png.parsePngColorType;
 pub const pngImageInfo = png.pngImageInfo;
 pub const pngImageInfoFromColorType = png.pngImageInfoFromColorType;
 pub const pngIdatChunksScratchLen = deflate.pngIdatChunksScratchLen;
+pub const png_windowed_rle258_history_scratch_len =
+    deflate.png_windowed_rle258_history_scratch_len;
 pub const pngAdam7Info = png.pngAdam7Info;
 pub const pngAdam7InfoFromColorType = png.pngAdam7InfoFromColorType;
 pub const pngAdam7DecodeBufferSizes = png.pngAdam7DecodeBufferSizes;
@@ -37,6 +40,7 @@ pub const decodePngStoredZlibImageFromChunksDirect = deflate.decodePngStoredZlib
 pub const decodePngStoredZlibImageFromChunksWithOptionsDirect = deflate.decodePngStoredZlibImageFromChunksWithOptionsDirect;
 pub const decodePngStreamingZlibImage = deflate.decodePngStreamingZlibImage;
 pub const decodePngStreamingZlibImageWithOptions = deflate.decodePngStreamingZlibImageWithOptions;
+pub const decodePngWindowedRle258ZlibImageWithOptions = deflate.decodePngWindowedRle258ZlibImageWithOptions;
 pub const decodePngStreamingZlibImageFromChunksDirect = deflate.decodePngStreamingZlibImageFromChunksDirect;
 pub const decodePngStreamingZlibImageFromChunksWithOptionsDirect = deflate.decodePngStreamingZlibImageFromChunksWithOptionsDirect;
 pub const decodePngZlibImage = deflate.decodePngZlibImage;
@@ -60,6 +64,10 @@ pub const streamPngAdam7ZlibRowsFromChunksDirect = deflate.streamPngAdam7ZlibRow
 pub const streamPngAdam7ZlibRowsFromChunksWithOptionsDirect = deflate.streamPngAdam7ZlibRowsFromChunksWithOptionsDirect;
 pub const reconstructPngScanline = png.reconstructPngScanline;
 
+test {
+    _ = windowed_tests;
+}
+
 /// Verify that root-level PNG aliases injected from this module remain usable.
 ///
 /// Keeping this logic next to the alias table lets `src/root.zig` stay small
@@ -76,6 +84,7 @@ pub fn smokeRootExports(comptime Root: type) !void {
         _ = Root.PngAdam7Info;
         _ = Root.PngZlibScanlineDecoder;
         _ = Root.PngStreamingZlibScanlineDecoder;
+        _ = Root.png_windowed_rle258_history_scratch_len;
     }
 
     const info = try Root.pngImageInfo(2, 1, 8, .truecolor);
