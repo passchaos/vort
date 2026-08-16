@@ -4346,6 +4346,19 @@ architecture blindly.
   aggregate strict/no-Adler throughput to `0.99922/0.99935x`; indexed
   Exoplanet reached `0.99594x` strict and the 32-pixel icon `0.99793x`
   no-Adler. Production code and the candidate-only oracle were fully reverted.
+- Profiled consecutive decode-side canonical RLE258 pairs with an independent
+  PNG/DEFLATE parser whose complete output lengths match Python zlib.
+  Transparency has 783 pairs in 287 runs: lengths 1/2/3/4 occur
+  96/6/65/120 times, so four-pair batches could cover 480 pairs (`61.3%`)
+  without broadening the existing final 12/9-bit dispatch.
+- Rejected an inline four-pair decode despite that coverage. The 0...9-pair
+  differential oracle matched output and reader state, and same-source fenced
+  binaries isolated the generated loop, but LLVM expanded the 1,032-byte fill
+  into 32 AVX2 stores plus a tail. Thirty-one target rounds measured strict
+  elapsed/cycles/instructions at `1.0009/0.9974/0.9935x` and no-Adler at
+  `0.9955/0.9986/0.9933x`. Branches fell about 1.7%, but bulk stores outweighed
+  loop-control savings. The candidate was fully reverted; only a materially
+  different out-of-line fill boundary would justify revisiting batch four.
 - Retested image-png's four-lane RGBA Paeth source shape behind the new
   Up-dominant executable-section boundary. The isolated scalar/in-place oracle
   and expected XMM loop were correct, and instructions fell 17--19%, but cycles

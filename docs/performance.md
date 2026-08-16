@@ -456,6 +456,35 @@ the generic speculative tail remains production behavior. Do not retry this
 store schedule without a design that also avoids the observed non-target
 layout/cache regressions.
 
+A separate read-only DEFLATE parser then measured consecutive canonical
+length-258/distance-one pairs before changing the loop again. Python zlib
+independently validated every complete output length across all 15 PNG bench
+fixtures. The selected final 12/9-bit `Transparency.png` block contains 783
+pairs in 287 runs: lengths one/two/three/four occur 96/6/65/120 times, and no
+run exceeds four. A four-pair decode can therefore cover 480 pairs (`61.3%`)
+without broadening the accepted dispatch. Exoplanet has longer runs, but its
+multi-block/table shapes intentionally remain outside this specialization.
+
+An inline batch-four candidate tested the low eight reservoir bits, consumed
+four canonical pairs together, and emitted one 1,032-byte repeated-byte fill.
+Differential tests covered zero through nine adjacent pairs, including every
+one-to-three-pair remainder and two complete batches, while comparing output,
+consumed bits, and reader byte offsets with the ordinary semantic loop.
+ReleaseFast generated the intended one-byte reservoir advance, but expanded
+the fill into 32 AVX2 stores plus one speculative tail.
+
+The same-source causal binaries used a benchmark-only 8 KiB section fence:
+ordinary `.text`, following Up/indexed sections, section addresses, and total
+section sizes were identical. The only shared `.rodata` differences were the
+same four-entry computed-jump table referenced exclusively by the isolated
+RLE258 function. Thirty-one fixed-CPU-6 rounds rejected the candidate before a
+corpus gate. Strict elapsed was only `1.0009x`, while cycles/instructions
+regressed to `0.9974x/0.9935x`; no-Adler elapsed/cycles/instructions were
+`0.9955x/0.9986x/0.9933x`. Branches improved about `1.017x`, but the expanded
+bulk fill cost more than the saved loop control. The candidate was fully
+reverted. Do not retry inline batch-four filling; any follow-up needs a
+materially different out-of-line bulk-fill code-generation boundary.
+
 The earlier image-png four-lane RGBA Paeth source shape was retested behind the
 new Up-dominant executable-section boundary, which is materially narrower than
 the previously rejected broad dispatches. A scalar oracle covered lengths
