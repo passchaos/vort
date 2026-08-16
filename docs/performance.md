@@ -691,3 +691,46 @@ claim a latency win. The production decoder and exact-size API changes were
 fully reverted before commit; only the reusable benchmark/oracle and this
 negative evidence remain. Do not retry the same short non-overlap
 specialization without a materially different scheduling or copy shape.
+
+## Rejected isolated RLE258 12/9 primary tables (2026-08-16)
+
+The accepted RLE258 dispatch identifies a final dynamic block whose literal and
+distance maximum widths are exactly 12 and 9 bits, but its semantic decoder
+still uses the general 11/8 primary tables plus secondary lookups. This is not
+the same experiment as the earlier broad semantic-12 policy: that policy
+selected the separate fused decoder only when a block had at least 1,024
+double-literal primary slots, while `Transparency.png` has only 277 and was
+never selected.
+
+A narrow candidate therefore built complete primary-only 12/9 semantic tables
+only after the existing final-block and canonical RLE258 proof. The reusable
+builder lived under `src/deflate/semantic/primary.zig` rather than enlarging the
+DEFLATE facade. A synthetic complete max-12/max-9 tree exercised a 12-bit
+literal, a 9-bit distance, an ordinary match, the two-bit RLE258 pair, and a
+12-bit EOB; output bytes, consumed bits, and reader byte offsets matched the
+established 11/8 secondary-table decoder. All 263 ReleaseFast Deflate tests
+also passed.
+
+Thirty-one fixed-CPU-6 alternating target rounds showed a small real signal.
+Strict elapsed/instructions/branches improved by
+`1.0022/1.0124/1.0321x`, but paired cycles were `0.9997x` and branch misses
+regressed to `0.8139x`. No-Adler elapsed/cycles/instructions/branches improved
+by `1.0100/1.0041/1.0169/1.0397x`, while branch misses were only `0.9718x`.
+The active binary also grew the isolated section from 3,770 to 6,523 bytes and
+changed ordinary `.text`, because it no longer constructed the old RLE258
+decoder before dispatch.
+
+The guarded corpus gate rejected the candidate. Each stage/fixture was a
+separate complete 31-round alternating batch; any compiler or generated runner
+restarted that item from round zero. Strict indexed Exoplanet measured
+`0.995024x` from independent medians and `0.993418x` paired geomean.
+No-Adler `lorem_ipsum_oxipng.png` measured `0.996983x` from independent
+medians. Both are non-target regressions, so the remaining batches were not
+used to manufacture an aggregate pass. The builder, wider loop, dispatch, and
+candidate oracle were fully removed.
+
+This closes the straightforward fdeflate-style table-width port for the
+current RLE258 boundary. A future 12/9 design must materially change table
+lifetime or storage—for example amortizing construction across repeated
+decodes—rather than allocating and building wider primary tables once per
+image.

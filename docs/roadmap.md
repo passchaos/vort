@@ -4450,3 +4450,18 @@ architecture blindly.
   `1.028824714x` but a cycle median of only `0.999749144x`; all production and
   exact-size API changes were reverted rather than accepting instruction-count
   evidence without a latency win.
+- Tested a primary-only 12-bit literal / 9-bit distance decoder only inside the
+  accepted final-block canonical RLE258 boundary. This was not a repeat of the
+  old broad semantic-12 policy: Transparency has only 277 double-literal slots
+  and never met that policy's 1,024-slot threshold. A modular
+  `deflate/semantic/primary.zig` candidate and complete max-12/max-9 oracle
+  covered a long literal, long distance, ordinary match, RLE258 pair, EOB,
+  output, and reader state; all 263 ReleaseFast Deflate tests passed.
+- Thirty-one fixed-CPU-6 target rounds improved no-Adler
+  elapsed/cycles/instructions/branches by
+  `1.0100/1.0041/1.0169/1.0397x`, but strict cycles were only `0.9997x` and
+  branch misses regressed. The guarded corpus gate then measured strict indexed
+  Exoplanet at `0.995024x` independent-median / `0.993418x` paired-geomean and
+  no-Adler lorem oxipng at `0.996983x`. The wider builder, loop, dispatch, and
+  oracle were fully removed. Do not retry a per-image 12/9 table build without
+  materially changing table storage or amortizing its lifetime.
