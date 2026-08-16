@@ -4377,6 +4377,21 @@ architecture blindly.
   6--9%, but inner-loop control/register pressure cost more than the saved
   lookup work. Production code was fully reverted. Exact-tail, inline/noinline
   batch four, and run grouping close the current RLE258 follow-up family.
+- Captured a committed-binary DWARF callgraph: the prior `memcpyFast` sample
+  comes entirely from the isolated RLE258 loop's `copyMatchAt`, not PNG
+  transform scratch. Since inline non-overlap copying already failed counters,
+  memcpy is not a separate untried direction.
+- Audited symbol-285 joint distributions. Of 1,280 occurrences in
+  Transparency, 783 are the accepted distance-one pair and 497 use other
+  distances, led by distance symbols 20/16/17 at 299/86/48 occurrences.
+  Rejected a one-branch length-only metadata shortcut that assigned
+  bits/base/extra as `1/258/0` before reusing ordinary distance/copy logic.
+  Pair and distance-two non-pair oracles matched output and reader state;
+  ReleaseFast emitted one low-bit test and shrank the isolated loop, but strict
+  elapsed/cycles/instructions/branches were
+  `1.0021/1.0004/0.9985/0.9914x` and no-Adler
+  `0.9991/1.0007/0.9986/0.9913x`. Production code was reverted. RLE258
+  metadata/copy/store/batch/run follow-ups are now closed on this target.
 - Retested image-png's four-lane RGBA Paeth source shape behind the new
   Up-dominant executable-section boundary. The isolated scalar/in-place oracle
   and expected XMM loop were correct, and instructions fell 17--19%, but cycles

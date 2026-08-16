@@ -528,6 +528,38 @@ neutral. The candidate was fully reverted. RLE258 store scheduling, exact
 tails, inline/noinline batch four, and consecutive-run grouping are all closed
 on this target; further PNG work must return to a broader profiled bottleneck.
 
+A fresh committed-binary DWARF callgraph profile then resolved the prior flat
+`memcpyFast` sample. All of its user-space caller frames lead through
+`decodeSemanticDynamicBlockIntoRle258BufferedReader -> copyMatchAt`; it is not
+a PNG transform or temporary-buffer copy. The profile attributes about 16.0%
+self cycles to the isolated loop, 4.6% to `memcpyFast`, 8.0% to generic Paeth,
+5.5% to the Up-dominant reconstruction section, and about 0.8--0.9% each to
+literal-table construction and dynamic-length parsing. This closes memcpy as a
+new direction because the isolated non-overlap integration has already failed
+its counters gate.
+
+Token joint-distribution analysis found one last metadata-only opportunity in
+the selected block. Symbol 285 occurs 1,280 times: 783 are the accepted
+two-bit distance-one pair, while 497 use other distances. Those non-pair
+distances are led by symbols 20/16/17 at 299/86/48 occurrences. Because the
+canonical-table proof already makes the low one bit uniquely identify symbol
+285, a candidate directly assigned code bits/base/extra as `1/258/0` and then
+reused the complete existing distance/copy path. A distance-two non-pair
+oracle joined the pair oracle and compared all output and reader state.
+
+The final source shape used one low-bit branch around the complete old slow
+path; ReleaseFast emitted exactly one test and reduced the isolated loop from
+about 3,770 to 3,751 bytes. Same-source fenced binaries retained identical
+ordinary `.text`, following hot sections, addresses, and normalized
+`.rodata`. Thirty-one fixed-CPU-6 rounds still rejected it before a corpus
+gate. Strict elapsed/cycles were only `1.0021x/1.0004x`, while
+instructions/branches regressed to `0.9985x/0.9914x`; no-Adler measured
+`0.9991x/1.0007x/0.9986x/0.9913x` for
+elapsed/cycles/instructions/branches, with worse branch misses. Non-selected
+`kodim17.png` stayed neutral. The candidate was fully reverted. RLE258
+metadata, copy, store, batch, and run-grouping follow-ups are now closed on
+this target.
+
 The earlier image-png four-lane RGBA Paeth source shape was retested behind the
 new Up-dominant executable-section boundary, which is materially narrower than
 the previously rejected broad dispatches. A scalar oracle covered lengths
