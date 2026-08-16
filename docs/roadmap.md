@@ -4316,6 +4316,24 @@ architecture blindly.
   cycles; vertical pipelines reduced instructions but regressed cycles/time
   about 5--7% through longer dependencies; run grouping did not beat the
   simpler isolated per-row path.
+- Added a canonical RLE258 semantic-loop specialization for final dynamic
+  blocks with the profiled 12-bit literal / 9-bit distance table shape.
+  `Transparency.png` uses one-bit code zero for both length 258 and distance
+  one, so the loop consumes the two-bit pair directly and reuses the existing
+  258-byte vector fill. Table proof and section ownership live under
+  `src/deflate/semantic/rle258.zig`; ordinary semantic loops retain their prior
+  generated-code instances.
+- Specialized/reference differential tests match output bytes, consumed bits,
+  and reader byte offsets. Thirty-one fixed-CPU-6 active/control counter rounds
+  improve Transparency no-Adler elapsed/cycles/instructions/branches by
+  `1.034/1.031/1.044/1.040x`; non-selected kodim17 remains effectively
+  `1.000x`. The 15-file gate improves Transparency `1.033x` strict and `1.031x`
+  no-Adler, with positive aggregate/geomean and a `0.9979x` worst non-target
+  no-Adler median.
+- Rejected a branch in every semantic loop and a broader all-matching-block
+  dispatch. The former regressed unrelated dynamic streams; the latter retained
+  multi-block indexed noise. The accepted final-block 12/9-bit policy keeps the
+  optimization narrow and evidence-backed.
 - Audited Vort's semantic DEFLATE loop against image-png's `fdeflate` 0.3.7
   backend and isolated speculative 16-byte match copying as the remaining
   concrete loop-shape difference. The match-copy benchmark now has an

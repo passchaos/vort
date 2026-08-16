@@ -384,6 +384,44 @@ cycles/end-to-end time by about 5--7%. Grouping consecutive Up rows without
 vertical vector chaining also increased instruction count and did not beat the
 simpler per-row specialization.
 
+## Canonical RLE258 semantic pair (2026-08-16)
+
+The same `Transparency.png` profile exposes a second narrow shape in its single
+dynamic DEFLATE block: 1,280 of 1,518 length symbols are 285 (length 258), 915
+distance symbols are zero (distance one), and 60.6% of all matched bytes are
+RLE. Both symbol 285 and distance symbol zero own canonical one-bit code zero.
+The common length-258/distance-one match is therefore exactly the two low zero
+bits of the semantic reservoir.
+
+Vort now proves that pair from the canonical tables in O(1), only for a final
+dynamic block with the observed 12-bit literal and 9-bit distance table shape.
+The selected semantic-loop instance consumes both bits together and emits the
+existing fixed-width 258-byte repeated-byte fill. It does not alter match-copy
+semantics, and all other table shapes retain the original semantic loop.
+
+Policy and executable-section ownership live in
+`src/deflate/semantic/rle258.zig`; the large DEFLATE facade retains only the
+tightly coupled loop instance and block dispatch. The complete specialized
+loop is emitted into `.vort_png_rle258`, while ordinary semantic loops keep
+their prior generated-code shapes. Tests prove the exact canonical table
+requirements and compare the specialized and ordinary loops byte-for-byte,
+including consumed-bit and reader-byte-offset state.
+
+Thirty-one alternating fixed-CPU-6 active/control counter rounds use binaries
+with byte-identical `.text` and `.rodata`. On `Transparency.png`, the policy
+improves no-Adler elapsed time by `1.034x`, cycles by `1.031x`, instructions by
+`1.044x`, and branches by `1.040x`. A non-selected `kodim17.png` control stays
+within about `0.9997x...1.0007x` across elapsed/cycles/instructions/branches.
+The final 15-file active/control gate improves `Transparency.png` by `1.033x`
+strict and `1.031x` no-Adler; aggregate/geomean are positive and the worst
+no-Adler non-target independent median is `0.9979x`.
+
+Two broader versions were rejected. Putting the pair branch in every semantic
+loop improved `Transparency.png` but regressed indexed Exoplanet and kodim17.
+Selecting every matching dynamic block isolated the loop but left a small
+multi-block indexed fluctuation; requiring the profitable final 12/9-bit table
+shape keeps the accepted policy to the profiled single-block workload.
+
 ## Rejected fdeflate match overcopy integration (2026-08-16)
 
 A source audit against image-png's `fdeflate` 0.3.7 backend found that Vort's

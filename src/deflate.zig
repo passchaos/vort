@@ -5,6 +5,7 @@ const huffman = @import("huffman.zig");
 const lz77 = @import("lz77.zig");
 const core = @import("core.zig");
 const png_ultrafast = @import("png_ultrafast.zig");
+const semantic_rle258 = @import("deflate/semantic/rle258.zig");
 
 const png = @import("png.zig");
 const png_up_dominant = @import("png/up_dominant.zig");
@@ -3201,14 +3202,28 @@ fn decodeRawAutoWithDictionaryFromReader(reader: anytype, raw_base_offset: usize
                             // semantic loop for that shape so the common copy case can be
                             // inlined without changing codegen for small icons or RLE-heavy
                             // text/screenshot streams.
-                            out_offset = if (parsed.distance_max_bits >= 12)
+                            out_offset = if (header.final and
+                                semantic_rle258.isCandidate(parsed) and
+                                semantic_rle258.shouldUse(
+                                    &lit_table,
+                                    semantic_decoder.compact_distance,
+                                ))
+                                try decodeSemanticDynamicBlockIntoRle258BufferedReader(reader, output, out_offset, &semantic_decoder)
+                            else if (parsed.distance_max_bits >= 12)
                                 try decodeSemanticDynamicBlockIntoBufferedReaderNonOverlapInline(reader, output, out_offset, &semantic_decoder)
                             else
                                 try decodeSemanticDynamicBlockIntoBufferedReader(reader, output, out_offset, &semantic_decoder);
                         } else {
                             const semantic_dist_table = try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
                             if (semantic_decoder.init(&lit_table, &semantic_dist_table)) {
-                                out_offset = if (parsed.distance_max_bits >= 12)
+                                out_offset = if (header.final and
+                                    semantic_rle258.isCandidate(parsed) and
+                                    semantic_rle258.shouldUse(
+                                        &lit_table,
+                                        &semantic_dist_table,
+                                    ))
+                                    try decodeSemanticDynamicBlockIntoRle258BufferedReader(reader, output, out_offset, &semantic_decoder)
+                                else if (parsed.distance_max_bits >= 12)
                                     try decodeSemanticDynamicBlockIntoBufferedReaderNonOverlapInline(reader, output, out_offset, &semantic_decoder)
                                 else
                                     try decodeSemanticDynamicBlockIntoBufferedReader(reader, output, out_offset, &semantic_decoder);
@@ -4187,6 +4202,7 @@ noinline fn decodeSemanticDynamicBlockIntoBufferedReader(
         false,
         false,
         false,
+        false,
         reader,
         output,
         initial_out_offset,
@@ -4204,6 +4220,7 @@ noinline fn decodeSemanticDynamicBlockIntoBufferedReaderNonOverlapInline(
         false,
         false,
         true,
+        false,
         reader,
         output,
         initial_out_offset,
@@ -4218,6 +4235,7 @@ noinline fn decodeSemanticDynamicBlockIntoSingleDistanceBufferedReader(
 ) Error!usize {
     return decodeSemanticDynamicBlockIntoLinearMode(
         true,
+        false,
         false,
         false,
         reader,
@@ -4236,6 +4254,7 @@ noinline fn decodeSemanticDynamicBlockIntoRle1BufferedReader(
         true,
         true,
         false,
+        false,
         reader,
         output,
         0,
@@ -4243,10 +4262,33 @@ noinline fn decodeSemanticDynamicBlockIntoRle1BufferedReader(
     );
 }
 
-noinline fn decodeSemanticDynamicBlockIntoLinearMode(
+noinline fn decodeSemanticDynamicBlockIntoRle258BufferedReader(
+    noalias reader: *bitstream.BufferedBitReader,
+    noalias output: []u8,
+    initial_out_offset: usize,
+    noalias decoder: *const SemanticDynamicDecoder,
+) linksection(semantic_rle258.text_section) Error!usize {
+    std.debug.assert(semantic_rle258.shouldUse(
+        decoder.compact_literal,
+        decoder.compact_distance,
+    ));
+    return decodeSemanticDynamicBlockIntoLinearMode(
+        false,
+        false,
+        false,
+        true,
+        reader,
+        output,
+        initial_out_offset,
+        decoder,
+    );
+}
+
+inline fn decodeSemanticDynamicBlockIntoLinearMode(
     comptime single_distance: bool,
     comptime rle1_distance: bool,
     comptime inline_non_overlap: bool,
+    comptime rle258_pair: bool,
     noalias reader: *bitstream.BufferedBitReader,
     noalias output: []u8,
     initial_out_offset: usize,
@@ -4271,6 +4313,26 @@ noinline fn decodeSemanticDynamicBlockIntoLinearMode(
     var entry = decoder.literal[@intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)];
 
     while (out_pos + output_headroom <= output.len and byte_index + 8 <= input.len) {
+        if (comptime rle258_pair) {
+            if ((bit_buffer & 0b11) == 0 and
+                out_pos != 0 and
+                output.len - out_pos >= 258)
+            {
+                bit_buffer >>= 2;
+                bit_count -= 2;
+                consumed_bits += 2;
+                refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
+                entry = decoder.literal[
+                    @intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)
+                ];
+
+                const byte = output[out_pos - 1];
+                fillLinearRle(output, out_pos, 258, byte);
+                out_pos += 258;
+                continue;
+            }
+        }
+
         var entry_bits: u6 = @truncate(entry);
 
         if ((entry & SemanticDynamicDecoder.literal_flag) != 0) {
@@ -11653,6 +11715,108 @@ test "png filter0 linear RLE block matches compact fallback and restores reader"
     );
     try fallback_sink.finish();
     try std.testing.expectEqualSlices(u8, &success_output, &fallback_output);
+}
+
+test "semantic decoder proves only exact one-bit RLE258 pair tables" {
+    var literal_lengths: [286]u4 = @splat(0);
+    literal_lengths[0] = 2;
+    literal_lengths[1] = 2;
+    literal_lengths[256] = 2;
+    literal_lengths[285] = 2;
+    const ordinary_literal =
+        try huffman.HuffmanTable(286).init(&literal_lengths);
+    try std.testing.expect(!semantic_rle258.hasOneBitZeroCode(
+        &ordinary_literal,
+        285,
+    ));
+
+    // A complete 1/2 + 1/4 + 1/4 tree lets symbol 285 own the only one-bit
+    // code (zero), while literal zero and EOB complete the other prefix.
+    literal_lengths = @splat(0);
+    literal_lengths[285] = 1;
+    literal_lengths[0] = 2;
+    literal_lengths[256] = 2;
+    const rle_literal =
+        try huffman.HuffmanTable(286).init(&literal_lengths);
+    try std.testing.expect(semantic_rle258.hasOneBitZeroCode(
+        &rle_literal,
+        285,
+    ));
+
+    const distance_lengths = [_]u4{ 1, 1 };
+    const distance =
+        try huffman.HuffmanTable(30).init(&distance_lengths);
+    try std.testing.expect(semantic_rle258.hasOneBitZeroCode(
+        &distance,
+        0,
+    ));
+    try std.testing.expect(!semantic_rle258.hasOneBitZeroCode(
+        &distance,
+        1,
+    ));
+
+    var candidate_parsed: huffman.DynamicLengths = undefined;
+    candidate_parsed.literal_max_bits = 12;
+    candidate_parsed.distance_max_bits = 9;
+    try std.testing.expect(semantic_rle258.isCandidate(candidate_parsed));
+    candidate_parsed.literal_max_bits = 11;
+    try std.testing.expect(!semantic_rle258.isCandidate(candidate_parsed));
+}
+
+test "semantic RLE258 pair shortcut matches generic decode" {
+    var literal_lengths: [286]u4 = @splat(0);
+    literal_lengths[285] = 1;
+    literal_lengths[0] = 2;
+    literal_lengths[256] = 2;
+    const literal_table_ =
+        try huffman.HuffmanTable(286).init(&literal_lengths);
+    const distance_lengths = [_]u4{ 1, 1 };
+    const distance_table_ =
+        try huffman.HuffmanTable(30).init(&distance_lengths);
+
+    var active_decoder: SemanticDynamicDecoder = undefined;
+    try std.testing.expect(active_decoder.init(
+        &literal_table_,
+        &distance_table_,
+    ));
+    var reference_decoder = active_decoder;
+
+    // LSB-first codes: literal zero = 01, length 258 = 0, distance one = 0,
+    // and EOB = 11. Padding gives the fused reader enough safe refill bytes.
+    const encoded = [_]u8{0b0011_0001} ++ ([_]u8{0} ** 15);
+    var active_reader = bitstream.BufferedBitReader.init(&encoded);
+    var reference_reader = bitstream.BufferedBitReader.init(&encoded);
+    var active: [259]u8 = undefined;
+    var reference: [active.len]u8 = undefined;
+    const active_written =
+        try decodeSemanticDynamicBlockIntoRle258BufferedReader(
+            &active_reader,
+            &active,
+            0,
+            &active_decoder,
+        );
+    const reference_written =
+        try decodeSemanticDynamicBlockIntoBufferedReader(
+            &reference_reader,
+            &reference,
+            0,
+            &reference_decoder,
+        );
+    try std.testing.expectEqual(active.len, active_written);
+    try std.testing.expectEqual(active_written, reference_written);
+    try std.testing.expectEqualSlices(
+        u8,
+        reference[0..reference_written],
+        active[0..active_written],
+    );
+    try std.testing.expectEqual(
+        reference_reader.consumed_bits,
+        active_reader.consumed_bits,
+    );
+    try std.testing.expectEqual(
+        reference_reader.byteOffset(),
+        active_reader.byteOffset(),
+    );
 }
 
 test "png parallel reconstruction matches scalar mixed filters" {
