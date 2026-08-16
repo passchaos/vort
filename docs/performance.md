@@ -428,6 +428,34 @@ slightly reduced instructions and branches, but fixed-CPU-6 counters put
 strict/no-Adler elapsed ratios at about `0.996x/0.990x` and cycles at
 `0.999x/0.998x`; fewer instructions did not improve execution time.
 
+The fixed 258-byte fill was then profiled separately. LLVM lowers its four
+64-byte body vectors to eight AVX2 stores, while the generic helper's
+speculative tail adds two more 32-byte stores even though only two logical
+bytes remain. An exact-tail candidate retained the 256-byte vector body and
+wrote bytes 256 and 257 exactly. A redzone oracle covered all 64 starting
+alignments and four byte values, and the existing specialized/reference
+decoder oracle continued to compare output and reader state.
+
+The causal binaries used a benchmark-only alignment fence inside
+`.vort_png_rle258`: shared `.text`, section addresses, and the following
+Up/indexed executable sections were byte-identical. Shared `.rodata` differed
+only in one 16-byte, four-entry computed-jump table referenced exclusively by
+the isolated RLE258 function; after normalizing that proven companion table,
+the rest of `.rodata` was byte-identical. Thirty-one fixed-CPU-6 counter rounds
+showed real target gains: strict elapsed/cycles/instructions improved
+`1.0081x/1.0055x/1.0075x`, and no-Adler improved
+`1.0123x/1.0111x/1.0094x`. Non-selected `kodim17.png` remained effectively
+neutral.
+
+The required 31-round, 15-fixture gate still rejected the candidate.
+`Transparency.png` improved `1.0064x` strict and `1.0062x` no-Adler, but
+aggregate throughput regressed to `0.99922x/0.99935x`. Strict indexed
+Exoplanet fell to `0.99594x`, and the no-Adler 32-pixel icon fell to
+`0.99793x`. The exact-tail implementation and its test were fully reverted;
+the generic speculative tail remains production behavior. Do not retry this
+store schedule without a design that also avoids the observed non-target
+layout/cache regressions.
+
 The earlier image-png four-lane RGBA Paeth source shape was retested behind the
 new Up-dominant executable-section boundary, which is materially narrower than
 the previously rejected broad dispatches. A scalar oracle covered lengths

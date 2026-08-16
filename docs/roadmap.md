@@ -4338,6 +4338,14 @@ architecture blindly.
   Instructions/branches fell slightly, but fixed-core strict/no-Adler elapsed
   ratios were about `0.996x/0.990x` and cycles `0.999x/0.998x`; the candidate
   was fully reverted before a corpus gate.
+- Rejected replacing the generic RLE258 speculative tail with a fixed exact
+  two-byte tail. The all-alignment redzone oracle and generated AVX2 body were
+  correct, and fixed-core target counters improved strict
+  elapsed/cycles/instructions by `1.0081/1.0055/1.0075x` and no-Adler by
+  `1.0123/1.0111/1.0094x`. The 31-round corpus gate nevertheless regressed
+  aggregate strict/no-Adler throughput to `0.99922/0.99935x`; indexed
+  Exoplanet reached `0.99594x` strict and the 32-pixel icon `0.99793x`
+  no-Adler. Production code and the candidate-only oracle were fully reverted.
 - Retested image-png's four-lane RGBA Paeth source shape behind the new
   Up-dominant executable-section boundary. The isolated scalar/in-place oracle
   and expected XMM loop were correct, and instructions fell 17--19%, but cycles
