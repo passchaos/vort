@@ -5,12 +5,16 @@ const png = @import("../../png.zig");
 
 pub const Error = core.Error;
 
-/// DEFLATE can reference at most 32 KiB of prior output. A second 32 KiB half
-/// gives the inflater a contiguous append region while the first half retains
-/// the immutable lookback, matching image-png's logical buffer model without
-/// copying every emitted byte into a separate ring.
+/// DEFLATE can reference at most 32 KiB of prior output. At least one more
+/// 32 KiB region gives the inflater contiguous append room while the retained
+/// lookback stays immutable, matching image-png's logical buffer model without
+/// copying every emitted byte into a separate ring. The general whole-image
+/// path uses four windows to amortize compaction; the narrow RLE258 path keeps
+/// the original two-window footprint.
 pub const lookback_len: usize = 32 * 1024;
+pub const minimum_scratch_len: usize = 2 * lookback_len;
 pub const scratch_len: usize = 2 * lookback_len;
+pub const general_scratch_len: usize = 4 * lookback_len;
 
 pub const Window = struct {
     scratch: []u8,
@@ -18,8 +22,8 @@ pub const Window = struct {
     row_start: usize = 0,
 
     pub fn init(scratch: []u8) Error!Window {
-        if (scratch.len < scratch_len) return error.OutputTooSmall;
-        return .{ .scratch = scratch[0..scratch_len] };
+        if (scratch.len < minimum_scratch_len) return error.OutputTooSmall;
+        return .{ .scratch = scratch };
     }
 
     pub fn output(self: *Window) []u8 {

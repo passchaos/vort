@@ -33,6 +33,8 @@ const pngScanlinePayloadLen = png.pngScanlinePayloadLen;
 
 pub const Error = core.Error;
 pub const max_stored_block_len: usize = std.math.maxInt(u16);
+pub const png_windowed_history_scratch_len =
+    png_windowed_history.general_scratch_len;
 pub const png_windowed_rle258_history_scratch_len =
     png_windowed_history.scratch_len;
 
@@ -4341,6 +4343,44 @@ noinline fn decodeSemanticDynamicBlockIntoRle258Window(
     );
 }
 
+noinline fn decodeSemanticDynamicBlockIntoWindow(
+    noalias reader: *bitstream.BufferedBitReader,
+    noalias output: []u8,
+    initial_out_offset: usize,
+    noalias decoder: *const SemanticDynamicDecoder,
+) Error!SemanticLinearStep {
+    return decodeSemanticDynamicBlockIntoLinearMode(
+        false,
+        false,
+        false,
+        false,
+        true,
+        reader,
+        output,
+        initial_out_offset,
+        decoder,
+    );
+}
+
+noinline fn decodeSemanticDynamicBlockIntoSingleDistanceWindow(
+    noalias reader: *bitstream.BufferedBitReader,
+    noalias output: []u8,
+    initial_out_offset: usize,
+    noalias decoder: *const SemanticDynamicDecoder,
+) Error!SemanticLinearStep {
+    return decodeSemanticDynamicBlockIntoLinearMode(
+        true,
+        false,
+        false,
+        false,
+        true,
+        reader,
+        output,
+        initial_out_offset,
+        decoder,
+    );
+}
+
 inline fn decodeSemanticDynamicBlockIntoLinearMode(
     comptime single_distance: bool,
     comptime rle1_distance: bool,
@@ -4690,6 +4730,56 @@ fn decodeSemanticTailWindow(
                 .output_written = out_pos,
                 .status = .end_of_block,
             },
+        }
+    }
+}
+
+fn decodeCompactBlockIntoWindow(
+    reader: *bitstream.BufferedBitReader,
+    output: []u8,
+    initial_out_pos: usize,
+    literal_table_: anytype,
+    distance_table_: anytype,
+) Error!SemanticLinearStep {
+    var out_pos = initial_out_pos;
+    while (true) {
+        // Compact decoding is the correctness fallback for valid Huffman trees
+        // that cannot use the semantic tables. Keep the same transactional
+        // token boundary as the optimized loop so a match never consumes input
+        // until its complete output fits in the current history window.
+        const saved_reader = reader.*;
+        const symbol = try literal_table_.decodeValue(reader);
+        if (symbol < 256) {
+            if (out_pos == output.len) {
+                reader.* = saved_reader;
+                return .{
+                    .output_written = out_pos,
+                    .status = .need_output,
+                };
+            }
+            output[out_pos] = @truncate(symbol);
+            out_pos += 1;
+        } else if (symbol == 256) {
+            return .{
+                .output_written = out_pos,
+                .status = .end_of_block,
+            };
+        } else if (symbol <= 285) {
+            const length = try decodeLength(symbol, reader);
+            const distance_symbol =
+                try distance_table_.decodeValue(reader);
+            const distance = try decodeDistance(distance_symbol, reader);
+            if (length > output.len - out_pos) {
+                reader.* = saved_reader;
+                return .{
+                    .output_written = out_pos,
+                    .status = .need_output,
+                };
+            }
+            try copyMatchAt(output, out_pos, length, distance);
+            out_pos += length;
+        } else {
+            return error.InvalidHuffmanCode;
         }
     }
 }
@@ -11252,6 +11342,238 @@ pub fn decodePngStreamingZlibImageWithOptions(
     return drainPngStreamingZlibImage(&decoder, output[0..output_len]);
 }
 
+/// Decode a complete non-interlaced PNG zlib payload while retaining only a
+/// bounded contiguous filtered-history window.
+///
+/// Dynamic blocks use the direct semantic inflater when their canonical trees
+/// fit its table representation and fall back to the compact reference tables
+/// otherwise. Fixed and stored blocks share the same transactional output
+/// boundary, so distances remain valid across arbitrary block sequences.
+///
+/// `history_scratch` must provide at least two DEFLATE windows. The exported
+/// four-window `png_windowed_history_scratch_len` amortizes compaction, while
+/// stored blocks are transactionally split when callers provide less append
+/// room. Input, history, and output must not alias.
+pub fn decodePngWindowedZlibImageWithOptions(
+    input: []const u8,
+    history_scratch: []u8,
+    info: PngImageInfo,
+    options: ZlibDecodeOptions,
+    output: []u8,
+) Error!PngImageDecodeResult {
+    const output_len = try pngImageOutputLen(info);
+    if (output.len < output_len) return error.OutputTooSmall;
+    var image = try png_windowed_history.ImageState.init(
+        history_scratch,
+        info,
+        output[0..output_len],
+        !options.ignore_adler,
+    );
+    try validatePngWindowedStorage(input, &image);
+
+    const zlib_header = try parseZlibHeader(input, null);
+    var reader = bitstream.BufferedBitReader.init(
+        input[zlib_header.data_offset..],
+    );
+    var stream_done = false;
+    while (!stream_done) {
+        const header = try readBlockHeader(&reader);
+        switch (header.block_type) {
+            0 => {
+                reader.alignToByte();
+                const len = try reader.readAlignedInt(u16, .little);
+                const nlen = try reader.readAlignedInt(u16, .little);
+                if (nlen != ~len) return error.StoredLengthMismatch;
+                var remaining: usize = len;
+                while (remaining != 0) {
+                    const old_write_pos = image.window.write_pos;
+                    const available =
+                        image.decodeOutput().len - old_write_pos;
+                    if (available == 0) {
+                        const released = try commitPngWindowStep(
+                            &image,
+                            old_write_pos,
+                            false,
+                            false,
+                        );
+                        if (!released) return error.OutputTooSmall;
+                        continue;
+                    }
+                    const count = @min(remaining, available);
+                    try reader.readAlignedBytes(
+                        image.decodeOutput()[old_write_pos..][0..count],
+                    );
+                    remaining -= count;
+                    const block_done = remaining == 0;
+                    const final_stream = block_done and header.final;
+                    const released = try commitPngWindowStep(
+                        &image,
+                        old_write_pos + count,
+                        final_stream,
+                        block_done,
+                    );
+                    if (!block_done and !released and count == available) {
+                        return error.OutputTooSmall;
+                    }
+                }
+                if (len == 0) {
+                    _ = try commitPngWindowStep(
+                        &image,
+                        image.window.write_pos,
+                        header.final,
+                        true,
+                    );
+                }
+                stream_done = header.final;
+            },
+            1 => {
+                const literal_table_ = try huffman.fixedLiteralTable();
+                const distance_table_ = try huffman.fixedDistanceTable();
+                stream_done = try decodePngWindowedBlock(
+                    &reader,
+                    &image,
+                    header.final,
+                    &literal_table_,
+                    &distance_table_,
+                    null,
+                    false,
+                );
+            },
+            2 => {
+                const parsed = try huffman.parseDynamicLengthsAfterHeader(
+                    header.final,
+                    &reader,
+                );
+                const literal_table_ = try huffman.HuffmanTable(286).init(
+                    parsed.literal_lengths[0..parsed.header.hlit],
+                );
+                const distance_table_ = try huffman.HuffmanTable(30).init(
+                    parsed.distance_lengths[0..parsed.header.hdist],
+                );
+                var semantic_decoder: SemanticDynamicDecoder = undefined;
+                const single_distance =
+                    distance_table_.len == 1 and
+                    semantic_decoder.initSingleDistance(
+                        &literal_table_,
+                        &distance_table_,
+                    );
+                const semantic = single_distance or semantic_decoder.init(
+                    &literal_table_,
+                    &distance_table_,
+                );
+                stream_done = try decodePngWindowedBlock(
+                    &reader,
+                    &image,
+                    header.final,
+                    &literal_table_,
+                    &distance_table_,
+                    if (semantic) &semantic_decoder else null,
+                    single_distance,
+                );
+            },
+            else => return error.InvalidDeflateBlockType,
+        }
+    }
+
+    try image.finish();
+    const footer_offset =
+        zlib_header.data_offset + reader.byteOffset();
+    const actual_adler =
+        if (options.ignore_adler) 0 else image.adlerDigest();
+    try validateZlibFooterWithOptions(
+        input,
+        footer_offset,
+        actual_adler,
+        options,
+    );
+    return .{
+        .rows = image.row_index,
+        .output_written = output_len,
+        .zlib_input_read = footer_offset + 4,
+    };
+}
+
+fn decodePngWindowedBlock(
+    reader: *bitstream.BufferedBitReader,
+    image: *png_windowed_history.ImageState,
+    final_block: bool,
+    literal_table_: anytype,
+    distance_table_: anytype,
+    semantic_decoder: ?*const SemanticDynamicDecoder,
+    single_distance: bool,
+) Error!bool {
+    while (true) {
+        const step = if (semantic_decoder) |decoder|
+            if (single_distance)
+                try decodeSemanticDynamicBlockIntoSingleDistanceWindow(
+                    reader,
+                    image.decodeOutput(),
+                    image.window.write_pos,
+                    decoder,
+                )
+            else
+                try decodeSemanticDynamicBlockIntoWindow(
+                    reader,
+                    image.decodeOutput(),
+                    image.window.write_pos,
+                    decoder,
+                )
+        else
+            try decodeCompactBlockIntoWindow(
+                reader,
+                image.decodeOutput(),
+                image.window.write_pos,
+                literal_table_,
+                distance_table_,
+            );
+        const block_done = step.status == .end_of_block;
+        const stream_done = block_done and final_block;
+        const released = try commitPngWindowStep(
+            image,
+            step.output_written,
+            stream_done,
+            block_done,
+        );
+        if (block_done) return stream_done;
+        if (!released) return error.OutputTooSmall;
+    }
+}
+
+fn commitPngWindowStep(
+    image: *png_windowed_history.ImageState,
+    new_write_pos: usize,
+    stream_done: bool,
+    block_done: bool,
+) Error!bool {
+    const old_write_pos = image.window.write_pos;
+    const released = try image.consumeStep(
+        old_write_pos,
+        new_write_pos,
+        stream_done,
+    );
+    // Compact at every safe pause, including non-final EOB. This bounds the
+    // next block's cursor and leaves room for a maximal stored block.
+    if (!stream_done and (released or block_done)) {
+        try image.compactReleased();
+    }
+    return released;
+}
+
+fn validatePngWindowedStorage(
+    input: []const u8,
+    image: *const png_windowed_history.ImageState,
+) Error!void {
+    if (slicesOverlapForSemanticDecode(input, image.window.scratch) or
+        slicesOverlapForSemanticDecode(input, image.output) or
+        slicesOverlapForSemanticDecode(
+            image.window.scratch,
+            image.output,
+        ))
+    {
+        return error.UnsupportedDeflateFeature;
+    }
+}
+
 /// Decode the profiled final-block canonical RLE258 shape through the direct
 /// semantic loop while retaining only a bounded contiguous filtered history.
 ///
@@ -11279,12 +11601,7 @@ pub fn decodePngWindowedRle258ZlibImageWithOptions(
     // the window, then reconstructs released rows into the final image. These
     // three live regions therefore cannot alias; reject overlap before parsing
     // so the experimental helper never corrupts input or caller-owned output.
-    if (slicesOverlapForSemanticDecode(input, image.window.scratch) or
-        slicesOverlapForSemanticDecode(input, image.output) or
-        slicesOverlapForSemanticDecode(image.window.scratch, image.output))
-    {
-        return error.UnsupportedDeflateFeature;
-    }
+    try validatePngWindowedStorage(input, &image);
     const zlib_header = try parseZlibHeader(input, null);
     var reader = bitstream.BufferedBitReader.init(
         input[zlib_header.data_offset..],

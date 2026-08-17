@@ -26,6 +26,8 @@ pub const parsePngColorType = png.parsePngColorType;
 pub const pngImageInfo = png.pngImageInfo;
 pub const pngImageInfoFromColorType = png.pngImageInfoFromColorType;
 pub const pngIdatChunksScratchLen = deflate.pngIdatChunksScratchLen;
+pub const png_windowed_history_scratch_len =
+    deflate.png_windowed_history_scratch_len;
 pub const png_windowed_rle258_history_scratch_len =
     deflate.png_windowed_rle258_history_scratch_len;
 pub const pngAdam7Info = png.pngAdam7Info;
@@ -40,6 +42,7 @@ pub const decodePngStoredZlibImageFromChunksDirect = deflate.decodePngStoredZlib
 pub const decodePngStoredZlibImageFromChunksWithOptionsDirect = deflate.decodePngStoredZlibImageFromChunksWithOptionsDirect;
 pub const decodePngStreamingZlibImage = deflate.decodePngStreamingZlibImage;
 pub const decodePngStreamingZlibImageWithOptions = deflate.decodePngStreamingZlibImageWithOptions;
+pub const decodePngWindowedZlibImageWithOptions = deflate.decodePngWindowedZlibImageWithOptions;
 pub const decodePngWindowedRle258ZlibImageWithOptions = deflate.decodePngWindowedRle258ZlibImageWithOptions;
 pub const decodePngStreamingZlibImageFromChunksDirect = deflate.decodePngStreamingZlibImageFromChunksDirect;
 pub const decodePngStreamingZlibImageFromChunksWithOptionsDirect = deflate.decodePngStreamingZlibImageFromChunksWithOptionsDirect;
@@ -84,6 +87,7 @@ pub fn smokeRootExports(comptime Root: type) !void {
         _ = Root.PngAdam7Info;
         _ = Root.PngZlibScanlineDecoder;
         _ = Root.PngStreamingZlibScanlineDecoder;
+        _ = Root.png_windowed_history_scratch_len;
         _ = Root.png_windowed_rle258_history_scratch_len;
     }
 

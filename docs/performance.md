@@ -792,3 +792,54 @@ reduction. The earlier complete 30-item corpus gate measured positive
 strict/no-Adler aggregate ratios of `1.000183x/1.000912x` and fixture
 geomeans of `1.009268x/1.012307x`; non-selected dimensions short-circuit
 before the policy's differing color immediate.
+
+## General bounded-history PNG decode (2026-08-17)
+
+The bounded-history architecture now extends beyond the single canonical
+RLE258 block. The general whole-image helper accepts arbitrary dynamic, fixed,
+and stored block sequences while preserving one continuous raw-filtered
+DEFLATE history across block boundaries. Complete canonical dynamic trees use
+the resumable semantic loop; unsupported semantic-table shapes use a compact
+transactional reference loop. Fixed blocks share that reference boundary, and
+stored blocks are split into safe output segments when a maximal 65,535-byte
+block cannot fit beside the retained lookback.
+
+The minimum public scratch remains two DEFLATE windows (64 KiB). Vort exports a
+four-window 128 KiB recommendation as
+`png_windowed_history_scratch_len`; imx uses it to compact less often. A
+1024x128 mixed-filter oracle forces more than one compaction and compares
+multi-dynamic, multi-fixed, and multi-stored streams against the established
+full-scratch image decoder. A second stored oracle uses only the 64 KiB
+minimum. Wrapper coverage locks strict/ignored Adler, trailing data,
+truncation, invalid filters, short scratch, and aliased storage.
+
+All 15 image-png benchmark fixtures have non-interlaced row strides below the
+32 KiB lookback limit, but performance evidence selects only large RGB8/RGBA8
+images. Indexed images retain imx's in-place expansion, grayscale Lohengrin
+retains its existing path, and the 300x300 RGBA8 workload retains the narrower
+RLE258 specialization.
+
+The final same-layout policy control keeps equal binary sizes and
+byte-identical ordinary `.text`, `.rodata`, RLE258, Up-dominant, indexed, and
+existing windowed sections. Seven selected fixtures completed independent
+31-round fixed-CPU-6 batches for both checksum policies; interrupted items
+were restarted from zero:
+
+| stage | aggregate | fixture geomean | fixture median | minimum |
+| --- | ---: | ---: | ---: | ---: |
+| strict decode-into | `1.142x` | `1.121x` | `1.057x` | `1.044x` |
+| decode-into no-Adler | `1.120x` | `1.109x` | `1.048x` | `1.028x` |
+
+Strict RGB Exoplanet and RGBA screenshot improve `1.302x` and `1.306x`;
+Fantasy's 65 dynamic plus one fixed block improves `1.077x`; all four Kodak
+rows improve `1.044x...1.057x`. No-Adler remains positive on every selected
+fixture.
+
+Code organization was benchmarked as part of the change. Moving the hot
+row-commit lifecycle behind a new cross-module function regressed RGB
+Exoplanet, kodim07, and screenshot by roughly 1--2%, so that extraction was
+rejected. `windowed_history.zig` continues to own the data structure and PNG
+row lifecycle, while the token/commit driver remains beside the semantic loop
+to preserve generated-code locality. General and RLE258 public-contract tests
+are split under `src/root_exports/png/windowed/` instead of growing one flat
+test facade.

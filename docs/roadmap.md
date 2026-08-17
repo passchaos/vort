@@ -4491,3 +4491,23 @@ architecture blindly.
   end-to-end win is reduced memory/dependency cost rather than fewer
   instructions. The prior guarded 30-item corpus remains positive at
   `1.000183/1.000912x` aggregate and `1.009268/1.012307x` fixture geomean.
+- Generalized bounded filtered history to arbitrary dynamic, fixed, and stored
+  block sequences. Resumable semantic and compact reference loops commit only
+  complete tokens, preserve raw filtered distances across EOB/table changes,
+  and transactionally segment maximal stored blocks. The public minimum remains
+  64 KiB; a 128 KiB exported scratch recommendation amortizes compaction.
+- Added a >128 KiB RGB8/RGBA8 imx policy while retaining indexed in-place,
+  grayscale, small-image, and 300x300 RLE258 paths. A mixed-filter 1024x128
+  oracle covers multi-dynamic/multi-fixed/multi-stored output against full
+  scratch, the 64 KiB stored minimum, Adler/trailing/truncation/filter errors,
+  overlap, and short scratch.
+- Seven selected real fixtures completed strict and no-Adler 31-round
+  same-layout gates with every row positive. Strict aggregate/geomean/minimum
+  are `1.142/1.121/1.044x`; no-Adler are `1.120/1.109/1.028x`.
+  RGB Exoplanet and RGBA screenshot improve about 30%, Fantasy about 7.7%, and
+  all four Kodak rows about 4.4--5.7%.
+- Rejected extracting the hot row-commit lifecycle behind a cross-module
+  function: fixed-core structure A/Bs regressed RGB Exoplanet, kodim07, and
+  screenshot by roughly 1--2%. Kept history/row state modular and split general
+  versus RLE258 contract tests into a descriptive subdirectory, but retained
+  the token/commit driver beside the semantic loop for generated-code locality.
