@@ -4900,6 +4900,23 @@ fn parseSequenceModeSpec(block: []const u8, offset: *usize, sequence_count: usiz
     const ll_mode: SymbolMode = @enumFromInt(mode >> 6);
     const of_mode: SymbolMode = @enumFromInt((mode >> 4) & 0x03);
     const ml_mode: SymbolMode = @enumFromInt((mode >> 2) & 0x03);
+    if (ll_mode == .predefined and
+        of_mode == .predefined and
+        ml_mode == .predefined)
+    {
+        const bitstream_offset = offset.*;
+        if (bitstream_offset >= block.len) return error.TruncatedFrame;
+        offset.* = block.len;
+        return .{
+            .ll_mode = .predefined,
+            .of_mode = .predefined,
+            .ml_mode = .predefined,
+            .literal_rle = null,
+            .offset_rle = null,
+            .match_rle = null,
+            .bitstream_offset = bitstream_offset,
+        };
+    }
 
     var literal_rle: ?SequenceSymbol = null;
     var offset_rle: ?SequenceSymbol = null;
@@ -4966,6 +4983,12 @@ fn resolveSymbolTable(
 }
 
 fn resolveSequenceModeSpec(spec: SequenceModeSpec, previous: ?SequenceTables) Error!SequenceModeSpec {
+    if (spec.ll_mode == .predefined and
+        spec.of_mode == .predefined and
+        spec.ml_mode == .predefined)
+    {
+        return spec;
+    }
     const ll = try resolveSymbolTable(spec.ll_mode, spec.literal_rle, spec.literal_fse, previous, .ll);
     const of = try resolveSymbolTable(spec.of_mode, spec.offset_rle, spec.offset_fse, previous, .of);
     const ml = try resolveSymbolTable(spec.ml_mode, spec.match_rle, spec.match_fse, previous, .ml);

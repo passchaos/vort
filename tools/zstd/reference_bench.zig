@@ -26,6 +26,9 @@ const Row = struct {
     ll_mode: []const u8,
     of_mode: []const u8,
     ml_mode: []const u8,
+    header_inspect_ns: u64,
+    block_inspect_ns: u64,
+    sequence_inspect_ns: u64,
 };
 
 const Options = struct {
@@ -163,6 +166,24 @@ fn measureCase(
         reference_output,
         iterations,
     );
+    const header_inspect = try measureInspect(
+        init.io,
+        .header,
+        encoded,
+        iterations,
+    );
+    const block_inspect = try measureInspect(
+        init.io,
+        .block,
+        encoded,
+        iterations,
+    );
+    const sequence_inspect = try measureInspect(
+        init.io,
+        .sequence,
+        encoded,
+        iterations,
+    );
     const vort_mib_s = mibPerSecond(
         case.payload.len * iterations,
         vort_sample.elapsed_ns,
@@ -193,10 +214,14 @@ fn measureCase(
         .ll_mode = @tagName(sequence_summary.literal_length_mode),
         .of_mode = @tagName(sequence_summary.offset_mode),
         .ml_mode = @tagName(sequence_summary.match_length_mode),
+        .header_inspect_ns = header_inspect.elapsed_ns,
+        .block_inspect_ns = block_inspect.elapsed_ns,
+        .sequence_inspect_ns = sequence_inspect.elapsed_ns,
     };
 }
 
 const Codec = enum { vort, reference };
+const InspectStage = enum { header, block, sequence };
 
 fn measureRepeated(
     io: std.Io,
@@ -228,6 +253,44 @@ fn measureRepeated(
     return best;
 }
 
+fn measureInspect(
+    io: std.Io,
+    stage: InspectStage,
+    encoded: []const u8,
+    iterations: usize,
+) !Sample {
+    var best = Sample{ .elapsed_ns = std.math.maxInt(u64), .mix = 0 };
+    for (0..5) |_| {
+        var mix: u64 = 0;
+        const start = std.Io.Clock.awake.now(io);
+        for (0..iterations) |_| {
+            switch (stage) {
+                .header => {
+                    const header = try vort.zstdInspectNativeFrameHeader(encoded);
+                    mix +%= header.payload_offset + header.block_size_max;
+                },
+                .block => {
+                    const block = try vort.zstdInspectNativeFrameFirstBlock(encoded);
+                    mix +%= block.payload_offset + block.payload_len;
+                },
+                .sequence => {
+                    const block = try vort.zstdInspectNativeFrameFirstBlock(encoded);
+                    const summary = try vort.zstdInspectNativeFrameBlockSequenceModes(
+                        encoded,
+                        block,
+                    );
+                    mix +%= summary.regenerated_literals_size + summary.sequence_count;
+                },
+            }
+        }
+        const elapsed_ns = elapsedNs(io, start);
+        if (elapsed_ns < best.elapsed_ns) {
+            best = .{ .elapsed_ns = elapsed_ns, .mix = mix };
+        }
+    }
+    return best;
+}
+
 fn elapsedNs(io: std.Io, start: std.Io.Timestamp) u64 {
     const ns = start.durationTo(std.Io.Clock.awake.now(io)).nanoseconds;
     return if (ns <= 0) 0 else @intCast(ns);
@@ -241,11 +304,11 @@ fn mibPerSecond(bytes: usize, ns: u64) f64 {
 
 fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
     try writer.writeAll(
-        "case,reference_version,input_bytes,encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,block_count,raw_blocks,rle_blocks,compressed_blocks,first_block_type,literals_kind,sequence_count,ll_mode,of_mode,ml_mode\n",
+        "case,reference_version,input_bytes,encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,block_count,raw_blocks,rle_blocks,compressed_blocks,first_block_type,literals_kind,sequence_count,ll_mode,of_mode,ml_mode,header_inspect_ns,block_inspect_ns,sequence_inspect_ns\n",
     );
     for (rows) |row| {
         try writer.print(
-            "{s},{s},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d},{d},{d},{d},{d},{s},{s},{d},{s},{s},{s}\n",
+            "{s},{s},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d},{d},{d},{d},{d},{s},{s},{d},{s},{s},{s},{d},{d},{d}\n",
             .{
                 row.case_name,
                 row.reference_version,
@@ -268,6 +331,9 @@ fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
                 row.ll_mode,
                 row.of_mode,
                 row.ml_mode,
+                row.header_inspect_ns,
+                row.block_inspect_ns,
+                row.sequence_inspect_ns,
             },
         );
     }

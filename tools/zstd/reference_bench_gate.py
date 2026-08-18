@@ -13,7 +13,8 @@ EXPECTED_COLUMNS = [
     "reference_mib_s", "vort_over_reference", "checksum",
     "block_count", "raw_blocks", "rle_blocks", "compressed_blocks",
     "first_block_type", "literals_kind", "sequence_count",
-    "ll_mode", "of_mode", "ml_mode",
+    "ll_mode", "of_mode", "ml_mode", "header_inspect_ns",
+    "block_inspect_ns", "sequence_inspect_ns",
 ]
 EXPECTED_CASES = {
     "tiny", "text", "structured", "repetitive",
@@ -41,6 +42,7 @@ def main() -> int:
         for key in (
             "input_bytes", "encoded_bytes", "iterations", "vort_ns",
             "reference_ns", "checksum", "block_count",
+            "header_inspect_ns", "block_inspect_ns", "sequence_inspect_ns",
         ):
             if int(row[key]) <= 0:
                 raise AssertionError(f"non-positive {key}: {row}")

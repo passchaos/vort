@@ -1978,6 +1978,18 @@ architecture blindly.
   established compressed/raw performance envelope. This is a structural hot-
   path boundary for further reservoir work, not an unsupported speed claim.
 
+- Extended the opt-in Zstd comparison with separate header, first-block, and
+  sequence-inspection timings. Header/block inspection cost only about 13/27 ns
+  per call on the locked frames, while single-sequence inspection costs roughly
+  12 microseconds—essentially the whole decode. This localizes the dominant
+  setup cost to sequence parsing and its large inline FSE-table objects, not
+  frame headers. A narrow production early return now handles all-predefined
+  sequence modes without constructing or resolving unused FSE tables, improving
+  the locked compressed decode rows by roughly 5–10% in the short matrix. A
+  broader table-view extraction was separately tested and reverted after code-
+  layout regressions; future work should redesign ownership/view boundaries
+  inside `src/zstd/sequence/`, not copy those large tables between modules.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box
