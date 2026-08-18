@@ -34,6 +34,7 @@ pub fn main(init: std.process.Init) !void {
         .{ .name = "text_q3", .payload = "Brotli benchmark text payload. " ** 1024, .quality = 3 },
         .{ .name = "structured_q3", .payload = "{\"service\":\"vort\",\"codec\":\"brotli\",\"value\":12345}\n" ** 512, .quality = 3 },
         .{ .name = "repetitive_q3", .payload = ("abcdefghijklmnopqrstuvwxyz012345" ** 4) ** 256, .quality = 3 },
+        .{ .name = "structured_q4", .payload = "{\"service\":\"vort\",\"codec\":\"brotli\",\"value\":12345}\n" ** 512, .quality = 4 },
     };
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);

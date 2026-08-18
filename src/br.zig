@@ -3,6 +3,7 @@ const core = @import("core.zig");
 const bitstream = @import("bitstream.zig");
 const huffman = @import("huffman.zig");
 const match_copy = @import("br/match_copy.zig");
+const static_dictionary = @import("br/static_dictionary.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 
@@ -1462,6 +1463,7 @@ fn processMinimalCompressedMetaBlock(
     if (meta_block_end > output.len) return error.OutputTooSmall;
     var header: MinimalCompressedHeader = undefined;
     try readMinimalCompressedHeaderInto(reader, &header);
+    var transformed_dictionary_word: [64]u8 = undefined;
     while (written.* < meta_block_end) {
         const command_symbol = try readCommandSymbol(&header, reader);
         const lengths = try readInsertCopyLengths(command_symbol, reader);
@@ -1484,7 +1486,7 @@ fn processMinimalCompressedMetaBlock(
         const distance = try readMinimalDistance(&header, reader, lengths, last_distances);
         if (distance == 0) return error.InvalidMatch;
         if (distance > written.*) {
-            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, written.*);
+            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, written.*, &transformed_dictionary_word);
             if (word.len > meta_block_end - written.*) return error.CorruptFrame;
             @memcpy(output[written.*..][0..word.len], word);
             written.* += word.len;
@@ -1507,6 +1509,7 @@ fn skipMinimalCompressedMetaBlock(
     const meta_block_end = std.math.add(usize, start_written, meta_block_len) catch return error.IntegerOverflow;
     var header: MinimalCompressedHeader = undefined;
     try readMinimalCompressedHeaderInto(reader, &header);
+    var transformed_dictionary_word: [64]u8 = undefined;
     var written = start_written;
     while (written < meta_block_end) {
         const command_symbol = try readCommandSymbol(&header, reader);
@@ -1530,7 +1533,7 @@ fn skipMinimalCompressedMetaBlock(
         const distance = try readMinimalDistance(&header, reader, lengths, last_distances);
         if (distance == 0) return error.InvalidMatch;
         if (distance > written) {
-            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, written);
+            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, written, &transformed_dictionary_word);
             if (word.len > meta_block_end - written) return error.CorruptFrame;
             if (stats) |s| {
                 s.static_dictionary_copy_count = std.math.add(usize, s.static_dictionary_copy_count, 1) catch return error.IntegerOverflow;
@@ -4272,7 +4275,12 @@ pub fn minimalStaticDictionaryCoverage() []const StaticDictionaryEntry {
     return &minimal_static_dictionary_entries;
 }
 
-fn minimalStaticDictionaryWord(distance: usize, copy_len: usize, current_output_len: usize) Error![]const u8 {
+fn minimalStaticDictionaryWord(
+    distance: usize,
+    copy_len: usize,
+    current_output_len: usize,
+    transformed_scratch: *[64]u8,
+) Error![]const u8 {
     // Brotli static-dictionary addresses are relative to the current maximum
     // LZ77 distance, not the raw distance code. In this minimal decoder slice
     // we only enter here while `distance > current_output_len`, so the current
@@ -4290,6 +4298,7 @@ fn minimalStaticDictionaryWord(distance: usize, copy_len: usize, current_output_
     for (minimal_static_dictionary_entries) |entry| {
         if (entry.transform == transform_index and entry.copy_len == copy_len and entry.word_index == word_index) return entry.word;
     }
+    if (static_dictionary.transform(address, copy_len, transformed_scratch)) |word| return word;
     return error.UnsupportedBrotliFeature;
 }
 

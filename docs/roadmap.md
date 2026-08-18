@@ -2166,6 +2166,17 @@ architecture blindly.
   past `UnsupportedBrotliFeature` but did not yet produce the exact payload, so
   they were rejected rather than claiming incomplete dictionary compatibility.
 
+- Replaced that narrow Brotli quality-4 dictionary dead end with a complete,
+  dependency-free static dictionary module. `src/br/dictionary.bin` embeds the
+  RFC 7932 122,784-byte dictionary, while the 207-line
+  `src/br/static_dictionary.zig` owns length offsets, all 121 transforms, UTF-8
+  uppercase behavior, and transformed-word scratch ownership. The previous
+  proven tuple table remains the introspection/report surface and fast subset;
+  missing tuples now fall back to the complete module. A focused transform test
+  covers the quality-4 omit-last references, all 833 unit tests pass, and the
+  structured quality-4 reference row now decodes exactly at about `1.38x`
+  libbrotli throughput instead of returning `UnsupportedBrotliFeature`.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box
