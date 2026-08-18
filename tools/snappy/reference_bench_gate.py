@@ -83,9 +83,10 @@ def main() -> int:
     for name in required_leaders:
         if float(by_case[name]["vort_over_reference"]) < 1.10:
             raise AssertionError(f"Vort no longer leads {name}: {by_case[name]}")
-    # The locked repetitive row is the only observed weak shape on libsnappy
-    # 1.1.10. Keep it explicit and bounded instead of hiding it in an aggregate.
-    if float(by_case["repetitive"]["vort_over_reference"]) < 0.88:
+    # The locked distance-32 COPY_2 row used to be the only observed weak
+    # shape. The word-replay kernel now clears reference parity, so keep that
+    # result as a dedicated regression contract.
+    if float(by_case["repetitive"]["vort_over_reference"]) < 1.02:
         raise AssertionError(f"repetitive regression: {by_case['repetitive']}")
 
     print(

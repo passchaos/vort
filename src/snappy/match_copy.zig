@@ -26,6 +26,22 @@ pub fn copy(
         @memset(destination, output[written - 1]);
         return;
     }
+    if (offset >= 8 and len >= 16) {
+        // COPY_2 commonly describes 32--64 byte repetitions with enough
+        // distance for an eight-byte load to precede its store. Advancing in
+        // machine words preserves overlap semantics (each source word has
+        // already been produced) and avoids two generic memcpy calls for the
+        // frequent distance-32/length-60 shape.
+        var copied: usize = 0;
+        while (copied + 8 <= len) : (copied += 8) {
+            destination[copied..][0..8].* =
+                output[written - offset + copied ..][0..8].*;
+        }
+        while (copied < len) : (copied += 1) {
+            destination[copied] = output[written - offset + copied];
+        }
+        return;
+    }
 
     const seed_len = @min(offset, len);
     @memcpy(
