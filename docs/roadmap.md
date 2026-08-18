@@ -2077,6 +2077,15 @@ architecture blindly.
   libzstd throughput (about `4%` faster), and the expanded gate raises that
   row's floor to preserve the gain without claiming parity.
 
+- Removed a redundant per-bit reconstruction loop from the shared Zstd reverse
+  reader. Its gathered `little` value already has the same integer order as the
+  prior loop; the existing per-bit oracle, plus explicit peek/skip alignment
+  tests, verifies the equivalence across widths and byte boundaries. On the
+  1,000-iteration huffman80k row this improves Vort from roughly `0.302x` to
+  `0.326x` libzstd throughput (about another `7–8%`), while the single-sequence
+  and literal-only Huffman rows remain within their established envelope. The
+  huffman80k gate floor rises to `0.29x`.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box

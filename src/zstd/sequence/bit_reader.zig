@@ -40,12 +40,10 @@ pub const Reader = struct {
         const mask: u72 = (@as(u72, 1) << @intCast(bit_count)) - 1;
         const little: usize = @intCast((reservoir >> shift) & mask);
         self.remaining_bits = start;
-        var value: usize = 0;
-        for (0..bit_count) |index| {
-            value = (value << 1) |
-                ((little >> @intCast(bit_count - 1 - index)) & 1);
-        }
-        return value;
+        // `little` already orders the selected range with the earliest reverse
+        // stream bit in its most-significant selected position. Rebuilding the
+        // same integer one bit at a time is redundant.
+        return little;
     }
 
     /// Return the next bits without advancing. The value uses the same stream
