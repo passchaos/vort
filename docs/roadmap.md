@@ -1868,6 +1868,20 @@ architecture blindly.
   `1.677x`. ReleaseFast gate floors were raised to cover the new performance
   envelope without relying on the A/B report alone.
 
+- Added an opt-in same-process Snappy decode comparison that dynamically loads
+  the installed `libsnappy` C ABI, so competitor evidence does not require
+  development headers or contaminate default CI. Both codecs consume identical
+  Vort-generated blocks into caller-owned output; the CSV also records literal
+  and copy-token distributions. Against Ubuntu `libsnappy` 1.1.10 on the local
+  i9-13900K, Vort leads tiny/text/structured/incompressible/RLE rows by roughly
+  `5.13/1.50/1.29/2.38/3.21x`. The 32-byte-period repetitive row is the only
+  measured gap at about `0.93x`; its exact shape is one literal plus 546 COPY_2
+  tokens. Direct/non-overlap copy specializations were tested and rejected when
+  repeat5 evidence failed to improve that row. The optional gate requires Vort
+  to retain clear wins on five rows and bounds the known repetitive weakness,
+  making the next token-loop optimization target explicit rather than claiming
+  blanket Snappy leadership.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box

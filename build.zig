@@ -2328,6 +2328,54 @@ pub fn build(b: *std.Build) void {
     const snappy_report_gate_step = b.step("run-snappy-report-gate", "Validate dependency-free Snappy raw/framed report CSV");
     snappy_report_gate_step.dependOn(&snappy_report_gate.step);
 
+    const snappy_reference_bench_exe = b.addExecutable(.{
+        .name = "vort-snappy-reference-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/snappy/reference_bench.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_snappy_reference_bench =
+        b.addRunArtifact(snappy_reference_bench_exe);
+    if (b.args) |args| run_snappy_reference_bench.addArgs(args);
+    const snappy_reference_bench_step = b.step(
+        "run-snappy-reference-bench",
+        "Compare caller-owned Snappy decode against runtime libsnappy",
+    );
+    snappy_reference_bench_step.dependOn(
+        &run_snappy_reference_bench.step,
+    );
+
+    const run_snappy_reference_bench_gate_csv =
+        b.addRunArtifact(snappy_reference_bench_exe);
+    run_snappy_reference_bench_gate_csv.addArgs(&.{
+        "--iterations",
+        "5000",
+        "--csv",
+        "zig-out/vort-snappy-reference-bench.csv",
+    });
+    const snappy_reference_bench_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/snappy/reference_bench_gate.py",
+        "--csv",
+        "zig-out/vort-snappy-reference-bench.csv",
+    });
+    snappy_reference_bench_gate.step.dependOn(
+        &run_snappy_reference_bench_gate_csv.step,
+    );
+    const snappy_reference_bench_gate_step = b.step(
+        "run-snappy-reference-bench-gate",
+        "Validate optional Vort/libsnappy caller-owned decode comparison",
+    );
+    snappy_reference_bench_gate_step.dependOn(
+        &snappy_reference_bench_gate.step,
+    );
+
     const run_native_library_bench_path_csv = b.addRunArtifact(native_library_bench_exe);
     run_native_library_bench_path_csv.addArgs(&.{
         "--iterations",
@@ -3160,6 +3208,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&native_dictionary_report_exe.step);
     check_step.dependOn(&native_library_bench_exe.step);
     check_step.dependOn(&snappy_report_exe.step);
+    check_step.dependOn(&snappy_reference_bench_exe.step);
     check_step.dependOn(&dictionary_deflate_report_exe.step);
     check_step.dependOn(&dictionary_decode_bench_exe.step);
     check_step.dependOn(&level_report_exe.step);

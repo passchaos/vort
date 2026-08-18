@@ -345,6 +345,7 @@ zig build -Doptimize=ReleaseFast run-file-corpus-standard-full-dashboard -- --li
 zig build bench-checksum -Doptimize=ReleaseFast
 zig build -Doptimize=ReleaseFast run-checksum-bench-gate
 zig build -Doptimize=ReleaseFast run-snappy-report-gate
+zig build -Doptimize=ReleaseFast run-snappy-reference-bench-gate  # optional runtime libsnappy comparison
 zig build bench-deflate-decode -Doptimize=ReleaseFast
 zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report
 zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report -- --iterations 1000
