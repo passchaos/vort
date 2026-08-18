@@ -141,6 +141,85 @@ pub fn validateBody(block: []const u8, header: Header) Error!void {
     if (written != header.decoded_len) return error.TruncatedFrame;
 }
 
+/// Decode tokens after the caller has consumed the length prefix and provided
+/// an exact output slice. Keeping this out-of-line gives raw-block and framed
+/// callers one shared hot loop without duplicating it into every allocation,
+/// append, and exact-size API wrapper.
+pub noinline fn decodeBody(
+    block: []const u8,
+    header: Header,
+    output: []u8,
+) Error!usize {
+    std.debug.assert(output.len == header.decoded_len);
+    var input_index = header.index;
+    var written: usize = 0;
+    while (input_index < block.len) {
+        if (written == header.decoded_len) return error.TrailingData;
+        const tag = block[input_index];
+        input_index += 1;
+        switch (tag & 0x03) {
+            0 => {
+                const literal_len =
+                    try readLiteralLen(tag, block, &input_index);
+                if (literal_len > header.decoded_len - written) {
+                    return error.SizeMismatch;
+                }
+                if (block.len - input_index < literal_len) {
+                    return error.TruncatedFrame;
+                }
+                @memcpy(
+                    output[written..][0..literal_len],
+                    block[input_index..][0..literal_len],
+                );
+                input_index += literal_len;
+                written += literal_len;
+            },
+            1 => {
+                const len: usize = 4 + ((tag >> 2) & 0x07);
+                if (block.len - input_index < 1) {
+                    return error.TruncatedFrame;
+                }
+                const offset: usize =
+                    (@as(usize, tag & 0xe0) << 3) | block[input_index];
+                input_index += 1;
+                try match_copy.copy(output, written, offset, len);
+                written += len;
+            },
+            2 => {
+                const len: usize = 1 + (tag >> 2);
+                if (block.len - input_index < 2) {
+                    return error.TruncatedFrame;
+                }
+                const offset = std.mem.readInt(
+                    u16,
+                    block[input_index..][0..2],
+                    .little,
+                );
+                input_index += 2;
+                try match_copy.copy(output, written, offset, len);
+                written += len;
+            },
+            3 => {
+                const len: usize = 1 + (tag >> 2);
+                if (block.len - input_index < 4) {
+                    return error.TruncatedFrame;
+                }
+                const offset = std.mem.readInt(
+                    u32,
+                    block[input_index..][0..4],
+                    .little,
+                );
+                input_index += 4;
+                try match_copy.copy(output, written, offset, len);
+                written += len;
+            },
+            else => unreachable,
+        }
+    }
+    if (written != header.decoded_len) return error.TruncatedFrame;
+    return written;
+}
+
 test "Snappy block validation covers malformed token boundaries" {
     try std.testing.expectError(
         error.TruncatedFrame,

@@ -1853,6 +1853,21 @@ architecture blindly.
   rows (`1.513x` geomean); the gate now enforces conservative ReleaseFast
   floors for those rows.
 
+- Removed the remaining duplicate raw-block token validation inside successful
+  Snappy framed decode. Compressed chunks now read their length prefix once and
+  run the shared out-of-line token decoder once; malformed tokens and short
+  output retain their established error priority. Framing, U24 fields, and
+  allocation preflight moved from the facade into `snappy/frame.zig`, reducing
+  `src/snappy.zig` from 1,540 to about 1,460 lines while keeping only three
+  cohesive files in the Snappy subdirectory. The frame checksum path now uses
+  Vort's selected CRC-32C backend rather than the byte-at-a-time scalar API.
+  Against commit `68684c6`, a same-machine ReleaseFast 1,000-iteration A/B
+  improves framed text/structured/repetitive/incompressible decode by about
+  `1.84/1.77/1.86/1.88x` and framed encode by about
+  `1.94/2.05/1.98/1.13x`; framed decode geomean across all report rows is
+  `1.677x`. ReleaseFast gate floors were raised to cover the new performance
+  envelope without relying on the A/B report alone.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box

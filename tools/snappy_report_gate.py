@@ -29,10 +29,10 @@ MIN_RELEASEFAST_DECODE_MIB_S = {
     ("raw_block", "text"): 350.0,
     ("raw_block", "structured"): 325.0,
     ("raw_block", "repetitive"): 350.0,
-    ("framed", "text"): 190.0,
-    ("framed", "structured"): 180.0,
-    ("framed", "repetitive"): 190.0,
-    ("framed", "incompressible"): 200.0,
+    ("framed", "text"): 350.0,
+    ("framed", "structured"): 325.0,
+    ("framed", "repetitive"): 350.0,
+    ("framed", "incompressible"): 350.0,
 }
 
 
