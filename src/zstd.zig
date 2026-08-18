@@ -5,6 +5,7 @@ const dictionary_mod = @import("dictionary.zig");
 const sequence_predefined = @import("zstd/sequence/predefined.zig");
 const sequence_bit_reader = @import("zstd/sequence/bit_reader.zig");
 const single_predefined = @import("zstd/sequence/single_predefined.zig");
+const sequence_continuation = @import("zstd/sequence/continuation.zig");
 const raw_frame = @import("zstd/frame/raw.zig");
 const huffman = @import("huffman.zig");
 
@@ -1695,6 +1696,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     direct_block_rle: bool = false,
     direct_rle_byte: u8 = 0,
     direct_block_compressed: bool = false,
+    direct_sequence_continuation: sequence_continuation.Context = .terminal,
     direct_block_decoded_len: usize = 0,
     direct_block_size_max: usize = 0,
     direct_history_window_len: usize = 0,
@@ -1996,7 +1998,16 @@ pub const NativeIncrementalFrameDecoder = struct {
                         const source = self.frame_scratch.items[self.direct_payload_offset..][0..self.direct_payload_len];
                         const written = written: {
                             var written_abs = output_written_step;
-                            try decodeLiteralOnlyCompressedBlockIntoBuffer(source, output, &written_abs, self.direct_block_size_max, output_written_step, self.direct_history.items, &self.direct_sequence_state);
+                            try decodeLiteralOnlyCompressedBlockIntoBuffer(
+                                source,
+                                output,
+                                &written_abs,
+                                self.direct_block_size_max,
+                                output_written_step,
+                                self.direct_history.items,
+                                &self.direct_sequence_state,
+                                self.direct_sequence_continuation,
+                            );
                             break :written written_abs - output_written_step;
                         };
                         if (written != self.direct_block_decoded_len) return error.SizeMismatch;
@@ -2060,6 +2071,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.direct_block_rle = false;
         self.direct_rle_byte = 0;
         self.direct_block_compressed = false;
+        self.direct_sequence_continuation = .terminal;
         self.direct_block_decoded_len = 0;
         self.direct_block_size_max = 0;
         self.direct_history_window_len = 0;
@@ -2224,6 +2236,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         var first_block_rle = false;
         var first_rle_byte: u8 = 0;
         var first_block_compressed = false;
+        var first_sequence_continuation: sequence_continuation.Context = .terminal;
         var first_block_decoded_len: usize = 0;
         var first_next_header: usize = 0;
         var total: usize = 0;
@@ -2264,6 +2277,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                 first_block_rle = block_type == 1;
                 first_rle_byte = if (block_type == 1) payload[0] else 0;
                 first_block_compressed = block_type == 2;
+                first_sequence_continuation = sequence_continuation.forLastBlock(last);
                 first_block_decoded_len = decoded_block_len;
             }
             if (header.has_checksum) {
@@ -2308,6 +2322,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.direct_block_rle = first_block_rle;
         self.direct_rle_byte = first_rle_byte;
         self.direct_block_compressed = first_block_compressed;
+        self.direct_sequence_continuation = first_sequence_continuation;
         self.direct_block_decoded_len = first_block_decoded_len;
         self.direct_block_size_max = header.block_size_max;
         const frame_history_window = @min(total, try checkedU64ToUsize(header.window_size));
@@ -2344,6 +2359,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         if (self.frame_scratch.items.len - offset < 3) return error.TruncatedFrame;
         const block_header = std.mem.readInt(u24, self.frame_scratch.items[offset..][0..3], .little);
         offset += 3;
+        const last = (block_header & 0x1) != 0;
         const block_type = (block_header >> 1) & 0x3;
         const block_len: usize = @intCast(block_header >> 3);
         if (block_type == 2) {
@@ -2361,6 +2377,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.direct_block_rle = block_type == 1;
         self.direct_rle_byte = if (block_type == 1) self.frame_scratch.items[offset] else 0;
         self.direct_block_compressed = block_type == 2;
+        self.direct_sequence_continuation = sequence_continuation.forLastBlock(last);
         self.direct_block_decoded_len = if (block_type == 2) blk: {
             var preflight_state = self.direct_sequence_state;
             break :blk try compressedLiteralOnlyBlockDecodedSize(
@@ -4204,7 +4221,7 @@ fn decodeRawOrRleZstandardFrameInto(
             },
             2 => {
                 if (frame.len - offset.* < block_len) return error.TruncatedFrame;
-                try decodeLiteralOnlyCompressedBlockInto(allocator, out, frame[offset.*..][0..block_len], header.block_size_max, frame_out_start, dictionary_history, &frame_state);
+                try decodeLiteralOnlyCompressedBlockInto(allocator, out, frame[offset.*..][0..block_len], header.block_size_max, frame_out_start, dictionary_history, &frame_state, sequence_continuation.forLastBlock(last));
                 offset.* += block_len;
             },
             else => return error.CorruptFrame,
@@ -4271,7 +4288,7 @@ fn decodeRawOrRleZstandardFrameIntoBuffer(
             },
             2 => {
                 if (frame.len - offset.* < block_len) return error.TruncatedFrame;
-                try decodeLiteralOnlyCompressedBlockIntoBuffer(frame[offset.*..][0..block_len], output, written, header.block_size_max, frame_out_start, dictionary_history, &frame_state);
+                try decodeLiteralOnlyCompressedBlockIntoBuffer(frame[offset.*..][0..block_len], output, written, header.block_size_max, frame_out_start, dictionary_history, &frame_state, sequence_continuation.forLastBlock(last));
                 offset.* += block_len;
             },
             else => return error.CorruptFrame,
@@ -4302,6 +4319,7 @@ fn decodeLiteralOnlyCompressedBlockInto(
     frame_output_start: usize,
     dictionary_history: []const u8,
     frame_state: *SequenceFrameState,
+    continuation: sequence_continuation.Context,
 ) Error!void {
     const start = out.items.len;
     // Size preflight and decode both advance sequence-table and repeat-offset
@@ -4314,7 +4332,7 @@ fn decodeLiteralOnlyCompressedBlockInto(
     const decoded_len = try compressedLiteralOnlyBlockDecodedSize(block, block_size_max, initial_history_len, &preflight_state);
     try out.ensureUnusedCapacity(allocator, decoded_len);
     var written = out.items.len;
-    try decodeLiteralOnlyCompressedBlockIntoBuffer(block, out.items.ptr[0..out.capacity], &written, block_size_max, frame_output_start, dictionary_history, frame_state);
+    try decodeLiteralOnlyCompressedBlockIntoBuffer(block, out.items.ptr[0..out.capacity], &written, block_size_max, frame_output_start, dictionary_history, frame_state, continuation);
     out.items.len = written;
     if (out.items.len - start != decoded_len) return error.SizeMismatch;
 }
@@ -4327,11 +4345,12 @@ fn decodeLiteralOnlyCompressedBlockIntoBuffer(
     frame_output_start: usize,
     dictionary_history: []const u8,
     frame_state: *SequenceFrameState,
+    continuation: sequence_continuation.Context,
 ) Error!void {
     const section = try parseLiteralsSection(block, frame_state);
     if (section.regenerated_size > block_size_max) return error.CorruptFrame;
     try validateSupportedLiteralSection(section);
-    if (section.sequence_count != 0) return try decodeRleSequencesCompressedBlockIntoBuffer(block, section, output, written, frame_output_start, dictionary_history, frame_state);
+    if (section.sequence_count != 0) return try decodeRleSequencesCompressedBlockIntoBuffer(block, section, output, written, frame_output_start, dictionary_history, frame_state, continuation);
     try expectConsumedBlock(section.sequence_payload_offset, block.len);
     try copyLiteralsFromSection(block, section, 0, output, written, section.regenerated_size);
 }
@@ -5269,6 +5288,7 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
     frame_output_start: usize,
     dictionary_history: []const u8,
     frame_state: *SequenceFrameState,
+    continuation: sequence_continuation.Context,
 ) Error!void {
     if (frame_output_start > written.*) return error.CorruptFrame;
     var offset = section.sequence_payload_offset;
@@ -5285,6 +5305,7 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
             frame_output_start,
             dictionary_history,
             frame_state,
+            continuation,
         );
     }
     const parsed_spec = try parseSequenceModeSpec(block, &offset, section.sequence_count);
@@ -5317,8 +5338,10 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
     } else {
         try copyLiteralsFromSection(block, section, literal_offset, output, written, last_literals);
     }
-    frame_state.previous_tables = spec.tables();
-    frame_state.repeated_offsets = state.repeated_offsets;
+    if (continuation.retainsState()) {
+        frame_state.previous_tables = spec.tables();
+        frame_state.repeated_offsets = state.repeated_offsets;
+    }
 }
 
 fn decodeSinglePredefinedSequence(
@@ -5330,15 +5353,17 @@ fn decodeSinglePredefinedSequence(
     frame_output_start: usize,
     dictionary_history: []const u8,
     frame_state: *SequenceFrameState,
+    continuation: sequence_continuation.Context,
 ) Error!void {
     if (bitstream_offset >= block.len) return error.TruncatedFrame;
     const sequence = try single_predefined.decode(block[bitstream_offset..]);
+    var repeated_offsets = frame_state.repeated_offsets;
     const match_offset = try resolveSequenceOffset(
         sequence.offset_base,
         sequence.offset_bits,
         sequence.offset_extra,
         sequence.literal_len,
-        &frame_state.repeated_offsets,
+        &repeated_offsets,
     );
 
     try copyLiteralsFromSection(
@@ -5368,14 +5393,17 @@ fn decodeSinglePredefinedSequence(
         written,
         section.regenerated_size - sequence.literal_len,
     );
-    frame_state.previous_tables = .{
-        .ll_mode = .predefined,
-        .of_mode = .predefined,
-        .ml_mode = .predefined,
-        .literal_rle = null,
-        .offset_rle = null,
-        .match_rle = null,
-    };
+    if (continuation.retainsState()) {
+        frame_state.previous_tables = .{
+            .ll_mode = .predefined,
+            .of_mode = .predefined,
+            .ml_mode = .predefined,
+            .literal_rle = null,
+            .offset_rle = null,
+            .match_rle = null,
+        };
+        frame_state.repeated_offsets = repeated_offsets;
+    }
 }
 
 fn rleSequencesCompressedBlockDecodedSize(
@@ -10466,6 +10494,54 @@ test "zstd native decoder repeats RLE sequence tables across compressed blocks" 
     try first_block_repeat.append(std.testing.allocator, 0xfc);
     try first_block_repeat.append(std.testing.allocator, 1);
     try std.testing.expectError(error.CorruptFrame, decodeNativeFrameAlloc(std.testing.allocator, first_block_repeat.items));
+}
+
+test "zstd terminal sequence decode does not retain continuation tables" {
+    const block = [_]u8{
+        (1 << 3) | 1, // One RLE literal seeds the match.
+        'a',
+        1,
+        0x54, // LL, offset, and ML all use RLE_Mode.
+        1,
+        0,
+        0,
+        1, // Minimal reverse bitstream end mark.
+    };
+    var section_state: SequenceFrameState = .{};
+    const section = try parseLiteralsSection(&block, &section_state);
+
+    var terminal_state: SequenceFrameState = .{};
+    var terminal_output: [4]u8 = undefined;
+    var terminal_written: usize = 0;
+    try decodeRleSequencesCompressedBlockIntoBuffer(
+        &block,
+        section,
+        &terminal_output,
+        &terminal_written,
+        0,
+        &.{},
+        &terminal_state,
+        .terminal,
+    );
+    try std.testing.expectEqualSlices(u8, "aaaa", terminal_output[0..terminal_written]);
+    try std.testing.expectEqual(@as(?SequenceTables, null), terminal_state.previous_tables);
+    try std.testing.expectEqual(initial_repeated_offsets, terminal_state.repeated_offsets);
+
+    var continuing_state: SequenceFrameState = .{};
+    var continuing_output: [4]u8 = undefined;
+    var continuing_written: usize = 0;
+    try decodeRleSequencesCompressedBlockIntoBuffer(
+        &block,
+        section,
+        &continuing_output,
+        &continuing_written,
+        0,
+        &.{},
+        &continuing_state,
+        .followed_by_block,
+    );
+    try std.testing.expectEqualSlices(u8, "aaaa", continuing_output[0..continuing_written]);
+    try std.testing.expect(continuing_state.previous_tables != null);
 }
 
 test "zstd native decoder reads RLE offset additional bits" {

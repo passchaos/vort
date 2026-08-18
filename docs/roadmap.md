@@ -2011,6 +2011,19 @@ architecture blindly.
   the best observed sample as a guarantee. Raw rows remain on their isolated
   fast path.
 
+- Removed the remaining terminal-block state materialization from Zstd sequence
+  decode. Frame loops now pass an explicit continuation context from each block
+  header; only blocks with a successor retain entropy tables and repeat offsets
+  for possible `Repeat_Mode` use. The policy lives in
+  `src/zstd/sequence/continuation.zig`, keeping lifecycle intent out of the
+  already-large facade, and both one-shot and direct incremental decode share
+  it. Multi-block repeat-table fixtures still exercise the retained-state path,
+  while a focused terminal/continuing state test covers the ownership boundary.
+  This avoids writing three unused 512-entry FSE tables on the dominant one-
+  block shape. In the local repeat5 libzstd 1.5.5 matrix, text/structured/
+  repetitive/repeated-byte improve from roughly `0.92/0.33/0.37/0.99x` to
+  `2.67/1.13/1.61/2.39x`; raw-frame paths remain separate and unchanged.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box
