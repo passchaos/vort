@@ -2159,6 +2159,12 @@ architecture blindly.
   leads libbrotli 1.1.0 by roughly `1.85/1.49/2.20x`; the optional gate now
   locks both quality-0 and quality-3 rows so the header-layout wins are not
   limited to a single encoder setting.
+  The tool also accepts `--case` and `--quality` for narrow support diagnostics.
+  Quality-4 probing shows tiny/text/repetitive/random are already supported;
+  structured data reaches missing static-dictionary transform tuples
+  `(27, 9, 161)` and `(42, 9, 721)`. Experimental tuple additions advanced
+  past `UnsupportedBrotliFeature` but did not yet produce the exact payload, so
+  they were rejected rather than claiming incomplete dictionary compatibility.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

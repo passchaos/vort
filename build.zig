@@ -2435,6 +2435,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const run_br_reference_bench = b.addRunArtifact(br_reference_bench_exe);
+    if (b.args) |args| run_br_reference_bench.addArgs(args);
     const br_reference_bench_step = b.step(
         "run-br-reference-bench",
         "Compare caller-owned Brotli decode against runtime libbrotli",

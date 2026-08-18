@@ -4,7 +4,13 @@ const libbrotli = @import("libbrotli_runtime.zig");
 
 const Case = struct { name: []const u8, payload: []const u8, quality: c_int = 0 };
 const Sample = struct { elapsed_ns: u64, mix: u64 };
-const Options = struct { iterations: usize = 1000, csv_path: ?[]const u8 = null };
+const Options = struct {
+    iterations: usize = 1000,
+    csv_path: ?[]const u8 = null,
+    only_case: ?[]const u8 = null,
+    quality_override: ?c_int = null,
+    print_encoded_hex: bool = false,
+};
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
@@ -35,8 +41,18 @@ pub fn main(init: std.process.Init) !void {
     const writer = &csv.writer;
     try writer.writeAll("case,reference_version,input_bytes,encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,size_ns,exact_alloc_ns\n");
     for (&cases) |case| {
-        const encoded = try runtime.encodeAlloc(init.gpa, case.payload, case.quality);
+        if (options.only_case) |wanted| {
+            if (!std.mem.eql(u8, wanted, case.name)) continue;
+        }
+        const encoded = try runtime.encodeAlloc(init.gpa, case.payload, options.quality_override orelse case.quality);
         defer init.gpa.free(encoded);
+        if (options.print_encoded_hex) {
+            var stderr_buffer: [4096]u8 = undefined;
+            var stderr = std.Io.File.stderr().writerStreaming(init.io, &stderr_buffer);
+            for (encoded) |byte| try stderr.interface.print("{x:0>2}", .{byte});
+            try stderr.interface.writeByte('\n');
+            try stderr.interface.flush();
+        }
         const vort_output = try init.gpa.alloc(u8, case.payload.len);
         defer init.gpa.free(vort_output);
         const reference_output = try init.gpa.alloc(u8, case.payload.len);
@@ -90,6 +106,12 @@ fn parseOptions(args: *std.process.Args.Iterator) !Options {
             options.iterations = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10);
         } else if (std.mem.eql(u8, arg, "--csv")) {
             options.csv_path = args.next() orelse return error.MissingCorpusPath;
+        } else if (std.mem.eql(u8, arg, "--case")) {
+            options.only_case = args.next() orelse return error.MissingCorpusPath;
+        } else if (std.mem.eql(u8, arg, "--quality")) {
+            options.quality_override = try std.fmt.parseInt(c_int, args.next() orelse return error.MissingLimit, 10);
+        } else if (std.mem.eql(u8, arg, "--print-encoded-hex")) {
+            options.print_encoded_hex = true;
         } else return error.UnknownArgument;
     }
     if (options.iterations == 0) return error.InvalidBlockPlan;
