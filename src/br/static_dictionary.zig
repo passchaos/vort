@@ -177,6 +177,11 @@ pub fn transform(address: usize, word_len: usize, out: []u8) ?[]const u8 {
     return out[0..written];
 }
 
+pub fn sizeBits(word_len: usize) ?u5 {
+    if (word_len >= size_bits.len or size_bits[word_len] == 0) return null;
+    return size_bits[word_len];
+}
+
 fn copyCString(out: []u8, offset: usize) usize {
     var len: usize = 0;
     while (prefix_suffix[offset + len] != 0) : (len += 1) out[len] = prefix_suffix[offset + len];

@@ -2184,6 +2184,14 @@ architecture blindly.
   optional matrix now protects quality 0, 3, 4, and 11 instead of extrapolating
   from a fast encoder mode.
 
+- Added a deterministic full-dictionary transform differential to the optional
+  libbrotli gate. It samples five word indices at every RFC dictionary length
+  4...24 and all 121 transforms (`12,705` cases), comparing Vort's embedded
+  dictionary and UTF-8 transform implementation byte-for-byte with
+  `libbrotlicommon`. This validates the complete fallback beyond the single
+  quality-4 frame and catches offset, omit, affix, and uppercase drift without
+  making the production library depend on the system runtime.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box

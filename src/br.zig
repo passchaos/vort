@@ -4315,6 +4315,9 @@ pub fn minimalStaticDictionarySizeBits(copy_len: usize) ?u5 {
     };
 }
 
+pub const transformStaticDictionaryWord = static_dictionary.transform;
+pub const fullStaticDictionarySizeBits = static_dictionary.sizeBits;
+
 fn readCommandSymbol(header: *MinimalCompressedHeader, reader: *bitstream.BitReader) Error!u16 {
     if (header.command_block.block_type_count > 1 and header.command_block.remaining == 0) {
         try switchCommandBlock(&header.command_block, reader);

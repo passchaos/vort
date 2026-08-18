@@ -19,6 +19,7 @@ pub fn main(init: std.process.Init) !void {
     const options = try parseOptions(&args);
     var runtime = try libbrotli.Runtime.open();
     defer runtime.deinit();
+    const dictionary_cases = try checkDictionaryTransforms(runtime);
     var random: [4096]u8 = undefined;
     var state: u32 = 0x1234_5678;
     for (&random) |*byte| {
@@ -43,7 +44,7 @@ pub fn main(init: std.process.Init) !void {
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
     const writer = &csv.writer;
-    try writer.writeAll("case,reference_version,input_bytes,encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,size_ns,exact_alloc_ns\n");
+    try writer.writeAll("case,reference_version,input_bytes,encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,size_ns,exact_alloc_ns,dictionary_cases\n");
     for (&cases) |case| {
         if (options.only_case) |wanted| {
             if (!std.mem.eql(u8, wanted, case.name)) continue;
@@ -72,8 +73,8 @@ pub fn main(init: std.process.Init) !void {
         const vort_mib_s = mibPerSecond(case.payload.len * options.iterations, vort_sample.elapsed_ns);
         const reference_mib_s = mibPerSecond(case.payload.len * options.iterations, reference_sample.elapsed_ns);
         try writer.print(
-            "{s},{x},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d},{d},{d}\n",
-            .{ case.name, runtime.version(), case.payload.len, encoded.len, options.iterations, vort_sample.elapsed_ns, reference_sample.elapsed_ns, vort_mib_s, reference_mib_s, vort_mib_s / reference_mib_s, vort_sample.mix +% reference_sample.mix, size_sample.elapsed_ns, exact_sample.elapsed_ns },
+            "{s},{x},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d},{d},{d},{d}\n",
+            .{ case.name, runtime.version(), case.payload.len, encoded.len, options.iterations, vort_sample.elapsed_ns, reference_sample.elapsed_ns, vort_mib_s, reference_mib_s, vort_mib_s / reference_mib_s, vort_sample.mix +% reference_sample.mix, size_sample.elapsed_ns, exact_sample.elapsed_ns, dictionary_cases },
         );
     }
     if (options.csv_path) |path| {
@@ -84,6 +85,27 @@ pub fn main(init: std.process.Init) !void {
         try stdout.interface.writeAll(csv.written());
         try stdout.interface.flush();
     }
+}
+
+fn checkDictionaryTransforms(runtime: libbrotli.Runtime) !usize {
+    var native: [64]u8 = undefined;
+    var reference: [64]u8 = undefined;
+    var cases: usize = 0;
+    for (4..25) |word_len| {
+        const bits = vort.br.fullStaticDictionarySizeBits(word_len) orelse return error.SizeMismatch;
+        const word_count = @as(usize, 1) << @intCast(bits);
+        const indices = [_]usize{ 0, 1, word_count / 3, word_count / 2, word_count - 1 };
+        for (indices) |word_index| {
+            for (0..121) |transform_index| {
+                const address = (transform_index << @intCast(bits)) | word_index;
+                const actual = vort.br.transformStaticDictionaryWord(address, word_len, &native) orelse return error.SizeMismatch;
+                const expected = try runtime.transformDictionary(address, word_len, &reference);
+                if (!std.mem.eql(u8, actual, expected)) return error.SizeMismatch;
+                cases += 1;
+            }
+        }
+    }
+    return cases;
 }
 
 fn measureExactAlloc(io: std.Io, allocator: std.mem.Allocator, encoded: []const u8, expected_len: usize, iterations: usize) !Sample {
