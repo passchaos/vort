@@ -1990,6 +1990,15 @@ architecture blindly.
   layout regressions; future work should redesign ownership/view boundaries
   inside `src/zstd/sequence/`, not copy those large tables between modules.
 
+- Reused the extracted predefined module for a zero-allocation sequence-shape
+  inspection fast path. `isModeByte` recognizes the all-predefined mode byte,
+  allowing `inspectNativeFrameBlockSequenceModes` to return its public summary
+  without constructing three empty 512-entry FSE tables. On the locked
+  libzstd rows, sequence inspection drops from roughly 12 microseconds to about
+  2.3 microseconds per call. The same shape predicate remains available to a
+  future production decoder fast path, while decode behavior and the generic
+  mixed/RLE/FSE/repeat-table fallback are unchanged.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box

@@ -5859,6 +5859,17 @@ fn inspectNativeFrameBlockSequenceModesWithState(
         };
     }
     var offset = section.sequence_payload_offset;
+    if (offset >= payload.len) return error.TruncatedFrame;
+    if (sequence_predefined.isModeByte(payload[offset])) {
+        return .{
+            .literals_kind = nativeLiteralsKind(section.kind),
+            .regenerated_literals_size = section.regenerated_size,
+            .sequence_count = section.sequence_count,
+            .literal_length_mode = .predefined,
+            .offset_mode = .predefined,
+            .match_length_mode = .predefined,
+        };
+    }
     const spec = try parseSequenceModeSpec(payload, &offset, section.sequence_count);
     const resolved = try resolveSequenceModeSpec(spec, frame_state.previous_tables);
     frame_state.previous_tables = resolved.tables();

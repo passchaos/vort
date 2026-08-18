@@ -193,6 +193,14 @@ pub fn match(state: usize) Error!Symbol {
     return match_symbols[state];
 }
 
+/// Whether the sequence mode byte selects predefined LL/OF/ML tables and has
+/// the two reserved low bits clear. This cheap shape test is shared by inspect
+/// and decode paths so callers need not construct empty FSE-table objects just
+/// to learn that no table payload exists.
+pub inline fn isModeByte(mode: u8) bool {
+    return mode == 0;
+}
+
 test "Zstd predefined sequence tables reject invalid states" {
     try std.testing.expectError(error.CorruptFrame, literal(literal_symbols.len));
     try std.testing.expectError(error.CorruptFrame, offset(offset_symbols.len));
