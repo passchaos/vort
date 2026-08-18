@@ -32,10 +32,21 @@ pub const Reader = struct {
         const start = end - bit_count;
         const first_byte = start >> 3;
         const last_byte = (end - 1) >> 3;
-        var reservoir: u72 = 0;
-        for (self.bytes[first_byte .. last_byte + 1], 0..) |byte, index| {
-            reservoir |= @as(u72, byte) << @intCast(index * 8);
-        }
+        const byte_count = last_byte + 1 - first_byte;
+        const reservoir: u72 = switch (byte_count) {
+            1 => self.bytes[first_byte],
+            2 => std.mem.readInt(u16, self.bytes[first_byte..][0..2], .little),
+            3...8 => blk: {
+                var padded: [8]u8 = @splat(0);
+                @memcpy(padded[0..byte_count], self.bytes[first_byte .. last_byte + 1]);
+                break :blk std.mem.readInt(u64, &padded, .little);
+            },
+            9 => blk: {
+                const low = std.mem.readInt(u64, self.bytes[first_byte..][0..8], .little);
+                break :blk @as(u72, low) | (@as(u72, self.bytes[first_byte + 8]) << 64);
+            },
+            else => unreachable,
+        };
         const shift: u7 = @intCast(start & 7);
         const mask: u72 = (@as(u72, 1) << @intCast(bit_count)) - 1;
         const little: usize = @intCast((reservoir >> shift) & mask);

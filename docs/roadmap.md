@@ -2086,6 +2086,15 @@ architecture blindly.
   and literal-only Huffman rows remain within their established envelope. The
   huffman80k gate floor rises to `0.29x`.
 
+- Replaced the reverse reader's dynamic byte-gather loop with bounded fixed-
+  width loads: direct one/two-byte reads, a padded u64 for three through eight
+  bytes, and a u64-plus-tail case for the maximum nine-byte request. The same
+  per-bit oracle covers every alignment and width before benchmark use. On the
+  1,000-iteration matrix huffman80k rises again from roughly `0.326x` to
+  `0.349x` libzstd throughput (about `7%` faster), numbered JSON improves to
+  about `0.125x`, and single-sequence/Huffman-literal-only rows stay within
+  their established envelopes. The huffman80k floor increases to `0.32x`.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box
