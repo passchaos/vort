@@ -15,7 +15,8 @@ const Plan = struct {
     content_size: usize,
 };
 
-/// Decode the common single-segment, checksum-free, dictionary-free raw frame.
+/// Decode a common single-segment, checksum-free, dictionary-free frame whose
+/// blocks are raw and/or RLE.
 ///
 /// Returns `null` for any other valid/unsupported shape without mutating
 /// output. The production facade can therefore fall back to its general parser
@@ -38,12 +39,22 @@ pub fn tryDecode(frame: []const u8, output: []u8) Error!?usize {
         );
         input_offset += 3;
         const len: usize = @intCast(header >> 3);
-        @memcpy(
-            output[output_offset..][0..len],
-            frame[input_offset..][0..len],
-        );
+        const block_type = (header >> 1) & 0x03;
+        if (block_type == 0) {
+            @memcpy(
+                output[output_offset..][0..len],
+                frame[input_offset..][0..len],
+            );
+            input_offset += len;
+        } else {
+            std.debug.assert(block_type == 1);
+            @memset(
+                output[output_offset..][0..len],
+                frame[input_offset],
+            );
+            input_offset += 1;
+        }
         output_offset += len;
-        input_offset += len;
         if ((header & 1) != 0) break;
     }
     std.debug.assert(input_offset == frame.len);
@@ -83,13 +94,16 @@ fn scan(frame: []const u8) Error!?Plan {
         if (frame.len - offset < 3) return error.TruncatedFrame;
         const header = std.mem.readInt(u24, frame[offset..][0..3], .little);
         offset += 3;
-        if (((header >> 1) & 0x03) != 0) return null;
+        const block_type = (header >> 1) & 0x03;
+        if (block_type > 1) return null;
         const len: usize = @intCast(header >> 3);
         if (len > block_size_max) return error.CorruptFrame;
-        if (frame.len - offset < len) return error.TruncatedFrame;
+        if (block_type == 1 and len == 0) return error.CorruptFrame;
+        const stored_len: usize = if (block_type == 0) len else 1;
+        if (frame.len - offset < stored_len) return error.TruncatedFrame;
         decoded = std.math.add(usize, decoded, len) catch
             return error.CorruptFrame;
-        offset += len;
+        offset += stored_len;
         if ((header & 1) != 0) break;
     }
     if (offset != frame.len) return null;
@@ -98,6 +112,25 @@ fn scan(frame: []const u8) Error!?Plan {
         .payload_offset = payload_offset,
         .content_size = content_size,
     };
+}
+
+test "Zstd raw frame fast path supports RLE blocks" {
+    var frame: [11]u8 = .{
+        0x28, 0xb5, 0x2f, 0xfd, 0x60, 0, 0,
+        0x03, 0x08, 0x00, 0x5a,
+    };
+    var output: [256]u8 = undefined;
+    try std.testing.expectEqual(
+        @as(?usize, output.len),
+        try tryDecode(&frame, &output),
+    );
+    for (output) |byte| try std.testing.expectEqual(@as(u8, 0x5a), byte);
+    frame[10] = 0xa5;
+    try std.testing.expectEqual(
+        @as(?usize, output.len),
+        try tryDecode(&frame, &output),
+    );
+    for (output) |byte| try std.testing.expectEqual(@as(u8, 0xa5), byte);
 }
 
 test "Zstd raw frame fast path decodes eligible frame without mutation on miss" {

@@ -1959,6 +1959,16 @@ architecture blindly.
   rows remain byte-identical and unchanged. The reference gate now requires a
   clear 1 KiB raw win and at least `0.85x` on the large raw row.
 
+- Extended the same isolated Zstd frame module to mixed raw/RLE block streams.
+  The first pass distinguishes stored payload length (`len` for raw, one byte
+  for RLE), validates non-zero RLE regeneration sizes and the declared total,
+  then the decode pass uses `memcpy`/`memset` without reparsing the full general
+  codec. A handcrafted 256-byte RLE oracle covers byte changes and output.
+  libzstd level 1 normally represents the locked repeated-byte corpora as one
+  compressed sequence rather than an RLE block, so this is compatibility/hot-
+  path coverage for valid externally produced RLE frames, not a benchmark win
+  falsely attributed to the current reference matrix.
+
 - Extracted Zstd's shared Huffman/sequence reverse-bit reader into
   `src/zstd/sequence/bit_reader.zig`, reducing the facade below 14,920 lines.
   The module owns marker-bit parsing and a cross-byte reservoir reader, with a
