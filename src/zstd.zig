@@ -945,7 +945,7 @@ fn decodeRawOrRleFrameAllocWithDictionaryInternal(
         if (known_size_frame.plan(frame)) |plan| {
             const output = try allocator.alloc(u8, plan.content_size);
             errdefer allocator.free(output);
-            const written = decodeRawOrRleFrameIntoWithDictionaryInternal(frame, output, null) catch |err| switch (err) {
+            const written = decodeFrameInto(frame, output) catch |err| switch (err) {
                 error.OutputTooSmall => return error.SizeMismatch,
                 else => return err,
             };
@@ -14361,6 +14361,33 @@ test "zstd known-size allocator plan excludes concatenated and multi-block strea
     const multi = try encodeRawOrRleFrameAlloc(std.testing.allocator, large_payload);
     defer std.testing.allocator.free(multi);
     try std.testing.expectEqual(@as(?known_size_frame.Plan, null), known_size_frame.plan(multi));
+}
+
+test "zstd known-size allocator reuses raw and RLE frame decode" {
+    var raw_payload: [1024]u8 = undefined;
+    for (&raw_payload, 0..) |*byte, index| byte.* = @truncate(index * 131);
+    const raw = try encodeRawOrRleFrameWithOptionsAlloc(
+        std.testing.allocator,
+        &raw_payload,
+        .{ .content_checksum = false },
+    );
+    defer std.testing.allocator.free(raw);
+    try std.testing.expect(known_size_frame.plan(raw) != null);
+    const raw_decoded = try decodeFrameAlloc(std.testing.allocator, raw);
+    defer std.testing.allocator.free(raw_decoded);
+    try std.testing.expectEqualSlices(u8, &raw_payload, raw_decoded);
+
+    const rle_payload = [_]u8{0xa5} ** 1024;
+    const rle = try encodeRawOrRleFrameWithOptionsAlloc(
+        std.testing.allocator,
+        &rle_payload,
+        .{ .content_checksum = false },
+    );
+    defer std.testing.allocator.free(rle);
+    try std.testing.expect(known_size_frame.plan(rle) != null);
+    const rle_decoded = try decodeFrameAlloc(std.testing.allocator, rle);
+    defer std.testing.allocator.free(rle_decoded);
+    try std.testing.expectEqualSlices(u8, &rle_payload, rle_decoded);
 }
 
 test "zstd native writer emits dictionary ids" {

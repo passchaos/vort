@@ -2033,8 +2033,12 @@ architecture blindly.
   allocates the final slice once and delegates all actual validation and output
   to the caller-owned decoder. Concatenated, skippable, dictionary, no-size, and
   multi-block streams retain the general path. The allocator/caller-owned ratio
-  falls to about `1.36–1.86x` on text/structured/repetitive/repeated-byte, and
-  the optional gate now protects a conservative `2.5x` ceiling. Focused tests
+  first fell to about `1.36–1.86x` on text/structured/repetitive/repeated-byte.
+  Reusing the public caller-owned facade from that final allocation also lets
+  raw/RLE shapes retain their specialized frame decoder; the locked compressed
+  rows now sit around `0.97–1.00x` and the 1 KiB raw row around `1.7x`, including
+  allocation/free overhead. The optional gate protects conservative `2.5x`
+  compressed and `3.0x` 1 KiB raw ceilings. Focused tests
   cover checksum and declared-size corruption plus concatenated/multi-block
   fallback without duplicating block decoding logic in the planner.
 

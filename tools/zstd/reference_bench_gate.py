@@ -89,6 +89,10 @@ def main() -> int:
     for name in compressed:
         if float(by_case[name]["into_over_alloc"]) > 2.5:
             raise AssertionError(f"allocator decode regression {name}: {by_case[name]}")
+    if float(by_case["incompressible"]["into_over_alloc"]) > 3.0:
+        raise AssertionError(
+            f"raw allocator decode regression: {by_case['incompressible']}"
+        )
 
     print(
         "zstd_reference_bench_gate=ok "
