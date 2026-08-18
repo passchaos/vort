@@ -2177,6 +2177,13 @@ architecture blindly.
   structured quality-4 reference row now decodes exactly at about `1.38x`
   libbrotli throughput instead of returning `UnsupportedBrotliFeature`.
 
+- Probed the expanded Brotli decoder through libbrotli qualities 5...11 on the
+  locked text/structured/repetitive corpora. Every combination now round-trips
+  natively; quality-11 rows are retained in the gate as the strongest encoder
+  setting. Vort leads libbrotli 1.1.0 there by roughly `1.93/1.34/2.20x`, so the
+  optional matrix now protects quality 0, 3, 4, and 11 instead of extrapolating
+  from a fast encoder mode.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box

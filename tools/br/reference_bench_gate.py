@@ -15,6 +15,7 @@ CASES = {
     "tiny", "text", "structured", "repetitive", "random4k",
     "text_q3", "structured_q3", "repetitive_q3",
     "structured_q4",
+    "text_q11", "structured_q11", "repetitive_q11",
 }
 
 
@@ -48,6 +49,7 @@ def main() -> int:
         "repetitive": 1.35, "random4k": 1.5,
         "text_q3": 1.45, "structured_q3": 1.15, "repetitive_q3": 1.70,
         "structured_q4": 1.10,
+        "text_q11": 1.55, "structured_q11": 1.05, "repetitive_q11": 1.75,
     }
     for name, floor in floors.items():
         if float(by_case[name]["vort_over_reference"]) < floor:
@@ -56,6 +58,7 @@ def main() -> int:
         "text", "structured", "repetitive",
         "text_q3", "structured_q3", "repetitive_q3",
         "structured_q4",
+        "text_q11", "structured_q11", "repetitive_q11",
     ):
         if int(by_case[name]["exact_alloc_ns"]) > int(by_case[name]["vort_ns"]) * 2:
             raise AssertionError(f"exact alloc regression {name}: {by_case[name]}")
