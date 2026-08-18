@@ -1959,6 +1959,15 @@ architecture blindly.
   rows remain byte-identical and unchanged. The reference gate now requires a
   clear 1 KiB raw win and at least `0.85x` on the large raw row.
 
+- Extracted Zstd's shared Huffman/sequence reverse-bit reader into
+  `src/zstd/sequence/bit_reader.zig`, reducing the facade below 14,920 lines.
+  The module owns marker-bit parsing and a cross-byte reservoir reader, with a
+  per-bit reference oracle covering input lengths and widths 1...16. The first
+  reservoir implementation exposed a bit-order bug through that oracle before
+  integration; the corrected reader keeps the libzstd repeat5 matrix at the
+  established compressed/raw performance envelope. This is a structural hot-
+  path boundary for further reservoir work, not an unsupported speed claim.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box

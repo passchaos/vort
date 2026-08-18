@@ -3,6 +3,7 @@ const core = @import("core.zig");
 const checksum_mod = @import("checksum.zig");
 const dictionary_mod = @import("dictionary.zig");
 const sequence_predefined = @import("zstd/sequence/predefined.zig");
+const sequence_bit_reader = @import("zstd/sequence/bit_reader.zig");
 const raw_frame = @import("zstd/frame/raw.zig");
 const huffman = @import("huffman.zig");
 
@@ -5146,40 +5147,7 @@ fn defaultMatchLengthSymbol(state: usize) Error!SequenceSymbol {
     return sequence_predefined.match(state);
 }
 
-const ReverseBitReader = struct {
-    bytes: []const u8,
-    remaining_bits: usize,
-
-    fn init(bitstream: []const u8) Error!ReverseBitReader {
-        if (bitstream.len == 0) return error.TruncatedFrame;
-        const last = bitstream[bitstream.len - 1];
-        if (last == 0) return error.CorruptFrame;
-
-        const marker_bit = highBitIndex(last);
-        const payload_bits = (bitstream.len - 1) * 8 + marker_bit;
-        return .{ .bytes = bitstream, .remaining_bits = payload_bits };
-    }
-
-    fn read(self: *ReverseBitReader, bit_count: u8) Error!usize {
-        if (bit_count == 0) return 0;
-        if (bit_count > @bitSizeOf(usize)) return error.CorruptFrame;
-        if (bit_count > self.remaining_bits) return error.TruncatedFrame;
-        var value: usize = 0;
-        var bit = self.remaining_bits;
-        while (bit > self.remaining_bits - bit_count) {
-            bit -= 1;
-            const byte = self.bytes[bit / 8];
-            const bit_index: u3 = @intCast(bit & 7);
-            value = (value << 1) | @as(usize, @intCast((byte >> bit_index) & 1));
-        }
-        self.remaining_bits -= bit_count;
-        return value;
-    }
-
-    fn expectEnd(self: ReverseBitReader) Error!void {
-        if (self.remaining_bits != 0) return error.CorruptFrame;
-    }
-};
+const ReverseBitReader = sequence_bit_reader.Reader;
 
 const low_bit_mask = [9]u8{
     0b00000000,
@@ -5268,15 +5236,6 @@ const ForwardBitReader = struct {
         return .{ @bitCast(@as(UT, @intCast(out))), num };
     }
 };
-
-fn highBitIndex(byte: u8) usize {
-    var bit: usize = 8;
-    while (bit > 0) {
-        bit -= 1;
-        if ((byte & (@as(u8, 1) << @as(u3, @intCast(bit)))) != 0) return bit;
-    }
-    unreachable;
-}
 
 fn decodeRleSequencesCompressedBlockIntoBuffer(
     block: []const u8,
