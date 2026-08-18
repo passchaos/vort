@@ -86,7 +86,7 @@ def main() -> int:
         "tiny": 0.10, "text": 0.60, "structured": 0.25,
         "repetitive": 0.28, "incompressible": 5.0, "rle64k": 0.75,
         "raw256k": 0.85,
-        "numbered_json": 0.09, "huffman80k": 0.24, "ascii64k": 0.07,
+        "numbered_json": 0.09, "huffman80k": 0.27, "ascii64k": 0.07,
     }
     for name, floor in floors.items():
         if float(by_case[name]["vort_over_reference"]) < floor:

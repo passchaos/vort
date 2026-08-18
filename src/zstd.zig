@@ -6,6 +6,7 @@ const sequence_predefined = @import("zstd/sequence/predefined.zig");
 const sequence_bit_reader = @import("zstd/sequence/bit_reader.zig");
 const single_predefined = @import("zstd/sequence/single_predefined.zig");
 const sequence_continuation = @import("zstd/sequence/continuation.zig");
+const sequence_match_copy = @import("zstd/sequence/match_copy.zig");
 const raw_frame = @import("zstd/frame/raw.zig");
 const known_size_frame = @import("zstd/frame/known_size.zig");
 const huffman_lookup = @import("zstd/literals/huffman_lookup.zig");
@@ -5757,20 +5758,7 @@ fn copyMatchFromHistory(
 }
 
 fn appendRepeatedMatch(output: []u8, written: *usize, repeat_start: usize, match_len: usize) void {
-    const initial_available = written.* - repeat_start;
-    const destination_start = written.*;
-    written.* += match_len;
-    var copied: usize = 0;
-    while (copied < match_len) {
-        const available = if (copied == 0) initial_available else copied;
-        const copy_len = @min(available, match_len - copied);
-        const source_start = if (copied == 0) repeat_start else destination_start;
-        @memcpy(
-            output[destination_start + copied ..][0..copy_len],
-            output[source_start..][0..copy_len],
-        );
-        copied += copy_len;
-    }
+    sequence_match_copy.append(output, written, repeat_start, match_len);
 }
 
 fn rawOrRleDecodedSizeLimited(frame: []const u8, max_output_len: usize) Error!usize {

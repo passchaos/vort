@@ -2068,6 +2068,15 @@ architecture blindly.
   protect those material gains; libzstd still leads the general Huffman/FSE
   paths, so further table/state and match-loop work remains necessary.
 
+- Extracted Zstd's current-frame match replay into
+  `src/zstd/sequence/match_copy.zig`, keeping match mechanics beside sequence
+  decoding rather than growing the facade. Non-overlapping matches now take one
+  exact memcpy, while overlapping matches seed one period and double the
+  initialized prefix. Focused period/non-overlap tests lock LZ semantics. A
+  1,000-iteration huffman80k A/B improved from roughly `0.290x` to `0.302x`
+  libzstd throughput (about `4%` faster), and the expanded gate raises that
+  row's floor to preserve the gain without claiming parity.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box
