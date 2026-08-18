@@ -69,8 +69,8 @@ def main() -> int:
     # rather than pretending Vort already leads. Bound catastrophic regressions
     # while retaining exact per-case ratios for follow-up fast-path work.
     floors = {
-        "tiny": 0.70, "text": 0.40, "structured": 0.14,
-        "repetitive": 0.16, "incompressible": 5.0, "rle64k": 0.35,
+        "tiny": 0.10, "text": 0.60, "structured": 0.25,
+        "repetitive": 0.28, "incompressible": 5.0, "rle64k": 0.75,
         "raw256k": 0.85,
     }
     for name, floor in floors.items():

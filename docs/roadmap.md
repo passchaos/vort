@@ -1999,6 +1999,18 @@ architecture blindly.
   future production decoder fast path, while decode behavior and the generic
   mixed/RLE/FSE/repeat-table fallback are unchanged.
 
+- Added that production fast path without growing the facade: the bitstream-
+  only decoder lives in `src/zstd/sequence/single_predefined.zig`, while the
+  parent retains repeat-offset mutation and output/history ownership. For an
+  exactly-one-sequence, all-predefined block, dispatch occurs before constructing
+  the three inline 512-entry FSE tables. In repeat5 libzstd comparisons,
+  text/structured/repetitive improve from about `0.52/0.19/0.21x` to
+  as high as `0.93/0.33/0.37x`, and the repeated-byte row can reach roughly
+  reference parity. Short gate runs are noisier (text has remained above about
+  `0.64x`), so conservative floors protect material improvement without encoding
+  the best observed sample as a guarantee. Raw rows remain on their isolated
+  fast path.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box

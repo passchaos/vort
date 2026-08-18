@@ -4,6 +4,7 @@ const checksum_mod = @import("checksum.zig");
 const dictionary_mod = @import("dictionary.zig");
 const sequence_predefined = @import("zstd/sequence/predefined.zig");
 const sequence_bit_reader = @import("zstd/sequence/bit_reader.zig");
+const single_predefined = @import("zstd/sequence/single_predefined.zig");
 const raw_frame = @import("zstd/frame/raw.zig");
 const huffman = @import("huffman.zig");
 
@@ -5271,6 +5272,21 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
 ) Error!void {
     if (frame_output_start > written.*) return error.CorruptFrame;
     var offset = section.sequence_payload_offset;
+    if (section.sequence_count == 1 and
+        offset < block.len and
+        sequence_predefined.isModeByte(block[offset]))
+    {
+        return try decodeSinglePredefinedSequence(
+            block,
+            section,
+            offset + 1,
+            output,
+            written,
+            frame_output_start,
+            dictionary_history,
+            frame_state,
+        );
+    }
     const parsed_spec = try parseSequenceModeSpec(block, &offset, section.sequence_count);
     const spec = try resolveSequenceModeSpec(parsed_spec, frame_state.previous_tables);
     try expectConsumedBlock(offset, block.len);
@@ -5303,6 +5319,63 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
     }
     frame_state.previous_tables = spec.tables();
     frame_state.repeated_offsets = state.repeated_offsets;
+}
+
+fn decodeSinglePredefinedSequence(
+    block: []const u8,
+    section: LiteralOnlySection,
+    bitstream_offset: usize,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    dictionary_history: []const u8,
+    frame_state: *SequenceFrameState,
+) Error!void {
+    if (bitstream_offset >= block.len) return error.TruncatedFrame;
+    const sequence = try single_predefined.decode(block[bitstream_offset..]);
+    const match_offset = try resolveSequenceOffset(
+        sequence.offset_base,
+        sequence.offset_bits,
+        sequence.offset_extra,
+        sequence.literal_len,
+        &frame_state.repeated_offsets,
+    );
+
+    try copyLiteralsFromSection(
+        block,
+        section,
+        0,
+        output,
+        written,
+        sequence.literal_len,
+    );
+    try copyMatchFromHistory(
+        output,
+        written,
+        frame_output_start,
+        dictionary_history,
+        match_offset,
+        sequence.match_len,
+    );
+    if (section.regenerated_size < sequence.literal_len) {
+        return error.CorruptFrame;
+    }
+    try copyLiteralsFromSection(
+        block,
+        section,
+        sequence.literal_len,
+        output,
+        written,
+        section.regenerated_size - sequence.literal_len,
+    );
+    frame_state.previous_tables = .{
+        .ll_mode = .predefined,
+        .of_mode = .predefined,
+        .ml_mode = .predefined,
+        .literal_rle = null,
+        .offset_rle = null,
+        .match_rle = null,
+    };
 }
 
 fn rleSequencesCompressedBlockDecodedSize(
