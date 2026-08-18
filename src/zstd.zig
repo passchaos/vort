@@ -5115,7 +5115,7 @@ fn readFseSequenceTable(
 
 const FseTableEntry = struct {
     symbol: u8,
-    baseline: usize,
+    baseline: u16,
     bits: u8,
 };
 
@@ -5215,11 +5215,11 @@ fn buildFseTable(values: []const u16, entries: []FseTableEntry) Error!void {
             entries[temp_states[i]] = if (i < double_state_count) .{
                 .symbol = @intCast(symbol),
                 .bits = @intCast(share_size_log + 1),
-                .baseline = single_state_count * share_size + @as(u16, @intCast(i)) * 2 * share_size,
+                .baseline = @intCast(single_state_count * share_size + @as(u16, @intCast(i)) * 2 * share_size),
             } else .{
                 .symbol = @intCast(symbol),
                 .bits = @intCast(share_size_log),
-                .baseline = (@as(u16, @intCast(i)) - double_state_count) * share_size,
+                .baseline = @intCast((@as(u16, @intCast(i)) - double_state_count) * share_size),
             };
         }
     }

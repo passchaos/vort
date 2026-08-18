@@ -2219,6 +2219,14 @@ architecture blindly.
   `0.24x`, and mixed binary to `0.32x` libzstd throughput. The corresponding
   conservative floors increase, while single-sequence text remains above `3x`.
 
+- Compacted the temporary FSE table-construction baseline from `usize` to the
+  format-bounded `u16`, with checked casts at the two state-assignment sites.
+  This reduces the raw builder scratch footprint before symbols are converted
+  into the already-compact decode table. The 100-iteration matrix keeps
+  huffman80k near `0.39x`, lifts 512 KiB JSON to about `0.25x`, and mixed binary
+  to about `0.32x` libzstd throughput; all 834 sequence/parser/encoder tests and
+  the 124-case lib-generated probe pass. Multi-block floors rise accordingly.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box
