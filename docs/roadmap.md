@@ -2200,6 +2200,16 @@ architecture blindly.
   path. These rows prevent the strong single-sequence and raw results from
   hiding the remaining general FSE/Huffman and multi-block gaps.
 
+- Extended the isolated known-size Zstd frame planner from exactly one block to
+  one complete dictionary-free frame with any number of raw/RLE/compressed
+  blocks. It scans only block headers and stored payload lengths, leaving all
+  entropy/checksum/declared-size validation to the production decoder. This
+  lets allocator decode reserve the declared output once and skip the full
+  decoded-size preflight on common multi-block frames. The large text/JSON/
+  mixed-binary allocator ratios fall from roughly `2.31/1.94/1.79x` caller-
+  owned cost to about `0.96/1.00/0.99x`; concatenated, dictionary, and no-size
+  streams retain the general path, with focused single/multi-block planner tests.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box

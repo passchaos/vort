@@ -37,20 +37,25 @@ pub fn plan(frame: []const u8) ?Plan {
     if (field_size == 2) content_size_u64 += 256;
     const content_size = std.math.cast(usize, content_size_u64) orelse return null;
 
-    // Lock the fast path to a single block whose stored payload and optional
-    // checksum end exactly at the input boundary. This excludes concatenation
-    // in O(1), without scanning a large raw payload for coincidental magic.
+    // Walk only block headers and stored payload lengths. The production
+    // decoder still validates compressed contents; this scan merely proves
+    // that one frame (possibly multi-block) ends exactly at the input boundary,
+    // excluding concatenation without searching payload bytes for magic.
     offset += field_size;
-    if (frame.len - offset < 3) return null;
-    const block_header = std.mem.readInt(u24, frame[offset..][0..3], .little);
-    if ((block_header & 1) == 0) return null;
-    const block_type = (block_header >> 1) & 0x03;
-    if (block_type == 3) return null;
-    const block_len: usize = @intCast(block_header >> 3);
-    const stored_len: usize = if (block_type == 1) 1 else block_len;
+    while (true) {
+        if (frame.len - offset < 3) return null;
+        const block_header = std.mem.readInt(u24, frame[offset..][0..3], .little);
+        offset += 3;
+        const block_type = (block_header >> 1) & 0x03;
+        if (block_type == 3) return null;
+        const block_len: usize = @intCast(block_header >> 3);
+        const stored_len: usize = if (block_type == 1) 1 else block_len;
+        if (frame.len - offset < stored_len) return null;
+        offset += stored_len;
+        if ((block_header & 1) != 0) break;
+    }
     const checksum_len: usize = if ((descriptor & 0x04) != 0) 4 else 0;
-    const expected_len = std.math.add(usize, offset + 3, stored_len) catch return null;
-    const final_len = std.math.add(usize, expected_len, checksum_len) catch return null;
+    const final_len = std.math.add(usize, offset, checksum_len) catch return null;
     if (final_len != frame.len) return null;
     return .{ .content_size = content_size };
 }
@@ -65,4 +70,13 @@ test "known-size plan recognizes one dictionary-free frame" {
     var dictionary = frame;
     dictionary[4] |= 1;
     try std.testing.expectEqual(@as(?Plan, null), plan(&dictionary));
+}
+
+test "known-size plan recognizes a multi-block frame" {
+    const frame = [_]u8{
+        0x28, 0xb5, 0x2f, 0xfd, 0x20, 5,
+        0x20, 0x00, 0x00, 'a',  'b',  'c',
+        'd',  0x09, 0x00, 0x00, 'e',
+    };
+    try std.testing.expectEqual(@as(usize, 5), plan(&frame).?.content_size);
 }

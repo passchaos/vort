@@ -14367,7 +14367,7 @@ test "zstd known-size allocator fast path preserves frame validation" {
     );
 }
 
-test "zstd known-size allocator plan excludes concatenated and multi-block streams" {
+test "zstd known-size allocator plan excludes concatenated streams" {
     const first = try encodeFrameWithLevelAlloc(std.testing.allocator, "first frame" ** 32, 1);
     defer std.testing.allocator.free(first);
     const second = try encodeFrameWithLevelAlloc(std.testing.allocator, "second frame" ** 32, 1);
@@ -14381,7 +14381,7 @@ test "zstd known-size allocator plan excludes concatenated and multi-block strea
     const large_payload = "0123456789abcdef" ** (20 * 1024);
     const multi = try encodeRawOrRleFrameAlloc(std.testing.allocator, large_payload);
     defer std.testing.allocator.free(multi);
-    try std.testing.expectEqual(@as(?known_size_frame.Plan, null), known_size_frame.plan(multi));
+    try std.testing.expectEqual(large_payload.len, known_size_frame.plan(multi).?.content_size);
 }
 
 test "zstd known-size allocator reuses raw and RLE frame decode" {

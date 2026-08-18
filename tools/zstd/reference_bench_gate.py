@@ -107,6 +107,9 @@ def main() -> int:
     }:
         if float(by_case[name]["into_over_alloc"]) > 2.5:
             raise AssertionError(f"allocator decode regression {name}: {by_case[name]}")
+    for name in ("large_text", "large_json", "binary_mixed"):
+        if float(by_case[name]["into_over_alloc"]) > 1.25:
+            raise AssertionError(f"multi-block allocator regression {name}: {by_case[name]}")
     if float(by_case["incompressible"]["into_over_alloc"]) > 3.0:
         raise AssertionError(
             f"raw allocator decode regression: {by_case['incompressible']}"
