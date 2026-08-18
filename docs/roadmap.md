@@ -2192,6 +2192,14 @@ architecture blindly.
   quality-4 frame and catches offset, omit, affix, and uppercase drift without
   making the production library depend on the system runtime.
 
+- Expanded the Zstd/libzstd gate with 512 KiB multi-block text, numbered JSON,
+  and mixed structured/binary corpora. The easy repeated-text shape already
+  reaches about `1.08x` libzstd, while realistic multi-sequence JSON and mixed
+  binary currently reach only about `0.21/0.26x`; allocator decode is another
+  `1.8–2.3x` slower because multi-block frames still use the strict preflight
+  path. These rows prevent the strong single-sequence and raw results from
+  hiding the remaining general FSE/Huffman and multi-block gaps.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box

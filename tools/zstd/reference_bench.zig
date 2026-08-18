@@ -85,6 +85,25 @@ pub fn main(init: std.process.Init) !void {
         ascii_state = ascii_state *% 1_664_525 +% 1_013_904_223;
         byte.* = @intCast(32 + ((ascii_state >> 16) % 95));
     }
+    const large_text = try init.gpa.alloc(u8, 512 * 1024);
+    defer init.gpa.free(large_text);
+    const text_unit = "Vort large Zstandard corpus line with words, punctuation, and repeated structure.\n";
+    for (large_text, 0..) |*byte, index| byte.* = text_unit[index % text_unit.len];
+    var large_json: std.ArrayList(u8) = .empty;
+    defer large_json.deinit(init.gpa);
+    while (large_json.items.len < 512 * 1024) {
+        var line: [128]u8 = undefined;
+        const index = large_json.items.len / 64;
+        const formatted = try std.fmt.bufPrint(&line, "{{\"id\":{d},\"service\":\"vort\",\"message\":\"structured zstd corpus payload\"}}\n", .{index});
+        try large_json.appendSlice(init.gpa, formatted);
+    }
+    const binary_mixed = try init.gpa.alloc(u8, 512 * 1024);
+    defer init.gpa.free(binary_mixed);
+    var binary_state: u32 = 0xfeed_beef;
+    for (binary_mixed, 0..) |*byte, index| {
+        binary_state = binary_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (index % 64 < 48) @truncate(index * 17) else @truncate(binary_state >> 16);
+    }
 
     const cases = [_]Case{
         .{ .name = "tiny", .payload = "hello zstd" },
@@ -106,6 +125,9 @@ pub fn main(init: std.process.Init) !void {
         .{ .name = "numbered_json", .payload = numbered_json.items },
         .{ .name = "huffman80k", .payload = huffman_payload },
         .{ .name = "ascii64k", .payload = ascii_payload, .level = 9 },
+        .{ .name = "large_text", .payload = large_text },
+        .{ .name = "large_json", .payload = large_json.items },
+        .{ .name = "binary_mixed", .payload = binary_mixed },
     };
 
     var rows: std.ArrayList(Row) = .empty;
