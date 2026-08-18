@@ -1938,6 +1938,16 @@ architecture blindly.
   shape, exact per-case ratios, and conservative regression floors; it does not
   misrepresent the current gaps as leadership.
 
+- Began structural work on that Zstd sequence target by moving the 178-line
+  predefined LL/OF/ML decode tables and checked state lookup into
+  `src/zstd/sequence/predefined.zig`. This reduces the already-large
+  `src/zstd.zig` facade by roughly 176 lines and gives future predefined fast
+  paths a cohesive module instead of adding more tables/logic to the 15K-line
+  file. A single-sequence shortcut and an RLE-match memset were both measured
+  and rejected after repeat5 end-to-end results were neutral-to-negative; only
+  the behavior-preserving extraction remains. The libzstd matrix stays at the
+  established baseline, and the new module has its own invalid-state tests.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box

@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("core.zig");
 const checksum_mod = @import("checksum.zig");
 const dictionary_mod = @import("dictionary.zig");
+const sequence_predefined = @import("zstd/sequence/predefined.zig");
 const huffman = @import("huffman.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
@@ -4831,12 +4832,7 @@ const SequenceModeSpec = struct {
     }
 };
 
-const SequenceSymbol = struct {
-    base: usize,
-    additional_bits: u8,
-    next_state: usize,
-    state_bits: u8,
-};
+const SequenceSymbol = sequence_predefined.Symbol;
 
 const max_sequence_fse_table_size = 1 << 9;
 
@@ -4890,175 +4886,6 @@ const ResolvedSymbolTable = struct {
     mode: SymbolMode,
     rle: ?SequenceSymbol,
     fse: SequenceFseTable = .{},
-};
-
-const default_ll_symbols = [_]SequenceSymbol{
-    .{ .base = 0, .additional_bits = 0, .next_state = 0, .state_bits = 4 },
-    .{ .base = 0, .additional_bits = 0, .next_state = 16, .state_bits = 4 },
-    .{ .base = 1, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
-    .{ .base = 3, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
-    .{ .base = 4, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
-    .{ .base = 6, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
-    .{ .base = 7, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
-    .{ .base = 9, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
-    .{ .base = 10, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
-    .{ .base = 12, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
-    .{ .base = 14, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 16, .additional_bits = 1, .next_state = 0, .state_bits = 5 },
-    .{ .base = 20, .additional_bits = 1, .next_state = 0, .state_bits = 5 },
-    .{ .base = 22, .additional_bits = 1, .next_state = 0, .state_bits = 5 },
-    .{ .base = 28, .additional_bits = 2, .next_state = 0, .state_bits = 5 },
-    .{ .base = 32, .additional_bits = 3, .next_state = 0, .state_bits = 5 },
-    .{ .base = 48, .additional_bits = 4, .next_state = 0, .state_bits = 5 },
-    .{ .base = 64, .additional_bits = 6, .next_state = 32, .state_bits = 5 },
-    .{ .base = 128, .additional_bits = 7, .next_state = 0, .state_bits = 5 },
-    .{ .base = 256, .additional_bits = 8, .next_state = 0, .state_bits = 6 },
-    .{ .base = 1024, .additional_bits = 10, .next_state = 0, .state_bits = 6 },
-    .{ .base = 4096, .additional_bits = 12, .next_state = 0, .state_bits = 6 },
-    .{ .base = 0, .additional_bits = 0, .next_state = 32, .state_bits = 4 },
-    .{ .base = 1, .additional_bits = 0, .next_state = 0, .state_bits = 4 },
-    .{ .base = 2, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
-    .{ .base = 4, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
-    .{ .base = 5, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
-    .{ .base = 7, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
-    .{ .base = 8, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
-    .{ .base = 10, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
-    .{ .base = 11, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
-    .{ .base = 13, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 16, .additional_bits = 1, .next_state = 32, .state_bits = 5 },
-    .{ .base = 18, .additional_bits = 1, .next_state = 0, .state_bits = 5 },
-    .{ .base = 22, .additional_bits = 1, .next_state = 32, .state_bits = 5 },
-    .{ .base = 24, .additional_bits = 2, .next_state = 0, .state_bits = 5 },
-    .{ .base = 32, .additional_bits = 3, .next_state = 32, .state_bits = 5 },
-    .{ .base = 40, .additional_bits = 3, .next_state = 0, .state_bits = 5 },
-    .{ .base = 64, .additional_bits = 6, .next_state = 0, .state_bits = 4 },
-    .{ .base = 64, .additional_bits = 6, .next_state = 16, .state_bits = 4 },
-    .{ .base = 128, .additional_bits = 7, .next_state = 32, .state_bits = 5 },
-    .{ .base = 512, .additional_bits = 9, .next_state = 0, .state_bits = 6 },
-    .{ .base = 2048, .additional_bits = 11, .next_state = 0, .state_bits = 6 },
-    .{ .base = 0, .additional_bits = 0, .next_state = 48, .state_bits = 4 },
-    .{ .base = 1, .additional_bits = 0, .next_state = 16, .state_bits = 4 },
-    .{ .base = 2, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
-    .{ .base = 3, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
-    .{ .base = 5, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
-    .{ .base = 6, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
-    .{ .base = 8, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
-    .{ .base = 9, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
-    .{ .base = 11, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
-    .{ .base = 12, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
-    .{ .base = 15, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 18, .additional_bits = 1, .next_state = 32, .state_bits = 5 },
-    .{ .base = 20, .additional_bits = 1, .next_state = 32, .state_bits = 5 },
-    .{ .base = 24, .additional_bits = 2, .next_state = 32, .state_bits = 5 },
-    .{ .base = 28, .additional_bits = 2, .next_state = 32, .state_bits = 5 },
-    .{ .base = 40, .additional_bits = 3, .next_state = 32, .state_bits = 5 },
-    .{ .base = 48, .additional_bits = 4, .next_state = 32, .state_bits = 5 },
-    .{ .base = 65536, .additional_bits = 16, .next_state = 0, .state_bits = 6 },
-    .{ .base = 32768, .additional_bits = 15, .next_state = 0, .state_bits = 6 },
-    .{ .base = 16384, .additional_bits = 14, .next_state = 0, .state_bits = 6 },
-    .{ .base = 8192, .additional_bits = 13, .next_state = 0, .state_bits = 6 },
-};
-
-const default_of_symbols = [_]SequenceSymbol{
-    .{ .base = 0, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
-    .{ .base = 61, .additional_bits = 6, .next_state = 0, .state_bits = 4 },
-    .{ .base = 509, .additional_bits = 9, .next_state = 0, .state_bits = 5 },
-    .{ .base = 32765, .additional_bits = 15, .next_state = 0, .state_bits = 5 },
-    .{ .base = 2097149, .additional_bits = 21, .next_state = 0, .state_bits = 5 },
-    .{ .base = 5, .additional_bits = 3, .next_state = 0, .state_bits = 5 },
-    .{ .base = 125, .additional_bits = 7, .next_state = 0, .state_bits = 4 },
-    .{ .base = 4093, .additional_bits = 12, .next_state = 0, .state_bits = 5 },
-    .{ .base = 262141, .additional_bits = 18, .next_state = 0, .state_bits = 5 },
-    .{ .base = 8388605, .additional_bits = 23, .next_state = 0, .state_bits = 5 },
-    .{ .base = 29, .additional_bits = 5, .next_state = 0, .state_bits = 5 },
-    .{ .base = 253, .additional_bits = 8, .next_state = 0, .state_bits = 4 },
-    .{ .base = 16381, .additional_bits = 14, .next_state = 0, .state_bits = 5 },
-    .{ .base = 1048573, .additional_bits = 20, .next_state = 0, .state_bits = 5 },
-    .{ .base = 1, .additional_bits = 2, .next_state = 0, .state_bits = 5 },
-    .{ .base = 125, .additional_bits = 7, .next_state = 16, .state_bits = 4 },
-    .{ .base = 2045, .additional_bits = 11, .next_state = 0, .state_bits = 5 },
-    .{ .base = 131069, .additional_bits = 17, .next_state = 0, .state_bits = 5 },
-    .{ .base = 4194301, .additional_bits = 22, .next_state = 0, .state_bits = 5 },
-    .{ .base = 13, .additional_bits = 4, .next_state = 0, .state_bits = 5 },
-    .{ .base = 253, .additional_bits = 8, .next_state = 16, .state_bits = 4 },
-    .{ .base = 8189, .additional_bits = 13, .next_state = 0, .state_bits = 5 },
-    .{ .base = 524285, .additional_bits = 19, .next_state = 0, .state_bits = 5 },
-    .{ .base = 1, .additional_bits = 1, .next_state = 0, .state_bits = 5 },
-    .{ .base = 61, .additional_bits = 6, .next_state = 16, .state_bits = 4 },
-    .{ .base = 1021, .additional_bits = 10, .next_state = 0, .state_bits = 5 },
-    .{ .base = 65533, .additional_bits = 16, .next_state = 0, .state_bits = 5 },
-    .{ .base = 268435453, .additional_bits = 28, .next_state = 0, .state_bits = 5 },
-    .{ .base = 134217725, .additional_bits = 27, .next_state = 0, .state_bits = 5 },
-    .{ .base = 67108861, .additional_bits = 26, .next_state = 0, .state_bits = 5 },
-    .{ .base = 33554429, .additional_bits = 25, .next_state = 0, .state_bits = 5 },
-    .{ .base = 16777213, .additional_bits = 24, .next_state = 0, .state_bits = 5 },
-};
-
-const default_ml_symbols = [_]SequenceSymbol{
-    .{ .base = 3, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 4, .additional_bits = 0, .next_state = 0, .state_bits = 4 },
-    .{ .base = 5, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
-    .{ .base = 6, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
-    .{ .base = 8, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
-    .{ .base = 9, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
-    .{ .base = 11, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
-    .{ .base = 13, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 16, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 19, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 22, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 25, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 28, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 31, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 34, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 37, .additional_bits = 1, .next_state = 0, .state_bits = 6 },
-    .{ .base = 41, .additional_bits = 1, .next_state = 0, .state_bits = 6 },
-    .{ .base = 47, .additional_bits = 2, .next_state = 0, .state_bits = 6 },
-    .{ .base = 59, .additional_bits = 3, .next_state = 0, .state_bits = 6 },
-    .{ .base = 83, .additional_bits = 4, .next_state = 0, .state_bits = 6 },
-    .{ .base = 131, .additional_bits = 7, .next_state = 0, .state_bits = 6 },
-    .{ .base = 515, .additional_bits = 9, .next_state = 0, .state_bits = 6 },
-    .{ .base = 4, .additional_bits = 0, .next_state = 16, .state_bits = 4 },
-    .{ .base = 5, .additional_bits = 0, .next_state = 0, .state_bits = 4 },
-    .{ .base = 6, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
-    .{ .base = 7, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
-    .{ .base = 9, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
-    .{ .base = 10, .additional_bits = 0, .next_state = 0, .state_bits = 5 },
-    .{ .base = 12, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 15, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 18, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 21, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 24, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 27, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 30, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 33, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 35, .additional_bits = 1, .next_state = 0, .state_bits = 6 },
-    .{ .base = 39, .additional_bits = 1, .next_state = 0, .state_bits = 6 },
-    .{ .base = 43, .additional_bits = 2, .next_state = 0, .state_bits = 6 },
-    .{ .base = 51, .additional_bits = 3, .next_state = 0, .state_bits = 6 },
-    .{ .base = 67, .additional_bits = 4, .next_state = 0, .state_bits = 6 },
-    .{ .base = 99, .additional_bits = 5, .next_state = 0, .state_bits = 6 },
-    .{ .base = 259, .additional_bits = 8, .next_state = 0, .state_bits = 6 },
-    .{ .base = 4, .additional_bits = 0, .next_state = 32, .state_bits = 4 },
-    .{ .base = 4, .additional_bits = 0, .next_state = 48, .state_bits = 4 },
-    .{ .base = 5, .additional_bits = 0, .next_state = 16, .state_bits = 4 },
-    .{ .base = 7, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
-    .{ .base = 8, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
-    .{ .base = 10, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
-    .{ .base = 11, .additional_bits = 0, .next_state = 32, .state_bits = 5 },
-    .{ .base = 14, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 17, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 20, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 23, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 26, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 29, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 32, .additional_bits = 0, .next_state = 0, .state_bits = 6 },
-    .{ .base = 65539, .additional_bits = 16, .next_state = 0, .state_bits = 6 },
-    .{ .base = 32771, .additional_bits = 15, .next_state = 0, .state_bits = 6 },
-    .{ .base = 16387, .additional_bits = 14, .next_state = 0, .state_bits = 6 },
-    .{ .base = 8195, .additional_bits = 13, .next_state = 0, .state_bits = 6 },
-    .{ .base = 4099, .additional_bits = 12, .next_state = 0, .state_bits = 6 },
-    .{ .base = 2051, .additional_bits = 11, .next_state = 0, .state_bits = 6 },
-    .{ .base = 1027, .additional_bits = 10, .next_state = 0, .state_bits = 6 },
 };
 
 fn parseSequenceModeSpec(block: []const u8, offset: *usize, sequence_count: usize) Error!SequenceModeSpec {
@@ -5306,18 +5133,15 @@ fn buildFseTable(values: []const u16, entries: []FseTableEntry) Error!void {
 }
 
 fn defaultLiteralLengthSymbol(state: usize) Error!SequenceSymbol {
-    if (state >= default_ll_symbols.len) return error.CorruptFrame;
-    return default_ll_symbols[state];
+    return sequence_predefined.literal(state);
 }
 
 fn defaultOffsetSymbol(state: usize) Error!SequenceSymbol {
-    if (state >= default_of_symbols.len) return error.CorruptFrame;
-    return default_of_symbols[state];
+    return sequence_predefined.offset(state);
 }
 
 fn defaultMatchLengthSymbol(state: usize) Error!SequenceSymbol {
-    if (state >= default_ml_symbols.len) return error.CorruptFrame;
-    return default_ml_symbols[state];
+    return sequence_predefined.match(state);
 }
 
 const ReverseBitReader = struct {
@@ -5706,9 +5530,9 @@ fn useRepeatedOffset(repeated_offsets: *[3]usize, index: usize) Error!usize {
 }
 
 test "zstd native default sequence tables reject invalid states as corrupt" {
-    try std.testing.expectError(error.CorruptFrame, defaultLiteralLengthSymbol(default_ll_symbols.len));
-    try std.testing.expectError(error.CorruptFrame, defaultOffsetSymbol(default_of_symbols.len));
-    try std.testing.expectError(error.CorruptFrame, defaultMatchLengthSymbol(default_ml_symbols.len));
+    try std.testing.expectError(error.CorruptFrame, defaultLiteralLengthSymbol(sequence_predefined.literal_symbols.len));
+    try std.testing.expectError(error.CorruptFrame, defaultOffsetSymbol(sequence_predefined.offset_symbols.len));
+    try std.testing.expectError(error.CorruptFrame, defaultMatchLengthSymbol(sequence_predefined.match_symbols.len));
 }
 
 test "zstd native repeat-offset resolver follows selector updates" {
@@ -7375,9 +7199,9 @@ fn emitMultiSequencePredefinedCompressedBlock(
     if (literal_lens.len != literal_ends.len) return false;
     if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return false;
 
-    const literal_plan = (try planPredefinedSequenceValues(literal_lens, &default_ll_symbols, 0)) orelse return false;
-    const offset_plan = (try planPredefinedSequenceValues(offsets, &default_of_symbols, 2)) orelse return false;
-    const match_plan = (try planPredefinedSequenceValues(match_lens, &default_ml_symbols, 0)) orelse return false;
+    const literal_plan = (try planPredefinedSequenceValues(literal_lens, &sequence_predefined.literal_symbols, 0)) orelse return false;
+    const offset_plan = (try planPredefinedSequenceValues(offsets, &sequence_predefined.offset_symbols, 2)) orelse return false;
+    const match_plan = (try planPredefinedSequenceValues(match_lens, &sequence_predefined.match_symbols, 0)) orelse return false;
 
     var payload: std.ArrayList(u8) = .empty;
     defer payload.deinit(allocator);
@@ -7880,7 +7704,7 @@ fn offsetSequenceTablePlanAlternatives(literal_lens: []const usize, offsets: []c
     if (try rleSequenceCodeForValues(offsets, &of_base, &of_bits)) |code| {
         try alternatives.add(.{ .rle = code });
     }
-    if (try planPredefinedSequenceValues(offsets, &default_of_symbols, 2)) |plan| {
+    if (try planPredefinedSequenceValues(offsets, &sequence_predefined.offset_symbols, 2)) |plan| {
         try alternatives.add(.{ .predefined = plan });
     }
     if (try planCompressedOffsetSequenceValues(literal_lens, offsets)) |plan| {
@@ -8312,9 +8136,9 @@ fn sequenceTableBits(kind: SequenceTableKind) []const u8 {
 
 fn sequenceTablePredefinedSymbols(kind: SequenceTableKind) []const SequenceSymbol {
     return switch (kind) {
-        .literal => default_ll_symbols[0..],
-        .offset => default_of_symbols[0..],
-        .match => default_ml_symbols[0..],
+        .literal => sequence_predefined.literal_symbols[0..],
+        .offset => sequence_predefined.offset_symbols[0..],
+        .match => sequence_predefined.match_symbols[0..],
     };
 }
 
@@ -8345,9 +8169,9 @@ fn multiSequencePayloadLenInternal(
     if (literal_ends) |ends| {
         if (ends.len != literal_lens.len) return error.CorruptFrame;
     }
-    const literal_plan = (try planPredefinedSequenceValues(literal_lens, &default_ll_symbols, 0)) orelse return error.CorruptFrame;
-    const offset_plan = (try planPredefinedSequenceValues(offsets, &default_of_symbols, 2)) orelse return error.CorruptFrame;
-    const match_plan = (try planPredefinedSequenceValues(match_lens, &default_ml_symbols, 0)) orelse return error.CorruptFrame;
+    const literal_plan = (try planPredefinedSequenceValues(literal_lens, &sequence_predefined.literal_symbols, 0)) orelse return error.CorruptFrame;
+    const offset_plan = (try planPredefinedSequenceValues(offsets, &sequence_predefined.offset_symbols, 2)) orelse return error.CorruptFrame;
+    const match_plan = (try planPredefinedSequenceValues(match_lens, &sequence_predefined.match_symbols, 0)) orelse return error.CorruptFrame;
 
     var len = try sequenceLiteralsPayloadSectionLen(block, literal_lens, literal_ends, tail_start);
     len = std.math.add(usize, len, try sequenceCountLen(literal_lens.len)) catch return error.IntegerOverflow;
@@ -9626,9 +9450,9 @@ fn predefinedSequenceReadFields(
     try appendBitField(out, &count, match_plan.states[0], 6);
 
     for (0..literal_plan.len) |i| {
-        const literal_symbol = default_ll_symbols[literal_plan.states[i]];
-        const offset_symbol = default_of_symbols[offset_plan.states[i]];
-        const match_symbol = default_ml_symbols[match_plan.states[i]];
+        const literal_symbol = sequence_predefined.literal_symbols[literal_plan.states[i]];
+        const offset_symbol = sequence_predefined.offset_symbols[offset_plan.states[i]];
+        const match_symbol = sequence_predefined.match_symbols[match_plan.states[i]];
 
         try appendBitField(out, &count, offset_plan.values[i] - offset_symbol.base, offset_symbol.additional_bits);
         try appendBitField(out, &count, match_plan.values[i] - match_symbol.base, match_symbol.additional_bits);
@@ -12589,7 +12413,7 @@ test "zstd sequence emitter supports compressed FSE absolute-offset table" {
         literal_ends[i] = payload.items.len;
     }
 
-    const literal_plan = (try planPredefinedSequenceValues(&literal_lens, &default_ll_symbols, 0)) orelse return error.CorruptFrame;
+    const literal_plan = (try planPredefinedSequenceValues(&literal_lens, &sequence_predefined.literal_symbols, 0)) orelse return error.CorruptFrame;
     const offset_plan = (try planCompressedSequenceValues(&offsets, .offset)) orelse return error.CorruptFrame;
     const plan: SequenceCombinedEmitPlan = .{
         .literal = .{ .predefined = literal_plan },
@@ -12651,7 +12475,7 @@ test "zstd sequence emitter supports compressed FSE repeat-offset selectors" {
         literal_ends[i] = payload.items.len;
     }
 
-    const literal_plan = (try planPredefinedSequenceValues(&literal_lens, &default_ll_symbols, 0)) orelse return error.CorruptFrame;
+    const literal_plan = (try planPredefinedSequenceValues(&literal_lens, &sequence_predefined.literal_symbols, 0)) orelse return error.CorruptFrame;
     const offset_plan = (try planCompressedOffsetSequenceValues(&literal_lens, &offsets)) orelse return error.CorruptFrame;
     const plan: SequenceCombinedEmitPlan = .{
         .literal = .{ .predefined = literal_plan },
@@ -12792,7 +12616,7 @@ test "zstd sequence emitter supports compressed FSE match-length table" {
         literal_ends[i] = payload.items.len;
     }
 
-    const literal_plan = (try planPredefinedSequenceValues(&literal_lens, &default_ll_symbols, 0)) orelse return error.CorruptFrame;
+    const literal_plan = (try planPredefinedSequenceValues(&literal_lens, &sequence_predefined.literal_symbols, 0)) orelse return error.CorruptFrame;
     const match_plan = (try planCompressedSequenceValues(&match_lens, .match)) orelse return error.CorruptFrame;
     const plan: SequenceCombinedEmitPlan = .{
         .literal = .{ .predefined = literal_plan },
