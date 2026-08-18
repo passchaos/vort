@@ -2122,6 +2122,16 @@ architecture blindly.
   `0.31/0.25/0.36x` for text/structured/repetitive (about `22–34%` faster),
   while stored/random leadership remains intact.
 
+- Removed redundant decoded-size passes from Brotli exact-size decode APIs.
+  `decodeStreamIntoExactSize` now decodes once into the caller's exact window
+  and maps an early `OutputTooSmall` or final length mismatch to `SizeMismatch`;
+  allocator and append exact-size helpers reuse that contract instead of
+  parsing every prefix tree two or three times. Existing undersized/oversized
+  tests preserve public error behavior and append rollback. The libbrotli tool
+  now records exact-allocation timing and gates it to at most twice caller-owned
+  decode; on compressed rows allocation plus decode is roughly one decode pass
+  (`~61 ms` per 1,000 calls) instead of decode plus the `~87–95 ms` preflight.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box

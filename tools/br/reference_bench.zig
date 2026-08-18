@@ -30,7 +30,7 @@ pub fn main(init: std.process.Init) !void {
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
     const writer = &csv.writer;
-    try writer.writeAll("case,reference_version,input_bytes,encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,size_ns\n");
+    try writer.writeAll("case,reference_version,input_bytes,encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,size_ns,exact_alloc_ns\n");
     for (&cases) |case| {
         const encoded = try runtime.encodeAlloc(init.gpa, case.payload, 0);
         defer init.gpa.free(encoded);
@@ -45,11 +45,12 @@ pub fn main(init: std.process.Init) !void {
         const vort_sample = try measure(init.io, .vort, runtime, encoded, vort_output, options.iterations);
         const reference_sample = try measure(init.io, .reference, runtime, encoded, reference_output, options.iterations);
         const size_sample = try measureSize(init.io, encoded, options.iterations);
+        const exact_sample = try measureExactAlloc(init.io, init.gpa, encoded, case.payload.len, options.iterations);
         const vort_mib_s = mibPerSecond(case.payload.len * options.iterations, vort_sample.elapsed_ns);
         const reference_mib_s = mibPerSecond(case.payload.len * options.iterations, reference_sample.elapsed_ns);
         try writer.print(
-            "{s},{x},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d},{d}\n",
-            .{ case.name, runtime.version(), case.payload.len, encoded.len, options.iterations, vort_sample.elapsed_ns, reference_sample.elapsed_ns, vort_mib_s, reference_mib_s, vort_mib_s / reference_mib_s, vort_sample.mix +% reference_sample.mix, size_sample.elapsed_ns },
+            "{s},{x},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d},{d},{d}\n",
+            .{ case.name, runtime.version(), case.payload.len, encoded.len, options.iterations, vort_sample.elapsed_ns, reference_sample.elapsed_ns, vort_mib_s, reference_mib_s, vort_mib_s / reference_mib_s, vort_sample.mix +% reference_sample.mix, size_sample.elapsed_ns, exact_sample.elapsed_ns },
         );
     }
     if (options.csv_path) |path| {
@@ -60,6 +61,23 @@ pub fn main(init: std.process.Init) !void {
         try stdout.interface.writeAll(csv.written());
         try stdout.interface.flush();
     }
+}
+
+fn measureExactAlloc(io: std.Io, allocator: std.mem.Allocator, encoded: []const u8, expected_len: usize, iterations: usize) !Sample {
+    var best = Sample{ .elapsed_ns = std.math.maxInt(u64), .mix = 0 };
+    for (0..5) |_| {
+        var mix: u64 = 0;
+        const start = std.Io.Clock.awake.now(io);
+        for (0..iterations) |_| {
+            const decoded = try vort.brDecodeStreamAllocExactSize(allocator, encoded, expected_len);
+            defer allocator.free(decoded);
+            mix +%= decoded.len;
+        }
+        const ns = start.durationTo(std.Io.Clock.awake.now(io)).nanoseconds;
+        const elapsed: u64 = if (ns <= 0) 0 else @intCast(ns);
+        if (elapsed < best.elapsed_ns) best = .{ .elapsed_ns = elapsed, .mix = mix };
+    }
+    return best;
 }
 
 fn parseOptions(args: *std.process.Args.Iterator) !Options {

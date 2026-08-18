@@ -490,8 +490,6 @@ pub fn decodeStreamAllocLimited(allocator: std.mem.Allocator, stream: []const u8
 }
 
 pub fn decodeStreamAllocExactSize(allocator: std.mem.Allocator, stream: []const u8, expected_output_len: usize) Error![]u8 {
-    const decoded_len = try decodedStreamSize(stream);
-    if (decoded_len != expected_output_len) return error.SizeMismatch;
     const out = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(out);
     const written = try decodeStreamIntoExactSize(stream, out, expected_output_len);
@@ -520,8 +518,6 @@ pub fn decodeStreamAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayLi
 }
 
 pub fn decodeStreamAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, expected_output_len: usize) Error!usize {
-    const decoded_len = try decodedStreamSize(stream);
-    if (decoded_len != expected_output_len) return error.SizeMismatch;
     try out.ensureUnusedCapacity(allocator, expected_output_len);
     const start = out.items.len;
     const slot = out.addManyAsSliceAssumeCapacity(expected_output_len);
@@ -598,8 +594,6 @@ pub fn decodeStreamIntoLimited(stream: []const u8, output: []u8, max_output_len:
 
 pub fn decodeStreamIntoExactSize(stream: []const u8, output: []u8, expected_output_len: usize) Error!usize {
     if (output.len < expected_output_len) return error.OutputTooSmall;
-    const decoded_len = try decodedStreamSize(stream);
-    if (decoded_len != expected_output_len) return error.SizeMismatch;
     const written = decodeStreamInto(stream, output[0..expected_output_len]) catch |err| switch (err) {
         error.OutputTooSmall => return error.SizeMismatch,
         else => return err,
