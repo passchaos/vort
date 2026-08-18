@@ -1924,6 +1924,20 @@ architecture blindly.
   probe, 93-row native library gate, and 814 unit tests cover the broader
   regression surface.
 
+- Added an opt-in same-process Zstd caller-owned decode comparison under
+  `tools/zstd/`, dynamically loading Ubuntu libzstd 1.5.5 and using level-1
+  reference frames as common input. Initial runs put Vort around `0.86/0.57/
+  0.20/0.22/0.89/0.60x` on tiny/text/structured/repetitive/incompressible/RLE
+  rows; the retained repeat5 gate currently records comparable gaps, while a
+  256 KiB raw multi-block row is around `0.8x`. The four compressed
+  cases all have raw literals, exactly one sequence, and predefined LL/OF/ML
+  tables, isolating the first optimization target to generic compressed-block
+  parse/sequence setup rather than Huffman or FSE table construction. A direct
+  RLE-match memset candidate was tested and reverted after end-to-end slowdown.
+  The evidence-first gate records reference version, block/literal/sequence
+  shape, exact per-case ratios, and conservative regression floors; it does not
+  misrepresent the current gaps as leadership.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box

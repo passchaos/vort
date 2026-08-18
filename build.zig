@@ -2422,6 +2422,48 @@ pub fn build(b: *std.Build) void {
         &lz4_reference_bench_gate.step,
     );
 
+    const zstd_reference_bench_exe = b.addExecutable(.{
+        .name = "vort-zstd-reference-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/reference_bench.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_zstd_reference_bench =
+        b.addRunArtifact(zstd_reference_bench_exe);
+    if (b.args) |args| run_zstd_reference_bench.addArgs(args);
+    const zstd_reference_bench_step = b.step(
+        "run-zstd-reference-bench",
+        "Compare caller-owned Zstd decode against runtime libzstd",
+    );
+    zstd_reference_bench_step.dependOn(&run_zstd_reference_bench.step);
+
+    const run_zstd_reference_bench_gate_csv =
+        b.addRunArtifact(zstd_reference_bench_exe);
+    run_zstd_reference_bench_gate_csv.addArgs(&.{
+        "--iterations", "1000",
+        "--csv",        "zig-out/vort-zstd-reference-bench.csv",
+    });
+    const zstd_reference_bench_gate = b.addSystemCommand(&.{
+        "python3", "tools/zstd/reference_bench_gate.py",
+        "--csv",   "zig-out/vort-zstd-reference-bench.csv",
+    });
+    zstd_reference_bench_gate.step.dependOn(
+        &run_zstd_reference_bench_gate_csv.step,
+    );
+    const zstd_reference_bench_gate_step = b.step(
+        "run-zstd-reference-bench-gate",
+        "Validate optional Vort/libzstd caller-owned decode comparison",
+    );
+    zstd_reference_bench_gate_step.dependOn(
+        &zstd_reference_bench_gate.step,
+    );
+
     const run_native_library_bench_path_csv = b.addRunArtifact(native_library_bench_exe);
     run_native_library_bench_path_csv.addArgs(&.{
         "--iterations",
@@ -3256,6 +3298,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&snappy_report_exe.step);
     check_step.dependOn(&snappy_reference_bench_exe.step);
     check_step.dependOn(&lz4_reference_bench_exe.step);
+    check_step.dependOn(&zstd_reference_bench_exe.step);
     check_step.dependOn(&dictionary_deflate_report_exe.step);
     check_step.dependOn(&dictionary_decode_bench_exe.step);
     check_step.dependOn(&level_report_exe.step);
