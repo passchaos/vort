@@ -1840,6 +1840,19 @@ architecture blindly.
   with split-input and file/hex CLI probe coverage for encoded and known-copy
   blocks.
 
+- Removed the duplicate full-token/checksum decode from allocating, append,
+  and exact-size Snappy frame APIs. These paths now preflight only framing and
+  declared block lengths before their single validating decode; raw block
+  allocation similarly consumes the length prefix once and decodes tokens
+  once. Error-priority tests retain output-limit, exact-size, malformed-token,
+  and checksum behavior. The old 1,500-line facade now delegates block
+  parsing/validation and overlapping history copies to focused
+  `snappy/{block_decode,match_copy}.zig` modules with independent oracles.
+  A same-machine ReleaseFast 1,000-iteration comparison improved framed decode
+  by about `1.50x...1.53x` on text, structured, repetitive, and incompressible
+  rows (`1.513x` geomean); the gate now enforces conservative ReleaseFast
+  floors for those rows.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box

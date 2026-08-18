@@ -1,6 +1,8 @@
 const std = @import("std");
 const core = @import("core.zig");
 const checksum = @import("checksum.zig");
+const block_decode = @import("snappy/block_decode.zig");
+const match_copy = @import("snappy/match_copy.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 
@@ -18,10 +20,7 @@ const uncompressed_data_chunk_type: u8 = 0x01;
 const min_skippable_chunk_type: u8 = 0x80;
 const stream_identifier_payload = "sNaPpY";
 
-const Header = struct {
-    decoded_len: usize,
-    index: usize,
-};
+const Header = block_decode.Header;
 
 pub const FrameSummary = struct {
     stream_identifier_count: usize = 0,
@@ -331,7 +330,7 @@ pub fn summarizeBlockLimited(block: []const u8, max_output_len: usize) Error!Blo
                 if (block.len - input_index < 1) return error.TruncatedFrame;
                 const offset: usize = (@as(usize, tag & 0xe0) << 3) | block[input_index];
                 input_index += 1;
-                try validateCopy(written, header.decoded_len, offset, len);
+                try match_copy.validate(written, header.decoded_len, offset, len);
                 written += len;
                 summary.copy_count += 1;
                 summary.copy1_count += 1;
@@ -342,7 +341,7 @@ pub fn summarizeBlockLimited(block: []const u8, max_output_len: usize) Error!Blo
                 if (block.len - input_index < 2) return error.TruncatedFrame;
                 const offset = std.mem.readInt(u16, block[input_index..][0..2], .little);
                 input_index += 2;
-                try validateCopy(written, header.decoded_len, offset, len);
+                try match_copy.validate(written, header.decoded_len, offset, len);
                 written += len;
                 summary.copy_count += 1;
                 summary.copy2_count += 1;
@@ -353,7 +352,7 @@ pub fn summarizeBlockLimited(block: []const u8, max_output_len: usize) Error!Blo
                 if (block.len - input_index < 4) return error.TruncatedFrame;
                 const offset = std.mem.readInt(u32, block[input_index..][0..4], .little);
                 input_index += 4;
-                try validateCopy(written, header.decoded_len, offset, len);
+                try match_copy.validate(written, header.decoded_len, offset, len);
                 written += len;
                 summary.copy_count += 1;
                 summary.copy4_count += 1;
@@ -376,20 +375,25 @@ pub fn decodeBlockAlloc(allocator: std.mem.Allocator, block: []const u8) Error![
 }
 
 pub fn decodeBlockAllocLimited(allocator: std.mem.Allocator, block: []const u8, max_output_len: usize) Error![]u8 {
-    const decoded_len = try decodedBlockSizeLimited(block, max_output_len);
-    const out = try allocator.alloc(u8, decoded_len);
+    const header = try readHeader(block);
+    if (header.decoded_len > max_output_len) {
+        return error.OutputLimitExceeded;
+    }
+    const out = try allocator.alloc(u8, header.decoded_len);
     errdefer allocator.free(out);
-    const written = try decodeBlockInto(block, out);
-    if (written != decoded_len) return error.SizeMismatch;
+    const written = try decodeBlockBody(block, header, out);
+    if (written != header.decoded_len) return error.SizeMismatch;
     return out;
 }
 
 pub fn decodeBlockAllocExactSize(allocator: std.mem.Allocator, block: []const u8, expected_output_len: usize) Error![]u8 {
-    const decoded_len = try decodedBlockSize(block);
-    if (decoded_len != expected_output_len) return error.SizeMismatch;
+    const header = try readHeader(block);
+    if (header.decoded_len != expected_output_len) {
+        return error.SizeMismatch;
+    }
     const out = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(out);
-    const written = try decodeBlockInto(block, out);
+    const written = try decodeBlockBody(block, header, out);
     if (written != expected_output_len) return error.SizeMismatch;
     return out;
 }
@@ -399,15 +403,18 @@ pub fn decodeBlockAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), 
 }
 
 pub fn decodeBlockAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, max_output_len: usize) Error!usize {
-    const decoded_len = try decodedBlockSizeLimited(block, max_output_len);
-    try out.ensureUnusedCapacity(allocator, decoded_len);
+    const header = try readHeader(block);
+    if (header.decoded_len > max_output_len) {
+        return error.OutputLimitExceeded;
+    }
+    try out.ensureUnusedCapacity(allocator, header.decoded_len);
     const start = out.items.len;
-    const slot = out.addManyAsSliceAssumeCapacity(decoded_len);
-    const written = decodeBlockInto(block, slot) catch |err| {
+    const slot = out.addManyAsSliceAssumeCapacity(header.decoded_len);
+    const written = decodeBlockBody(block, header, slot) catch |err| {
         out.items.len = start;
         return err;
     };
-    if (written != decoded_len) {
+    if (written != header.decoded_len) {
         out.items.len = start;
         return error.SizeMismatch;
     }
@@ -415,12 +422,14 @@ pub fn decodeBlockAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayLis
 }
 
 pub fn decodeBlockAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, expected_output_len: usize) Error!usize {
-    const decoded_len = try decodedBlockSize(block);
-    if (decoded_len != expected_output_len) return error.SizeMismatch;
+    const header = try readHeader(block);
+    if (header.decoded_len != expected_output_len) {
+        return error.SizeMismatch;
+    }
     try out.ensureUnusedCapacity(allocator, expected_output_len);
     const start = out.items.len;
     const slot = out.addManyAsSliceAssumeCapacity(expected_output_len);
-    const written = decodeBlockInto(block, slot) catch |err| {
+    const written = decodeBlockBody(block, header, slot) catch |err| {
         out.items.len = start;
         return err;
     };
@@ -434,6 +443,18 @@ pub fn decodeBlockAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayL
 pub fn decodeBlockInto(block: []const u8, output: []u8) Error!usize {
     const header = try readHeader(block);
     if (output.len < header.decoded_len) return error.OutputTooSmall;
+    return decodeBlockBody(block, header, output[0..header.decoded_len]);
+}
+
+/// Decode after the caller has already consumed the length prefix for output
+/// sizing. Allocation/append helpers use this boundary to validate and emit
+/// tokens once rather than running a complete summary pass before decoding.
+noinline fn decodeBlockBody(
+    block: []const u8,
+    header: Header,
+    output: []u8,
+) Error!usize {
+    std.debug.assert(output.len == header.decoded_len);
     var input_index = header.index;
     var written: usize = 0;
     while (input_index < block.len) {
@@ -454,7 +475,7 @@ pub fn decodeBlockInto(block: []const u8, output: []u8) Error!usize {
                 if (block.len - input_index < 1) return error.TruncatedFrame;
                 const offset: usize = (@as(usize, tag & 0xe0) << 3) | block[input_index];
                 input_index += 1;
-                try copyFromHistory(output[0..header.decoded_len], written, offset, len);
+                try match_copy.copy(output[0..header.decoded_len], written, offset, len);
                 written += len;
             },
             2 => {
@@ -462,7 +483,7 @@ pub fn decodeBlockInto(block: []const u8, output: []u8) Error!usize {
                 if (block.len - input_index < 2) return error.TruncatedFrame;
                 const offset = std.mem.readInt(u16, block[input_index..][0..2], .little);
                 input_index += 2;
-                try copyFromHistory(output[0..header.decoded_len], written, offset, len);
+                try match_copy.copy(output[0..header.decoded_len], written, offset, len);
                 written += len;
             },
             3 => {
@@ -470,7 +491,7 @@ pub fn decodeBlockInto(block: []const u8, output: []u8) Error!usize {
                 if (block.len - input_index < 4) return error.TruncatedFrame;
                 const offset = std.mem.readInt(u32, block[input_index..][0..4], .little);
                 input_index += 4;
-                try copyFromHistory(output[0..header.decoded_len], written, offset, len);
+                try match_copy.copy(output[0..header.decoded_len], written, offset, len);
                 written += len;
             },
             else => unreachable,
@@ -482,12 +503,15 @@ pub fn decodeBlockInto(block: []const u8, output: []u8) Error!usize {
 
 pub fn decodeBlockIntoExactSize(block: []const u8, output: []u8, expected_output_len: usize) Error!usize {
     if (output.len < expected_output_len) return error.OutputTooSmall;
-    const decoded_len = try decodedBlockSize(block);
-    if (decoded_len != expected_output_len) return error.SizeMismatch;
-    const written = decodeBlockInto(block, output[0..expected_output_len]) catch |err| switch (err) {
-        error.OutputTooSmall => return error.SizeMismatch,
-        else => return err,
-    };
+    const header = try readHeader(block);
+    if (header.decoded_len != expected_output_len) {
+        return error.SizeMismatch;
+    }
+    const written = try decodeBlockBody(
+        block,
+        header,
+        output[0..expected_output_len],
+    );
     if (written != expected_output_len) return error.SizeMismatch;
     return written;
 }
@@ -537,7 +561,12 @@ pub fn decodedBlockSize(block: []const u8) Error!usize {
 }
 
 pub fn decodedBlockSizeLimited(block: []const u8, max_output_len: usize) Error!usize {
-    return (try summarizeBlockLimited(block, max_output_len)).decoded_bytes;
+    const header = try readHeader(block);
+    if (header.decoded_len > max_output_len) {
+        return error.OutputLimitExceeded;
+    }
+    try block_decode.validateBody(block, header);
+    return header.decoded_len;
 }
 
 pub fn decodedBlockChunksSize(chunks: []const []const u8, compressed_scratch: []u8) Error!usize {
@@ -555,7 +584,7 @@ pub fn decodeFrameAlloc(allocator: std.mem.Allocator, frame: []const u8) Error![
 }
 
 pub fn decodeFrameAllocLimited(allocator: std.mem.Allocator, frame: []const u8, max_output_len: usize) Error![]u8 {
-    const decoded_len = try decodedFrameSizeLimited(frame, max_output_len);
+    const decoded_len = try preflightFrameDecodedLen(frame, max_output_len);
     const out = try allocator.alloc(u8, decoded_len);
     errdefer allocator.free(out);
     const written = try decodeFrameInto(frame, out);
@@ -564,7 +593,10 @@ pub fn decodeFrameAllocLimited(allocator: std.mem.Allocator, frame: []const u8, 
 }
 
 pub fn decodeFrameAllocExactSize(allocator: std.mem.Allocator, frame: []const u8, expected_output_len: usize) Error![]u8 {
-    const decoded_len = try decodedFrameSize(frame);
+    const decoded_len = try preflightFrameDecodedLen(
+        frame,
+        std.math.maxInt(usize),
+    );
     if (decoded_len != expected_output_len) return error.SizeMismatch;
     const out = try allocator.alloc(u8, expected_output_len);
     errdefer allocator.free(out);
@@ -578,7 +610,7 @@ pub fn decodeFrameAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), 
 }
 
 pub fn decodeFrameAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8, max_output_len: usize) Error!usize {
-    const decoded_len = try decodedFrameSizeLimited(frame, max_output_len);
+    const decoded_len = try preflightFrameDecodedLen(frame, max_output_len);
     try out.ensureUnusedCapacity(allocator, decoded_len);
     const start = out.items.len;
     const slot = out.addManyAsSliceAssumeCapacity(decoded_len);
@@ -594,7 +626,10 @@ pub fn decodeFrameAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayLis
 }
 
 pub fn decodeFrameAppendExactSize(allocator: std.mem.Allocator, out: *std.ArrayList(u8), frame: []const u8, expected_output_len: usize) Error!usize {
-    const decoded_len = try decodedFrameSize(frame);
+    const decoded_len = try preflightFrameDecodedLen(
+        frame,
+        std.math.maxInt(usize),
+    );
     if (decoded_len != expected_output_len) return error.SizeMismatch;
     try out.ensureUnusedCapacity(allocator, expected_output_len);
     const start = out.items.len;
@@ -641,12 +676,15 @@ pub fn decodeFrameInto(frame: []const u8, output: []u8) Error!usize {
 
 pub fn decodeFrameIntoExactSize(frame: []const u8, output: []u8, expected_output_len: usize) Error!usize {
     if (output.len < expected_output_len) return error.OutputTooSmall;
-    const decoded_len = try decodedFrameSize(frame);
+    const decoded_len = try preflightFrameDecodedLen(
+        frame,
+        std.math.maxInt(usize),
+    );
     if (decoded_len != expected_output_len) return error.SizeMismatch;
-    const written = decodeFrameInto(frame, output[0..expected_output_len]) catch |err| switch (err) {
-        error.OutputTooSmall => return error.SizeMismatch,
-        else => return err,
-    };
+    const written = try decodeFrameInto(
+        frame,
+        output[0..expected_output_len],
+    );
     if (written != expected_output_len) return error.SizeMismatch;
     return written;
 }
@@ -721,6 +759,37 @@ pub fn decodedFrameSizeLimited(frame: []const u8, max_output_len: usize) Error!u
                 total = next_total;
             },
         }
+    }
+    return total;
+}
+
+/// Determine the allocation size from framing and raw-block length prefixes.
+///
+/// The allocating/append decoders still validate every token and checksum in
+/// `decodeFrameInto`; this preflight deliberately avoids doing that same full
+/// decode twice. Output limits remain deterministic because all declared chunk
+/// lengths are accumulated before any caller-visible output is produced.
+fn preflightFrameDecodedLen(
+    frame: []const u8,
+    max_output_len: usize,
+) Error!usize {
+    var iterator = try FrameChunkIterator.init(frame);
+    var total: usize = 0;
+    while (try iterator.next()) |chunk| {
+        const decoded_len = switch (chunk.kind) {
+            .stream_identifier, .skippable => continue,
+            .uncompressed => chunk.payload.len - 4,
+            .compressed => blk: {
+                const decoded_len =
+                    (try readHeader(chunk.payload[4..])).decoded_len;
+                if (decoded_len > max_uncompressed_chunk_len) {
+                    return error.CorruptFrame;
+                }
+                break :blk decoded_len;
+            },
+        };
+        total = try checkedAdd(total, decoded_len);
+        if (total > max_output_len) return error.OutputLimitExceeded;
     }
     return total;
 }
@@ -816,20 +885,7 @@ fn joinChunks(chunks: []const []const u8, compressed_scratch: []u8) Error![]cons
 }
 
 fn readHeader(block: []const u8) Error!Header {
-    var result: usize = 0;
-    var shift: u6 = 0;
-    var index: usize = 0;
-    while (index < block.len and index < 5) : (index += 1) {
-        const byte = block[index];
-        const payload = byte & 0x7f;
-        if (index == 4 and payload > 0x0f) return error.CorruptFrame;
-        result |= @as(usize, payload) << shift;
-        if ((byte & 0x80) == 0) {
-            return .{ .decoded_len = result, .index = index + 1 };
-        }
-        shift += 7;
-    }
-    return if (index < 5) error.TruncatedFrame else error.CorruptFrame;
+    return block_decode.readHeader(block);
 }
 
 fn writeVarint(allocator: std.mem.Allocator, out: *std.ArrayList(u8), value: usize) Error!void {
@@ -929,19 +985,7 @@ fn writeU24(bytes: *[3]u8, value: usize) void {
 }
 
 fn readLiteralLen(tag: u8, block: []const u8, input_index: *usize) Error!usize {
-    const tag_len = tag >> 2;
-    if (tag_len < 60) return @as(usize, tag_len) + 1;
-    const byte_count: usize = @as(usize, tag_len) - 59;
-    if (block.len - input_index.* < byte_count) return error.TruncatedFrame;
-    var len_minus_one: usize = 0;
-    var shift: u6 = 0;
-    var i: usize = 0;
-    while (i < byte_count) : (i += 1) {
-        len_minus_one |= @as(usize, block[input_index.* + i]) << shift;
-        shift += 8;
-    }
-    input_index.* += byte_count;
-    return std.math.add(usize, len_minus_one, 1) catch error.IntegerOverflow;
+    return block_decode.readLiteralLen(tag, block, input_index);
 }
 
 fn literalHeaderLen(literal_len: usize) Error!usize {
@@ -1050,21 +1094,6 @@ fn countMatch(input: []const u8, candidate: usize, ip: usize) usize {
         len += 1;
     }
     return len;
-}
-
-fn validateCopy(written: usize, decoded_len: usize, offset_raw: anytype, len: usize) Error!void {
-    const offset: usize = @intCast(offset_raw);
-    if (offset == 0 or offset > written) return error.InvalidMatch;
-    if (len > decoded_len - written) return error.SizeMismatch;
-}
-
-fn copyFromHistory(output: []u8, written: usize, offset_raw: anytype, len: usize) Error!void {
-    try validateCopy(written, output.len, offset_raw, len);
-    const offset: usize = @intCast(offset_raw);
-    var i: usize = 0;
-    while (i < len) : (i += 1) {
-        output[written + i] = output[written - offset + i];
-    }
 }
 
 fn checkedAdd(a: usize, b: usize) Error!usize {
@@ -1338,6 +1367,30 @@ test "snappy framed stream exact-size helpers reject size drift" {
     try std.testing.expectEqualSlices(u8, "prefix:", appended.items);
     try std.testing.expectEqual(payload.len, try decodeFrameChunksAppendExactSize(std.testing.allocator, &appended, &chunks, scratch, payload.len));
     try std.testing.expectEqualSlices(u8, "prefix:" ++ payload, appended.items);
+}
+
+test "snappy allocating frame decode keeps checksum validation after length preflight" {
+    const payload = "snappy preflight checksum payload" ** 32;
+    const encoded = try encodeFrameAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    var corrupt = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(corrupt);
+
+    // The first data chunk follows the ten-byte stream identifier and stores
+    // its masked CRC immediately after the four-byte chunk header.
+    corrupt[14] ^= 1;
+    try std.testing.expectError(
+        error.ChecksumMismatch,
+        decodeFrameAlloc(std.testing.allocator, corrupt),
+    );
+    try std.testing.expectError(
+        error.ChecksumMismatch,
+        decodeFrameAllocExactSize(
+            std.testing.allocator,
+            corrupt,
+            payload.len,
+        ),
+    );
 }
 
 test "snappy framed stream decodes compressed and skippable chunks" {

@@ -2321,6 +2321,9 @@ pub fn build(b: *std.Build) void {
         "--csv",
         "zig-out/vort-snappy-report.csv",
     });
+    if (optimize == .ReleaseFast) {
+        snappy_report_gate.addArg("--enforce-throughput");
+    }
     snappy_report_gate.step.dependOn(snappy_report_csv_step);
     const snappy_report_gate_step = b.step("run-snappy-report-gate", "Validate dependency-free Snappy raw/framed report CSV");
     snappy_report_gate_step.dependOn(&snappy_report_gate.step);

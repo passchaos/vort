@@ -344,6 +344,7 @@ zig build -Doptimize=ReleaseFast run-file-corpus-standard-dashboard -- --limit 3
 zig build -Doptimize=ReleaseFast run-file-corpus-standard-full-dashboard -- --limit 3
 zig build bench-checksum -Doptimize=ReleaseFast
 zig build -Doptimize=ReleaseFast run-checksum-bench-gate
+zig build -Doptimize=ReleaseFast run-snappy-report-gate
 zig build bench-deflate-decode -Doptimize=ReleaseFast
 zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report
 zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report -- --iterations 1000

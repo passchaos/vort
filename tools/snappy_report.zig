@@ -29,6 +29,11 @@ const Row = struct {
     checksum: u64,
 };
 
+const Sample = struct {
+    elapsed_ns: u64,
+    checksum: u64,
+};
+
 const Options = struct {
     iterations: usize = 200,
     csv_path: ?[]const u8 = null,
@@ -105,31 +110,21 @@ fn row(io: std.Io, allocator: std.mem.Allocator, mode: Mode, case: Case, iterati
     defer allocator.free(decoded);
     if (!std.mem.eql(u8, case.payload, decoded)) return error.SizeMismatch;
 
-    var encode_checksum: u64 = 0;
-    const encode_start = std.Io.Clock.awake.now(io);
-    for (0..iterations) |_| {
-        const iteration_encoded = switch (mode) {
-            .raw_block => try vort.snappyEncodeBlockAlloc(allocator, case.payload),
-            .framed => try vort.snappyEncodeFrameAlloc(allocator, case.payload),
-            .raw_block_reusable => try encoder.encodeBlockAlloc(case.payload),
-            .framed_reusable => try encoder.encodeFrameAlloc(case.payload),
-        };
-        encode_checksum +%= vort.crc32(iteration_encoded);
-        allocator.free(iteration_encoded);
-    }
-    const encode_ns = elapsedNs(io, encode_start);
-
-    var decode_checksum: u64 = 0;
-    const decode_start = std.Io.Clock.awake.now(io);
-    for (0..iterations) |_| {
-        const iteration_decoded = switch (mode) {
-            .raw_block, .raw_block_reusable => try vort.snappyDecodeBlockAlloc(allocator, encoded),
-            .framed, .framed_reusable => try vort.snappyDecodeFrameAlloc(allocator, encoded),
-        };
-        decode_checksum +%= vort.crc32(iteration_decoded);
-        allocator.free(iteration_decoded);
-    }
-    const decode_ns = elapsedNs(io, decode_start);
+    const encode_sample = try measureEncode(
+        io,
+        allocator,
+        &encoder,
+        mode,
+        case.payload,
+        iterations,
+    );
+    const decode_sample = try measureDecode(
+        io,
+        allocator,
+        mode,
+        encoded,
+        iterations,
+    );
 
     return .{
         .mode = mode,
@@ -138,12 +133,55 @@ fn row(io: std.Io, allocator: std.mem.Allocator, mode: Mode, case: Case, iterati
         .encoded_bytes = encoded.len,
         .ratio = @as(f64, @floatFromInt(encoded.len)) / @as(f64, @floatFromInt(case.payload.len)),
         .iterations = iterations,
-        .encode_ns = encode_ns,
-        .decode_ns = decode_ns,
-        .encode_mib_s = mibPerSecond(case.payload.len * iterations, encode_ns),
-        .decode_mib_s = mibPerSecond(case.payload.len * iterations, decode_ns),
-        .checksum = encode_checksum +% decode_checksum,
+        .encode_ns = encode_sample.elapsed_ns,
+        .decode_ns = decode_sample.elapsed_ns,
+        .encode_mib_s = mibPerSecond(case.payload.len * iterations, encode_sample.elapsed_ns),
+        .decode_mib_s = mibPerSecond(case.payload.len * iterations, decode_sample.elapsed_ns),
+        .checksum = encode_sample.checksum +% decode_sample.checksum,
     };
+}
+
+fn measureEncode(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    encoder: *vort.SnappyEncoder,
+    mode: Mode,
+    payload: []const u8,
+    iterations: usize,
+) !Sample {
+    var checksum: u64 = 0;
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        const encoded = switch (mode) {
+            .raw_block => try vort.snappyEncodeBlockAlloc(allocator, payload),
+            .framed => try vort.snappyEncodeFrameAlloc(allocator, payload),
+            .raw_block_reusable => try encoder.encodeBlockAlloc(payload),
+            .framed_reusable => try encoder.encodeFrameAlloc(payload),
+        };
+        checksum +%= vort.crc32(encoded);
+        allocator.free(encoded);
+    }
+    return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
+}
+
+fn measureDecode(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    mode: Mode,
+    encoded: []const u8,
+    iterations: usize,
+) !Sample {
+    var checksum: u64 = 0;
+    const start = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        const decoded = switch (mode) {
+            .raw_block, .raw_block_reusable => try vort.snappyDecodeBlockAlloc(allocator, encoded),
+            .framed, .framed_reusable => try vort.snappyDecodeFrameAlloc(allocator, encoded),
+        };
+        checksum +%= vort.crc32(decoded);
+        allocator.free(decoded);
+    }
+    return .{ .elapsed_ns = elapsedNs(io, start), .checksum = checksum };
 }
 
 fn elapsedNs(io: std.Io, start: std.Io.Timestamp) u64 {
