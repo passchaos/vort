@@ -11,7 +11,10 @@ COLUMNS = [
     "reference_mib_s", "vort_over_reference", "checksum", "size_ns",
     "exact_alloc_ns",
 ]
-CASES = {"tiny", "text", "structured", "repetitive", "random4k"}
+CASES = {
+    "tiny", "text", "structured", "repetitive", "random4k",
+    "text_q3", "structured_q3", "repetitive_q3",
+}
 
 
 def main() -> int:
@@ -42,11 +45,15 @@ def main() -> int:
     floors = {
         "tiny": 1.0, "text": 1.25, "structured": 1.0,
         "repetitive": 1.35, "random4k": 1.5,
+        "text_q3": 1.45, "structured_q3": 1.15, "repetitive_q3": 1.70,
     }
     for name, floor in floors.items():
         if float(by_case[name]["vort_over_reference"]) < floor:
             raise AssertionError(f"decode regression {name}: {by_case[name]}")
-    for name in ("text", "structured", "repetitive"):
+    for name in (
+        "text", "structured", "repetitive",
+        "text_q3", "structured_q3", "repetitive_q3",
+    ):
         if int(by_case[name]["exact_alloc_ns"]) > int(by_case[name]["vort_ns"]) * 2:
             raise AssertionError(f"exact alloc regression {name}: {by_case[name]}")
     print(f"br_reference_bench_gate=ok rows={len(rows)} reference_version={next(iter(versions))}")

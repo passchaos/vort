@@ -2152,6 +2152,14 @@ architecture blindly.
   repetitive, up from `1.03/0.81/1.10x`; exact-size allocation stays near one
   decode pass. Feature limits and all 32-tree fixtures remain unchanged.
 
+- Expanded the Brotli reference matrix from quality 0 to supported quality-3
+  text, structured, and repetitive frames. Probe runs showed qualities 1–3 all
+  decode through the current native subset, while quality 4 introduces an
+  unsupported shape and remains explicit follow-up work. On quality 3, Vort
+  leads libbrotli 1.1.0 by roughly `1.85/1.49/2.20x`; the optional gate now
+  locks both quality-0 and quality-3 rows so the header-layout wins are not
+  limited to a single encoder setting.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box

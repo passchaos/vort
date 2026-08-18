@@ -2,7 +2,7 @@ const std = @import("std");
 const vort = @import("vort");
 const libbrotli = @import("libbrotli_runtime.zig");
 
-const Case = struct { name: []const u8, payload: []const u8 };
+const Case = struct { name: []const u8, payload: []const u8, quality: c_int = 0 };
 const Sample = struct { elapsed_ns: u64, mix: u64 };
 const Options = struct { iterations: usize = 1000, csv_path: ?[]const u8 = null };
 
@@ -25,6 +25,9 @@ pub fn main(init: std.process.Init) !void {
         .{ .name = "structured", .payload = "{\"service\":\"vort\",\"codec\":\"brotli\",\"value\":12345}\n" ** 512 },
         .{ .name = "repetitive", .payload = ("abcdefghijklmnopqrstuvwxyz012345" ** 4) ** 256 },
         .{ .name = "random4k", .payload = &random },
+        .{ .name = "text_q3", .payload = "Brotli benchmark text payload. " ** 1024, .quality = 3 },
+        .{ .name = "structured_q3", .payload = "{\"service\":\"vort\",\"codec\":\"brotli\",\"value\":12345}\n" ** 512, .quality = 3 },
+        .{ .name = "repetitive_q3", .payload = ("abcdefghijklmnopqrstuvwxyz012345" ** 4) ** 256, .quality = 3 },
     };
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
@@ -32,7 +35,7 @@ pub fn main(init: std.process.Init) !void {
     const writer = &csv.writer;
     try writer.writeAll("case,reference_version,input_bytes,encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,size_ns,exact_alloc_ns\n");
     for (&cases) |case| {
-        const encoded = try runtime.encodeAlloc(init.gpa, case.payload, 0);
+        const encoded = try runtime.encodeAlloc(init.gpa, case.payload, case.quality);
         defer init.gpa.free(encoded);
         const vort_output = try init.gpa.alloc(u8, case.payload.len);
         defer init.gpa.free(vort_output);
