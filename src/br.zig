@@ -1250,6 +1250,12 @@ fn readBlockTypeCount(reader: *bitstream.BitReader) Error!u16 {
 }
 
 fn readMinimalCompressedHeader(reader: *bitstream.BitReader) Error!MinimalCompressedHeader {
+    var header: MinimalCompressedHeader = undefined;
+    try readMinimalCompressedHeaderInto(reader, &header);
+    return header;
+}
+
+fn readMinimalCompressedHeaderInto(reader: *bitstream.BitReader, header: *MinimalCompressedHeader) Error!void {
     const nbltypes_l = try readBlockTypeCount(reader);
     if (nbltypes_l > max_literal_block_types) return error.UnsupportedBrotliFeature;
     var literal_block = BlockSwitchState(max_literal_block_types){ .block_type_count = nbltypes_l };
@@ -1316,7 +1322,7 @@ fn readMinimalCompressedHeader(reader: *bitstream.BitReader) Error!MinimalCompre
         distance_trees[distance_tree_index] = try readPrefixCodeRuntime(max_distance_alphabet_size, distance_alphabet_size, reader);
     }
 
-    return .{
+    header.* = .{
         .npostfix = npostfix,
         .ndirect = ndirect,
         .literal_context_modes = literal_context_modes,
@@ -1454,7 +1460,8 @@ fn processMinimalCompressedMetaBlock(
 ) Error!void {
     const meta_block_end = std.math.add(usize, written.*, meta_block_len) catch return error.IntegerOverflow;
     if (meta_block_end > output.len) return error.OutputTooSmall;
-    var header = try readMinimalCompressedHeader(reader);
+    var header: MinimalCompressedHeader = undefined;
+    try readMinimalCompressedHeaderInto(reader, &header);
     while (written.* < meta_block_end) {
         const command_symbol = try readCommandSymbol(&header, reader);
         const lengths = try readInsertCopyLengths(command_symbol, reader);
@@ -1498,7 +1505,8 @@ fn skipMinimalCompressedMetaBlock(
     stats: ?*StreamSummaryMetaBlockStats,
 ) Error!void {
     const meta_block_end = std.math.add(usize, start_written, meta_block_len) catch return error.IntegerOverflow;
-    var header = try readMinimalCompressedHeader(reader);
+    var header: MinimalCompressedHeader = undefined;
+    try readMinimalCompressedHeaderInto(reader, &header);
     var written = start_written;
     while (written < meta_block_end) {
         const command_symbol = try readCommandSymbol(&header, reader);

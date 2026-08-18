@@ -2143,6 +2143,15 @@ architecture blindly.
   `1.03/0.81/1.10x`, a `3.3–3.7x` Vort speedup without lowering feature limits.
   The gate floors rise to protect most of those gains.
 
+- Changed production Brotli compressed-header parsing to construct the roughly
+  290 KiB `MinimalCompressedHeader` directly in its caller-provided slot. A
+  small value-returning wrapper remains for parser tests, but decode and strict
+  size-preflight no longer return/copy the giant header object through function
+  boundaries. Combined with lazy tree-slot initialization, the 1,000-call
+  libbrotli matrix now reaches roughly `1.55/1.25/1.64x` on text/structured/
+  repetitive, up from `1.03/0.81/1.10x`; exact-size allocation stays near one
+  decode pass. Feature limits and all 32-tree fixtures remain unchanged.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box
