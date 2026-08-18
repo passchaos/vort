@@ -29,6 +29,9 @@ const Row = struct {
     header_inspect_ns: u64,
     block_inspect_ns: u64,
     sequence_inspect_ns: u64,
+    alloc_ns: u64,
+    alloc_mib_s: f64,
+    into_over_alloc: f64,
 };
 
 const Options = struct {
@@ -149,6 +152,9 @@ fn measureCase(
     {
         return error.SizeMismatch;
     }
+    const alloc_output = try vort.zstdDecodeFrameAlloc(init.gpa, encoded);
+    defer init.gpa.free(alloc_output);
+    if (!std.mem.eql(u8, case.payload, alloc_output)) return error.SizeMismatch;
 
     const vort_sample = try measureRepeated(
         init.io,
@@ -156,6 +162,13 @@ fn measureCase(
         runtime,
         encoded,
         vort_output,
+        iterations,
+    );
+    const alloc_sample = try measureAllocRepeated(
+        init.io,
+        init.gpa,
+        encoded,
+        case.payload.len,
         iterations,
     );
     const reference_sample = try measureRepeated(
@@ -217,6 +230,10 @@ fn measureCase(
         .header_inspect_ns = header_inspect.elapsed_ns,
         .block_inspect_ns = block_inspect.elapsed_ns,
         .sequence_inspect_ns = sequence_inspect.elapsed_ns,
+        .alloc_ns = alloc_sample.elapsed_ns,
+        .alloc_mib_s = mibPerSecond(case.payload.len * iterations, alloc_sample.elapsed_ns),
+        .into_over_alloc = @as(f64, @floatFromInt(alloc_sample.elapsed_ns)) /
+            @as(f64, @floatFromInt(vort_sample.elapsed_ns)),
     };
 }
 
@@ -244,6 +261,32 @@ fn measureRepeated(
                 },
             }
             if (output.len != 0) mix +%= output[0];
+        }
+        const elapsed_ns = elapsedNs(io, start);
+        if (elapsed_ns < best.elapsed_ns) {
+            best = .{ .elapsed_ns = elapsed_ns, .mix = mix };
+        }
+    }
+    return best;
+}
+
+fn measureAllocRepeated(
+    io: std.Io,
+    allocator: std.mem.Allocator,
+    encoded: []const u8,
+    expected_len: usize,
+    iterations: usize,
+) !Sample {
+    var best = Sample{ .elapsed_ns = std.math.maxInt(u64), .mix = 0 };
+    for (0..5) |_| {
+        var mix: u64 = 0;
+        const start = std.Io.Clock.awake.now(io);
+        for (0..iterations) |_| {
+            const decoded = try vort.zstdDecodeFrameAlloc(allocator, encoded);
+            defer allocator.free(decoded);
+            if (decoded.len != expected_len) return error.SizeMismatch;
+            mix +%= decoded.len;
+            if (decoded.len != 0) mix +%= decoded[0];
         }
         const elapsed_ns = elapsedNs(io, start);
         if (elapsed_ns < best.elapsed_ns) {
@@ -304,11 +347,11 @@ fn mibPerSecond(bytes: usize, ns: u64) f64 {
 
 fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
     try writer.writeAll(
-        "case,reference_version,input_bytes,encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,block_count,raw_blocks,rle_blocks,compressed_blocks,first_block_type,literals_kind,sequence_count,ll_mode,of_mode,ml_mode,header_inspect_ns,block_inspect_ns,sequence_inspect_ns\n",
+        "case,reference_version,input_bytes,encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,block_count,raw_blocks,rle_blocks,compressed_blocks,first_block_type,literals_kind,sequence_count,ll_mode,of_mode,ml_mode,header_inspect_ns,block_inspect_ns,sequence_inspect_ns,alloc_ns,alloc_mib_s,into_over_alloc\n",
     );
     for (rows) |row| {
         try writer.print(
-            "{s},{s},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d},{d},{d},{d},{d},{s},{s},{d},{s},{s},{s},{d},{d},{d}\n",
+            "{s},{s},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d},{d},{d},{d},{d},{s},{s},{d},{s},{s},{s},{d},{d},{d},{d},{d:.2},{d:.4}\n",
             .{
                 row.case_name,
                 row.reference_version,
@@ -334,6 +377,9 @@ fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
                 row.header_inspect_ns,
                 row.block_inspect_ns,
                 row.sequence_inspect_ns,
+                row.alloc_ns,
+                row.alloc_mib_s,
+                row.into_over_alloc,
             },
         );
     }

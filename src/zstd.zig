@@ -7,6 +7,7 @@ const sequence_bit_reader = @import("zstd/sequence/bit_reader.zig");
 const single_predefined = @import("zstd/sequence/single_predefined.zig");
 const sequence_continuation = @import("zstd/sequence/continuation.zig");
 const raw_frame = @import("zstd/frame/raw.zig");
+const known_size_frame = @import("zstd/frame/known_size.zig");
 const huffman = @import("huffman.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
@@ -940,6 +941,18 @@ fn decodeRawOrRleFrameAllocWithDictionaryInternal(
     frame: []const u8,
     dictionary: ?NativeDictionary,
 ) Error![]u8 {
+    if (dictionary == null) {
+        if (known_size_frame.plan(frame)) |plan| {
+            const output = try allocator.alloc(u8, plan.content_size);
+            errdefer allocator.free(output);
+            const written = decodeRawOrRleFrameIntoWithDictionaryInternal(frame, output, null) catch |err| switch (err) {
+                error.OutputTooSmall => return error.SizeMismatch,
+                else => return err,
+            };
+            if (written != output.len) return error.SizeMismatch;
+            return output;
+        }
+    }
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
 
@@ -14297,6 +14310,57 @@ test "zstd raw/RLE native decoder rejects corrupt frames" {
 
     try std.testing.expectError(error.TruncatedFrame, decodeRawOrRleFrameAlloc(std.testing.allocator, encoded[0 .. encoded.len - 1]));
     try std.testing.expectError(error.InvalidMagic, decodeRawOrRleFrameAlloc(std.testing.allocator, "not-zstd"));
+}
+
+test "zstd known-size allocator fast path preserves frame validation" {
+    const payload = "known-size compressed allocator payload " ** 64;
+    const encoded = try encodeFrameWithLevelAlloc(std.testing.allocator, payload, 1);
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expect(known_size_frame.plan(encoded) != null);
+
+    const decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    var bad_size = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(bad_size);
+    bad_size[5] +%= 1;
+    try std.testing.expect(known_size_frame.plan(bad_size) != null);
+    try std.testing.expectError(
+        error.SizeMismatch,
+        decodeFrameAlloc(std.testing.allocator, bad_size),
+    );
+
+    var checksummed = try encodeFrameWithLevelAndOptionsAlloc(
+        std.testing.allocator,
+        payload,
+        1,
+        .{ .content_checksum = true },
+    );
+    defer std.testing.allocator.free(checksummed);
+    try std.testing.expect(known_size_frame.plan(checksummed) != null);
+    checksummed[checksummed.len - 1] ^= 1;
+    try std.testing.expectError(
+        error.ChecksumMismatch,
+        decodeFrameAlloc(std.testing.allocator, checksummed),
+    );
+}
+
+test "zstd known-size allocator plan excludes concatenated and multi-block streams" {
+    const first = try encodeFrameWithLevelAlloc(std.testing.allocator, "first frame" ** 32, 1);
+    defer std.testing.allocator.free(first);
+    const second = try encodeFrameWithLevelAlloc(std.testing.allocator, "second frame" ** 32, 1);
+    defer std.testing.allocator.free(second);
+    var concatenated: std.ArrayList(u8) = .empty;
+    defer concatenated.deinit(std.testing.allocator);
+    try concatenated.appendSlice(std.testing.allocator, first);
+    try concatenated.appendSlice(std.testing.allocator, second);
+    try std.testing.expectEqual(@as(?known_size_frame.Plan, null), known_size_frame.plan(concatenated.items));
+
+    const large_payload = "0123456789abcdef" ** (20 * 1024);
+    const multi = try encodeRawOrRleFrameAlloc(std.testing.allocator, large_payload);
+    defer std.testing.allocator.free(multi);
+    try std.testing.expectEqual(@as(?known_size_frame.Plan, null), known_size_frame.plan(multi));
 }
 
 test "zstd native writer emits dictionary ids" {

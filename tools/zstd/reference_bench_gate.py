@@ -15,6 +15,7 @@ EXPECTED_COLUMNS = [
     "first_block_type", "literals_kind", "sequence_count",
     "ll_mode", "of_mode", "ml_mode", "header_inspect_ns",
     "block_inspect_ns", "sequence_inspect_ns",
+    "alloc_ns", "alloc_mib_s", "into_over_alloc",
 ]
 EXPECTED_CASES = {
     "tiny", "text", "structured", "repetitive",
@@ -43,6 +44,7 @@ def main() -> int:
             "input_bytes", "encoded_bytes", "iterations", "vort_ns",
             "reference_ns", "checksum", "block_count",
             "header_inspect_ns", "block_inspect_ns", "sequence_inspect_ns",
+            "alloc_ns",
         ):
             if int(row[key]) <= 0:
                 raise AssertionError(f"non-positive {key}: {row}")
@@ -50,7 +52,10 @@ def main() -> int:
             row["compressed_blocks"]
         ) != int(row["block_count"]):
             raise AssertionError(f"block count mismatch: {row}")
-        for key in ("vort_mib_s", "reference_mib_s", "vort_over_reference"):
+        for key in (
+            "vort_mib_s", "reference_mib_s", "vort_over_reference",
+            "alloc_mib_s", "into_over_alloc",
+        ):
             if float(row[key]) <= 0:
                 raise AssertionError(f"non-positive {key}: {row}")
 
@@ -76,6 +81,14 @@ def main() -> int:
     for name, floor in floors.items():
         if float(by_case[name]["vort_over_reference"]) < floor:
             raise AssertionError(f"decode regression {name}: {by_case[name]}")
+
+    # Known-size one-block frames should allocate once and decode directly,
+    # rather than paying the former full size-preflight plus second decode.
+    # Keep enough scheduler slack for the short optional gate while ensuring
+    # the compressed allocator path remains within 2.5x of caller-owned decode.
+    for name in compressed:
+        if float(by_case[name]["into_over_alloc"]) > 2.5:
+            raise AssertionError(f"allocator decode regression {name}: {by_case[name]}")
 
     print(
         "zstd_reference_bench_gate=ok "

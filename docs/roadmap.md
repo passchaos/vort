@@ -2024,6 +2024,20 @@ architecture blindly.
   repetitive/repeated-byte improve from roughly `0.92/0.33/0.37/0.99x` to
   `2.67/1.13/1.61/2.39x`; raw-frame paths remain separate and unchanged.
 
+- Extended the same-process libzstd comparison to measure Vort's allocator-
+  returning decode beside caller-owned decode. The first measurement exposed a
+  `6.0–7.2x` gap on the locked single-block compressed rows: the allocator path
+  performed a complete decoded-size preflight and then parsed/decoded the block
+  again. A new shape planner in `src/zstd/frame/known_size.zig` recognizes one
+  dictionary-free frame with declared content size and exactly one block, then
+  allocates the final slice once and delegates all actual validation and output
+  to the caller-owned decoder. Concatenated, skippable, dictionary, no-size, and
+  multi-block streams retain the general path. The allocator/caller-owned ratio
+  falls to about `1.36–1.86x` on text/structured/repetitive/repeated-byte, and
+  the optional gate now protects a conservative `2.5x` ceiling. Focused tests
+  cover checksum and declared-size corruption plus concatenated/multi-block
+  fallback without duplicating block decoding logic in the planner.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box
