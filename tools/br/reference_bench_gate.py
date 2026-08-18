@@ -40,8 +40,8 @@ def main() -> int:
             if float(row[key]) <= 0:
                 raise AssertionError(f"non-positive {key}: {row}")
     floors = {
-        "tiny": 1.0, "text": 0.27, "structured": 0.22,
-        "repetitive": 0.32, "random4k": 1.5,
+        "tiny": 1.0, "text": 0.85, "structured": 0.68,
+        "repetitive": 0.90, "random4k": 1.5,
     }
     for name, floor in floors.items():
         if float(by_case[name]["vort_over_reference"]) < floor:

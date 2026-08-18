@@ -1295,21 +1295,21 @@ fn readMinimalCompressedHeader(reader: *bitstream.BitReader) Error!MinimalCompre
     var distance_context_map: [max_distance_block_types * 4]u8 = @splat(0);
     try readContextMap(reader, distance_context_map[0..(@as(usize, nbltypes_d) * 4)], ntrees_d);
 
-    var literal_trees: [max_literal_context_trees]PrefixCode(256) = @splat(.{});
+    var literal_trees: [max_literal_context_trees]PrefixCode(256) = undefined;
     literal_trees[0] = try readPrefixCode(256, reader);
     var literal_tree_index: u16 = 1;
     while (literal_tree_index < ntrees_l) : (literal_tree_index += 1) {
         literal_trees[literal_tree_index] = try readPrefixCode(256, reader);
     }
 
-    var insert_copy_trees: [max_command_block_types]PrefixCode(704) = @splat(.{});
+    var insert_copy_trees: [max_command_block_types]PrefixCode(704) = undefined;
     insert_copy_trees[0] = try readPrefixCode(704, reader);
     var command_tree_index: u16 = 1;
     while (command_tree_index < nbltypes_i) : (command_tree_index += 1) {
         insert_copy_trees[command_tree_index] = try readPrefixCode(704, reader);
     }
 
-    var distance_trees: [max_distance_context_trees]PrefixCode(max_distance_alphabet_size) = @splat(.{});
+    var distance_trees: [max_distance_context_trees]PrefixCode(max_distance_alphabet_size) = undefined;
     distance_trees[0] = try readPrefixCodeRuntime(max_distance_alphabet_size, distance_alphabet_size, reader);
     var distance_tree_index: u16 = 1;
     while (distance_tree_index < ntrees_d) : (distance_tree_index += 1) {

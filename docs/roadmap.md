@@ -2132,6 +2132,17 @@ architecture blindly.
   decode; on compressed rows allocation plus decode is roughly one decode pass
   (`~61 ms` per 1,000 calls) instead of decode plus the `~87–95 ms` preflight.
 
+- Eliminated eager zero-initialization of all 96 bounded Brotli prefix-tree
+  slots in each compressed meta-block header. The retained capacities remain
+  unchanged (32 literal, command, and distance trees), but only the wire-
+  declared slots are now initialized before use; context/block indices already
+  validate every access. Layout diagnostics showed why this dominates: a
+  `PrefixCode(256)` is 1,624 bytes, `PrefixCode(704)` is 4,312 bytes, and the
+  full header is about 290 KiB. On the 1,000-call libbrotli matrix, text/
+  structured/repetitive improve from roughly `0.31/0.25/0.36x` to
+  `1.03/0.81/1.10x`, a `3.3–3.7x` Vort speedup without lowering feature limits.
+  The gate floors rise to protect most of those gains.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box
