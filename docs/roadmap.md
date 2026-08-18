@@ -2227,6 +2227,17 @@ architecture blindly.
   to about `0.32x` libzstd throughput; all 834 sequence/parser/encoder tests and
   the 124-case lib-generated probe pass. Multi-block floors rise accordingly.
 
+- Reused the bounded reverse-bit-reader prefix extraction for Zstd's narrow
+  initial and transition FSE states. These reads are at most 11 bits, so the
+  sequence loop now avoids the generic `u72` gather while retaining one shared
+  reader implementation and an independent per-bit oracle. Ten interleaved
+  ReleaseFast 100-iteration A/B rounds against the prior commit improve median
+  huffman80k, 512 KiB JSON, and mixed-binary decode time by about
+  `2.8%/2.7%/1.3%`; single-sequence text is neutral. The retained 13-row gate
+  reports about `0.45x/0.26x/0.32x` libzstd throughput for those FSE-heavy rows,
+  raises their conservative regression floors, and all 835 tests plus the
+  124-case lib-generated differential pass.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box

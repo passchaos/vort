@@ -87,6 +87,14 @@ pub const Reader = struct {
         return @intCast((reservoir >> @intCast(start & 7)) & mask);
     }
 
+    /// Consume a narrow field through the bounded prefix path. FSE sequence
+    /// states stay below its three-byte bound and avoid the generic u72 gather.
+    pub fn readSmall(self: *Reader, bit_count: u4) Error!usize {
+        const value = try self.peekSmall(bit_count);
+        try self.skip(bit_count);
+        return value;
+    }
+
     pub fn skip(self: *Reader, bit_count: u8) Error!void {
         if (bit_count > self.remaining_bits) return error.TruncatedFrame;
         self.remaining_bits -= bit_count;
@@ -158,6 +166,19 @@ test "Zstd reverse reader small peek matches read across alignments" {
                 try oracle.read(width),
                 try aligned.peekSmall(width),
             );
+        }
+    }
+}
+
+test "Zstd reverse reader small read matches generic read" {
+    const bytes = [_]u8{ 0x35, 0xa6, 0x59, 0xc3, 0xd0 };
+    for (0..12) |prefix_bits| {
+        var fast = try Reader.init(&bytes);
+        if (prefix_bits != 0) try fast.skip(@intCast(prefix_bits));
+        var generic = fast;
+        var width: u4 = 1;
+        while (width <= 11 and width <= fast.available()) : (width += 1) {
+            try std.testing.expectEqual(try generic.read(width), try fast.readSmall(width));
         }
     }
 }

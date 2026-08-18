@@ -5521,8 +5521,8 @@ fn initSequenceDecodeState(
 
 fn readInitialSequenceState(reader: *ReverseBitReader, mode: SymbolMode, fse_accuracy_log: u8, predefined_accuracy_log: u8) Error!usize {
     return switch (mode) {
-        .predefined => try reader.read(predefined_accuracy_log),
-        .compressed => try reader.read(fse_accuracy_log),
+        .predefined => try reader.readSmall(@intCast(predefined_accuracy_log)),
+        .compressed => try reader.readSmall(@intCast(fse_accuracy_log)),
         .rle => 0,
         .repeat => unreachable,
     };
@@ -5603,7 +5603,7 @@ const DecodedSequence = struct {
 };
 
 fn nextSequenceState(reader: *ReverseBitReader, symbol: SequenceSymbol) Error!usize {
-    return std.math.add(usize, symbol.next_state, try reader.read(symbol.state_bits)) catch return error.IntegerOverflow;
+    return std.math.add(usize, symbol.next_state, try reader.readSmall(@intCast(symbol.state_bits))) catch return error.IntegerOverflow;
 }
 
 fn resolveSequenceOffset(
