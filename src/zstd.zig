@@ -7,6 +7,7 @@ const sequence_bit_reader = @import("zstd/sequence/bit_reader.zig");
 const single_predefined = @import("zstd/sequence/single_predefined.zig");
 const sequence_continuation = @import("zstd/sequence/continuation.zig");
 const sequence_match_copy = @import("zstd/sequence/match_copy.zig");
+const sequence_fse_builder = @import("zstd/sequence/fse_builder.zig");
 const raw_frame = @import("zstd/frame/raw.zig");
 const known_size_frame = @import("zstd/frame/known_size.zig");
 const huffman_lookup = @import("zstd/literals/huffman_lookup.zig");
@@ -5113,11 +5114,7 @@ fn readFseSequenceTable(
     return table;
 }
 
-const FseTableEntry = struct {
-    symbol: u8,
-    baseline: u16,
-    bits: u8,
-};
+const FseTableEntry = sequence_fse_builder.Entry;
 
 fn decodeFseTable(
     reader: *ForwardBitReader,
@@ -5176,6 +5173,11 @@ fn decodeFseTable(
 }
 
 fn buildFseTable(values: []const u16, entries: []FseTableEntry) Error!void {
+    // Large tables dominate construction cost in sequence-heavy blocks. Their
+    // linear state pass is kept out of line so uncommon table setup does not
+    // inflate the hot decode loop's instruction footprint.
+    if (entries.len >= 256) return sequence_fse_builder.build(values, entries);
+
     const total_probability: u16 = @intCast(entries.len);
     const accuracy_log = std.math.log2_int(u16, total_probability);
     var less_than_one_count: usize = 0;

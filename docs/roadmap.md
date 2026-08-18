@@ -2238,6 +2238,18 @@ architecture blindly.
   raises their conservative regression floors, and all 835 tests plus the
   124-case lib-generated differential pass.
 
+- Moved Zstd FSE decode-table construction into the focused
+  `zstd/sequence/fse_builder.zig` module and replaced per-symbol spread-position
+  sorting with the standard linear state-order pass for 256/512-state tables.
+  The smaller tables retain the compact reference constructor; the linear path
+  is kept out of line so table setup does not inflate the sequence loop. Ten
+  alternating fixed-P-core ReleaseFast rounds improve huffman80k, 512 KiB JSON,
+  and mixed binary by about `10.2%/5.9%/4.8%`, while no-FSE rows are neutral.
+  The retained gate reaches about `0.46x/0.29x/0.34x` libzstd on those rows and
+  raises their floors. A byte-for-byte oracle compares the new constructor to
+  the sorted reference, all 837 tests pass, and the 124-case lib-generated
+  differential remains clean.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box
