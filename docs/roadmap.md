@@ -2095,6 +2095,15 @@ architecture blindly.
   about `0.125x`, and single-sequence/Huffman-literal-only rows stay within
   their established envelopes. The huffman80k floor increases to `0.32x`.
 
+- Changed the Huffman literal hot path to borrow the 256-node canonical tree
+  instead of passing it by value through cursor lookup and fallback queries.
+  This mirrors the earlier FSE-state ownership fix and keeps the API boundary
+  explicit without changing tree layout. On the 1,000-iteration general matrix
+  numbered JSON rises from roughly `0.125x` to `0.133x` libzstd throughput,
+  huffman80k remains around `0.34x`, and the literal-only row remains in its
+  existing range. All Huffman, treeless, four-stream, and high-byte fixtures
+  continue to share the same decoder; the numbered-JSON floor rises to `0.11x`.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box

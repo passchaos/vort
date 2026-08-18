@@ -4423,7 +4423,7 @@ fn copyHuffmanLiteralsFromSection(
     // for many small literal runs, yet it preserves exact behavior while this
     // native Zstd path is still correctness-first and sequence/FSE support is
     // incomplete.
-    const huffman_tree = section.huffman_tree orelse return error.CorruptFrame;
+    const huffman_tree = &(section.huffman_tree orelse return error.CorruptFrame);
     const end = std.math.add(usize, literal_offset, dest.len) catch return error.IntegerOverflow;
     var decoded_index: usize = 0;
     var output_index: usize = 0;
@@ -4440,7 +4440,7 @@ fn copyHuffmanLiteralsFromSection(
 
 const HuffmanLiteralDecodeState = struct {
     cursor: HuffmanLiteralCursor,
-    tree: StdZstdHuffmanTree,
+    tree: *const StdZstdHuffmanTree,
     lookup: HuffmanLiteralLookup,
     decoded: usize = 0,
 };
@@ -4449,8 +4449,8 @@ fn initHuffmanLiteralDecodeState(block: []const u8, section: LiteralOnlySection)
     if (section.kind != .compressed and section.kind != .treeless) return null;
     return .{
         .cursor = try initHuffmanLiteralCursor(block, section),
-        .tree = section.huffman_tree orelse return error.CorruptFrame,
-        .lookup = HuffmanLiteralLookup.build(section.huffman_tree orelse return error.CorruptFrame),
+        .tree = &(section.huffman_tree orelse return error.CorruptFrame),
+        .lookup = HuffmanLiteralLookup.build(&(section.huffman_tree orelse return error.CorruptFrame)),
     };
 }
 
@@ -4471,7 +4471,7 @@ fn copyLiteralsFromHuffmanState(
 
 fn validateHuffmanLiteralsConsumed(block: []const u8, section: LiteralOnlySection) Error!void {
     if (section.kind != .compressed and section.kind != .treeless) return;
-    const huffman_tree = section.huffman_tree orelse return error.CorruptFrame;
+    const huffman_tree = &(section.huffman_tree orelse return error.CorruptFrame);
     var cursor = try initHuffmanLiteralCursor(block, section);
     const lookup = HuffmanLiteralLookup.build(huffman_tree);
     for (0..section.regenerated_size) |_| {
@@ -4521,7 +4521,7 @@ const HuffmanLiteralCursor = struct {
 
     fn readSymbol(
         self: *HuffmanLiteralCursor,
-        tree: StdZstdHuffmanTree,
+        tree: *const StdZstdHuffmanTree,
         lookup: *const HuffmanLiteralLookup,
     ) Error!u8 {
         const width: u8 = @intCast(@min(@as(usize, tree.max_bit_count), self.reader.available()));
@@ -4553,7 +4553,7 @@ fn initHuffmanLiteralCursor(block: []const u8, section: LiteralOnlySection) Erro
     }
 }
 
-fn readHuffmanLiteralSymbolFromCursor(cursor: *HuffmanLiteralCursor, huffman_tree: StdZstdHuffmanTree) Error!u8 {
+fn readHuffmanLiteralSymbolFromCursor(cursor: *HuffmanLiteralCursor, huffman_tree: *const StdZstdHuffmanTree) Error!u8 {
     const max_bit_count = huffman_tree.max_bit_count;
     const starting_bit_count = StdZstdHuffmanTree.weightToBitCount(
         huffman_tree.nodes[huffman_tree.symbol_count_minus_one].weight,
@@ -4587,7 +4587,7 @@ fn readHuffmanLiteralSymbolFromCursor(cursor: *HuffmanLiteralCursor, huffman_tre
 
 fn readHuffmanLiteralSymbolFromCursorWithLookup(
     cursor: *HuffmanLiteralCursor,
-    huffman_tree: StdZstdHuffmanTree,
+    huffman_tree: *const StdZstdHuffmanTree,
     lookup: *const HuffmanLiteralLookup,
 ) Error!u8 {
     return try cursor.readSymbol(huffman_tree, lookup);
