@@ -5078,7 +5078,7 @@ fn readRleSymbolCode(block: []const u8, offset: *usize, bases: []const usize, bi
     const code = block[offset.*];
     offset.* += 1;
     if (code >= bases.len) return error.CorruptFrame;
-    return .{ .base = bases[code], .additional_bits = bits[code], .next_state = 0, .state_bits = 0 };
+    return .{ .base = @intCast(bases[code]), .additional_bits = bits[code], .next_state = 0, .state_bits = 0 };
 }
 
 fn readFseSequenceTable(
@@ -5104,9 +5104,9 @@ fn readFseSequenceTable(
         const code = entry.symbol;
         if (code >= bases.len or code >= bits.len) return error.CorruptFrame;
         table.entries[i] = .{
-            .base = bases[code],
+            .base = @intCast(bases[code]),
             .additional_bits = bits[code],
-            .next_state = entry.baseline,
+            .next_state = @intCast(entry.baseline),
             .state_bits = entry.bits,
         };
     }
@@ -8199,7 +8199,7 @@ fn sequenceTableSymbol(plan: SequenceTableEmitPlan, kind: SequenceTableKind, ind
         .compressed => |compressed| blk: {
             if (index >= compressed.len) return error.CorruptFrame;
             var symbol = try sequenceRleSymbol(kind, compressed.codes[index]);
-            symbol.next_state = compressed.next_states[index];
+            symbol.next_state = @intCast(compressed.next_states[index]);
             symbol.state_bits = compressed.state_bits[index];
             break :blk symbol;
         },
@@ -8211,7 +8211,7 @@ fn sequenceRleSymbol(kind: SequenceTableKind, code: u8) Error!SequenceSymbol {
     const bits = sequenceTableBits(kind);
     if (code >= bases.len or code >= bits.len) return error.CorruptFrame;
     return .{
-        .base = bases[code],
+        .base = @intCast(bases[code]),
         .additional_bits = bits[code],
         .next_state = 0,
         .state_bits = 0,
@@ -12564,7 +12564,7 @@ test "zstd predefined sequence planner declines oversized symbol table" {
     var symbols: [max_predefined_sequence_states + 1]SequenceSymbol = undefined;
     for (&symbols, 0..) |*symbol, i| {
         symbol.* = .{
-            .base = i,
+            .base = @intCast(i),
             .additional_bits = 0,
             .state_bits = 0,
             .next_state = 0,

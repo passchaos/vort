@@ -3,9 +3,9 @@ const std = @import("std");
 pub const Error = error{CorruptFrame};
 
 pub const Symbol = struct {
-    base: usize,
+    base: u32,
     additional_bits: u8,
-    next_state: usize,
+    next_state: u16,
     state_bits: u8,
 };
 

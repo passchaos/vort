@@ -2210,6 +2210,15 @@ architecture blindly.
   owned cost to about `0.96/1.00/0.99x`; concatenated, dictionary, and no-size
   streams retain the general path, with focused single/multi-block planner tests.
 
+- Compacted Zstd sequence symbols from two machine-word fields to spec-bounded
+  `u32` bases and `u16` next states, halving each FSE table entry on 64-bit
+  targets without changing the public wire/API surface. Checked casts sit at
+  parser/planner construction boundaries; 834 tests cover predefined, RLE, FSE,
+  Repeat_Mode, malformed, and encoder use. On the 100-iteration general matrix,
+  numbered JSON rises to about `0.22x`, huffman80k to `0.39x`, 512 KiB JSON to
+  `0.24x`, and mixed binary to `0.32x` libzstd throughput. The corresponding
+  conservative floors increase, while single-sequence text remains above `3x`.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box
