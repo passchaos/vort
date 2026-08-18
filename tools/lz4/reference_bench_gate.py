@@ -12,6 +12,7 @@ EXPECTED_COLUMNS = [
     "reference_version",
     "input_bytes",
     "encoded_bytes",
+    "vort_encoded_bytes",
     "iterations",
     "vort_ns",
     "reference_ns",
@@ -23,6 +24,10 @@ EXPECTED_COLUMNS = [
     "literal_bytes",
     "match_count",
     "match_bytes",
+    "vort_literal_count",
+    "vort_literal_bytes",
+    "vort_match_count",
+    "vort_match_bytes",
 ]
 EXPECTED_CASES = {
     "tiny",
@@ -55,6 +60,7 @@ def main() -> int:
         for key in (
             "input_bytes",
             "encoded_bytes",
+            "vort_encoded_bytes",
             "iterations",
             "vort_ns",
             "reference_ns",
@@ -68,6 +74,12 @@ def main() -> int:
             row["input_bytes"]
         ):
             raise AssertionError(f"token byte mismatch: {row}")
+        if int(row["vort_literal_bytes"]) + int(row["vort_match_bytes"]) != int(
+            row["input_bytes"]
+        ):
+            raise AssertionError(f"Vort token byte mismatch: {row}")
+        if int(row["input_bytes"]) >= 12 and int(row["vort_literal_bytes"]) < 5:
+            raise AssertionError(f"Vort terminal literals missing: {row}")
         for key in (
             "vort_mib_s",
             "reference_mib_s",

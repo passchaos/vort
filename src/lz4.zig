@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("core.zig");
 const checksum_mod = @import("checksum.zig");
 const dictionary_mod = @import("dictionary.zig");
+const block_format = @import("lz4/block_format.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 
@@ -5228,7 +5229,7 @@ fn encodeBlockInto(
 
     var anchor: usize = 0;
     var index: usize = 0;
-    while (index + 12 <= input.len) {
+    while (block_format.hasMatchSearchRoom(index, input.len)) {
         var match_index = index;
         var best = insertAndFindBest(input, index, table, occupancy_bits, chain_table, chain_depth);
         if (best.len != 0 and index + 13 <= input.len and best.len < good_match_len) {
@@ -5248,6 +5249,11 @@ fn encodeBlockInto(
                 candidate_start -= 1;
                 match_len += 1;
             }
+            match_len = @min(
+                match_len,
+                block_format.maxMatchLen(match_start, input.len),
+            );
+            std.debug.assert(match_len >= block_format.min_match_len);
             try emitSequence(allocator, out, input[anchor..match_start], @intCast(match_start - candidate_start), match_len);
             index = match_start + match_len;
             anchor = index;
@@ -5304,7 +5310,7 @@ fn encodeLinkedBlockInto(
 
     var anchor: usize = block_start;
     var index: usize = block_start;
-    while (index + 12 <= virtual_len) {
+    while (block_format.hasMatchSearchRoom(index, virtual_len)) {
         var match_index = index;
         var best = insertAndFindBestLinked(history, input, index, table, occupancy_bits, chain_table, chain_depth);
         if (best.len != 0 and index + 13 <= virtual_len and best.len < good_match_len) {
@@ -5324,6 +5330,11 @@ fn encodeLinkedBlockInto(
                 candidate_start -= 1;
                 match_len += 1;
             }
+            match_len = @min(
+                match_len,
+                block_format.maxMatchLen(match_start, virtual_len),
+            );
+            std.debug.assert(match_len >= block_format.min_match_len);
             const literal_start = anchor - block_start;
             const literal_end = match_start - block_start;
             try emitSequence(

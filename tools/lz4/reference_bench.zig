@@ -12,6 +12,7 @@ const Row = struct {
     reference_version: []const u8,
     input_bytes: usize,
     encoded_bytes: usize,
+    vort_encoded_bytes: usize,
     iterations: usize,
     vort_ns: u64,
     reference_ns: u64,
@@ -23,6 +24,10 @@ const Row = struct {
     literal_bytes: usize,
     match_count: usize,
     match_bytes: usize,
+    vort_literal_count: usize,
+    vort_literal_bytes: usize,
+    vort_match_count: usize,
+    vort_match_bytes: usize,
 };
 
 const Options = struct {
@@ -130,7 +135,13 @@ fn measureCase(
 ) !Row {
     const encoded = try runtime.encodeAlloc(init.gpa, case.payload);
     defer init.gpa.free(encoded);
+    const vort_encoded = try vort.lz4EncodeBlockAlloc(
+        init.gpa,
+        case.payload,
+    );
+    defer init.gpa.free(vort_encoded);
     const summary = try vort.lz4SummarizeBlock(encoded);
+    const vort_summary = try vort.lz4SummarizeBlock(vort_encoded);
     const vort_output = try init.gpa.alloc(u8, case.payload.len);
     defer init.gpa.free(vort_output);
     const reference_output = try init.gpa.alloc(u8, case.payload.len);
@@ -146,6 +157,13 @@ fn measureCase(
     if (!std.mem.eql(u8, case.payload, vort_output) or
         !std.mem.eql(u8, case.payload, reference_output))
     {
+        return error.SizeMismatch;
+    }
+    // Differentially require the production Vort encoder to emit blocks that
+    // the reference safe decoder accepts, not merely blocks that Vort's more
+    // permissive decoder can round-trip.
+    try runtime.decode(vort_encoded, reference_output);
+    if (!std.mem.eql(u8, case.payload, reference_output)) {
         return error.SizeMismatch;
     }
 
@@ -178,6 +196,7 @@ fn measureCase(
         .reference_version = runtime.version(),
         .input_bytes = case.payload.len,
         .encoded_bytes = encoded.len,
+        .vort_encoded_bytes = vort_encoded.len,
         .iterations = iterations,
         .vort_ns = vort_sample.elapsed_ns,
         .reference_ns = reference_sample.elapsed_ns,
@@ -189,6 +208,10 @@ fn measureCase(
         .literal_bytes = summary.literal_bytes,
         .match_count = summary.match_count,
         .match_bytes = summary.match_bytes,
+        .vort_literal_count = vort_summary.literal_count,
+        .vort_literal_bytes = vort_summary.literal_bytes,
+        .vort_match_count = vort_summary.match_count,
+        .vort_match_bytes = vort_summary.match_bytes,
     };
 }
 
@@ -247,16 +270,17 @@ fn mibPerSecond(bytes: usize, ns: u64) f64 {
 
 fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
     try writer.writeAll(
-        "case,reference_version,input_bytes,encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,literal_count,literal_bytes,match_count,match_bytes\n",
+        "case,reference_version,input_bytes,encoded_bytes,vort_encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,literal_count,literal_bytes,match_count,match_bytes,vort_literal_count,vort_literal_bytes,vort_match_count,vort_match_bytes\n",
     );
     for (rows) |row| {
         try writer.print(
-            "{s},{s},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d},{d},{d},{d},{d}\n",
+            "{s},{s},{d},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d},{d},{d},{d},{d},{d},{d},{d},{d}\n",
             .{
                 row.case_name,
                 row.reference_version,
                 row.input_bytes,
                 row.encoded_bytes,
+                row.vort_encoded_bytes,
                 row.iterations,
                 row.vort_ns,
                 row.reference_ns,
@@ -268,6 +292,10 @@ fn writeCsv(writer: *std.Io.Writer, rows: []const Row) !void {
                 row.literal_bytes,
                 row.match_count,
                 row.match_bytes,
+                row.vort_literal_count,
+                row.vort_literal_bytes,
+                row.vort_match_count,
+                row.vort_match_bytes,
             },
         );
     }

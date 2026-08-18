@@ -1897,6 +1897,21 @@ architecture blindly.
   incompressible row. No production decoder change was justified by this
   matrix; the newly exposed work is encoder terminal-format compatibility.
 
+- Fixed that LZ4 raw-block encoder compatibility gap. Both independent and
+  linked hash-chain encoders now share `lz4/block_format.zig`, which codifies
+  the wire-format terminal requirements: the final match starts at least 12
+  bytes before the end and a final literal-only sequence retains at least five
+  bytes. Match search still uses the same candidates and back-extension, but
+  the selected match is clipped before emission rather than consuming the
+  mandatory tail. The runtime liblz4 comparison now differentially decodes
+  both liblz4- and Vort-generated blocks for all six cases and records both
+  token layouts/sizes. Vort output matches liblz4 size exactly on the locked
+  tiny/text/structured/repetitive/incompressible/RLE matrix, retains its
+  caller-owned decode lead on the compressed rows, and exposes at least five
+  Vort literal bytes on every match-capable case. The 113-case native LZ4
+  probe, 93-row native library gate, and 814 unit tests cover the broader
+  regression surface.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box
