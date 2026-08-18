@@ -2,7 +2,11 @@ const std = @import("std");
 const vort = @import("vort");
 const libzstd = @import("libzstd_runtime.zig");
 
-const Case = struct { name: []const u8, payload: []const u8 };
+const Case = struct {
+    name: []const u8,
+    payload: []const u8,
+    level: c_int = 1,
+};
 
 const Row = struct {
     case_name: []const u8,
@@ -57,6 +61,30 @@ pub fn main(init: std.process.Init) !void {
     const raw_large_payload = try init.gpa.alloc(u8, 256 * 1024);
     defer init.gpa.free(raw_large_payload);
     fillIncompressible(raw_large_payload, 0x9e37_79b9);
+    var numbered_json: std.ArrayList(u8) = .empty;
+    defer numbered_json.deinit(init.gpa);
+    for (0..20) |index| {
+        var line: [96]u8 = undefined;
+        const formatted = try std.fmt.bufPrint(
+            &line,
+            "{{\"k\":\"{d:0>4}\",\"n\":{d},\"txt\":\"abcdefghijklmnopqrstuvwxyz0123456789\"}}\n",
+            .{ index, index },
+        );
+        try numbered_json.appendSlice(init.gpa, formatted);
+    }
+    const huffman_payload = try init.gpa.alloc(u8, 80_000);
+    defer init.gpa.free(huffman_payload);
+    const huffman_alphabet = "ACGTN";
+    for (huffman_payload, 0..) |*byte, index| {
+        byte.* = huffman_alphabet[(index * 17 + index / 7 + index / 31) % huffman_alphabet.len];
+    }
+    const ascii_payload = try init.gpa.alloc(u8, 64 * 1024);
+    defer init.gpa.free(ascii_payload);
+    var ascii_state: u32 = 31;
+    for (ascii_payload) |*byte| {
+        ascii_state = ascii_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @intCast(32 + ((ascii_state >> 16) % 95));
+    }
 
     const cases = [_]Case{
         .{ .name = "tiny", .payload = "hello zstd" },
@@ -75,6 +103,9 @@ pub fn main(init: std.process.Init) !void {
         .{ .name = "incompressible", .payload = &incompressible_payload },
         .{ .name = "rle64k", .payload = &rle_payload },
         .{ .name = "raw256k", .payload = raw_large_payload },
+        .{ .name = "numbered_json", .payload = numbered_json.items },
+        .{ .name = "huffman80k", .payload = huffman_payload },
+        .{ .name = "ascii64k", .payload = ascii_payload, .level = 9 },
     };
 
     var rows: std.ArrayList(Row) = .empty;
@@ -130,7 +161,7 @@ fn measureCase(
     case: Case,
     iterations: usize,
 ) !Row {
-    const encoded = try runtime.encodeAlloc(init.gpa, case.payload, 1);
+    const encoded = try runtime.encodeAlloc(init.gpa, case.payload, case.level);
     defer init.gpa.free(encoded);
     const summary = try vort.zstdSummarizeNativeFrameBlocks(encoded);
     const first_block = try vort.zstdInspectNativeFrameFirstBlock(encoded);

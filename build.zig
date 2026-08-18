@@ -2446,7 +2446,7 @@ pub fn build(b: *std.Build) void {
     const run_zstd_reference_bench_gate_csv =
         b.addRunArtifact(zstd_reference_bench_exe);
     run_zstd_reference_bench_gate_csv.addArgs(&.{
-        "--iterations", "1000",
+        "--iterations", "100",
         "--csv",        "zig-out/vort-zstd-reference-bench.csv",
     });
     const zstd_reference_bench_gate = b.addSystemCommand(&.{

@@ -48,6 +48,23 @@ pub const Reader = struct {
         return value;
     }
 
+    /// Return the next bits without advancing. The value uses the same stream
+    /// order as `read`, so table decoders can index fixed-width prefixes and
+    /// then consume the actual code length.
+    pub fn peek(self: Reader, bit_count: u8) Error!usize {
+        var copy = self;
+        return copy.read(bit_count);
+    }
+
+    pub fn skip(self: *Reader, bit_count: u8) Error!void {
+        if (bit_count > self.remaining_bits) return error.TruncatedFrame;
+        self.remaining_bits -= bit_count;
+    }
+
+    pub fn available(self: Reader) usize {
+        return self.remaining_bits;
+    }
+
     pub fn expectEnd(self: Reader) Error!void {
         if (self.remaining_bits != 0) return error.CorruptFrame;
     }
@@ -83,4 +100,17 @@ test "Zstd reverse reader matches per-bit oracle across alignments and widths" {
             );
         }
     }
+}
+
+test "Zstd reverse reader peek and skip match read" {
+    const bytes = [_]u8{ 0x35, 0xa6, 0xd0 };
+    var reader = try Reader.init(&bytes);
+    const before = reader.available();
+    const peeked = try reader.peek(7);
+    try std.testing.expectEqual(before, reader.available());
+    var oracle = reader;
+    try std.testing.expectEqual(try oracle.read(7), peeked);
+    try reader.skip(7);
+    try std.testing.expectEqual(oracle.available(), reader.available());
+    try std.testing.expectError(error.TruncatedFrame, reader.skip(@intCast(reader.available() + 1)));
 }

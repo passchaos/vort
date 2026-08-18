@@ -20,6 +20,7 @@ EXPECTED_COLUMNS = [
 EXPECTED_CASES = {
     "tiny", "text", "structured", "repetitive",
     "incompressible", "rle64k", "raw256k",
+    "numbered_json", "huffman80k", "ascii64k",
 }
 
 
@@ -69,6 +70,14 @@ def main() -> int:
     for name in {"tiny", "incompressible", "raw256k"}:
         if int(by_case[name]["raw_blocks"]) == 0:
             raise AssertionError(f"expected raw-block row: {by_case[name]}")
+    if int(by_case["numbered_json"]["sequence_count"]) <= 1:
+        raise AssertionError(f"expected multi-sequence row: {by_case['numbered_json']}")
+    if by_case["numbered_json"]["of_mode"] != "compressed":
+        raise AssertionError(f"expected FSE row: {by_case['numbered_json']}")
+    if int(by_case["huffman80k"]["sequence_count"]) < 100:
+        raise AssertionError(f"expected large sequence row: {by_case['huffman80k']}")
+    if by_case["ascii64k"]["literals_kind"] != "compressed":
+        raise AssertionError(f"expected Huffman literals row: {by_case['ascii64k']}")
 
     # This gate is evidence-first: the first matrix establishes real gaps
     # rather than pretending Vort already leads. Bound catastrophic regressions
@@ -77,6 +86,7 @@ def main() -> int:
         "tiny": 0.10, "text": 0.60, "structured": 0.25,
         "repetitive": 0.28, "incompressible": 5.0, "rle64k": 0.75,
         "raw256k": 0.85,
+        "numbered_json": 0.08, "huffman80k": 0.20, "ascii64k": 0.008,
     }
     for name, floor in floors.items():
         if float(by_case[name]["vort_over_reference"]) < floor:
@@ -86,7 +96,7 @@ def main() -> int:
     # rather than paying the former full size-preflight plus second decode.
     # Keep enough scheduler slack for the short optional gate while ensuring
     # the compressed allocator path remains within 2.5x of caller-owned decode.
-    for name in compressed:
+    for name in compressed | {"numbered_json", "huffman80k", "ascii64k"}:
         if float(by_case[name]["into_over_alloc"]) > 2.5:
             raise AssertionError(f"allocator decode regression {name}: {by_case[name]}")
     if float(by_case["incompressible"]["into_over_alloc"]) > 3.0:

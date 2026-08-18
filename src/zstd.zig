@@ -8,6 +8,7 @@ const single_predefined = @import("zstd/sequence/single_predefined.zig");
 const sequence_continuation = @import("zstd/sequence/continuation.zig");
 const raw_frame = @import("zstd/frame/raw.zig");
 const known_size_frame = @import("zstd/frame/known_size.zig");
+const huffman_lookup = @import("zstd/literals/huffman_lookup.zig");
 const huffman = @import("huffman.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
@@ -88,6 +89,7 @@ const of_bits = [_]u8{
 
 const StdZstdLiteralsSection = std.compress.zstd.Decompress.LiteralsSection;
 const StdZstdHuffmanTree = StdZstdLiteralsSection.HuffmanTree;
+const HuffmanLiteralLookup = huffman_lookup.Table(11);
 
 pub const FrameOptions = struct {
     include_content_size: bool = true,
@@ -4437,6 +4439,7 @@ fn copyHuffmanLiteralsFromSection(
 const HuffmanLiteralDecodeState = struct {
     cursor: HuffmanLiteralCursor,
     tree: StdZstdHuffmanTree,
+    lookup: HuffmanLiteralLookup,
     decoded: usize = 0,
 };
 
@@ -4445,6 +4448,7 @@ fn initHuffmanLiteralDecodeState(block: []const u8, section: LiteralOnlySection)
     return .{
         .cursor = try initHuffmanLiteralCursor(block, section),
         .tree = section.huffman_tree orelse return error.CorruptFrame,
+        .lookup = HuffmanLiteralLookup.build(section.huffman_tree orelse return error.CorruptFrame),
     };
 }
 
@@ -4457,7 +4461,7 @@ fn copyLiteralsFromHuffmanState(
     if (literal_offset != state.decoded) return error.CorruptFrame;
     if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < dest.len) return error.CorruptFrame;
     for (dest) |*out| {
-        out.* = try readHuffmanLiteralSymbolFromCursor(&state.cursor, state.tree);
+        out.* = try readHuffmanLiteralSymbolFromCursorWithLookup(&state.cursor, state.tree, &state.lookup);
         state.decoded += 1;
     }
     if (state.decoded == section.regenerated_size) try state.cursor.expectEnd();
@@ -4511,6 +4515,25 @@ const HuffmanLiteralCursor = struct {
             .none => return error.CorruptFrame,
         }
     }
+
+    fn readSymbol(
+        self: *HuffmanLiteralCursor,
+        tree: StdZstdHuffmanTree,
+        lookup: *const HuffmanLiteralLookup,
+    ) Error!u8 {
+        const width: u8 = @intCast(@min(@as(usize, tree.max_bit_count), self.reader.available()));
+        if (width == tree.max_bit_count and width != 0) {
+            const prefix = try self.reader.peek(width);
+            if (lookup.lookup(prefix << @intCast(11 - width))) |entry| {
+                try self.reader.skip(entry.bit_count);
+                return entry.symbol;
+            }
+        }
+        // A valid four-stream section may end the current stream with fewer
+        // than `max_bit_count` bits. Decode that tail through the canonical
+        // tree, which also performs the stream transition when needed.
+        return try readHuffmanLiteralSymbolFromCursor(self, tree);
+    }
 };
 
 fn initHuffmanLiteralCursor(block: []const u8, section: LiteralOnlySection) Error!HuffmanLiteralCursor {
@@ -4557,6 +4580,14 @@ fn readHuffmanLiteralSymbolFromCursor(cursor: *HuffmanLiteralCursor, huffman_tre
             },
         }
     }
+}
+
+fn readHuffmanLiteralSymbolFromCursorWithLookup(
+    cursor: *HuffmanLiteralCursor,
+    huffman_tree: StdZstdHuffmanTree,
+    lookup: *const HuffmanLiteralLookup,
+) Error!u8 {
+    return try cursor.readSymbol(huffman_tree, lookup);
 }
 
 fn compressedLiteralOnlyBlockDecodedSize(
@@ -4877,7 +4908,7 @@ const SequenceFseTable = struct {
     len: usize = 0,
     accuracy_log: u8 = 0,
 
-    fn symbol(self: SequenceFseTable, state: usize) Error!SequenceSymbol {
+    fn symbol(self: *const SequenceFseTable, state: usize) Error!SequenceSymbol {
         if (state >= self.len) return error.CorruptFrame;
         return self.entries[state];
     }
@@ -5497,9 +5528,9 @@ fn readInitialSequenceState(reader: *ReverseBitReader, mode: SymbolMode, fse_acc
 fn readModeSequence(state: *SequenceDecodeState) Error!DecodedSequence {
     if (state.remaining == 0) return error.CorruptFrame;
 
-    const ll_symbol = try currentLiteralSymbol(state.*);
-    const of_symbol = try currentOffsetSymbol(state.*);
-    const ml_symbol = try currentMatchSymbol(state.*);
+    const ll_symbol = try currentLiteralSymbol(state);
+    const of_symbol = try currentOffsetSymbol(state);
+    const ml_symbol = try currentMatchSymbol(state);
 
     // Zstandard stores the offset extra bits before match/literal extra bits,
     // but repeat-offset selection depends on the *fully decoded* literal
@@ -5523,7 +5554,7 @@ fn readModeSequence(state: *SequenceDecodeState) Error!DecodedSequence {
     return .{ .literal_len = literal_len, .match_len = match_len, .match_offset = match_offset };
 }
 
-fn currentLiteralSymbol(state: SequenceDecodeState) Error!SequenceSymbol {
+fn currentLiteralSymbol(state: *const SequenceDecodeState) Error!SequenceSymbol {
     return switch (state.spec.ll_mode) {
         .predefined => try defaultLiteralLengthSymbol(state.ll_state),
         .rle => state.spec.literal_rle orelse error.CorruptFrame,
@@ -5532,7 +5563,7 @@ fn currentLiteralSymbol(state: SequenceDecodeState) Error!SequenceSymbol {
     };
 }
 
-fn currentOffsetSymbol(state: SequenceDecodeState) Error!SequenceSymbol {
+fn currentOffsetSymbol(state: *const SequenceDecodeState) Error!SequenceSymbol {
     return switch (state.spec.of_mode) {
         .predefined => try defaultOffsetSymbol(state.of_state),
         .rle => state.spec.offset_rle orelse error.CorruptFrame,
@@ -5541,7 +5572,7 @@ fn currentOffsetSymbol(state: SequenceDecodeState) Error!SequenceSymbol {
     };
 }
 
-fn currentMatchSymbol(state: SequenceDecodeState) Error!SequenceSymbol {
+fn currentMatchSymbol(state: *const SequenceDecodeState) Error!SequenceSymbol {
     return switch (state.spec.ml_mode) {
         .predefined => try defaultMatchLengthSymbol(state.ml_state),
         .rle => state.spec.match_rle orelse error.CorruptFrame,

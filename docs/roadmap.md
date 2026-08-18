@@ -2042,6 +2042,22 @@ architecture blindly.
   cover checksum and declared-size corruption plus concatenated/multi-block
   fallback without duplicating block decoding logic in the planner.
 
+- Expanded the libzstd decode matrix beyond the favorable one-sequence shape.
+  Deterministic numbered-JSON, 80 KiB patterned-symbol, and 64 KiB printable-
+  ASCII rows now lock multi-sequence/FSE, large FSE-sequence, and Huffman-
+  literal-only coverage respectively. The first measurements exposed much
+  larger general-path gaps (`0.077/0.014/0.012x` reference throughput), so the
+  gate records conservative floors instead of treating the earlier matrix as a
+  complete leadership claim. The dominant multi-sequence defect was structural:
+  three inline 512-entry FSE tables were copied by value for every decoded
+  sequence. Changing symbol lookup to borrow `SequenceDecodeState`/tables lifts
+  numbered JSON to about `0.12x` and the 5,161-sequence row to about `0.30x`
+  without changing table layout. A new `src/zstd/literals/huffman_lookup.zig`
+  module adds fixed-prefix literal lookup using peek/skip support in the shared
+  reverse reader; exact stream-boundary fallback retains malformed-input
+  behavior. Literal-only Huffman remains the largest gap and is now explicitly
+  visible rather than hidden by the original corpus.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box
