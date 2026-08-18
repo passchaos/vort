@@ -2058,6 +2058,16 @@ architecture blindly.
   behavior. Literal-only Huffman remains the largest gap and is now explicitly
   visible rather than hidden by the original corpus.
 
+- Routed sequence-free Huffman literal blocks through the same fixed-prefix
+  table instead of leaving them on the canonical linear tree scan. The shared
+  reverse reader now exposes an oracle-tested small-width peek specialized for
+  Zstd's at-most-11-bit Huffman codes, touching at most three bytes without the
+  generic u72 gather loop. On the 64 KiB printable-ASCII row this raises Vort
+  from roughly `0.013x` to about `0.11x` libzstd throughput (over `8x` faster),
+  while the multi-sequence rows remain around `0.12/0.32x`. The gate floors now
+  protect those material gains; libzstd still leads the general Huffman/FSE
+  paths, so further table/state and match-loop work remains necessary.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box

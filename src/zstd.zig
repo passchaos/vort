@@ -4427,8 +4427,9 @@ fn copyHuffmanLiteralsFromSection(
     var decoded_index: usize = 0;
     var output_index: usize = 0;
     var cursor = try initHuffmanLiteralCursor(block, section);
+    const lookup = HuffmanLiteralLookup.build(huffman_tree);
     while (decoded_index < end) {
-        const symbol = try readHuffmanLiteralSymbolFromCursor(&cursor, huffman_tree);
+        const symbol = try cursor.readSymbol(huffman_tree, &lookup);
         if (decoded_index >= literal_offset) dest[output_index] = symbol;
         if (decoded_index >= literal_offset) output_index += 1;
         decoded_index += 1;
@@ -4471,8 +4472,9 @@ fn validateHuffmanLiteralsConsumed(block: []const u8, section: LiteralOnlySectio
     if (section.kind != .compressed and section.kind != .treeless) return;
     const huffman_tree = section.huffman_tree orelse return error.CorruptFrame;
     var cursor = try initHuffmanLiteralCursor(block, section);
+    const lookup = HuffmanLiteralLookup.build(huffman_tree);
     for (0..section.regenerated_size) |_| {
-        _ = try readHuffmanLiteralSymbolFromCursor(&cursor, huffman_tree);
+        _ = try cursor.readSymbol(huffman_tree, &lookup);
     }
     try cursor.expectEnd();
 }
@@ -4523,7 +4525,7 @@ const HuffmanLiteralCursor = struct {
     ) Error!u8 {
         const width: u8 = @intCast(@min(@as(usize, tree.max_bit_count), self.reader.available()));
         if (width == tree.max_bit_count and width != 0) {
-            const prefix = try self.reader.peek(width);
+            const prefix = try self.reader.peekSmall(@intCast(width));
             if (lookup.lookup(prefix << @intCast(11 - width))) |entry| {
                 try self.reader.skip(entry.bit_count);
                 return entry.symbol;

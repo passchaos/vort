@@ -56,6 +56,28 @@ pub const Reader = struct {
         return copy.read(bit_count);
     }
 
+    /// Fast non-advancing prefix extraction for Huffman lookup tables. Zstd's
+    /// literal code width is at most 11 bits, so an unaligned prefix touches no
+    /// more than three bytes and does not need the generic u72 gather loop.
+    pub fn peekSmall(self: Reader, bit_count: u4) Error!usize {
+        if (bit_count == 0) return 0;
+        if (bit_count > self.remaining_bits) return error.TruncatedFrame;
+        const end = self.remaining_bits;
+        const start = end - bit_count;
+        const first_byte = start >> 3;
+        const last_byte = (end - 1) >> 3;
+        const byte_count = last_byte + 1 - first_byte;
+        const reservoir: u32 = switch (byte_count) {
+            1 => self.bytes[first_byte],
+            2 => std.mem.readInt(u16, self.bytes[first_byte..][0..2], .little),
+            3 => @as(u32, std.mem.readInt(u16, self.bytes[first_byte..][0..2], .little)) |
+                (@as(u32, self.bytes[first_byte + 2]) << 16),
+            else => unreachable,
+        };
+        const mask = (@as(u32, 1) << bit_count) - 1;
+        return @intCast((reservoir >> @intCast(start & 7)) & mask);
+    }
+
     pub fn skip(self: *Reader, bit_count: u8) Error!void {
         if (bit_count > self.remaining_bits) return error.TruncatedFrame;
         self.remaining_bits -= bit_count;
@@ -113,4 +135,20 @@ test "Zstd reverse reader peek and skip match read" {
     try reader.skip(7);
     try std.testing.expectEqual(oracle.available(), reader.available());
     try std.testing.expectError(error.TruncatedFrame, reader.skip(@intCast(reader.available() + 1)));
+}
+
+test "Zstd reverse reader small peek matches read across alignments" {
+    var bytes: [8]u8 = .{ 0x35, 0xa6, 0x59, 0xc3, 0x17, 0xe8, 0x42, 0xd0 };
+    for (0..12) |prefix_bits| {
+        var aligned = try Reader.init(&bytes);
+        if (prefix_bits != 0) try aligned.skip(@intCast(prefix_bits));
+        var width: u4 = 1;
+        while (width <= 11 and width <= aligned.available()) : (width += 1) {
+            var oracle = aligned;
+            try std.testing.expectEqual(
+                try oracle.read(width),
+                try aligned.peekSmall(width),
+            );
+        }
+    }
 }
