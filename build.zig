@@ -2422,6 +2422,41 @@ pub fn build(b: *std.Build) void {
         &lz4_reference_bench_gate.step,
     );
 
+    const br_reference_bench_exe = b.addExecutable(.{
+        .name = "vort-br-reference-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/reference_bench.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_br_reference_bench = b.addRunArtifact(br_reference_bench_exe);
+    const br_reference_bench_step = b.step(
+        "run-br-reference-bench",
+        "Compare caller-owned Brotli decode against runtime libbrotli",
+    );
+    br_reference_bench_step.dependOn(&run_br_reference_bench.step);
+
+    const run_br_reference_bench_gate_csv = b.addRunArtifact(br_reference_bench_exe);
+    run_br_reference_bench_gate_csv.addArgs(&.{
+        "--iterations", "500",
+        "--csv",        "zig-out/vort-br-reference-bench.csv",
+    });
+    const br_reference_bench_gate = b.addSystemCommand(&.{
+        "python3", "tools/br/reference_bench_gate.py",
+        "--csv",   "zig-out/vort-br-reference-bench.csv",
+    });
+    br_reference_bench_gate.step.dependOn(&run_br_reference_bench_gate_csv.step);
+    const br_reference_bench_gate_step = b.step(
+        "run-br-reference-bench-gate",
+        "Validate optional Vort/libbrotli caller-owned decode comparison",
+    );
+    br_reference_bench_gate_step.dependOn(&br_reference_bench_gate.step);
+
     const zstd_reference_bench_exe = b.addExecutable(.{
         .name = "vort-zstd-reference-bench",
         .root_module = b.createModule(.{

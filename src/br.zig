@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("core.zig");
 const bitstream = @import("bitstream.zig");
 const huffman = @import("huffman.zig");
+const match_copy = @import("br/match_copy.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 
@@ -1490,11 +1491,7 @@ fn processMinimalCompressedMetaBlock(
         }
         pushLastDistance(last_distances, distance);
         if (lengths.copy_len > meta_block_end - written.*) return error.CorruptFrame;
-        var copy_index: usize = 0;
-        while (copy_index < lengths.copy_len) : (copy_index += 1) {
-            output[written.*] = output[written.* - distance];
-            written.* += 1;
-        }
+        match_copy.append(output, written, distance, lengths.copy_len);
     }
 }
 

@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+"""Validate the optional Vort/libbrotli caller-owned decode comparison."""
+
+import argparse
+import csv
+from pathlib import Path
+
+COLUMNS = [
+    "case", "reference_version", "input_bytes", "encoded_bytes",
+    "iterations", "vort_ns", "reference_ns", "vort_mib_s",
+    "reference_mib_s", "vort_over_reference", "checksum", "size_ns",
+]
+CASES = {"tiny", "text", "structured", "repetitive", "random4k"}
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--csv", type=Path, required=True)
+    args = parser.parse_args()
+    with args.csv.open(newline="") as file:
+        reader = csv.DictReader(file)
+        if reader.fieldnames != COLUMNS:
+            raise AssertionError(f"bad columns: {reader.fieldnames!r}")
+        rows = list(reader)
+    by_case = {row["case"]: row for row in rows}
+    if len(rows) != len(CASES) or set(by_case) != CASES:
+        raise AssertionError(f"bad cases: {sorted(by_case)!r}")
+    versions = {row["reference_version"] for row in rows}
+    if len(versions) != 1 or not next(iter(versions)):
+        raise AssertionError(f"bad versions: {versions!r}")
+    for row in rows:
+        for key in (
+            "input_bytes", "encoded_bytes", "iterations", "vort_ns",
+            "reference_ns", "checksum", "size_ns",
+        ):
+            if int(row[key]) <= 0:
+                raise AssertionError(f"non-positive {key}: {row}")
+        for key in ("vort_mib_s", "reference_mib_s", "vort_over_reference"):
+            if float(row[key]) <= 0:
+                raise AssertionError(f"non-positive {key}: {row}")
+    floors = {
+        "tiny": 1.0, "text": 0.27, "structured": 0.22,
+        "repetitive": 0.32, "random4k": 1.5,
+    }
+    for name, floor in floors.items():
+        if float(by_case[name]["vort_over_reference"]) < floor:
+            raise AssertionError(f"decode regression {name}: {by_case[name]}")
+    print(f"br_reference_bench_gate=ok rows={len(rows)} reference_version={next(iter(versions))}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

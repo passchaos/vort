@@ -2104,6 +2104,24 @@ architecture blindly.
   existing range. All Huffman, treeless, four-stream, and high-byte fixtures
   continue to share the same decoder; the numbered-JSON floor rises to `0.11x`.
 
+- Added an opt-in same-process Brotli caller-owned decode comparison under
+  `tools/br/`, dynamically loading Ubuntu libbrotli 1.1.0. The locked quality-0
+  frames keep all rows inside Vort's supported subset and show the real split:
+  tiny/stored-random paths lead libbrotli by roughly `11x/3x`, while compressed
+  text/structured/repetitive initially reached only about `0.24/0.20/0.27x`.
+  Separate decoded-size timing shows the strict preflight itself is even more
+  expensive than output decode on those compressed rows, localizing future work
+  to shared prefix/header parsing rather than allocation. The optional gate
+  records version, exact round trips, throughput, and conservative row floors.
+
+- Extracted Brotli in-window match replay into `src/br/match_copy.zig`. The
+  decoder now copies one source period and doubles the initialized prefix, with
+  exact memcpy for non-overlap, instead of advancing one byte at a time. Focused
+  period and non-overlap tests lock LZ77 semantics. Same-machine A/B raises the
+  compressed libbrotli ratios from roughly `0.24/0.20/0.27x` to
+  `0.31/0.25/0.36x` for text/structured/repetitive (about `22–34%` faster),
+  while stored/random leadership remains intact.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box
