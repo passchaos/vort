@@ -68,8 +68,8 @@ def main() -> int:
     # while retaining exact per-case ratios for follow-up fast-path work.
     floors = {
         "tiny": 0.70, "text": 0.40, "structured": 0.14,
-        "repetitive": 0.16, "incompressible": 0.70, "rle64k": 0.35,
-        "raw256k": 0.60,
+        "repetitive": 0.16, "incompressible": 5.0, "rle64k": 0.35,
+        "raw256k": 0.85,
     }
     for name, floor in floors.items():
         if float(by_case[name]["vort_over_reference"]) < floor:

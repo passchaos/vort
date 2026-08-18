@@ -3,6 +3,7 @@ const core = @import("core.zig");
 const checksum_mod = @import("checksum.zig");
 const dictionary_mod = @import("dictionary.zig");
 const sequence_predefined = @import("zstd/sequence/predefined.zig");
+const raw_frame = @import("zstd/frame/raw.zig");
 const huffman = @import("huffman.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
@@ -414,6 +415,7 @@ pub fn decodeFrameAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayLis
 }
 
 pub fn decodeFrameInto(frame: []const u8, output: []u8) Error!usize {
+    if (try raw_frame.tryDecode(frame, output)) |written| return written;
     return try decodeNativeFrameInto(frame, output);
 }
 

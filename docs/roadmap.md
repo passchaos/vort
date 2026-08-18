@@ -1948,6 +1948,17 @@ architecture blindly.
   the behavior-preserving extraction remains. The libzstd matrix stays at the
   established baseline, and the new module has its own invalid-state tests.
 
+- Added a focused raw-frame fast path under `src/zstd/frame/raw.zig` rather
+  than expanding the Zstd facade. It accepts only checksum-free, dictionary-
+  free, single-segment frames containing raw blocks, validates the complete
+  frame and declared size before mutating output, and falls back without side
+  effects for every other shape. Payloads below 256 bytes stay on the general
+  decoder to avoid two-pass fixed overhead. In the libzstd repeat5 matrix, the
+  1 KiB raw row moves from roughly parity to over `30x` the reference call and
+  the 256 KiB/two-block row improves from about `0.8x` to `0.94x`; compressed
+  rows remain byte-identical and unchanged. The reference gate now requires a
+  clear 1 KiB raw win and at least `0.85x` on the large raw row.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box
