@@ -5139,6 +5139,10 @@ architecture blindly.
   It keeps bit packing continuous, plans each block against a rolling 32 KiB
   history, supports tiny output and pledged input, and emits an empty stored
   block for byte-aligned zlib-compatible sync flush without ending the stream.
+- Wrapped the fixed stream core with `ZlibIncrementalFixedEncoder`, adding a
+  streamed CMF/FLG header, optional preset-dictionary DICTID/history, incremental
+  Adler-32 footer, exact input sizes, tiny-output draining, and the same sync
+  flush continuation semantics.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

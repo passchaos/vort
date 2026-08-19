@@ -21,6 +21,7 @@ pub fn Encoder(comptime Codec: type) type {
         total_input: usize = 0,
         total_output: usize = 0,
         expected_input_len: ?usize = null,
+        dictionary: []const u8 = &.{},
 
         const Self = @This();
         pub const Error = Codec.Error;
@@ -38,6 +39,12 @@ pub fn Encoder(comptime Codec: type) type {
         }
         pub fn initExactSize(allocator: std.mem.Allocator, options: Options, expected_input_len: usize) Self {
             return .{ .allocator = allocator, .options = options, .expected_input_len = expected_input_len };
+        }
+        pub fn initWithDictionary(allocator: std.mem.Allocator, options: Options, dictionary: []const u8) Self {
+            return .{ .allocator = allocator, .options = options, .dictionary = dictionary };
+        }
+        pub fn initExactSizeWithDictionary(allocator: std.mem.Allocator, options: Options, expected_input_len: usize, dictionary: []const u8) Self {
+            return .{ .allocator = allocator, .options = options, .expected_input_len = expected_input_len, .dictionary = dictionary };
         }
         pub fn deinit(self: *Self) void {
             Codec.deinitState(&self.state, self.allocator);
@@ -137,6 +144,10 @@ pub fn Encoder(comptime Codec: type) type {
 
         fn writeDataBlock(self: *Self, final: bool) Error!void {
             try self.history.ensureTotalCapacity(self.allocator, Codec.history_len);
+            if (self.history.items.len == 0 and self.dictionary.len != 0) {
+                const keep = @min(self.dictionary.len, Codec.history_len);
+                self.history.appendSliceAssumeCapacity(self.dictionary[self.dictionary.len - keep ..]);
+            }
             try Codec.writeFixedBlock(self.allocator, &self.pending, &self.state, self.plain.items, self.history.items, final, self.options.compression);
             if (self.plain.items.len >= Codec.history_len) {
                 self.history.clearRetainingCapacity();

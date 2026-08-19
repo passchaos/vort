@@ -676,6 +676,8 @@ defer zstd_incremental_encoder.deinit();
 // contract for RFC 1951 stored blocks, including pledged input size and flush.
 // RawDeflateIncrementalFixedEncoder adds fixed-Huffman compression, a rolling
 // 32 KiB history, and zlib-compatible empty stored sync-flush boundaries.
+// ZlibIncrementalFixedEncoder adds CMF/FLG, optional preset DICTID, streaming
+// Adler-32 and the footer while preserving the raw core's flush semantics.
 const zstd_dict_options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only };
 const zstd_dict_bound = try vort.zstdEncodedNativeFrameBoundWithDictionary(
     "prefix: previous zstd history payload, shared phrase tail".len,

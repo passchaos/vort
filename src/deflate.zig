@@ -10,6 +10,7 @@ const png_windowed_history =
 const semantic_rle258 = @import("deflate/semantic/rle258.zig");
 const incremental_stored_encoder = @import("deflate/incremental/encoder/stored.zig");
 const incremental_fixed_encoder = @import("deflate/incremental/encoder/fixed.zig");
+const incremental_zlib_fixed_encoder = @import("deflate/incremental/encoder/zlib_fixed.zig");
 const incremental_tests = @import("deflate/incremental/tests.zig");
 
 const png = @import("png.zig");
@@ -95,6 +96,26 @@ const IncrementalFixedEncoderCodec = struct {
 };
 
 pub const RawDeflateIncrementalFixedEncoder = incremental_fixed_encoder.Encoder(IncrementalFixedEncoderCodec);
+
+const IncrementalZlibFixedEncoderCodec = struct {
+    pub const Error = deflate.Error || std.mem.Allocator.Error;
+    pub const RawEncoder = deflate.RawDeflateIncrementalFixedEncoder;
+    pub const RawOptions = RawEncoder.Options;
+    pub const Adler32 = checksum.Adler32;
+
+    pub fn writeHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), dictionary: []const u8) IncrementalZlibFixedEncoderCodec.Error!void {
+        const header_len: usize = if (dictionary.len == 0) 2 else 6;
+        const header = try out.addManyAsSlice(allocator, header_len);
+        writeZlibHeader(header, if (dictionary.len == 0) null else dictionary);
+    }
+    pub fn writeFooter(allocator: std.mem.Allocator, out: *std.ArrayList(u8), digest: u32) IncrementalZlibFixedEncoderCodec.Error!void {
+        var bytes: [4]u8 = undefined;
+        std.mem.writeInt(u32, &bytes, digest, .big);
+        try out.appendSlice(allocator, &bytes);
+    }
+};
+
+pub const ZlibIncrementalFixedEncoder = incremental_zlib_fixed_encoder.Encoder(IncrementalZlibFixedEncoderCodec);
 
 test {
     _ = incremental_tests;
