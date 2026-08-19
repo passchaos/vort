@@ -2269,6 +2269,12 @@ architecture blindly.
   fast-path attempts were rejected: a general literal-only precheck regressed
   1 KiB input by about 9.8%, while a large-only precheck gained about 1.8% at
   256 KiB but regressed tiny and 1 KiB rows sharply. Both were fully reverted.
+  A later parser-only optimization keeps the ordinary scalar length-extension
+  loop intact but scans genuinely long 0xff extension runs in 32-byte chunks.
+  Seven alternating fixed-CPU baseline/candidate rounds improved Vort elapsed
+  time by about 9.6% at the median (`0.83x -> 0.90x` liblz4), while targeted
+  ordinary compressed rows stayed within noise or improved. The gate now
+  requires `0.85x`; malformed unterminated extensions have a focused oracle.
 
 - Added a true system-libzstd compatibility probe under `tools/zstd/`, separate
   from the native-writer probe. It dynamically loads libzstd only in the tool,

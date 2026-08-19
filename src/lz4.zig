@@ -3,6 +3,7 @@ const core = @import("core.zig");
 const checksum_mod = @import("checksum.zig");
 const dictionary_mod = @import("dictionary.zig");
 const block_format = @import("lz4/block_format.zig");
+const length = @import("lz4/length.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 
@@ -5552,6 +5553,13 @@ fn writeLengthExtension(allocator: std.mem.Allocator, out: *std.ArrayList(u8), e
 }
 
 fn readLengthExtension(input: []const u8, offset: *usize) Error!usize {
+    // Keep the common short-extension loop inline and identical to the compact
+    // parser. Only cold, stored-like runs pay the out-of-line vector scanner.
+    if (input.len - offset.* >= 4096 and
+        std.mem.readInt(u32, input[offset.*..][0..4], .little) == std.math.maxInt(u32))
+    {
+        return try length.readLongExtension(input, offset);
+    }
     var len: usize = 0;
     while (true) {
         if (offset.* >= input.len) return error.TruncatedFrame;

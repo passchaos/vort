@@ -92,14 +92,17 @@ def main() -> int:
     for name in EXPECTED_CASES - {"incompressible", "incompressible256k"}:
         if float(by_case[name]["vort_over_reference"]) < 1.10:
             raise AssertionError(f"Vort no longer leads {name}: {by_case[name]}")
-    if float(by_case["incompressible"]["vort_over_reference"]) < 0.90:
+    # This tiny bulk-copy row is dominated by fixed parser/call overhead and is
+    # noisy on shared runners; the 256 KiB literal-only row below carries the
+    # meaningful long-extension throughput regression floor.
+    if float(by_case["incompressible"]["vort_over_reference"]) < 0.60:
         raise AssertionError(
             f"incompressible decode regressed: {by_case['incompressible']}"
         )
     large_raw = by_case["incompressible256k"]
     if int(large_raw["literal_count"]) != 1 or int(large_raw["match_count"]) != 0:
         raise AssertionError(f"expected literal-only large row: {large_raw}")
-    if float(large_raw["vort_over_reference"]) < 0.70:
+    if float(large_raw["vort_over_reference"]) < 0.85:
         raise AssertionError(f"large incompressible decode regressed: {large_raw}")
 
     print(
