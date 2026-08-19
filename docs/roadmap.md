@@ -5168,6 +5168,11 @@ architecture blindly.
   payload directly caller-to-caller through tiny output, enforces exact/maximum
   output bounds before copying, and reports reserved type, LEN/NLEN, truncation,
   trailing input, and recoverability diagnostics without buffering a frame.
+- Added a byte-progressive fixed-Huffman literal decoder with a persistent bit
+  reservoir and partial canonical-code state. It handles arbitrary byte splits
+  and tiny output without frame buffering, enforces output limits/exact size,
+  and explicitly reports length/distance symbols as unsupported until the 32 KiB
+  history-ring execution slice lands.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

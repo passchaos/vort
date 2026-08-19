@@ -690,6 +690,8 @@ defer zstd_incremental_encoder.deinit();
 // complete LZ77 token boundary discovered with next-call prefix bytes.
 // RawDeflateIncrementalStoredDecoder is the caller-to-caller byte-progressive
 // decode reference path for RFC 1951 stored blocks and bounded hostile input.
+// RawDeflateIncrementalFixedLiteralDecoder adds resumable fixed-Huffman bit
+// decoding for literal-only blocks and explicitly rejects match symbols for now.
 const zstd_dict_options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only };
 const zstd_dict_bound = try vort.zstdEncodedNativeFrameBoundWithDictionary(
     "prefix: previous zstd history payload, shared phrase tail".len,

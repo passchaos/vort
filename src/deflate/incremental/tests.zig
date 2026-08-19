@@ -560,3 +560,41 @@ test "raw deflate incremental stored decoder validates hostile streams" {
     try std.testing.expectError(error.TruncatedFrame, truncated.finish());
     try std.testing.expectEqualStrings("truncated_input", truncated.diagnostics().recoverability_hint_name);
 }
+
+test "raw deflate incremental fixed literal decoder streams bit splits" {
+    const payload = "fixed literal only progressive decode" ** 16;
+    const encoded = try deflate.encodeRawFixedWithOptionsAlloc(std.testing.allocator, payload, .{ .strategy = .huffman_only });
+    defer std.testing.allocator.free(encoded);
+    var decoder = deflate.RawDeflateIncrementalFixedLiteralDecoder.initWithOptions(.{ .expected_output_len = payload.len });
+    var output: [payload.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (input_offset < encoded.len) {
+        const end = @min(encoded.len, input_offset + 1);
+        const output_end = @min(output.len, output_offset + 2);
+        const result = try decoder.step(encoded[input_offset..end], output[output_offset..output_end]);
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+    }
+    while (output_offset < output.len) {
+        const end = @min(output.len, output_offset + 2);
+        const result = try decoder.step("", output[output_offset..end]);
+        output_offset += result.progress.output_written;
+    }
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, payload, &output);
+}
+
+test "raw deflate incremental fixed literal decoder rejects matches and truncation" {
+    const matched = try deflate.encodeRawFixedAlloc(std.testing.allocator, "repeat repeat repeat repeat repeat");
+    defer std.testing.allocator.free(matched);
+    var unsupported = deflate.RawDeflateIncrementalFixedLiteralDecoder.init();
+    var output: [64]u8 = undefined;
+    try std.testing.expectError(error.UnsupportedDeflateFeature, unsupported.step(matched, &output));
+
+    const literal = try deflate.encodeRawFixedWithOptionsAlloc(std.testing.allocator, "truncated literals", .{ .strategy = .huffman_only });
+    defer std.testing.allocator.free(literal);
+    var truncated = deflate.RawDeflateIncrementalFixedLiteralDecoder.init();
+    _ = try truncated.step(literal[0 .. literal.len - 1], &output);
+    try std.testing.expectError(error.TruncatedFrame, truncated.finish());
+}
