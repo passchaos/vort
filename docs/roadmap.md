@@ -5067,6 +5067,10 @@ architecture blindly.
   dictionary bytes seed the first block's match history; later linked blocks
   continue from the rolling 64 KiB frame history. Zero or mismatched IDs are
   rejected before output.
+- Added dictionary-set constructors for the incremental LZ4 encoder, including
+  pledged-size mode. The encoder resolves Dictionary_ID once at construction,
+  borrows the selected history bytes, and returns `NeedDictionary` before any
+  frame output when the catalog has no matching entry.
 - Added a no-content-size incremental native Zstd raw/RLE frame encoder under
   `src/zstd/incremental/`. It retains one bounded block, delays the Zstd final
   block bit until explicit finish, maintains the optional XXH64 content checksum

@@ -45,6 +45,14 @@ pub fn Encoder(comptime Codec: type) type {
             try Codec.validate(options, expected_input_len, dictionary_id);
             return .{ .allocator = allocator, .options = options, .block_encoder = try Codec.EncoderState.init(allocator), .expected_input_len = expected_input_len, .dictionary_id = dictionary_id, .dictionary = dictionary };
         }
+        pub fn initWithDictionarySet(allocator: std.mem.Allocator, options: Codec.Options, dictionary_set: anytype, dictionary_id: u32) Error!Self {
+            const dictionary = dictionary_set.find(dictionary_id) orelse return error.NeedDictionary;
+            return initWithDictionary(allocator, options, dictionary.id, dictionary.content);
+        }
+        pub fn initExactSizeWithDictionarySet(allocator: std.mem.Allocator, options: Codec.Options, expected_input_len: usize, dictionary_set: anytype, dictionary_id: u32) Error!Self {
+            const dictionary = dictionary_set.find(dictionary_id) orelse return error.NeedDictionary;
+            return initExactSizeWithDictionary(allocator, options, expected_input_len, dictionary.id, dictionary.content);
+        }
         pub fn deinit(self: *Self) void {
             self.block_encoder.deinit();
             self.block.deinit(self.allocator);

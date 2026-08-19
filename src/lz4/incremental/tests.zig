@@ -102,3 +102,14 @@ test "LZ4 incremental frame encoder supports preset dictionary" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
 }
+
+test "LZ4 incremental frame encoder resolves dictionary set" {
+    const dictionary = lz4.NativeDictionary.init(0x10203040, "dictionary-set prefix");
+    const set = try lz4.NativeDictionarySet.initChecked(&.{dictionary});
+    var encoder = try lz4.NativeIncrementalFrameEncoder.initWithDictionarySet(std.testing.allocator, .{ .include_content_size = false, .dictionary_id = dictionary.id }, set, dictionary.id);
+    defer encoder.deinit();
+    var missing_options: lz4.NativeFrameOptions = .{ .include_content_size = false, .dictionary_id = 7 };
+    try std.testing.expectError(error.NeedDictionary, lz4.NativeIncrementalFrameEncoder.initWithDictionarySet(std.testing.allocator, missing_options, set, 7));
+    missing_options.dictionary_id = dictionary.id;
+    encoder.reset();
+}
