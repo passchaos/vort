@@ -14,6 +14,8 @@ const huffman_lookup = @import("zstd/literals/huffman_lookup.zig");
 const incremental_encoder = @import("zstd/incremental/frame_encoder.zig");
 const incremental_block_emitter = @import("zstd/incremental/block_emitter.zig");
 const incremental_history_match = @import("zstd/incremental/history_match.zig");
+const incremental_history = @import("zstd/incremental/history.zig");
+const incremental_history_index = @import("zstd/incremental/history_index.zig");
 const incremental_tests = @import("zstd/incremental/tests.zig");
 const huffman = @import("huffman.zig");
 
@@ -132,6 +134,7 @@ const IncrementalEncoderCodec = struct {
     pub const Options = zstd.NativeFrameOptions;
     pub const Dictionary = zstd.NativeDictionary;
     pub const State = LiteralOnlyEncoderState;
+    pub const HistoryView = incremental_history.View;
     pub const max_block_len = std.compress.zstd.block_size_max;
     pub fn validate(options: Options, expected_input_len: ?usize, dictionary_id: ?u32) zstd.Error!void {
         if (options.include_content_size != (expected_input_len != null)) return error.InvalidBlockPlan;
@@ -160,7 +163,7 @@ const IncrementalEncoderCodec = struct {
     pub fn writeRawOrRle(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) zstd.Error!void {
         try emitBlock(allocator, out, block, last);
     }
-    pub fn writeEntropy(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, state: *State, dictionary: ?IncrementalEncoderCodec.Dictionary, frame_history: []const u8, frame_offset: usize, match_search_budget: usize) zstd.Error!void {
+    pub fn writeEntropy(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, state: *State, dictionary: ?IncrementalEncoderCodec.Dictionary, frame_history: HistoryView, frame_offset: usize, match_search_budget: usize) zstd.Error!void {
         try emitLiteralOnlyCompressedBlockWithHistory(allocator, out, block, last, state, dictionary, frame_history, frame_offset, match_search_budget);
     }
     pub fn writeChecksum(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options, hasher: *std.hash.XxHash64) zstd.Error!void {
@@ -178,6 +181,9 @@ pub const NativeIncrementalFrameEncoder = incremental_encoder.Encoder(Incrementa
 
 test {
     _ = incremental_tests;
+    _ = incremental_history;
+    _ = incremental_history_index;
+    _ = incremental_history_match;
 }
 
 pub const NativeDictionary = struct {
@@ -6589,10 +6595,17 @@ fn emitLiteralOnlyCompressedBlockWithDictionary(
         last,
         state,
         dictionary,
-        &.{},
+        emptyIncrementalHistoryView(),
         frame_offset,
         match_search_budget,
     );
+}
+
+fn emptyIncrementalHistoryView() incremental_history.View {
+    const Empty = struct {
+        var index: incremental_history_index.Index = .{};
+    };
+    return .{ .bytes = &.{}, .absolute_start = 0, .index = &Empty.index };
 }
 
 fn emitLiteralOnlyCompressedBlockWithHistory(
@@ -6602,7 +6615,7 @@ fn emitLiteralOnlyCompressedBlockWithHistory(
     last: bool,
     state: *LiteralOnlyEncoderState,
     dictionary: ?NativeDictionary,
-    frame_history: []const u8,
+    frame_history: incremental_history.View,
     frame_offset: usize,
     match_search_budget: usize,
 ) Error!void {
@@ -6780,17 +6793,33 @@ fn emitFrameHistoryMatchCompressedBlock(
     out: *std.ArrayList(u8),
     block: []const u8,
     last: bool,
-    history: []const u8,
+    history: incremental_history.View,
 ) Error!bool {
-    const match = incremental_history_match.find(history, block) orelse return false;
-    const literal_len = match.block_start;
-    const match_offset = match.offset(history.len) orelse return error.IntegerOverflow;
-    const tail_start = match.block_start + match.len;
-    const literal_lens = [_]usize{literal_len};
-    const offsets = [_]usize{match_offset};
-    const match_lens = [_]usize{match.len};
-    const literal_ends = [_]usize{tail_start};
-    return try emitBestSequenceCompressedBlock(allocator, out, block, last, &literal_lens, &offsets, &match_lens, &literal_ends, tail_start);
+    const plan = incremental_history_match.findPlan(history, block);
+    if (plan.len == 0) return false;
+    var literal_lens: [incremental_history_match.max_matches]usize = undefined;
+    var offsets: [incremental_history_match.max_matches]usize = undefined;
+    var match_lens: [incremental_history_match.max_matches]usize = undefined;
+    var literal_ends: [incremental_history_match.max_matches]usize = undefined;
+    var literal_start: usize = 0;
+    for (plan.slice(), 0..) |match, i| {
+        literal_lens[i] = match.block_start - literal_start;
+        offsets[i] = match.offset(history.bytes.len) orelse return error.IntegerOverflow;
+        match_lens[i] = match.len;
+        literal_ends[i] = match.block_start + match.len;
+        literal_start = literal_ends[i];
+    }
+    return try emitBestSequenceCompressedBlock(
+        allocator,
+        out,
+        block,
+        last,
+        literal_lens[0..plan.len],
+        offsets[0..plan.len],
+        match_lens[0..plan.len],
+        literal_ends[0..plan.len],
+        literal_start,
+    );
 }
 
 fn emitSingleDictionaryMatchCompressedBlock(

@@ -662,7 +662,8 @@ var zstd_incremental_encoder = try vort.ZstdNativeIncrementalFrameEncoder.initWi
 defer zstd_incremental_encoder.deinit();
 // Feed split input with step(), call finish(), then drain until StepResult.done.
 // The dictionary bytes are borrowed and may be referenced by emitted sequences;
-// completed blocks also seed a bounded rolling window for later block matches.
+// completed blocks also seed a bounded indexed rolling window for multiple later
+// block matches without retaining the complete input stream.
 const zstd_dict_options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only };
 const zstd_dict_bound = try vort.zstdEncodedNativeFrameBoundWithDictionary(
     "prefix: previous zstd history payload, shared phrase tail".len,

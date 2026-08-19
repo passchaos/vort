@@ -137,7 +137,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
                 // it is not final; otherwise retain it until finish.
                 if (self.block.items.len == Codec.blockLen(self.options) and input_read < input.len) {
                     try self.history.prepareCompletedBlock(self.allocator, self.block.items, Codec.historyLen(self.options));
-                    try BlockEmitter.write(self.allocator, &self.pending, self.block.items, false, self.options, &self.codec_state, self.dictionary, self.history.slice(), self.total_input - self.block.items.len);
+                    try BlockEmitter.write(self.allocator, &self.pending, self.block.items, false, self.options, &self.codec_state, self.dictionary, self.history.view(), self.total_input - self.block.items.len);
                     self.history.appendCompletedBlock(self.block.items, Codec.historyLen(self.options));
                     self.block.clearRetainingCapacity();
                     continue;
@@ -146,7 +146,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
                     if (self.expected_input_len) |expected| {
                         if (self.total_input != expected) return error.SizeMismatch;
                     }
-                    try BlockEmitter.write(self.allocator, &self.pending, self.block.items, true, self.options, &self.codec_state, self.dictionary, self.history.slice(), self.total_input - self.block.items.len);
+                    try BlockEmitter.write(self.allocator, &self.pending, self.block.items, true, self.options, &self.codec_state, self.dictionary, self.history.view(), self.total_input - self.block.items.len);
                     self.block.clearRetainingCapacity();
                     try Codec.writeChecksum(self.allocator, &self.pending, self.options, &self.hasher);
                     self.final_written = true;

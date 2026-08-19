@@ -5106,6 +5106,11 @@ architecture blindly.
   the newest advertised-window bytes; later blocks can emit real sequences that
   reference earlier input while split input, tiny output, checksum, and reset
   behavior continue through the same streaming state machine.
+- Replaced the initial per-block linear prefix lookup with a persistent
+  four-way hash index over absolute stream positions. The matcher now finds up
+  to eight non-prefix history regions per block and emits them as one bounded
+  multi-sequence plan, while stale positions are rejected against the sliding
+  window without rebuilding the index.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

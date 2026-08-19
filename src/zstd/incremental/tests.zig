@@ -197,6 +197,31 @@ test "Zstd incremental frame encoder matches previous blocks" {
     try std.testing.expectEqualSlices(u8, first, reset_decoded);
 }
 
+test "Zstd incremental frame encoder emits multiple non-prefix history matches" {
+    const first = "alpha-0123456789-omega-ABCDEFGHIJK-tail-1234567890";
+    const second = "pfx-0123456789-mid-ABCDEFGHIJK-end-uvwxyz-XYZ-QWER";
+    comptime std.debug.assert(first.len == second.len);
+    const payload = first ++ second;
+    var encoder = try zstd.NativeIncrementalFrameEncoder.init(std.testing.allocator, .{
+        .include_content_size = false,
+        .content_checksum = false,
+        .selection = .literal_only,
+        .block_size_max = first.len,
+    });
+    defer encoder.deinit();
+    const frame = try encodeSplit(&encoder, payload);
+    defer std.testing.allocator.free(frame);
+
+    var blocks = try zstd.iterateNativeFrameBlocks(frame);
+    _ = (try blocks.next()).?;
+    const second_block = (try blocks.next()).?;
+    const modes = try zstd.inspectNativeFrameBlockSequenceModes(frame, second_block);
+    try std.testing.expectEqual(@as(usize, 2), modes.sequence_count);
+    const decoded = try zstd.decodeFrameAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
 fn encodeSplit(encoder: *zstd.NativeIncrementalFrameEncoder, payload: []const u8) ![]u8 {
     var frame: std.ArrayList(u8) = .empty;
     errdefer frame.deinit(std.testing.allocator);

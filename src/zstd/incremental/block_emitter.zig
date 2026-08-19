@@ -14,7 +14,7 @@ pub fn Emitter(comptime Codec: type) type {
             options: Codec.Options,
             state: *Codec.State,
             dictionary: ?Codec.Dictionary,
-            frame_history: []const u8,
+            frame_history: Codec.HistoryView,
             frame_offset: usize,
         ) Codec.Error!void {
             switch (options.selection) {
