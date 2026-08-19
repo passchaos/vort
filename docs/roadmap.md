@@ -5143,6 +5143,9 @@ architecture blindly.
   streamed CMF/FLG header, optional preset-dictionary DICTID/history, incremental
   Adler-32 footer, exact input sizes, tiny-output draining, and the same sync
   flush continuation semantics.
+- Added `GzipIncrementalFixedEncoder` over the same raw core, including standard
+  or metadata-rich RFC 1952 headers, optional FHCRC, incremental CRC-32, ISIZE,
+  exact input sizing, tiny-output draining, and resumable sync flush.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

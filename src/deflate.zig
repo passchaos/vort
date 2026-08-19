@@ -11,6 +11,7 @@ const semantic_rle258 = @import("deflate/semantic/rle258.zig");
 const incremental_stored_encoder = @import("deflate/incremental/encoder/stored.zig");
 const incremental_fixed_encoder = @import("deflate/incremental/encoder/fixed.zig");
 const incremental_zlib_fixed_encoder = @import("deflate/incremental/encoder/zlib_fixed.zig");
+const incremental_gzip_fixed_encoder = @import("deflate/incremental/encoder/gzip_fixed.zig");
 const incremental_tests = @import("deflate/incremental/tests.zig");
 
 const png = @import("png.zig");
@@ -116,6 +117,28 @@ const IncrementalZlibFixedEncoderCodec = struct {
 };
 
 pub const ZlibIncrementalFixedEncoder = incremental_zlib_fixed_encoder.Encoder(IncrementalZlibFixedEncoderCodec);
+
+const IncrementalGzipFixedEncoderCodec = struct {
+    pub const Error = deflate.Error || std.mem.Allocator.Error;
+    pub const RawEncoder = deflate.RawDeflateIncrementalFixedEncoder;
+    pub const RawOptions = RawEncoder.Options;
+    pub const HeaderOptions = deflate.GzipHeaderOptions;
+    pub const Crc32 = checksum.Crc32Slice32;
+
+    pub fn writeHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: HeaderOptions) IncrementalGzipFixedEncoderCodec.Error!void {
+        const header_len = try gzipHeaderEncodedSize(options);
+        const header = try out.addManyAsSlice(allocator, header_len);
+        _ = try writeGzipHeader(header, options);
+    }
+    pub fn writeFooter(allocator: std.mem.Allocator, out: *std.ArrayList(u8), digest: u32, total_input: usize) IncrementalGzipFixedEncoderCodec.Error!void {
+        var bytes: [8]u8 = undefined;
+        std.mem.writeInt(u32, bytes[0..4], digest, .little);
+        std.mem.writeInt(u32, bytes[4..8], @truncate(total_input), .little);
+        try out.appendSlice(allocator, &bytes);
+    }
+};
+
+pub const GzipIncrementalFixedEncoder = incremental_gzip_fixed_encoder.Encoder(IncrementalGzipFixedEncoderCodec);
 
 test {
     _ = incremental_tests;
