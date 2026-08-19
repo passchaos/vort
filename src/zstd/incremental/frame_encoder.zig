@@ -19,16 +19,27 @@ pub fn Encoder(comptime Codec: type) type {
         total_input: usize = 0,
         total_output: usize = 0,
         expected_input_len: ?usize = null,
+        dictionary_id: ?u32 = null,
 
         const Self = @This();
         pub const Error = Codec.Error;
         pub fn init(allocator: std.mem.Allocator, options: Codec.Options) Error!Self {
-            try Codec.validate(options, null);
+            try Codec.validate(options, null, null);
             return .{ .allocator = allocator, .options = options };
         }
         pub fn initExactSize(allocator: std.mem.Allocator, options: Codec.Options, expected_input_len: usize) Error!Self {
-            try Codec.validate(options, expected_input_len);
+            try Codec.validate(options, expected_input_len, null);
             return .{ .allocator = allocator, .options = options, .expected_input_len = expected_input_len };
+        }
+        pub fn initWithDictionary(allocator: std.mem.Allocator, options: Codec.Options, dictionary_id: u32) Error!Self {
+            if (dictionary_id == 0) return error.NeedDictionary;
+            try Codec.validate(options, null, dictionary_id);
+            return .{ .allocator = allocator, .options = options, .dictionary_id = dictionary_id };
+        }
+        pub fn initExactSizeWithDictionary(allocator: std.mem.Allocator, options: Codec.Options, expected_input_len: usize, dictionary_id: u32) Error!Self {
+            if (dictionary_id == 0) return error.NeedDictionary;
+            try Codec.validate(options, expected_input_len, dictionary_id);
+            return .{ .allocator = allocator, .options = options, .expected_input_len = expected_input_len, .dictionary_id = dictionary_id };
         }
         pub fn deinit(self: *Self) void {
             self.block.deinit(self.allocator);
@@ -74,7 +85,7 @@ pub fn Encoder(comptime Codec: type) type {
                     if (output_written == output.len and output.len != 0) return result(input_read, output_written, .need_output);
                 }
                 if (!self.header_written) {
-                    try Codec.writeHeader(self.allocator, &self.pending, self.options, self.expected_input_len);
+                    try Codec.writeHeader(self.allocator, &self.pending, self.options, self.expected_input_len, self.dictionary_id);
                     self.header_written = true;
                     continue;
                 }

@@ -5074,6 +5074,11 @@ architecture blindly.
   shortest single-segment content-size header when the caller pledges total
   input length. Split input and tiny-output behavior remain unchanged; pledged
   length underflow or overflow returns `SizeMismatch`.
+- Added Dictionary_ID constructors for the incremental Zstd raw/RLE encoder,
+  including pledged-size mode. Because raw/RLE blocks never reference preset
+  history, these constructors carry and validate dictionary metadata without
+  borrowing dictionary bytes; matching dictionary-aware decode APIs enforce the
+  ID before returning the payload.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

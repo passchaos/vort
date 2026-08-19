@@ -50,7 +50,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   history decode APIs, direct-output incremental decode for raw/RLE/compressed
   native frames (including dictionary, dictionary-set, no-content-size,
   bounded-history multi-block paths, and small-output scratch fallback), zero-allocation native stream/block iterators, and
-  caller-owned encode/decode-into/append, incremental raw/RLE frame encode with optional pledged content size, plus reusable scratch encoder/decoder API,
+  caller-owned encode/decode-into/append, incremental raw/RLE frame encode with optional pledged content size and Dictionary_ID metadata, plus reusable scratch encoder/decoder API,
   used by downstream
   projects such as `../mcap` so compression algorithms stay centralized in
   Vort;
