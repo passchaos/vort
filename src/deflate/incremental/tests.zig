@@ -749,11 +749,39 @@ test "zlib incremental decoder rejects checksum dictionary and truncation" {
     const dict_frame = try deflate.encodeZlibFixedWithDictionaryAlloc(std.testing.allocator, "dictionary payload", "dictionary", .{});
     defer std.testing.allocator.free(dict_frame);
     var needs = try deflate.ZlibIncrementalDecoder.init(.{}, &history);
-    try std.testing.expectError(error.NeedDictionary, needs.step(dict_frame[0..2], &.{}));
+    _ = try needs.step(dict_frame[0..2], &.{});
+    try std.testing.expectError(error.NeedDictionary, needs.step(dict_frame[2..6], &.{}));
 
     const valid = try deflate.encodeZlibStoredAlloc(std.testing.allocator, "truncated");
     defer std.testing.allocator.free(valid);
     var truncated = try deflate.ZlibIncrementalDecoder.init(.{}, &history);
     _ = try truncated.step(valid[0 .. valid.len - 1], &output);
     try std.testing.expectError(error.TruncatedFrame, truncated.finish());
+}
+
+test "zlib incremental decoder validates and uses preset dictionary" {
+    const dictionary = "shared zlib dictionary phrase for incremental decode";
+    const payload = "shared zlib dictionary phrase for incremental decode payload";
+    const encoded = try deflate.encodeZlibFixedWithDictionaryAlloc(std.testing.allocator, payload, dictionary, .{});
+    defer std.testing.allocator.free(encoded);
+    var history: [32 * 1024]u8 = undefined;
+    var decoder = try deflate.ZlibIncrementalDecoder.initWithDictionary(.{ .expected_output_len = payload.len }, &history, dictionary);
+    var output: [payload.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (input_offset < encoded.len) {
+        const result = try decoder.step(encoded[input_offset .. input_offset + 1], output[output_offset..][0..@min(2, output.len - output_offset)]);
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+    }
+    while (output_offset < output.len) {
+        const result = try decoder.step("", output[output_offset..][0..@min(2, output.len - output_offset)]);
+        output_offset += result.progress.output_written;
+    }
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, payload, &output);
+
+    var wrong = try deflate.ZlibIncrementalDecoder.initWithDictionary(.{}, &history, "wrong dictionary");
+    _ = try wrong.step(encoded[0..2], &.{});
+    try std.testing.expectError(error.NeedDictionary, wrong.step(encoded[2..6], &.{}));
 }

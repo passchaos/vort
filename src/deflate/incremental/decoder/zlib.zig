@@ -13,6 +13,9 @@ pub fn Decoder(comptime Codec: type) type {
         header_received: usize = 0,
         footer: [4]u8 = undefined,
         footer_received: usize = 0,
+        dictid: [4]u8 = undefined,
+        dictid_received: usize = 0,
+        dictionary: []const u8 = &.{},
         adler: Codec.Adler32 = Codec.Adler32.init(),
         input_finished: bool = false,
         total_input: usize = 0,
@@ -26,7 +29,7 @@ pub fn Decoder(comptime Codec: type) type {
             max_output_len: usize = std.math.maxInt(usize),
             expected_output_len: ?usize = null,
         };
-        pub const Phase = enum { header, raw, footer, done };
+        pub const Phase = enum { header, dictid, raw, footer, done };
 
         pub fn init(options: Options, history: []u8) Error!Self {
             return .{
@@ -37,11 +40,22 @@ pub fn Decoder(comptime Codec: type) type {
                 }, history),
             };
         }
+        pub fn initWithDictionary(options: Options, history: []u8, dictionary: []const u8) Error!Self {
+            return .{
+                .options = options,
+                .raw = try Codec.RawDecoder.initWithDictionary(.{
+                    .max_output_len = options.max_output_len,
+                    .expected_output_len = options.expected_output_len,
+                }, history, dictionary),
+                .dictionary = dictionary,
+            };
+        }
         pub fn reset(self: *Self) void {
             self.raw.reset();
             self.phase = .header;
             self.header_received = 0;
             self.footer_received = 0;
+            self.dictid_received = 0;
             self.adler = Codec.Adler32.init();
             self.input_finished = false;
             self.total_input = 0;
@@ -84,6 +98,19 @@ pub fn Decoder(comptime Codec: type) type {
                     }
                     if (self.header_received != self.header.len) return result(input_read, output_written, .need_input);
                     try self.validateHeader();
+                    self.phase = if ((self.header[1] & 0x20) != 0) .dictid else .raw;
+                },
+                .dictid => {
+                    const n = @min(self.dictid.len - self.dictid_received, input.len - input_read);
+                    if (n != 0) {
+                        @memcpy(self.dictid[self.dictid_received..][0..n], input[input_read..][0..n]);
+                        self.dictid_received += n;
+                        input_read += n;
+                        self.total_input += n;
+                    }
+                    if (self.dictid_received != self.dictid.len) return result(input_read, output_written, .need_input);
+                    if (self.dictionary.len == 0) return self.fail(.dictid, error.NeedDictionary);
+                    if (std.mem.readInt(u32, &self.dictid, .big) != Codec.Adler32.hash(self.dictionary)) return self.fail(.dictid, error.NeedDictionary);
                     self.phase = .raw;
                 },
                 .raw => {
@@ -129,7 +156,6 @@ pub fn Decoder(comptime Codec: type) type {
             const flg = self.header[1];
             if ((cmf & 0x0f) != 8 or (cmf >> 4) > 7) return self.fail(.header, error.BadZlibHeader);
             if ((@as(u16, cmf) << 8 | flg) % 31 != 0) return self.fail(.header, error.BadZlibHeader);
-            if ((flg & 0x20) != 0) return self.fail(.header, error.NeedDictionary);
         }
         fn fail(self: *Self, phase: Phase, err: Error) Error {
             self.last_error_name = @errorName(err);

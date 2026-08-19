@@ -5188,6 +5188,10 @@ architecture blindly.
   parsing, output Adler-32, split big-endian footer validation, exact/max output,
   trailing input, truncation, and FDICT diagnostics preserve caller-owned history
   and prevent raw bit prefetch from consuming wrapper footer bytes.
+- Added preset-dictionary support to that wrapper. A split four-byte DICTID is
+  checked against the supplied bytes before raw decode, the dictionary tail seeds
+  the caller-owned 32 KiB history ring, and missing/wrong dictionaries report
+  `NeedDictionary` with retry diagnostics.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

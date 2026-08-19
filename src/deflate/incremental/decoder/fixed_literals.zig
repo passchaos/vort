@@ -59,11 +59,24 @@ pub const Decoder = struct {
         if (history.len < 32 * 1024) return error.OutputTooSmall;
         return .{ .options = options, .history = history[0 .. 32 * 1024] };
     }
+    pub fn initWithDictionary(options: Options, history: []u8, dictionary: []const u8) Error!Decoder {
+        var decoder = try initWithHistory(options, history);
+        decoder.seedDictionary(dictionary);
+        return decoder;
+    }
     pub fn initWithOptions(options: Options) Decoder {
         return .{ .options = options };
     }
     pub fn reset(self: *Decoder) void {
         self.* = .{ .options = self.options, .history = self.history };
+    }
+    pub fn seedDictionary(self: *Decoder, dictionary: []const u8) void {
+        if (self.history.len == 0) return;
+        const keep = @min(dictionary.len, self.history.len);
+        const source = dictionary[dictionary.len - keep ..];
+        @memcpy(self.history[0..keep], source);
+        self.history_len = keep;
+        self.history_pos = keep % self.history.len;
     }
     pub fn diagnostics(self: *const Decoder) core.StreamingDiagnostics {
         return .{

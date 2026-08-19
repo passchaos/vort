@@ -698,6 +698,8 @@ defer zstd_incremental_encoder.deinit();
 // code-length alphabet/repeats into byte-progressive payload literals and matches.
 // ZlibIncrementalDecoder layers split CMF/FLG and streaming Adler/footer
 // validation over that raw decoder without allowing footer prefetch.
+// initWithDictionary validates split DICTID and seeds the raw 32 KiB history
+// from the caller-owned preset dictionary.
 const zstd_dict_options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only };
 const zstd_dict_bound = try vort.zstdEncodedNativeFrameBoundWithDictionary(
     "prefix: previous zstd history payload, shared phrase tail".len,
