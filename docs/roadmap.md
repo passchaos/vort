@@ -5040,3 +5040,11 @@ architecture blindly.
   chunk and total-output limits, snapshots, and shared streaming diagnostics.
   The implementation lives under `src/snappy/incremental/` behind a narrow codec
   interface instead of expanding the already-large Snappy facade.
+- Added a bounded split-input Brotli incremental facade under
+  `src/br/incremental/`. It accumulates compressed fragments under an explicit
+  limit, performs complete supported-stream preflight and decode at `finish`,
+  enforces optional exact/maximum output lengths, then drains through arbitrary
+  caller-owned output slices with shared progress, reset, snapshot, and
+  diagnostics semantics. The narrow codec interface leaves the 13k-line Brotli
+  facade unchanged except for a small adapter and keeps the state machine ready
+  for a future byte-progressive compressed meta-block core.

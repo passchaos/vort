@@ -71,6 +71,7 @@ pub const BrotliCompressedSupportLimits = br.CompressedSupportLimits;
 pub const BrotliPrefixCode = br.PrefixCode;
 pub const BrotliStoredStreamEncoder = br.StoredStreamEncoder;
 pub const BrotliStreamDecoder = br.StreamDecoder;
+pub const BrotliIncrementalStreamDecoder = br.IncrementalStreamDecoder;
 pub const brCompressedSupportLimits = br.compressedSupportLimits;
 pub const brMinimalStaticDictionaryCoverage = br.minimalStaticDictionaryCoverage;
 pub const brMinimalStaticDictionarySizeBits = br.minimalStaticDictionarySizeBits;

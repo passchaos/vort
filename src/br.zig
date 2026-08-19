@@ -4,8 +4,33 @@ const bitstream = @import("bitstream.zig");
 const huffman = @import("huffman.zig");
 const match_copy = @import("br/match_copy.zig");
 const static_dictionary = @import("br/static_dictionary.zig");
+const incremental = @import("br/incremental/stream_decoder.zig");
+const incremental_tests = @import("br/incremental/tests.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
+
+const IncrementalCodec = struct {
+    pub const Error = br.Error;
+    pub fn decodedSizeLimited(stream: []const u8, limit: usize) br.Error!usize {
+        return br.decodedStreamSizeLimited(stream, limit);
+    }
+    pub fn decodeInto(stream: []const u8, output: []u8) br.Error!usize {
+        return br.decodeStreamInto(stream, output);
+    }
+};
+
+const br = @This();
+pub const IncrementalStreamDecoder = incremental.Decoder(IncrementalCodec);
+
+test {
+    _ = incremental_tests;
+}
+
+pub const IncrementalTestSupport = struct {
+    pub fn encodeStored(allocator: std.mem.Allocator, payload: []const u8) Error![]u8 {
+        return encodeStoredStreamAlloc(allocator, payload);
+    }
+};
 
 pub const max_uncompressed_meta_block_len: usize = 1 << 24;
 
