@@ -612,7 +612,48 @@ pub fn treeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4) [n
         }
         return lengths;
     }
+    // Dynamic DEFLATE alphabets are frequently sparse (especially distance and
+    // code-length trees). Specializing the package record width to the active
+    // symbol count avoids moving the full 286-symbol multiplicity vector at
+    // every package-merge depth, then maps the compact result back to symbols.
+    if (active <= 32 and n > 32)
+        return compactPackageMergeCodeLengths(n, freqs, max_bits, active, 32);
+    if (active <= 64 and n > 64)
+        return compactPackageMergeCodeLengths(n, freqs, max_bits, active, 64);
     return packageMergeCodeLengths(n, freqs, max_bits, active);
+}
+
+/// Full-alphabet package-merge reference retained for focused equivalence and
+/// performance measurements of the compact sparse production path.
+pub fn treeCodeLengthsFullWidth(comptime n: usize, freqs: *const [n]u32, max_bits: u4) [n]u4 {
+    var active: usize = 0;
+    for (freqs.*) |freq| active += @intFromBool(freq != 0);
+    if (active < 2) return treeCodeLengths(n, freqs, max_bits);
+    return packageMergeCodeLengths(n, freqs, max_bits, active);
+}
+
+fn compactPackageMergeCodeLengths(
+    comptime n: usize,
+    freqs: *const [n]u32,
+    max_bits: u4,
+    active: usize,
+    comptime compact_n: usize,
+) [n]u4 {
+    var compact_freqs: [compact_n]u32 = @splat(0);
+    var symbols: [compact_n]u16 = undefined;
+    var compact_i: usize = 0;
+    for (freqs.*, 0..) |freq, symbol| {
+        if (freq == 0) continue;
+        compact_freqs[compact_i] = freq;
+        symbols[compact_i] = @intCast(symbol);
+        compact_i += 1;
+    }
+    std.debug.assert(compact_i == active);
+    const compact_lengths = packageMergeCodeLengths(compact_n, &compact_freqs, max_bits, active);
+    var lengths: [n]u4 = @splat(0);
+    for (symbols[0..active], compact_lengths[0..active]) |symbol, code_bits|
+        lengths[symbol] = code_bits;
+    return lengths;
 }
 
 fn packageMergeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4, active: usize) [n]u4 {
@@ -1396,6 +1437,25 @@ fn expectPackageMergeMatchesReference(
         packageMergeCodeLengthsReference(n, freqs, max_bits, active),
         packageMergeCodeLengths(n, freqs, max_bits, active),
     );
+}
+
+test "compact sparse package-merge matches full-width reference" {
+    var freqs: [286]u32 = @splat(0);
+    for (0..48) |active| {
+        @memset(&freqs, 0);
+        const count = active + 2;
+        for (0..count) |i| {
+            const symbol = (i * 17 + active * 11) % freqs.len;
+            freqs[symbol] = @intCast(1 + ((i * 13 + active * 7) % 97));
+        }
+        var actual_active: usize = 0;
+        for (freqs) |freq| actual_active += @intFromBool(freq != 0);
+        if (actual_active < 2 or actual_active > 64) continue;
+        try std.testing.expectEqual(
+            packageMergeCodeLengths(freqs.len, &freqs, 15, actual_active),
+            treeCodeLengths(freqs.len, &freqs, 15),
+        );
+    }
 }
 
 test "package-merge Huffman lengths match small optimal costs" {

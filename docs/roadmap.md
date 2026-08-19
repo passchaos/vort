@@ -5204,6 +5204,15 @@ architecture blindly.
   latest local ReleaseFast smoke improved the 286-symbol mixed/long-tail encoder
   rows by about `1.24x`/`1.23x`; smaller distance/code-length tables improve more
   modestly, and the multi-corpus zlib-ng DEFLATE gate remains green.
+- Sparse package-merge code-length planning now compacts active symbols into
+  32- or 64-symbol workspaces before running the same optimal algorithm, then
+  maps lengths back to the full DEFLATE alphabet. This avoids moving 286-symbol
+  multiplicity vectors through every depth for sparse literal trees while
+  preserving the full-width path for dense alphabets. Full-width reference
+  equivalence tests cover deterministic sparse layouts, and the new focused
+  `run-huffman-length-bench-gate` compares both paths directly. Initial local
+  ReleaseFast evidence improved 18- and 48-active-symbol literal trees by about
+  `3.36x` and `3.39x` respectively with identical output checksums.
 - Added a byte-progressive raw-DEFLATE stored-block decoder under
   `src/deflate/incremental/decoder/`. It preserves split header state, streams
   payload directly caller-to-caller through tiny output, enforces exact/maximum

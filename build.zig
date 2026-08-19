@@ -229,6 +229,34 @@ pub fn build(b: *std.Build) void {
     const deflate_huffman_build_bench_gate_step = b.step("run-deflate-huffman-build-bench-gate", "Validate DEFLATE Huffman table build benchmark CSV");
     deflate_huffman_build_bench_gate_step.dependOn(&deflate_huffman_build_bench_gate.step);
 
+    const huffman_length_bench_exe = b.addExecutable(.{
+        .name = "vort-huffman-length-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/huffman_length_bench.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_huffman_length_bench = b.addRunArtifact(huffman_length_bench_exe);
+    if (b.args) |args| run_huffman_length_bench.addArgs(args);
+    const huffman_length_bench_step = b.step("bench-huffman-length", "Benchmark sparse and dense Huffman code-length construction");
+    huffman_length_bench_step.dependOn(&run_huffman_length_bench.step);
+
+    const run_huffman_length_bench_csv = b.addRunArtifact(huffman_length_bench_exe);
+    run_huffman_length_bench_csv.addArgs(&.{ "--iterations", "4096", "--csv", "zig-out/vort-huffman-length-bench.csv" });
+    const huffman_length_bench_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/huffman_length_bench_gate.py",
+        "--csv",
+        "zig-out/vort-huffman-length-bench.csv",
+    });
+    huffman_length_bench_gate.step.dependOn(&run_huffman_length_bench_csv.step);
+    const huffman_length_bench_gate_step = b.step("run-huffman-length-bench-gate", "Require compact sparse package-merge speedups");
+    huffman_length_bench_gate_step.dependOn(&huffman_length_bench_gate.step);
+
     const deflate_huffman_lookup_bench_exe = b.addExecutable(.{
         .name = "vort-deflate-huffman-lookup-bench",
         .root_module = b.createModule(.{
@@ -3375,6 +3403,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&deflate_decode_stage_report_exe.step);
     check_step.dependOn(&deflate_dynamic_decode_profile_exe.step);
     check_step.dependOn(&deflate_huffman_build_bench_exe.step);
+    check_step.dependOn(&huffman_length_bench_exe.step);
     check_step.dependOn(&deflate_huffman_lookup_bench_exe.step);
     check_step.dependOn(&deflate_chunked_huffman_bench_exe.step);
     check_step.dependOn(&deflate_match_copy_bench_exe.step);
@@ -3481,6 +3510,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(deflate_decode_stage_report_dashboard_step);
     ci_smoke_step.dependOn(deflate_dynamic_decode_profile_gate_step);
     ci_smoke_step.dependOn(deflate_huffman_build_bench_gate_step);
+    ci_smoke_step.dependOn(huffman_length_bench_gate_step);
     ci_smoke_step.dependOn(deflate_huffman_lookup_bench_gate_step);
     ci_smoke_step.dependOn(deflate_chunked_huffman_bench_gate_step);
     ci_smoke_step.dependOn(deflate_match_copy_bench_gate_step);
