@@ -1,10 +1,10 @@
 const std = @import("std");
 const core = @import("../../core.zig");
 
-/// Build a no-content-size incremental Zstd raw/RLE frame encoder. One bounded
-/// block is retained; completed encoded blocks drain through arbitrary caller
+/// Build an incremental Zstd frame encoder. One bounded block is retained;
+/// completed raw, RLE, or entropy-coded blocks drain through arbitrary caller
 /// output. The final block bit is delayed until `finish`, as required by Zstd.
-pub fn Encoder(comptime Codec: type) type {
+pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
     return struct {
         allocator: std.mem.Allocator,
         options: Codec.Options,
@@ -20,6 +20,8 @@ pub fn Encoder(comptime Codec: type) type {
         total_output: usize = 0,
         expected_input_len: ?usize = null,
         dictionary_id: ?u32 = null,
+        dictionary: ?Codec.Dictionary = null,
+        codec_state: Codec.State = .{},
 
         const Self = @This();
         pub const Error = Codec.Error;
@@ -31,23 +33,40 @@ pub fn Encoder(comptime Codec: type) type {
             try Codec.validate(options, expected_input_len, null);
             return .{ .allocator = allocator, .options = options, .expected_input_len = expected_input_len };
         }
+        /// Retained for callers that only need Dictionary_ID metadata in a
+        /// raw/RLE stream. Use `initWithPresetDictionary` when blocks should
+        /// actually reference preset history.
         pub fn initWithDictionary(allocator: std.mem.Allocator, options: Codec.Options, dictionary_id: u32) Error!Self {
             if (dictionary_id == 0) return error.NeedDictionary;
+            if (options.selection != .raw_or_rle) return error.InvalidBlockPlan;
             try Codec.validate(options, null, dictionary_id);
             return .{ .allocator = allocator, .options = options, .dictionary_id = dictionary_id };
         }
         pub fn initExactSizeWithDictionary(allocator: std.mem.Allocator, options: Codec.Options, expected_input_len: usize, dictionary_id: u32) Error!Self {
             if (dictionary_id == 0) return error.NeedDictionary;
+            if (options.selection != .raw_or_rle) return error.InvalidBlockPlan;
             try Codec.validate(options, expected_input_len, dictionary_id);
             return .{ .allocator = allocator, .options = options, .expected_input_len = expected_input_len, .dictionary_id = dictionary_id };
         }
+        /// Borrow preset history for the encoder lifetime. Entropy-coded blocks
+        /// may reference these bytes, so they must outlive the encoder.
+        pub fn initWithPresetDictionary(allocator: std.mem.Allocator, options: Codec.Options, dictionary: Codec.Dictionary) Error!Self {
+            if (dictionary.id == 0) return error.NeedDictionary;
+            try Codec.validate(options, null, dictionary.id);
+            return .{ .allocator = allocator, .options = options, .dictionary_id = dictionary.id, .dictionary = dictionary };
+        }
+        pub fn initExactSizeWithPresetDictionary(allocator: std.mem.Allocator, options: Codec.Options, expected_input_len: usize, dictionary: Codec.Dictionary) Error!Self {
+            if (dictionary.id == 0) return error.NeedDictionary;
+            try Codec.validate(options, expected_input_len, dictionary.id);
+            return .{ .allocator = allocator, .options = options, .expected_input_len = expected_input_len, .dictionary_id = dictionary.id, .dictionary = dictionary };
+        }
         pub fn initWithDictionarySet(allocator: std.mem.Allocator, options: Codec.Options, dictionary_set: anytype, dictionary_id: u32) Error!Self {
             const dictionary = dictionary_set.find(dictionary_id) orelse return error.NeedDictionary;
-            return initWithDictionary(allocator, options, dictionary.id);
+            return initWithPresetDictionary(allocator, options, dictionary);
         }
         pub fn initExactSizeWithDictionarySet(allocator: std.mem.Allocator, options: Codec.Options, expected_input_len: usize, dictionary_set: anytype, dictionary_id: u32) Error!Self {
             const dictionary = dictionary_set.find(dictionary_id) orelse return error.NeedDictionary;
-            return initExactSizeWithDictionary(allocator, options, expected_input_len, dictionary.id);
+            return initExactSizeWithPresetDictionary(allocator, options, expected_input_len, dictionary);
         }
         pub fn deinit(self: *Self) void {
             self.block.deinit(self.allocator);
@@ -67,6 +86,7 @@ pub fn Encoder(comptime Codec: type) type {
             self.total_input = 0;
             self.total_output = 0;
             self.expected_input_len = expected_input_len;
+            self.codec_state = .{};
         }
         pub fn finish(self: *Self) void {
             self.finishing = true;
@@ -112,7 +132,7 @@ pub fn Encoder(comptime Codec: type) type {
                 // A full block can be emitted only when another input byte proves
                 // it is not final; otherwise retain it until finish.
                 if (self.block.items.len == Codec.blockLen(self.options) and input_read < input.len) {
-                    try Codec.writeBlock(self.allocator, &self.pending, self.block.items, false);
+                    try BlockEmitter.write(self.allocator, &self.pending, self.block.items, false, self.options, &self.codec_state, self.dictionary, self.total_input - self.block.items.len);
                     self.block.clearRetainingCapacity();
                     continue;
                 }
@@ -120,7 +140,7 @@ pub fn Encoder(comptime Codec: type) type {
                     if (self.expected_input_len) |expected| {
                         if (self.total_input != expected) return error.SizeMismatch;
                     }
-                    try Codec.writeBlock(self.allocator, &self.pending, self.block.items, true);
+                    try BlockEmitter.write(self.allocator, &self.pending, self.block.items, true, self.options, &self.codec_state, self.dictionary, self.total_input - self.block.items.len);
                     self.block.clearRetainingCapacity();
                     try Codec.writeChecksum(self.allocator, &self.pending, self.options, &self.hasher);
                     self.final_written = true;

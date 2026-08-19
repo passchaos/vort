@@ -5080,8 +5080,8 @@ architecture blindly.
   block bit until explicit finish, maintains the optional XXH64 content checksum
   incrementally, and drains through tiny caller output. The streaming header
   advertises a legal 128 KiB window without requiring total content size;
-  content-size, Dictionary_ID, and entropy-coded selection remain on complete-
-  input APIs.
+  this initial slice left content-size, Dictionary_ID, and entropy-coded
+  selection on complete-input APIs before the extensions below.
 - Extended the incremental Zstd encoder with `initExactSize`, using the normal
   shortest single-segment content-size header when the caller pledges total
   input length. Split input and tiny-output behavior remain unchanged; pledged
@@ -5094,6 +5094,13 @@ architecture blindly.
 - Added dictionary-set constructors for the incremental Zstd raw/RLE encoder,
   including pledged-size mode. Dictionary_ID is resolved once at construction;
   missing catalog entries return `NeedDictionary` before any frame output.
+- Extended the incremental Zstd encoder to use the native Huffman/sequence block
+  planner for `literal_only` and `auto`, while retaining raw/RLE compatibility
+  mode. Preset-dictionary constructors borrow history bytes for the encoder
+  lifetime, emit real dictionary-referencing sequences, and share a narrow
+  incremental block-emitter module instead of adding codec policy to the generic
+  streaming state machine. Dictionary-set constructors now resolve and retain
+  the selected history rather than carrying Dictionary_ID metadata alone.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

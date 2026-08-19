@@ -654,6 +654,14 @@ var zstd_bounded_incremental = vort.ZstdNativeIncrementalFrameDecoder.initWithOp
 defer zstd_bounded_incremental.deinit();
 // After feeding/draining the final frame, call finish() to validate exact-size EOF.
 const zstd_dict = vort.ZstdNativeDictionary.init(0x1234, "previous zstd history shared phrase");
+var zstd_incremental_encoder = try vort.ZstdNativeIncrementalFrameEncoder.initWithPresetDictionary(allocator, .{
+    .include_content_size = false,
+    .selection = .literal_only,
+    .dictionary_id = zstd_dict.id,
+}, zstd_dict);
+defer zstd_incremental_encoder.deinit();
+// Feed split input with step(), call finish(), then drain until StepResult.done.
+// The dictionary bytes are borrowed and may be referenced by emitted sequences.
 const zstd_dict_options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only };
 const zstd_dict_bound = try vort.zstdEncodedNativeFrameBoundWithDictionary(
     "prefix: previous zstd history payload, shared phrase tail".len,

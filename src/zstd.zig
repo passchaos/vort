@@ -12,6 +12,7 @@ const raw_frame = @import("zstd/frame/raw.zig");
 const known_size_frame = @import("zstd/frame/known_size.zig");
 const huffman_lookup = @import("zstd/literals/huffman_lookup.zig");
 const incremental_encoder = @import("zstd/incremental/frame_encoder.zig");
+const incremental_block_emitter = @import("zstd/incremental/block_emitter.zig");
 const incremental_tests = @import("zstd/incremental/tests.zig");
 const huffman = @import("huffman.zig");
 
@@ -128,11 +129,14 @@ pub const AdvancedFrameOptions = NativeFrameOptions;
 const IncrementalEncoderCodec = struct {
     pub const Error = zstd.Error;
     pub const Options = zstd.NativeFrameOptions;
+    pub const Dictionary = zstd.NativeDictionary;
+    pub const State = LiteralOnlyEncoderState;
     pub const max_block_len = std.compress.zstd.block_size_max;
     pub fn validate(options: Options, expected_input_len: ?usize, dictionary_id: ?u32) zstd.Error!void {
-        if (options.include_content_size != (expected_input_len != null) or options.selection != .raw_or_rle) return error.InvalidBlockPlan;
+        if (options.include_content_size != (expected_input_len != null)) return error.InvalidBlockPlan;
         if (options.dictionary_id != (dictionary_id orelse 0)) return error.InvalidBlockPlan;
         _ = try nativeBlockSizeMax(options);
+        _ = try nativeMatchSearchBudget(options);
     }
     pub fn blockLen(options: Options) usize {
         return options.block_size_max;
@@ -142,14 +146,17 @@ const IncrementalEncoderCodec = struct {
         try out.appendSlice(allocator, &frame_magic);
         const checksum_flag: u8 = if (options.content_checksum) 0x04 else 0;
         try out.append(allocator, checksum_flag | nativeDictionaryIdFlag(dictionary_id orelse 0));
-        // The streaming header cannot know total content length. Advertise a
-        // window large enough for any legal Zstd block instead of deriving it
-        // from the placeholder content length used by the one-shot writer.
-        try out.append(allocator, (7 << 3)); // 128 KiB base window.
+        // A no-size stream cannot tighten the window from content length. Use
+        // the library's native dictionary window so preset-history offsets
+        // remain valid while still bounding decoder memory explicitly.
+        try emitWindowDescriptor(allocator, out, native_dictionary_window_len);
         try emitDictionaryId(allocator, out, dictionary_id orelse 0);
     }
-    pub fn writeBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) zstd.Error!void {
+    pub fn writeRawOrRle(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) zstd.Error!void {
         try emitBlock(allocator, out, block, last);
+    }
+    pub fn writeEntropy(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, state: *State, dictionary: ?IncrementalEncoderCodec.Dictionary, frame_offset: usize, match_search_budget: usize) zstd.Error!void {
+        try emitLiteralOnlyCompressedBlockWithDictionary(allocator, out, block, last, state, dictionary, frame_offset, match_search_budget);
     }
     pub fn writeChecksum(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options, hasher: *std.hash.XxHash64) zstd.Error!void {
         if (!options.content_checksum) return;
@@ -159,8 +166,10 @@ const IncrementalEncoderCodec = struct {
     }
 };
 
+const IncrementalBlockEmitter = incremental_block_emitter.Emitter(IncrementalEncoderCodec);
+
 const zstd = @This();
-pub const NativeIncrementalFrameEncoder = incremental_encoder.Encoder(IncrementalEncoderCodec);
+pub const NativeIncrementalFrameEncoder = incremental_encoder.Encoder(IncrementalEncoderCodec, IncrementalBlockEmitter);
 
 test {
     _ = incremental_tests;

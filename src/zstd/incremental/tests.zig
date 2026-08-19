@@ -33,7 +33,7 @@ test "Zstd incremental frame encoder round trips split raw RLE input" {
 }
 
 test "Zstd incremental frame encoder requires raw no-size mode" {
-    try std.testing.expectError(error.InvalidBlockPlan, zstd.NativeIncrementalFrameEncoder.init(std.testing.allocator, .{}));
+    try std.testing.expectError(error.InvalidBlockPlan, zstd.NativeIncrementalFrameEncoder.init(std.testing.allocator, .{ .include_content_size = true }));
 }
 
 test "Zstd incremental frame encoder supports pledged content size" {
@@ -106,8 +106,79 @@ test "Zstd incremental frame encoder emits Dictionary ID metadata" {
 test "Zstd incremental frame encoder resolves dictionary set" {
     const dictionary = zstd.NativeDictionary.init(0x10203040, "dictionary-set metadata");
     const set = try zstd.NativeDictionarySet.initChecked(&.{dictionary});
-    var encoder = try zstd.NativeIncrementalFrameEncoder.initWithDictionarySet(std.testing.allocator, .{ .include_content_size = false, .selection = .raw_or_rle, .dictionary_id = dictionary.id }, set, dictionary.id);
+    var encoder = try zstd.NativeIncrementalFrameEncoder.initWithDictionarySet(std.testing.allocator, .{ .include_content_size = false, .selection = .literal_only, .dictionary_id = dictionary.id }, set, dictionary.id);
     defer encoder.deinit();
     try std.testing.expectError(error.NeedDictionary, zstd.NativeIncrementalFrameEncoder.initWithDictionarySet(std.testing.allocator, .{ .include_content_size = false, .selection = .raw_or_rle, .dictionary_id = 7 }, set, 7));
+    const payload = "prefix-dictionary-set metadata-suffix";
+    const frame = try encodeSplit(&encoder, payload);
+    defer std.testing.allocator.free(frame);
+    const decoded = try zstd.decodeFrameAllocWithDictionarySet(std.testing.allocator, frame, set);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
     encoder.reset();
+}
+
+test "Zstd incremental frame encoder emits entropy-coded blocks" {
+    const payload = ("entropy entropy entropy: abcdefghijklmnopqrstuvwxyz\n" ** 96);
+    var encoder = try zstd.NativeIncrementalFrameEncoder.init(std.testing.allocator, .{
+        .include_content_size = false,
+        .content_checksum = true,
+        .selection = .auto,
+        .block_size_max = 1024,
+    });
+    defer encoder.deinit();
+    const frame = try encodeSplit(&encoder, payload);
+    defer std.testing.allocator.free(frame);
+
+    var blocks = try zstd.iterateNativeFrameBlocks(frame);
+    var compressed_count: usize = 0;
+    while (try blocks.next()) |block| {
+        if (block.block_type == .compressed) compressed_count += 1;
+    }
+    try std.testing.expect(compressed_count != 0);
+    const decoded = try zstd.decodeFrameAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "Zstd incremental frame encoder references preset dictionary history" {
+    const dictionary = zstd.NativeDictionary.init(0x5566_7788, "abcdefghijklmnop");
+    const payload = "pfx-abcdefghijklmnop-tail";
+    var encoder = try zstd.NativeIncrementalFrameEncoder.initWithPresetDictionary(std.testing.allocator, .{
+        .include_content_size = false,
+        .content_checksum = true,
+        .selection = .literal_only,
+        .dictionary_id = dictionary.id,
+    }, dictionary);
+    defer encoder.deinit();
+    const frame = try encodeSplit(&encoder, payload);
+    defer std.testing.allocator.free(frame);
+
+    const first_block = try zstd.inspectNativeFrameFirstBlock(frame);
+    try std.testing.expectEqual(zstd.NativeBlockType.compressed, first_block.block_type);
+    const modes = try zstd.inspectNativeFrameBlockSequenceModes(frame, first_block);
+    try std.testing.expect(modes.sequence_count != 0);
+    const decoded = try zstd.decodeFrameAllocWithDictionary(std.testing.allocator, frame, dictionary);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+fn encodeSplit(encoder: *zstd.NativeIncrementalFrameEncoder, payload: []const u8) ![]u8 {
+    var frame: std.ArrayList(u8) = .empty;
+    errdefer frame.deinit(std.testing.allocator);
+    var scratch: [19]u8 = undefined;
+    var offset: usize = 0;
+    while (offset < payload.len) {
+        const end = @min(payload.len, offset + 37);
+        const result = try encoder.step(payload[offset..end], &scratch);
+        offset += result.progress.input_read;
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    return try frame.toOwnedSlice(std.testing.allocator);
 }
