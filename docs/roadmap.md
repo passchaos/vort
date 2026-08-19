@@ -2275,6 +2275,14 @@ architecture blindly.
   time by about 9.6% at the median (`0.83x -> 0.90x` liblz4), while targeted
   ordinary compressed rows stayed within noise or improved. The gate now
   requires `0.85x`; malformed unterminated extensions have a focused oracle.
+  Perf then attributed about 52% of the remaining literal-only time to Zig's
+  generic compiler-rt memcpy. The caller-owned decoder now sends only final
+  literals of at least 512 bytes through an out-of-line four-vector copy loop,
+  leaving ordinary literal/match decoding on the compact existing path. Five
+  interleaved fixed-CPU rounds move the 256 KiB row from roughly `0.91x` to
+  `0.99x` liblz4 median throughput, with text/structured/repetitive/RLE rows
+  within noise; the retained conservative floor rises to `0.88x`. Focused copy
+  tests cover the threshold, vector tail, and scalar tail boundaries.
 
 - Added a true system-libzstd compatibility probe under `tools/zstd/`, separate
   from the native-writer probe. It dynamically loads libzstd only in the tool,

@@ -102,7 +102,7 @@ def main() -> int:
     large_raw = by_case["incompressible256k"]
     if int(large_raw["literal_count"]) != 1 or int(large_raw["match_count"]) != 0:
         raise AssertionError(f"expected literal-only large row: {large_raw}")
-    if float(large_raw["vort_over_reference"]) < 0.85:
+    if float(large_raw["vort_over_reference"]) < 0.88:
         raise AssertionError(f"large incompressible decode regressed: {large_raw}")
 
     print(

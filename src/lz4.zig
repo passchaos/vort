@@ -4,6 +4,7 @@ const checksum_mod = @import("checksum.zig");
 const dictionary_mod = @import("dictionary.zig");
 const block_format = @import("lz4/block_format.zig");
 const length = @import("lz4/length.zig");
+const literal_copy = @import("lz4/literal_copy.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 
@@ -5112,7 +5113,11 @@ fn decodeBlockIntoBuffer(
         if (literal_len == 15) literal_len = try checkedAdd(literal_len, try readLengthExtension(input, &offset));
         if (input.len - offset < literal_len) return error.TruncatedFrame;
         if (output.len - written.* < literal_len) return error.OutputTooSmall;
-        @memcpy(output[written.*..][0..literal_len], input[offset..][0..literal_len]);
+        if (literal_len >= literal_copy.bulk_min_len and offset + literal_len == input.len) {
+            literal_copy.copyBulk(output[written.*..][0..literal_len], input[offset..][0..literal_len]);
+        } else {
+            @memcpy(output[written.*..][0..literal_len], input[offset..][0..literal_len]);
+        }
         written.* += literal_len;
         offset += literal_len;
         if (offset == input.len) break;
