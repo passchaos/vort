@@ -27,8 +27,12 @@ pub fn Decoder(comptime Codec: type) type {
         total_output: usize = 0,
         member_output: usize = 0,
         member_count: usize = 0,
+        member_offset: usize = 0,
         last_error_name: []const u8 = "",
         last_error_phase: Phase = .header,
+        last_error_member_index: ?usize = null,
+        last_error_member_offset: ?usize = null,
+        last_error_input_offset: ?usize = null,
 
         const Self = @This();
         pub const Error = Codec.Error;
@@ -46,8 +50,19 @@ pub fn Decoder(comptime Codec: type) type {
             member_output: usize,
             /// Number of members whose footer has been fully validated.
             member_count: usize,
+            /// Zero-based active member, or the last validated member at EOF.
+            member_index: usize,
+            /// Compressed-stream offset of the active or last validated member.
+            member_offset: usize,
+            member_input: usize,
             header_received: usize,
             footer_received: usize,
+            last_error_name: []const u8,
+            last_error_phase: ?Phase,
+            last_error_member_index: ?usize,
+            last_error_member_offset: ?usize,
+            /// Cumulative compressed offset at which the error was detected.
+            last_error_input_offset: ?usize,
             done: bool,
         };
 
@@ -76,9 +91,13 @@ pub fn Decoder(comptime Codec: type) type {
             self.total_output = 0;
             self.member_output = 0;
             self.member_count = 0;
+            self.member_offset = 0;
             self.configureRawForMember();
             self.last_error_name = "";
             self.last_error_phase = .header;
+            self.last_error_member_index = null;
+            self.last_error_member_offset = null;
+            self.last_error_input_offset = null;
         }
         pub fn snapshot(self: *const Self) Snapshot {
             return .{
@@ -87,8 +106,16 @@ pub fn Decoder(comptime Codec: type) type {
                 .total_output = self.total_output,
                 .member_output = self.member_output,
                 .member_count = self.member_count,
+                .member_index = self.diagnosticMemberIndex(self.phase),
+                .member_offset = self.member_offset,
+                .member_input = self.total_input - self.member_offset,
                 .header_received = self.header_received,
                 .footer_received = self.footer_received,
+                .last_error_name = self.last_error_name,
+                .last_error_phase = if (self.last_error_name.len == 0) null else self.last_error_phase,
+                .last_error_member_index = self.last_error_member_index,
+                .last_error_member_offset = self.last_error_member_offset,
+                .last_error_input_offset = self.last_error_input_offset,
                 .done = self.phase == .done,
             };
         }
@@ -283,6 +310,7 @@ pub fn Decoder(comptime Codec: type) type {
             self.footer_received = 0;
             self.crc = Codec.Crc32.init();
             self.member_output = 0;
+            self.member_offset = self.total_input;
         }
         fn configureRawForMember(self: *Self) void {
             self.raw.options.max_output_len = self.remainingRawLimit();
@@ -320,9 +348,17 @@ pub fn Decoder(comptime Codec: type) type {
                 return self.fail(.raw, self.cumulativeLimitError());
             return self.fail(.raw, err);
         }
+        fn diagnosticMemberIndex(self: *const Self, phase: Phase) usize {
+            if ((phase == .between_members or phase == .done) and self.member_count != 0)
+                return self.member_count - 1;
+            return self.member_count;
+        }
         fn fail(self: *Self, phase: Phase, err: Error) Error {
             self.last_error_name = @errorName(err);
             self.last_error_phase = phase;
+            self.last_error_member_index = self.diagnosticMemberIndex(phase);
+            self.last_error_member_offset = self.member_offset;
+            self.last_error_input_offset = self.total_input;
             return err;
         }
         fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {

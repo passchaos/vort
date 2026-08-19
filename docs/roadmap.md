@@ -5201,6 +5201,10 @@ architecture blindly.
   boundary while stream input/output accounting, exact-size and output limits
   remain cumulative; snapshots expose validated member counts and later-member
   corruption/truncation retains the completed-member context.
+- Extended those snapshots with the active or last validated member index, its
+  compressed-stream offset and local input progress. Failure snapshots retain
+  the failing member index/offset, phase, and cumulative detection offset across
+  split headers, payloads, and footers, and reset clears all error context.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

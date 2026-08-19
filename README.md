@@ -703,6 +703,8 @@ defer zstd_incremental_encoder.deinit();
 // GzipIncrementalDecoder supports split FEXTRA/FNAME/FCOMMENT/FHCRC plus
 // streaming CRC-32/ISIZE. Set allow_concatenated to continue through RFC 1952
 // members while enforcing max_output_len/expected_output_len cumulatively.
+// snapshot() reports the active/last member index and compressed offset; after
+// an error it preserves the failing member, phase, and detection offset.
 const zstd_dict_options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only };
 const zstd_dict_bound = try vort.zstdEncodedNativeFrameBoundWithDictionary(
     "prefix: previous zstd history payload, shared phrase tail".len,
