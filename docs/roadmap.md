@@ -5233,6 +5233,16 @@ architecture blindly.
   `1.18x`, with exact plan/frequency/extra-bit checksums on every row; individual
   sparse or dense shapes can remain setup/layout-bound, so the gate protects the
   aggregate workload rather than claiming a universal per-shape win.
+- Incremental best encoding now offers `low_entropy_block_len`, an explicit
+  bounded buffering cap that expands a block only when its first normal-sized
+  prefix contains at most four distinct bytes. This keeps ordinary text/source
+  latency at `block_len` while amortizing repeated dynamic-tree headers for runs
+  and tiny alphabets. On the 256 KiB single-byte corpus, a 32 KiB normal block
+  with a 256 KiB low-entropy cap falls from `373` to `271` raw bytes, matching
+  the one-shot Vort stream and narrowly beating the local zlib-ng level-6 raw
+  result (`272` bytes). Tests pin the exact one-shot size, bounded option
+  validation, round-trip behavior, and the zlib-ng gate now requires this row
+  to match or beat the competitor rather than merely remain within a loose ratio.
 - Added a byte-progressive raw-DEFLATE stored-block decoder under
   `src/deflate/incremental/decoder/`. It preserves split header state, streams
   payload directly caller-to-caller through tiny output, enforces exact/maximum

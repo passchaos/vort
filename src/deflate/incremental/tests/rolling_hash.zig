@@ -248,6 +248,43 @@ test "raw deflate incremental stored probe preserves repeated binary history" {
     try std.testing.expect(encoded.len < stored.len - first.len / 2);
 }
 
+test "raw deflate incremental low entropy blocks amortize dynamic headers" {
+    const payload = "a" ** (256 * 1024);
+    var coalesced = deflate.RawDeflateIncrementalBestEncoder.initWithOptions(std.testing.allocator, .{
+        .block_len = 32 * 1024,
+        .low_entropy_block_len = payload.len,
+        .compression = deflate.optionsForLevel(.default),
+    });
+    defer coalesced.deinit();
+    const encoded = try encodeStream(&coalesced, payload);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try deflate.decodeRawAutoAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    var fixed = deflate.RawDeflateIncrementalBestEncoder.initWithOptions(std.testing.allocator, .{
+        .block_len = 32 * 1024,
+        .compression = deflate.optionsForLevel(.default),
+    });
+    defer fixed.deinit();
+    const fixed_encoded = try encodeStream(&fixed, payload);
+    defer std.testing.allocator.free(fixed_encoded);
+    try std.testing.expect(encoded.len + 64 < fixed_encoded.len);
+
+    const one_shot = try deflate.encodeRawBestAlloc(std.testing.allocator, payload, deflate.optionsForLevel(.default));
+    defer std.testing.allocator.free(one_shot);
+    try std.testing.expectEqual(one_shot.len, encoded.len);
+}
+
+test "raw deflate incremental low entropy block limit validates bounds" {
+    var invalid = deflate.RawDeflateIncrementalBestEncoder.initWithOptions(std.testing.allocator, .{
+        .block_len = 1024,
+        .low_entropy_block_len = 512,
+    });
+    defer invalid.deinit();
+    try std.testing.expectError(error.InvalidBlockPlan, invalid.step("x", &.{}));
+}
+
 fn feedAndForceBlock(encoder: *deflate.RawDeflateIncrementalBestEncoder, encoded: *std.ArrayList(u8), block: []const u8, next: u8) !void {
     var joined = try std.testing.allocator.alloc(u8, block.len + 1);
     defer std.testing.allocator.free(joined);

@@ -48,6 +48,8 @@ def main() -> int:
             raise SystemExit(f"{case}: persistent size regressed >1% against rebuild")
         if case in COMPRESSIBLE and persistent_size > int(rival["output_bytes"]) * 3:
             raise SystemExit(f"{case}: persistent size exceeds 3x {competitor}")
+        if case == "repetitive" and persistent_size > int(rival["output_bytes"]):
+            raise SystemExit(f"repetitive: persistent size does not match/beat {competitor}")
         if case == "binary" and persistent_speed <= float(rival["throughput_mib_s"]):
             raise SystemExit(f"binary: persistent throughput does not beat {competitor}")
         if case != "binary":

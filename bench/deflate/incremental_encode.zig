@@ -37,6 +37,7 @@ pub fn main(init: std.process.Init) !void {
     const options = vort.optionsForCompressionLevel(.default);
     var persistent = vort.RawDeflateIncrementalBestEncoder.initWithOptions(init.gpa, .{
         .block_len = block_len,
+        .low_entropy_block_len = input_len,
         .compression = options,
     });
     defer persistent.deinit();

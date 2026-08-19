@@ -698,6 +698,8 @@ defer zstd_incremental_encoder.deinit();
 // for costed, bounded block-boundary selection instead of one fixed block size.
 // Set lookahead_len to retain a bounded suffix and move normal block cuts to a
 // complete LZ77 token boundary discovered with next-call prefix bytes.
+// Set low_entropy_block_len to a larger bounded cap to amortize dynamic-tree
+// headers for byte runs/tiny alphabets while retaining block_len for other data.
 // RawDeflateIncrementalStoredDecoder is the caller-to-caller byte-progressive
 // decode reference path for RFC 1951 stored blocks and bounded hostile input.
 // RawDeflateIncrementalFixedLiteralDecoder adds resumable fixed-Huffman bit

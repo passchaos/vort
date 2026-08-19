@@ -33,6 +33,11 @@ pub fn Encoder(comptime Codec: type) type {
         pub const Options = struct {
             max_input_len: usize = std.math.maxInt(usize),
             block_len: usize = 32 * 1024,
+            /// Optional larger bounded buffer for low-entropy input. When the
+            /// first block-sized prefix has very low byte diversity, delay the
+            /// block boundary up to this cap so dynamic-tree header cost is
+            /// amortized. Zero preserves the fixed block_len policy.
+            low_entropy_block_len: usize = 0,
             compression: Codec.CompressionOptions = .{},
             /// Enable costed block sizing within `compression.split_options`.
             /// Input buffering remains bounded by that policy's max block size.
@@ -94,8 +99,7 @@ pub fn Encoder(comptime Codec: type) type {
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
-            const block_target = try self.blockTarget();
-            const block_capacity = std.math.add(usize, block_target, self.options.lookahead_len) catch return error.IntegerOverflow;
+            const base_block_target = try self.blockTarget();
             if (self.done) {
                 if (input.len != 0) return error.TrailingData;
                 return .{ .status = .done };
@@ -120,6 +124,8 @@ pub fn Encoder(comptime Codec: type) type {
                     if (output_written == output.len and output.len != 0) return result(input_read, output_written, .need_output);
                 }
 
+                const block_target = self.activeBlockTarget(base_block_target);
+                const block_capacity = std.math.add(usize, block_target, self.options.lookahead_len) catch return error.IntegerOverflow;
                 const room = block_capacity - self.plain.items.len;
                 const n = @min(room, input.len - input_read);
                 if (n != 0) {
@@ -130,7 +136,8 @@ pub fn Encoder(comptime Codec: type) type {
                         if (self.total_input > expected) return error.SizeMismatch;
                     }
                 }
-                if (self.plain.items.len == block_capacity and
+                const active_capacity = std.math.add(usize, self.activeBlockTarget(base_block_target), self.options.lookahead_len) catch return error.IntegerOverflow;
+                if (self.plain.items.len == active_capacity and
                     (input_read < input.len or self.options.lookahead_len != 0))
                 {
                     try self.writeDataBlock(false);
@@ -204,6 +211,8 @@ pub fn Encoder(comptime Codec: type) type {
             if (!self.options.adaptive_blocks) {
                 if (self.options.block_len == 0) return error.InvalidBlockPlan;
                 if (self.options.lookahead_len >= self.options.block_len) return error.InvalidBlockPlan;
+                if (self.options.low_entropy_block_len != 0 and
+                    self.options.low_entropy_block_len < self.options.block_len) return error.InvalidBlockPlan;
                 return self.options.block_len;
             }
             const split = self.options.compression.split_options;
@@ -211,8 +220,30 @@ pub fn Encoder(comptime Codec: type) type {
             if (self.options.lookahead_len >= split.max_block_len) return error.InvalidBlockPlan;
             return split.max_block_len;
         }
+        fn activeBlockTarget(self: *const Self, base: usize) usize {
+            const expanded = self.options.low_entropy_block_len;
+            if (expanded == 0 or self.options.adaptive_blocks or self.options.lookahead_len != 0) return base;
+            if (self.plain.items.len < base) return base;
+            // A 32 KiB prefix is enough to distinguish byte runs and tiny
+            // alphabets from text/source without another parser or allocation.
+            // Once expanded, retain that decision until the block is emitted.
+            return if (uniqueByteCount(self.plain.items[0..base]) <= 4) expanded else base;
+        }
         fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
             return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = status };
         }
     };
+}
+
+fn uniqueByteCount(input: []const u8) usize {
+    var seen: [256]bool = @splat(false);
+    var count: usize = 0;
+    for (input) |byte| {
+        if (!seen[byte]) {
+            seen[byte] = true;
+            count += 1;
+            if (count > 4) break;
+        }
+    }
+    return count;
 }
