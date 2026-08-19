@@ -585,16 +585,37 @@ test "raw deflate incremental fixed literal decoder streams bit splits" {
     try std.testing.expectEqualSlices(u8, payload, &output);
 }
 
-test "raw deflate incremental fixed literal decoder rejects matches and truncation" {
+test "raw deflate incremental fixed literal decoder streams matches and truncation" {
     const matched = try deflate.encodeRawFixedAlloc(std.testing.allocator, "repeat repeat repeat repeat repeat");
     defer std.testing.allocator.free(matched);
-    var unsupported = deflate.RawDeflateIncrementalFixedLiteralDecoder.init();
-    var output: [64]u8 = undefined;
-    try std.testing.expectError(error.UnsupportedDeflateFeature, unsupported.step(matched, &output));
+    var history: [32 * 1024]u8 = undefined;
+    var decoder = try deflate.RawDeflateIncrementalFixedLiteralDecoder.initWithHistory(.{ .expected_output_len = 34 }, &history);
+    var output: [34]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (input_offset < matched.len) {
+        const result = try decoder.step(matched[input_offset .. input_offset + 1], output[output_offset..][0..@min(2, output.len - output_offset)]);
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+    }
+    while (output_offset < output.len) {
+        const result = try decoder.step("", output[output_offset..][0..@min(2, output.len - output_offset)]);
+        output_offset += result.progress.output_written;
+    }
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, "repeat repeat repeat repeat repeat", &output);
 
     const literal = try deflate.encodeRawFixedWithOptionsAlloc(std.testing.allocator, "truncated literals", .{ .strategy = .huffman_only });
     defer std.testing.allocator.free(literal);
     var truncated = deflate.RawDeflateIncrementalFixedLiteralDecoder.init();
-    _ = try truncated.step(literal[0 .. literal.len - 1], &output);
+    _ = try truncated.step(literal[0 .. literal.len - 1], output[0..]);
     try std.testing.expectError(error.TruncatedFrame, truncated.finish());
+}
+
+test "raw deflate incremental fixed decoder requires history for matches" {
+    const matched = try deflate.encodeRawFixedAlloc(std.testing.allocator, "abcabcabcabcabcabc");
+    defer std.testing.allocator.free(matched);
+    var decoder = deflate.RawDeflateIncrementalFixedLiteralDecoder.init();
+    var output: [32]u8 = undefined;
+    try std.testing.expectError(error.OutputTooSmall, decoder.step(matched, &output));
 }

@@ -1,10 +1,10 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
 
-/// Byte-progressive raw-DEFLATE decoder for fixed-Huffman literal-only blocks.
+/// Byte-progressive raw-DEFLATE decoder for fixed-Huffman blocks.
 /// Huffman code state survives arbitrary input splits; literals stream directly
-/// to caller output. Length/distance symbols are rejected explicitly until the
-/// match/history continuation slice is enabled.
+/// to caller output. A caller-owned 32 KiB history ring backs length/distance
+/// copies, including overlapping matches across arbitrary output boundaries.
 pub const Decoder = struct {
     options: Options,
     phase: Phase = .block_header,
@@ -13,6 +13,16 @@ pub const Decoder = struct {
     code: u16 = 0,
     code_bits: u4 = 0,
     final_block: bool = false,
+    history: []u8 = &.{},
+    history_pos: usize = 0,
+    history_len: usize = 0,
+    length_base: usize = 0,
+    length_extra_bits: u6 = 0,
+    distance_code: u16 = 0,
+    distance_code_bits: u3 = 0,
+    match_len: usize = 0,
+    match_remaining: usize = 0,
+    match_distance: usize = 0,
     input_finished: bool = false,
     total_input: usize = 0,
     total_output: usize = 0,
@@ -24,16 +34,20 @@ pub const Decoder = struct {
         max_output_len: usize = std.math.maxInt(usize),
         expected_output_len: ?usize = null,
     };
-    pub const Phase = enum { block_header, symbols, done };
+    pub const Phase = enum { block_header, symbols, length_extra, distance_symbol, distance_extra, match_copy, done };
 
     pub fn init() Decoder {
         return initWithOptions(.{});
+    }
+    pub fn initWithHistory(options: Options, history: []u8) Error!Decoder {
+        if (history.len < 32 * 1024) return error.OutputTooSmall;
+        return .{ .options = options, .history = history[0 .. 32 * 1024] };
     }
     pub fn initWithOptions(options: Options) Decoder {
         return .{ .options = options };
     }
     pub fn reset(self: *Decoder) void {
-        self.* = .{ .options = self.options };
+        self.* = .{ .options = self.options, .history = self.history };
     }
     pub fn diagnostics(self: *const Decoder) core.StreamingDiagnostics {
         return .{
@@ -84,7 +98,7 @@ pub const Decoder = struct {
                     }
                     output[output_written] = @intCast(symbol);
                     output_written += 1;
-                    self.total_output += 1;
+                    try self.recordByte(@intCast(symbol));
                     continue;
                 }
                 if (symbol == 256) {
@@ -96,7 +110,45 @@ pub const Decoder = struct {
                     }
                     continue;
                 }
-                return self.fail(.symbols, error.UnsupportedDeflateFeature);
+                const length = lengthBaseAndBits(symbol) orelse return self.fail(.symbols, error.InvalidHuffmanCode);
+                self.length_base = length.base;
+                self.length_extra_bits = length.bits;
+                self.phase = if (length.bits == 0) .distance_symbol else .length_extra;
+            },
+            .length_extra => {
+                const extra = self.readBits(input, &input_read, self.length_extra_bits) orelse return result(input_read, output_written, .need_input);
+                self.match_len = self.length_base + extra;
+                self.phase = .distance_symbol;
+            },
+            .distance_symbol => {
+                if (self.match_len == 0) self.match_len = self.length_base;
+                const symbol = self.readFixedDistanceSymbol(input, &input_read) orelse return result(input_read, output_written, .need_input);
+                const distance = distanceBaseAndBits(symbol) orelse return self.fail(.distance_symbol, error.InvalidHuffmanCode);
+                self.match_distance = distance.base;
+                self.length_extra_bits = distance.bits;
+                self.phase = if (distance.bits == 0) .match_copy else .distance_extra;
+                if (self.phase == .match_copy) try self.beginMatch();
+            },
+            .distance_extra => {
+                const extra = self.readBits(input, &input_read, self.length_extra_bits) orelse return result(input_read, output_written, .need_input);
+                self.match_distance += extra;
+                try self.beginMatch();
+                self.phase = .match_copy;
+            },
+            .match_copy => {
+                if (output_written == output.len) return result(input_read, output_written, .need_output);
+                while (self.match_remaining != 0 and output_written < output.len) {
+                    const source = (self.history_pos + self.history.len - self.match_distance) % self.history.len;
+                    const byte = self.history[source];
+                    output[output_written] = byte;
+                    output_written += 1;
+                    try self.recordByte(byte);
+                    self.match_remaining -= 1;
+                }
+                if (self.match_remaining == 0) {
+                    self.match_len = 0;
+                    self.phase = .symbols;
+                }
             },
             .done => {
                 // A partial final byte belongs to the stream as padding; bytes
@@ -125,6 +177,34 @@ pub const Decoder = struct {
             }
         }
         return self.fail(.symbols, error.InvalidHuffmanCode);
+    }
+    fn beginMatch(self: *Decoder) Error!void {
+        if (self.history.len == 0) return self.fail(.match_copy, error.OutputTooSmall);
+        if (self.match_distance == 0 or self.match_distance > self.history_len) return self.fail(.match_copy, error.InvalidMatch);
+        if (self.total_output > self.options.max_output_len or self.match_len > self.options.max_output_len - self.total_output) return self.fail(.match_copy, error.OutputLimitExceeded);
+        if (self.options.expected_output_len) |expected| {
+            if (self.total_output > expected or self.match_len > expected - self.total_output) return self.fail(.match_copy, error.SizeMismatch);
+        }
+        self.match_remaining = self.match_len;
+    }
+    fn readFixedDistanceSymbol(self: *Decoder, input: []const u8, input_read: *usize) ?usize {
+        while (self.distance_code_bits < 5) {
+            const bit = self.readBits(input, input_read, 1) orelse return null;
+            self.distance_code |= @as(u16, @intCast(bit)) << self.distance_code_bits;
+            self.distance_code_bits += 1;
+        }
+        const symbol: usize = @bitReverse(@as(u5, @truncate(self.distance_code)));
+        self.distance_code = 0;
+        self.distance_code_bits = 0;
+        return symbol;
+    }
+    fn recordByte(self: *Decoder, byte: u8) Error!void {
+        if (self.history.len != 0) {
+            self.history[self.history_pos] = byte;
+            self.history_pos = (self.history_pos + 1) % self.history.len;
+            self.history_len = @min(self.history_len + 1, self.history.len);
+        }
+        self.total_output += 1;
     }
 
     fn readBits(self: *Decoder, input: []const u8, input_read: *usize, count: u6) ?usize {
@@ -190,4 +270,23 @@ fn buildFixedTable(lengths: [288]u4) [288]FixedEntry {
         next[bits] += 1;
     }
     return out;
+}
+
+const BaseBits = struct { base: usize, bits: u6 };
+
+fn lengthBaseAndBits(symbol: u16) ?BaseBits {
+    if (symbol < 257 or symbol > 285) return null;
+    if (symbol <= 264) return .{ .base = symbol - 254, .bits = 0 };
+    if (symbol == 285) return .{ .base = 258, .bits = 0 };
+    const bases = [_]usize{ 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227 };
+    const bits = [_]u6{ 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5 };
+    const index: usize = symbol - 265;
+    return .{ .base = bases[index], .bits = bits[index] };
+}
+
+const distance_bases = [_]usize{ 1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577 };
+
+fn distanceBaseAndBits(symbol: usize) ?BaseBits {
+    if (symbol >= distance_bases.len) return null;
+    return .{ .base = distance_bases[symbol], .bits = if (symbol < 4) 0 else @intCast(symbol / 2 - 1) };
 }
