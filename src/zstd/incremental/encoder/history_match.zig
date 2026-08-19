@@ -73,7 +73,9 @@ test "Zstd incremental history matcher finds multiple non-prefix matches" {
 
     const plan = findPlan(rolling.view(), "pfx-0123456789-mid-ABCDEFGHIJK-end");
     try std.testing.expectEqual(@as(usize, 2), plan.len);
-    try std.testing.expectEqual(@as(usize, 4), plan.matches[0].block_start);
-    try std.testing.expectEqual(@as(usize, 11), plan.matches[0].len);
-    try std.testing.expectEqual(@as(usize, 20), plan.matches[1].block_start);
+    // The leading '-' extends both history matches by one byte. Assert the
+    // actual maximal regions rather than only the alphanumeric cores.
+    try std.testing.expectEqual(@as(usize, 3), plan.matches[0].block_start);
+    try std.testing.expectEqual(@as(usize, 12), plan.matches[0].len);
+    try std.testing.expectEqual(@as(usize, 18), plan.matches[1].block_start);
 }

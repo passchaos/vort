@@ -5122,6 +5122,10 @@ architecture blindly.
   checksums across flushed blocks; Snappy publishes a complete checksummed data
   chunk. Both drain through tiny output, resume input after `need_input`, and
   remain finish/reset compatible.
+- Extended resumable flush to the Brotli stored encoder, preserving its
+  bit-writer state across flushed uncompressed meta-blocks. Input limits are now
+  validated before pending prefix output is drained, so deterministic limit
+  errors no longer depend on whether the caller supplied an empty output slice.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

@@ -13,6 +13,7 @@ pub fn Encoder(comptime Codec: type) type {
         pending: std.ArrayList(u8) = .empty,
         pending_offset: usize = 0,
         prefix_written: bool = false,
+        flush_requested: bool = false,
         finishing: bool = false,
         final_written: bool = false,
         done: bool = false,
@@ -45,6 +46,7 @@ pub fn Encoder(comptime Codec: type) type {
             self.codec_state = .{};
             self.pending_offset = 0;
             self.prefix_written = false;
+            self.flush_requested = false;
             self.finishing = false;
             self.final_written = false;
             self.done = false;
@@ -63,6 +65,13 @@ pub fn Encoder(comptime Codec: type) type {
         }
         pub fn finish(self: *Self) Error!void {
             self.finishing = true;
+            self.flush_requested = false;
+        }
+        /// Publish buffered bytes as a non-final uncompressed meta-block. The
+        /// bit-level writer state is retained so later input continues the same
+        /// Brotli stream after `step` acknowledges the flush with `need_input`.
+        pub fn flush(self: *Self) void {
+            if (!self.finishing and !self.done) self.flush_requested = true;
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
@@ -71,7 +80,13 @@ pub fn Encoder(comptime Codec: type) type {
                 if (input.len != 0) return error.TrailingData;
                 return .{ .status = .done };
             }
-            if (self.finishing and input.len != 0) return error.TrailingData;
+            if ((self.finishing or self.flush_requested) and input.len != 0) return error.TrailingData;
+            // Validate the whole offered slice before draining prefix/pending
+            // output. Otherwise an empty output buffer can hide a deterministic
+            // input-limit error behind `need_output`, making error behavior
+            // depend on caller output chunking.
+            const offered_total = std.math.add(usize, self.total_input, input.len) catch return error.IntegerOverflow;
+            if (offered_total > self.options.max_input_len) return error.OutputLimitExceeded;
             var input_read: usize = 0;
             var output_written: usize = 0;
             while (true) {
@@ -96,15 +111,19 @@ pub fn Encoder(comptime Codec: type) type {
                 const n = @min(room, input.len - input_read);
                 if (n != 0) {
                     const total = std.math.add(usize, self.total_input, n) catch return error.IntegerOverflow;
-                    if (total > self.options.max_input_len) return error.OutputLimitExceeded;
                     try self.plain.appendSlice(self.allocator, input[input_read..][0..n]);
                     input_read += n;
                     self.total_input = total;
                 }
-                if (self.plain.items.len == self.options.block_len or (self.finishing and self.plain.items.len != 0)) {
-                    try Codec.writeBlock(self.allocator, &self.pending, &self.codec_state, self.plain.items);
-                    self.plain.clearRetainingCapacity();
+                if (self.plain.items.len == self.options.block_len or
+                    ((self.finishing or self.flush_requested) and self.plain.items.len != 0))
+                {
+                    try self.writeBlock();
                     continue;
+                }
+                if (self.flush_requested) {
+                    self.flush_requested = false;
+                    return result(input_read, output_written, .need_input);
                 }
                 if (self.finishing and !self.final_written) {
                     try Codec.writeFinal(self.allocator, &self.pending, &self.codec_state);
@@ -121,6 +140,11 @@ pub fn Encoder(comptime Codec: type) type {
 
         fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
             return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = status };
+        }
+        fn writeBlock(self: *Self) Error!void {
+            std.debug.assert(self.plain.items.len != 0);
+            try Codec.writeBlock(self.allocator, &self.pending, &self.codec_state, self.plain.items);
+            self.plain.clearRetainingCapacity();
         }
     };
 }
