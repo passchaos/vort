@@ -5126,6 +5126,11 @@ architecture blindly.
   bit-writer state across flushed uncompressed meta-blocks. Input limits are now
   validated before pending prefix output is drained, so deterministic limit
   errors no longer depend on whether the caller supplied an empty output slice.
+- Added pledged compressed length to the general Brotli incremental decoder. A
+  framed transport can now trigger validation and stored/compressed meta-block
+  decode automatically at the known payload boundary, consume the boundary
+  call's tiny output immediately, and receive deterministic short/long
+  `SizeMismatch` errors without a separate finish call.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

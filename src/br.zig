@@ -62,6 +62,28 @@ pub const IncrementalTestSupport = struct {
     pub fn encodeStored(allocator: std.mem.Allocator, payload: []const u8) Error![]u8 {
         return encodeStoredStreamAlloc(allocator, payload);
     }
+
+    /// Build the minimal compressed "hello" fixture through the same private
+    /// header writer used by the compressed-meta-block decoder tests. Keeping
+    /// fixture construction here lets incremental tests exercise compressed
+    /// input without exposing test-only bitstream helpers as production APIs.
+    pub fn encodeCompressedHello(allocator: std.mem.Allocator) Error![]u8 {
+        var encoded: std.ArrayList(u8) = .empty;
+        errdefer encoded.deinit(allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeWindowBits(allocator, &writer, default_window_bits);
+        try writer.writeBits(allocator, 1, 1); // ISLAST
+        try writer.writeBits(allocator, 0, 1); // ISLASTEMPTY = false
+        try writer.writeBits(allocator, 0, 2); // MNIBBLES = 4
+        try writer.writeBits(allocator, 4, 16); // MLEN - 1
+        try writeMinimalCompressedHeaderForHello(allocator, &writer);
+        try writer.writeBits(allocator, 2, 2); // h
+        try writer.writeBits(allocator, 0, 2); // e
+        try writer.writeBits(allocator, 1, 2); // l
+        try writer.writeBits(allocator, 1, 2); // l
+        try writer.writeBits(allocator, 3, 2); // o
+        return try encoded.toOwnedSlice(allocator);
+    }
 };
 
 pub const max_uncompressed_meta_block_len: usize = 1 << 24;

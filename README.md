@@ -653,6 +653,9 @@ var zstd_bounded_incremental = vort.ZstdNativeIncrementalFrameDecoder.initWithOp
 });
 defer zstd_bounded_incremental.deinit();
 // After feeding/draining the final frame, call finish() to validate exact-size EOF.
+// Brotli's general incremental decoder can instead pledge expected_compressed_len
+// (or use initExactCompressedSize) to auto-validate/decode stored or compressed
+// meta-block streams at a transport-provided boundary, then drain tiny output.
 const zstd_dict = vort.ZstdNativeDictionary.init(0x1234, "previous zstd history shared phrase");
 var zstd_incremental_encoder = try vort.ZstdNativeIncrementalFrameEncoder.initWithPresetDictionary(allocator, .{
     .include_content_size = false,
