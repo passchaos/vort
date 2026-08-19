@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("../../core.zig");
+const history_mod = @import("history.zig");
 
 /// Build an incremental Zstd frame encoder. One bounded block is retained;
 /// completed raw, RLE, or entropy-coded blocks drain through arbitrary caller
@@ -22,6 +23,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
         dictionary_id: ?u32 = null,
         dictionary: ?Codec.Dictionary = null,
         codec_state: Codec.State = .{},
+        history: history_mod.Rolling = .{},
 
         const Self = @This();
         pub const Error = Codec.Error;
@@ -69,6 +71,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
             return initExactSizeWithPresetDictionary(allocator, options, expected_input_len, dictionary);
         }
         pub fn deinit(self: *Self) void {
+            self.history.deinit(self.allocator);
             self.block.deinit(self.allocator);
             self.pending.deinit(self.allocator);
             self.* = undefined;
@@ -87,6 +90,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
             self.total_output = 0;
             self.expected_input_len = expected_input_len;
             self.codec_state = .{};
+            self.history.clearRetainingCapacity();
         }
         pub fn finish(self: *Self) void {
             self.finishing = true;
@@ -132,7 +136,9 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
                 // A full block can be emitted only when another input byte proves
                 // it is not final; otherwise retain it until finish.
                 if (self.block.items.len == Codec.blockLen(self.options) and input_read < input.len) {
-                    try BlockEmitter.write(self.allocator, &self.pending, self.block.items, false, self.options, &self.codec_state, self.dictionary, self.total_input - self.block.items.len);
+                    try self.history.prepareCompletedBlock(self.allocator, self.block.items, Codec.historyLen(self.options));
+                    try BlockEmitter.write(self.allocator, &self.pending, self.block.items, false, self.options, &self.codec_state, self.dictionary, self.history.slice(), self.total_input - self.block.items.len);
+                    self.history.appendCompletedBlock(self.block.items, Codec.historyLen(self.options));
                     self.block.clearRetainingCapacity();
                     continue;
                 }
@@ -140,7 +146,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
                     if (self.expected_input_len) |expected| {
                         if (self.total_input != expected) return error.SizeMismatch;
                     }
-                    try BlockEmitter.write(self.allocator, &self.pending, self.block.items, true, self.options, &self.codec_state, self.dictionary, self.total_input - self.block.items.len);
+                    try BlockEmitter.write(self.allocator, &self.pending, self.block.items, true, self.options, &self.codec_state, self.dictionary, self.history.slice(), self.total_input - self.block.items.len);
                     self.block.clearRetainingCapacity();
                     try Codec.writeChecksum(self.allocator, &self.pending, self.options, &self.hasher);
                     self.final_written = true;

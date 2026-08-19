@@ -13,6 +13,7 @@ const known_size_frame = @import("zstd/frame/known_size.zig");
 const huffman_lookup = @import("zstd/literals/huffman_lookup.zig");
 const incremental_encoder = @import("zstd/incremental/frame_encoder.zig");
 const incremental_block_emitter = @import("zstd/incremental/block_emitter.zig");
+const incremental_history_match = @import("zstd/incremental/history_match.zig");
 const incremental_tests = @import("zstd/incremental/tests.zig");
 const huffman = @import("huffman.zig");
 
@@ -141,6 +142,10 @@ const IncrementalEncoderCodec = struct {
     pub fn blockLen(options: Options) usize {
         return options.block_size_max;
     }
+    pub fn historyLen(options: Options) usize {
+        _ = options;
+        return native_dictionary_window_len;
+    }
     pub fn writeHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options, expected_input_len: ?usize, dictionary_id: ?u32) zstd.Error!void {
         if (expected_input_len) |len| return emitFrameHeader(allocator, out, try checkedUsizeToU64(len), options);
         try out.appendSlice(allocator, &frame_magic);
@@ -155,8 +160,8 @@ const IncrementalEncoderCodec = struct {
     pub fn writeRawOrRle(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) zstd.Error!void {
         try emitBlock(allocator, out, block, last);
     }
-    pub fn writeEntropy(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, state: *State, dictionary: ?IncrementalEncoderCodec.Dictionary, frame_offset: usize, match_search_budget: usize) zstd.Error!void {
-        try emitLiteralOnlyCompressedBlockWithDictionary(allocator, out, block, last, state, dictionary, frame_offset, match_search_budget);
+    pub fn writeEntropy(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, state: *State, dictionary: ?IncrementalEncoderCodec.Dictionary, frame_history: []const u8, frame_offset: usize, match_search_budget: usize) zstd.Error!void {
+        try emitLiteralOnlyCompressedBlockWithHistory(allocator, out, block, last, state, dictionary, frame_history, frame_offset, match_search_budget);
     }
     pub fn writeChecksum(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options, hasher: *std.hash.XxHash64) zstd.Error!void {
         if (!options.content_checksum) return;
@@ -6577,12 +6582,40 @@ fn emitLiteralOnlyCompressedBlockWithDictionary(
     frame_offset: usize,
     match_search_budget: usize,
 ) Error!void {
+    return try emitLiteralOnlyCompressedBlockWithHistory(
+        allocator,
+        out,
+        block,
+        last,
+        state,
+        dictionary,
+        &.{},
+        frame_offset,
+        match_search_budget,
+    );
+}
+
+fn emitLiteralOnlyCompressedBlockWithHistory(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    state: *LiteralOnlyEncoderState,
+    dictionary: ?NativeDictionary,
+    frame_history: []const u8,
+    frame_offset: usize,
+    match_search_budget: usize,
+) Error!void {
     var dictionary_block: std.ArrayList(u8) = .empty;
     defer dictionary_block.deinit(allocator);
     const dictionary_ok = if (dictionary) |dict|
         try emitDictionaryMatchCompressedBlock(allocator, &dictionary_block, block, last, dict, frame_offset, match_search_budget)
     else
         false;
+
+    var history_block: std.ArrayList(u8) = .empty;
+    defer history_block.deinit(allocator);
+    const history_ok = try emitFrameHistoryMatchCompressedBlock(allocator, &history_block, block, last, frame_history);
 
     var huffman_state = state.*;
     var huffman_block: std.ArrayList(u8) = .empty;
@@ -6593,12 +6626,16 @@ fn emitLiteralOnlyCompressedBlockWithDictionary(
     defer match_block.deinit(allocator);
     const match_ok = try emitNativeMatchCompressedBlock(allocator, &match_block, block, last, match_search_budget);
 
-    const CandidateKind = enum { dictionary, huffman, match };
+    const CandidateKind = enum { dictionary, history, huffman, match };
     var best_kind: ?CandidateKind = null;
     var best_len: usize = std.math.maxInt(usize);
     if (dictionary_ok) {
         best_kind = .dictionary;
         best_len = dictionary_block.items.len;
+    }
+    if (history_ok and history_block.items.len < best_len) {
+        best_kind = .history;
+        best_len = history_block.items.len;
     }
     if (huffman_ok and huffman_block.items.len <= best_len) {
         best_kind = .huffman;
@@ -6613,6 +6650,11 @@ fn emitLiteralOnlyCompressedBlockWithDictionary(
         .dictionary => {
             state.previous_huffman_plan = null;
             try out.appendSlice(allocator, dictionary_block.items);
+            return;
+        },
+        .history => {
+            state.previous_huffman_plan = null;
+            try out.appendSlice(allocator, history_block.items);
             return;
         },
         .huffman => {
@@ -6731,6 +6773,24 @@ fn chooseShortestPlannedBlock(ok: bool, block: []const u8, best: *?[]const u8, b
     if (!ok or block.len >= best_len.*) return;
     best.* = block;
     best_len.* = block.len;
+}
+
+fn emitFrameHistoryMatchCompressedBlock(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    history: []const u8,
+) Error!bool {
+    const match = incremental_history_match.find(history, block) orelse return false;
+    const literal_len = match.block_start;
+    const match_offset = match.offset(history.len) orelse return error.IntegerOverflow;
+    const tail_start = match.block_start + match.len;
+    const literal_lens = [_]usize{literal_len};
+    const offsets = [_]usize{match_offset};
+    const match_lens = [_]usize{match.len};
+    const literal_ends = [_]usize{tail_start};
+    return try emitBestSequenceCompressedBlock(allocator, out, block, last, &literal_lens, &offsets, &match_lens, &literal_ends, tail_start);
 }
 
 fn emitSingleDictionaryMatchCompressedBlock(

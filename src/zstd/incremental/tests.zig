@@ -163,6 +163,40 @@ test "Zstd incremental frame encoder references preset dictionary history" {
     try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
+test "Zstd incremental frame encoder matches previous blocks" {
+    const first = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!@";
+    const payload = first ++ first;
+    var encoder = try zstd.NativeIncrementalFrameEncoder.init(std.testing.allocator, .{
+        .include_content_size = false,
+        .content_checksum = true,
+        .selection = .literal_only,
+        .block_size_max = first.len,
+    });
+    defer encoder.deinit();
+    const frame = try encodeSplit(&encoder, payload);
+    defer std.testing.allocator.free(frame);
+
+    var blocks = try zstd.iterateNativeFrameBlocks(frame);
+    const first_block = (try blocks.next()).?;
+    const second_block = (try blocks.next()).?;
+    try std.testing.expectEqual(zstd.NativeBlockType.compressed, second_block.block_type);
+    const modes = try zstd.inspectNativeFrameBlockSequenceModes(frame, second_block);
+    try std.testing.expect(modes.sequence_count != 0);
+    try std.testing.expect(second_block.payload_len < first_block.payload_len);
+    try std.testing.expect((try blocks.next()) == null);
+
+    const decoded = try zstd.decodeFrameAlloc(std.testing.allocator, frame);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    encoder.reset();
+    const reset_frame = try encodeSplit(&encoder, first);
+    defer std.testing.allocator.free(reset_frame);
+    const reset_decoded = try zstd.decodeFrameAlloc(std.testing.allocator, reset_frame);
+    defer std.testing.allocator.free(reset_decoded);
+    try std.testing.expectEqualSlices(u8, first, reset_decoded);
+}
+
 fn encodeSplit(encoder: *zstd.NativeIncrementalFrameEncoder, payload: []const u8) ![]u8 {
     var frame: std.ArrayList(u8) = .empty;
     errdefer frame.deinit(std.testing.allocator);

@@ -5101,6 +5101,11 @@ architecture blindly.
   incremental block-emitter module instead of adding codec policy to the generic
   streaming state machine. Dictionary-set constructors now resolve and retain
   the selected history rather than carrying Dictionary_ID metadata alone.
+- Added a bounded rolling frame-history buffer and a separate cross-block match
+  finder for the incremental Zstd entropy encoder. Completed blocks retain only
+  the newest advertised-window bytes; later blocks can emit real sequences that
+  reference earlier input while split input, tiny output, checksum, and reset
+  behavior continue through the same streaming state machine.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,
