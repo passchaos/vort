@@ -5154,6 +5154,10 @@ architecture blindly.
   public level-to-options helpers. Wrapper checksum, dictionary/metadata, flush,
   exact sizing, and tiny-output behavior now automatically cover stored, fixed,
   and dynamic block choices.
+- Added bounded adaptive block sizing to the incremental best core. Full input
+  windows use the existing stored/fixed/dynamic cost scorer and split policy to
+  choose a shorter prefix, while buffering never exceeds `max_block_len`; raw,
+  zlib, and gzip wrappers share the option through their common raw core.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

@@ -684,6 +684,8 @@ defer zstd_incremental_encoder.deinit();
 // representations per block while retaining the same rolling history core.
 // ZlibIncrementalBestEncoder and GzipIncrementalBestEncoder expose that selector
 // through wrapper checksums/metadata; *OptionsForLevel maps zlib levels 0...9.
+// Set adaptive_blocks on a best encoder to use CompressionOptions.split_options
+// for costed, bounded block-boundary selection instead of one fixed block size.
 const zstd_dict_options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only };
 const zstd_dict_bound = try vort.zstdEncodedNativeFrameBoundWithDictionary(
     "prefix: previous zstd history payload, shared phrase tail".len,

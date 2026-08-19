@@ -415,3 +415,63 @@ fn encodeZlibBestTestStream(encoder: *deflate.ZlibIncrementalBestEncoder, payloa
     }
     return try encoded.toOwnedSlice(std.testing.allocator);
 }
+
+test "raw deflate incremental best encoder adapts block boundaries" {
+    const payload = ("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" ** 512) ++
+        ("structured-json-field:value,structured-json-field:value\n" ** 512);
+    var compression = deflate.optionsForLevel(.default);
+    compression.split_options = .{
+        .min_block_len = 8 * 1024,
+        .max_block_len = 32 * 1024,
+        .sample_len = 2048,
+        .search_step = 8 * 1024,
+    };
+    var adaptive = deflate.RawDeflateIncrementalBestEncoder.initWithOptions(std.testing.allocator, .{
+        .adaptive_blocks = true,
+        .compression = compression,
+    });
+    defer adaptive.deinit();
+    const encoded = try encodeRawBestTestStream(&adaptive, payload);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try deflate.decodeRawAutoAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    var fixed_boundary = deflate.RawDeflateIncrementalBestEncoder.initWithOptions(std.testing.allocator, .{
+        .block_len = 32 * 1024,
+        .compression = compression,
+    });
+    defer fixed_boundary.deinit();
+    const fixed_encoded = try encodeRawBestTestStream(&fixed_boundary, payload);
+    defer std.testing.allocator.free(fixed_encoded);
+    try std.testing.expect(encoded.len <= fixed_encoded.len);
+}
+
+test "raw deflate incremental adaptive plan validates bounds" {
+    var encoder = deflate.RawDeflateIncrementalBestEncoder.initWithOptions(std.testing.allocator, .{
+        .adaptive_blocks = true,
+        .compression = .{ .split_options = .{ .min_block_len = 0, .max_block_len = 1024 } },
+    });
+    defer encoder.deinit();
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.step("x", &.{}));
+}
+
+fn encodeRawBestTestStream(encoder: *deflate.RawDeflateIncrementalBestEncoder, payload: []const u8) ![]u8 {
+    var encoded: std.ArrayList(u8) = .empty;
+    errdefer encoded.deinit(std.testing.allocator);
+    var scratch: [29]u8 = undefined;
+    var offset: usize = 0;
+    while (offset < payload.len) {
+        const end = @min(payload.len, offset + 777);
+        const result = try encoder.step(payload[offset..end], &scratch);
+        offset += result.progress.input_read;
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    return try encoded.toOwnedSlice(std.testing.allocator);
+}

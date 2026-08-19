@@ -90,6 +90,11 @@ const IncrementalFixedEncoderCodec = struct {
         try state.alignToByte(allocator);
         try drainWriterBytes(allocator, pending, state);
     }
+    pub fn chooseBlockLen(allocator: std.mem.Allocator, input: []const u8, options: IncrementalFixedEncoderCodec.CompressionOptions) IncrementalFixedEncoderCodec.Error!usize {
+        _ = allocator;
+        _ = options;
+        return input.len;
+    }
     fn drainWriterBytes(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) std.mem.Allocator.Error!void {
         try pending.appendSlice(allocator, state.bytes.items);
         state.bytes.clearRetainingCapacity();
@@ -124,6 +129,9 @@ const IncrementalBestEncoderCodec = struct {
     }
     pub fn finishState(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) IncrementalBestEncoderCodec.Error!void {
         return IncrementalFixedEncoderCodec.finishState(allocator, pending, state);
+    }
+    pub fn chooseBlockLen(allocator: std.mem.Allocator, input: []const u8, options: IncrementalBestEncoderCodec.CompressionOptions) IncrementalBestEncoderCodec.Error!usize {
+        return try chooseNonRegressiveIncrementalBlockLen(allocator, input, options);
     }
     fn drainWriterBytes(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) std.mem.Allocator.Error!void {
         try pending.appendSlice(allocator, state.bytes.items);
@@ -1046,6 +1054,32 @@ fn chooseCostedAdaptiveBlockLen(allocator: std.mem.Allocator, input: []const u8,
         if (score < best_score) best_len = limit;
     }
     return best_len;
+}
+
+fn chooseNonRegressiveIncrementalBlockLen(allocator: std.mem.Allocator, input: []const u8, options: CompressionOptions) !usize {
+    const split = options.split_options;
+    const candidate = try chooseCostedAdaptiveBlockLen(
+        allocator,
+        input,
+        @min(split.min_block_len, input.len),
+        @min(split.max_block_len, input.len),
+        split.sample_len,
+        split.search_step,
+        options,
+    );
+    if (candidate == input.len) return candidate;
+
+    // A prefix's local score omits the second block header/tree overhead. Only
+    // accept the split when the two independently scored halves beat the full
+    // window after charging a conservative byte for the extra BFINAL/BTYPE
+    // boundary. This prevents adaptive mode from regressing ratio merely because
+    // one prefix looks locally cheap.
+    const full_score = try scoreSplitCandidate(allocator, input, input.len, options);
+    const first_score = try scoreSplitCandidate(allocator, input, candidate, options);
+    const tail_score = try scoreSplitCandidate(allocator, input[candidate..], input.len - candidate, options);
+    const split_score = std.math.add(usize, first_score, tail_score) catch return error.IntegerOverflow;
+    const charged_split = std.math.add(usize, split_score, 1) catch return error.IntegerOverflow;
+    return if (charged_split < full_score) candidate else input.len;
 }
 
 fn scoreSplitCandidate(allocator: std.mem.Allocator, input: []const u8, candidate_len: usize, options: CompressionOptions) !usize {

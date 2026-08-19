@@ -30,6 +30,9 @@ pub fn Encoder(comptime Codec: type) type {
             max_input_len: usize = std.math.maxInt(usize),
             block_len: usize = 32 * 1024,
             compression: Codec.CompressionOptions = .{},
+            /// Enable costed block sizing within `compression.split_options`.
+            /// Input buffering remains bounded by that policy's max block size.
+            adaptive_blocks: bool = false,
         };
 
         pub fn init(allocator: std.mem.Allocator) Self {
@@ -78,7 +81,7 @@ pub fn Encoder(comptime Codec: type) type {
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
-            if (self.options.block_len == 0) return error.InvalidBlockPlan;
+            const block_capacity = try self.blockCapacity();
             if (self.done) {
                 if (input.len != 0) return error.TrailingData;
                 return .{ .status = .done };
@@ -103,7 +106,7 @@ pub fn Encoder(comptime Codec: type) type {
                     if (output_written == output.len and output.len != 0) return result(input_read, output_written, .need_output);
                 }
 
-                const room = self.options.block_len - self.plain.items.len;
+                const room = block_capacity - self.plain.items.len;
                 const n = @min(room, input.len - input_read);
                 if (n != 0) {
                     try self.plain.appendSlice(self.allocator, input[input_read..][0..n]);
@@ -113,7 +116,7 @@ pub fn Encoder(comptime Codec: type) type {
                         if (self.total_input > expected) return error.SizeMismatch;
                     }
                 }
-                if (self.plain.items.len == self.options.block_len and input_read < input.len) {
+                if (self.plain.items.len == block_capacity and input_read < input.len) {
                     try self.writeDataBlock(false);
                     continue;
                 }
@@ -144,23 +147,43 @@ pub fn Encoder(comptime Codec: type) type {
         }
 
         fn writeDataBlock(self: *Self, final: bool) Error!void {
+            const selected_len = if (self.options.adaptive_blocks and !final and !self.flush_requested)
+                try Codec.chooseBlockLen(self.allocator, self.plain.items, self.options.compression)
+            else
+                self.plain.items.len;
+            if ((selected_len == 0 and !(final and self.plain.items.len == 0)) or selected_len > self.plain.items.len) return error.InvalidBlockPlan;
+            const block = self.plain.items[0..selected_len];
             try self.history.ensureTotalCapacity(self.allocator, Codec.history_len);
             if (self.history.items.len == 0 and self.dictionary.len != 0) {
                 const keep = @min(self.dictionary.len, Codec.history_len);
                 self.history.appendSliceAssumeCapacity(self.dictionary[self.dictionary.len - keep ..]);
             }
-            try Codec.writeBlock(self.allocator, &self.pending, &self.state, self.plain.items, self.history.items, final, self.options.compression);
-            if (self.plain.items.len >= Codec.history_len) {
+            try Codec.writeBlock(self.allocator, &self.pending, &self.state, block, self.history.items, final, self.options.compression);
+            if (block.len >= Codec.history_len) {
                 self.history.clearRetainingCapacity();
-                self.history.appendSliceAssumeCapacity(self.plain.items[self.plain.items.len - Codec.history_len ..]);
+                self.history.appendSliceAssumeCapacity(block[block.len - Codec.history_len ..]);
             } else {
-                const keep = @min(self.history.items.len, Codec.history_len - self.plain.items.len);
+                const keep = @min(self.history.items.len, Codec.history_len - block.len);
                 const start = self.history.items.len - keep;
                 std.mem.copyForwards(u8, self.history.items[0..keep], self.history.items[start..]);
                 self.history.items.len = keep;
-                self.history.appendSliceAssumeCapacity(self.plain.items);
+                self.history.appendSliceAssumeCapacity(block);
             }
-            self.plain.clearRetainingCapacity();
+            if (selected_len == self.plain.items.len) {
+                self.plain.clearRetainingCapacity();
+            } else {
+                std.mem.copyForwards(u8, self.plain.items[0 .. self.plain.items.len - selected_len], self.plain.items[selected_len..]);
+                self.plain.items.len -= selected_len;
+            }
+        }
+        fn blockCapacity(self: *const Self) Error!usize {
+            if (!self.options.adaptive_blocks) {
+                if (self.options.block_len == 0) return error.InvalidBlockPlan;
+                return self.options.block_len;
+            }
+            const split = self.options.compression.split_options;
+            if (split.min_block_len == 0 or split.max_block_len == 0 or split.min_block_len > split.max_block_len) return error.InvalidBlockPlan;
+            return split.max_block_len;
         }
         fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
             return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = status };
