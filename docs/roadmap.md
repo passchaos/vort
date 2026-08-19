@@ -2292,6 +2292,16 @@ architecture blindly.
   `0.10x` to `0.13x`. Existing four-stream, checksum, malformed-tail, and
   lib-generated compatibility coverage exercise the stream-boundary behavior.
 
+- Specialized the four-stream bulk loop's reverse prefix gather. Once the loop
+  has established that a full Huffman width remains, the touched byte count is
+  determined entirely by `start & 7 + width`; the new reader chooses its
+  one-, two-, or three-byte reservoir directly instead of recomputing both end
+  byte indexes and their difference. An exhaustive alignment/width oracle
+  compares it with the checked generic prefix reader for widths 1...11. Seven
+  fixed-CPU 500-iteration A/B rounds reduce `ascii64k` median time from about
+  `219.2 ms` to `182.9 ms` (`16.5%`), raising its conservative libzstd floor
+  from `0.13x` to `0.14x`; other decode shapes do not call this bulk helper.
+
 - Expanded the LZ4/liblz4 caller-owned matrix with a deterministic 256 KiB
   incompressible, literal-only block. This separates real bulk-copy throughput
   from the existing 1 KiB row's fixed call overhead and locks the one-literal,

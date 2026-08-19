@@ -4598,7 +4598,7 @@ const HuffmanLiteralCursor = struct {
         width: u4,
         lookup: *const HuffmanLiteralLookup,
     ) Error!u8 {
-        const prefix = try self.reader.peekSmall(width);
+        const prefix = self.reader.peekBulkHuffman(width);
         const entry = lookup.lookup(prefix << @intCast(11 - width)) orelse
             return error.CorruptFrame;
         try self.reader.skip(entry.bit_count);

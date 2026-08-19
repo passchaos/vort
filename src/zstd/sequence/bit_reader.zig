@@ -87,6 +87,26 @@ pub const Reader = struct {
         return @intCast((reservoir >> @intCast(start & 7)) & mask);
     }
 
+    /// Return one full-width prefix for the four-stream Huffman bulk loop. The
+    /// loop has already proven that `bit_count` bits remain, so this helper can
+    /// select the 1/2/3-byte reservoir using only the start alignment: a field
+    /// spans three bytes exactly when `alignment + width > 16`.
+    pub fn peekBulkHuffman(self: Reader, bit_count: u4) usize {
+        std.debug.assert(bit_count != 0 and bit_count <= self.remaining_bits);
+        const start = self.remaining_bits - bit_count;
+        const first_byte = start >> 3;
+        const shift: u3 = @intCast(start & 7);
+        const span_bits: u5 = @as(u5, shift) + bit_count;
+        const reservoir: u32 = if (span_bits <= 8)
+            self.bytes[first_byte]
+        else if (span_bits <= 16)
+            std.mem.readInt(u16, self.bytes[first_byte..][0..2], .little)
+        else
+            @as(u32, std.mem.readInt(u16, self.bytes[first_byte..][0..2], .little)) |
+                (@as(u32, self.bytes[first_byte + 2]) << 16);
+        return @intCast((reservoir >> shift) & ((@as(u32, 1) << bit_count) - 1));
+    }
+
     /// Consume a narrow field through the bounded prefix path. FSE sequence
     /// states stay below its three-byte bound and avoid the generic u72 gather.
     pub fn readSmall(self: *Reader, bit_count: u4) Error!usize {
@@ -165,6 +185,21 @@ test "Zstd reverse reader small peek matches read across alignments" {
             try std.testing.expectEqual(
                 try oracle.read(width),
                 try aligned.peekSmall(width),
+            );
+        }
+    }
+}
+
+test "Zstd reverse reader bulk Huffman peek matches checked prefix" {
+    var bytes: [8]u8 = .{ 0x35, 0xa6, 0x59, 0xc3, 0x17, 0xe8, 0x42, 0xd0 };
+    for (0..16) |prefix_bits| {
+        var reader = try Reader.init(&bytes);
+        if (prefix_bits != 0) try reader.skip(@intCast(prefix_bits));
+        var width: u4 = 1;
+        while (width <= 11 and width <= reader.available()) : (width += 1) {
+            try std.testing.expectEqual(
+                try reader.peekSmall(width),
+                reader.peekBulkHuffman(width),
             );
         }
     }
