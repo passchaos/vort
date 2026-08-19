@@ -667,6 +667,8 @@ defer zstd_incremental_encoder.deinit();
 // Call flush(), then step with empty input until need_input, to publish a
 // non-final block before continuing the same frame. Repeated empty flushes are
 // idempotent.
+// LZ4 and framed Snappy incremental encoders expose the same resumable flush
+// acknowledgement contract.
 const zstd_dict_options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only };
 const zstd_dict_bound = try vort.zstdEncodedNativeFrameBoundWithDictionary(
     "prefix: previous zstd history payload, shared phrase tail".len,

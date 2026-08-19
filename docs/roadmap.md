@@ -5117,6 +5117,11 @@ architecture blindly.
   subsequent writes, and treats repeated empty flushes as idempotent. Encoder
   state and helpers now live under `src/zstd/incremental/encoder/` instead of
   expanding the incremental directory as a flat list.
+- Extended the same resumable, idempotent flush contract to the LZ4 and framed
+  Snappy incremental encoders. LZ4 linked mode retains its 64 KiB history and
+  checksums across flushed blocks; Snappy publishes a complete checksummed data
+  chunk. Both drain through tiny output, resume input after `need_input`, and
+  remain finish/reset compatible.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

@@ -147,3 +147,58 @@ test "incremental frame encoder enforces pledged input size" {
     encoder.reset();
     try std.testing.expectError(error.SizeMismatch, encoder.step("abcde", &scratch));
 }
+
+test "incremental frame encoder flushes and resumes" {
+    const first = "first flushed Snappy chunk";
+    const second = "second Snappy chunk after flush";
+    var encoder = snappy.IncrementalFrameEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    var scratch: [5]u8 = undefined;
+
+    var first_offset: usize = 0;
+    var result: core.StepResult = undefined;
+    while (first_offset < first.len) {
+        result = try encoder.step(first[first_offset..], &scratch);
+        first_offset += result.progress.input_read;
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    encoder.flush();
+    while (true) {
+        result = try encoder.step("", &scratch);
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .need_input) break;
+        try std.testing.expectEqual(.need_output, result.status);
+    }
+    try std.testing.expectEqual(@as(usize, 0), encoder.snapshot().buffered_input);
+
+    var offset: usize = 0;
+    while (offset < second.len) {
+        result = try encoder.step(second[offset..], &scratch);
+        offset += result.progress.input_read;
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    encoder.flush();
+    while (true) {
+        result = try encoder.step("", &scratch);
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .need_input) break;
+    }
+    const flushed_len = frame.items.len;
+    encoder.flush();
+    result = try encoder.step("", &scratch);
+    try std.testing.expectEqual(.need_input, result.status);
+    try std.testing.expectEqual(flushed_len, frame.items.len);
+
+    try encoder.finish();
+    while (true) {
+        result = try encoder.step("", &scratch);
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    const decoded = try snappy.decodeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, first ++ second, decoded);
+    encoder.reset();
+}

@@ -1,4 +1,5 @@
 const std = @import("std");
+const core = @import("../../core.zig");
 const lz4 = @import("../../lz4.zig");
 
 test "LZ4 incremental frame encoder round trips split linked input" {
@@ -111,5 +112,67 @@ test "LZ4 incremental frame encoder resolves dictionary set" {
     var missing_options: lz4.NativeFrameOptions = .{ .include_content_size = false, .dictionary_id = 7 };
     try std.testing.expectError(error.NeedDictionary, lz4.NativeIncrementalFrameEncoder.initWithDictionarySet(std.testing.allocator, missing_options, set, 7));
     missing_options.dictionary_id = dictionary.id;
+    encoder.reset();
+}
+
+test "LZ4 incremental frame encoder flushes and resumes" {
+    const first = "first linked LZ4 flush segment repeated repeated";
+    const second = "second linked segment reuses repeated repeated";
+    var encoder = try lz4.NativeIncrementalFrameEncoder.init(std.testing.allocator, .{
+        .include_content_size = false,
+        .block_size_id = .max64kb,
+        .block_mode = .linked,
+        .block_checksum = true,
+        .content_checksum = true,
+    });
+    defer encoder.deinit();
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    var scratch: [7]u8 = undefined;
+
+    var first_offset: usize = 0;
+    var result: core.StepResult = undefined;
+    while (first_offset < first.len) {
+        result = try encoder.step(first[first_offset..], &scratch);
+        first_offset += result.progress.input_read;
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    encoder.flush();
+    while (true) {
+        result = try encoder.step("", &scratch);
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .need_input) break;
+        try std.testing.expectEqual(.need_output, result.status);
+    }
+    const first_block = (try lz4.inspectNativeFrameFirstBlock(frame.items)).?;
+    try std.testing.expect(first_block.payload_offset < frame.items.len);
+
+    var offset: usize = 0;
+    while (offset < second.len) {
+        result = try encoder.step(second[offset..], &scratch);
+        offset += result.progress.input_read;
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    encoder.flush();
+    while (true) {
+        result = try encoder.step("", &scratch);
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .need_input) break;
+    }
+    const flushed_len = frame.items.len;
+    encoder.flush();
+    result = try encoder.step("", &scratch);
+    try std.testing.expectEqual(.need_input, result.status);
+    try std.testing.expectEqual(flushed_len, frame.items.len);
+
+    encoder.finish();
+    while (true) {
+        result = try encoder.step("", &scratch);
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    const decoded = try lz4.decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, first ++ second, decoded);
     encoder.reset();
 }

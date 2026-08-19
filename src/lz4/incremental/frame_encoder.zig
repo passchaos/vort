@@ -15,6 +15,7 @@ pub fn Encoder(comptime Codec: type) type {
         pending_offset: usize = 0,
         hasher: std.hash.XxHash32 = std.hash.XxHash32.init(0),
         header_written: bool = false,
+        flush_requested: bool = false,
         finishing: bool = false,
         footer_written: bool = false,
         done: bool = false,
@@ -68,6 +69,7 @@ pub fn Encoder(comptime Codec: type) type {
             self.pending_offset = 0;
             self.hasher = std.hash.XxHash32.init(0);
             self.header_written = false;
+            self.flush_requested = false;
             self.finishing = false;
             self.footer_written = false;
             self.done = false;
@@ -77,13 +79,19 @@ pub fn Encoder(comptime Codec: type) type {
         }
         pub fn finish(self: *Self) void {
             self.finishing = true;
+            self.flush_requested = false;
+        }
+        /// Publish accepted input as a non-final LZ4 block, then resume the same
+        /// frame once `step` acknowledges the drained flush with `need_input`.
+        pub fn flush(self: *Self) void {
+            if (!self.finishing and !self.done) self.flush_requested = true;
         }
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
             if (self.done) {
                 if (input.len != 0) return error.TrailingData;
                 return .{ .status = .done };
             }
-            if (self.finishing and input.len != 0) return error.TrailingData;
+            if ((self.finishing or self.flush_requested) and input.len != 0) return error.TrailingData;
             var input_read: usize = 0;
             var output_written: usize = 0;
             while (true) {
@@ -116,16 +124,15 @@ pub fn Encoder(comptime Codec: type) type {
                         if (self.total_input > expected) return error.SizeMismatch;
                     }
                 }
-                if (self.block.items.len == Codec.maxBlockLen(self.options) or (self.finishing and self.block.items.len != 0)) {
-                    const prefix = if (self.history.items.len != 0) self.history.items else if (self.dictionary.len != 0) self.dictionary else &.{};
-                    try Codec.writeBlock(&self.block_encoder, &self.pending, self.block.items, prefix, self.options);
-                    if (self.options.block_mode == .linked) {
-                        self.history.clearRetainingCapacity();
-                        const keep = @min(self.block.items.len, 64 * 1024);
-                        try self.history.appendSlice(self.allocator, self.block.items[self.block.items.len - keep ..]);
-                    }
-                    self.block.clearRetainingCapacity();
+                if (self.block.items.len == Codec.maxBlockLen(self.options) or
+                    ((self.finishing or self.flush_requested) and self.block.items.len != 0))
+                {
+                    try self.writeNonFinalBlock();
                     continue;
+                }
+                if (self.flush_requested) {
+                    self.flush_requested = false;
+                    return result(input_read, output_written, .need_input);
                 }
                 if (self.finishing and !self.footer_written) {
                     if (self.expected_input_len) |expected| {
@@ -144,6 +151,32 @@ pub fn Encoder(comptime Codec: type) type {
         }
         fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
             return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = status };
+        }
+        fn writeNonFinalBlock(self: *Self) Error!void {
+            std.debug.assert(self.block.items.len != 0);
+            const prefix = if (self.history.items.len != 0) self.history.items else if (self.dictionary.len != 0) self.dictionary else &.{};
+            if (self.options.block_mode == .linked) try self.history.ensureTotalCapacity(self.allocator, 64 * 1024);
+            try Codec.writeBlock(&self.block_encoder, &self.pending, self.block.items, prefix, self.options);
+            if (self.options.block_mode == .linked) {
+                // Partial flush blocks must extend, rather than replace, linked
+                // history. Normal full 64 KiB+ blocks naturally replace the
+                // window, while repeated small flushes retain earlier bytes.
+                if (self.history.items.len == 0 and self.dictionary.len != 0) {
+                    const dictionary_keep = @min(self.dictionary.len, 64 * 1024);
+                    self.history.appendSliceAssumeCapacity(self.dictionary[self.dictionary.len - dictionary_keep ..]);
+                }
+                if (self.block.items.len >= 64 * 1024) {
+                    self.history.clearRetainingCapacity();
+                    self.history.appendSliceAssumeCapacity(self.block.items[self.block.items.len - 64 * 1024 ..]);
+                } else {
+                    const history_keep = @min(self.history.items.len, 64 * 1024 - self.block.items.len);
+                    const history_start = self.history.items.len - history_keep;
+                    std.mem.copyForwards(u8, self.history.items[0..history_keep], self.history.items[history_start..]);
+                    self.history.items.len = history_keep;
+                    self.history.appendSliceAssumeCapacity(self.block.items);
+                }
+            }
+            self.block.clearRetainingCapacity();
         }
     };
 }
