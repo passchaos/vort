@@ -5054,6 +5054,13 @@ architecture blindly.
   tiny caller output. Explicit finish emits the end mark/footer; content-size
   and Dictionary_ID modes are rejected because their headers require metadata
   before streaming input begins.
+- Added a no-content-size incremental native Zstd raw/RLE frame encoder under
+  `src/zstd/incremental/`. It retains one bounded block, delays the Zstd final
+  block bit until explicit finish, maintains the optional XXH64 content checksum
+  incrementally, and drains through tiny caller output. The streaming header
+  advertises a legal 128 KiB window without requiring total content size;
+  content-size, Dictionary_ID, and entropy-coded selection remain on complete-
+  input APIs.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

@@ -11,6 +11,8 @@ const sequence_fse_builder = @import("zstd/sequence/fse_builder.zig");
 const raw_frame = @import("zstd/frame/raw.zig");
 const known_size_frame = @import("zstd/frame/known_size.zig");
 const huffman_lookup = @import("zstd/literals/huffman_lookup.zig");
+const incremental_encoder = @import("zstd/incremental/frame_encoder.zig");
+const incremental_tests = @import("zstd/incremental/tests.zig");
 const huffman = @import("huffman.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
@@ -122,6 +124,44 @@ pub const NativeFrameOptions = struct {
 
 pub const FrameSelection = NativeFrameSelection;
 pub const AdvancedFrameOptions = NativeFrameOptions;
+
+const IncrementalEncoderCodec = struct {
+    pub const Error = zstd.Error;
+    pub const Options = zstd.NativeFrameOptions;
+    pub const max_block_len = std.compress.zstd.block_size_max;
+    pub fn validate(options: Options) zstd.Error!void {
+        if (options.include_content_size or options.dictionary_id != 0 or options.selection != .raw_or_rle) return error.InvalidBlockPlan;
+        _ = try nativeBlockSizeMax(options);
+    }
+    pub fn blockLen(options: Options) usize {
+        return options.block_size_max;
+    }
+    pub fn writeHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options) zstd.Error!void {
+        try out.appendSlice(allocator, &frame_magic);
+        const checksum_flag: u8 = if (options.content_checksum) 0x04 else 0;
+        try out.append(allocator, checksum_flag);
+        // The streaming header cannot know total content length. Advertise a
+        // window large enough for any legal Zstd block instead of deriving it
+        // from the placeholder content length used by the one-shot writer.
+        try out.append(allocator, (7 << 3)); // 128 KiB base window.
+    }
+    pub fn writeBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) zstd.Error!void {
+        try emitBlock(allocator, out, block, last);
+    }
+    pub fn writeChecksum(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options, hasher: *std.hash.XxHash64) zstd.Error!void {
+        if (!options.content_checksum) return;
+        var checksum: [4]u8 = undefined;
+        std.mem.writeInt(u32, &checksum, @truncate(hasher.final()), .little);
+        try out.appendSlice(allocator, &checksum);
+    }
+};
+
+const zstd = @This();
+pub const NativeIncrementalFrameEncoder = incremental_encoder.Encoder(IncrementalEncoderCodec);
+
+test {
+    _ = incremental_tests;
+}
 
 pub const NativeDictionary = struct {
     id: u32,

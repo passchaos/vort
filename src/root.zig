@@ -739,6 +739,7 @@ pub const ZstdNativeFrameEncodeResult = zstd.NativeFrameEncodeResult;
 pub const ZstdNativeFrameEncodeIntoResult = zstd.NativeFrameEncodeIntoResult;
 pub const ZstdNativeFrameEncodeScratchResult = zstd.NativeFrameEncodeScratchResult;
 pub const ZstdNativeFrameEncoder = zstd.NativeFrameEncoder;
+pub const ZstdNativeIncrementalFrameEncoder = zstd.NativeIncrementalFrameEncoder;
 pub const ZstdNativeFrameDecoder = zstd.NativeFrameDecoder;
 pub const ZstdNativeIncrementalFrameDecoder = zstd.NativeIncrementalFrameDecoder;
 pub const ZstdNativeDictionary = zstd.NativeDictionary;
