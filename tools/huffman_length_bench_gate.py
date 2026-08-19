@@ -8,11 +8,11 @@ import sys
 
 sys.dont_write_bytecode = True
 
-EXPECTED_COLUMNS = {"case", "mode", "symbols", "active", "max_bits", "iterations", "elapsed_ns", "builds_per_s", "checksum"}
+EXPECTED_COLUMNS = {"case", "mode", "symbols", "active", "max_bits", "iterations", "elapsed_ns", "builds_per_s", "checksum", "cost_checksum"}
 EXPECTED = {
     "literal-sparse-18": {"production", "full-width"},
     "literal-sparse-48": {"production", "full-width"},
-    "literal-dense": {"production"},
+    "literal-dense": {"production", "full-width"},
     "distance": {"production"},
     "code-length": {"production"},
 }
@@ -47,7 +47,14 @@ def main() -> int:
         if ratio <= 1.0:
             raise SystemExit(f"{case}: compact package merge not faster ({ratio:.3f})")
         ratios.append(ratio)
-    print(f"huffman length gate: sparse18={ratios[0]:.2f}x sparse48={ratios[1]:.2f}x rows={len(rows)}")
+    dense = by_key[("literal-dense", "production")]
+    dense_reference = by_key[("literal-dense", "full-width")]
+    if dense["cost_checksum"] != dense_reference["cost_checksum"]:
+        raise SystemExit("literal-dense: weighted cost differs from full-width reference")
+    dense_ratio = float(dense["builds_per_s"]) / float(dense_reference["builds_per_s"])
+    if dense_ratio <= 1.0:
+        raise SystemExit(f"literal-dense: back-reference package merge not faster ({dense_ratio:.3f})")
+    print(f"huffman length gate: sparse18={ratios[0]:.2f}x sparse48={ratios[1]:.2f}x dense={dense_ratio:.2f}x rows={len(rows)}")
     return 0
 
 

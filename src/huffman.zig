@@ -620,6 +620,8 @@ pub fn treeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4) [n
         return compactPackageMergeCodeLengths(n, freqs, max_bits, active, 32);
     if (active <= 64 and n > 64)
         return compactPackageMergeCodeLengths(n, freqs, max_bits, active, 64);
+    if (n > 64)
+        return backrefPackageMergeCodeLengths(n, freqs, max_bits, active);
     return packageMergeCodeLengths(n, freqs, max_bits, active);
 }
 
@@ -654,6 +656,128 @@ fn compactPackageMergeCodeLengths(
     for (symbols[0..active], compact_lengths[0..active]) |symbol, code_bits|
         lengths[symbol] = code_bits;
     return lengths;
+}
+
+fn backrefPackageMergeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4, active: usize) [n]u4 {
+    comptime std.debug.assert(n * max_code_bits <= std.math.maxInt(u16));
+    const invalid = std.math.maxInt(u16);
+    const Node = struct {
+        weight: u64,
+        left: u16 = invalid,
+        right: u16 = invalid,
+        symbol: u16 = invalid,
+        serial: u16,
+    };
+    const Less = struct {
+        nodes: []const Node,
+
+        fn less(context: @This(), lhs: u16, rhs: u16) bool {
+            const left = context.nodes[lhs];
+            const right = context.nodes[rhs];
+            if (left.weight != right.weight) return left.weight < right.weight;
+            // Equal-weight symbols/packages are interchangeable for weighted
+            // cost. A stable creation-order tie-break keeps output deterministic
+            // without reconstructing or storing a 286-symbol count vector.
+            return left.serial < right.serial;
+        }
+    };
+
+    // Each level creates fewer than `active` packages. Keeping one compact
+    // arena of back-references avoids copying an n-symbol multiplicity vector
+    // through every package and defers code-length recovery until selection.
+    var nodes: [n * max_code_bits]Node = undefined;
+    var node_len: usize = 0;
+    var leaves: [n]u16 = undefined;
+    for (freqs.*, 0..) |freq, symbol| {
+        if (freq == 0) continue;
+        const index: u16 = @intCast(node_len);
+        nodes[node_len] = .{ .weight = freq, .symbol = @intCast(symbol), .serial = index };
+        leaves[node_len] = index;
+        node_len += 1;
+    }
+    std.debug.assert(node_len == active);
+    std.mem.sort(u16, leaves[0..active], Less{ .nodes = nodes[0..node_len] }, Less.less);
+
+    var current: [2 * n]u16 = undefined;
+    var next: [n]u16 = undefined;
+    var current_len = active;
+    @memcpy(current[0..current_len], leaves[0..active]);
+
+    var depth: u4 = 1;
+    while (depth < max_bits) : (depth += 1) {
+        var pair_len: usize = 0;
+        var i: usize = 0;
+        while (i + 1 < current_len) : (i += 2) {
+            const left = current[i];
+            const right = current[i + 1];
+            const index: u16 = @intCast(node_len);
+            nodes[node_len] = .{
+                .weight = nodes[left].weight + nodes[right].weight,
+                .left = left,
+                .right = right,
+                .serial = index,
+            };
+            node_len += 1;
+            next[pair_len] = index;
+            pair_len += 1;
+        }
+        const less = Less{ .nodes = nodes[0..node_len] };
+        if (comptime builtin.mode == .Debug or builtin.mode == .ReleaseSafe)
+            std.debug.assert(nodeIndexesAreSorted(Node, next[0..pair_len], less));
+        current_len = mergeNodeIndexLists(Node, &current, leaves[0..active], next[0..pair_len], less);
+    }
+
+    const selected_count = 2 * active - 2;
+    std.debug.assert(selected_count <= current_len);
+    var lengths: [n]u4 = @splat(0);
+    for (current[0..selected_count]) |index|
+        accumulateBackrefLengths(Node, n, nodes[0..node_len], index, &lengths);
+    return lengths;
+}
+
+fn nodeIndexesAreSorted(comptime Node: type, indexes: []const u16, less: anytype) bool {
+    _ = Node;
+    for (indexes[1..], indexes[0..indexes.len -| 1]) |current, previous|
+        if (less.less(current, previous)) return false;
+    return true;
+}
+
+fn mergeNodeIndexLists(comptime Node: type, out: anytype, leaves: []const u16, packages: []const u16, less: anytype) usize {
+    _ = Node;
+    var out_len: usize = 0;
+    var leaf_i: usize = 0;
+    var package_i: usize = 0;
+    while (leaf_i < leaves.len or package_i < packages.len) {
+        const take_leaf = if (package_i >= packages.len)
+            true
+        else if (leaf_i >= leaves.len)
+            false
+        else
+            less.less(leaves[leaf_i], packages[package_i]);
+        out[out_len] = if (take_leaf) leaves[leaf_i] else packages[package_i];
+        out_len += 1;
+        if (take_leaf) leaf_i += 1 else package_i += 1;
+    }
+    return out_len;
+}
+
+fn accumulateBackrefLengths(comptime Node: type, comptime n: usize, nodes: []const Node, root: u16, lengths: *[n]u4) void {
+    const invalid = std.math.maxInt(u16);
+    var stack: [max_code_bits + 1]u16 = undefined;
+    var stack_len: usize = 1;
+    stack[0] = root;
+    while (stack_len != 0) {
+        stack_len -= 1;
+        const node = nodes[stack[stack_len]];
+        if (node.symbol != invalid) {
+            lengths[node.symbol] += 1;
+        } else {
+            std.debug.assert(stack_len + 2 <= stack.len);
+            stack[stack_len] = node.left;
+            stack[stack_len + 1] = node.right;
+            stack_len += 2;
+        }
+    }
 }
 
 fn packageMergeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4, active: usize) [n]u4 {
@@ -1455,6 +1579,22 @@ test "compact sparse package-merge matches full-width reference" {
             packageMergeCodeLengths(freqs.len, &freqs, 15, actual_active),
             treeCodeLengths(freqs.len, &freqs, 15),
         );
+    }
+}
+
+test "dense back-reference package-merge preserves optimal weighted cost" {
+    var freqs: [286]u32 = undefined;
+    for (0..24) |seed| {
+        for (&freqs, 0..) |*freq, symbol|
+            freq.* = @intCast(1 + ((symbol * 17 + seed * 31 + symbol * seed) % 251));
+        const production = treeCodeLengths(freqs.len, &freqs, 15);
+        const reference = treeCodeLengthsFullWidth(freqs.len, &freqs, 15);
+        try std.testing.expectEqual(
+            codeLengthCost(freqs.len, &freqs, &reference),
+            codeLengthCost(freqs.len, &freqs, &production),
+        );
+        try std.testing.expect(kraftCost(freqs.len, &production, 15) <= (@as(usize, 1) << 15));
+        try std.testing.expectEqual(production, treeCodeLengths(freqs.len, &freqs, 15));
     }
 }
 

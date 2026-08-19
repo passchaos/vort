@@ -5213,6 +5213,15 @@ architecture blindly.
   `run-huffman-length-bench-gate` compares both paths directly. Initial local
   ReleaseFast evidence improved 18- and 48-active-symbol literal trees by about
   `3.36x` and `3.39x` respectively with identical output checksums.
+- Dense 286-symbol package-merge now stores only weight plus compact child
+  back-references per package and accumulates code lengths from the selected
+  DAG, instead of carrying a 144-byte packed multiplicity vector through every
+  list merge. Stable creation-order tie-breaking may assign equal-frequency
+  symbols different but interchangeable optimal lengths; randomized tests and
+  the gate therefore require identical weighted cost, valid Kraft space, and
+  deterministic output rather than symbol-by-symbol identity. Current local
+  ReleaseFast evidence improves the dense literal alphabet by about `4.18x`
+  while retaining the full-width implementation as the reference.
 - Added a byte-progressive raw-DEFLATE stored-block decoder under
   `src/deflate/incremental/decoder/`. It preserves split header state, streams
   payload directly caller-to-caller through tiny output, enforces exact/maximum

@@ -13,6 +13,7 @@ const Row = struct {
     elapsed_ns: i96,
     builds_per_s: f64,
     checksum: u64,
+    cost_checksum: u64,
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -30,19 +31,20 @@ pub fn main(init: std.process.Init) !void {
         } else return error.UnknownArgument;
     }
 
-    var rows: [7]Row = undefined;
+    var rows: [8]Row = undefined;
     rows[0] = try measure(init, "literal-sparse-18", 286, sparseLiteralFreqs(18), 15, iterations, false);
     rows[1] = try measure(init, "literal-sparse-18", 286, sparseLiteralFreqs(18), 15, iterations, true);
     rows[2] = try measure(init, "literal-sparse-48", 286, sparseLiteralFreqs(48), 15, iterations, false);
     rows[3] = try measure(init, "literal-sparse-48", 286, sparseLiteralFreqs(48), 15, iterations, true);
     rows[4] = try measure(init, "literal-dense", 286, denseLiteralFreqs(), 15, iterations, false);
-    rows[5] = try measure(init, "distance", 30, distanceFreqs(), 15, iterations, false);
-    rows[6] = try measure(init, "code-length", 19, codeLengthFreqs(), 7, iterations, false);
+    rows[5] = try measure(init, "literal-dense", 286, denseLiteralFreqs(), 15, iterations, true);
+    rows[6] = try measure(init, "distance", 30, distanceFreqs(), 15, iterations, false);
+    rows[7] = try measure(init, "code-length", 19, codeLengthFreqs(), 7, iterations, false);
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.writeAll("case,mode,symbols,active,max_bits,iterations,elapsed_ns,builds_per_s,checksum\n");
-    for (rows) |row| try csv.writer.print("{s},{s},{d},{d},{d},{d},{d},{d:.2},{d}\n", .{ row.case, row.mode, row.symbols, row.active, row.max_bits, row.iterations, row.elapsed_ns, row.builds_per_s, row.checksum });
+    try csv.writer.writeAll("case,mode,symbols,active,max_bits,iterations,elapsed_ns,builds_per_s,checksum,cost_checksum\n");
+    for (rows) |row| try csv.writer.print("{s},{s},{d},{d},{d},{d},{d},{d:.2},{d},{d}\n", .{ row.case, row.mode, row.symbols, row.active, row.max_bits, row.iterations, row.elapsed_ns, row.builds_per_s, row.checksum, row.cost_checksum });
 
     var stdout_buffer: [2048]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
@@ -55,6 +57,7 @@ fn measure(init: std.process.Init, comptime name: []const u8, comptime n: usize,
     var active: usize = 0;
     for (freqs) |freq| active += @intFromBool(freq != 0);
     var checksum: u64 = 0;
+    var cost_checksum: u64 = 0;
     const start = std.Io.Clock.awake.now(init.io);
     for (0..iterations) |i| {
         const lengths = if (reference)
@@ -63,11 +66,12 @@ fn measure(init: std.process.Init, comptime name: []const u8, comptime n: usize,
             vort.huffman.treeCodeLengths(n, &freqs, max_bits);
         checksum +%= lengths[i % n];
         checksum +%= lengths[(i * 17 + 3) % n];
+        for (freqs, lengths) |frequency, code_bits| cost_checksum +%= @as(u64, frequency) * code_bits;
     }
     const elapsed = start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
     std.mem.doNotOptimizeAway(checksum);
     const seconds = @as(f64, @floatFromInt(elapsed)) / @as(f64, std.time.ns_per_s);
-    return .{ .case = name, .mode = if (reference) "full-width" else "production", .symbols = n, .active = active, .max_bits = max_bits, .iterations = iterations, .elapsed_ns = elapsed, .builds_per_s = @as(f64, @floatFromInt(iterations)) / seconds, .checksum = checksum };
+    return .{ .case = name, .mode = if (reference) "full-width" else "production", .symbols = n, .active = active, .max_bits = max_bits, .iterations = iterations, .elapsed_ns = elapsed, .builds_per_s = @as(f64, @floatFromInt(iterations)) / seconds, .checksum = checksum, .cost_checksum = cost_checksum };
 }
 
 fn sparseLiteralFreqs(comptime active: usize) [286]u32 {
