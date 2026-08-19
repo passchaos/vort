@@ -20,7 +20,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   raw-block and skippable-frame encode-into/decoded-size preflight, inspectable
   native frame/block/skippable headers plus Zstd sequence-mode summaries, zero-allocation native stream/block
   iterators, reusable raw-block decoder, and
-  caller-owned encode/decode-into/append plus reusable
+  caller-owned encode/decode-into/append, no-content-size incremental frame encode, plus reusable
   scratch encoder/decoder APIs,
   pure Zig native Zstandard frame encode/bounded/caller-owned decode with header
   options and decoded-size preflight, a

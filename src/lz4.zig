@@ -5,6 +5,8 @@ const dictionary_mod = @import("dictionary.zig");
 const block_format = @import("lz4/block_format.zig");
 const length = @import("lz4/length.zig");
 const literal_copy = @import("lz4/literal_copy.zig");
+const incremental_encoder = @import("lz4/incremental/frame_encoder.zig");
+const incremental_tests = @import("lz4/incremental/tests.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 
@@ -56,6 +58,62 @@ pub const NativeFrameOptions = struct {
     /// favor encode speed; the default keeps the deeper-ratio parser enabled.
     chain_depth: u8 = native_max_chain_depth,
 };
+
+const IncrementalEncoderCodec = struct {
+    pub const Error = lz4.Error;
+    pub const Options = lz4.NativeFrameOptions;
+    pub const EncoderState = lz4.BlockEncoder;
+    pub fn maxBlockLen(options: Options) usize {
+        return options.block_size_id.maxLen();
+    }
+    pub fn validate(options: Options) lz4.Error!void {
+        if (options.include_content_size or options.dictionary_id != null) return error.InvalidBlockPlan;
+        _ = try nativeChainDepth(options);
+    }
+    pub fn writeHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options) lz4.Error!void {
+        try out.appendSlice(allocator, &frame_magic);
+        const descriptor_start = out.items.len;
+        var flg: u8 = 0x40;
+        if (options.block_mode == .independent) flg |= 0x20;
+        if (options.block_checksum) flg |= 0x10;
+        if (options.content_checksum) flg |= 0x04;
+        try out.append(allocator, flg);
+        try out.append(allocator, @intFromEnum(options.block_size_id) << 4);
+        try out.append(allocator, descriptorChecksum(out.items[descriptor_start..]));
+    }
+    pub fn writeBlock(state: *EncoderState, out: *std.ArrayList(u8), block: []const u8, history: []const u8, options: Options) lz4.Error!void {
+        const allocator = state.allocator;
+        const header_start = out.items.len;
+        try out.appendNTimes(allocator, 0, 4);
+        const encoded_start = out.items.len;
+        const chain_depth = try nativeChainDepth(options);
+        const compressed_len = if (history.len == 0) try state.appendWithChainDepth(out, block, chain_depth) else try state.appendWithPrefixAndChainDepth(out, block, history, chain_depth);
+        if (compressed_len < block.len) {
+            std.mem.writeInt(u32, out.items[header_start..][0..4], @intCast(compressed_len), .little);
+            if (options.block_checksum) try emitBlockChecksum(allocator, out, out.items[encoded_start..][0..compressed_len]);
+        } else {
+            out.items.len = encoded_start;
+            std.mem.writeInt(u32, out.items[header_start..][0..4], 0x8000_0000 | @as(u32, @intCast(block.len)), .little);
+            try out.appendSlice(allocator, block);
+            if (options.block_checksum) try emitBlockChecksum(allocator, out, block);
+        }
+    }
+    pub fn writeFooter(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options, hasher: *std.hash.XxHash32) lz4.Error!void {
+        try out.appendSlice(allocator, &.{ 0, 0, 0, 0 });
+        if (options.content_checksum) {
+            var checksum: [4]u8 = undefined;
+            std.mem.writeInt(u32, &checksum, hasher.final(), .little);
+            try out.appendSlice(allocator, &checksum);
+        }
+    }
+};
+
+const lz4 = @This();
+pub const NativeIncrementalFrameEncoder = incremental_encoder.Encoder(IncrementalEncoderCodec);
+
+test {
+    _ = incremental_tests;
+}
 
 pub const NativeDictionary = struct {
     id: u32,

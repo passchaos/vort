@@ -223,6 +223,7 @@ pub const Lz4BlockMode = lz4.BlockMode;
 pub const Lz4BlockEncoder = lz4.BlockEncoder;
 pub const Lz4BlockDecoder = lz4.BlockDecoder;
 pub const Lz4NativeFrameEncoder = lz4.NativeFrameEncoder;
+pub const Lz4NativeIncrementalFrameEncoder = lz4.NativeIncrementalFrameEncoder;
 pub const Lz4NativeFrameDecoder = lz4.NativeFrameDecoder;
 pub const Lz4NativeIncrementalFrameDecoder = lz4.NativeIncrementalFrameDecoder;
 pub const Lz4NativeDictionary = lz4.NativeDictionary;

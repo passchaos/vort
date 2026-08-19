@@ -5047,6 +5047,13 @@ architecture blindly.
   selection, and drains encoded chunks through arbitrarily small caller output.
   Explicit finish, input limits, reset/reuse, snapshots, and multi-chunk round
   trips are covered beside the incremental decoder tests.
+- Added a no-content-size incremental native LZ4 frame encoder under
+  `src/lz4/incremental/`. It preserves linked or independent block policy, one
+  bounded frame block, 64 KiB linked history, block/content XXH32 checksums, and
+  reusable match-finder state while accepting split input and draining through
+  tiny caller output. Explicit finish emits the end mark/footer; content-size
+  and Dictionary_ID modes are rejected because their headers require metadata
+  before streaming input begins.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,
