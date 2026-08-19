@@ -4989,9 +4989,18 @@ fn parseSequenceModeSpec(block: []const u8, offset: *usize, sequence_count: usiz
     var literal_rle: ?SequenceSymbol = null;
     var offset_rle: ?SequenceSymbol = null;
     var match_rle: ?SequenceSymbol = null;
-    var literal_fse: SequenceFseTable = .{};
-    var offset_fse: SequenceFseTable = .{};
-    var match_fse: SequenceFseTable = .{};
+    // Only `len` and `accuracy_log` are observed for non-compressed modes. Do
+    // not zero three 4 KiB entry arrays before immediately overwriting the
+    // compressed ones; the active mode guards every entry access.
+    var literal_fse: SequenceFseTable = undefined;
+    literal_fse.len = 0;
+    literal_fse.accuracy_log = 0;
+    var offset_fse: SequenceFseTable = undefined;
+    offset_fse.len = 0;
+    offset_fse.accuracy_log = 0;
+    var match_fse: SequenceFseTable = undefined;
+    match_fse.len = 0;
+    match_fse.accuracy_log = 0;
 
     // Sequence table payloads are serialized in LL, OF, ML order. Each table's
     // mode decides whether the next bytes are a one-byte RLE symbol or a full

@@ -2250,6 +2250,16 @@ architecture blindly.
   the sorted reference, all 837 tests pass, and the 124-case lib-generated
   differential remains clean.
 
+- Removed three unconditional 4 KiB FSE-table clears from Zstd sequence-mode
+  parsing. Non-compressed modes observe only zero `len`/`accuracy_log`, while a
+  compressed mode overwrites every active entry before the mode-guarded decoder
+  can access it; the parser now initializes only that metadata instead of all
+  1,536 unused symbols per block. Ten alternating fixed-P-core ReleaseFast
+  rounds improve numbered JSON, mixed binary, huffman80k, and 512 KiB JSON by
+  about `17.8%/4.5%/2.0%/1.2%`; the retained gate reports roughly
+  `0.29x/0.35x/0.51x/0.29x` libzstd and raises conservative floors. All 837
+  tests and the 124-case lib-generated differential pass.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box
