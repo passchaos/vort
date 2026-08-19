@@ -2500,6 +2500,25 @@ pub fn build(b: *std.Build) void {
         &zstd_reference_bench_gate.step,
     );
 
+    const zstd_compat_probe_exe = b.addExecutable(.{
+        .name = "vort-zstd-compat-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/compat_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod_releasefast },
+            },
+        }),
+    });
+    const run_zstd_compat_probe = b.addRunArtifact(zstd_compat_probe_exe);
+    const zstd_compat_probe_step = b.step(
+        "run-zstd-compat-probe",
+        "Decode a broad system-libzstd frame matrix through Vort",
+    );
+    zstd_compat_probe_step.dependOn(&run_zstd_compat_probe.step);
+
     const run_native_library_bench_path_csv = b.addRunArtifact(native_library_bench_exe);
     run_native_library_bench_path_csv.addArgs(&.{
         "--iterations",

@@ -2270,6 +2270,14 @@ architecture blindly.
   1 KiB input by about 9.8%, while a large-only precheck gained about 1.8% at
   256 KiB but regressed tiny and 1 KiB rows sharply. Both were fully reverted.
 
+- Added a true system-libzstd compatibility probe under `tools/zstd/`, separate
+  from the native-writer probe. It dynamically loads libzstd only in the tool,
+  generates 160 frames across compression levels 1/3/9/19, four corpus shapes,
+  and sizes from empty through 512 KiB, then decodes every frame through Vort's
+  dependency-free public API and requires byte-exact output. All 160 currently
+  pass against libzstd 1.5.5. This closes a validation naming/coverage blind
+  spot without adding a runtime dependency to the production library.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box
