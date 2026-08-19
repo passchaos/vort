@@ -8,6 +8,8 @@ const png_ultrafast = @import("png_ultrafast.zig");
 const png_windowed_history =
     @import("deflate/png/windowed_history.zig");
 const semantic_rle258 = @import("deflate/semantic/rle258.zig");
+const incremental_stored_encoder = @import("deflate/incremental/stored_encoder.zig");
+const incremental_tests = @import("deflate/incremental/tests.zig");
 
 const png = @import("png.zig");
 const png_up_dominant = @import("png/up_dominant.zig");
@@ -37,6 +39,26 @@ pub const png_windowed_history_scratch_len =
     png_windowed_history.general_scratch_len;
 pub const png_windowed_rle258_history_scratch_len =
     png_windowed_history.scratch_len;
+
+const IncrementalStoredEncoderCodec = struct {
+    pub const Error = deflate.Error || std.mem.Allocator.Error;
+    pub const max_block_len = deflate.max_stored_block_len;
+
+    pub fn writeBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, final: bool) IncrementalStoredEncoderCodec.Error!void {
+        if (block.len > max_block_len) return error.InvalidBlockPlan;
+        var header: [5]u8 = undefined;
+        writeStoredHeader(final, @intCast(block.len), &header);
+        try out.appendSlice(allocator, &header);
+        try out.appendSlice(allocator, block);
+    }
+};
+
+const deflate = @This();
+pub const RawDeflateIncrementalStoredEncoder = incremental_stored_encoder.Encoder(IncrementalStoredEncoderCodec);
+
+test {
+    _ = incremental_tests;
+}
 
 pub const RawDeflateProbeResult = struct {
     ok: bool,

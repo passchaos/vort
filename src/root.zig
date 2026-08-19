@@ -1249,6 +1249,7 @@ pub const encodeRawFixedWithOptionsAlloc = deflate.encodeRawFixedWithOptionsAllo
 pub const encodeRawFixedWithOptionsAppend = deflate.encodeRawFixedWithOptionsAppend;
 pub const encodeRawFixedTokensAlloc = deflate.encodeRawFixedTokensAlloc;
 pub const RawDeflateEncoder = deflate.RawDeflateEncoder;
+pub const RawDeflateIncrementalStoredEncoder = deflate.RawDeflateIncrementalStoredEncoder;
 pub const RawDeflateDecoder = deflate.RawDeflateDecoder;
 pub const DeflateDecodeResult = deflate.DecodeResult;
 pub const DeflateOwnedDecodeResult = deflate.OwnedDecodeResult;

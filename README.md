@@ -672,6 +672,8 @@ defer zstd_incremental_encoder.deinit();
 // idempotent.
 // LZ4 and framed Snappy incremental encoders expose the same resumable flush
 // acknowledgement contract, as does the Brotli stored-stream encoder.
+// RawDeflateIncrementalStoredEncoder provides the same split-input/tiny-output
+// contract for RFC 1951 stored blocks, including pledged input size and flush.
 const zstd_dict_options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only };
 const zstd_dict_bound = try vort.zstdEncodedNativeFrameBoundWithDictionary(
     "prefix: previous zstd history payload, shared phrase tail".len,

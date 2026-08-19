@@ -5131,6 +5131,10 @@ architecture blindly.
   decode automatically at the known payload boundary, consume the boundary
   call's tiny output immediately, and receive deterministic short/long
   `SizeMismatch` errors without a separate finish call.
+- Added a modular raw-DEFLATE incremental stored-block encoder under
+  `src/deflate/incremental/`. It accepts split input, drains through tiny output,
+  emits resumable non-final flush blocks, supports pledged and maximum input
+  sizes, and writes the sole BFINAL block only at finish.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,
