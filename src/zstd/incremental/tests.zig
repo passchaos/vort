@@ -102,3 +102,12 @@ test "Zstd incremental frame encoder emits Dictionary ID metadata" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
 }
+
+test "Zstd incremental frame encoder resolves dictionary set" {
+    const dictionary = zstd.NativeDictionary.init(0x10203040, "dictionary-set metadata");
+    const set = try zstd.NativeDictionarySet.initChecked(&.{dictionary});
+    var encoder = try zstd.NativeIncrementalFrameEncoder.initWithDictionarySet(std.testing.allocator, .{ .include_content_size = false, .selection = .raw_or_rle, .dictionary_id = dictionary.id }, set, dictionary.id);
+    defer encoder.deinit();
+    try std.testing.expectError(error.NeedDictionary, zstd.NativeIncrementalFrameEncoder.initWithDictionarySet(std.testing.allocator, .{ .include_content_size = false, .selection = .raw_or_rle, .dictionary_id = 7 }, set, 7));
+    encoder.reset();
+}

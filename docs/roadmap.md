@@ -5087,6 +5087,9 @@ architecture blindly.
   history, these constructors carry and validate dictionary metadata without
   borrowing dictionary bytes; matching dictionary-aware decode APIs enforce the
   ID before returning the payload.
+- Added dictionary-set constructors for the incremental Zstd raw/RLE encoder,
+  including pledged-size mode. Dictionary_ID is resolved once at construction;
+  missing catalog entries return `NeedDictionary` before any frame output.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,
