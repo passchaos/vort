@@ -700,6 +700,8 @@ defer zstd_incremental_encoder.deinit();
 // validation over that raw decoder without allowing footer prefetch.
 // initWithDictionary validates split DICTID and seeds the raw 32 KiB history
 // from the caller-owned preset dictionary.
+// GzipIncrementalDecoder supports standard ten-byte single-member headers plus
+// streaming CRC-32/ISIZE; optional metadata is the next wrapper state slice.
 const zstd_dict_options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only };
 const zstd_dict_bound = try vort.zstdEncodedNativeFrameBoundWithDictionary(
     "prefix: previous zstd history payload, shared phrase tail".len,
