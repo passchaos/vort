@@ -2281,6 +2281,17 @@ architecture blindly.
   huffman80k, large JSON, mixed binary, and numbered JSON stay neutral or
   improve in the same matrix.
 
+- Added a four-stream bulk Huffman loop for the same 16 KiB+ zero-sequence
+  literal sections. Zstd defines each regenerated stream segment as
+  `ceil(literals / 4)`, so the decoder now advances streams at known output
+  boundaries and keeps full-width lookup guarantees inside each segment. This
+  removes the per-symbol `min(available, max_bits)` and stream-tail decision
+  while retaining the canonical decoder for the few trailing bits in each
+  stream. Ten fixed-CPU 500-iteration A/B rounds reduce `ascii64k` median time
+  from about `218.9 ms` to `181.3 ms` (`17.2%`); the libzstd floor rises from
+  `0.10x` to `0.13x`. Existing four-stream, checksum, malformed-tail, and
+  lib-generated compatibility coverage exercise the stream-boundary behavior.
+
 - Expanded the LZ4/liblz4 caller-owned matrix with a deterministic 256 KiB
   incompressible, literal-only block. This separates real bulk-copy throughput
   from the existing 1 KiB row's fixed call overhead and locks the one-literal,

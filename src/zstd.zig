@@ -4430,6 +4430,31 @@ fn copyHuffmanLiteralsFromSection(
     var output_index: usize = 0;
     var cursor = try initHuffmanLiteralCursor(block, section);
     const lookup = HuffmanLiteralLookup.build(huffman_tree);
+    if (section.sequence_count == 0 and
+        section.regenerated_size >= 16 * 1024 and
+        section.huffman_streams == .four and
+        literal_offset == 0 and
+        dest.len == section.regenerated_size)
+    {
+        const segment_len = (section.regenerated_size + 3) / 4;
+        var segment_start: usize = 0;
+        for (0..4) |stream_index| {
+            const segment_end = @min(section.regenerated_size, segment_start + segment_len);
+            while (segment_start < segment_end and cursor.reader.available() >= huffman_tree.max_bit_count) : (segment_start += 1) {
+                dest[segment_start] = try cursor.readFullWidthSymbol(huffman_tree.max_bit_count, &lookup);
+            }
+            while (segment_start < segment_end) : (segment_start += 1) {
+                dest[segment_start] = try readHuffmanLiteralSymbolFromCursorCold(&cursor, huffman_tree);
+            }
+            if (stream_index != 3) {
+                try cursor.reader.expectEnd();
+                cursor.stream_index += 1;
+                cursor.reader = try ReverseBitReader.init(section.huffman_streams.four[cursor.stream_index]);
+            }
+        }
+        try cursor.expectEnd();
+        return;
+    }
     while (decoded_index < end) {
         // Large literal-only sections spend almost every cycle in lookup hits.
         // Keep their rare stream-tail tree walk out of line without imposing
@@ -4562,6 +4587,22 @@ const HuffmanLiteralCursor = struct {
             }
         }
         return readHuffmanLiteralSymbolFromCursorCold(self, tree);
+    }
+
+    /// Decode a symbol while the caller guarantees a full-width prefix remains
+    /// in the current Huffman stream. Four-stream literal sections have known
+    /// regenerated segment lengths, so their bulk loops can keep stream-tail
+    /// handling outside this per-symbol path.
+    fn readFullWidthSymbol(
+        self: *HuffmanLiteralCursor,
+        width: u4,
+        lookup: *const HuffmanLiteralLookup,
+    ) Error!u8 {
+        const prefix = try self.reader.peekSmall(width);
+        const entry = lookup.lookup(prefix << @intCast(11 - width)) orelse
+            return error.CorruptFrame;
+        try self.reader.skip(entry.bit_count);
+        return entry.symbol;
     }
 };
 
