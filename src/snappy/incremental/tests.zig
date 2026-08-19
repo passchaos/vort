@@ -115,9 +115,21 @@ test "incremental frame encoder accepts split input and tiny output" {
 test "incremental frame encoder enforces input limit and finish" {
     var encoder = snappy.IncrementalFrameEncoder.initWithOptions(std.testing.allocator, .{ .max_input_len = 3 });
     defer encoder.deinit();
-    try std.testing.expectError(error.OutputLimitExceeded, encoder.step("four", &.{}));
+    var scratch: [64]u8 = undefined;
+    try std.testing.expectError(error.OutputLimitExceeded, encoder.step("four", &scratch));
     encoder.reset();
-    _ = try encoder.step("abc", &.{});
+    _ = try encoder.step("abc", &scratch);
     try encoder.finish();
-    try std.testing.expectError(error.TrailingData, encoder.step("x", &.{}));
+    try std.testing.expectError(error.TrailingData, encoder.step("x", &scratch));
+}
+
+test "incremental frame encoder enforces pledged input size" {
+    var encoder = snappy.IncrementalFrameEncoder.initExactSize(std.testing.allocator, .{}, 4);
+    defer encoder.deinit();
+    var scratch: [64]u8 = undefined;
+    _ = try encoder.step("abc", &scratch);
+    try encoder.finish();
+    try std.testing.expectError(error.SizeMismatch, encoder.step("", &scratch));
+    encoder.reset();
+    try std.testing.expectError(error.SizeMismatch, encoder.step("abcde", &scratch));
 }

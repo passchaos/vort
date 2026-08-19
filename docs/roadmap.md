@@ -5047,6 +5047,10 @@ architecture blindly.
   selection, and drains encoded chunks through arbitrarily small caller output.
   Explicit finish, input limits, reset/reuse, snapshots, and multi-chunk round
   trips are covered beside the incremental decoder tests.
+- Added `initExactSize` to the incremental Snappy encoder. Although framed
+  Snappy has no content-size header field, applications can pledge total input
+  size and receive `SizeMismatch` on underflow or overflow while retaining the
+  same split-input, chunking, and tiny-output behavior.
 - Added a no-content-size incremental native LZ4 frame encoder under
   `src/lz4/incremental/`. It preserves linked or independent block policy, one
   bounded frame block, 64 KiB linked history, block/content XXH32 checksums, and

@@ -17,6 +17,7 @@ pub fn Encoder(comptime BlockEncoder: type, comptime Codec: type) type {
         done: bool = false,
         total_input: usize = 0,
         total_output: usize = 0,
+        expected_input_len: ?usize = null,
 
         const Self = @This();
         pub const Error = Codec.Error;
@@ -29,6 +30,9 @@ pub fn Encoder(comptime BlockEncoder: type, comptime Codec: type) type {
         pub fn initWithOptions(allocator: std.mem.Allocator, options: Options) Self {
             return .{ .allocator = allocator, .options = options, .block_encoder = BlockEncoder.init(allocator) };
         }
+        pub fn initExactSize(allocator: std.mem.Allocator, options: Options, expected_input_len: usize) Self {
+            return .{ .allocator = allocator, .options = options, .block_encoder = BlockEncoder.init(allocator), .expected_input_len = expected_input_len };
+        }
         pub fn deinit(self: *Self) void {
             self.block_encoder.deinit();
             self.plain.deinit(self.allocator);
@@ -36,6 +40,7 @@ pub fn Encoder(comptime BlockEncoder: type, comptime Codec: type) type {
             self.* = undefined;
         }
         pub fn reset(self: *Self) void {
+            const expected_input_len = self.expected_input_len;
             self.plain.clearRetainingCapacity();
             self.pending.clearRetainingCapacity();
             self.pending_offset = 0;
@@ -44,6 +49,7 @@ pub fn Encoder(comptime BlockEncoder: type, comptime Codec: type) type {
             self.done = false;
             self.total_input = 0;
             self.total_output = 0;
+            self.expected_input_len = expected_input_len;
         }
         pub fn snapshot(self: *const Self) Snapshot {
             return .{
@@ -95,6 +101,9 @@ pub fn Encoder(comptime BlockEncoder: type, comptime Codec: type) type {
                     try self.plain.appendSlice(self.allocator, input[input_read..][0..n]);
                     input_read += n;
                     self.total_input = next_total;
+                    if (self.expected_input_len) |expected| {
+                        if (self.total_input > expected) return error.SizeMismatch;
+                    }
                 }
                 if (self.plain.items.len == Codec.max_chunk_len or (self.finishing and self.plain.items.len != 0)) {
                     try Codec.encodeChunk(&self.block_encoder, self.plain.items, &self.pending);
@@ -102,6 +111,9 @@ pub fn Encoder(comptime BlockEncoder: type, comptime Codec: type) type {
                     continue;
                 }
                 if (self.finishing) {
+                    if (self.expected_input_len) |expected| {
+                        if (self.total_input != expected) return error.SizeMismatch;
+                    }
                     self.done = true;
                     return result(input_read, output_written, .done);
                 }
