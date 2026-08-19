@@ -692,6 +692,8 @@ defer zstd_incremental_encoder.deinit();
 // decode reference path for RFC 1951 stored blocks and bounded hostile input.
 // RawDeflateIncrementalFixedLiteralDecoder adds resumable fixed-Huffman bit
 // decoding plus caller-owned 32 KiB history for split length/distance matches.
+// The same byte-progressive decoder switches between stored and fixed blocks
+// without losing bit-reservoir or history state.
 const zstd_dict_options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only };
 const zstd_dict_bound = try vort.zstdEncodedNativeFrameBoundWithDictionary(
     "prefix: previous zstd history payload, shared phrase tail".len,

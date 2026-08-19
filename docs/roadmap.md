@@ -5173,6 +5173,10 @@ architecture blindly.
   and tiny output without frame buffering, decodes split length/distance extra
   fields and overlapping copies through a caller-owned 32 KiB history ring, and
   enforces output limits/exact size before match execution.
+- Unified stored and fixed block execution in that byte-progressive decoder.
+  Stored LEN/NLEN and aligned payload state now share the same bit reservoir and
+  caller-owned history ring, enabling mixed block streams without handing
+  prefetched bytes between separate decoder objects.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

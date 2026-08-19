@@ -23,6 +23,9 @@ pub const Decoder = struct {
     match_len: usize = 0,
     match_remaining: usize = 0,
     match_distance: usize = 0,
+    stored_lengths: [4]u8 = undefined,
+    stored_length_received: usize = 0,
+    stored_remaining: usize = 0,
     input_finished: bool = false,
     total_input: usize = 0,
     total_output: usize = 0,
@@ -34,7 +37,7 @@ pub const Decoder = struct {
         max_output_len: usize = std.math.maxInt(usize),
         expected_output_len: ?usize = null,
     };
-    pub const Phase = enum { block_header, symbols, length_extra, distance_symbol, distance_extra, match_copy, done };
+    pub const Phase = enum { block_header, stored_lengths, stored_payload, symbols, length_extra, distance_symbol, distance_extra, match_copy, done };
 
     pub fn init() Decoder {
         return initWithOptions(.{});
@@ -77,8 +80,45 @@ pub const Decoder = struct {
                 const header = self.readBits(input, &input_read, 3) orelse return result(input_read, output_written, .need_input);
                 self.final_block = (header & 1) != 0;
                 const block_type = (header >> 1) & 0x3;
-                if (block_type != 1) return self.fail(.block_header, if (block_type == 3) error.InvalidDeflateBlockType else error.UnsupportedDeflateFeature);
-                self.phase = .symbols;
+                switch (block_type) {
+                    0 => {
+                        self.alignStoredHeader();
+                        self.phase = .stored_lengths;
+                    },
+                    1 => self.phase = .symbols,
+                    2 => return self.fail(.block_header, error.UnsupportedDeflateFeature),
+                    else => return self.fail(.block_header, error.InvalidDeflateBlockType),
+                }
+            },
+            .stored_lengths => {
+                while (self.stored_length_received < self.stored_lengths.len) {
+                    const byte = self.readBits(input, &input_read, 8) orelse return result(input_read, output_written, .need_input);
+                    self.stored_lengths[self.stored_length_received] = @intCast(byte);
+                    self.stored_length_received += 1;
+                }
+                const len = std.mem.readInt(u16, self.stored_lengths[0..2], .little);
+                const nlen = std.mem.readInt(u16, self.stored_lengths[2..4], .little);
+                if (nlen != ~len) return self.fail(.stored_lengths, error.StoredLengthMismatch);
+                if (self.total_output > self.options.max_output_len or len > self.options.max_output_len - self.total_output) return self.fail(.stored_lengths, error.OutputLimitExceeded);
+                if (self.options.expected_output_len) |expected| {
+                    if (self.total_output > expected or len > expected - self.total_output) return self.fail(.stored_lengths, error.SizeMismatch);
+                }
+                self.stored_remaining = len;
+                self.stored_length_received = 0;
+                self.phase = .stored_payload;
+                if (self.stored_remaining == 0) self.completeBlock();
+            },
+            .stored_payload => {
+                if (output_written == output.len) return result(input_read, output_written, .need_output);
+                if (input_read == input.len and self.bit_count == 0) return result(input_read, output_written, .need_input);
+                while (self.stored_remaining != 0 and output_written < output.len) {
+                    const byte = self.readBits(input, &input_read, 8) orelse return result(input_read, output_written, .need_input);
+                    output[output_written] = @intCast(byte);
+                    output_written += 1;
+                    try self.recordByte(@intCast(byte));
+                    self.stored_remaining -= 1;
+                }
+                if (self.stored_remaining == 0) self.completeBlock();
             },
             .symbols => {
                 if (output_written == output.len and output.len != 0) return result(input_read, output_written, .need_output);
@@ -186,6 +226,14 @@ pub const Decoder = struct {
             if (self.total_output > expected or self.match_len > expected - self.total_output) return self.fail(.match_copy, error.SizeMismatch);
         }
         self.match_remaining = self.match_len;
+    }
+    fn alignStoredHeader(self: *Decoder) void {
+        const drop: u6 = self.bit_count % 8;
+        self.bit_buffer >>= drop;
+        self.bit_count -= drop;
+    }
+    fn completeBlock(self: *Decoder) void {
+        self.phase = if (self.final_block) .done else .block_header;
     }
     fn readFixedDistanceSymbol(self: *Decoder, input: []const u8, input_read: *usize) ?usize {
         while (self.distance_code_bits < 5) {

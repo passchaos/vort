@@ -619,3 +619,41 @@ test "raw deflate incremental fixed decoder requires history for matches" {
     var output: [32]u8 = undefined;
     try std.testing.expectError(error.OutputTooSmall, decoder.step(matched, &output));
 }
+
+test "raw deflate incremental fixed decoder handles mixed stored blocks" {
+    const first = "fixed-prefix-fixed-prefix-fixed-prefix";
+    const second = "stored suffix after fixed block";
+    const fixed = try deflate.encodeRawFixedAlloc(std.testing.allocator, first);
+    defer std.testing.allocator.free(fixed);
+    const stored = try deflate.encodeRawStoredAlloc(std.testing.allocator, second);
+    defer std.testing.allocator.free(stored);
+    // Clear BFINAL on the fixed block; it ends on a byte boundary for this
+    // fixture, so the following stored header starts in the same next byte.
+    var mixed: std.ArrayList(u8) = .empty;
+    defer mixed.deinit(std.testing.allocator);
+    try mixed.appendSlice(std.testing.allocator, fixed);
+    mixed.items[0] &= 0xfe;
+    try mixed.appendSlice(std.testing.allocator, stored);
+
+    var history: [32 * 1024]u8 = undefined;
+    var decoder = try deflate.RawDeflateIncrementalFixedLiteralDecoder.initWithHistory(.{ .expected_output_len = first.len + second.len }, &history);
+    var output: [first.len + second.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (input_offset < mixed.items.len) {
+        const result = try decoder.step(mixed.items[input_offset .. input_offset + 1], output[output_offset..][0..@min(3, output.len - output_offset)]);
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+    }
+    while (output_offset < output.len) {
+        const result = try decoder.step("", output[output_offset..][0..@min(3, output.len - output_offset)]);
+        output_offset += result.progress.output_written;
+    }
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, first ++ second, &output);
+}
+
+test "raw deflate incremental mixed decoder validates stored lengths" {
+    var decoder = deflate.RawDeflateIncrementalFixedLiteralDecoder.init();
+    try std.testing.expectError(error.StoredLengthMismatch, decoder.step(&.{ 0x01, 1, 0, 0xff, 0xff }, &.{}));
+}
