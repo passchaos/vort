@@ -20,13 +20,18 @@ pub fn Encoder(comptime Codec: type) type {
         done: bool = false,
         total_input: usize = 0,
         total_output: usize = 0,
+        expected_input_len: ?usize = null,
 
         const Self = @This();
         pub const Error = Codec.Error;
 
         pub fn init(allocator: std.mem.Allocator, options: Codec.Options) Error!Self {
-            try Codec.validate(options);
+            try Codec.validate(options, null);
             return .{ .allocator = allocator, .options = options, .block_encoder = try Codec.EncoderState.init(allocator) };
+        }
+        pub fn initExactSize(allocator: std.mem.Allocator, options: Codec.Options, expected_input_len: usize) Error!Self {
+            try Codec.validate(options, expected_input_len);
+            return .{ .allocator = allocator, .options = options, .block_encoder = try Codec.EncoderState.init(allocator), .expected_input_len = expected_input_len };
         }
         pub fn deinit(self: *Self) void {
             self.block_encoder.deinit();
@@ -36,6 +41,7 @@ pub fn Encoder(comptime Codec: type) type {
             self.* = undefined;
         }
         pub fn reset(self: *Self) void {
+            const expected_input_len = self.expected_input_len;
             self.block.clearRetainingCapacity();
             self.history.clearRetainingCapacity();
             self.pending.clearRetainingCapacity();
@@ -47,6 +53,7 @@ pub fn Encoder(comptime Codec: type) type {
             self.done = false;
             self.total_input = 0;
             self.total_output = 0;
+            self.expected_input_len = expected_input_len;
         }
         pub fn finish(self: *Self) void {
             self.finishing = true;
@@ -73,7 +80,7 @@ pub fn Encoder(comptime Codec: type) type {
                     if (output_written == output.len and output.len != 0) return result(input_read, output_written, .need_output);
                 }
                 if (!self.header_written) {
-                    try Codec.writeHeader(self.allocator, &self.pending, self.options);
+                    try Codec.writeHeader(self.allocator, &self.pending, self.options, self.expected_input_len);
                     self.header_written = true;
                     continue;
                 }
@@ -85,6 +92,9 @@ pub fn Encoder(comptime Codec: type) type {
                     if (self.options.content_checksum) self.hasher.update(bytes);
                     input_read += n;
                     self.total_input += n;
+                    if (self.expected_input_len) |expected| {
+                        if (self.total_input > expected) return error.SizeMismatch;
+                    }
                 }
                 if (self.block.items.len == Codec.maxBlockLen(self.options) or (self.finishing and self.block.items.len != 0)) {
                     const prefix = if (self.options.block_mode == .linked) self.history.items else &.{};
@@ -98,6 +108,9 @@ pub fn Encoder(comptime Codec: type) type {
                     continue;
                 }
                 if (self.finishing and !self.footer_written) {
+                    if (self.expected_input_len) |expected| {
+                        if (self.total_input != expected) return error.SizeMismatch;
+                    }
                     try Codec.writeFooter(self.allocator, &self.pending, self.options, &self.hasher);
                     self.footer_written = true;
                     continue;

@@ -5054,6 +5054,10 @@ architecture blindly.
   tiny caller output. Explicit finish emits the end mark/footer; content-size
   and Dictionary_ID modes are rejected because their headers require metadata
   before streaming input begins.
+- Extended the incremental LZ4 encoder with `initExactSize`. Callers that know
+  the total input length can emit the content-size header while retaining split
+  input and tiny-output behavior; underflow or overflow against the pledged
+  length returns `SizeMismatch`.
 - Added a no-content-size incremental native Zstd raw/RLE frame encoder under
   `src/zstd/incremental/`. It retains one bounded block, delays the Zstd final
   block bit until explicit finish, maintains the optional XXH64 content checksum

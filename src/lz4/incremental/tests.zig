@@ -36,3 +36,43 @@ test "LZ4 incremental frame encoder round trips split linked input" {
 test "LZ4 incremental frame encoder requires unknown content size" {
     try std.testing.expectError(error.InvalidBlockPlan, lz4.NativeIncrementalFrameEncoder.init(std.testing.allocator, .{}));
 }
+
+test "LZ4 incremental frame encoder supports pledged content size" {
+    const payload = "pledged LZ4 content size" ** 64;
+    var encoder = try lz4.NativeIncrementalFrameEncoder.initExactSize(std.testing.allocator, .{ .include_content_size = true }, payload.len);
+    defer encoder.deinit();
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    var scratch: [37]u8 = undefined;
+    var input_offset: usize = 0;
+    while (input_offset < payload.len) {
+        const result = try encoder.step(payload[input_offset..], &scratch);
+        input_offset += result.progress.input_read;
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    const header = try lz4.inspectNativeFrameHeader(frame.items);
+    try std.testing.expectEqual(@as(?u64, payload.len), header.expected_content_size);
+
+    var mismatch = try lz4.NativeIncrementalFrameEncoder.initExactSize(std.testing.allocator, .{ .include_content_size = true }, payload.len + 1);
+    defer mismatch.deinit();
+    input_offset = 0;
+    while (input_offset < payload.len) {
+        const result = try mismatch.step(payload[input_offset..], &scratch);
+        input_offset += result.progress.input_read;
+    }
+    mismatch.finish();
+    while (true) {
+        if (mismatch.step("", &scratch)) |result| {
+            try std.testing.expect(result.status == .need_output);
+        } else |err| {
+            try std.testing.expectEqual(error.SizeMismatch, err);
+            break;
+        }
+    }
+}

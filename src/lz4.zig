@@ -66,19 +66,25 @@ const IncrementalEncoderCodec = struct {
     pub fn maxBlockLen(options: Options) usize {
         return options.block_size_id.maxLen();
     }
-    pub fn validate(options: Options) lz4.Error!void {
-        if (options.include_content_size or options.dictionary_id != null) return error.InvalidBlockPlan;
+    pub fn validate(options: Options, expected_input_len: ?usize) lz4.Error!void {
+        if (options.include_content_size != (expected_input_len != null) or options.dictionary_id != null) return error.InvalidBlockPlan;
         _ = try nativeChainDepth(options);
     }
-    pub fn writeHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options) lz4.Error!void {
+    pub fn writeHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options, expected_input_len: ?usize) lz4.Error!void {
         try out.appendSlice(allocator, &frame_magic);
         const descriptor_start = out.items.len;
         var flg: u8 = 0x40;
         if (options.block_mode == .independent) flg |= 0x20;
         if (options.block_checksum) flg |= 0x10;
+        if (expected_input_len != null) flg |= 0x08;
         if (options.content_checksum) flg |= 0x04;
         try out.append(allocator, flg);
         try out.append(allocator, @intFromEnum(options.block_size_id) << 4);
+        if (expected_input_len) |len| {
+            var content_size: [8]u8 = undefined;
+            std.mem.writeInt(u64, &content_size, try checkedUsizeToU64(len), .little);
+            try out.appendSlice(allocator, &content_size);
+        }
         try out.append(allocator, descriptorChecksum(out.items[descriptor_start..]));
     }
     pub fn writeBlock(state: *EncoderState, out: *std.ArrayList(u8), block: []const u8, history: []const u8, options: Options) lz4.Error!void {
