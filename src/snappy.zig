@@ -4,6 +4,7 @@ const checksum = @import("checksum.zig");
 const block_decode = @import("snappy/block_decode.zig");
 const frame_format = @import("snappy/frame.zig");
 const incremental_frame = @import("snappy/incremental/frame_decoder.zig");
+const incremental_encoder = @import("snappy/incremental/frame_encoder.zig");
 const incremental_tests = @import("snappy/incremental/tests.zig");
 const match_copy = @import("snappy/match_copy.zig");
 
@@ -78,6 +79,25 @@ const IncrementalFrameCodec = struct {
 
 const snappy = @This();
 pub const IncrementalFrameDecoder = incremental_frame.Decoder(IncrementalFrameCodec);
+
+const IncrementalEncoderCodec = struct {
+    pub const Error = snappy.Error;
+    pub const max_chunk_len = snappy.max_uncompressed_chunk_len;
+    pub fn encodeChunk(encoder: *snappy.Encoder, plain: []const u8, out: *std.ArrayList(u8)) snappy.Error!void {
+        encoder.block_scratch.clearRetainingCapacity();
+        try encoder.encodeBlockAppend(&encoder.block_scratch, plain);
+        if (encoder.block_scratch.items.len < plain.len) {
+            try writeCheckedChunk(encoder.allocator, out, compressed_data_chunk_type, plain, encoder.block_scratch.items);
+        } else {
+            try writeCheckedChunk(encoder.allocator, out, uncompressed_data_chunk_type, plain, plain);
+        }
+    }
+    pub fn writeIdentifier(allocator: std.mem.Allocator, out: *std.ArrayList(u8)) snappy.Error!void {
+        try writeChunk(allocator, out, stream_identifier_chunk_type, stream_identifier_payload);
+    }
+};
+
+pub const IncrementalFrameEncoder = incremental_encoder.Encoder(Encoder, IncrementalEncoderCodec);
 
 test {
     _ = incremental_tests;

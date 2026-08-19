@@ -5040,6 +5040,13 @@ architecture blindly.
   chunk and total-output limits, snapshots, and shared streaming diagnostics.
   The implementation lives under `src/snappy/incremental/` behind a narrow codec
   interface instead of expanding the already-large Snappy facade.
+- Added the matching incremental Snappy framed encoder under
+  `src/snappy/incremental/frame_encoder.zig`. It accepts arbitrary input
+  fragments, emits the stream identifier once, accumulates at most one 64 KiB
+  format chunk, reuses the existing greedy block encoder and compressed-vs-raw
+  selection, and drains encoded chunks through arbitrarily small caller output.
+  Explicit finish, input limits, reset/reuse, snapshots, and multi-chunk round
+  trips are covered beside the incremental decoder tests.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

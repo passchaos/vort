@@ -83,3 +83,41 @@ test "incremental frame decoder drains uncompressed chunks" {
     try std.testing.expectEqual(core.StepResult.Status.done, second.status);
     try std.testing.expectEqualSlices(u8, "raw", &output);
 }
+
+test "incremental frame encoder accepts split input and tiny output" {
+    const payload = ("incremental encode payload " ** 3000) ++ "tail";
+    var encoder = snappy.IncrementalFrameEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var input_offset: usize = 0;
+    var output_buf: [11]u8 = undefined;
+    while (input_offset < payload.len) {
+        const end = @min(payload.len, input_offset + 137);
+        const result = try encoder.step(payload[input_offset..end], &output_buf);
+        input_offset += result.progress.input_read;
+        try encoded.appendSlice(std.testing.allocator, output_buf[0..result.progress.output_written]);
+    }
+    try encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &output_buf);
+        try encoded.appendSlice(std.testing.allocator, output_buf[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    const decoded = try snappy.decodeFrameAlloc(std.testing.allocator, encoded.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expectEqual(payload.len, encoder.snapshot().input_read);
+    encoder.reset();
+    try std.testing.expectEqual(@as(usize, 0), encoder.snapshot().input_read);
+}
+
+test "incremental frame encoder enforces input limit and finish" {
+    var encoder = snappy.IncrementalFrameEncoder.initWithOptions(std.testing.allocator, .{ .max_input_len = 3 });
+    defer encoder.deinit();
+    try std.testing.expectError(error.OutputLimitExceeded, encoder.step("four", &.{}));
+    encoder.reset();
+    _ = try encoder.step("abc", &.{});
+    try encoder.finish();
+    try std.testing.expectError(error.TrailingData, encoder.step("x", &.{}));
+}
