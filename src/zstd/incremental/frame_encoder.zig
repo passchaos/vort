@@ -18,12 +18,17 @@ pub fn Encoder(comptime Codec: type) type {
         done: bool = false,
         total_input: usize = 0,
         total_output: usize = 0,
+        expected_input_len: ?usize = null,
 
         const Self = @This();
         pub const Error = Codec.Error;
         pub fn init(allocator: std.mem.Allocator, options: Codec.Options) Error!Self {
-            try Codec.validate(options);
+            try Codec.validate(options, null);
             return .{ .allocator = allocator, .options = options };
+        }
+        pub fn initExactSize(allocator: std.mem.Allocator, options: Codec.Options, expected_input_len: usize) Error!Self {
+            try Codec.validate(options, expected_input_len);
+            return .{ .allocator = allocator, .options = options, .expected_input_len = expected_input_len };
         }
         pub fn deinit(self: *Self) void {
             self.block.deinit(self.allocator);
@@ -31,6 +36,7 @@ pub fn Encoder(comptime Codec: type) type {
             self.* = undefined;
         }
         pub fn reset(self: *Self) void {
+            const expected_input_len = self.expected_input_len;
             self.block.clearRetainingCapacity();
             self.pending.clearRetainingCapacity();
             self.pending_offset = 0;
@@ -41,6 +47,7 @@ pub fn Encoder(comptime Codec: type) type {
             self.done = false;
             self.total_input = 0;
             self.total_output = 0;
+            self.expected_input_len = expected_input_len;
         }
         pub fn finish(self: *Self) void {
             self.finishing = true;
@@ -67,7 +74,7 @@ pub fn Encoder(comptime Codec: type) type {
                     if (output_written == output.len and output.len != 0) return result(input_read, output_written, .need_output);
                 }
                 if (!self.header_written) {
-                    try Codec.writeHeader(self.allocator, &self.pending, self.options);
+                    try Codec.writeHeader(self.allocator, &self.pending, self.options, self.expected_input_len);
                     self.header_written = true;
                     continue;
                 }
@@ -79,6 +86,9 @@ pub fn Encoder(comptime Codec: type) type {
                     if (self.options.content_checksum) self.hasher.update(bytes);
                     input_read += n;
                     self.total_input += n;
+                    if (self.expected_input_len) |expected| {
+                        if (self.total_input > expected) return error.SizeMismatch;
+                    }
                 }
                 // A full block can be emitted only when another input byte proves
                 // it is not final; otherwise retain it until finish.
@@ -88,6 +98,9 @@ pub fn Encoder(comptime Codec: type) type {
                     continue;
                 }
                 if (self.finishing and !self.final_written) {
+                    if (self.expected_input_len) |expected| {
+                        if (self.total_input != expected) return error.SizeMismatch;
+                    }
                     try Codec.writeBlock(self.allocator, &self.pending, self.block.items, true);
                     self.block.clearRetainingCapacity();
                     try Codec.writeChecksum(self.allocator, &self.pending, self.options, &self.hasher);

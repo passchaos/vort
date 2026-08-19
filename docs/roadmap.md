@@ -5065,6 +5065,10 @@ architecture blindly.
   advertises a legal 128 KiB window without requiring total content size;
   content-size, Dictionary_ID, and entropy-coded selection remain on complete-
   input APIs.
+- Extended the incremental Zstd encoder with `initExactSize`, using the normal
+  shortest single-segment content-size header when the caller pledges total
+  input length. Split input and tiny-output behavior remain unchanged; pledged
+  length underflow or overflow returns `SizeMismatch`.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

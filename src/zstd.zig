@@ -129,14 +129,15 @@ const IncrementalEncoderCodec = struct {
     pub const Error = zstd.Error;
     pub const Options = zstd.NativeFrameOptions;
     pub const max_block_len = std.compress.zstd.block_size_max;
-    pub fn validate(options: Options) zstd.Error!void {
-        if (options.include_content_size or options.dictionary_id != 0 or options.selection != .raw_or_rle) return error.InvalidBlockPlan;
+    pub fn validate(options: Options, expected_input_len: ?usize) zstd.Error!void {
+        if (options.include_content_size != (expected_input_len != null) or options.dictionary_id != 0 or options.selection != .raw_or_rle) return error.InvalidBlockPlan;
         _ = try nativeBlockSizeMax(options);
     }
     pub fn blockLen(options: Options) usize {
         return options.block_size_max;
     }
-    pub fn writeHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options) zstd.Error!void {
+    pub fn writeHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options, expected_input_len: ?usize) zstd.Error!void {
+        if (expected_input_len) |len| return emitFrameHeader(allocator, out, try checkedUsizeToU64(len), options);
         try out.appendSlice(allocator, &frame_magic);
         const checksum_flag: u8 = if (options.content_checksum) 0x04 else 0;
         try out.append(allocator, checksum_flag);

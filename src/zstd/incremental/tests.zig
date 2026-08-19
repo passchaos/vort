@@ -35,3 +35,43 @@ test "Zstd incremental frame encoder round trips split raw RLE input" {
 test "Zstd incremental frame encoder requires raw no-size mode" {
     try std.testing.expectError(error.InvalidBlockPlan, zstd.NativeIncrementalFrameEncoder.init(std.testing.allocator, .{}));
 }
+
+test "Zstd incremental frame encoder supports pledged content size" {
+    const payload = "pledged Zstd content size" ** 80;
+    var encoder = try zstd.NativeIncrementalFrameEncoder.initExactSize(std.testing.allocator, .{ .include_content_size = true, .selection = .raw_or_rle }, payload.len);
+    defer encoder.deinit();
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    var scratch: [41]u8 = undefined;
+    var input_offset: usize = 0;
+    while (input_offset < payload.len) {
+        const result = try encoder.step(payload[input_offset..], &scratch);
+        input_offset += result.progress.input_read;
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    const header = try zstd.inspectNativeFrameHeader(frame.items);
+    try std.testing.expectEqual(@as(?u64, payload.len), header.content_size);
+
+    var mismatch = try zstd.NativeIncrementalFrameEncoder.initExactSize(std.testing.allocator, .{ .include_content_size = true, .selection = .raw_or_rle }, payload.len + 1);
+    defer mismatch.deinit();
+    input_offset = 0;
+    while (input_offset < payload.len) {
+        const result = try mismatch.step(payload[input_offset..], &scratch);
+        input_offset += result.progress.input_read;
+    }
+    mismatch.finish();
+    while (true) {
+        if (mismatch.step("", &scratch)) |result| {
+            try std.testing.expect(result.status == .need_output);
+        } else |err| {
+            try std.testing.expectEqual(error.SizeMismatch, err);
+            break;
+        }
+    }
+}
