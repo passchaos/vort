@@ -5179,8 +5179,10 @@ architecture blindly.
   prefetched bytes between separate decoder objects.
 - Began byte-progressive dynamic-Huffman parsing in the same state machine.
   HLIT/HDIST/HCLEN and the permuted code-length alphabet survive arbitrary input
-  splits, validate RFC bounds/Kraft oversubscription, and stop explicitly before
-  repeat-code expansion rather than falling back to whole-frame buffering.
+  splits and validate RFC bounds/Kraft oversubscription. Code-length Huffman
+  symbols and repeat codes 16/17/18 now build the complete literal/distance
+  length arrays with persistent extra-bit state, validate EOB/table shapes, and
+  stop explicitly at dynamic payload execution rather than buffering the frame.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

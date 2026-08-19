@@ -665,7 +665,7 @@ test "raw deflate incremental decoder parses split dynamic prefix" {
     var decoder = deflate.RawDeflateIncrementalFixedLiteralDecoder.init();
     var offset: usize = 0;
     while (offset < encoded.len) {
-        if (decoder.diagnostics().phase_name.len != 0 and std.mem.eql(u8, decoder.diagnostics().phase_name, "dynamic_lengths")) break;
+        if (decoder.diagnostics().phase_name.len != 0 and std.mem.eql(u8, decoder.diagnostics().phase_name, "dynamic_ready")) break;
         if (decoder.step(encoded[offset .. offset + 1], &.{})) |result| {
             offset += result.progress.input_read;
         } else |err| {
@@ -673,7 +673,7 @@ test "raw deflate incremental decoder parses split dynamic prefix" {
             break;
         }
     }
-    try std.testing.expectEqualStrings("dynamic_lengths", decoder.diagnostics().phase_name);
+    try std.testing.expectEqualStrings("dynamic_ready", decoder.diagnostics().phase_name);
     try std.testing.expectError(error.UnsupportedDeflateFeature, decoder.step("", &.{}));
 }
 
@@ -688,4 +688,21 @@ test "raw deflate incremental decoder validates dynamic counts" {
     var truncated = deflate.RawDeflateIncrementalFixedLiteralDecoder.init();
     _ = try truncated.step(dynamic[0..2], &.{});
     try std.testing.expectError(error.TruncatedFrame, truncated.finish());
+}
+
+test "raw deflate incremental decoder expands dynamic repeat codes" {
+    const payload = ("aaaaabbbbbcccccdddddeeeee\n" ** 100);
+    const encoded = try deflate.encodeRawDynamicWithOptionsAlloc(std.testing.allocator, payload, deflate.optionsForLevel(.default));
+    defer std.testing.allocator.free(encoded);
+    var decoder = deflate.RawDeflateIncrementalFixedLiteralDecoder.init();
+    var offset: usize = 0;
+    while (offset < encoded.len) {
+        if (decoder.step(encoded[offset .. offset + 1], &.{})) |result| {
+            offset += result.progress.input_read;
+        } else |err| {
+            try std.testing.expectEqual(error.UnsupportedDeflateFeature, err);
+            break;
+        }
+    }
+    try std.testing.expectEqualStrings("dynamic_ready", decoder.diagnostics().phase_name);
 }

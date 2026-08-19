@@ -31,6 +31,13 @@ pub const Decoder = struct {
     dynamic_hclen: usize = 0,
     dynamic_code_length_index: usize = 0,
     dynamic_code_lengths: [19]u4 = @splat(0),
+    dynamic_literal_lengths: [286]u4 = @splat(0),
+    dynamic_distance_lengths: [30]u4 = @splat(0),
+    dynamic_length_pos: usize = 0,
+    dynamic_previous_length: u4 = 0,
+    dynamic_repeat_symbol: u5 = 0,
+    dynamic_code: u16 = 0,
+    dynamic_code_bits: u4 = 0,
     input_finished: bool = false,
     total_input: usize = 0,
     total_output: usize = 0,
@@ -42,7 +49,7 @@ pub const Decoder = struct {
         max_output_len: usize = std.math.maxInt(usize),
         expected_output_len: ?usize = null,
     };
-    pub const Phase = enum { block_header, stored_lengths, stored_payload, dynamic_counts, dynamic_code_lengths, dynamic_lengths, symbols, length_extra, distance_symbol, distance_extra, match_copy, done };
+    pub const Phase = enum { block_header, stored_lengths, stored_payload, dynamic_counts, dynamic_code_lengths, dynamic_lengths, dynamic_repeat, dynamic_ready, symbols, length_extra, distance_symbol, distance_extra, match_copy, done };
 
     pub fn init() Decoder {
         return initWithOptions(.{});
@@ -142,11 +149,62 @@ pub const Decoder = struct {
                     self.dynamic_code_length_index += 1;
                 }
                 if (!validCodeLengthAlphabet(self.dynamic_code_lengths)) return self.fail(.dynamic_code_lengths, error.InvalidDynamicBlockHeader);
-                // The prefix is now fully validated and retained. Repeat-code
-                // expansion into literal/distance tables is the next state slice.
+                self.dynamic_literal_lengths = @splat(0);
+                self.dynamic_distance_lengths = @splat(0);
+                self.dynamic_length_pos = 0;
+                self.dynamic_previous_length = 0;
                 self.phase = .dynamic_lengths;
             },
-            .dynamic_lengths => return self.fail(.dynamic_lengths, error.UnsupportedDeflateFeature),
+            .dynamic_lengths => {
+                const total = self.dynamic_hlit + self.dynamic_hdist;
+                if (self.dynamic_length_pos == total) {
+                    if (self.dynamic_literal_lengths[256] == 0) return self.fail(.dynamic_lengths, error.InvalidDynamicBlockHeader);
+                    if (!validDynamicAlphabet(self.dynamic_literal_lengths[0..self.dynamic_hlit]) or
+                        !validDynamicAlphabet(self.dynamic_distance_lengths[0..self.dynamic_hdist]))
+                        return self.fail(.dynamic_lengths, error.InvalidDynamicBlockHeader);
+                    self.phase = .dynamic_ready;
+                    continue;
+                }
+                const symbol = (try self.readCodeLengthSymbol(input, &input_read)) orelse return result(input_read, output_written, .need_input);
+                switch (symbol) {
+                    0...15 => {
+                        self.setDynamicLength(@intCast(symbol));
+                        self.dynamic_previous_length = @intCast(symbol);
+                        self.dynamic_length_pos += 1;
+                    },
+                    16...18 => {
+                        if (symbol == 16 and self.dynamic_length_pos == 0) return self.fail(.dynamic_lengths, error.InvalidDynamicBlockHeader);
+                        self.dynamic_repeat_symbol = @intCast(symbol);
+                        self.phase = .dynamic_repeat;
+                    },
+                    else => return self.fail(.dynamic_lengths, error.InvalidDynamicBlockHeader),
+                }
+            },
+            .dynamic_repeat => {
+                const extra_bits: u6 = switch (self.dynamic_repeat_symbol) {
+                    16 => 2,
+                    17 => 3,
+                    18 => 7,
+                    else => unreachable,
+                };
+                const extra = self.readBits(input, &input_read, extra_bits) orelse return result(input_read, output_written, .need_input);
+                const repeat_base: usize = switch (self.dynamic_repeat_symbol) {
+                    16, 17 => 3,
+                    18 => 11,
+                    else => unreachable,
+                };
+                const count: usize = extra + repeat_base;
+                const total = self.dynamic_hlit + self.dynamic_hdist;
+                if (count > total - self.dynamic_length_pos) return self.fail(.dynamic_repeat, error.InvalidDynamicBlockHeader);
+                const value: u4 = if (self.dynamic_repeat_symbol == 16) self.dynamic_previous_length else 0;
+                for (0..count) |_| {
+                    self.setDynamicLength(value);
+                    self.dynamic_length_pos += 1;
+                }
+                self.dynamic_previous_length = value;
+                self.phase = .dynamic_lengths;
+            },
+            .dynamic_ready => return self.fail(.dynamic_ready, error.UnsupportedDeflateFeature),
             .symbols => {
                 if (output_written == output.len and output.len != 0) return result(input_read, output_written, .need_output);
                 const symbol = (try self.readFixedSymbol(input, &input_read)) orelse return result(input_read, output_written, .need_input);
@@ -273,6 +331,26 @@ pub const Decoder = struct {
         self.distance_code_bits = 0;
         return symbol;
     }
+    fn readCodeLengthSymbol(self: *Decoder, input: []const u8, input_read: *usize) Error!?u16 {
+        while (self.dynamic_code_bits < 7) {
+            const bit = self.readBits(input, input_read, 1) orelse return null;
+            self.dynamic_code |= @as(u16, @intCast(bit)) << self.dynamic_code_bits;
+            self.dynamic_code_bits += 1;
+            if (canonicalSymbol(self.dynamic_code_lengths[0..], self.dynamic_code, self.dynamic_code_bits)) |symbol| {
+                self.dynamic_code = 0;
+                self.dynamic_code_bits = 0;
+                return symbol;
+            }
+        }
+        return self.fail(.dynamic_lengths, error.InvalidHuffmanCode);
+    }
+    fn setDynamicLength(self: *Decoder, value: u4) void {
+        if (self.dynamic_length_pos < self.dynamic_hlit) {
+            self.dynamic_literal_lengths[self.dynamic_length_pos] = value;
+        } else {
+            self.dynamic_distance_lengths[self.dynamic_length_pos - self.dynamic_hlit] = value;
+        }
+    }
     fn recordByte(self: *Decoder, byte: u8) Error!void {
         if (self.history.len != 0) {
             self.history[self.history_pos] = byte;
@@ -385,4 +463,45 @@ fn validCodeLengthAlphabet(lengths: [19]u4) bool {
         if (available < 0) return false;
     }
     return true;
+}
+
+fn validDynamicAlphabet(lengths: []const u4) bool {
+    var counts: [16]usize = @splat(0);
+    var active: usize = 0;
+    for (lengths) |length| {
+        if (length > 15) return false;
+        if (length != 0) {
+            counts[length] += 1;
+            active += 1;
+        }
+    }
+    if (active == 0) return false;
+    if (active == 1) return true; // RFC permits one-bit incomplete singleton.
+    var available: isize = 1;
+    for (1..16) |bits| {
+        available = available * 2 - @as(isize, @intCast(counts[bits]));
+        if (available < 0) return false;
+    }
+    return available == 0;
+}
+
+fn canonicalSymbol(lengths: []const u4, wanted_code: u16, wanted_bits: u4) ?u16 {
+    var counts: [16]u16 = @splat(0);
+    for (lengths) |length| if (length != 0) {
+        counts[length] += 1;
+    };
+    var next: [16]u16 = @splat(0);
+    var code: u16 = 0;
+    for (1..16) |bits| {
+        code = (code + counts[bits - 1]) << 1;
+        next[bits] = code;
+    }
+    for (lengths, 0..) |bits, symbol| {
+        if (bits == 0) continue;
+        const shift: u4 = @intCast(@as(u5, 16) - @as(u5, bits));
+        const reversed = @bitReverse(next[bits]) >> shift;
+        next[bits] += 1;
+        if (bits == wanted_bits and reversed == wanted_code) return @intCast(symbol);
+    }
+    return null;
 }
