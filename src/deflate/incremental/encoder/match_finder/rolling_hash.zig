@@ -20,6 +20,7 @@ pub const Matcher = struct {
     indexed_positions: usize = 0,
     initialized: bool = false,
     anchor_len: u3 = 0,
+    lazy_mode: bool = false,
 
     pub const Snapshot = struct {
         initialized: bool,
@@ -37,9 +38,23 @@ pub const Matcher = struct {
 
     pub fn reset(self: *Matcher) void {
         self.absolute_position = 0;
+        self.invalidateIndex();
+    }
+
+    /// Record bytes emitted by a parser that does not use this index. The next
+    /// rolling parse will reseed from caller history at the correct logical
+    /// stream position rather than following stale chains across skipped data.
+    pub fn observeUnindexedBlock(self: *Matcher, block_len: usize, history_len: usize) !void {
+        self.invalidateIndex();
+        const base = @max(self.absolute_position, history_len);
+        self.absolute_position = std.math.add(usize, base, block_len) catch return error.IntegerOverflow;
+    }
+
+    fn invalidateIndex(self: *Matcher) void {
         self.indexed_positions = 0;
         self.initialized = false;
         self.anchor_len = 0;
+        self.lazy_mode = false;
         self.epoch +%= 1;
         if (self.epoch == 0) {
             @memset(self.head_epoch.items, 0);
@@ -62,6 +77,7 @@ pub const Matcher = struct {
         block: []const u8,
         history: []const u8,
         options: lz77.GreedyOptions,
+        lazy: bool,
     ) !lz77.GreedyPlan {
         if (options.window_len == 0 or options.window_len > lz77.default_window_len or
             options.min_match < 3 or options.min_match > 4) return error.InvalidMatch;
@@ -70,9 +86,9 @@ pub const Matcher = struct {
         // Options are intentionally public on the encoder. If a caller changes
         // between three- and four-byte hash anchors between blocks, invalidate
         // the old bucket interpretation and reseed from current history.
-        if (self.initialized and self.anchor_len != anchor_len) self.reset();
+        if (self.initialized and (self.anchor_len != anchor_len or self.lazy_mode != lazy)) self.invalidateIndex();
         if (!self.initialized) {
-            self.seedHistory(history, block, anchor_len);
+            self.seedHistory(history, block, anchor_len, lazy);
         } else {
             self.seedBoundary(history, block, anchor_len);
         }
@@ -84,27 +100,59 @@ pub const Matcher = struct {
         var pos: usize = 0;
         while (pos < block.len) {
             const best = self.findBest(history, block, pos, options, anchor_len);
-            if (acceptMatch(block, pos, best.length, best.distance, options)) {
-                try tokens.append(allocator, .{ .match = .{
-                    .length = @intCast(best.length),
-                    .distance = @intCast(best.distance),
-                } });
-                stats.matches += 1;
-                stats.matched_bytes += best.length;
-                const end = @min(block.len, pos + best.length);
+            if (!acceptMatch(block, pos, best.length, best.distance, options)) {
+                try tokens.append(allocator, .{ .literal = block[pos] });
+                stats.literals += 1;
                 self.insertBlockPosition(history, block, pos, anchor_len);
-                // Match the existing fast hash parser: seed the first and last
-                // few positions rather than indexing every byte of long runs.
+                pos += 1;
+                continue;
+            }
+
+            var current_inserted = false;
+            if (lazy and pos + 1 < block.len) {
+                // Insert before the one-byte probe so distance-1 matches are
+                // available at the next position, matching the existing lazy
+                // planner's ordering and deterministic tie behavior.
+                self.insertBlockPosition(history, block, pos, anchor_len);
+                current_inserted = true;
+                const next = self.findBest(history, block, pos + 1, options, anchor_len);
+                if (next.length >= best.length + options.lazy_min_gain and
+                    acceptMatch(block, pos + 1, next.length, next.distance, options))
+                {
+                    try tokens.append(allocator, .{ .literal = block[pos] });
+                    stats.literals += 1;
+                    pos += 1;
+                    continue;
+                }
+            }
+
+            try tokens.append(allocator, .{ .match = .{
+                .length = @intCast(best.length),
+                .distance = @intCast(best.distance),
+            } });
+            stats.matches += 1;
+            stats.matched_bytes += best.length;
+            const end = @min(block.len, pos + best.length);
+            if (lazy) {
+                if (!current_inserted) self.insertBlockPosition(history, block, pos, anchor_len);
+                // Long matches are already represented by the current anchor.
+                // Seed their tail like the fast parser instead of writing every
+                // skipped position; lazy quality comes from the one-byte probe,
+                // while dense insertion mostly adds memory traffic on runs.
+                const tail_start = if (end > pos + 4) end - 4 else pos + 1;
+                var insert_pos = @max(pos + 1, tail_start);
+                while (insert_pos < end) : (insert_pos += 1)
+                    self.insertBlockPosition(history, block, insert_pos, anchor_len);
+                pos = end;
+            } else {
+                self.insertBlockPosition(history, block, pos, anchor_len);
+                // Fast and lazy parsing both keep a sparse tail for long
+                // matches; lazy additionally inserts before its one-byte probe.
                 const tail_start = if (end > pos + 4) end - 4 else pos + 1;
                 pos += 1;
                 if (pos < tail_start) pos = tail_start;
                 while (pos < end) : (pos += 1)
                     self.insertBlockPosition(history, block, pos, anchor_len);
-            } else {
-                try tokens.append(allocator, .{ .literal = block[pos] });
-                stats.literals += 1;
-                self.insertBlockPosition(history, block, pos, anchor_len);
-                pos += 1;
             }
         }
         self.absolute_position = std.math.add(usize, self.absolute_position, block.len) catch return error.IntegerOverflow;
@@ -121,13 +169,15 @@ pub const Matcher = struct {
         @memset(self.head_epoch.items, 0);
     }
 
-    fn seedHistory(self: *Matcher, history: []const u8, block: []const u8, anchor_len: usize) void {
-        self.absolute_position = history.len;
-        var pos: usize = 0;
-        while (pos + anchor_len <= history.len + block.len and pos < history.len) : (pos += 1)
-            self.insertAbsolute(history, block, pos, anchor_len);
+    fn seedHistory(self: *Matcher, history: []const u8, block: []const u8, anchor_len: usize, lazy: bool) void {
+        self.absolute_position = @max(self.absolute_position, history.len);
+        const history_start = self.absolute_position - history.len;
+        var absolute = history_start;
+        while (absolute + anchor_len <= self.absolute_position + block.len and absolute < self.absolute_position) : (absolute += 1)
+            self.insertAbsolute(history, block, absolute, anchor_len);
         self.initialized = true;
         self.anchor_len = @intCast(anchor_len);
+        self.lazy_mode = lazy;
     }
 
     fn seedBoundary(self: *Matcher, history: []const u8, block: []const u8, anchor_len: usize) void {

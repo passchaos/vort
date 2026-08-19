@@ -79,12 +79,10 @@ const IncrementalFixedEncoderCodec = struct {
         state.bit_index = 0;
     }
     pub fn writeBlock(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State, matcher: *incremental_rolling_hash.Matcher, block: []const u8, history: []const u8, final: bool, options: IncrementalFixedEncoderCodec.CompressionOptions) IncrementalFixedEncoderCodec.Error!void {
-        const plan = if (supportsRollingHash(options))
-            try matcher.planAlloc(allocator, block, history, normalizeOptionsForStrategy(options).lz77_options)
+        const rolling_parser = rollingParser(options);
+        const plan = if (rolling_parser) |parser|
+            try matcher.planAlloc(allocator, block, history, normalizeOptionsForStrategy(options).lz77_options, parser == .lazy)
         else blk: {
-            // Public options may change between blocks. Do not let a later
-            // switch back to hash parsing reuse an index that skipped bytes.
-            matcher.reset();
             break :blk if (history.len == 0)
                 try planTokensAlloc(allocator, block, options)
             else
@@ -92,6 +90,7 @@ const IncrementalFixedEncoderCodec = struct {
         };
         defer plan.deinit(allocator);
         try writeFixedTokens(allocator, state, plan.tokens, final);
+        if (rolling_parser == null) try matcher.observeUnindexedBlock(block.len, history.len);
         try drainWriterBytes(allocator, pending, state);
     }
     pub fn writeSyncFlush(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) IncrementalFixedEncoderCodec.Error!void {
@@ -131,10 +130,10 @@ const IncrementalBestEncoderCodec = struct {
         IncrementalFixedEncoderCodec.resetState(state);
     }
     pub fn writeBlock(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State, matcher: *incremental_rolling_hash.Matcher, block: []const u8, history: []const u8, final: bool, options: IncrementalBestEncoderCodec.CompressionOptions) IncrementalBestEncoderCodec.Error!void {
-        const plan = if (supportsRollingHash(options))
-            try matcher.planAlloc(allocator, block, history, normalizeOptionsForStrategy(options).lz77_options)
+        const rolling_parser = rollingParser(options);
+        const plan = if (rolling_parser) |parser|
+            try matcher.planAlloc(allocator, block, history, normalizeOptionsForStrategy(options).lz77_options, parser == .lazy)
         else blk: {
-            matcher.reset();
             break :blk if (history.len == 0)
                 try planTokensAlloc(allocator, block, options)
             else
@@ -142,6 +141,7 @@ const IncrementalBestEncoderCodec = struct {
         };
         defer plan.deinit(allocator);
         try writeBestTokensBlock(allocator, state, block, plan.tokens, final, options);
+        if (rolling_parser == null) try matcher.observeUnindexedBlock(block.len, history.len);
         try drainWriterBytes(allocator, pending, state);
     }
     pub fn writeSyncFlush(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) IncrementalBestEncoderCodec.Error!void {
@@ -717,14 +717,15 @@ fn planTokensAlloc(allocator: std.mem.Allocator, input: []const u8, options: Com
     };
 }
 
-fn supportsRollingHash(options: CompressionOptions) bool {
+fn rollingParser(options: CompressionOptions) ?ParserMode {
     const normalized = normalizeOptionsForStrategy(options);
-    return normalized.strategy == .default and
-        normalized.parser == .hash and
-        normalized.lz77_options.window_len != 0 and
-        normalized.lz77_options.window_len <= lz77.default_window_len and
-        normalized.lz77_options.min_match >= 3 and
-        normalized.lz77_options.min_match <= 4;
+    if (normalized.strategy != .default or
+        (normalized.parser != .hash and normalized.parser != .lazy) or
+        normalized.lz77_options.window_len == 0 or
+        normalized.lz77_options.window_len > lz77.default_window_len or
+        normalized.lz77_options.min_match < 3 or
+        normalized.lz77_options.min_match > 4) return null;
+    return normalized.parser;
 }
 
 fn useSmallInputScanPlan(input: []const u8, options: CompressionOptions) bool {

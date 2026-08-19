@@ -510,6 +510,28 @@ pub fn build(b: *std.Build) void {
     const deflate_encode_bench_step = b.step("bench-deflate-encode", "Run fixed deflate encode throughput smoke benchmark");
     deflate_encode_bench_step.dependOn(&run_deflate_encode_bench.step);
 
+    const deflate_incremental_encode_bench_exe = b.addExecutable(.{
+        .name = "vort-bench-deflate-incremental-encode",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("bench/deflate/incremental_encode.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_deflate_incremental_encode_bench = b.addRunArtifact(deflate_incremental_encode_bench_exe);
+    const deflate_incremental_encode_bench_step = b.step("bench-deflate-incremental-encode", "Compare persistent and rebuilt incremental DEFLATE match indexes");
+    deflate_incremental_encode_bench_step.dependOn(&run_deflate_incremental_encode_bench.step);
+
+    const deflate_incremental_encode_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/deflate_incremental_encode_gate.py",
+    });
+    const deflate_incremental_encode_gate_step = b.step("run-deflate-incremental-encode-gate", "Require persistent lazy DEFLATE speed and size non-regression");
+    deflate_incremental_encode_gate_step.dependOn(&deflate_incremental_encode_gate.step);
+
     const native_parallel_bench_exe = b.addExecutable(.{
         .name = "vort-bench-native-parallel",
         .root_module = b.createModule(.{
@@ -3337,6 +3359,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&png_scanline_bench_exe.step);
     check_step.dependOn(&zlib_encode_bench_exe.step);
     check_step.dependOn(&deflate_encode_bench_exe.step);
+    check_step.dependOn(&deflate_incremental_encode_bench_exe.step);
     check_step.dependOn(&native_parallel_bench_exe.step);
     check_step.dependOn(&fuzz_smoke_exe.step);
     check_step.dependOn(&fuzz_corpus_exe.step);

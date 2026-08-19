@@ -5170,6 +5170,15 @@ architecture blindly.
   dictionary tables per block. Preset dictionaries and cross-block hash anchors
   seed the same state; reset is O(1), retains table allocation, and reproduces
   deterministic output. Other parser modes retain their existing planner paths.
+- Extended that persistent matcher to the lazy parser used by default and
+  middle compression levels. The shared state now performs the existing
+  one-byte lazy probe with safe hash/lazy/anchor mode transitions, while sparse
+  tail insertion avoids indexing every byte of long matches. The dedicated
+  `bench-deflate-incremental-encode` comparison and its non-regression gate
+  require persistent lazy encoding to be both no slower and no larger than the
+  per-block rebuilt reference; the initial local ReleaseFast smoke measured
+  about `402.76` versus `225.61` MiB/s (`1.785x`) and `2371` versus `4489` bytes
+  (`0.528x`) on a 256 KiB structured-log stream.
 - Added a byte-progressive raw-DEFLATE stored-block decoder under
   `src/deflate/incremental/decoder/`. It preserves split header state, streams
   payload directly caller-to-caller through tiny output, enforces exact/maximum
