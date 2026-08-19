@@ -682,6 +682,8 @@ defer zstd_incremental_encoder.deinit();
 // streaming CRC-32 and ISIZE with the same split-input and sync-flush contract.
 // RawDeflateIncrementalBestEncoder evaluates stored, fixed, and dynamic Huffman
 // representations per block while retaining the same rolling history core.
+// ZlibIncrementalBestEncoder and GzipIncrementalBestEncoder expose that selector
+// through wrapper checksums/metadata; *OptionsForLevel maps zlib levels 0...9.
 const zstd_dict_options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only };
 const zstd_dict_bound = try vort.zstdEncodedNativeFrameBoundWithDictionary(
     "prefix: previous zstd history payload, shared phrase tail".len,

@@ -5150,6 +5150,10 @@ architecture blindly.
   machine while selecting stored, fixed, or dynamic Huffman representation per
   block. It retains rolling history, pledged-size handling, tiny output, BFINAL,
   and sync-flush semantics across all three wire choices.
+- Added zlib/gzip best incremental wrappers over the same raw selector plus
+  public level-to-options helpers. Wrapper checksum, dictionary/metadata, flush,
+  exact sizing, and tiny-output behavior now automatically cover stored, fixed,
+  and dynamic block choices.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

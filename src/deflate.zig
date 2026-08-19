@@ -153,6 +153,17 @@ const IncrementalZlibFixedEncoderCodec = struct {
 
 pub const ZlibIncrementalFixedEncoder = incremental_zlib_fixed_encoder.Encoder(IncrementalZlibFixedEncoderCodec);
 
+const IncrementalZlibBestEncoderCodec = struct {
+    pub const Error = IncrementalZlibFixedEncoderCodec.Error;
+    pub const RawEncoder = deflate.RawDeflateIncrementalBestEncoder;
+    pub const RawOptions = RawEncoder.Options;
+    pub const Adler32 = checksum.Adler32;
+    pub const writeHeader = IncrementalZlibFixedEncoderCodec.writeHeader;
+    pub const writeFooter = IncrementalZlibFixedEncoderCodec.writeFooter;
+};
+
+pub const ZlibIncrementalBestEncoder = incremental_zlib_fixed_encoder.Encoder(IncrementalZlibBestEncoderCodec);
+
 const IncrementalGzipFixedEncoderCodec = struct {
     pub const Error = deflate.Error || std.mem.Allocator.Error;
     pub const RawEncoder = deflate.RawDeflateIncrementalFixedEncoder;
@@ -174,6 +185,26 @@ const IncrementalGzipFixedEncoderCodec = struct {
 };
 
 pub const GzipIncrementalFixedEncoder = incremental_gzip_fixed_encoder.Encoder(IncrementalGzipFixedEncoderCodec);
+
+const IncrementalGzipBestEncoderCodec = struct {
+    pub const Error = IncrementalGzipFixedEncoderCodec.Error;
+    pub const RawEncoder = deflate.RawDeflateIncrementalBestEncoder;
+    pub const RawOptions = RawEncoder.Options;
+    pub const HeaderOptions = deflate.GzipHeaderOptions;
+    pub const Crc32 = checksum.Crc32Slice32;
+    pub const writeHeader = IncrementalGzipFixedEncoderCodec.writeHeader;
+    pub const writeFooter = IncrementalGzipFixedEncoderCodec.writeFooter;
+};
+
+pub const GzipIncrementalBestEncoder = incremental_gzip_fixed_encoder.Encoder(IncrementalGzipBestEncoderCodec);
+
+pub fn zlibIncrementalBestOptionsForLevel(level: u4) Error!ZlibIncrementalBestEncoder.Options {
+    return .{ .raw = .{ .compression = try optionsForZlibLevel(level) } };
+}
+
+pub fn gzipIncrementalBestOptionsForLevel(level: u4, header: GzipHeaderOptions) Error!GzipIncrementalBestEncoder.Options {
+    return .{ .raw = .{ .compression = try optionsForZlibLevel(level) }, .header = header };
+}
 
 test {
     _ = incremental_tests;

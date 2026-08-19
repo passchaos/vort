@@ -347,3 +347,71 @@ test "raw deflate incremental best encoder falls back to stored and sync flushes
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &payload, decoded);
 }
+
+test "zlib incremental best encoder selects dynamic blocks by level" {
+    const payload = ("zlib best dynamic wrapper payload alpha beta gamma delta\n" ** 300);
+    var options = try deflate.zlibIncrementalBestOptionsForLevel(6);
+    options.raw.block_len = payload.len;
+    var encoder = deflate.ZlibIncrementalBestEncoder.initWithOptions(std.testing.allocator, options);
+    defer encoder.deinit();
+    const encoded = try encodeZlibBestTestStream(&encoder, payload);
+    defer std.testing.allocator.free(encoded);
+    const header = try deflate.parseZlibHeaderInfo(encoded);
+    const raw_info = try deflate.parseRawDeflateHeaderInfo(encoded[header.data_offset..]);
+    try std.testing.expectEqual(deflate.RawDeflateBlockType.dynamic, raw_info.block_type);
+    const decoded = try deflate.decodeZlibAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "gzip incremental best encoder selects stored and preserves metadata" {
+    var payload: [2048]u8 = undefined;
+    var random = std.Random.DefaultPrng.init(0xfeed_beef);
+    random.random().bytes(&payload);
+    var options = try deflate.gzipIncrementalBestOptionsForLevel(6, .{ .filename = "random.bin", .header_crc = true });
+    options.raw.block_len = payload.len;
+    var encoder = deflate.GzipIncrementalBestEncoder.initWithOptions(std.testing.allocator, options);
+    defer encoder.deinit();
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var scratch: [23]u8 = undefined;
+    var offset: usize = 0;
+    while (offset < payload.len) {
+        const result = try encoder.step(payload[offset..], &scratch);
+        offset += result.progress.input_read;
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    const header = try deflate.parseGzipHeaderInfo(encoded.items);
+    try std.testing.expectEqualSlices(u8, "random.bin", header.filename.?);
+    const raw_info = try deflate.parseRawDeflateHeaderInfo(encoded.items[header.data_offset..]);
+    try std.testing.expectEqual(deflate.RawDeflateBlockType.stored, raw_info.block_type);
+    const decoded = try deflate.decodeGzipAlloc(std.testing.allocator, encoded.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+}
+
+fn encodeZlibBestTestStream(encoder: *deflate.ZlibIncrementalBestEncoder, payload: []const u8) ![]u8 {
+    var encoded: std.ArrayList(u8) = .empty;
+    errdefer encoded.deinit(std.testing.allocator);
+    var scratch: [19]u8 = undefined;
+    var offset: usize = 0;
+    while (offset < payload.len) {
+        const end = @min(payload.len, offset + 137);
+        const result = try encoder.step(payload[offset..end], &scratch);
+        offset += result.progress.input_read;
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    return try encoded.toOwnedSlice(std.testing.allocator);
+}
