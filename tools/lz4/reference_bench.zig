@@ -54,6 +54,13 @@ pub fn main(init: std.process.Init) !void {
     const options = try parseOptions(&args);
     var runtime = try liblz4.Runtime.open();
     defer runtime.deinit();
+    const incompressible_large = try init.gpa.alloc(u8, 256 * 1024);
+    defer init.gpa.free(incompressible_large);
+    var large_state: u32 = 0x6d2b_79f5;
+    for (incompressible_large) |*byte| {
+        large_state = large_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(large_state >> 16);
+    }
 
     const cases = [_]Case{
         .{ .name = "tiny", .payload = "hello lz4" },
@@ -70,6 +77,7 @@ pub fn main(init: std.process.Init) !void {
             .payload = ("abcdefghijklmnopqrstuvwxyz012345" ** 4) ** 256,
         },
         .{ .name = "incompressible", .payload = &incompressible_payload },
+        .{ .name = "incompressible256k", .payload = incompressible_large },
         .{ .name = "rle64k", .payload = &rle_payload },
     };
 

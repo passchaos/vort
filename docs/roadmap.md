@@ -2260,6 +2260,16 @@ architecture blindly.
   `0.29x/0.35x/0.51x/0.29x` libzstd and raises conservative floors. All 837
   tests and the 124-case lib-generated differential pass.
 
+- Expanded the LZ4/liblz4 caller-owned matrix with a deterministic 256 KiB
+  incompressible, literal-only block. This separates real bulk-copy throughput
+  from the existing 1 KiB row's fixed call overhead and locks the one-literal,
+  zero-match shape. Current ReleaseFast evidence is about `0.76x` liblz4, so the
+  gate records a conservative `0.70x` floor instead of hiding the remaining
+  large-literal gap behind Vort's strong compressed rows. Two production
+  fast-path attempts were rejected: a general literal-only precheck regressed
+  1 KiB input by about 9.8%, while a large-only precheck gained about 1.8% at
+  256 KiB but regressed tiny and 1 KiB rows sharply. Both were fully reverted.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box

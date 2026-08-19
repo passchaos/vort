@@ -35,6 +35,7 @@ EXPECTED_CASES = {
     "structured",
     "repetitive",
     "incompressible",
+    "incompressible256k",
     "rle64k",
 }
 
@@ -88,13 +89,18 @@ def main() -> int:
             if float(row[key]) <= 0:
                 raise AssertionError(f"non-positive {key}: {row}")
 
-    for name in EXPECTED_CASES - {"incompressible"}:
+    for name in EXPECTED_CASES - {"incompressible", "incompressible256k"}:
         if float(by_case[name]["vort_over_reference"]) < 1.10:
             raise AssertionError(f"Vort no longer leads {name}: {by_case[name]}")
     if float(by_case["incompressible"]["vort_over_reference"]) < 0.90:
         raise AssertionError(
             f"incompressible decode regressed: {by_case['incompressible']}"
         )
+    large_raw = by_case["incompressible256k"]
+    if int(large_raw["literal_count"]) != 1 or int(large_raw["match_count"]) != 0:
+        raise AssertionError(f"expected literal-only large row: {large_raw}")
+    if float(large_raw["vort_over_reference"]) < 0.70:
+        raise AssertionError(f"large incompressible decode regressed: {large_raw}")
 
     print(
         "lz4_reference_bench_gate=ok "
