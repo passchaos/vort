@@ -107,6 +107,14 @@ pub const Reader = struct {
         return @intCast((reservoir >> shift) & ((@as(u32, 1) << bit_count) - 1));
     }
 
+    /// Consume a code after a successful bulk Huffman lookup. The caller just
+    /// proved that a full table width remains, and every valid code is no wider
+    /// than that width, so this unchecked update removes a redundant bounds
+    /// comparison from every decoded literal.
+    pub inline fn skipBulkHuffman(self: *Reader, bit_count: u4) void {
+        self.remaining_bits -= bit_count;
+    }
+
     /// Consume a narrow field through the bounded prefix path. FSE sequence
     /// states stay below its three-byte bound and avoid the generic u72 gather.
     pub fn readSmall(self: *Reader, bit_count: u4) Error!usize {

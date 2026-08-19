@@ -2302,6 +2302,14 @@ architecture blindly.
   `219.2 ms` to `182.9 ms` (`16.5%`), raising its conservative libzstd floor
   from `0.13x` to `0.14x`; other decode shapes do not call this bulk helper.
 
+- Removed the redundant checked skip after a successful four-stream bulk
+  Huffman lookup. The outer loop has already established that at least the full
+  table width remains, while every valid entry consumes no more than that
+  width, so the reader can update `remaining_bits` directly without another
+  comparison. Seven fixed-CPU 500-iteration A/B rounds reduce `ascii64k` median
+  time from about `182.48 ms` to `180.46 ms` (`1.1%`). A broader attempt to
+  fuse the table load and reader update regressed and was fully reverted.
+
 - Expanded the LZ4/liblz4 caller-owned matrix with a deterministic 256 KiB
   incompressible, literal-only block. This separates real bulk-copy throughput
   from the existing 1 KiB row's fixed call overhead and locks the one-literal,

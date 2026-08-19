@@ -4601,7 +4601,7 @@ const HuffmanLiteralCursor = struct {
         const prefix = self.reader.peekBulkHuffman(width);
         const entry = lookup.lookup(prefix << @intCast(11 - width)) orelse
             return error.CorruptFrame;
-        try self.reader.skip(entry.bit_count);
+        self.reader.skipBulkHuffman(entry.bit_count);
         return entry.symbol;
     }
 };
