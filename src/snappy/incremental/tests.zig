@@ -65,6 +65,20 @@ test "incremental frame decoder enforces limits and finish semantics" {
     try std.testing.expectEqualStrings("truncated_input", truncated.diagnostics().recoverability_hint_name);
 }
 
+test "incremental frame decoder enforces exact output size" {
+    const frame = try snappy.encodeFrameAlloc(std.testing.allocator, "exact");
+    defer std.testing.allocator.free(frame);
+    var short = snappy.IncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{ .expected_output_len = 6 });
+    defer short.deinit();
+    var output: [8]u8 = undefined;
+    _ = try short.step(frame, &output);
+    try std.testing.expectError(error.SizeMismatch, short.finish());
+
+    var long = snappy.IncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{ .expected_output_len = 4 });
+    defer long.deinit();
+    try std.testing.expectError(error.SizeMismatch, long.step(frame, &output));
+}
+
 test "incremental frame decoder drains uncompressed chunks" {
     // Framed Snappy chunk: identifier followed by an uncompressed "raw"
     // payload with the well-known masked CRC-32C value produced by Vort.

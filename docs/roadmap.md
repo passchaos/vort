@@ -5051,6 +5051,10 @@ architecture blindly.
   Snappy has no content-size header field, applications can pledge total input
   size and receive `SizeMismatch` on underflow or overflow while retaining the
   same split-input, chunking, and tiny-output behavior.
+- Added `expected_output_len` to the incremental Snappy decoder. Declared data
+  chunks cannot exceed the remaining pledged output, and `finish` rejects a
+  shorter stream with `SizeMismatch`, giving framed Snappy symmetric exact-size
+  contracts for incremental encode and decode.
 - Added a no-content-size incremental native LZ4 frame encoder under
   `src/lz4/incremental/`. It preserves linked or independent block policy, one
   bounded frame block, 64 KiB linked history, block/content XXH32 checksums, and

@@ -26,6 +26,7 @@ pub fn Decoder(comptime Codec: type) type {
         pub const Options = struct {
             max_chunk_payload_len: usize = 0x00ff_ffff,
             max_output_len: usize = std.math.maxInt(usize),
+            expected_output_len: ?usize = null,
         };
         pub const Phase = enum { header, payload, output, done };
         pub const Snapshot = struct {
@@ -94,7 +95,15 @@ pub fn Decoder(comptime Codec: type) type {
                 return error.TruncatedFrame;
             }
             self.input_finished = true;
-            if (self.phase == .header) self.phase = .done;
+            if (self.phase == .header) {
+                if (self.options.expected_output_len) |expected| {
+                    if (self.total_output != expected) {
+                        self.recordError(.header, error.SizeMismatch);
+                        return error.SizeMismatch;
+                    }
+                }
+                self.phase = .done;
+            }
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
@@ -118,6 +127,9 @@ pub fn Decoder(comptime Codec: type) type {
                     self.decoded_offset = 0;
                     self.phase = .header;
                     if (self.input_finished) {
+                        if (self.options.expected_output_len) |expected| {
+                            if (self.total_output != expected) return self.fail(.output, error.SizeMismatch);
+                        }
                         self.phase = .done;
                         return result(input_read, output_written, .done);
                     }
@@ -186,6 +198,9 @@ pub fn Decoder(comptime Codec: type) type {
         fn reserveOutput(self: *Self, n: usize) Error!void {
             const total = std.math.add(usize, self.total_output, n) catch return error.IntegerOverflow;
             if (total > self.options.max_output_len) return error.OutputLimitExceeded;
+            if (self.options.expected_output_len) |expected| {
+                if (total > expected) return error.SizeMismatch;
+            }
             try self.decoded.ensureTotalCapacity(self.allocator, n);
         }
         fn fail(self: *Self, phase: Phase, err: Error) Error {
