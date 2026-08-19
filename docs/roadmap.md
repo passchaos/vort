@@ -5111,6 +5111,12 @@ architecture blindly.
   to eight non-prefix history regions per block and emits them as one bounded
   multi-sequence plan, while stale positions are rejected against the sliding
   window without rebuilding the index.
+- Added resumable `flush()` to the incremental Zstd encoder. A flush emits the
+  accepted partial block as non-final, drains through arbitrary caller output,
+  acknowledges completion with `need_input`, preserves rolling history for
+  subsequent writes, and treats repeated empty flushes as idempotent. Encoder
+  state and helpers now live under `src/zstd/incremental/encoder/` instead of
+  expanding the incremental directory as a flat list.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

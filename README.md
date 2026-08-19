@@ -664,6 +664,9 @@ defer zstd_incremental_encoder.deinit();
 // The dictionary bytes are borrowed and may be referenced by emitted sequences;
 // completed blocks also seed a bounded indexed rolling window for multiple later
 // block matches without retaining the complete input stream.
+// Call flush(), then step with empty input until need_input, to publish a
+// non-final block before continuing the same frame. Repeated empty flushes are
+// idempotent.
 const zstd_dict_options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only };
 const zstd_dict_bound = try vort.zstdEncodedNativeFrameBoundWithDictionary(
     "prefix: previous zstd history payload, shared phrase tail".len,

@@ -222,6 +222,73 @@ test "Zstd incremental frame encoder emits multiple non-prefix history matches" 
     try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
+test "Zstd incremental frame encoder flushes and resumes through tiny output" {
+    const first = "first flushed Zstd segment with repeated repeated text";
+    const second = "second segment after flush reuses repeated repeated text";
+    var encoder = try zstd.NativeIncrementalFrameEncoder.init(std.testing.allocator, .{
+        .include_content_size = false,
+        .content_checksum = true,
+        .selection = .literal_only,
+        .block_size_max = 96,
+    });
+    defer encoder.deinit();
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    var scratch: [7]u8 = undefined;
+
+    var result = try encoder.step(first, &scratch);
+    try std.testing.expectEqual(first.len, result.progress.input_read);
+    try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    encoder.flush();
+    while (true) {
+        result = try encoder.step("", &scratch);
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .need_input) break;
+        try std.testing.expectEqual(.need_output, result.status);
+    }
+    // The flushed prefix is a valid non-final frame prefix: its first block is
+    // available for inspection even though finish has not written a last block.
+    const first_block = try zstd.inspectNativeFrameFirstBlock(frame.items);
+    try std.testing.expect(!first_block.last);
+
+    var second_offset: usize = 0;
+    while (second_offset < second.len) {
+        result = try encoder.step(second[second_offset..], &scratch);
+        second_offset += result.progress.input_read;
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    encoder.flush();
+    while (true) {
+        result = try encoder.step("", &scratch);
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .need_input) break;
+    }
+    // An empty repeated flush must not add an empty block.
+    const len_after_flush = frame.items.len;
+    encoder.flush();
+    result = try encoder.step("", &scratch);
+    try std.testing.expectEqual(.need_input, result.status);
+    try std.testing.expectEqual(@as(usize, 0), result.progress.output_written);
+    try std.testing.expectEqual(len_after_flush, frame.items.len);
+
+    encoder.finish();
+    while (true) {
+        result = try encoder.step("", &scratch);
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    const decoded = try zstd.decodeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, first ++ second, decoded);
+
+    encoder.reset();
+    const reset_frame = try encodeSplit(&encoder, "after flush reset");
+    defer std.testing.allocator.free(reset_frame);
+    const reset_decoded = try zstd.decodeFrameAlloc(std.testing.allocator, reset_frame);
+    defer std.testing.allocator.free(reset_decoded);
+    try std.testing.expectEqualSlices(u8, "after flush reset", reset_decoded);
+}
+
 fn encodeSplit(encoder: *zstd.NativeIncrementalFrameEncoder, payload: []const u8) ![]u8 {
     var frame: std.ArrayList(u8) = .empty;
     errdefer frame.deinit(std.testing.allocator);

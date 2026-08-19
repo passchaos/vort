@@ -1,5 +1,5 @@
 const std = @import("std");
-const core = @import("../../core.zig");
+const core = @import("../../../core.zig");
 const history_mod = @import("history.zig");
 
 /// Build an incremental Zstd frame encoder. One bounded block is retained;
@@ -14,6 +14,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
         pending_offset: usize = 0,
         hasher: std.hash.XxHash64 = std.hash.XxHash64.init(0),
         header_written: bool = false,
+        flush_requested: bool = false,
         finishing: bool = false,
         final_written: bool = false,
         done: bool = false,
@@ -83,6 +84,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
             self.pending_offset = 0;
             self.hasher = std.hash.XxHash64.init(0);
             self.header_written = false;
+            self.flush_requested = false;
             self.finishing = false;
             self.final_written = false;
             self.done = false;
@@ -94,13 +96,21 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
         }
         pub fn finish(self: *Self) void {
             self.finishing = true;
+            self.flush_requested = false;
+        }
+        /// End the current non-final block and make all accepted input
+        /// decodable without ending the frame. Repeated calls with no new input
+        /// are idempotent; the request drains through the normal tiny-output
+        /// path and callers may resume input once `need_input` is returned.
+        pub fn flush(self: *Self) void {
+            if (!self.finishing and !self.done) self.flush_requested = true;
         }
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
             if (self.done) {
                 if (input.len != 0) return error.TrailingData;
                 return .{ .status = .done };
             }
-            if (self.finishing and input.len != 0) return error.TrailingData;
+            if ((self.finishing or self.flush_requested) and input.len != 0) return error.TrailingData;
             var input_read: usize = 0;
             var output_written: usize = 0;
             while (true) {
@@ -136,11 +146,19 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
                 // A full block can be emitted only when another input byte proves
                 // it is not final; otherwise retain it until finish.
                 if (self.block.items.len == Codec.blockLen(self.options) and input_read < input.len) {
-                    try self.history.prepareCompletedBlock(self.allocator, self.block.items, Codec.historyLen(self.options));
-                    try BlockEmitter.write(self.allocator, &self.pending, self.block.items, false, self.options, &self.codec_state, self.dictionary, self.history.view(), self.total_input - self.block.items.len);
-                    self.history.appendCompletedBlock(self.block.items, Codec.historyLen(self.options));
-                    self.block.clearRetainingCapacity();
+                    try self.writeNonFinalBlock();
                     continue;
+                }
+                if (self.flush_requested) {
+                    if (self.block.items.len != 0) {
+                        try self.writeNonFinalBlock();
+                        continue;
+                    }
+                    self.flush_requested = false;
+                    // `need_input` is the flush-complete acknowledgement: no
+                    // pending encoded bytes remain and the next call may resume
+                    // normal input without a separate status enum.
+                    return result(input_read, output_written, .need_input);
                 }
                 if (self.finishing and !self.final_written) {
                     if (self.expected_input_len) |expected| {
@@ -161,6 +179,13 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
         }
         fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
             return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = status };
+        }
+        fn writeNonFinalBlock(self: *Self) Error!void {
+            std.debug.assert(self.block.items.len != 0);
+            try self.history.prepareCompletedBlock(self.allocator, self.block.items, Codec.historyLen(self.options));
+            try BlockEmitter.write(self.allocator, &self.pending, self.block.items, false, self.options, &self.codec_state, self.dictionary, self.history.view(), self.total_input - self.block.items.len);
+            self.history.appendCompletedBlock(self.block.items, Codec.historyLen(self.options));
+            self.block.clearRetainingCapacity();
         }
     };
 }

@@ -11,11 +11,11 @@ const sequence_fse_builder = @import("zstd/sequence/fse_builder.zig");
 const raw_frame = @import("zstd/frame/raw.zig");
 const known_size_frame = @import("zstd/frame/known_size.zig");
 const huffman_lookup = @import("zstd/literals/huffman_lookup.zig");
-const incremental_encoder = @import("zstd/incremental/frame_encoder.zig");
-const incremental_block_emitter = @import("zstd/incremental/block_emitter.zig");
-const incremental_history_match = @import("zstd/incremental/history_match.zig");
-const incremental_history = @import("zstd/incremental/history.zig");
-const incremental_history_index = @import("zstd/incremental/history_index.zig");
+const incremental_encoder = @import("zstd/incremental/encoder/frame.zig");
+const incremental_block_emitter = @import("zstd/incremental/encoder/block_emitter.zig");
+const incremental_history_match = @import("zstd/incremental/encoder/history_match.zig");
+const incremental_history = @import("zstd/incremental/encoder/history.zig");
+const incremental_history_index = @import("zstd/incremental/encoder/history_index.zig");
 const incremental_tests = @import("zstd/incremental/tests.zig");
 const huffman = @import("huffman.zig");
 
