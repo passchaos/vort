@@ -5062,3 +5062,9 @@ architecture blindly.
   input to arbitrarily small caller output. Output limits, compressed-block
   rejection, padding validation, explicit finish/truncation, reset, snapshots,
   and diagnostics are covered in the colocated module tests.
+- Added the matching incremental stored Brotli encoder under
+  `src/br/incremental/stored/encoder.zig`. It preserves bit-writer state across
+  metadata and multiple configurable meta-blocks, buffers only one block of
+  caller input, drains encoded bytes through tiny caller output, and supports
+  input limits, explicit finish, reset/reuse, and snapshots. Split-input,
+  multi-block, metadata, and window-bit round trips use the production decoder.

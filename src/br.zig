@@ -7,6 +7,7 @@ const static_dictionary = @import("br/static_dictionary.zig");
 const incremental = @import("br/incremental/stream_decoder.zig");
 const incremental_tests = @import("br/incremental/tests.zig");
 const incremental_stored = @import("br/incremental/stored/decoder.zig");
+const incremental_stored_encoder = @import("br/incremental/stored/encoder.zig");
 const incremental_stored_tests = @import("br/incremental/stored/tests.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
@@ -24,6 +25,33 @@ const IncrementalCodec = struct {
 const br = @This();
 pub const IncrementalStreamDecoder = incremental.Decoder(IncrementalCodec);
 pub const IncrementalStoredStreamDecoder = incremental_stored.Decoder;
+
+const IncrementalStoredEncoderCodec = struct {
+    pub const Error = br.Error;
+    pub const StreamOptions = br.StoredStreamOptions;
+    pub const max_block_len = br.max_uncompressed_meta_block_len;
+    pub const State = struct { bit_index: u3 = 0 };
+
+    pub fn writePrefix(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, options: StreamOptions) br.Error!void {
+        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+        try writeWindowBits(allocator, &writer, options.window_bits);
+        if (options.metadata.len != 0) try writeMetadataMetaBlock(allocator, &writer, options.metadata);
+        state.bit_index = writer.bit_index;
+    }
+    pub fn writeBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, block: []const u8) br.Error!void {
+        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+        try writeUncompressedMetaBlock(allocator, &writer, block);
+        state.bit_index = writer.bit_index;
+    }
+    pub fn writeFinal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State) br.Error!void {
+        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+        try writer.writeBits(allocator, 1, 1);
+        try writer.writeBits(allocator, 1, 1);
+        state.bit_index = writer.bit_index;
+    }
+};
+
+pub const IncrementalStoredStreamEncoder = incremental_stored_encoder.Encoder(IncrementalStoredEncoderCodec);
 
 test {
     _ = incremental_tests;

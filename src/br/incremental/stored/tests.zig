@@ -47,3 +47,43 @@ test "byte-progressive stored decoder rejects compressed and truncated streams" 
     limited.reset();
     try std.testing.expectEqual(br.IncrementalStoredStreamDecoder.Phase.window, limited.snapshot().phase);
 }
+
+test "incremental stored encoder round trips split input and tiny output" {
+    const payload = "incremental Brotli stored encode payload " ** 100;
+    var encoder = br.IncrementalStoredStreamEncoder.initWithOptions(std.testing.allocator, .{
+        .stream = .{ .window_bits = 21, .metadata = "meta" },
+        .block_len = 97,
+    });
+    defer encoder.deinit();
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var input_offset: usize = 0;
+    var scratch: [9]u8 = undefined;
+    while (input_offset < payload.len) {
+        const end = @min(payload.len, input_offset + 31);
+        const result = try encoder.step(payload[input_offset..end], &scratch);
+        input_offset += result.progress.input_read;
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    try encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    const decoded = try br.decodeStreamAlloc(std.testing.allocator, encoded.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    encoder.reset();
+    try std.testing.expectEqual(@as(usize, 0), encoder.snapshot().input_read);
+}
+
+test "incremental stored encoder enforces limits and finish" {
+    var encoder = br.IncrementalStoredStreamEncoder.initWithOptions(std.testing.allocator, .{ .max_input_len = 3 });
+    defer encoder.deinit();
+    try std.testing.expectError(error.OutputLimitExceeded, encoder.step("four", &.{}));
+    encoder.reset();
+    _ = try encoder.step("abc", &.{});
+    try encoder.finish();
+    try std.testing.expectError(error.TrailingData, encoder.step("x", &.{}));
+}
