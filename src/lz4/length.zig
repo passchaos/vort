@@ -6,9 +6,9 @@ pub const Error = error{ TruncatedFrame, IntegerOverflow };
 ///
 /// Long literal-only blocks encode almost the entire input length as a run of
 /// 0xff bytes. Consume those runs a vector at a time, then return to the word
-/// and byte loops for the first partial chunk and its terminating byte. Besides being
-/// substantially cheaper for stored-like LZ4 blocks, this preserves the exact
-/// cursor and overflow behavior of the scalar parser on malformed input.
+/// and byte loops for the first partial chunk and its terminating byte. Besides
+/// being substantially cheaper for stored-like LZ4 blocks, this preserves the
+/// exact cursor and overflow behavior of the scalar parser on malformed input.
 pub fn readLongExtension(input: []const u8, offset: *usize) Error!usize {
     if (offset.* > input.len) return error.TruncatedFrame;
     var len: usize = 0;
