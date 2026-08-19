@@ -5467,6 +5467,25 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
             huffman_literals,
         );
     }
+    if (spec.ll_mode == .compressed and
+        spec.of_mode == .compressed and
+        spec.ml_mode == .compressed and
+        (section.kind == .compressed or section.kind == .treeless) and
+        section.sequence_count >= 1024 and
+        dictionary_history.len == 0)
+    {
+        return try decodeAllFseHuffmanSequences(
+            section,
+            spec,
+            output,
+            written,
+            frame_output_start,
+            frame_state,
+            continuation,
+            &state,
+            huffman_literals orelse return error.CorruptFrame,
+        );
+    }
     while (state.remaining != 0) {
         const sequence = try readModeSequence(&state);
         const literal_len = sequence.literal_len;
@@ -5489,6 +5508,52 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
     } else {
         try copyLiteralsFromSection(block, section, literal_offset, output, written, last_literals);
     }
+    if (continuation.retainsState()) {
+        frame_state.previous_tables = spec.tables();
+        frame_state.repeated_offsets = state.repeated_offsets;
+    }
+}
+
+noinline fn decodeAllFseHuffmanSequences(
+    section: LiteralOnlySection,
+    spec: SequenceModeSpec,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    frame_state: *SequenceFrameState,
+    continuation: sequence_continuation.Context,
+    state: *SequenceDecodeState,
+    initial_huffman: HuffmanLiteralDecodeState,
+) Error!void {
+    var huffman_state = initial_huffman;
+    var literal_offset: usize = 0;
+    while (state.remaining != 0) {
+        const ll_symbol = try spec.literal_fse.symbol(state.ll_state);
+        const of_symbol = try spec.offset_fse.symbol(state.of_state);
+        const ml_symbol = try spec.match_fse.symbol(state.ml_state);
+        const offset_extra = try state.reader.read(of_symbol.additional_bits);
+        const match_len = std.math.add(usize, ml_symbol.base, try state.reader.read(ml_symbol.additional_bits)) catch return error.IntegerOverflow;
+        const literal_len = std.math.add(usize, ll_symbol.base, try state.reader.read(ll_symbol.additional_bits)) catch return error.IntegerOverflow;
+        const match_offset = try resolveSequenceOffset(of_symbol.base, of_symbol.additional_bits, offset_extra, literal_len, &state.repeated_offsets);
+        state.remaining -= 1;
+        if (state.remaining != 0) {
+            state.ll_state = try nextSequenceState(&state.reader, ll_symbol);
+            state.ml_state = try nextSequenceState(&state.reader, ml_symbol);
+            state.of_state = try nextSequenceState(&state.reader, of_symbol);
+        } else try state.reader.expectEnd();
+
+        if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < literal_len) return error.CorruptFrame;
+        if (output.len - written.* < literal_len) return error.OutputTooSmall;
+        try copyLiteralsFromHuffmanState(&huffman_state, section, literal_offset, output[written.*..][0..literal_len]);
+        written.* += literal_len;
+        literal_offset += literal_len;
+        try copyMatchFromHistory(output, written, frame_output_start, &.{}, match_offset, match_len);
+    }
+    if (section.regenerated_size < literal_offset) return error.CorruptFrame;
+    const last_literals = section.regenerated_size - literal_offset;
+    if (output.len - written.* < last_literals) return error.OutputTooSmall;
+    try copyLiteralsFromHuffmanState(&huffman_state, section, literal_offset, output[written.*..][0..last_literals]);
+    written.* += last_literals;
     if (continuation.retainsState()) {
         frame_state.previous_tables = spec.tables();
         frame_state.repeated_offsets = state.repeated_offsets;

@@ -2319,6 +2319,16 @@ architecture blindly.
   its conservative libzstd floor from `0.32x` to `0.36x`. Broader raw-literal
   and extra-bit fast paths regressed other FSE shapes and were fully reverted.
 
+- Added a matching executor for 1,024+ sequence blocks whose LL/OF/ML tables
+  are all FSE and whose literals are Huffman-compressed. It hoists the three
+  table-mode switches out of the sequence loop and keeps Huffman literal replay
+  beside the decoded match, while preserving the generic path for small and
+  mixed-mode blocks. Ten fixed-CPU 200-iteration A/B rounds reduce the 512 KiB
+  JSON median from about `46.997 ms` to `39.972 ms` (`14.9%`) and improve the
+  5,161-sequence raw-literal stress row by about `4.2%`. The conservative
+  `large_json` libzstd floor rises from `0.27x` to `0.32x`; smaller numbered
+  JSON stays on the generic path.
+
 - Expanded the LZ4/liblz4 caller-owned matrix with a deterministic 256 KiB
   incompressible, literal-only block. This separates real bulk-copy throughput
   from the existing 1 KiB row's fixed call overhead and locks the one-literal,
