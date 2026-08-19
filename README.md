@@ -674,6 +674,8 @@ defer zstd_incremental_encoder.deinit();
 // acknowledgement contract, as does the Brotli stored-stream encoder.
 // RawDeflateIncrementalStoredEncoder provides the same split-input/tiny-output
 // contract for RFC 1951 stored blocks, including pledged input size and flush.
+// RawDeflateIncrementalFixedEncoder adds fixed-Huffman compression, a rolling
+// 32 KiB history, and zlib-compatible empty stored sync-flush boundaries.
 const zstd_dict_options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only };
 const zstd_dict_bound = try vort.zstdEncodedNativeFrameBoundWithDictionary(
     "prefix: previous zstd history payload, shared phrase tail".len,

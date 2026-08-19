@@ -5135,6 +5135,10 @@ architecture blindly.
   `src/deflate/incremental/`. It accepts split input, drains through tiny output,
   emits resumable non-final flush blocks, supports pledged and maximum input
   sizes, and writes the sole BFINAL block only at finish.
+- Added a fixed-Huffman raw-DEFLATE incremental encoder beside the stored core.
+  It keeps bit packing continuous, plans each block against a rolling 32 KiB
+  history, supports tiny output and pledged input, and emits an empty stored
+  block for byte-aligned zlib-compatible sync flush without ending the stream.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

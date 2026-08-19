@@ -1,5 +1,5 @@
 const std = @import("std");
-const core = @import("../../core.zig");
+const core = @import("../../../core.zig");
 
 /// Incremental raw-DEFLATE stored-block encoder. One RFC 1951 stored block is
 /// retained; encoded bytes drain through arbitrary caller output. Flush writes
