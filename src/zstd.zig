@@ -5617,7 +5617,12 @@ fn nextSequenceState(reader: *ReverseBitReader, symbol: SequenceSymbol) Error!us
     return std.math.add(usize, symbol.next_state, try reader.readSmall(@intCast(symbol.state_bits))) catch return error.IntegerOverflow;
 }
 
-fn resolveSequenceOffset(
+/// Resolve repeat/direct offsets inside the per-sequence decode loop. This is
+/// deliberately forced inline: all arguments are already live at the caller,
+/// and profiling showed the tiny helper's call/return boundary consuming a
+/// measurable share of FSE-heavy blocks. The resolver's focused selector tests
+/// below remain the behavior oracle for the expanded hot path.
+inline fn resolveSequenceOffset(
     offset_base: usize,
     offset_bits: u8,
     offset_extra: usize,

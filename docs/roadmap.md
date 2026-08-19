@@ -2260,6 +2260,15 @@ architecture blindly.
   `0.29x/0.35x/0.51x/0.29x` libzstd and raises conservative floors. All 837
   tests and the 124-case lib-generated differential pass.
 
+- Inlined Zstd's repeat/direct offset resolver into the FSE sequence loop after
+  perf attributed about 6% of `readModeSequence` samples to the small helper's
+  call boundary. Ten interleaved fixed-CPU ReleaseFast rounds improve median
+  huffman80k, 512 KiB JSON, binary-mixed, and numbered-JSON caller-owned decode
+  time by about `4.0%/3.5%/0.5%/4.4%`, respectively. The retained conservative
+  libzstd floors rise to `0.44/0.27/0.32/0.24x`; the existing repeat-selector,
+  direct-offset, `rep0 - 1`, and invalid-match tests remain the expanded-path
+  behavior oracle.
+
 - Expanded the LZ4/liblz4 caller-owned matrix with a deterministic 256 KiB
   incompressible, literal-only block. This separates real bulk-copy throughput
   from the existing 1 KiB row's fixed call overhead and locks the one-literal,
