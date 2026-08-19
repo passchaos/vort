@@ -1,10 +1,10 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
 
-/// Byte-progressive single-member gzip decoder for the standard ten-byte
-/// header. Raw input is offered one byte at a time so footer ownership remains
-/// outside the DEFLATE bit reservoir. Optional header fields are rejected until
-/// the metadata state slice is enabled.
+/// Byte-progressive gzip decoder with opt-in concatenated-member support. Raw
+/// input is offered one byte at a time so footer ownership remains outside the
+/// DEFLATE bit reservoir. Each member gets independent header, history, CRC-32,
+/// and ISIZE state while stream output limits remain cumulative.
 pub fn Decoder(comptime Codec: type) type {
     return struct {
         options: Options,
@@ -25,6 +25,8 @@ pub fn Decoder(comptime Codec: type) type {
         input_finished: bool = false,
         total_input: usize = 0,
         total_output: usize = 0,
+        member_output: usize = 0,
+        member_count: usize = 0,
         last_error_name: []const u8 = "",
         last_error_phase: Phase = .header,
 
@@ -34,15 +36,27 @@ pub fn Decoder(comptime Codec: type) type {
             max_output_len: usize = std.math.maxInt(usize),
             expected_output_len: ?usize = null,
             max_header_metadata_len: usize = 1 << 20,
+            allow_concatenated: bool = false,
         };
-        pub const Phase = enum { header, extra_len, extra_payload, filename, comment, header_crc, raw, footer, done };
+        pub const Phase = enum { header, extra_len, extra_payload, filename, comment, header_crc, raw, footer, between_members, done };
+        pub const Snapshot = struct {
+            phase: Phase,
+            total_input: usize,
+            total_output: usize,
+            member_output: usize,
+            /// Number of members whose footer has been fully validated.
+            member_count: usize,
+            header_received: usize,
+            footer_received: usize,
+            done: bool,
+        };
 
         pub fn init(options: Options, history: []u8) Error!Self {
             return .{
                 .options = options,
                 .raw = try Codec.RawDecoder.initWithHistory(.{
-                    .max_output_len = options.max_output_len,
-                    .expected_output_len = options.expected_output_len,
+                    .max_output_len = initialRawLimit(options),
+                    .expected_output_len = if (options.allow_concatenated) null else options.expected_output_len,
                 }, history),
             };
         }
@@ -60,8 +74,23 @@ pub fn Decoder(comptime Codec: type) type {
             self.input_finished = false;
             self.total_input = 0;
             self.total_output = 0;
+            self.member_output = 0;
+            self.member_count = 0;
+            self.configureRawForMember();
             self.last_error_name = "";
             self.last_error_phase = .header;
+        }
+        pub fn snapshot(self: *const Self) Snapshot {
+            return .{
+                .phase = self.phase,
+                .total_input = self.total_input,
+                .total_output = self.total_output,
+                .member_output = self.member_output,
+                .member_count = self.member_count,
+                .header_received = self.header_received,
+                .footer_received = self.footer_received,
+                .done = self.phase == .done,
+            };
         }
         pub fn diagnostics(self: *const Self) core.StreamingDiagnostics {
             return .{
@@ -77,7 +106,13 @@ pub fn Decoder(comptime Codec: type) type {
         }
         pub fn finish(self: *Self) Error!void {
             self.input_finished = true;
+            if (self.options.allow_concatenated and self.phase == .between_members) {
+                try self.validateExpectedOutput();
+                self.phase = .done;
+                return;
+            }
             if (self.phase != .done) return self.fail(self.phase, error.TruncatedFrame);
+            try self.validateExpectedOutput();
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
@@ -159,21 +194,35 @@ pub fn Decoder(comptime Codec: type) type {
                     self.phase = .raw;
                 },
                 .raw => {
-                    const raw_input = if (input_read < input.len) input[input_read .. input_read + 1] else "";
-                    const raw_result = self.raw.step(raw_input, output[output_written..]) catch |err| return self.fail(.raw, err);
-                    input_read += raw_result.progress.input_read;
-                    self.total_input += raw_result.progress.input_read;
-                    if (raw_result.progress.output_written != 0) {
-                        const produced = output[output_written..][0..raw_result.progress.output_written];
-                        self.crc.update(produced);
-                        output_written += produced.len;
-                        self.total_output += produced.len;
-                    }
-                    if (raw_result.status == .done) {
+                    // Drain symbols already present in the raw bit reservoir
+                    // before offering another byte. Dynamic EOB codes can end
+                    // there; pre-supplying a byte in that case would make the
+                    // strict raw decoder mistake the first footer byte for raw
+                    // trailing data.
+                    const drained = self.raw.step("", output[output_written..]) catch |err| return self.failRaw(err);
+                    self.recordRawProgress(drained, output, &input_read, &output_written);
+                    if (drained.status == .done) {
                         self.phase = .footer;
                         continue;
                     }
-                    if (raw_result.status == .need_output) return result(input_read, output_written, .need_output);
+                    if (drained.status == .need_output) {
+                        // The raw decoder can retain one decoded literal when
+                        // passed an empty output slice. If the cumulative cap is
+                        // already exhausted, surface the limit now rather than
+                        // asking the caller for output that may not be written.
+                        if (self.options.allow_concatenated and self.remainingRawLimit() == 0)
+                            return self.fail(.raw, self.cumulativeLimitError());
+                        return result(input_read, output_written, .need_output);
+                    }
+                    if (input_read == input.len) return result(input_read, output_written, .need_input);
+
+                    const supplied = self.raw.step(input[input_read .. input_read + 1], output[output_written..]) catch |err| return self.failRaw(err);
+                    self.recordRawProgress(supplied, output, &input_read, &output_written);
+                    if (supplied.status == .done) {
+                        self.phase = .footer;
+                        continue;
+                    }
+                    if (supplied.status == .need_output) return result(input_read, output_written, .need_output);
                     if (input_read == input.len) return result(input_read, output_written, .need_input);
                 },
                 .footer => {
@@ -186,8 +235,13 @@ pub fn Decoder(comptime Codec: type) type {
                     }
                     if (self.footer_received != self.footer.len) return result(input_read, output_written, .need_input);
                     if (std.mem.readInt(u32, self.footer[0..4], .little) != self.crc.digest()) return self.fail(.footer, error.ChecksumMismatch);
-                    if (std.mem.readInt(u32, self.footer[4..8], .little) != @as(u32, @truncate(self.total_output))) return self.fail(.footer, error.SizeMismatch);
-                    self.phase = .done;
+                    if (std.mem.readInt(u32, self.footer[4..8], .little) != @as(u32, @truncate(self.member_output))) return self.fail(.footer, error.SizeMismatch);
+                    self.member_count += 1;
+                    self.phase = if (self.options.allow_concatenated) .between_members else .done;
+                },
+                .between_members => {
+                    if (input_read == input.len) return result(input_read, output_written, .need_input);
+                    self.beginMember();
                 },
                 .done => {
                     if (input_read != input.len) return self.fail(.done, error.TrailingData);
@@ -213,6 +267,59 @@ pub fn Decoder(comptime Codec: type) type {
                 self.phase = .raw;
             }
         }
+        fn beginMember(self: *Self) void {
+            // RFC 1952 members are independent streams: a later member cannot
+            // reference the prior member's DEFLATE window. Only wrapper-wide
+            // byte accounting and limits survive this reset.
+            self.raw.reset();
+            self.configureRawForMember();
+            self.phase = .header;
+            self.header_received = 0;
+            self.header_crc = Codec.Crc32.init();
+            self.flags = 0;
+            self.xlen_received = 0;
+            self.optional_remaining = 0;
+            self.header_crc_received = 0;
+            self.footer_received = 0;
+            self.crc = Codec.Crc32.init();
+            self.member_output = 0;
+        }
+        fn configureRawForMember(self: *Self) void {
+            self.raw.options.max_output_len = self.remainingRawLimit();
+            // In concatenated mode no individual member is required to fill
+            // the stream's exact size. The wrapper checks that cumulative size
+            // only once EOF is declared through finish().
+            self.raw.options.expected_output_len = if (self.options.allow_concatenated) null else self.options.expected_output_len;
+        }
+        fn remainingRawLimit(self: *const Self) usize {
+            return rawLimit(self.options, self.total_output);
+        }
+        fn cumulativeLimitError(self: *const Self) Error {
+            if (self.options.expected_output_len) |expected| {
+                if (expected <= self.options.max_output_len) return error.SizeMismatch;
+            }
+            return error.OutputLimitExceeded;
+        }
+        fn validateExpectedOutput(self: *Self) Error!void {
+            if (self.options.expected_output_len) |expected| {
+                if (self.total_output != expected) return self.fail(self.phase, error.SizeMismatch);
+            }
+        }
+        fn recordRawProgress(self: *Self, raw_result: core.StepResult, output: []const u8, input_read: *usize, output_written: *usize) void {
+            input_read.* += raw_result.progress.input_read;
+            self.total_input += raw_result.progress.input_read;
+            if (raw_result.progress.output_written == 0) return;
+            const produced = output[output_written.*..][0..raw_result.progress.output_written];
+            self.crc.update(produced);
+            output_written.* += produced.len;
+            self.total_output += produced.len;
+            self.member_output += produced.len;
+        }
+        fn failRaw(self: *Self, err: Error) Error {
+            if (self.options.allow_concatenated and err == error.OutputLimitExceeded)
+                return self.fail(.raw, self.cumulativeLimitError());
+            return self.fail(.raw, err);
+        }
         fn fail(self: *Self, phase: Phase, err: Error) Error {
             self.last_error_name = @errorName(err);
             self.last_error_phase = phase;
@@ -222,4 +329,18 @@ pub fn Decoder(comptime Codec: type) type {
             return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = status };
         }
     };
+}
+
+fn initialRawLimit(options: anytype) usize {
+    return rawLimit(options, 0);
+}
+
+fn rawLimit(options: anytype, total_output: usize) usize {
+    const max_remaining = if (total_output < options.max_output_len) options.max_output_len - total_output else 0;
+    if (!options.allow_concatenated) return max_remaining;
+    if (options.expected_output_len) |expected| {
+        const expected_remaining = if (total_output < expected) expected - total_output else 0;
+        return @min(max_remaining, expected_remaining);
+    }
+    return max_remaining;
 }

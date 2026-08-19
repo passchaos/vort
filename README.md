@@ -701,7 +701,8 @@ defer zstd_incremental_encoder.deinit();
 // initWithDictionary validates split DICTID and seeds the raw 32 KiB history
 // from the caller-owned preset dictionary.
 // GzipIncrementalDecoder supports split FEXTRA/FNAME/FCOMMENT/FHCRC plus
-// streaming CRC-32/ISIZE for one member.
+// streaming CRC-32/ISIZE. Set allow_concatenated to continue through RFC 1952
+// members while enforcing max_output_len/expected_output_len cumulatively.
 const zstd_dict_options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only };
 const zstd_dict_bound = try vort.zstdEncodedNativeFrameBoundWithDictionary(
     "prefix: previous zstd history payload, shared phrase tail".len,

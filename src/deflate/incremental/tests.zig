@@ -1,6 +1,11 @@
 const std = @import("std");
 const core = @import("../../core.zig");
 const deflate = @import("../../deflate.zig");
+const gzip_concatenated_tests = @import("tests/gzip_concatenated.zig");
+
+test {
+    _ = gzip_concatenated_tests;
+}
 
 test "raw deflate incremental stored encoder splits flushes and resumes" {
     const first = "first raw deflate stored segment";

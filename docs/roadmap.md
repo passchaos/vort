@@ -5196,6 +5196,11 @@ architecture blindly.
   raw decoder one byte at a time, validates streaming CRC-32 and ISIZE from a
   split footer, and incrementally parses/skips bounded FEXTRA, FNAME, FCOMMENT,
   and FHCRC fields with header CRC validation and truncation diagnostics.
+- Extended the byte-progressive gzip decoder with opt-in concatenated-member
+  traversal. Member headers, DEFLATE history, CRC-32, and ISIZE reset at each
+  boundary while stream input/output accounting, exact-size and output limits
+  remain cumulative; snapshots expose validated member counts and later-member
+  corruption/truncation retains the completed-member context.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,
