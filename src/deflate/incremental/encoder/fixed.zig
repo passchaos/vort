@@ -1,9 +1,10 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
 
-/// Incremental fixed-Huffman raw-DEFLATE encoder. Each accepted block is
+/// Incremental block-planned raw-DEFLATE encoder. Each accepted block is
 /// independently planned against the retained 32 KiB history; bit packing stays
-/// continuous until finish writes BFINAL. Flush emits an empty stored block,
+/// continuous until finish writes BFINAL. The codec adapter chooses fixed-only
+/// or stored/fixed/dynamic best emission. Flush emits an empty stored block,
 /// matching zlib's sync-flush byte boundary without ending the stream.
 pub fn Encoder(comptime Codec: type) type {
     return struct {
@@ -148,7 +149,7 @@ pub fn Encoder(comptime Codec: type) type {
                 const keep = @min(self.dictionary.len, Codec.history_len);
                 self.history.appendSliceAssumeCapacity(self.dictionary[self.dictionary.len - keep ..]);
             }
-            try Codec.writeFixedBlock(self.allocator, &self.pending, &self.state, self.plain.items, self.history.items, final, self.options.compression);
+            try Codec.writeBlock(self.allocator, &self.pending, &self.state, self.plain.items, self.history.items, final, self.options.compression);
             if (self.plain.items.len >= Codec.history_len) {
                 self.history.clearRetainingCapacity();
                 self.history.appendSliceAssumeCapacity(self.plain.items[self.plain.items.len - Codec.history_len ..]);

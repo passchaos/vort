@@ -5146,6 +5146,10 @@ architecture blindly.
 - Added `GzipIncrementalFixedEncoder` over the same raw core, including standard
   or metadata-rich RFC 1952 headers, optional FHCRC, incremental CRC-32, ISIZE,
   exact input sizing, tiny-output draining, and resumable sync flush.
+- Added `RawDeflateIncrementalBestEncoder`, reusing the fixed stream state
+  machine while selecting stored, fixed, or dynamic Huffman representation per
+  block. It retains rolling history, pledged-size handling, tiny output, BFINAL,
+  and sync-flush semantics across all three wire choices.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

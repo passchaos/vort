@@ -680,6 +680,8 @@ defer zstd_incremental_encoder.deinit();
 // Adler-32 and the footer while preserving the raw core's flush semantics.
 // GzipIncrementalFixedEncoder adds optional RFC 1952 metadata/FHCRC plus
 // streaming CRC-32 and ISIZE with the same split-input and sync-flush contract.
+// RawDeflateIncrementalBestEncoder evaluates stored, fixed, and dynamic Huffman
+// representations per block while retaining the same rolling history core.
 const zstd_dict_options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only };
 const zstd_dict_bound = try vort.zstdEncodedNativeFrameBoundWithDictionary(
     "prefix: previous zstd history payload, shared phrase tail".len,

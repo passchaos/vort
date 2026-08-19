@@ -73,7 +73,7 @@ const IncrementalFixedEncoderCodec = struct {
         state.scratch = 0;
         state.bit_index = 0;
     }
-    pub fn writeFixedBlock(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State, block: []const u8, history: []const u8, final: bool, options: IncrementalFixedEncoderCodec.CompressionOptions) IncrementalFixedEncoderCodec.Error!void {
+    pub fn writeBlock(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State, block: []const u8, history: []const u8, final: bool, options: IncrementalFixedEncoderCodec.CompressionOptions) IncrementalFixedEncoderCodec.Error!void {
         const plan = if (history.len == 0)
             try planTokensAlloc(allocator, block, options)
         else
@@ -97,6 +97,41 @@ const IncrementalFixedEncoderCodec = struct {
 };
 
 pub const RawDeflateIncrementalFixedEncoder = incremental_fixed_encoder.Encoder(IncrementalFixedEncoderCodec);
+
+const IncrementalBestEncoderCodec = struct {
+    pub const Error = deflate.Error || std.mem.Allocator.Error;
+    pub const CompressionOptions = deflate.CompressionOptions;
+    pub const history_len = lz77.default_window_len;
+    pub const State = bitstream.BitWriter;
+
+    pub fn deinitState(state: *State, allocator: std.mem.Allocator) void {
+        state.deinit(allocator);
+    }
+    pub fn resetState(state: *State) void {
+        IncrementalFixedEncoderCodec.resetState(state);
+    }
+    pub fn writeBlock(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State, block: []const u8, history: []const u8, final: bool, options: IncrementalBestEncoderCodec.CompressionOptions) IncrementalBestEncoderCodec.Error!void {
+        const plan = if (history.len == 0)
+            try planTokensAlloc(allocator, block, options)
+        else
+            try planTokensWithDictionaryAlloc(allocator, block, history, options);
+        defer plan.deinit(allocator);
+        try writeBestTokensBlock(allocator, state, block, plan.tokens, final, options);
+        try drainWriterBytes(allocator, pending, state);
+    }
+    pub fn writeSyncFlush(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) IncrementalBestEncoderCodec.Error!void {
+        return IncrementalFixedEncoderCodec.writeSyncFlush(allocator, pending, state);
+    }
+    pub fn finishState(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) IncrementalBestEncoderCodec.Error!void {
+        return IncrementalFixedEncoderCodec.finishState(allocator, pending, state);
+    }
+    fn drainWriterBytes(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) std.mem.Allocator.Error!void {
+        try pending.appendSlice(allocator, state.bytes.items);
+        state.bytes.clearRetainingCapacity();
+    }
+};
+
+pub const RawDeflateIncrementalBestEncoder = incremental_fixed_encoder.Encoder(IncrementalBestEncoderCodec);
 
 const IncrementalZlibFixedEncoderCodec = struct {
     pub const Error = deflate.Error || std.mem.Allocator.Error;

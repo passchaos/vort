@@ -1251,6 +1251,7 @@ pub const encodeRawFixedTokensAlloc = deflate.encodeRawFixedTokensAlloc;
 pub const RawDeflateEncoder = deflate.RawDeflateEncoder;
 pub const RawDeflateIncrementalStoredEncoder = deflate.RawDeflateIncrementalStoredEncoder;
 pub const RawDeflateIncrementalFixedEncoder = deflate.RawDeflateIncrementalFixedEncoder;
+pub const RawDeflateIncrementalBestEncoder = deflate.RawDeflateIncrementalBestEncoder;
 pub const ZlibIncrementalFixedEncoder = deflate.ZlibIncrementalFixedEncoder;
 pub const GzipIncrementalFixedEncoder = deflate.GzipIncrementalFixedEncoder;
 pub const RawDeflateDecoder = deflate.RawDeflateDecoder;
