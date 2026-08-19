@@ -26,6 +26,11 @@ pub const Decoder = struct {
     stored_lengths: [4]u8 = undefined,
     stored_length_received: usize = 0,
     stored_remaining: usize = 0,
+    dynamic_hlit: usize = 0,
+    dynamic_hdist: usize = 0,
+    dynamic_hclen: usize = 0,
+    dynamic_code_length_index: usize = 0,
+    dynamic_code_lengths: [19]u4 = @splat(0),
     input_finished: bool = false,
     total_input: usize = 0,
     total_output: usize = 0,
@@ -37,7 +42,7 @@ pub const Decoder = struct {
         max_output_len: usize = std.math.maxInt(usize),
         expected_output_len: ?usize = null,
     };
-    pub const Phase = enum { block_header, stored_lengths, stored_payload, symbols, length_extra, distance_symbol, distance_extra, match_copy, done };
+    pub const Phase = enum { block_header, stored_lengths, stored_payload, dynamic_counts, dynamic_code_lengths, dynamic_lengths, symbols, length_extra, distance_symbol, distance_extra, match_copy, done };
 
     pub fn init() Decoder {
         return initWithOptions(.{});
@@ -86,7 +91,7 @@ pub const Decoder = struct {
                         self.phase = .stored_lengths;
                     },
                     1 => self.phase = .symbols,
-                    2 => return self.fail(.block_header, error.UnsupportedDeflateFeature),
+                    2 => self.phase = .dynamic_counts,
                     else => return self.fail(.block_header, error.InvalidDeflateBlockType),
                 }
             },
@@ -120,6 +125,28 @@ pub const Decoder = struct {
                 }
                 if (self.stored_remaining == 0) self.completeBlock();
             },
+            .dynamic_counts => {
+                const counts = self.readBits(input, &input_read, 14) orelse return result(input_read, output_written, .need_input);
+                self.dynamic_hlit = (counts & 0x1f) + 257;
+                self.dynamic_hdist = ((counts >> 5) & 0x1f) + 1;
+                self.dynamic_hclen = ((counts >> 10) & 0x0f) + 4;
+                if (self.dynamic_hlit > 286 or self.dynamic_hdist > 30) return self.fail(.dynamic_counts, error.InvalidDynamicBlockHeader);
+                self.dynamic_code_lengths = @splat(0);
+                self.dynamic_code_length_index = 0;
+                self.phase = .dynamic_code_lengths;
+            },
+            .dynamic_code_lengths => {
+                while (self.dynamic_code_length_index < self.dynamic_hclen) {
+                    const length = self.readBits(input, &input_read, 3) orelse return result(input_read, output_written, .need_input);
+                    self.dynamic_code_lengths[code_length_order[self.dynamic_code_length_index]] = @intCast(length);
+                    self.dynamic_code_length_index += 1;
+                }
+                if (!validCodeLengthAlphabet(self.dynamic_code_lengths)) return self.fail(.dynamic_code_lengths, error.InvalidDynamicBlockHeader);
+                // The prefix is now fully validated and retained. Repeat-code
+                // expansion into literal/distance tables is the next state slice.
+                self.phase = .dynamic_lengths;
+            },
+            .dynamic_lengths => return self.fail(.dynamic_lengths, error.UnsupportedDeflateFeature),
             .symbols => {
                 if (output_written == output.len and output.len != 0) return result(input_read, output_written, .need_output);
                 const symbol = (try self.readFixedSymbol(input, &input_read)) orelse return result(input_read, output_written, .need_input);
@@ -337,4 +364,25 @@ const distance_bases = [_]usize{ 1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97
 fn distanceBaseAndBits(symbol: usize) ?BaseBits {
     if (symbol >= distance_bases.len) return null;
     return .{ .base = distance_bases[symbol], .bits = if (symbol < 4) 0 else @intCast(symbol / 2 - 1) };
+}
+
+const code_length_order = [_]u8{ 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 };
+
+fn validCodeLengthAlphabet(lengths: [19]u4) bool {
+    var counts: [8]usize = @splat(0);
+    var active: usize = 0;
+    for (lengths) |length| {
+        if (length > 7) return false;
+        if (length != 0) {
+            counts[length] += 1;
+            active += 1;
+        }
+    }
+    if (active == 0) return false;
+    var available: isize = 1;
+    for (1..8) |bits| {
+        available = available * 2 - @as(isize, @intCast(counts[bits]));
+        if (available < 0) return false;
+    }
+    return true;
 }

@@ -657,3 +657,35 @@ test "raw deflate incremental mixed decoder validates stored lengths" {
     var decoder = deflate.RawDeflateIncrementalFixedLiteralDecoder.init();
     try std.testing.expectError(error.StoredLengthMismatch, decoder.step(&.{ 0x01, 1, 0, 0xff, 0xff }, &.{}));
 }
+
+test "raw deflate incremental decoder parses split dynamic prefix" {
+    const payload = "dynamic prefix progressive parser alpha beta gamma" ** 40;
+    const encoded = try deflate.encodeRawDynamicWithOptionsAlloc(std.testing.allocator, payload, deflate.optionsForLevel(.default));
+    defer std.testing.allocator.free(encoded);
+    var decoder = deflate.RawDeflateIncrementalFixedLiteralDecoder.init();
+    var offset: usize = 0;
+    while (offset < encoded.len) {
+        if (decoder.diagnostics().phase_name.len != 0 and std.mem.eql(u8, decoder.diagnostics().phase_name, "dynamic_lengths")) break;
+        if (decoder.step(encoded[offset .. offset + 1], &.{})) |result| {
+            offset += result.progress.input_read;
+        } else |err| {
+            try std.testing.expectEqual(error.UnsupportedDeflateFeature, err);
+            break;
+        }
+    }
+    try std.testing.expectEqualStrings("dynamic_lengths", decoder.diagnostics().phase_name);
+    try std.testing.expectError(error.UnsupportedDeflateFeature, decoder.step("", &.{}));
+}
+
+test "raw deflate incremental decoder validates dynamic counts" {
+    // BFINAL=1, BTYPE=dynamic, HLIT=31 (288 literal codes, above RFC limit).
+    const invalid = [_]u8{ 0xfd, 0x00, 0x00 };
+    var decoder = deflate.RawDeflateIncrementalFixedLiteralDecoder.init();
+    try std.testing.expectError(error.InvalidDynamicBlockHeader, decoder.step(&invalid, &.{}));
+
+    const dynamic = try deflate.encodeRawDynamicLiteralAlloc(std.testing.allocator, "truncated dynamic header");
+    defer std.testing.allocator.free(dynamic);
+    var truncated = deflate.RawDeflateIncrementalFixedLiteralDecoder.init();
+    _ = try truncated.step(dynamic[0..2], &.{});
+    try std.testing.expectError(error.TruncatedFrame, truncated.finish());
+}

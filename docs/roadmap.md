@@ -5177,6 +5177,10 @@ architecture blindly.
   Stored LEN/NLEN and aligned payload state now share the same bit reservoir and
   caller-owned history ring, enabling mixed block streams without handing
   prefetched bytes between separate decoder objects.
+- Began byte-progressive dynamic-Huffman parsing in the same state machine.
+  HLIT/HDIST/HCLEN and the permuted code-length alphabet survive arbitrary input
+  splits, validate RFC bounds/Kraft oversubscription, and stop explicitly before
+  repeat-code expansion rather than falling back to whole-frame buffering.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

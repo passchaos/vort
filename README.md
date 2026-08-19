@@ -694,6 +694,8 @@ defer zstd_incremental_encoder.deinit();
 // decoding plus caller-owned 32 KiB history for split length/distance matches.
 // The same byte-progressive decoder switches between stored and fixed blocks
 // without losing bit-reservoir or history state.
+// Dynamic blocks currently progress through HLIT/HDIST/HCLEN and the split
+// code-length alphabet before explicitly stopping at repeat-code expansion.
 const zstd_dict_options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only };
 const zstd_dict_bound = try vort.zstdEncodedNativeFrameBoundWithDictionary(
     "prefix: previous zstd history payload, shared phrase tail".len,
