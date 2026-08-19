@@ -4,6 +4,7 @@ const checksum = @import("checksum.zig");
 const block_decode = @import("snappy/block_decode.zig");
 const frame_format = @import("snappy/frame.zig");
 const incremental_frame = @import("snappy/incremental/frame_decoder.zig");
+const incremental_tests = @import("snappy/incremental/tests.zig");
 const match_copy = @import("snappy/match_copy.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
@@ -77,6 +78,10 @@ const IncrementalFrameCodec = struct {
 
 const snappy = @This();
 pub const IncrementalFrameDecoder = incremental_frame.Decoder(IncrementalFrameCodec);
+
+test {
+    _ = incremental_tests;
+}
 
 pub fn encodedBlockBound(input_len: usize) Error!usize {
     _ = try checkedUsizeToU32(input_len);
@@ -1046,74 +1051,6 @@ test "snappy raw block encodes empty and hello with known bytes" {
     var too_small: [1]u8 = undefined;
     try std.testing.expectError(error.OutputTooSmall, encodeBlockInto("hello", &too_small));
     try std.testing.expectError(error.OutputTooSmall, encodeFrameInto("hello", &too_small));
-}
-
-test "snappy incremental frame decoder accepts split input and tiny output" {
-    const payload = ("incremental snappy payload " ** 64) ++ ([_]u8{0xa5} ** 257);
-    const frame = try encodeFrameAlloc(std.testing.allocator, payload[0..]);
-    defer std.testing.allocator.free(frame);
-
-    // Insert an empty skippable chunk after the stream identifier so the state
-    // machine covers metadata without changing the production encoder.
-    var framed: std.ArrayList(u8) = .empty;
-    defer framed.deinit(std.testing.allocator);
-    try framed.appendSlice(std.testing.allocator, frame[0 .. 4 + stream_identifier_payload.len]);
-    try framed.appendSlice(std.testing.allocator, &.{ 0x80, 0, 0, 0 });
-    try framed.appendSlice(std.testing.allocator, frame[4 + stream_identifier_payload.len ..]);
-
-    var decoder = IncrementalFrameDecoder.init(std.testing.allocator);
-    defer decoder.deinit();
-    var decoded: [payload.len]u8 = undefined;
-    var input_offset: usize = 0;
-    var output_offset: usize = 0;
-    while (input_offset < framed.items.len) {
-        const input_end = @min(framed.items.len, input_offset + 3);
-        const output_end = @min(decoded.len, output_offset + 7);
-        const result = try decoder.step(
-            framed.items[input_offset..input_end],
-            decoded[output_offset..output_end],
-        );
-        input_offset += result.progress.input_read;
-        output_offset += result.progress.output_written;
-        try std.testing.expect(result.progress.input_read != 0 or result.progress.output_written != 0 or result.status == .need_input);
-    }
-    try decoder.finish();
-    while (true) {
-        const output_end = @min(decoded.len, output_offset + 7);
-        const result = try decoder.step("", decoded[output_offset..output_end]);
-        output_offset += result.progress.output_written;
-        if (result.status == .done) break;
-        try std.testing.expectEqual(core.StepResult.Status.need_output, result.status);
-    }
-    try std.testing.expectEqual(payload.len, output_offset);
-    try std.testing.expectEqualSlices(u8, payload[0..], &decoded);
-    try std.testing.expect(decoder.snapshot().saw_identifier);
-    try std.testing.expectEqual(IncrementalFrameDecoder.Phase.done, decoder.snapshot().phase);
-
-    decoder.reset();
-    try std.testing.expectEqual(@as(usize, 0), decoder.snapshot().output_written);
-    try std.testing.expectEqual(IncrementalFrameDecoder.Phase.header, decoder.snapshot().phase);
-}
-
-test "snappy incremental frame decoder enforces limits and finish semantics" {
-    const frame = try encodeFrameAlloc(std.testing.allocator, "bounded snappy frame");
-    defer std.testing.allocator.free(frame);
-
-    var output_limited = IncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{ .max_output_len = 3 });
-    defer output_limited.deinit();
-    try std.testing.expectError(error.OutputLimitExceeded, output_limited.step(frame, &.{}));
-    try std.testing.expectEqualStrings("OutputLimitExceeded", output_limited.snapshot().last_error_name);
-
-    var chunk_limited = IncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{ .max_chunk_payload_len = 5 });
-    defer chunk_limited.deinit();
-    try std.testing.expectError(error.OutputLimitExceeded, chunk_limited.step(frame, &.{}));
-
-    var truncated = IncrementalFrameDecoder.init(std.testing.allocator);
-    defer truncated.deinit();
-    const partial = try truncated.step(frame[0 .. frame.len - 1], &.{});
-    try std.testing.expectEqual(core.StepResult.Status.need_input, partial.status);
-    try std.testing.expectError(error.TruncatedFrame, truncated.finish());
-    try std.testing.expectEqualStrings("truncated_input", truncated.diagnostics().recoverability_hint_name);
 }
 
 test "snappy raw block round trips repeated payload with copy tokens" {
