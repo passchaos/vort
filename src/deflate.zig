@@ -1632,6 +1632,57 @@ pub fn encodeRawFixedTokensAlloc(allocator: std.mem.Allocator, tokens: []const l
     return encodeRawFixedTokensFinalAlloc(allocator, tokens, true);
 }
 
+/// Append a non-final fixed block followed by a byte-aligned sync-flush block.
+///
+/// RFC 7692 permessage-deflate uses exactly this raw-DEFLATE shape and omits
+/// the trailing `00 00 ff ff` bytes on the WebSocket wire. Keeping bit packing
+/// inside the encoder avoids callers trying to rewrite BFINAL after alignment,
+/// which is incorrect whenever the fixed block ends mid-byte.
+pub fn encodeRawFixedSyncFlushAppend(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    input: []const u8,
+    options: CompressionOptions,
+) !usize {
+    const start = out.items.len;
+    const plan = try planTokensAlloc(allocator, input, options);
+    defer plan.deinit(allocator);
+    var writer = bitstream.BitWriter{};
+    defer writer.deinit(allocator);
+    try writeFixedTokens(allocator, &writer, plan.tokens, false);
+    try writeStoredBlock(allocator, &writer, "", false);
+    try out.appendSlice(allocator, writer.bytes.items);
+    return out.items.len - start;
+}
+
+test "raw fixed sync flush round trips after RFC 7692 tail elision" {
+    const allocator = std.testing.allocator;
+    const payload = "websocket sync flush payload " ** 32;
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(allocator);
+    const written = try encodeRawFixedSyncFlushAppend(
+        allocator,
+        &encoded,
+        payload,
+        .{ .parser = .hash },
+    );
+    try std.testing.expectEqual(encoded.items.len, written);
+    try std.testing.expect(std.mem.endsWith(
+        u8,
+        encoded.items,
+        "\x00\x00\xff\xff",
+    ));
+
+    encoded.items.len -= 4;
+    try encoded.appendSlice(allocator, "\x00\x00\xff\xff");
+    // The RFC 7692 restored sync flush remains non-final. Add a final empty
+    // stored block only for this whole-stream decoder assertion.
+    try encoded.appendSlice(allocator, "\x01\x00\x00\xff\xff");
+    const decoded = try decodeRawAutoAlloc(allocator, encoded.items);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualStrings(payload, decoded);
+}
+
 fn encodeRawFixedTokensFinalAlloc(allocator: std.mem.Allocator, tokens: []const lz77.Token, final: bool) ![]u8 {
     var writer = bitstream.BitWriter{};
     errdefer writer.deinit(allocator);

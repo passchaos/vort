@@ -1240,6 +1240,7 @@ pub const encodeRawDynamicSplitWithDictionaryAppend = deflate.encodeRawDynamicSp
 pub const encodeRawDynamicTokensAlloc = deflate.encodeRawDynamicTokensAlloc;
 pub const encodeRawFixedWithOptionsAlloc = deflate.encodeRawFixedWithOptionsAlloc;
 pub const encodeRawFixedWithOptionsAppend = deflate.encodeRawFixedWithOptionsAppend;
+pub const encodeRawFixedSyncFlushAppend = deflate.encodeRawFixedSyncFlushAppend;
 pub const encodeRawFixedTokensAlloc = deflate.encodeRawFixedTokensAlloc;
 pub const RawDeflateEncoder = deflate.RawDeflateEncoder;
 pub const RawDeflateDecoder = deflate.RawDeflateDecoder;
