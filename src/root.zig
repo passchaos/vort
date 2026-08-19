@@ -122,6 +122,7 @@ pub const snappyEncodeFrameAppend = snappy.encodeFrameAppend;
 pub const snappyEncodeFrameInto = snappy.encodeFrameInto;
 pub const snappyEncodedFrameBound = snappy.encodedFrameBound;
 pub const SnappyEncoder = snappy.Encoder;
+pub const SnappyIncrementalFrameDecoder = snappy.IncrementalFrameDecoder;
 pub const SnappyFrameSummary = snappy.FrameSummary;
 pub const SnappyBlockSummary = snappy.BlockSummary;
 pub const snappySummarizeBlock = snappy.summarizeBlock;

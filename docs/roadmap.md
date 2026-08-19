@@ -5032,3 +5032,11 @@ architecture blindly.
   screenshot by roughly 1--2%. Kept history/row state modular and split general
   versus RLE258 contract tests into a descriptive subdirectory, but retained
   the token/commit driver beside the semantic loop for generated-code locality.
+- Added a caller-owned incremental Snappy framed-stream decoder. Chunk headers
+  and payloads can split at arbitrary input boundaries; compressed and
+  uncompressed chunks are checksum-validated into bounded per-chunk scratch and
+  drained through arbitrarily small output buffers. The state machine supports
+  skippable chunks, explicit finish/truncation semantics, reset/reuse, compressed
+  chunk and total-output limits, snapshots, and shared streaming diagnostics.
+  The implementation lives under `src/snappy/incremental/` behind a narrow codec
+  interface instead of expanding the already-large Snappy facade.
