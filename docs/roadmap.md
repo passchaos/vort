@@ -5058,6 +5058,11 @@ architecture blindly.
   the total input length can emit the content-size header while retaining split
   input and tiny-output behavior; underflow or overflow against the pledged
   length returns `SizeMismatch`.
+- Added preset-dictionary constructors for the incremental LZ4 encoder, with
+  optional pledged size. Dictionary_ID is emitted before streaming begins and
+  dictionary bytes seed the first block's match history; later linked blocks
+  continue from the rolling 64 KiB frame history. Zero or mismatched IDs are
+  rejected before output.
 - Added a no-content-size incremental native Zstd raw/RLE frame encoder under
   `src/zstd/incremental/`. It retains one bounded block, delays the Zstd final
   block bit until explicit finish, maintains the optional XXH64 content checksum

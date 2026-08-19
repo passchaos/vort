@@ -21,17 +21,29 @@ pub fn Encoder(comptime Codec: type) type {
         total_input: usize = 0,
         total_output: usize = 0,
         expected_input_len: ?usize = null,
+        dictionary_id: ?u32 = null,
+        dictionary: []const u8 = &.{},
 
         const Self = @This();
         pub const Error = Codec.Error;
 
         pub fn init(allocator: std.mem.Allocator, options: Codec.Options) Error!Self {
-            try Codec.validate(options, null);
+            try Codec.validate(options, null, null);
             return .{ .allocator = allocator, .options = options, .block_encoder = try Codec.EncoderState.init(allocator) };
         }
         pub fn initExactSize(allocator: std.mem.Allocator, options: Codec.Options, expected_input_len: usize) Error!Self {
-            try Codec.validate(options, expected_input_len);
+            try Codec.validate(options, expected_input_len, null);
             return .{ .allocator = allocator, .options = options, .block_encoder = try Codec.EncoderState.init(allocator), .expected_input_len = expected_input_len };
+        }
+        pub fn initWithDictionary(allocator: std.mem.Allocator, options: Codec.Options, dictionary_id: u32, dictionary: []const u8) Error!Self {
+            if (dictionary_id == 0) return error.NeedDictionary;
+            try Codec.validate(options, null, dictionary_id);
+            return .{ .allocator = allocator, .options = options, .block_encoder = try Codec.EncoderState.init(allocator), .dictionary_id = dictionary_id, .dictionary = dictionary };
+        }
+        pub fn initExactSizeWithDictionary(allocator: std.mem.Allocator, options: Codec.Options, expected_input_len: usize, dictionary_id: u32, dictionary: []const u8) Error!Self {
+            if (dictionary_id == 0) return error.NeedDictionary;
+            try Codec.validate(options, expected_input_len, dictionary_id);
+            return .{ .allocator = allocator, .options = options, .block_encoder = try Codec.EncoderState.init(allocator), .expected_input_len = expected_input_len, .dictionary_id = dictionary_id, .dictionary = dictionary };
         }
         pub fn deinit(self: *Self) void {
             self.block_encoder.deinit();
@@ -80,7 +92,7 @@ pub fn Encoder(comptime Codec: type) type {
                     if (output_written == output.len and output.len != 0) return result(input_read, output_written, .need_output);
                 }
                 if (!self.header_written) {
-                    try Codec.writeHeader(self.allocator, &self.pending, self.options, self.expected_input_len);
+                    try Codec.writeHeader(self.allocator, &self.pending, self.options, self.expected_input_len, self.dictionary_id);
                     self.header_written = true;
                     continue;
                 }
@@ -97,7 +109,7 @@ pub fn Encoder(comptime Codec: type) type {
                     }
                 }
                 if (self.block.items.len == Codec.maxBlockLen(self.options) or (self.finishing and self.block.items.len != 0)) {
-                    const prefix = if (self.options.block_mode == .linked) self.history.items else &.{};
+                    const prefix = if (self.history.items.len != 0) self.history.items else if (self.dictionary.len != 0) self.dictionary else &.{};
                     try Codec.writeBlock(&self.block_encoder, &self.pending, self.block.items, prefix, self.options);
                     if (self.options.block_mode == .linked) {
                         self.history.clearRetainingCapacity();

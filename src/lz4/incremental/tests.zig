@@ -76,3 +76,29 @@ test "LZ4 incremental frame encoder supports pledged content size" {
         }
     }
 }
+
+test "LZ4 incremental frame encoder supports preset dictionary" {
+    const dictionary = "shared LZ4 dictionary phrase " ** 32;
+    const payload = dictionary ++ "payload";
+    const id: u32 = 0x1234abcd;
+    var encoder = try lz4.NativeIncrementalFrameEncoder.initWithDictionary(std.testing.allocator, .{ .include_content_size = false, .dictionary_id = id }, id, dictionary);
+    defer encoder.deinit();
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    var scratch: [29]u8 = undefined;
+    var offset: usize = 0;
+    while (offset < payload.len) {
+        const result = try encoder.step(payload[offset..], &scratch);
+        offset += result.progress.input_read;
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    const decoded = try lz4.decodeNativeFrameAllocWithDictionary(std.testing.allocator, frame.items, lz4.NativeDictionary.init(id, dictionary));
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
