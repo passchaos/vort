@@ -5163,6 +5163,13 @@ architecture blindly.
   the next input prefix, and moves the cut to a complete LZ77 token boundary so
   matches spanning a caller/block boundary are not truncated. Flush and finish
   still publish all accepted bytes immediately.
+- Added a persistent rolling hash-chain match finder for incremental DEFLATE
+  hash-parser levels under `src/deflate/incremental/encoder/match_finder/`. Fixed,
+  best, zlib, and gzip wrappers now share epoch-tagged 32 Ki-entry hash heads and
+  a bounded predecessor ring across blocks instead of allocating and rebuilding
+  dictionary tables per block. Preset dictionaries and cross-block hash anchors
+  seed the same state; reset is O(1), retains table allocation, and reproduces
+  deterministic output. Other parser modes retain their existing planner paths.
 - Added a byte-progressive raw-DEFLATE stored-block decoder under
   `src/deflate/incremental/decoder/`. It preserves split header state, streams
   payload directly caller-to-caller through tiny output, enforces exact/maximum

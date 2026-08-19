@@ -682,6 +682,8 @@ defer zstd_incremental_encoder.deinit();
 // streaming CRC-32 and ISIZE with the same split-input and sync-flush contract.
 // RawDeflateIncrementalBestEncoder evaluates stored, fixed, and dynamic Huffman
 // representations per block while retaining the same rolling history core.
+// Hash-parser levels additionally retain a bounded 32 KiB predecessor ring and
+// epoch-tagged hash heads across blocks; reset reuses those tables in O(1).
 // ZlibIncrementalBestEncoder and GzipIncrementalBestEncoder expose that selector
 // through wrapper checksums/metadata; *OptionsForLevel maps zlib levels 0...9.
 // Set adaptive_blocks on a best encoder to use CompressionOptions.split_options

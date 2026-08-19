@@ -10,6 +10,7 @@ const png_windowed_history =
 const semantic_rle258 = @import("deflate/semantic/rle258.zig");
 const incremental_stored_encoder = @import("deflate/incremental/encoder/stored.zig");
 const incremental_fixed_encoder = @import("deflate/incremental/encoder/fixed.zig");
+const incremental_rolling_hash = @import("deflate/incremental/encoder/match_finder/rolling_hash.zig");
 const incremental_zlib_fixed_encoder = @import("deflate/incremental/encoder/zlib_fixed.zig");
 const incremental_gzip_fixed_encoder = @import("deflate/incremental/encoder/gzip_fixed.zig");
 const incremental_stored_decoder = @import("deflate/incremental/decoder/stored.zig");
@@ -77,11 +78,18 @@ const IncrementalFixedEncoderCodec = struct {
         state.scratch = 0;
         state.bit_index = 0;
     }
-    pub fn writeBlock(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State, block: []const u8, history: []const u8, final: bool, options: IncrementalFixedEncoderCodec.CompressionOptions) IncrementalFixedEncoderCodec.Error!void {
-        const plan = if (history.len == 0)
-            try planTokensAlloc(allocator, block, options)
-        else
-            try planTokensWithDictionaryAlloc(allocator, block, history, options);
+    pub fn writeBlock(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State, matcher: *incremental_rolling_hash.Matcher, block: []const u8, history: []const u8, final: bool, options: IncrementalFixedEncoderCodec.CompressionOptions) IncrementalFixedEncoderCodec.Error!void {
+        const plan = if (supportsRollingHash(options))
+            try matcher.planAlloc(allocator, block, history, normalizeOptionsForStrategy(options).lz77_options)
+        else blk: {
+            // Public options may change between blocks. Do not let a later
+            // switch back to hash parsing reuse an index that skipped bytes.
+            matcher.reset();
+            break :blk if (history.len == 0)
+                try planTokensAlloc(allocator, block, options)
+            else
+                try planTokensWithDictionaryAlloc(allocator, block, history, options);
+        };
         defer plan.deinit(allocator);
         try writeFixedTokens(allocator, state, plan.tokens, final);
         try drainWriterBytes(allocator, pending, state);
@@ -122,11 +130,16 @@ const IncrementalBestEncoderCodec = struct {
     pub fn resetState(state: *State) void {
         IncrementalFixedEncoderCodec.resetState(state);
     }
-    pub fn writeBlock(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State, block: []const u8, history: []const u8, final: bool, options: IncrementalBestEncoderCodec.CompressionOptions) IncrementalBestEncoderCodec.Error!void {
-        const plan = if (history.len == 0)
-            try planTokensAlloc(allocator, block, options)
-        else
-            try planTokensWithDictionaryAlloc(allocator, block, history, options);
+    pub fn writeBlock(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State, matcher: *incremental_rolling_hash.Matcher, block: []const u8, history: []const u8, final: bool, options: IncrementalBestEncoderCodec.CompressionOptions) IncrementalBestEncoderCodec.Error!void {
+        const plan = if (supportsRollingHash(options))
+            try matcher.planAlloc(allocator, block, history, normalizeOptionsForStrategy(options).lz77_options)
+        else blk: {
+            matcher.reset();
+            break :blk if (history.len == 0)
+                try planTokensAlloc(allocator, block, options)
+            else
+                try planTokensWithDictionaryAlloc(allocator, block, history, options);
+        };
         defer plan.deinit(allocator);
         try writeBestTokensBlock(allocator, state, block, plan.tokens, final, options);
         try drainWriterBytes(allocator, pending, state);
@@ -702,6 +715,16 @@ fn planTokensAlloc(allocator: std.mem.Allocator, input: []const u8, options: Com
         .huffman_only => try lz77.literalPlanAlloc(allocator, input),
         .rle => try lz77.runLengthPlanAlloc(allocator, input, normalized.lz77_options),
     };
+}
+
+fn supportsRollingHash(options: CompressionOptions) bool {
+    const normalized = normalizeOptionsForStrategy(options);
+    return normalized.strategy == .default and
+        normalized.parser == .hash and
+        normalized.lz77_options.window_len != 0 and
+        normalized.lz77_options.window_len <= lz77.default_window_len and
+        normalized.lz77_options.min_match >= 3 and
+        normalized.lz77_options.min_match <= 4;
 }
 
 fn useSmallInputScanPlan(input: []const u8, options: CompressionOptions) bool {

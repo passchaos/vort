@@ -2,9 +2,11 @@ const std = @import("std");
 const core = @import("../../core.zig");
 const deflate = @import("../../deflate.zig");
 const gzip_concatenated_tests = @import("tests/gzip_concatenated.zig");
+const rolling_hash_tests = @import("tests/rolling_hash.zig");
 
 test {
     _ = gzip_concatenated_tests;
+    _ = rolling_hash_tests;
 }
 
 test "raw deflate incremental stored encoder splits flushes and resumes" {

@@ -1,16 +1,19 @@
 const std = @import("std");
 const core = @import("../../../core.zig");
+const rolling_hash = @import("match_finder/rolling_hash.zig");
 
-/// Incremental block-planned raw-DEFLATE encoder. Each accepted block is
-/// independently planned against the retained 32 KiB history; bit packing stays
-/// continuous until finish writes BFINAL. The codec adapter chooses fixed-only
-/// or stored/fixed/dynamic best emission. Flush emits an empty stored block,
-/// matching zlib's sync-flush byte boundary without ending the stream.
+/// Incremental block-planned raw-DEFLATE encoder. Blocks share retained 32 KiB
+/// history and hash-parser levels additionally share a persistent match index;
+/// bit packing stays continuous until finish writes BFINAL. The codec adapter
+/// chooses fixed-only or stored/fixed/dynamic best emission. Flush emits an
+/// empty stored block, matching zlib's sync-flush byte boundary without ending
+/// the stream.
 pub fn Encoder(comptime Codec: type) type {
     return struct {
         allocator: std.mem.Allocator,
         options: Options,
         state: Codec.State = .{},
+        match_finder: rolling_hash.Matcher = .{},
         plain: std.ArrayList(u8) = .empty,
         history: std.ArrayList(u8) = .empty,
         pending: std.ArrayList(u8) = .empty,
@@ -26,6 +29,7 @@ pub fn Encoder(comptime Codec: type) type {
 
         const Self = @This();
         pub const Error = Codec.Error;
+        pub const MatchFinderSnapshot = rolling_hash.Matcher.Snapshot;
         pub const Options = struct {
             max_input_len: usize = std.math.maxInt(usize),
             block_len: usize = 32 * 1024,
@@ -56,6 +60,7 @@ pub fn Encoder(comptime Codec: type) type {
         }
         pub fn deinit(self: *Self) void {
             Codec.deinitState(&self.state, self.allocator);
+            self.match_finder.deinit(self.allocator);
             self.plain.deinit(self.allocator);
             self.history.deinit(self.allocator);
             self.pending.deinit(self.allocator);
@@ -64,6 +69,7 @@ pub fn Encoder(comptime Codec: type) type {
         pub fn reset(self: *Self) void {
             const expected = self.expected_input_len;
             Codec.resetState(&self.state);
+            self.match_finder.reset();
             self.plain.clearRetainingCapacity();
             self.history.clearRetainingCapacity();
             self.pending.clearRetainingCapacity();
@@ -75,6 +81,9 @@ pub fn Encoder(comptime Codec: type) type {
             self.total_input = 0;
             self.total_output = 0;
             self.expected_input_len = expected;
+        }
+        pub fn matchFinderSnapshot(self: *const Self) MatchFinderSnapshot {
+            return self.match_finder.snapshot();
         }
         pub fn flush(self: *Self) void {
             if (!self.finishing and !self.done) self.flush_requested = true;
@@ -173,7 +182,7 @@ pub fn Encoder(comptime Codec: type) type {
                 self.plain.items.len;
             if ((selected_len == 0 and !(final and self.plain.items.len == 0)) or selected_len > self.plain.items.len) return error.InvalidBlockPlan;
             const block = self.plain.items[0..selected_len];
-            try Codec.writeBlock(self.allocator, &self.pending, &self.state, block, self.history.items, final, self.options.compression);
+            try Codec.writeBlock(self.allocator, &self.pending, &self.state, &self.match_finder, block, self.history.items, final, self.options.compression);
             if (block.len >= Codec.history_len) {
                 self.history.clearRetainingCapacity();
                 self.history.appendSliceAssumeCapacity(block[block.len - Codec.history_len ..]);

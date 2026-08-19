@@ -1,0 +1,233 @@
+const std = @import("std");
+const lz77 = @import("../../../../lz77.zig");
+
+const hash_bits: usize = 15;
+const hash_size: usize = 1 << hash_bits;
+const invalid_position = std.math.maxInt(usize);
+
+/// Persistent 32 KiB hash-chain parser for incremental DEFLATE blocks.
+///
+/// Positions are absolute within the logical input stream. `prev` is a bounded
+/// ring, while each head carries an epoch so reset is O(1) and stale entries
+/// cannot be followed. The caller still owns the rolling history bytes; this
+/// type retains only the match index and parser progress.
+pub const Matcher = struct {
+    head: std.ArrayList(usize) = .empty,
+    head_epoch: std.ArrayList(u32) = .empty,
+    prev: std.ArrayList(usize) = .empty,
+    epoch: u32 = 1,
+    absolute_position: usize = 0,
+    indexed_positions: usize = 0,
+    initialized: bool = false,
+    anchor_len: u3 = 0,
+
+    pub const Snapshot = struct {
+        initialized: bool,
+        absolute_position: usize,
+        indexed_positions: usize,
+        table_entries: usize,
+    };
+
+    pub fn deinit(self: *Matcher, allocator: std.mem.Allocator) void {
+        self.head.deinit(allocator);
+        self.head_epoch.deinit(allocator);
+        self.prev.deinit(allocator);
+        self.* = undefined;
+    }
+
+    pub fn reset(self: *Matcher) void {
+        self.absolute_position = 0;
+        self.indexed_positions = 0;
+        self.initialized = false;
+        self.anchor_len = 0;
+        self.epoch +%= 1;
+        if (self.epoch == 0) {
+            @memset(self.head_epoch.items, 0);
+            self.epoch = 1;
+        }
+    }
+
+    pub fn snapshot(self: *const Matcher) Snapshot {
+        return .{
+            .initialized = self.initialized,
+            .absolute_position = self.absolute_position,
+            .indexed_positions = self.indexed_positions,
+            .table_entries = self.head.items.len + self.head_epoch.items.len + self.prev.items.len,
+        };
+    }
+
+    pub fn planAlloc(
+        self: *Matcher,
+        allocator: std.mem.Allocator,
+        block: []const u8,
+        history: []const u8,
+        options: lz77.GreedyOptions,
+    ) !lz77.GreedyPlan {
+        if (options.window_len == 0 or options.window_len > lz77.default_window_len or
+            options.min_match < 3 or options.min_match > 4) return error.InvalidMatch;
+        try self.ensureTables(allocator);
+        const anchor_len: usize = if (options.min_match >= 4) 4 else 3;
+        // Options are intentionally public on the encoder. If a caller changes
+        // between three- and four-byte hash anchors between blocks, invalidate
+        // the old bucket interpretation and reseed from current history.
+        if (self.initialized and self.anchor_len != anchor_len) self.reset();
+        if (!self.initialized) {
+            self.seedHistory(history, block, anchor_len);
+        } else {
+            self.seedBoundary(history, block, anchor_len);
+        }
+
+        var tokens = try std.ArrayList(lz77.Token).initCapacity(allocator, @min(block.len, 4096));
+        errdefer tokens.deinit(allocator);
+        var stats: lz77.PlanStats = .{};
+
+        var pos: usize = 0;
+        while (pos < block.len) {
+            const best = self.findBest(history, block, pos, options, anchor_len);
+            if (acceptMatch(block, pos, best.length, best.distance, options)) {
+                try tokens.append(allocator, .{ .match = .{
+                    .length = @intCast(best.length),
+                    .distance = @intCast(best.distance),
+                } });
+                stats.matches += 1;
+                stats.matched_bytes += best.length;
+                const end = @min(block.len, pos + best.length);
+                self.insertBlockPosition(history, block, pos, anchor_len);
+                // Match the existing fast hash parser: seed the first and last
+                // few positions rather than indexing every byte of long runs.
+                const tail_start = if (end > pos + 4) end - 4 else pos + 1;
+                pos += 1;
+                if (pos < tail_start) pos = tail_start;
+                while (pos < end) : (pos += 1)
+                    self.insertBlockPosition(history, block, pos, anchor_len);
+            } else {
+                try tokens.append(allocator, .{ .literal = block[pos] });
+                stats.literals += 1;
+                self.insertBlockPosition(history, block, pos, anchor_len);
+                pos += 1;
+            }
+        }
+        self.absolute_position = std.math.add(usize, self.absolute_position, block.len) catch return error.IntegerOverflow;
+        return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+    }
+
+    fn ensureTables(self: *Matcher, allocator: std.mem.Allocator) !void {
+        if (self.head.items.len != 0) return;
+        try self.head.resize(allocator, hash_size);
+        errdefer self.head.clearAndFree(allocator);
+        try self.head_epoch.resize(allocator, hash_size);
+        errdefer self.head_epoch.clearAndFree(allocator);
+        try self.prev.resize(allocator, lz77.default_window_len);
+        @memset(self.head_epoch.items, 0);
+    }
+
+    fn seedHistory(self: *Matcher, history: []const u8, block: []const u8, anchor_len: usize) void {
+        self.absolute_position = history.len;
+        var pos: usize = 0;
+        while (pos + anchor_len <= history.len + block.len and pos < history.len) : (pos += 1)
+            self.insertAbsolute(history, block, pos, anchor_len);
+        self.initialized = true;
+        self.anchor_len = @intCast(anchor_len);
+    }
+
+    fn seedBoundary(self: *Matcher, history: []const u8, block: []const u8, anchor_len: usize) void {
+        if (history.len == 0 or block.len == 0) return;
+        const history_start = self.absolute_position - history.len;
+        var absolute = @max(history_start, self.absolute_position -| (anchor_len - 1));
+        while (absolute < self.absolute_position) : (absolute += 1)
+            self.insertAbsolute(history, block, absolute, anchor_len);
+    }
+
+    const Candidate = struct { length: usize = 0, distance: usize = 0 };
+
+    fn findBest(self: *const Matcher, history: []const u8, block: []const u8, pos: usize, options: lz77.GreedyOptions, anchor_len: usize) Candidate {
+        if (pos + anchor_len > block.len) return .{};
+        const current = self.absolute_position + pos;
+        const h = hashAt(history, block, self.absolute_position, current, anchor_len);
+        if (self.head_epoch.items[h] != self.epoch) return .{};
+
+        var candidate = self.head.items[h];
+        var checked: usize = 0;
+        var best: Candidate = .{};
+        const minimum = @max(@as(usize, 3), @min(options.min_match, @max(@as(usize, 3), @min(options.max_match, lz77.max_match_len))));
+        const max_walks = if (minimum <= 3 or options.max_chain > 8) options.max_chain else options.max_chain * 4;
+        var walked: usize = 0;
+        const maximum = @min(@max(@as(usize, 3), @min(options.max_match, lz77.max_match_len)), block.len - pos);
+        while (candidate != invalid_position and checked < options.max_chain and walked < max_walks) : (walked += 1) {
+            if (candidate >= current) break;
+            const distance = current - candidate;
+            if (distance > options.window_len) break;
+            const required = @max(best.length, minimum - 1);
+            if (byteAt(history, block, self.absolute_position, candidate + required) == block[pos + required]) {
+                checked += 1;
+                const length = matchLength(history, block, self.absolute_position, candidate, pos, maximum);
+                if (length > best.length) {
+                    best = .{ .length = length, .distance = distance };
+                    if (length >= options.nice_len or length == maximum) break;
+                }
+            }
+            candidate = self.prev.items[candidate & (lz77.default_window_len - 1)];
+        }
+        return best;
+    }
+
+    fn insertBlockPosition(self: *Matcher, history: []const u8, block: []const u8, pos: usize, anchor_len: usize) void {
+        self.insertAbsolute(history, block, self.absolute_position + pos, anchor_len);
+    }
+
+    fn insertAbsolute(self: *Matcher, history: []const u8, block: []const u8, absolute: usize, anchor_len: usize) void {
+        if (absolute + anchor_len > self.absolute_position + block.len) return;
+        const h = hashAt(history, block, self.absolute_position, absolute, anchor_len);
+        const previous = if (self.head_epoch.items[h] == self.epoch) self.head.items[h] else invalid_position;
+        const slot = absolute & (lz77.default_window_len - 1);
+        self.prev.items[slot] = previous;
+        self.head.items[h] = absolute;
+        self.head_epoch.items[h] = self.epoch;
+        self.indexed_positions += 1;
+    }
+};
+
+fn byteAt(history: []const u8, block: []const u8, block_absolute: usize, absolute: usize) u8 {
+    const history_absolute = block_absolute - history.len;
+    return if (absolute < block_absolute) history[absolute - history_absolute] else block[absolute - block_absolute];
+}
+
+fn matchLength(history: []const u8, block: []const u8, block_absolute: usize, candidate: usize, pos: usize, maximum: usize) usize {
+    var length: usize = 0;
+    while (length < maximum and
+        byteAt(history, block, block_absolute, candidate + length) == block[pos + length]) : (length += 1)
+    {}
+    return length;
+}
+
+fn hashAt(history: []const u8, block: []const u8, block_absolute: usize, absolute: usize, anchor_len: usize) usize {
+    var bytes: [4]u8 = undefined;
+    for (0..anchor_len) |i| bytes[i] = byteAt(history, block, block_absolute, absolute + i);
+    return hashBytes(&bytes, anchor_len);
+}
+
+fn hashBytes(bytes: *const [4]u8, anchor_len: usize) usize {
+    if (anchor_len == 4) {
+        const word = std.mem.readInt(u32, bytes, .little);
+        return (word *% 2654435761) >> (32 - hash_bits);
+    }
+    const value: usize = (@as(usize, bytes[0]) << 16) | (@as(usize, bytes[1]) << 8) | bytes[2];
+    return ((value *% 2654435761) >> 16) & (hash_size - 1);
+}
+
+fn acceptMatch(input: []const u8, pos: usize, length: usize, distance: usize, options: lz77.GreedyOptions) bool {
+    const minimum = @max(@as(usize, 3), @min(options.min_match, @max(@as(usize, 3), @min(options.max_match, lz77.max_match_len))));
+    if (length < minimum or distance == 0 or distance > lz77.default_window_len) return false;
+    const literal_bits = blk: {
+        var bits = length * 8;
+        for (input[pos..][0..length]) |byte| bits += @intFromBool(byte > 143);
+        break :blk bits;
+    };
+    return literal_bits >= fixedMatchBits(length, distance) + options.min_savings_bits;
+}
+
+fn fixedMatchBits(length: usize, distance: usize) usize {
+    const length_bits: usize = if (length <= 10) 7 else if (length <= 18) 8 else if (length <= 34) 9 else if (length <= 66) 10 else if (length <= 130) 11 else if (length <= 257) 12 else 8;
+    const distance_extra: usize = if (distance <= 4) 0 else std.math.log2_int(usize, distance - 1) - 1;
+    return length_bits + 5 + distance_extra;
+}
