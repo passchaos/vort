@@ -5195,6 +5195,15 @@ architecture blindly.
   while zlib-ng remained roughly `2.1-2.5x` faster than Vort on those rows and
   materially smaller on repetitive input; those measured gaps remain active
   optimization targets.
+- Dynamic DEFLATE encoder tables now build canonical code arrays directly from
+  code lengths instead of first materializing the decoder-oriented bucketed
+  `HuffmanTable` and rescanning its entries. The focused Huffman build benchmark
+  gained equivalent `encoder` and legacy `encoder-reference` rows for literal,
+  long-tail, distance, and code-length alphabets; its gate requires the direct
+  path to win every shape while matching canonical codes in unit tests. The
+  latest local ReleaseFast smoke improved the 286-symbol mixed/long-tail encoder
+  rows by about `1.24x`/`1.23x`; smaller distance/code-length tables improve more
+  modestly, and the multi-corpus zlib-ng DEFLATE gate remains green.
 - Added a byte-progressive raw-DEFLATE stored-block decoder under
   `src/deflate/incremental/decoder/`. It preserves split header state, streams
   payload directly caller-to-caller through tiny output, enforces exact/maximum

@@ -55,11 +55,41 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
             bits: [max_symbols]u4 = @splat(0),
 
             pub fn init(lengths: []const u4) Error!Encoder {
-                const table = try Self.init(lengths);
+                @setEvalBranchQuota(20_000);
+                if (lengths.len > max_symbols) return error.CorruptFrame;
+                var counts: [max_code_bits + 1]u16 = @splat(0);
+                var max_bits_seen: u4 = 0;
+                for (lengths) |code_bits| {
+                    if (code_bits > max_code_bits) return error.CorruptFrame;
+                    if (code_bits != 0) {
+                        counts[code_bits] += 1;
+                        max_bits_seen = @max(max_bits_seen, code_bits);
+                    }
+                }
+                if (max_bits_seen == 0) return .{};
+
+                // Canonical encoder construction only needs the length
+                // histogram and next-code recurrence. The previous path built
+                // a fully bucketed decoder table first, then scanned it again
+                // to reconstruct these two arrays. Dynamic DEFLATE builds three
+                // encoders per block, so skipping that intermediate table also
+                // removes its active-symbol list and bucket write passes.
+                var available: i32 = 1;
+                var code: u16 = 0;
+                var next_code: [max_code_bits + 1]u16 = @splat(0);
+                for (1..max_code_bits + 1) |code_bits| {
+                    available = (available << 1) - @as(i32, counts[code_bits]);
+                    if (available < 0) return error.InvalidHuffmanCode;
+                    code = (code + counts[code_bits - 1]) << 1;
+                    next_code[code_bits] = code;
+                }
+
                 var encoder = Encoder{};
-                for (table.entries[0..table.len]) |entry| {
-                    encoder.codes[entry.symbol] = entry.code;
-                    encoder.bits[entry.symbol] = entry.bits;
+                for (lengths, 0..) |code_bits, symbol| {
+                    if (code_bits == 0) continue;
+                    encoder.codes[symbol] = reverseBits(next_code[code_bits], code_bits);
+                    encoder.bits[symbol] = code_bits;
+                    next_code[code_bits] += 1;
                 }
                 return encoder;
             }
@@ -1425,6 +1455,27 @@ test "package-merge Huffman length builder covers deflate alphabet sizes" {
         try std.testing.expect(kraftCost(freqs.len, &lengths, 7) <= (@as(usize, 1) << 7));
         for (lengths) |bits| try std.testing.expect(bits > 0 and bits <= 7);
     }
+}
+
+test "direct Huffman encoder matches canonical decoder table entries" {
+    const cases = [_][19]u4{
+        .{ 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        .{ 1, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        .{ 2, 2, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+    };
+    for (cases) |lengths| {
+        const table = try HuffmanTable(lengths.len).init(&lengths);
+        const encoder = try HuffmanTable(lengths.len).Encoder.init(&lengths);
+        for (table.entries[0..table.len]) |entry| {
+            try std.testing.expectEqual(entry.bits, encoder.bits[entry.symbol]);
+            try std.testing.expectEqual(entry.code, encoder.codes[entry.symbol]);
+        }
+    }
+
+    const oversubscribed = [_]u4{ 1, 1, 1 };
+    try std.testing.expectError(error.InvalidHuffmanCode, HuffmanTable(oversubscribed.len).Encoder.init(&oversubscribed));
+    const too_many = [_]u4{ 1, 1, 1, 1 };
+    try std.testing.expectError(error.InvalidHuffmanCode, HuffmanTable(too_many.len).Encoder.init(&too_many));
 }
 
 test "tree Huffman length limiter preserves skewed short codes" {

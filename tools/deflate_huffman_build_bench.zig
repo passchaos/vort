@@ -6,6 +6,8 @@ const iterations_default: usize = 4096;
 
 const BuildKind = enum {
     table,
+    encoder,
+    encoder_reference,
     fast5,
     fast8,
     fast7,
@@ -16,6 +18,8 @@ const BuildKind = enum {
     fn label(self: BuildKind) []const u8 {
         return switch (self) {
             .table => "table",
+            .encoder => "encoder",
+            .encoder_reference => "encoder-reference",
             .fast5 => "fast5",
             .fast8 => "fast8",
             .fast7 => "fast7",
@@ -27,7 +31,7 @@ const BuildKind = enum {
 
     fn lookupBits(self: BuildKind) u8 {
         return switch (self) {
-            .table => 0,
+            .table, .encoder, .encoder_reference => 0,
             .fast5 => 5,
             .fast7 => 7,
             .fast8 => 8,
@@ -107,6 +111,8 @@ fn runCase(init: std.process.Init, writer: *std.Io.Writer, comptime case: CaseKi
         .code_length => fillCodeLength(&lengths),
     }
     try writeRow(writer, try runBuild(init, case, .table, &lengths, iterations));
+    try writeRow(writer, try runBuild(init, case, .encoder, &lengths, iterations));
+    try writeRow(writer, try runBuild(init, case, .encoder_reference, &lengths, iterations));
     switch (case) {
         .literal_mixed, .literal_long_tail => {
             try writeRow(writer, try runBuild(init, case, .fast9, &lengths, iterations));
@@ -129,31 +135,51 @@ fn runBuild(init: std.process.Init, comptime case: CaseKind, kind: BuildKind, le
     var checksum: u64 = 0;
     var i: usize = 0;
     while (i < iterations) : (i += 1) {
-        const table = try huffman.HuffmanTable(288).init(lengths);
-        checksum +%= table.len + table.max_bits + table.count_by_bits[(i % 15) + 1];
         switch (kind) {
-            .table => {},
+            .table => {
+                const table = try huffman.HuffmanTable(288).init(lengths);
+                checksum +%= table.len + table.max_bits + table.count_by_bits[(i % 15) + 1];
+            },
+            .encoder => {
+                const encoder = try huffman.HuffmanTable(288).Encoder.init(lengths);
+                checksum +%= encoder.codes[i % lengths.len] + encoder.bits[i % lengths.len];
+            },
+            .encoder_reference => {
+                const table = try huffman.HuffmanTable(288).init(lengths);
+                var encoder: huffman.HuffmanTable(288).Encoder = .{};
+                for (table.entries[0..table.len]) |entry| {
+                    encoder.codes[entry.symbol] = entry.code;
+                    encoder.bits[entry.symbol] = entry.bits;
+                }
+                checksum +%= encoder.codes[i % lengths.len] + encoder.bits[i % lengths.len];
+            },
             .fast5 => {
+                const table = try huffman.HuffmanTable(288).init(lengths);
                 const decoder = huffman.FastDecoder(288, 5).init(table);
                 checksum +%= decoder.lookupCoverage();
             },
             .fast8 => {
+                const table = try huffman.HuffmanTable(288).init(lengths);
                 const decoder = huffman.FastDecoder(288, 8).init(table);
                 checksum +%= decoder.lookupCoverage();
             },
             .fast7 => {
+                const table = try huffman.HuffmanTable(288).init(lengths);
                 const decoder = huffman.FastDecoder(288, 7).init(table);
                 checksum +%= decoder.lookupCoverage();
             },
             .fast9 => {
+                const table = try huffman.HuffmanTable(288).init(lengths);
                 const decoder = huffman.FastDecoder(288, 9).init(table);
                 checksum +%= decoder.lookupCoverage();
             },
             .fast11 => {
+                const table = try huffman.HuffmanTable(288).init(lengths);
                 const decoder = huffman.FastDecoder(288, 11).init(table);
                 checksum +%= decoder.lookupCoverage();
             },
             .fast12 => {
+                const table = try huffman.HuffmanTable(288).init(lengths);
                 const decoder = huffman.FastDecoder(288, 12).init(table);
                 checksum +%= decoder.lookupCoverage();
             },
