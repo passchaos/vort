@@ -5447,6 +5447,26 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
     var state = try initSequenceDecodeState(spec, section.sequence_count, bit_reader, frame_state.repeated_offsets);
     var huffman_literals = try initHuffmanLiteralDecodeState(block, section);
     var literal_offset: usize = 0;
+    if (spec.ll_mode == .compressed and
+        spec.of_mode == .compressed and
+        spec.ml_mode == .rle and
+        section.kind == .raw and
+        section.sequence_count >= 1024)
+    {
+        return try decodeFseFseRleSequences(
+            block,
+            section,
+            spec,
+            output,
+            written,
+            frame_output_start,
+            dictionary_history,
+            frame_state,
+            continuation,
+            &state,
+            huffman_literals,
+        );
+    }
     while (state.remaining != 0) {
         const sequence = try readModeSequence(&state);
         const literal_len = sequence.literal_len;
@@ -5469,6 +5489,56 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
     } else {
         try copyLiteralsFromSection(block, section, literal_offset, output, written, last_literals);
     }
+    if (continuation.retainsState()) {
+        frame_state.previous_tables = spec.tables();
+        frame_state.repeated_offsets = state.repeated_offsets;
+    }
+}
+
+noinline fn decodeFseFseRleSequences(
+    block: []const u8,
+    section: LiteralOnlySection,
+    spec: SequenceModeSpec,
+    output: []u8,
+    written: *usize,
+    frame_output_start: usize,
+    dictionary_history: []const u8,
+    frame_state: *SequenceFrameState,
+    continuation: sequence_continuation.Context,
+    state: *SequenceDecodeState,
+    maybe_huffman: ?HuffmanLiteralDecodeState,
+) Error!void {
+    var huffman_literals = maybe_huffman;
+    var literal_offset: usize = 0;
+    const ml_symbol = spec.match_rle orelse return error.CorruptFrame;
+    while (state.remaining != 0) {
+        const ll_symbol = try spec.literal_fse.symbol(state.ll_state);
+        const of_symbol = try spec.offset_fse.symbol(state.of_state);
+        const offset_extra = try state.reader.read(of_symbol.additional_bits);
+        const match_len = std.math.add(usize, ml_symbol.base, try state.reader.read(ml_symbol.additional_bits)) catch return error.IntegerOverflow;
+        const literal_len = std.math.add(usize, ll_symbol.base, try state.reader.read(ll_symbol.additional_bits)) catch return error.IntegerOverflow;
+        const match_offset = try resolveSequenceOffset(of_symbol.base, of_symbol.additional_bits, offset_extra, literal_len, &state.repeated_offsets);
+        state.remaining -= 1;
+        if (state.remaining != 0) {
+            state.ll_state = try nextSequenceState(&state.reader, ll_symbol);
+            state.of_state = try nextSequenceState(&state.reader, of_symbol);
+        } else try state.reader.expectEnd();
+
+        if (huffman_literals) |*huffman_state| {
+            if (output.len - written.* < literal_len) return error.OutputTooSmall;
+            try copyLiteralsFromHuffmanState(huffman_state, section, literal_offset, output[written.*..][0..literal_len]);
+            written.* += literal_len;
+        } else try copyLiteralsFromSection(block, section, literal_offset, output, written, literal_len);
+        literal_offset = std.math.add(usize, literal_offset, literal_len) catch return error.IntegerOverflow;
+        try copyMatchFromHistory(output, written, frame_output_start, dictionary_history, match_offset, match_len);
+    }
+    if (section.regenerated_size < literal_offset) return error.CorruptFrame;
+    const last_literals = section.regenerated_size - literal_offset;
+    if (huffman_literals) |*huffman_state| {
+        if (output.len - written.* < last_literals) return error.OutputTooSmall;
+        try copyLiteralsFromHuffmanState(huffman_state, section, literal_offset, output[written.*..][0..last_literals]);
+        written.* += last_literals;
+    } else try copyLiteralsFromSection(block, section, literal_offset, output, written, last_literals);
     if (continuation.retainsState()) {
         frame_state.previous_tables = spec.tables();
         frame_state.repeated_offsets = state.repeated_offsets;

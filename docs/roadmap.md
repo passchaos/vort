@@ -2310,6 +2310,15 @@ architecture blindly.
   time from about `182.48 ms` to `180.46 ms` (`1.1%`). A broader attempt to
   fuse the table load and reader update regressed and was fully reverted.
 
+- Added a narrow Zstd sequence executor for large raw-literal blocks whose
+  literal-length and offset tables are FSE while match length is RLE. The path
+  is gated to 1,024+ sequences, eliminating three per-sequence mode switches
+  and the never-changing match-length state without perturbing mixed Huffman or
+  smaller blocks. Ten fixed-CPU 1,000-iteration A/B rounds reduce the 512 KiB
+  mixed-binary median from about `142.72 ms` to `137.09 ms` (`3.9%`), raising
+  its conservative libzstd floor from `0.32x` to `0.36x`. Broader raw-literal
+  and extra-bit fast paths regressed other FSE shapes and were fully reverted.
+
 - Expanded the LZ4/liblz4 caller-owned matrix with a deterministic 256 KiB
   incompressible, literal-only block. This separates real bulk-copy throughput
   from the existing 1 KiB row's fixed call overhead and locks the one-literal,
