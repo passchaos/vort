@@ -33,6 +33,10 @@ pub fn Encoder(comptime Codec: type) type {
             /// Enable costed block sizing within `compression.split_options`.
             /// Input buffering remains bounded by that policy's max block size.
             adaptive_blocks: bool = false,
+            /// Retain this many bytes past a normal block target so matches that
+            /// begin near the boundary can be planned with next-call lookahead.
+            /// Flush and finish still publish every accepted byte immediately.
+            lookahead_len: usize = 0,
         };
 
         pub fn init(allocator: std.mem.Allocator) Self {
@@ -81,7 +85,8 @@ pub fn Encoder(comptime Codec: type) type {
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
-            const block_capacity = try self.blockCapacity();
+            const block_target = try self.blockTarget();
+            const block_capacity = std.math.add(usize, block_target, self.options.lookahead_len) catch return error.IntegerOverflow;
             if (self.done) {
                 if (input.len != 0) return error.TrailingData;
                 return .{ .status = .done };
@@ -116,7 +121,9 @@ pub fn Encoder(comptime Codec: type) type {
                         if (self.total_input > expected) return error.SizeMismatch;
                     }
                 }
-                if (self.plain.items.len == block_capacity and input_read < input.len) {
+                if (self.plain.items.len == block_capacity and
+                    (input_read < input.len or self.options.lookahead_len != 0))
+                {
                     try self.writeDataBlock(false);
                     continue;
                 }
@@ -147,17 +154,25 @@ pub fn Encoder(comptime Codec: type) type {
         }
 
         fn writeDataBlock(self: *Self, final: bool) Error!void {
-            const selected_len = if (self.options.adaptive_blocks and !final and !self.flush_requested)
-                try Codec.chooseBlockLen(self.allocator, self.plain.items, self.options.compression)
-            else
-                self.plain.items.len;
-            if ((selected_len == 0 and !(final and self.plain.items.len == 0)) or selected_len > self.plain.items.len) return error.InvalidBlockPlan;
-            const block = self.plain.items[0..selected_len];
             try self.history.ensureTotalCapacity(self.allocator, Codec.history_len);
             if (self.history.items.len == 0 and self.dictionary.len != 0) {
                 const keep = @min(self.dictionary.len, Codec.history_len);
                 self.history.appendSliceAssumeCapacity(self.dictionary[self.dictionary.len - keep ..]);
             }
+            const selected_len = if (!final and !self.flush_requested and self.options.lookahead_len != 0)
+                try Codec.chooseLookaheadLen(
+                    self.allocator,
+                    self.plain.items,
+                    self.history.items,
+                    self.plain.items.len - self.options.lookahead_len,
+                    self.options.compression,
+                )
+            else if (self.options.adaptive_blocks and !final and !self.flush_requested)
+                try Codec.chooseBlockLen(self.allocator, self.plain.items, self.options.compression)
+            else
+                self.plain.items.len;
+            if ((selected_len == 0 and !(final and self.plain.items.len == 0)) or selected_len > self.plain.items.len) return error.InvalidBlockPlan;
+            const block = self.plain.items[0..selected_len];
             try Codec.writeBlock(self.allocator, &self.pending, &self.state, block, self.history.items, final, self.options.compression);
             if (block.len >= Codec.history_len) {
                 self.history.clearRetainingCapacity();
@@ -176,13 +191,15 @@ pub fn Encoder(comptime Codec: type) type {
                 self.plain.items.len -= selected_len;
             }
         }
-        fn blockCapacity(self: *const Self) Error!usize {
+        fn blockTarget(self: *const Self) Error!usize {
             if (!self.options.adaptive_blocks) {
                 if (self.options.block_len == 0) return error.InvalidBlockPlan;
+                if (self.options.lookahead_len >= self.options.block_len) return error.InvalidBlockPlan;
                 return self.options.block_len;
             }
             const split = self.options.compression.split_options;
             if (split.min_block_len == 0 or split.max_block_len == 0 or split.min_block_len > split.max_block_len) return error.InvalidBlockPlan;
+            if (self.options.lookahead_len >= split.max_block_len) return error.InvalidBlockPlan;
             return split.max_block_len;
         }
         fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {

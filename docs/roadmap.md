@@ -5158,6 +5158,11 @@ architecture blindly.
   windows use the existing stored/fixed/dynamic cost scorer and split policy to
   choose a shorter prefix, while buffering never exceeds `max_block_len`; raw,
   zlib, and gzip wrappers share the option through their common raw core.
+- Added bounded cross-call lookahead to incremental DEFLATE block planning. The
+  encoder retains a configurable suffix beyond the normal target, plans it with
+  the next input prefix, and moves the cut to a complete LZ77 token boundary so
+  matches spanning a caller/block boundary are not truncated. Flush and finish
+  still publish all accepted bytes immediately.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

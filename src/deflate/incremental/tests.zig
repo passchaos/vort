@@ -475,3 +475,43 @@ fn encodeRawBestTestStream(encoder: *deflate.RawDeflateIncrementalBestEncoder, p
     }
     return try encoded.toOwnedSlice(std.testing.allocator);
 }
+
+test "raw deflate incremental lookahead preserves boundary matches" {
+    const phrase = "cross-boundary-match-abcdefghijklmnopqrstuvwxyz";
+    const first = ("history-padding-" ** 20) ++ phrase;
+    const second = phrase ++ "-tail";
+    const payload = first ++ second;
+    const target = first.len + 8;
+    var compression = deflate.optionsForLevel(.default);
+    compression.block_selection = .stored_fixed_dynamic;
+
+    var lookahead = deflate.RawDeflateIncrementalBestEncoder.initWithOptions(std.testing.allocator, .{
+        .block_len = target + 64,
+        .lookahead_len = 64,
+        .compression = compression,
+    });
+    defer lookahead.deinit();
+    const lookahead_encoded = try encodeRawBestTestStream(&lookahead, payload);
+    defer std.testing.allocator.free(lookahead_encoded);
+    const decoded = try deflate.decodeRawAutoAlloc(std.testing.allocator, lookahead_encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    var hard = deflate.RawDeflateIncrementalBestEncoder.initWithOptions(std.testing.allocator, .{
+        .block_len = target,
+        .compression = compression,
+    });
+    defer hard.deinit();
+    const hard_encoded = try encodeRawBestTestStream(&hard, payload);
+    defer std.testing.allocator.free(hard_encoded);
+    try std.testing.expect(lookahead_encoded.len <= hard_encoded.len);
+}
+
+test "raw deflate incremental lookahead validates capacity" {
+    var encoder = deflate.RawDeflateIncrementalBestEncoder.initWithOptions(std.testing.allocator, .{
+        .block_len = 16,
+        .lookahead_len = 16,
+    });
+    defer encoder.deinit();
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.step("x", &.{}));
+}

@@ -95,6 +95,9 @@ const IncrementalFixedEncoderCodec = struct {
         _ = options;
         return input.len;
     }
+    pub fn chooseLookaheadLen(allocator: std.mem.Allocator, input: []const u8, history: []const u8, target: usize, options: IncrementalFixedEncoderCodec.CompressionOptions) IncrementalFixedEncoderCodec.Error!usize {
+        return try chooseTokenBoundaryWithLookahead(allocator, input, history, target, options);
+    }
     fn drainWriterBytes(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) std.mem.Allocator.Error!void {
         try pending.appendSlice(allocator, state.bytes.items);
         state.bytes.clearRetainingCapacity();
@@ -132,6 +135,9 @@ const IncrementalBestEncoderCodec = struct {
     }
     pub fn chooseBlockLen(allocator: std.mem.Allocator, input: []const u8, options: IncrementalBestEncoderCodec.CompressionOptions) IncrementalBestEncoderCodec.Error!usize {
         return try chooseNonRegressiveIncrementalBlockLen(allocator, input, options);
+    }
+    pub fn chooseLookaheadLen(allocator: std.mem.Allocator, input: []const u8, history: []const u8, target: usize, options: IncrementalBestEncoderCodec.CompressionOptions) IncrementalBestEncoderCodec.Error!usize {
+        return try chooseTokenBoundaryWithLookahead(allocator, input, history, target, options);
     }
     fn drainWriterBytes(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) std.mem.Allocator.Error!void {
         try pending.appendSlice(allocator, state.bytes.items);
@@ -1080,6 +1086,32 @@ fn chooseNonRegressiveIncrementalBlockLen(allocator: std.mem.Allocator, input: [
     const split_score = std.math.add(usize, first_score, tail_score) catch return error.IntegerOverflow;
     const charged_split = std.math.add(usize, split_score, 1) catch return error.IntegerOverflow;
     return if (charged_split < full_score) candidate else input.len;
+}
+
+fn chooseTokenBoundaryWithLookahead(allocator: std.mem.Allocator, input: []const u8, history: []const u8, target: usize, options: CompressionOptions) !usize {
+    if (target == 0 or target >= input.len) return target;
+    const plan = if (history.len == 0)
+        try planTokensAlloc(allocator, input, options)
+    else
+        try planTokensWithDictionaryAlloc(allocator, input, history, options);
+    defer plan.deinit(allocator);
+
+    var consumed: usize = 0;
+    var previous: usize = 0;
+    for (plan.tokens) |token| {
+        previous = consumed;
+        consumed += switch (token) {
+            .literal => 1,
+            .match => |match| match.length,
+        };
+        if (consumed >= target) {
+            // Never cut through a token discovered with lookahead. Prefer the
+            // post-token boundary when it stays inside the offered window; this
+            // preserves the cross-boundary match in the emitted block.
+            return if (consumed <= input.len) consumed else previous;
+        }
+    }
+    return target;
 }
 
 fn scoreSplitCandidate(allocator: std.mem.Allocator, input: []const u8, candidate_len: usize, options: CompressionOptions) !usize {
