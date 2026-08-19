@@ -216,6 +216,7 @@ zig build run-checksum-diff
 zig build run-checksum-zlib-diff
 zig build -Doptimize=ReleaseFast run-checksum-bench-gate
 zig build -Doptimize=ReleaseFast run-huffman-length-bench-gate
+zig build -Doptimize=ReleaseFast run-deflate-code-length-rle-bench-gate
 zig build run-zlib-diff
 zig build run-gzip-diff
 zig build run-python-zlib-diff

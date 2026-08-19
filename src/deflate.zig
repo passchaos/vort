@@ -8,6 +8,7 @@ const png_ultrafast = @import("png_ultrafast.zig");
 const png_windowed_history =
     @import("deflate/png/windowed_history.zig");
 const semantic_rle258 = @import("deflate/semantic/rle258.zig");
+const dynamic_code_length_rle = @import("deflate/dynamic/code_length_rle.zig");
 const incremental_stored_encoder = @import("deflate/incremental/encoder/stored.zig");
 const incremental_fixed_encoder = @import("deflate/incremental/encoder/fixed.zig");
 const incremental_rolling_hash = @import("deflate/incremental/encoder/match_finder/rolling_hash.zig");
@@ -1338,39 +1339,11 @@ pub fn encodeRawDynamicWithDictionaryAlloc(allocator: std.mem.Allocator, input: 
     return encodeRawDynamicTokensAlloc(allocator, plan.tokens);
 }
 
-const CodeLengthOp = struct {
-    symbol: u8,
-    extra_bits: u6 = 0,
-    extra_value: u8 = 0,
-};
-
-const max_dynamic_code_length_ops = 286 + 30;
-
-const CodeLengthOpBuffer = struct {
-    items: [max_dynamic_code_length_ops]CodeLengthOp = undefined,
-    len: usize = 0,
-
-    fn append(self: *CodeLengthOpBuffer, op: CodeLengthOp) !void {
-        // Dynamic DEFLATE headers describe at most HLIT + HDIST code lengths
-        // (286 + 30). The repeat opcodes 16/17/18 always replace multiple raw
-        // lengths with a single op, so RLE can never need more ops than the
-        // uncompressed length sequence. Keep the check as a defensive guard
-        // against future changes to the header encoder.
-        if (self.len >= self.items.len) return error.InvalidBlockPlan;
-        self.items[self.len] = op;
-        self.len += 1;
-    }
-
-    fn slice(self: *const CodeLengthOpBuffer) []const CodeLengthOp {
-        return self.items[0..self.len];
-    }
-};
-
 const DynamicCodingPlan = struct {
     lit_lengths_full: [286]u4,
     dist_lengths_full: [30]u4,
     code_len_lengths: [19]u4,
-    code_len_ops: CodeLengthOpBuffer,
+    code_len_ops: dynamic_code_length_rle.Plan,
     fixed_bits: usize,
     dynamic_bits: usize,
     hlit: usize,
@@ -1428,17 +1401,16 @@ const DynamicCodingPlan = struct {
         const hlit = trimmedLiteralCodeCount(&lit_lengths_full);
         const hdist = trimmedDistanceCodeCount(&dist_lengths_full);
 
-        const code_len_ops = try buildCodeLengthOps(lit_lengths_full[0..hlit], dist_lengths_full[0..hdist]);
-        var code_len_freqs: [19]u32 = @splat(0);
-        for (code_len_ops.slice()) |op| code_len_freqs[op.symbol] += 1;
+        const code_len_ops = try dynamic_code_length_rle.build(lit_lengths_full[0..hlit], dist_lengths_full[0..hdist]);
+        var code_len_freqs = code_len_ops.frequencies;
         completeCodeLengthFrequencySet(&code_len_freqs);
         const code_len_lengths = huffman.treeCodeLengths(19, &code_len_freqs, 7);
         const hclen = trimmedCodeLengthAlphabetCount(&code_len_lengths);
 
         var dynamic_bits: usize = 3 + 5 + 5 + 4 + hclen * 3;
-        for (code_len_ops.slice()) |op| {
-            dynamic_bits += code_len_lengths[op.symbol] + op.extra_bits;
-        }
+        for (code_len_freqs, code_len_lengths) |frequency, code_bits|
+            dynamic_bits += @as(usize, frequency) * code_bits;
+        dynamic_bits += code_len_ops.extra_bit_count;
         for (lit_freqs, lit_lengths_full) |frequency, code_bits| {
             dynamic_bits += @as(usize, frequency) * code_bits;
         }
@@ -1708,45 +1680,8 @@ fn writeDynamicMatchReference(
     }
 }
 
-fn buildCodeLengthOps(lit_lengths: []const u4, dist_lengths: []const u4) !CodeLengthOpBuffer {
-    var lengths: [286 + 30]u4 = undefined;
-    @memcpy(lengths[0..lit_lengths.len], lit_lengths);
-    @memcpy(lengths[lit_lengths.len..][0..dist_lengths.len], dist_lengths);
-    var ops = CodeLengthOpBuffer{};
-    try appendCodeLengthOps(&ops, lengths[0 .. lit_lengths.len + dist_lengths.len]);
-    return ops;
-}
-
-fn appendCodeLengthOps(ops: *CodeLengthOpBuffer, lengths: []const u4) !void {
-    var i: usize = 0;
-    while (i < lengths.len) {
-        const value = lengths[i];
-        var run: usize = 1;
-        while (i + run < lengths.len and lengths[i + run] == value) run += 1;
-        if (value == 0) {
-            var remaining = run;
-            while (remaining >= 11) {
-                const count = @min(remaining, 138);
-                try ops.append(.{ .symbol = 18, .extra_bits = 7, .extra_value = @intCast(count - 11) });
-                remaining -= count;
-            }
-            if (remaining >= 3) {
-                try ops.append(.{ .symbol = 17, .extra_bits = 3, .extra_value = @intCast(remaining - 3) });
-                remaining = 0;
-            }
-            while (remaining > 0) : (remaining -= 1) try ops.append(.{ .symbol = 0 });
-        } else {
-            try ops.append(.{ .symbol = value });
-            var remaining = run - 1;
-            while (remaining >= 3) {
-                const count = @min(remaining, 6);
-                try ops.append(.{ .symbol = 16, .extra_bits = 2, .extra_value = @intCast(count - 3) });
-                remaining -= count;
-            }
-            while (remaining > 0) : (remaining -= 1) try ops.append(.{ .symbol = value });
-        }
-        i += run;
-    }
+fn buildCodeLengthOps(lit_lengths: []const u4, dist_lengths: []const u4) !dynamic_code_length_rle.Plan {
+    return dynamic_code_length_rle.build(lit_lengths, dist_lengths);
 }
 
 pub fn encodeRawDynamicTokensAlloc(allocator: std.mem.Allocator, tokens: []const lz77.Token) ![]u8 {

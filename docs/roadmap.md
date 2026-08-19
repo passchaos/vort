@@ -5222,6 +5222,17 @@ architecture blindly.
   deterministic output rather than symbol-by-symbol identity. Current local
   ReleaseFast evidence improves the dense literal alphabet by about `4.18x`
   while retaining the full-width implementation as the reference.
+- Dynamic-header code-length RLE is now isolated under
+  `src/deflate/dynamic/code_length_rle.zig` and walks HLIT/HDIST as one logical
+  sequence without materializing their 316-entry concatenation. It emits ops,
+  accumulates the 19-symbol frequency histogram, and totals repeat extra bits
+  in the same pass, removing two subsequent op scans from dynamic block
+  planning while preserving cross-boundary zero runs. A fused-vs-legacy-shape
+  benchmark/gate covers sparse, mixed, boundary, and dense code-length patterns;
+  initial local ReleaseFast evidence improves the geometric mean by about
+  `1.18x`, with exact plan/frequency/extra-bit checksums on every row; individual
+  sparse or dense shapes can remain setup/layout-bound, so the gate protects the
+  aggregate workload rather than claiming a universal per-shape win.
 - Added a byte-progressive raw-DEFLATE stored-block decoder under
   `src/deflate/incremental/decoder/`. It preserves split header state, streams
   payload directly caller-to-caller through tiny output, enforces exact/maximum

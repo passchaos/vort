@@ -257,6 +257,38 @@ pub fn build(b: *std.Build) void {
     const huffman_length_bench_gate_step = b.step("run-huffman-length-bench-gate", "Require compact sparse package-merge speedups");
     huffman_length_bench_gate_step.dependOn(&huffman_length_bench_gate.step);
 
+    const deflate_code_length_rle_bench_exe = b.addExecutable(.{
+        .name = "vort-deflate-code-length-rle-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/deflate_code_length_rle_bench.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "code_length_rle", .module = b.createModule(.{
+                    .root_source_file = b.path("src/deflate/dynamic/code_length_rle.zig"),
+                    .target = target,
+                    .optimize = optimize,
+                }) },
+            },
+        }),
+    });
+    const run_deflate_code_length_rle_bench = b.addRunArtifact(deflate_code_length_rle_bench_exe);
+    if (b.args) |args| run_deflate_code_length_rle_bench.addArgs(args);
+    const deflate_code_length_rle_bench_step = b.step("bench-deflate-code-length-rle", "Benchmark fused dynamic-header code-length RLE planning");
+    deflate_code_length_rle_bench_step.dependOn(&run_deflate_code_length_rle_bench.step);
+
+    const run_deflate_code_length_rle_bench_csv = b.addRunArtifact(deflate_code_length_rle_bench_exe);
+    run_deflate_code_length_rle_bench_csv.addArgs(&.{ "--iterations", "100000", "--csv", "zig-out/vort-deflate-code-length-rle-bench.csv" });
+    const deflate_code_length_rle_bench_gate = b.addSystemCommand(&.{
+        "python3",
+        "tools/deflate_code_length_rle_bench_gate.py",
+        "--csv",
+        "zig-out/vort-deflate-code-length-rle-bench.csv",
+    });
+    deflate_code_length_rle_bench_gate.step.dependOn(&run_deflate_code_length_rle_bench_csv.step);
+    const deflate_code_length_rle_bench_gate_step = b.step("run-deflate-code-length-rle-bench-gate", "Require fused dynamic-header RLE speedups");
+    deflate_code_length_rle_bench_gate_step.dependOn(&deflate_code_length_rle_bench_gate.step);
+
     const deflate_huffman_lookup_bench_exe = b.addExecutable(.{
         .name = "vort-deflate-huffman-lookup-bench",
         .root_module = b.createModule(.{
@@ -3404,6 +3436,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&deflate_dynamic_decode_profile_exe.step);
     check_step.dependOn(&deflate_huffman_build_bench_exe.step);
     check_step.dependOn(&huffman_length_bench_exe.step);
+    check_step.dependOn(&deflate_code_length_rle_bench_exe.step);
     check_step.dependOn(&deflate_huffman_lookup_bench_exe.step);
     check_step.dependOn(&deflate_chunked_huffman_bench_exe.step);
     check_step.dependOn(&deflate_match_copy_bench_exe.step);
@@ -3511,6 +3544,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(deflate_dynamic_decode_profile_gate_step);
     ci_smoke_step.dependOn(deflate_huffman_build_bench_gate_step);
     ci_smoke_step.dependOn(huffman_length_bench_gate_step);
+    ci_smoke_step.dependOn(deflate_code_length_rle_bench_gate_step);
     ci_smoke_step.dependOn(deflate_huffman_lookup_bench_gate_step);
     ci_smoke_step.dependOn(deflate_chunked_huffman_bench_gate_step);
     ci_smoke_step.dependOn(deflate_match_copy_bench_gate_step);
