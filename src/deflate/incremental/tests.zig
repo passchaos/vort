@@ -662,19 +662,22 @@ test "raw deflate incremental decoder parses split dynamic prefix" {
     const payload = "dynamic prefix progressive parser alpha beta gamma" ** 40;
     const encoded = try deflate.encodeRawDynamicWithOptionsAlloc(std.testing.allocator, payload, deflate.optionsForLevel(.default));
     defer std.testing.allocator.free(encoded);
-    var decoder = deflate.RawDeflateIncrementalFixedLiteralDecoder.init();
+    var history: [32 * 1024]u8 = undefined;
+    var decoder = try deflate.RawDeflateIncrementalFixedLiteralDecoder.initWithHistory(.{ .expected_output_len = payload.len }, &history);
     var offset: usize = 0;
+    var output: [payload.len]u8 = undefined;
+    var output_offset: usize = 0;
     while (offset < encoded.len) {
-        if (decoder.diagnostics().phase_name.len != 0 and std.mem.eql(u8, decoder.diagnostics().phase_name, "dynamic_ready")) break;
-        if (decoder.step(encoded[offset .. offset + 1], &.{})) |result| {
-            offset += result.progress.input_read;
-        } else |err| {
-            try std.testing.expectEqual(error.UnsupportedDeflateFeature, err);
-            break;
-        }
+        const result = try decoder.step(encoded[offset .. offset + 1], output[output_offset..][0..@min(3, output.len - output_offset)]);
+        offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
     }
-    try std.testing.expectEqualStrings("dynamic_ready", decoder.diagnostics().phase_name);
-    try std.testing.expectError(error.UnsupportedDeflateFeature, decoder.step("", &.{}));
+    while (output_offset < output.len) {
+        const result = try decoder.step("", output[output_offset..][0..@min(3, output.len - output_offset)]);
+        output_offset += result.progress.output_written;
+    }
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, payload, &output);
 }
 
 test "raw deflate incremental decoder validates dynamic counts" {
@@ -694,15 +697,20 @@ test "raw deflate incremental decoder expands dynamic repeat codes" {
     const payload = ("aaaaabbbbbcccccdddddeeeee\n" ** 100);
     const encoded = try deflate.encodeRawDynamicWithOptionsAlloc(std.testing.allocator, payload, deflate.optionsForLevel(.default));
     defer std.testing.allocator.free(encoded);
-    var decoder = deflate.RawDeflateIncrementalFixedLiteralDecoder.init();
+    var history: [32 * 1024]u8 = undefined;
+    var decoder = try deflate.RawDeflateIncrementalFixedLiteralDecoder.initWithHistory(.{ .expected_output_len = payload.len }, &history);
+    var output: [payload.len]u8 = undefined;
     var offset: usize = 0;
+    var output_offset: usize = 0;
     while (offset < encoded.len) {
-        if (decoder.step(encoded[offset .. offset + 1], &.{})) |result| {
-            offset += result.progress.input_read;
-        } else |err| {
-            try std.testing.expectEqual(error.UnsupportedDeflateFeature, err);
-            break;
-        }
+        const result = try decoder.step(encoded[offset .. offset + 1], output[output_offset..][0..@min(2, output.len - output_offset)]);
+        offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
     }
-    try std.testing.expectEqualStrings("dynamic_ready", decoder.diagnostics().phase_name);
+    while (output_offset < output.len) {
+        const result = try decoder.step("", output[output_offset..][0..@min(2, output.len - output_offset)]);
+        output_offset += result.progress.output_written;
+    }
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, payload, &output);
 }

@@ -38,6 +38,7 @@ pub const Decoder = struct {
     dynamic_repeat_symbol: u5 = 0,
     dynamic_code: u16 = 0,
     dynamic_code_bits: u4 = 0,
+    dynamic_block: bool = false,
     input_finished: bool = false,
     total_input: usize = 0,
     total_output: usize = 0,
@@ -49,7 +50,7 @@ pub const Decoder = struct {
         max_output_len: usize = std.math.maxInt(usize),
         expected_output_len: ?usize = null,
     };
-    pub const Phase = enum { block_header, stored_lengths, stored_payload, dynamic_counts, dynamic_code_lengths, dynamic_lengths, dynamic_repeat, dynamic_ready, symbols, length_extra, distance_symbol, distance_extra, match_copy, done };
+    pub const Phase = enum { block_header, stored_lengths, stored_payload, dynamic_counts, dynamic_code_lengths, dynamic_lengths, dynamic_repeat, symbols, length_extra, distance_symbol, distance_extra, match_copy, done };
 
     pub fn init() Decoder {
         return initWithOptions(.{});
@@ -97,8 +98,14 @@ pub const Decoder = struct {
                         self.alignStoredHeader();
                         self.phase = .stored_lengths;
                     },
-                    1 => self.phase = .symbols,
-                    2 => self.phase = .dynamic_counts,
+                    1 => {
+                        self.dynamic_block = false;
+                        self.phase = .symbols;
+                    },
+                    2 => {
+                        self.dynamic_block = true;
+                        self.phase = .dynamic_counts;
+                    },
                     else => return self.fail(.block_header, error.InvalidDeflateBlockType),
                 }
             },
@@ -162,7 +169,7 @@ pub const Decoder = struct {
                     if (!validDynamicAlphabet(self.dynamic_literal_lengths[0..self.dynamic_hlit]) or
                         !validDynamicAlphabet(self.dynamic_distance_lengths[0..self.dynamic_hdist]))
                         return self.fail(.dynamic_lengths, error.InvalidDynamicBlockHeader);
-                    self.phase = .dynamic_ready;
+                    self.phase = .symbols;
                     continue;
                 }
                 const symbol = (try self.readCodeLengthSymbol(input, &input_read)) orelse return result(input_read, output_written, .need_input);
@@ -204,10 +211,9 @@ pub const Decoder = struct {
                 self.dynamic_previous_length = value;
                 self.phase = .dynamic_lengths;
             },
-            .dynamic_ready => return self.fail(.dynamic_ready, error.UnsupportedDeflateFeature),
             .symbols => {
                 if (output_written == output.len and output.len != 0) return result(input_read, output_written, .need_output);
-                const symbol = (try self.readFixedSymbol(input, &input_read)) orelse return result(input_read, output_written, .need_input);
+                const symbol = (try self.readLiteralSymbol(input, &input_read)) orelse return result(input_read, output_written, .need_input);
                 if (symbol < 256) {
                     if (output_written == output.len) {
                         // A decoded literal cannot be committed without caller
@@ -247,7 +253,7 @@ pub const Decoder = struct {
             },
             .distance_symbol => {
                 if (self.match_len == 0) self.match_len = self.length_base;
-                const symbol = self.readFixedDistanceSymbol(input, &input_read) orelse return result(input_read, output_written, .need_input);
+                const symbol = (try self.readDistanceSymbol(input, &input_read)) orelse return result(input_read, output_written, .need_input);
                 const distance = distanceBaseAndBits(symbol) orelse return self.fail(.distance_symbol, error.InvalidHuffmanCode);
                 self.match_distance = distance.base;
                 self.length_extra_bits = distance.bits;
@@ -303,6 +309,26 @@ pub const Decoder = struct {
         }
         return self.fail(.symbols, error.InvalidHuffmanCode);
     }
+    fn readLiteralSymbol(self: *Decoder, input: []const u8, input_read: *usize) Error!?u16 {
+        if (!self.dynamic_block) return self.readFixedSymbol(input, input_read);
+        if (self.code_bits == 15) {
+            const symbol = self.code;
+            self.code = 0;
+            self.code_bits = 0;
+            return symbol;
+        }
+        while (self.code_bits < 15) {
+            const bit = self.readBits(input, input_read, 1) orelse return null;
+            self.code |= @as(u16, @intCast(bit)) << self.code_bits;
+            self.code_bits += 1;
+            if (canonicalSymbol(self.dynamic_literal_lengths[0..self.dynamic_hlit], self.code, self.code_bits)) |symbol| {
+                self.code = 0;
+                self.code_bits = 0;
+                return symbol;
+            }
+        }
+        return self.fail(.symbols, error.InvalidHuffmanCode);
+    }
     fn beginMatch(self: *Decoder) Error!void {
         if (self.history.len == 0) return self.fail(.match_copy, error.OutputTooSmall);
         if (self.match_distance == 0 or self.match_distance > self.history_len) return self.fail(.match_copy, error.InvalidMatch);
@@ -330,6 +356,20 @@ pub const Decoder = struct {
         self.distance_code = 0;
         self.distance_code_bits = 0;
         return symbol;
+    }
+    fn readDistanceSymbol(self: *Decoder, input: []const u8, input_read: *usize) Error!?usize {
+        if (!self.dynamic_block) return self.readFixedDistanceSymbol(input, input_read);
+        while (self.dynamic_code_bits < 15) {
+            const bit = self.readBits(input, input_read, 1) orelse return null;
+            self.dynamic_code |= @as(u16, @intCast(bit)) << self.dynamic_code_bits;
+            self.dynamic_code_bits += 1;
+            if (canonicalSymbol(self.dynamic_distance_lengths[0..self.dynamic_hdist], self.dynamic_code, self.dynamic_code_bits)) |symbol| {
+                self.dynamic_code = 0;
+                self.dynamic_code_bits = 0;
+                return symbol;
+            }
+        }
+        return self.fail(.distance_symbol, error.InvalidHuffmanCode);
     }
     fn readCodeLengthSymbol(self: *Decoder, input: []const u8, input_read: *usize) Error!?u16 {
         while (self.dynamic_code_bits < 7) {
