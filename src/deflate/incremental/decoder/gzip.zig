@@ -12,6 +12,13 @@ pub fn Decoder(comptime Codec: type) type {
         phase: Phase = .header,
         header: [10]u8 = undefined,
         header_received: usize = 0,
+        header_crc: Codec.Crc32 = Codec.Crc32.init(),
+        flags: u8 = 0,
+        xlen_bytes: [2]u8 = undefined,
+        xlen_received: usize = 0,
+        optional_remaining: usize = 0,
+        header_crc_bytes: [2]u8 = undefined,
+        header_crc_received: usize = 0,
         footer: [8]u8 = undefined,
         footer_received: usize = 0,
         crc: Codec.Crc32 = Codec.Crc32.init(),
@@ -23,8 +30,12 @@ pub fn Decoder(comptime Codec: type) type {
 
         const Self = @This();
         pub const Error = Codec.Error;
-        pub const Options = struct { max_output_len: usize = std.math.maxInt(usize), expected_output_len: ?usize = null };
-        pub const Phase = enum { header, raw, footer, done };
+        pub const Options = struct {
+            max_output_len: usize = std.math.maxInt(usize),
+            expected_output_len: ?usize = null,
+            max_header_metadata_len: usize = 1 << 20,
+        };
+        pub const Phase = enum { header, extra_len, extra_payload, filename, comment, header_crc, raw, footer, done };
 
         pub fn init(options: Options, history: []u8) Error!Self {
             return .{
@@ -40,6 +51,11 @@ pub fn Decoder(comptime Codec: type) type {
             self.phase = .header;
             self.header_received = 0;
             self.footer_received = 0;
+            self.header_crc = Codec.Crc32.init();
+            self.flags = 0;
+            self.xlen_received = 0;
+            self.optional_remaining = 0;
+            self.header_crc_received = 0;
             self.crc = Codec.Crc32.init();
             self.input_finished = false;
             self.total_input = 0;
@@ -82,6 +98,64 @@ pub fn Decoder(comptime Codec: type) type {
                     }
                     if (self.header_received != self.header.len) return result(input_read, output_written, .need_input);
                     try self.validateHeader();
+                    self.header_crc.update(&self.header);
+                    self.flags = self.header[3];
+                    self.advanceOptionalPhase();
+                },
+                .extra_len => {
+                    while (self.xlen_received < 2) {
+                        if (input_read == input.len) return result(input_read, output_written, .need_input);
+                        const byte = input[input_read];
+                        self.xlen_bytes[self.xlen_received] = byte;
+                        self.header_crc.update(input[input_read .. input_read + 1]);
+                        self.xlen_received += 1;
+                        input_read += 1;
+                        self.total_input += 1;
+                    }
+                    self.optional_remaining = std.mem.readInt(u16, &self.xlen_bytes, .little);
+                    if (self.optional_remaining > self.options.max_header_metadata_len) return self.fail(.extra_len, error.OutputLimitExceeded);
+                    self.phase = .extra_payload;
+                },
+                .extra_payload => {
+                    const n = @min(self.optional_remaining, input.len - input_read);
+                    if (n != 0) {
+                        self.header_crc.update(input[input_read..][0..n]);
+                        self.optional_remaining -= n;
+                        input_read += n;
+                        self.total_input += n;
+                    }
+                    if (self.optional_remaining != 0) return result(input_read, output_written, .need_input);
+                    self.flags &= ~@as(u8, 0x04);
+                    self.advanceOptionalPhase();
+                },
+                .filename, .comment => {
+                    while (input_read < input.len) {
+                        const byte = input[input_read];
+                        self.header_crc.update(input[input_read .. input_read + 1]);
+                        input_read += 1;
+                        self.total_input += 1;
+                        self.optional_remaining += 1;
+                        if (self.optional_remaining > self.options.max_header_metadata_len) return self.fail(self.phase, error.OutputLimitExceeded);
+                        if (byte == 0) {
+                            self.flags &= if (self.phase == .filename) ~@as(u8, 0x08) else ~@as(u8, 0x10);
+                            self.optional_remaining = 0;
+                            self.advanceOptionalPhase();
+                            break;
+                        }
+                    }
+                    if (self.phase == .filename or self.phase == .comment) return result(input_read, output_written, .need_input);
+                },
+                .header_crc => {
+                    while (self.header_crc_received < 2) {
+                        if (input_read == input.len) return result(input_read, output_written, .need_input);
+                        self.header_crc_bytes[self.header_crc_received] = input[input_read];
+                        self.header_crc_received += 1;
+                        input_read += 1;
+                        self.total_input += 1;
+                    }
+                    const expected = std.mem.readInt(u16, &self.header_crc_bytes, .little);
+                    if (expected != @as(u16, @truncate(self.header_crc.digest()))) return self.fail(.header_crc, error.BadGzipHeader);
+                    self.flags &= ~@as(u8, 0x02);
                     self.phase = .raw;
                 },
                 .raw => {
@@ -124,7 +198,20 @@ pub fn Decoder(comptime Codec: type) type {
 
         fn validateHeader(self: *Self) Error!void {
             if (!std.mem.eql(u8, self.header[0..2], &.{ 0x1f, 0x8b })) return self.fail(.header, error.BadGzipHeader);
-            if (self.header[2] != 8 or self.header[3] != 0) return self.fail(.header, error.BadGzipHeader);
+            if (self.header[2] != 8 or (self.header[3] & 0xe0) != 0) return self.fail(.header, error.BadGzipHeader);
+        }
+        fn advanceOptionalPhase(self: *Self) void {
+            if ((self.flags & 0x04) != 0) {
+                self.phase = .extra_len;
+            } else if ((self.flags & 0x08) != 0) {
+                self.phase = .filename;
+            } else if ((self.flags & 0x10) != 0) {
+                self.phase = .comment;
+            } else if ((self.flags & 0x02) != 0) {
+                self.phase = .header_crc;
+            } else {
+                self.phase = .raw;
+            }
         }
         fn fail(self: *Self, phase: Phase, err: Error) Error {
             self.last_error_name = @errorName(err);

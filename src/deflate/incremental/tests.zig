@@ -808,23 +808,62 @@ test "gzip incremental decoder streams dynamic input and validates footer" {
     try std.testing.expectEqualSlices(u8, payload, &output);
 }
 
-test "gzip incremental decoder rejects optional header crc and isize" {
+test "gzip incremental decoder parses optional header metadata" {
     const optional = try deflate.encodeGzipStoredWithHeaderAlloc(std.testing.allocator, "header", .{ .filename = "x" });
     defer std.testing.allocator.free(optional);
     var history: [32 * 1024]u8 = undefined;
-    var unsupported = try deflate.GzipIncrementalDecoder.init(.{}, &history);
-    try std.testing.expectError(error.BadGzipHeader, unsupported.step(optional[0..10], &.{}));
+    var metadata = try deflate.GzipIncrementalDecoder.init(.{ .expected_output_len = 6 }, &history);
+    var metadata_out: [6]u8 = undefined;
+    var metadata_input: usize = 0;
+    var metadata_output: usize = 0;
+    while (metadata_input < optional.len) {
+        const result = try metadata.step(optional[metadata_input .. metadata_input + 1], metadata_out[metadata_output..][0..@min(2, metadata_out.len - metadata_output)]);
+        metadata_input += result.progress.input_read;
+        metadata_output += result.progress.output_written;
+    }
+    try metadata.finish();
+    try std.testing.expectEqualSlices(u8, "header", &metadata_out);
+
+    const rich = try deflate.encodeGzipStoredWithHeaderAlloc(std.testing.allocator, "rich", .{
+        .extra = "xy",
+        .filename = "file",
+        .comment = "comment",
+        .header_crc = true,
+    });
+    defer std.testing.allocator.free(rich);
+    var rich_decoder = try deflate.GzipIncrementalDecoder.init(.{ .expected_output_len = 4 }, &history);
+    var rich_out: [4]u8 = undefined;
+    var rich_input: usize = 0;
+    var rich_output: usize = 0;
+    while (rich_input < rich.len) {
+        const end = @min(rich.len, rich_input + 2);
+        const result = try rich_decoder.step(rich[rich_input..end], rich_out[rich_output..]);
+        rich_input += result.progress.input_read;
+        rich_output += result.progress.output_written;
+    }
+    try rich_decoder.finish();
+    try std.testing.expectEqualSlices(u8, "rich", &rich_out);
+}
+
+test "gzip incremental decoder rejects header crc and bad footer" {
+    var history: [32 * 1024]u8 = undefined;
+    var bad_header = try deflate.encodeGzipStoredWithHeaderAlloc(std.testing.allocator, "header", .{ .filename = "x", .header_crc = true });
+    defer std.testing.allocator.free(bad_header);
+    const header_info = try deflate.parseGzipHeaderInfo(bad_header);
+    bad_header[header_info.data_offset - 1] ^= 1;
+    var header_decoder = try deflate.GzipIncrementalDecoder.init(.{}, &history);
+    var scratch: [32]u8 = undefined;
+    try std.testing.expectError(error.BadGzipHeader, header_decoder.step(bad_header[0..header_info.data_offset], &scratch));
 
     var bad_crc = try deflate.encodeGzipFixedAlloc(std.testing.allocator, "crc");
     defer std.testing.allocator.free(bad_crc);
     bad_crc[bad_crc.len - 8] ^= 1;
     var crc_decoder = try deflate.GzipIncrementalDecoder.init(.{}, &history);
-    var output: [32]u8 = undefined;
-    try std.testing.expectError(error.ChecksumMismatch, crc_decoder.step(bad_crc, &output));
+    try std.testing.expectError(error.ChecksumMismatch, crc_decoder.step(bad_crc, &scratch));
 
     var bad_size = try deflate.encodeGzipFixedAlloc(std.testing.allocator, "size");
     defer std.testing.allocator.free(bad_size);
     bad_size[bad_size.len - 1] ^= 1;
     var size_decoder = try deflate.GzipIncrementalDecoder.init(.{}, &history);
-    try std.testing.expectError(error.SizeMismatch, size_decoder.step(bad_size, &output));
+    try std.testing.expectError(error.SizeMismatch, size_decoder.step(bad_size, &scratch));
 }

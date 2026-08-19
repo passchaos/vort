@@ -5192,10 +5192,10 @@ architecture blindly.
   checked against the supplied bytes before raw decode, the dictionary tail seeds
   the caller-owned 32 KiB history ring, and missing/wrong dictionaries report
   `NeedDictionary` with retry diagnostics.
-- Added a byte-progressive single-member gzip decoder for the standard ten-byte
-  header. It composes the unified raw decoder one byte at a time, validates
-  streaming CRC-32 and ISIZE from a split footer, enforces limits/exact size, and
-  explicitly rejects optional header fields until their metadata phases land.
+- Added a byte-progressive single-member gzip decoder. It composes the unified
+  raw decoder one byte at a time, validates streaming CRC-32 and ISIZE from a
+  split footer, and incrementally parses/skips bounded FEXTRA, FNAME, FCOMMENT,
+  and FHCRC fields with header CRC validation and truncation diagnostics.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,
