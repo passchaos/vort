@@ -6,6 +6,8 @@ const match_copy = @import("br/match_copy.zig");
 const static_dictionary = @import("br/static_dictionary.zig");
 const incremental = @import("br/incremental/stream_decoder.zig");
 const incremental_tests = @import("br/incremental/tests.zig");
+const incremental_stored = @import("br/incremental/stored/decoder.zig");
+const incremental_stored_tests = @import("br/incremental/stored/tests.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 
@@ -21,9 +23,11 @@ const IncrementalCodec = struct {
 
 const br = @This();
 pub const IncrementalStreamDecoder = incremental.Decoder(IncrementalCodec);
+pub const IncrementalStoredStreamDecoder = incremental_stored.Decoder;
 
 test {
     _ = incremental_tests;
+    _ = incremental_stored_tests;
 }
 
 pub const IncrementalTestSupport = struct {

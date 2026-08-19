@@ -5048,3 +5048,10 @@ architecture blindly.
   diagnostics semantics. The narrow codec interface leaves the 13k-line Brotli
   facade unchanged except for a small adapter and keeps the state machine ready
   for a future byte-progressive compressed meta-block core.
+- Added a true byte-progressive Brotli decoder for the stored/uncompressed
+  subset under `src/br/incremental/stored/`. It preserves bit-level window and
+  meta-block header state across arbitrary one-byte input splits, skips metadata
+  without retaining it, and copies aligned payload bytes directly from caller
+  input to arbitrarily small caller output. Output limits, compressed-block
+  rejection, padding validation, explicit finish/truncation, reset, snapshots,
+  and diagnostics are covered in the colocated module tests.
