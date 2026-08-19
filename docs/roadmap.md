@@ -2269,6 +2269,18 @@ architecture blindly.
   direct-offset, `rep0 - 1`, and invalid-match tests remain the expanded-path
   behavior oracle.
 
+- Split large zero-sequence Zstd Huffman literal sections into a compact lookup
+  loop plus an out-of-line canonical stream-tail fallback. Perf showed
+  `HuffmanLiteralCursor.readSymbol` at about 71% of the 64 KiB ASCII decode and
+  revealed that the fallback's Zig std tree query takes the 1 KiB tree by value;
+  keeping that rare path inline gave every successful lookup a roughly 1.1 KiB
+  frame. The specialized path is limited to 16 KiB+ full literal sections so
+  sequence-interleaved and small sections retain their prior code shape. Ten
+  fixed-CPU interleaved rounds improve `ascii64k` median decode time by about
+  `4.9%`; the conservative libzstd floor rises from `0.07x` to `0.10x`, while
+  huffman80k, large JSON, mixed binary, and numbered JSON stay neutral or
+  improve in the same matrix.
+
 - Expanded the LZ4/liblz4 caller-owned matrix with a deterministic 256 KiB
   incompressible, literal-only block. This separates real bulk-copy throughput
   from the existing 1 KiB row's fixed call overhead and locks the one-literal,

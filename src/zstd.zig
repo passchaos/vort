@@ -4431,7 +4431,13 @@ fn copyHuffmanLiteralsFromSection(
     var cursor = try initHuffmanLiteralCursor(block, section);
     const lookup = HuffmanLiteralLookup.build(huffman_tree);
     while (decoded_index < end) {
-        const symbol = try cursor.readSymbol(huffman_tree, &lookup);
+        // Large literal-only sections spend almost every cycle in lookup hits.
+        // Keep their rare stream-tail tree walk out of line without imposing
+        // that call boundary on short or sequence-interleaved literal runs.
+        const symbol = if (section.sequence_count == 0 and section.regenerated_size >= 16 * 1024)
+            try cursor.readFullSectionSymbol(huffman_tree, &lookup)
+        else
+            try cursor.readSymbol(huffman_tree, &lookup);
         if (decoded_index >= literal_offset) dest[output_index] = symbol;
         if (decoded_index >= literal_offset) output_index += 1;
         decoded_index += 1;
@@ -4538,6 +4544,25 @@ const HuffmanLiteralCursor = struct {
         // tree, which also performs the stream transition when needed.
         return try readHuffmanLiteralSymbolFromCursor(self, tree);
     }
+
+    /// Full-section literal decode keeps the rare stream-tail tree walk out of
+    /// the dominant lookup loop. Sequence interleaving continues to use
+    /// `readSymbol`, whose inlining choices are better for short literal runs.
+    fn readFullSectionSymbol(
+        self: *HuffmanLiteralCursor,
+        tree: *const StdZstdHuffmanTree,
+        lookup: *const HuffmanLiteralLookup,
+    ) Error!u8 {
+        const width: u8 = @intCast(@min(@as(usize, tree.max_bit_count), self.reader.available()));
+        if (width == tree.max_bit_count and width != 0) {
+            const prefix = try self.reader.peekSmall(@intCast(width));
+            if (lookup.lookup(prefix << @intCast(11 - width))) |entry| {
+                try self.reader.skip(entry.bit_count);
+                return entry.symbol;
+            }
+        }
+        return readHuffmanLiteralSymbolFromCursorCold(self, tree);
+    }
 };
 
 fn initHuffmanLiteralCursor(block: []const u8, section: LiteralOnlySection) Error!HuffmanLiteralCursor {
@@ -4584,6 +4609,13 @@ fn readHuffmanLiteralSymbolFromCursor(cursor: *HuffmanLiteralCursor, huffman_tre
             },
         }
     }
+}
+
+noinline fn readHuffmanLiteralSymbolFromCursorCold(cursor: *HuffmanLiteralCursor, huffman_tree: *const StdZstdHuffmanTree) Error!u8 {
+    // Zig std's tree query currently receives the 1 KiB tree by value. Keeping
+    // this rare fallback out of line prevents that copy frame from spilling
+    // the full-section lookup loop on every successfully table-decoded symbol.
+    return readHuffmanLiteralSymbolFromCursor(cursor, huffman_tree);
 }
 
 fn readHuffmanLiteralSymbolFromCursorWithLookup(
