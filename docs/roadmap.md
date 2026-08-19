@@ -5163,6 +5163,11 @@ architecture blindly.
   the next input prefix, and moves the cut to a complete LZ77 token boundary so
   matches spanning a caller/block boundary are not truncated. Flush and finish
   still publish all accepted bytes immediately.
+- Added a byte-progressive raw-DEFLATE stored-block decoder under
+  `src/deflate/incremental/decoder/`. It preserves split header state, streams
+  payload directly caller-to-caller through tiny output, enforces exact/maximum
+  output bounds before copying, and reports reserved type, LEN/NLEN, truncation,
+  trailing input, and recoverability diagnostics without buffering a frame.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

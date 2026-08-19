@@ -515,3 +515,48 @@ test "raw deflate incremental lookahead validates capacity" {
     defer encoder.deinit();
     try std.testing.expectError(error.InvalidBlockPlan, encoder.step("x", &.{}));
 }
+
+test "raw deflate incremental stored decoder streams split input and tiny output" {
+    const payload = "byte progressive raw deflate stored payload" ** 32;
+    const encoded = try deflate.encodeRawStoredAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    var decoder = deflate.RawDeflateIncrementalStoredDecoder.initWithOptions(.{
+        .expected_output_len = payload.len,
+    });
+    var output: [payload.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (input_offset < encoded.len) {
+        const output_end = @min(output.len, output_offset + 3);
+        const result = try decoder.step(encoded[input_offset .. input_offset + 1], output[output_offset..output_end]);
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+    }
+    while (decoder.snapshot().phase != .done) {
+        const output_end = @min(output.len, output_offset + 3);
+        const result = try decoder.step("", output[output_offset..output_end]);
+        output_offset += result.progress.output_written;
+    }
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, payload, &output);
+    decoder.reset();
+    try std.testing.expectEqual(deflate.RawDeflateIncrementalStoredDecoder.Phase.header, decoder.snapshot().phase);
+}
+
+test "raw deflate incremental stored decoder validates hostile streams" {
+    var reserved = deflate.RawDeflateIncrementalStoredDecoder.init();
+    try std.testing.expectError(error.InvalidDeflateBlockType, reserved.step(&.{ 0x03, 0, 0, 0xff, 0xff }, &.{}));
+
+    var lengths = deflate.RawDeflateIncrementalStoredDecoder.init();
+    try std.testing.expectError(error.StoredLengthMismatch, lengths.step(&.{ 0x01, 1, 0, 0xff, 0xff }, &.{}));
+
+    const encoded = try deflate.encodeRawStoredAlloc(std.testing.allocator, "limit");
+    defer std.testing.allocator.free(encoded);
+    var limited = deflate.RawDeflateIncrementalStoredDecoder.initWithOptions(.{ .max_output_len = 4 });
+    try std.testing.expectError(error.OutputLimitExceeded, limited.step(encoded, &.{}));
+
+    var truncated = deflate.RawDeflateIncrementalStoredDecoder.init();
+    _ = try truncated.step(encoded[0 .. encoded.len - 1], &.{});
+    try std.testing.expectError(error.TruncatedFrame, truncated.finish());
+    try std.testing.expectEqualStrings("truncated_input", truncated.diagnostics().recoverability_hint_name);
+}

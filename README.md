@@ -688,6 +688,8 @@ defer zstd_incremental_encoder.deinit();
 // for costed, bounded block-boundary selection instead of one fixed block size.
 // Set lookahead_len to retain a bounded suffix and move normal block cuts to a
 // complete LZ77 token boundary discovered with next-call prefix bytes.
+// RawDeflateIncrementalStoredDecoder is the caller-to-caller byte-progressive
+// decode reference path for RFC 1951 stored blocks and bounded hostile input.
 const zstd_dict_options: vort.ZstdNativeFrameOptions = .{ .selection = .literal_only };
 const zstd_dict_bound = try vort.zstdEncodedNativeFrameBoundWithDictionary(
     "prefix: previous zstd history payload, shared phrase tail".len,
