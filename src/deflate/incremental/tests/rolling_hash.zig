@@ -223,6 +223,31 @@ test "raw deflate incremental matcher preserves offsets across unindexed mode" {
     try std.testing.expectEqual(expected.len, encoder.matchFinderSnapshot().absolute_position);
 }
 
+test "raw deflate incremental stored probe preserves repeated binary history" {
+    var first: [32 * 1024]u8 = undefined;
+    var random = std.Random.DefaultPrng.init(0x6a09_e667_f3bc_c909);
+    random.random().bytes(&first);
+    const payload = first ++ first;
+    var encoder = deflate.RawDeflateIncrementalBestEncoder.initWithOptions(std.testing.allocator, .{
+        .block_len = first.len,
+        .compression = deflate.optionsForLevel(.default),
+    });
+    defer encoder.deinit();
+
+    const encoded = try encodeStream(&encoder, &payload);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try deflate.decodeRawAutoAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+    try std.testing.expectEqual(deflate.RawDeflateBlockType.stored, (try deflate.parseRawDeflateHeaderInfo(encoded)).block_type);
+
+    const stored = try deflate.encodeRawStoredAlloc(std.testing.allocator, &payload);
+    defer std.testing.allocator.free(stored);
+    // The first block takes the stored fast path, but sparse history probes
+    // route the repeated second block through the matcher instead of storing it.
+    try std.testing.expect(encoded.len < stored.len - first.len / 2);
+}
+
 fn feedAndForceBlock(encoder: *deflate.RawDeflateIncrementalBestEncoder, encoded: *std.ArrayList(u8), block: []const u8, next: u8) !void {
     var joined = try std.testing.allocator.alloc(u8, block.len + 1);
     defer std.testing.allocator.free(joined);

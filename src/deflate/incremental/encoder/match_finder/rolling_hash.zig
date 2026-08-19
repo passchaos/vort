@@ -243,10 +243,34 @@ fn byteAt(history: []const u8, block: []const u8, block_absolute: usize, absolut
 }
 
 fn matchLength(history: []const u8, block: []const u8, block_absolute: usize, candidate: usize, pos: usize, maximum: usize) usize {
+    if (candidate >= block_absolute)
+        return sliceMatchLength(block, candidate - block_absolute, pos, maximum);
+
+    const history_absolute = block_absolute - history.len;
+    const history_pos = candidate - history_absolute;
+    const history_part = @min(maximum, history.len - history_pos);
+    var length = crossSliceMatchLength(history, history_pos, block, pos, history_part);
+    if (length != history_part or length == maximum) return length;
+
+    // A legal DEFLATE match can overlap the bytes currently being encoded.
+    // Once a source that began in history crosses the block boundary, continue
+    // from block offset zero just like the decoder's forward match copy.
+    length += sliceMatchLength(block, 0, pos + length, maximum - length);
+    return length;
+}
+
+fn sliceMatchLength(input: []const u8, left_pos: usize, right_pos: usize, maximum: usize) usize {
+    return crossSliceMatchLength(input, left_pos, input, right_pos, maximum);
+}
+
+fn crossSliceMatchLength(left: []const u8, left_pos: usize, right: []const u8, right_pos: usize, maximum: usize) usize {
     var length: usize = 0;
-    while (length < maximum and
-        byteAt(history, block, block_absolute, candidate + length) == block[pos + length]) : (length += 1)
-    {}
+    while (length + 8 <= maximum) : (length += 8) {
+        const a = std.mem.readInt(u64, left[left_pos + length ..][0..8], .little);
+        const b = std.mem.readInt(u64, right[right_pos + length ..][0..8], .little);
+        if (a != b) return length + @ctz(a ^ b) / 8;
+    }
+    while (length < maximum and left[left_pos + length] == right[right_pos + length]) : (length += 1) {}
     return length;
 }
 

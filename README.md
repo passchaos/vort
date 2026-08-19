@@ -350,6 +350,12 @@ zig build -Doptimize=ReleaseFast run-lz4-reference-bench-gate  # optional runtim
 zig build -Doptimize=ReleaseFast run-zstd-reference-bench-gate  # optional runtime libzstd comparison
 zig build run-zstd-compat-probe  # optional system-libzstd decode matrix
 zig build bench-deflate-decode -Doptimize=ReleaseFast
+zig build bench-deflate-incremental-encode -Doptimize=ReleaseFast -- 8
+zig build run-deflate-incremental-encode-gate
+# Optional direct zlib-ng compat-library comparison:
+zig build bench-deflate-incremental-encode -Doptimize=ReleaseFast \
+  -Dzlib-ng-root=$HOME/Work/zlib-ng -- 8
+zig build -Dzlib-ng-root=$HOME/Work/zlib-ng run-deflate-incremental-encode-gate
 zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report
 zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report -- --iterations 1000
 zig build -Doptimize=ReleaseFast run-deflate-decode-stage-report-csv

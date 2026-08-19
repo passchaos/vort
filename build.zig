@@ -510,17 +510,35 @@ pub fn build(b: *std.Build) void {
     const deflate_encode_bench_step = b.step("bench-deflate-encode", "Run fixed deflate encode throughput smoke benchmark");
     deflate_encode_bench_step.dependOn(&run_deflate_encode_bench.step);
 
+    const zlib_ng_root = b.option([]const u8, "zlib-ng-root", "Use a zlib-ng compat build for the incremental DEFLATE benchmark");
     const deflate_incremental_encode_bench_exe = b.addExecutable(.{
         .name = "vort-bench-deflate-incremental-encode",
         .root_module = b.createModule(.{
             .root_source_file = b.path("bench/deflate/incremental_encode.zig"),
             .target = target,
-            .optimize = optimize,
+            // Performance gates must not silently benchmark Debug when the
+            // caller omits -Doptimize. Keep this dedicated artifact fixed.
+            .optimize = .ReleaseFast,
             .imports = &.{
-                .{ .name = "vort", .module = vort_mod },
+                .{ .name = "vort", .module = vort_mod_releasefast },
             },
         }),
     });
+    const zlib_translate = b.addTranslateC(.{
+        .root_source_file = if (zlib_ng_root) |root| .{ .cwd_relative = b.pathJoin(&.{ root, "build/zlib.h" }) } else b.path("bench/deflate/zlib_compat.h"),
+        .target = target,
+        .optimize = .ReleaseFast,
+    });
+    if (zlib_ng_root) |root| {
+        zlib_translate.addIncludePath(.{ .cwd_relative = b.pathJoin(&.{ root, "build" }) });
+        zlib_translate.defineCMacro("VORT_ZLIB_BENCH_NAME", "\"zlib-ng-2.3.90-level6\"");
+        deflate_incremental_encode_bench_exe.root_module.addObjectFile(.{ .cwd_relative = b.pathJoin(&.{ root, "build/libz.a" }) });
+    } else {
+        zlib_translate.linkSystemLibrary("z", .{});
+        zlib_translate.defineCMacro("VORT_ZLIB_BENCH_NAME", "\"zlib-1.3-level6\"");
+        deflate_incremental_encode_bench_exe.root_module.linkSystemLibrary("z", .{});
+    }
+    deflate_incremental_encode_bench_exe.root_module.addImport("zlib", zlib_translate.createModule());
     const run_deflate_incremental_encode_bench = b.addRunArtifact(deflate_incremental_encode_bench_exe);
     const deflate_incremental_encode_bench_step = b.step("bench-deflate-incremental-encode", "Compare persistent and rebuilt incremental DEFLATE match indexes");
     deflate_incremental_encode_bench_step.dependOn(&run_deflate_incremental_encode_bench.step);
@@ -529,6 +547,13 @@ pub fn build(b: *std.Build) void {
         "python3",
         "tools/deflate_incremental_encode_gate.py",
     });
+    const run_deflate_incremental_encode_gate_bench = b.addRunArtifact(deflate_incremental_encode_bench_exe);
+    run_deflate_incremental_encode_gate_bench.addArg("8");
+    const deflate_incremental_encode_gate_output = run_deflate_incremental_encode_gate_bench.captureStdOut(.{});
+    deflate_incremental_encode_gate.addArg("--csv");
+    deflate_incremental_encode_gate.addFileArg(deflate_incremental_encode_gate_output);
+    deflate_incremental_encode_gate.addArg("--expect-competitor");
+    deflate_incremental_encode_gate.addArg(if (zlib_ng_root != null) "zlib-ng" else "zlib");
     const deflate_incremental_encode_gate_step = b.step("run-deflate-incremental-encode-gate", "Require persistent lazy DEFLATE speed and size non-regression");
     deflate_incremental_encode_gate_step.dependOn(&deflate_incremental_encode_gate.step);
 

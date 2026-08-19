@@ -130,6 +130,16 @@ const IncrementalBestEncoderCodec = struct {
         IncrementalFixedEncoderCodec.resetState(state);
     }
     pub fn writeBlock(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State, matcher: *incremental_rolling_hash.Matcher, block: []const u8, history: []const u8, final: bool, options: IncrementalBestEncoderCodec.CompressionOptions) IncrementalBestEncoderCodec.Error!void {
+        if (usesStoredFastPath(block, options) and !sampledHistoryMatch(block, history)) {
+            // Incompressible blocks should not pay for a match plan that the
+            // stored/fixed/dynamic selector will immediately discard. A sparse
+            // history probe preserves repeated binary/window blocks without
+            // forcing a full chain search for unrelated random data.
+            try matcher.observeUnindexedBlock(block.len, history.len);
+            try writeStoredBlock(allocator, state, block, final);
+            try drainWriterBytes(allocator, pending, state);
+            return;
+        }
         const rolling_parser = rollingParser(options);
         const plan = if (rolling_parser) |parser|
             try matcher.planAlloc(allocator, block, history, normalizeOptionsForStrategy(options).lz77_options, parser == .lazy)
@@ -815,6 +825,16 @@ fn looksIncompressible(input: []const u8) bool {
         }
     }
     return true;
+}
+
+fn sampledHistoryMatch(input: []const u8, history: []const u8) bool {
+    if (input.len < 8 or history.len < 8) return false;
+    const last = input.len - 8;
+    const positions = [_]usize{ 0, last / 7, last * 2 / 7, last * 3 / 7, last * 4 / 7, last * 5 / 7, last * 6 / 7, last };
+    for (positions) |pos| {
+        if (std.mem.indexOf(u8, history, input[pos..][0..8]) != null) return true;
+    }
+    return false;
 }
 
 pub fn encodeRawBestWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: CompressionOptions) ![]u8 {

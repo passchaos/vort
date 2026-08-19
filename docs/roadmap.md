@@ -5179,6 +5179,22 @@ architecture blindly.
   per-block rebuilt reference; the initial local ReleaseFast smoke measured
   about `402.76` versus `225.61` MiB/s (`1.785x`) and `2371` versus `4489` bytes
   (`0.528x`) on a 256 KiB structured-log stream.
+- Expanded that benchmark from one favorable stream to five deterministic
+  256 KiB corpora: JSON logs, source, repetitive bytes, mixed binary, and exact
+  32 KiB cross-window repetition. It now invokes zlib 1.3 level 6 directly via
+  its in-memory raw-DEFLATE API, and `-Dzlib-ng-root=...` links a local zlib-ng
+  compat build (locally 2.3.90) through the same API without process/file timing
+  noise. The gate requires the full case/mode matrix, limits persistent ratio
+  drift versus per-block rebuild to 1%, bounds compressible output against the
+  competitor, and protects aggregate non-binary throughput. Multi-corpus evidence
+  also exposed two hot paths now fixed in production: word-at-a-time history
+  match comparison and stored fast-path selection guarded by sparse history
+  probes so unrelated random blocks skip search while repeated binary windows
+  remain compressible. A 32 KiB-block local zlib-ng smoke showed Vort around
+  `2.1x` faster on JSON and `2.3x` on source than its per-block rebuild baseline,
+  while zlib-ng remained roughly `2.1-2.5x` faster than Vort on those rows and
+  materially smaller on repetitive input; those measured gaps remain active
+  optimization targets.
 - Added a byte-progressive raw-DEFLATE stored-block decoder under
   `src/deflate/incremental/decoder/`. It preserves split header state, streams
   payload directly caller-to-caller through tiny output, enforces exact/maximum
