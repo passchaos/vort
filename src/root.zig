@@ -1258,6 +1258,7 @@ pub const ZlibIncrementalBestEncoder = deflate.ZlibIncrementalBestEncoder;
 pub const GzipIncrementalBestEncoder = deflate.GzipIncrementalBestEncoder;
 pub const RawDeflateIncrementalStoredDecoder = deflate.RawDeflateIncrementalStoredDecoder;
 pub const RawDeflateIncrementalFixedLiteralDecoder = deflate.RawDeflateIncrementalFixedLiteralDecoder;
+pub const ZlibIncrementalDecoder = deflate.ZlibIncrementalDecoder;
 pub const zlibIncrementalBestOptionsForLevel = deflate.zlibIncrementalBestOptionsForLevel;
 pub const gzipIncrementalBestOptionsForLevel = deflate.gzipIncrementalBestOptionsForLevel;
 pub const RawDeflateDecoder = deflate.RawDeflateDecoder;

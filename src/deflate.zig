@@ -14,6 +14,7 @@ const incremental_zlib_fixed_encoder = @import("deflate/incremental/encoder/zlib
 const incremental_gzip_fixed_encoder = @import("deflate/incremental/encoder/gzip_fixed.zig");
 const incremental_stored_decoder = @import("deflate/incremental/decoder/stored.zig");
 const incremental_fixed_literal_decoder = @import("deflate/incremental/decoder/fixed_literals.zig");
+const incremental_zlib_decoder = @import("deflate/incremental/decoder/zlib.zig");
 const incremental_tests = @import("deflate/incremental/tests.zig");
 
 const png = @import("png.zig");
@@ -215,6 +216,14 @@ const IncrementalGzipBestEncoderCodec = struct {
 pub const GzipIncrementalBestEncoder = incremental_gzip_fixed_encoder.Encoder(IncrementalGzipBestEncoderCodec);
 pub const RawDeflateIncrementalStoredDecoder = incremental_stored_decoder.Decoder;
 pub const RawDeflateIncrementalFixedLiteralDecoder = incremental_fixed_literal_decoder.Decoder;
+
+const IncrementalZlibDecoderCodec = struct {
+    pub const Error = deflate.Error;
+    pub const RawDecoder = deflate.RawDeflateIncrementalFixedLiteralDecoder;
+    pub const Adler32 = checksum.Adler32;
+};
+
+pub const ZlibIncrementalDecoder = incremental_zlib_decoder.Decoder(IncrementalZlibDecoderCodec);
 
 pub fn zlibIncrementalBestOptionsForLevel(level: u4) Error!ZlibIncrementalBestEncoder.Options {
     return .{ .raw = .{ .compression = try optionsForZlibLevel(level) } };

@@ -5184,6 +5184,10 @@ architecture blindly.
   length arrays with persistent extra-bit state and validate EOB/table shapes.
   Dynamic literal/length and distance canonical codes now execute through the
   same split extra-bit and caller-owned history-ring match phases as fixed blocks.
+- Added a byte-progressive zlib decoder wrapper over the unified raw core. CMF/FLG
+  parsing, output Adler-32, split big-endian footer validation, exact/max output,
+  trailing input, truncation, and FDICT diagnostics preserve caller-owned history
+  and prevent raw bit prefetch from consuming wrapper footer bytes.
 - Added a bounded split-input Brotli incremental facade under
   `src/br/incremental/`. It accumulates compressed fragments under an explicit
   limit, performs complete supported-stream preflight and decode at `finish`,

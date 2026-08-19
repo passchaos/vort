@@ -714,3 +714,46 @@ test "raw deflate incremental decoder expands dynamic repeat codes" {
     try decoder.finish();
     try std.testing.expectEqualSlices(u8, payload, &output);
 }
+
+test "zlib incremental decoder streams dynamic input and validates adler" {
+    const payload = "byte progressive zlib dynamic payload alpha beta gamma" ** 40;
+    const encoded = try deflate.encodeZlibBestAlloc(std.testing.allocator, payload, deflate.optionsForLevel(.default));
+    defer std.testing.allocator.free(encoded);
+    var history: [32 * 1024]u8 = undefined;
+    var decoder = try deflate.ZlibIncrementalDecoder.init(.{ .expected_output_len = payload.len }, &history);
+    var output: [payload.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (input_offset < encoded.len) {
+        const result = try decoder.step(encoded[input_offset .. input_offset + 1], output[output_offset..][0..@min(3, output.len - output_offset)]);
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+    }
+    while (output_offset < output.len) {
+        const result = try decoder.step("", output[output_offset..][0..@min(3, output.len - output_offset)]);
+        output_offset += result.progress.output_written;
+    }
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, payload, &output);
+}
+
+test "zlib incremental decoder rejects checksum dictionary and truncation" {
+    var encoded = try deflate.encodeZlibFixedAlloc(std.testing.allocator, "checksum");
+    defer std.testing.allocator.free(encoded);
+    encoded[encoded.len - 1] ^= 1;
+    var history: [32 * 1024]u8 = undefined;
+    var bad = try deflate.ZlibIncrementalDecoder.init(.{}, &history);
+    var output: [32]u8 = undefined;
+    try std.testing.expectError(error.ChecksumMismatch, bad.step(encoded, &output));
+
+    const dict_frame = try deflate.encodeZlibFixedWithDictionaryAlloc(std.testing.allocator, "dictionary payload", "dictionary", .{});
+    defer std.testing.allocator.free(dict_frame);
+    var needs = try deflate.ZlibIncrementalDecoder.init(.{}, &history);
+    try std.testing.expectError(error.NeedDictionary, needs.step(dict_frame[0..2], &.{}));
+
+    const valid = try deflate.encodeZlibStoredAlloc(std.testing.allocator, "truncated");
+    defer std.testing.allocator.free(valid);
+    var truncated = try deflate.ZlibIncrementalDecoder.init(.{}, &history);
+    _ = try truncated.step(valid[0 .. valid.len - 1], &output);
+    try std.testing.expectError(error.TruncatedFrame, truncated.finish());
+}
