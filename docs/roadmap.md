@@ -5666,6 +5666,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   49.1/42.8/73.8 MiB/s for JSON/source/log with byte-identical output; variance
   remains high enough that this is recorded as a structural hot-path reduction,
   not an across-the-board speed claim.
+  Insert/copy length-code selection is now a direct RFC range mapping rather
+  than a 24-entry scan per query. Boundary tests cover both ends of all 48
+  insert/copy ranges plus out-of-range rejection; command/LUT and corpus output
+  remain byte-identical. The attempted token-cursor removal of the command plan
+  regressed the stable A/B and was fully reverted, preserving the faster typed
+  command representation.
   The transient `PlannedWireCommand[]` materialization is removed: frequency
   collection and final emission now derive indexed command/distance metadata
   directly from the typed command plan in two passes. This eliminates one

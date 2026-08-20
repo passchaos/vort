@@ -703,13 +703,39 @@ fn commandEntryForLengths(insert_len: usize, copy_len: usize) ?CommandEncoding {
 }
 
 fn lengthCodeForValue(value: usize, comptime insert: bool) ?u5 {
-    var code: u5 = 0;
-    while (code < 24) : (code += 1) {
-        const spec = if (insert) insertLengthSpec(code) else copyLengthSpec(code);
-        const span = @as(usize, 1) << spec.extra_bits;
-        if (value >= spec.base and value - spec.base < span) return code;
-    }
-    return null;
+    if (comptime insert) return switch (value) {
+        0...5 => @intCast(value),
+        6...9 => @intCast(6 + ((value - 6) >> 1)),
+        10...17 => @intCast(8 + ((value - 10) >> 2)),
+        18...33 => @intCast(10 + ((value - 18) >> 3)),
+        34...65 => @intCast(12 + ((value - 34) >> 4)),
+        66...129 => @intCast(14 + ((value - 66) >> 5)),
+        130...193 => 16,
+        194...321 => 17,
+        322...577 => 18,
+        578...1089 => 19,
+        1090...2113 => 20,
+        2114...6209 => 21,
+        6210...22593 => 22,
+        22594...16_799_809 => 23,
+        else => null,
+    };
+    return switch (value) {
+        2...9 => @intCast(value - 2),
+        10...13 => @intCast(8 + ((value - 10) >> 1)),
+        14...21 => @intCast(10 + ((value - 14) >> 2)),
+        22...37 => @intCast(12 + ((value - 22) >> 3)),
+        38...69 => @intCast(14 + ((value - 38) >> 4)),
+        70...101 => 16,
+        102...133 => 17,
+        134...197 => 18,
+        198...325 => 19,
+        326...581 => 20,
+        582...1093 => 21,
+        1094...2117 => 22,
+        2118...16_779_333 => 23,
+        else => null,
+    };
 }
 
 fn writeCommandLengthExtras(allocator: std.mem.Allocator, writer: *BitWriter, command: CommandEncoding, insert_len: usize, copy_len: usize) Error!void {
@@ -5650,6 +5676,21 @@ test "br explicit command index matches exhaustive LUT search" {
             _ = symbol;
         };
     }
+}
+
+test "br direct length-code mapping matches reference scan" {
+    inline for (.{ true, false }) |insert| {
+        var code: u5 = 0;
+        while (code < 24) : (code += 1) {
+            const spec = if (insert) insertLengthSpec(code) else copyLengthSpec(code);
+            const last = spec.base + ((@as(usize, 1) << spec.extra_bits) - 1);
+            try std.testing.expectEqual(@as(?u5, code), lengthCodeForValue(spec.base, insert));
+            try std.testing.expectEqual(@as(?u5, code), lengthCodeForValue(last, insert));
+        }
+    }
+    try std.testing.expectEqual(@as(?u5, null), lengthCodeForValue(1, false));
+    try std.testing.expectEqual(@as(?u5, null), lengthCodeForValue(16_799_810, true));
+    try std.testing.expectEqual(@as(?u5, null), lengthCodeForValue(16_779_334, false));
 }
 
 fn exhaustiveCommandEntryForLengths(insert_len: usize, copy_len: usize) ?CommandEncoding {
