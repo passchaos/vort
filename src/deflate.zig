@@ -1655,6 +1655,38 @@ pub fn encodeRawFixedSyncFlushAppend(
     return out.items.len - start;
 }
 
+/// Chunked-input counterpart that never joins caller plaintext slices.
+///
+/// Each non-empty slice becomes a non-final fixed block. DEFLATE bit packing
+/// remains continuous and one final sync-flush block terminates the message;
+/// match search is intentionally scoped to each caller slice so no temporary
+/// contiguous plaintext buffer is required.
+pub fn encodeRawFixedSyncFlushChunksAppend(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    chunks: []const []const u8,
+    options: CompressionOptions,
+) !usize {
+    const start = out.items.len;
+    var writer = bitstream.BitWriter{};
+    defer writer.deinit(allocator);
+    var wrote_block = false;
+    for (chunks) |chunk| {
+        if (chunk.len == 0) continue;
+        const plan = try planTokensAlloc(allocator, chunk, options);
+        defer plan.deinit(allocator);
+        try writeFixedTokens(allocator, &writer, plan.tokens, false);
+        wrote_block = true;
+    }
+    if (!wrote_block) {
+        const empty: [0]lz77.Token = .{};
+        try writeFixedTokens(allocator, &writer, &empty, false);
+    }
+    try writeStoredBlock(allocator, &writer, "", false);
+    try out.appendSlice(allocator, writer.bytes.items);
+    return out.items.len - start;
+}
+
 test "raw fixed sync flush round trips after RFC 7692 tail elision" {
     const allocator = std.testing.allocator;
     const payload = "websocket sync flush payload " ** 32;
@@ -1681,6 +1713,35 @@ test "raw fixed sync flush round trips after RFC 7692 tail elision" {
     const decoded = try decodeRawAutoAlloc(allocator, encoded.items);
     defer allocator.free(decoded);
     try std.testing.expectEqualStrings(payload, decoded);
+}
+
+test "raw fixed sync flush chunks preserve split input" {
+    const allocator = std.testing.allocator;
+    const chunks = [_][]const u8{
+        "split websocket ",
+        "payload split websocket ",
+        "payload",
+    };
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(allocator);
+    _ = try encodeRawFixedSyncFlushChunksAppend(
+        allocator,
+        &encoded,
+        &chunks,
+        .{ .parser = .hash },
+    );
+    try std.testing.expect(std.mem.endsWith(
+        u8,
+        encoded.items,
+        "\x00\x00\xff\xff",
+    ));
+    try encoded.appendSlice(allocator, "\x01\x00\x00\xff\xff");
+    const decoded = try decodeRawAutoAlloc(allocator, encoded.items);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualStrings(
+        "split websocket payload split websocket payload",
+        decoded,
+    );
 }
 
 fn encodeRawFixedTokensFinalAlloc(allocator: std.mem.Allocator, tokens: []const lz77.Token, final: bool) ![]u8 {
