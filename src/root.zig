@@ -1273,6 +1273,17 @@ pub const AdaptiveSplitOptions = deflate.AdaptiveSplitOptions;
 pub const BlockSelection = deflate.BlockSelection;
 pub const CompressionLevel = deflate.CompressionLevel;
 pub const optionsForCompressionLevel = deflate.optionsForLevel;
+
+test "root gzip incremental fixed encoder exposes member continuation" {
+    var encoder = GzipIncrementalFixedEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    var output: [128]u8 = undefined;
+    _ = try encoder.step("one", &output);
+    encoder.finish();
+    while ((try encoder.step("", &output)).status != .done) {}
+    try encoder.nextMember(.{ .filename = "two.txt" });
+    try std.testing.expectEqual(@as(usize, 1), encoder.snapshot().member_index);
+}
 pub const optionsForZlibLevel = deflate.optionsForZlibLevel;
 pub const normalizeCompressionOptionsForStrategy = deflate.normalizeOptionsForStrategy;
 pub const usesStoredFastPath = deflate.usesStoredFastPath;

@@ -5170,7 +5170,9 @@ architecture blindly.
   stored-random members are wire-inspected and concatenated-decoder tested. The
   encoder snapshot exposes pending output and the active/last member index so
   tiny-output schedulers can distinguish a drained boundary from an in-flight
-  member before calling `nextMember`.
+  member before calling `nextMember`. Both fixed and best encoders share this
+  surface; fixed-member concatenation and the root public export have dedicated
+  coverage rather than relying only on generic instantiation.
 - Added bounded adaptive block sizing to the incremental best core. Full input
   windows use the existing stored/fixed/dynamic cost scorer and split policy to
   choose a shorter prefix, while buffering never exceeds `max_block_len`; raw,

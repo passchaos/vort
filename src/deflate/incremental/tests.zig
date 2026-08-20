@@ -440,6 +440,35 @@ test "gzip incremental best encoder emits concatenated members" {
     try std.testing.expectEqual(@as(usize, 2), decoder.snapshot().member_count);
 }
 
+test "gzip incremental fixed encoder emits concatenated members" {
+    const first = "fixed member one payload" ** 16;
+    const second = "fixed member two payload" ** 12;
+    var encoder = deflate.GzipIncrementalFixedEncoder.initWithOptions(std.testing.allocator, .{
+        .raw = .{ .block_len = 128 },
+        .header = .{ .filename = "one.txt" },
+    });
+    defer encoder.deinit();
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    try appendGzipFixedMember(&encoder, &encoded, first);
+    const second_offset = encoded.items.len;
+    try encoder.nextMember(.{ .filename = "two.txt", .comment = "second" });
+    try appendGzipFixedMember(&encoder, &encoded, second);
+
+    const first_header = try deflate.parseGzipHeaderInfo(encoded.items);
+    try std.testing.expectEqualSlices(u8, "one.txt", first_header.filename.?);
+    const second_header = try deflate.parseGzipHeaderInfo(encoded.items[second_offset..]);
+    try std.testing.expectEqualSlices(u8, "two.txt", second_header.filename.?);
+    var history: [32 * 1024]u8 = undefined;
+    var decoder = try deflate.GzipIncrementalDecoder.init(.{
+        .allow_concatenated = true,
+        .expected_output_len = first.len + second.len,
+    }, &history);
+    const decoded = try decodeGzipMembersTest(&decoder, encoded.items, first.len + second.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, first ++ second, decoded);
+}
+
 test "gzip incremental encoder rejects member transition before drain" {
     var encoder = deflate.GzipIncrementalBestEncoder.init(std.testing.allocator);
     defer encoder.deinit();
@@ -516,6 +545,22 @@ test "gzip incremental members switch compression options" {
 
 fn appendGzipBestMember(encoder: *deflate.GzipIncrementalBestEncoder, encoded: *std.ArrayList(u8), payload: []const u8) !void {
     var scratch: [31]u8 = undefined;
+    var offset: usize = 0;
+    while (offset < payload.len) {
+        const result = try encoder.step(payload[offset..], &scratch);
+        offset += result.progress.input_read;
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+}
+
+fn appendGzipFixedMember(encoder: *deflate.GzipIncrementalFixedEncoder, encoded: *std.ArrayList(u8), payload: []const u8) !void {
+    var scratch: [17]u8 = undefined;
     var offset: usize = 0;
     while (offset < payload.len) {
         const result = try encoder.step(payload[offset..], &scratch);
