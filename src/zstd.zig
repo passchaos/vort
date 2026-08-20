@@ -172,6 +172,9 @@ const IncrementalEncoderCodec = struct {
         std.mem.writeInt(u32, &checksum, @truncate(hasher.final()), .little);
         try out.appendSlice(allocator, &checksum);
     }
+    pub fn writeSkippable(allocator: std.mem.Allocator, out: *std.ArrayList(u8), skippable_id: u4, payload: []const u8) zstd.Error!void {
+        try encodeSkippableFrameAppend(allocator, out, skippable_id, payload);
+    }
 };
 
 const IncrementalBlockEmitter = incremental_block_emitter.Emitter(IncrementalEncoderCodec);

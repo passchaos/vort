@@ -5149,6 +5149,9 @@ architecture blindly.
   entropy/history/checksum state resets while snapshots retain cumulative bytes
   and frame count/index. Mixed entropy plus dictionary-backed concatenation is
   decoded through a dictionary set and covered by the root facade.
+  At a drained frame boundary, `writeSkippable` can queue and tiny-output drain
+  a standard Zstd skippable frame before `nextFrame` starts the next data frame.
+  Stream summary and concatenated decode cover data-skippable-data ordering.
   state and helpers now live under `src/zstd/incremental/encoder/` instead of
   expanding the incremental directory as a flat list.
 - Extended the same resumable, idempotent flush contract to the LZ4 and framed

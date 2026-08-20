@@ -327,6 +327,39 @@ test "Zstd incremental encoder continues mixed dictionary frames" {
     try std.testing.expectEqualSlices(u8, first ++ second, decoded);
 }
 
+test "Zstd incremental encoder emits skippable frames between data frames" {
+    const first = "first Zstd data frame";
+    const second = "second Zstd data frame";
+    const metadata = "zstd-skippable-metadata";
+    var encoder = try zstd.NativeIncrementalFrameEncoder.initExactSize(std.testing.allocator, .{ .include_content_size = true }, first.len);
+    defer encoder.deinit();
+    const first_frame = try encodeSplit(&encoder, first);
+    defer std.testing.allocator.free(first_frame);
+    try encoder.writeSkippable(4, metadata);
+    var skippable: std.ArrayList(u8) = .empty;
+    defer skippable.deinit(std.testing.allocator);
+    var scratch: [7]u8 = undefined;
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try skippable.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    try encoder.nextFrameExactSize(.{ .include_content_size = true }, second.len);
+    const second_frame = try encodeSplit(&encoder, second);
+    defer std.testing.allocator.free(second_frame);
+    var stream: std.ArrayList(u8) = .empty;
+    defer stream.deinit(std.testing.allocator);
+    try stream.appendSlice(std.testing.allocator, first_frame);
+    try stream.appendSlice(std.testing.allocator, skippable.items);
+    try stream.appendSlice(std.testing.allocator, second_frame);
+    const summary = try zstd.summarizeNativeStream(stream.items);
+    try std.testing.expectEqual(@as(usize, 2), summary.frame_count);
+    try std.testing.expectEqual(@as(usize, 1), summary.skippable_frame_count);
+    const decoded = try zstd.decodeNativeConcatenatedFrameAllocExactSize(std.testing.allocator, stream.items, first.len + second.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, first ++ second, decoded);
+}
+
 fn encodeSplit(encoder: *zstd.NativeIncrementalFrameEncoder, payload: []const u8) ![]u8 {
     var frame: std.ArrayList(u8) = .empty;
     errdefer frame.deinit(std.testing.allocator);
