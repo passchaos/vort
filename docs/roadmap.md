@@ -4,6 +4,28 @@ This roadmap is a living checklist toward the larger goal: outperform and
 out-feature `zlib`, `zlib-ng`, `zlib-rs`, and `zstd` without copying their
 architecture blindly.
 
+### Current completion audit (2026-08-20)
+
+The long-term objective is **not complete**. Current evidence still leaves these
+major gaps before Vort can claim broad industry-best parity:
+
+- Brotli general-purpose compression is not implemented; production encoding
+  currently covers stored streams, single-byte RLE, and externally gated short
+  alternating patterns only.
+- True byte-progressive Brotli compressed-meta-block decoding remains future
+  work; the general incremental facade buffers a bounded complete payload.
+- Incremental DEFLATE source throughput remains behind the local zlib-ng level-6
+  comparison on stable runs, despite leading several binary/history shapes.
+- Zstd-compatible dictionary training, seekable/indexed framing, and broader
+  entropy-mode parity still require completion and competitor evidence.
+- Cross-platform optimized kernels and reproducible competitor measurements are
+  not yet comprehensive enough for a blanket performance-leadership claim.
+
+The next highest-value deliverable is a general Brotli literal/command encoder
+built from an upstream-verified command LUT, followed by a byte-progressive
+compressed-meta-block decoder. Performance work should then resume on the
+profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
+
 ## Milestone 0: repository and validation spine
 
 - [x] Zig 0.16 package scaffold.
