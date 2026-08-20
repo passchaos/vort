@@ -5641,3 +5641,9 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   (38.0/47.7/52.9 MiB/s). A focused max-chain 8 experiment did not improve the
   interleaved result and was rejected, so the production search budget remains
   unchanged.
+  A caller-owned scratch API (`encodePlannedStreamWithScratchAlloc`) now bounds
+  all planner intermediate allocations and returns only final bytes through the
+  caller allocator. It is intended for allocation control/reuse; an A/B trial
+  found it slower than the ordinary allocator path on the current small corpus,
+  so production convenience encoding and throughput benchmarks retain the faster
+  default path.

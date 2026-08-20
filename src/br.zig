@@ -518,6 +518,31 @@ pub fn encodePlannedStreamAlloc(allocator: std.mem.Allocator, input: []const u8)
     return encodeCommandPlanAlloc(allocator, input, plan.commands);
 }
 
+/// Same planner-backed encoder with a caller-owned scratch arena for all
+/// intermediate LZ77 tokens, command plans, wire commands, and prefix RLE. The
+/// returned stream is owned by `allocator`; `OutOfMemory` reports an undersized
+/// scratch buffer without silently allocating temporary state elsewhere.
+pub fn encodePlannedStreamWithScratchAlloc(allocator: std.mem.Allocator, scratch: []u8, input: []const u8) Error![]u8 {
+    if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
+    var fixed = std.heap.FixedBufferAllocator.init(scratch);
+    const scratch_allocator = fixed.allocator();
+    const lz_plan = try lz77.hashGreedyPlanAutoTinyAlloc(scratch_allocator, input, .{
+        .window_len = @min(input.len, 32 * 1024),
+        .max_chain = 64,
+        .nice_len = 64,
+        .max_candidates = 8,
+        .min_match = 3,
+        .max_match = lz77.max_match_len,
+    });
+    defer lz_plan.deinit(scratch_allocator);
+    if (lz_plan.stats.matches == 0) return error.InvalidBlockPlan;
+    const plan = try command_plan.buildAlloc(scratch_allocator, input, lz_plan.tokens);
+    defer plan.deinit(scratch_allocator);
+    const encoded = try encodeCommandPlanAlloc(scratch_allocator, input, plan.commands);
+    defer scratch_allocator.free(encoded);
+    return allocator.dupe(u8, encoded);
+}
+
 pub fn encodeRleStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) Error!void {
     var writer = BitWriter{ .out = out };
     try encodeRleStreamWrite(allocator, &writer, input);
@@ -5622,6 +5647,18 @@ test "br planner-backed encoder covers full byte literal alphabet" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &payload, decoded);
     try std.testing.expect(encoded.len < payload.len);
+}
+
+test "br planner-backed encoder accepts caller scratch" {
+    const payload = "abcabcXabcabcXabcabcX";
+    var scratch: [16 * 1024]u8 = undefined;
+    const encoded = try encodePlannedStreamWithScratchAlloc(std.testing.allocator, &scratch, payload);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    var tiny: [64]u8 = undefined;
+    try std.testing.expectError(error.OutOfMemory, encodePlannedStreamWithScratchAlloc(std.testing.allocator, &tiny, payload));
 }
 
 test "br simple encoder selects RLE or stored streams" {
