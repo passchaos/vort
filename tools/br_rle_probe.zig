@@ -29,6 +29,8 @@ pub fn main(init: std.process.Init) !void {
         try vort.brEncodePlannedStreamAlloc(init.gpa, ("abcd" ** 10) ++ "aa" ++ ("abcd" ** 10))
     else if (std.mem.eql(u8, mode, "planned-complex"))
         try vort.brEncodePlannedStreamAlloc(init.gpa, "abcdefabcdefXabcdefabcdefXabcdefabcdefX")
+    else if (std.mem.eql(u8, mode, "planned-complex16"))
+        try vort.brEncodePlannedStreamAlloc(init.gpa, "abcdefghijklmnop" ** 8)
     else
         return error.InvalidBlockPlan;
     defer init.gpa.free(encoded);

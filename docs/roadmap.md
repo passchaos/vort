@@ -5613,10 +5613,10 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   emits the matching extra bits beyond the 15 direct distances. A gated
   distance-42 payload compresses from 82 to 18 bytes and round-trips through
   both Vort and Node.
-  Planner prefix alphabets now expand from four to eight symbols through the
+  Planner prefix alphabets now expand from four to 32 symbols through the
   focused `src/br/encoder/complex_prefix.zig` writer. It emits valid Brotli
-  complex prefix trees with an explicit compact code-length alphabet; a
-  seven-literal mixed fixture passes Vort and Node decoding instead of falling
-  back to stored. The first implementation favors correctness and coverage
-  (42 encoded bytes for 39 source bytes); repeat-code optimization and larger
-  alphabets remain follow-up ratio work.
+  complex prefix trees and `src/br/encoder/code_length_rle.zig` chains symbol-17
+  zero runs across sparse literal/command/distance alphabets. The seven-literal
+  mixed fixture improves from the initial 42 bytes to 21 for 39 source bytes;
+  a 16-literal fixture compresses from 128 to 27 bytes and passes Node. Larger
+  alphabets and repeated non-zero code-length optimization remain follow-up work.

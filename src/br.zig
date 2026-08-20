@@ -5600,7 +5600,18 @@ test "br planner-backed encoder emits complex literal prefix" {
     const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
-    try std.testing.expect(encoded.len < 96);
+    try std.testing.expect(encoded.len < payload.len);
+}
+
+test "br planner-backed encoder covers wider literal alphabet" {
+    const phrase = "abcdefghijklmnop";
+    const payload = phrase ** 8;
+    const encoded = try encodePlannedStreamAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < payload.len);
 }
 
 test "br simple encoder selects RLE or stored streams" {

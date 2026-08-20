@@ -23,13 +23,15 @@ pub const Plan = struct {
     }
 };
 
+pub const max_prefix_symbols = 32;
+
 /// A compact Brotli prefix alphabet, ordered by descending frequency so shorter
-/// codes go to hotter symbols. Up to four entries use Brotli's simple prefix
-/// representation; five through eight use the first production complex-tree
-/// slice. Equal-frequency ordering is deterministic by symbol.
+/// codes go to hotter symbols. Up to four entries use Brotli's simple prefix;
+/// larger sets use the complex-tree writer. Equal-frequency ordering is
+/// deterministic by symbol.
 pub const PrefixAlphabet = struct {
-    symbols: [8]u16 = @splat(0),
-    frequencies: [8]usize = @splat(0),
+    symbols: [max_prefix_symbols]u16 = @splat(0),
+    frequencies: [max_prefix_symbols]usize = @splat(0),
     len: usize = 0,
 
     pub fn add(self: *PrefixAlphabet, symbol: u16) !void {
@@ -72,12 +74,11 @@ pub const PrefixAlphabet = struct {
             4 => {
                 for (self.symbols[0..4]) |symbol| lengths[symbol] = 2;
             },
-            5...8 => {
-                const long_bits: u4 = @intCast(std.math.log2_int_ceil(usize, self.len));
-                const short_bits = long_bits - 1;
-                const short_count = (@as(usize, 1) << long_bits) - self.len;
-                for (self.symbols[0..self.len], 0..) |symbol, i|
-                    lengths[symbol] = if (i < short_count) short_bits else long_bits;
+            5...max_prefix_symbols => {
+                var frequencies: [alphabet_size]u32 = @splat(0);
+                for (self.symbols[0..self.len], self.frequencies[0..self.len]) |symbol, frequency|
+                    frequencies[symbol] = @intCast(@min(frequency, std.math.maxInt(u32)));
+                lengths = @import("../../huffman.zig").treeCodeLengths(alphabet_size, &frequencies, 15);
             },
             else => unreachable,
         }
@@ -170,10 +171,6 @@ test "complex alphabet produces a complete balanced tree" {
     for ([_]u16{ 9, 8, 7, 6, 5 }) |symbol| try alphabet.add(symbol);
     alphabet.finish();
     const lengths = try alphabet.codeLengths(16);
-    try std.testing.expectEqual(@as(u4, 2), lengths[5]);
-    try std.testing.expectEqual(@as(u4, 2), lengths[6]);
-    try std.testing.expectEqual(@as(u4, 2), lengths[7]);
-    try std.testing.expectEqual(@as(u4, 3), lengths[8]);
-    try std.testing.expectEqual(@as(u4, 3), lengths[9]);
+    for ([_]u16{ 5, 6, 7, 8, 9 }) |symbol| try std.testing.expect(lengths[symbol] != 0);
     _ = try @import("../../huffman.zig").HuffmanTable(16).init(&lengths);
 }

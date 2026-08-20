@@ -25,6 +25,7 @@ def main() -> int:
         ("planned-mixed", b"abcabcXabcabcXabcabcX"),
         ("planned-distance42", (b"abcd" * 10) + b"aa" + (b"abcd" * 10)),
         ("planned-complex", b"abcdefabcdefXabcdefabcdefXabcdefabcdefX"),
+        ("planned-complex16", b"abcdefghijklmnop" * 8),
     )
     script = (
         "const z=require('zlib');let b=[];"
