@@ -17,6 +17,10 @@ def main() -> int:
         ("alternating-7", b"xyxyxyx"),
         ("alternating-9", b"xyxyxyxyx"),
         ("alternating-11", b"xyxyxyxyxyx"),
+        ("alternating-13", b"xyxyxyxyxyxyx"),
+        ("alternating-15", b"xyxyxyxyxyxyxyx"),
+        ("alternating-17", b"xyxyxyxyxyxyxyxyx"),
+        ("alternating-19", b"xyxyxyxyxyxyxyxyxyx"),
     )
     script = (
         "const z=require('zlib');let b=[];"

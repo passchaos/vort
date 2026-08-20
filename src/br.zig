@@ -436,7 +436,7 @@ pub fn encodeAbabaPatternStreamAlloc(allocator: std.mem.Allocator, first: u8, se
 }
 
 pub fn encodeAlternatingStreamAlloc(allocator: std.mem.Allocator, first: u8, second: u8, len: usize) Error![]u8 {
-    if (first == second or len < 5 or len > 11 or len & 1 == 0) return error.InvalidBlockPlan;
+    if (first == second or len < 5 or len > 19 or len & 1 == 0) return error.InvalidBlockPlan;
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
     var writer = BitWriter{ .out = &out };
@@ -445,7 +445,11 @@ pub fn encodeAlternatingStreamAlloc(allocator: std.mem.Allocator, first: u8, sec
     try writer.writeBits(allocator, 0, 1);
     try writer.writeBits(allocator, 0, 2);
     try writer.writeBits(allocator, len - 1, 16);
-    try writeMinimalCompressedHeaderForAlternatingPattern(allocator, &writer, first, second, len - 2);
+    const copy_len = len - 2;
+    const entry = commandEntryForLengths(2, copy_len) orelse return error.InvalidBlockPlan;
+    try writeMinimalCompressedHeaderForAlternatingPattern(allocator, &writer, first, second, entry.symbol);
+    if (entry.command.copy_extra_bits != 0)
+        try writer.writeBits(allocator, copy_len - entry.command.copy_base, entry.command.copy_extra_bits);
     // Two-symbol simple trees assign code 0/1 by listed symbol order.
     try writer.writeBits(allocator, 0, 1);
     try writer.writeBits(allocator, 1, 1);
@@ -519,10 +523,24 @@ fn isRleInput(input: []const u8) bool {
 }
 
 fn alternatingLength(input: []const u8) ?usize {
-    if (input.len < 5 or input.len > 11 or input.len & 1 == 0 or input[0] == input[1]) return null;
+    if (input.len < 5 or input.len > 19 or input.len & 1 == 0 or input[0] == input[1]) return null;
     for (input, 0..) |byte, i|
         if (byte != input[i & 1]) return null;
     return input.len;
+}
+
+const CommandEncoding = struct { symbol: u16, command: command_lut.Entry };
+
+fn commandEntryForLengths(insert_len: usize, copy_len: usize) ?CommandEncoding {
+    for (command_lut.entries, 0..) |entry, symbol| {
+        if (entry.distance_code != -1) continue;
+        const insert_span = @as(usize, 1) << @intCast(entry.insert_extra_bits);
+        const copy_span = @as(usize, 1) << @intCast(entry.copy_extra_bits);
+        if (insert_len >= entry.insert_base and insert_len - entry.insert_base < insert_span and
+            copy_len >= entry.copy_base and copy_len - entry.copy_base < copy_span)
+            return .{ .symbol = @intCast(symbol), .command = entry };
+    }
+    return null;
 }
 
 fn encodeRleStreamWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8) Error!void {
@@ -5370,7 +5388,7 @@ test "br proven ababa encoder slice round trips" {
     defer std.testing.allocator.free(binary_decoded);
     try std.testing.expectEqualSlices(u8, &.{ 0, 0xff, 0, 0xff, 0 }, binary_decoded);
     try std.testing.expectError(error.InvalidBlockPlan, encodeAbabaPatternStreamAlloc(std.testing.allocator, 'x', 'x'));
-    inline for (.{ 5, 7, 9, 11 }) |len| {
+    inline for (.{ 5, 7, 9, 11, 13, 15, 17, 19 }) |len| {
         const alternating = try encodeAlternatingStreamAlloc(std.testing.allocator, 'x', 'y', len);
         defer std.testing.allocator.free(alternating);
         const alternating_decoded = try decodeStreamAlloc(std.testing.allocator, alternating);
@@ -12526,10 +12544,10 @@ fn writeMinimalCompressedHeaderForRegularDistance(allocator: std.mem.Allocator, 
 }
 
 fn writeMinimalCompressedHeaderForRegularDistancePattern(allocator: std.mem.Allocator, writer: *BitWriter, first: u8, second: u8) Error!void {
-    return writeMinimalCompressedHeaderForAlternatingPattern(allocator, writer, first, second, 3);
+    return writeMinimalCompressedHeaderForAlternatingPattern(allocator, writer, first, second, 145);
 }
 
-fn writeMinimalCompressedHeaderForAlternatingPattern(allocator: std.mem.Allocator, writer: *BitWriter, first: u8, second: u8, copy_len: usize) Error!void {
+fn writeMinimalCompressedHeaderForAlternatingPattern(allocator: std.mem.Allocator, writer: *BitWriter, first: u8, second: u8, command_symbol: u16) Error!void {
     if (first == second) return error.InvalidBlockPlan;
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
@@ -12547,8 +12565,7 @@ fn writeMinimalCompressedHeaderForAlternatingPattern(allocator: std.mem.Allocato
 
     try writer.writeBits(allocator, 1, 2); // simple insert-copy prefix
     try writer.writeBits(allocator, 0, 2); // NSYM = 1
-    if (copy_len < 3 or copy_len > 9) return error.InvalidBlockPlan;
-    try writer.writeBits(allocator, 145 + (copy_len - 3), alphabetBits(704));
+    try writer.writeBits(allocator, command_symbol, alphabetBits(704));
 
     try writeSimpleSingleSymbolPrefix(allocator, writer, 112, 17);
 }
