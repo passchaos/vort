@@ -1,11 +1,13 @@
 const std = @import("std");
 const core = @import("core.zig");
+const lz77 = @import("lz77.zig");
 const bitstream = @import("bitstream.zig");
 const huffman = @import("huffman.zig");
 const match_copy = @import("br/match_copy.zig");
 const static_dictionary = @import("br/static_dictionary.zig");
 const command_lut = @import("br/command_lut.zig");
 const pattern = @import("br/pattern.zig");
+const command_plan = @import("br/encoder/command_plan.zig");
 const incremental = @import("br/incremental/stream_decoder.zig");
 const incremental_tests = @import("br/incremental/tests.zig");
 const incremental_stored = @import("br/incremental/stored/decoder.zig");
@@ -64,6 +66,7 @@ test {
     _ = incremental_tests;
     _ = incremental_stored_tests;
     _ = pattern;
+    _ = command_plan;
 }
 
 pub const IncrementalTestSupport = struct {
@@ -490,6 +493,28 @@ pub fn encodeRepeatedPrefixStreamAlloc(allocator: std.mem.Allocator, prefix: []c
     return out.toOwnedSlice(allocator);
 }
 
+/// Build a small general Brotli command stream from the shared LZ77 matcher.
+/// This first planner-backed slice deliberately accepts only plans whose
+/// literal, command, and distance alphabets each fit Brotli's simple-prefix
+/// representation (at most four symbols); unsupported inputs return a precise
+/// error so the general simple encoder can retain its stored fallback.
+pub fn encodePlannedStreamAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
+    const lz_plan = try lz77.hashGreedyPlanAutoAlloc(allocator, input, .{
+        .window_len = @min(input.len, 15),
+        .max_chain = 64,
+        .nice_len = 64,
+        .max_candidates = 8,
+        .min_match = 3,
+        .max_match = lz77.max_match_len,
+    });
+    defer lz_plan.deinit(allocator);
+    if (lz_plan.stats.matches == 0) return error.InvalidBlockPlan;
+    const plan = try command_plan.buildAlloc(allocator, input, lz_plan.tokens);
+    defer plan.deinit(allocator);
+    return encodeCommandPlanAlloc(allocator, input, plan.commands);
+}
+
 pub fn encodeRleStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) Error!void {
     var writer = BitWriter{ .out = out };
     try encodeRleStreamWrite(allocator, &writer, input);
@@ -536,6 +561,14 @@ pub fn encodeSimpleStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayLis
         defer allocator.free(encoded);
         try out.appendSlice(allocator, encoded);
     } else {
+        if (encodePlannedStreamAlloc(allocator, input)) |encoded| {
+            defer allocator.free(encoded);
+            try out.appendSlice(allocator, encoded);
+            return;
+        } else |err| switch (err) {
+            error.InvalidBlockPlan => {},
+            else => return err,
+        }
         try encodeStoredStreamAppend(allocator, out, input);
     }
 }
@@ -555,6 +588,15 @@ pub fn encodeSimpleStreamInto(input: []const u8, output: []u8) Error!usize {
         if (output.len < encoded.len) return error.OutOfMemory;
         @memcpy(output[0..encoded.len], encoded);
         return encoded.len;
+    }
+    if (encodePlannedStreamAlloc(std.heap.smp_allocator, input)) |encoded| {
+        defer std.heap.smp_allocator.free(encoded);
+        if (output.len < encoded.len) return error.OutOfMemory;
+        @memcpy(output[0..encoded.len], encoded);
+        return encoded.len;
+    } else |err| switch (err) {
+        error.InvalidBlockPlan => {},
+        else => return err,
     }
     return encodeStoredStreamInto(input, output);
 }
@@ -591,6 +633,68 @@ fn writeCommandLengthExtras(allocator: std.mem.Allocator, writer: *BitWriter, co
         try writer.writeBits(allocator, insert_len - command.command.insert_base, command.command.insert_extra_bits);
     if (command.command.copy_extra_bits != 0)
         try writer.writeBits(allocator, copy_len - command.command.copy_base, command.command.copy_extra_bits);
+}
+
+const PlannedWireCommand = struct {
+    plan: command_plan.Command,
+    encoding: CommandEncoding,
+    distance_symbol: u16 = 0,
+};
+
+fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command) Error![]u8 {
+    if (commands.len == 0) return error.InvalidBlockPlan;
+    const wire = try allocator.alloc(PlannedWireCommand, commands.len);
+    defer allocator.free(wire);
+    var literal_alphabet = command_plan.SimpleAlphabet{};
+    var command_alphabet = command_plan.SimpleAlphabet{};
+    var distance_alphabet = command_plan.SimpleAlphabet{};
+    for (commands, 0..) |command, i| {
+        const encoding = commandEntryForLengths(command.insert_len, command.copy_len) orelse return error.InvalidBlockPlan;
+        wire[i] = .{ .plan = command, .encoding = encoding };
+        try command_alphabet.add(encoding.symbol);
+        for (input[command.insert_start..][0..command.insert_len]) |literal| try literal_alphabet.add(literal);
+        if (!command.has_copy) continue;
+        const distance_symbol = directDistanceSymbol(command.distance) orelse return error.InvalidBlockPlan;
+        wire[i].distance_symbol = distance_symbol;
+        try distance_alphabet.add(distance_symbol);
+    }
+    if (literal_alphabet.len == 0 or command_alphabet.len == 0 or distance_alphabet.len == 0) return error.InvalidBlockPlan;
+    literal_alphabet.finish();
+    command_alphabet.finish();
+    distance_alphabet.finish();
+
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    var writer = BitWriter{ .out = &out };
+    try writeWindowBits(allocator, &writer, default_window_bits);
+    try writeLastCompressedMetaBlockHeader(allocator, &writer, input.len);
+    try writePlannedCompressedHeader(allocator, &writer, literal_alphabet, command_alphabet, distance_alphabet);
+
+    const literal_lengths = try literal_alphabet.codeLengths(256);
+    const literal_encoder = try huffman.HuffmanTable(256).Encoder.init(&literal_lengths);
+    const command_lengths = try command_alphabet.codeLengths(704);
+    const command_encoder = try huffman.HuffmanTable(704).Encoder.init(&command_lengths);
+    const distance_lengths = try distance_alphabet.codeLengths(max_distance_alphabet_size);
+    const distance_encoder = try huffman.HuffmanTable(max_distance_alphabet_size).Encoder.init(&distance_lengths);
+    for (wire) |item| {
+        if (command_alphabet.len > 1) try writer.writeBits(allocator, command_encoder.codes[item.encoding.symbol], command_encoder.bits[item.encoding.symbol]);
+        try writeCommandLengthExtras(allocator, &writer, item.encoding, item.plan.insert_len, item.plan.copy_len);
+        for (input[item.plan.insert_start..][0..item.plan.insert_len]) |literal|
+            if (literal_alphabet.len > 1) try writer.writeBits(allocator, literal_encoder.codes[literal], literal_encoder.bits[literal]);
+        if (item.plan.has_copy and item.encoding.command.distance_code == -1) {
+            if (distance_alphabet.len > 1)
+                try writer.writeBits(allocator, distance_encoder.codes[item.distance_symbol], distance_encoder.bits[item.distance_symbol]);
+            // With NDIRECT=15 every accepted planned distance is direct and therefore
+            // carries no regular-distance extra bits.
+        }
+    }
+    if (writer.bit_index != 0) writer.alignToByte();
+    return out.toOwnedSlice(allocator);
+}
+
+fn directDistanceSymbol(distance: usize) ?u16 {
+    if (distance == 0 or distance > 15) return null;
+    return @intCast(15 + distance);
 }
 
 fn encodeRleStreamWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8) Error!void {
@@ -5463,6 +5567,17 @@ test "br repeated prefix encoder emits multiple commands" {
     try std.testing.expectError(error.IntegerOverflow, encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "abcd", std.math.maxInt(usize)));
 }
 
+test "br planner-backed encoder emits mixed literal and match commands" {
+    const payload = "abcabcXabcabcXabcabcX";
+    const encoded = try encodePlannedStreamAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < payload.len);
+    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamAlloc(std.testing.allocator, "all unique"));
+}
+
 test "br simple encoder selects RLE or stored streams" {
     const run = "z" ** 1024;
     const simple_run = try encodeSimpleStreamAlloc(std.testing.allocator, run);
@@ -5505,6 +5620,13 @@ test "br simple encoder selects RLE or stored streams" {
     const expected_three = try encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "xyz", 5);
     defer std.testing.allocator.free(expected_three);
     try std.testing.expectEqualSlices(u8, expected_three, simple_three);
+
+    const planned_payload = "abcabcXabcabcXabcabcX";
+    const simple_planned = try encodeSimpleStreamAlloc(std.testing.allocator, planned_payload);
+    defer std.testing.allocator.free(simple_planned);
+    const expected_planned = try encodePlannedStreamAlloc(std.testing.allocator, planned_payload);
+    defer std.testing.allocator.free(expected_planned);
+    try std.testing.expectEqualSlices(u8, expected_planned, simple_planned);
 }
 
 test "br minimal compressed stream reuses last distance" {
@@ -12668,6 +12790,37 @@ fn writeRepeatedPrefixCompressedHeader(allocator: std.mem.Allocator, writer: *Bi
     try writer.writeBits(allocator, copy_symbol, alphabetBits(704));
     try writer.writeBits(allocator, seed_symbol, alphabetBits(704));
     try writeSimpleSingleSymbolPrefixRuntime(allocator, writer, 16 + prefix.len + 48, 15 + prefix.len);
+}
+
+fn writePlannedCompressedHeader(
+    allocator: std.mem.Allocator,
+    writer: *BitWriter,
+    literal_alphabet: command_plan.SimpleAlphabet,
+    command_alphabet: command_plan.SimpleAlphabet,
+    distance_alphabet: command_plan.SimpleAlphabet,
+) Error!void {
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 15, 4); // NDIRECT = 15
+    try writer.writeBits(allocator, 0, 2); // literal context mode
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeSimplePrefixSymbols(allocator, writer, 256, literal_alphabet);
+    try writeSimplePrefixSymbols(allocator, writer, 704, command_alphabet);
+    try writeSimplePrefixSymbols(allocator, writer, 16 + 15 + 48, distance_alphabet);
+}
+
+fn writeSimplePrefixSymbols(allocator: std.mem.Allocator, writer: *BitWriter, alphabet_size: usize, alphabet: command_plan.SimpleAlphabet) Error!void {
+    if (alphabet.len == 0 or alphabet.len > 4) return error.InvalidBlockPlan;
+    try writer.writeBits(allocator, 1, 2);
+    try writer.writeBits(allocator, alphabet.len - 1, 2);
+    for (alphabet.symbols[0..alphabet.len]) |symbol| {
+        if (symbol >= alphabet_size) return error.InvalidHuffmanCode;
+        try writer.writeBits(allocator, symbol, alphabetBitsRuntime(alphabet_size));
+    }
+    if (alphabet.len == 4) try writer.writeBits(allocator, 0, 1); // balanced four-symbol tree
 }
 
 fn writeMinimalCompressedHeaderForDistanceContext(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {

@@ -23,6 +23,8 @@ pub fn main(init: std.process.Init) !void {
         try vort.brEncodeRepeatedPrefixStreamAlloc(init.gpa, "xyz", try std.fmt.parseInt(usize, mode["repeated-prefix3-".len..], 10))
     else if (std.mem.startsWith(u8, mode, "binary-prefix3-"))
         try vort.brEncodeRepeatedPrefixStreamAlloc(init.gpa, &.{ 0, 0x80, 0xff }, try std.fmt.parseInt(usize, mode["binary-prefix3-".len..], 10))
+    else if (std.mem.eql(u8, mode, "planned-mixed"))
+        try vort.brEncodePlannedStreamAlloc(init.gpa, "abcabcXabcabcXabcabcX")
     else
         return error.InvalidBlockPlan;
     defer init.gpa.free(encoded);

@@ -5600,3 +5600,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   `src/br/pattern.zig` helper (two-byte repetitions retain the smaller alternating
   stream); this establishes command-tree emission and repeated command sequencing
   needed by a future general match planner.
+- Added the first planner-backed Brotli command encoder under
+  `src/br/encoder/command_plan.zig`. The shared LZ77 hash matcher now feeds a
+  validated insert/copy command plan; production encoding emits simple literal,
+  command, and direct-distance trees whenever each alphabet contains at most
+  four symbols and distances fit the initial direct range. A mixed literal/copy
+  payload (`abcabcX...`) compresses from 21 to 16 bytes and passes both Vort and
+  Node decoding. `encodeSimpleStream` selects this planned path when supported
+  and retains the stored fallback for plans that need broader Huffman trees or
+  regular distances.
