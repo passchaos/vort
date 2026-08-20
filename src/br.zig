@@ -5,6 +5,7 @@ const huffman = @import("huffman.zig");
 const match_copy = @import("br/match_copy.zig");
 const static_dictionary = @import("br/static_dictionary.zig");
 const command_lut = @import("br/command_lut.zig");
+const pattern = @import("br/pattern.zig");
 const incremental = @import("br/incremental/stream_decoder.zig");
 const incremental_tests = @import("br/incremental/tests.zig");
 const incremental_stored = @import("br/incremental/stored/decoder.zig");
@@ -62,6 +63,7 @@ pub const IncrementalStoredStreamEncoder = incremental_stored_encoder.Encoder(In
 test {
     _ = incremental_tests;
     _ = incremental_stored_tests;
+    _ = pattern;
 }
 
 pub const IncrementalTestSupport = struct {
@@ -459,9 +461,9 @@ pub fn encodeAlternatingStreamAlloc(allocator: std.mem.Allocator, first: u8, sec
 /// copy command per repetition instead of relying on a
 /// single copy whose overlap happens to generate the rest of the payload.
 pub fn encodeRepeatedPrefixStreamAlloc(allocator: std.mem.Allocator, prefix: []const u8, repeat_count: usize) Error![]u8 {
-    if (prefix.len != 4 or repeat_count < 2) return error.InvalidBlockPlan;
+    if (prefix.len < 2 or prefix.len > 4 or repeat_count < 2) return error.InvalidBlockPlan;
     const len = std.math.mul(usize, prefix.len, repeat_count) catch return error.IntegerOverflow;
-    if (len > max_uncompressed_meta_block_len or repeat_count - 1 > 2048) return error.InvalidBlockPlan;
+    if (len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
     for (prefix, 0..) |byte, i|
         for (prefix[0..i]) |previous|
             if (byte == previous) return error.InvalidBlockPlan;
@@ -477,7 +479,7 @@ pub fn encodeRepeatedPrefixStreamAlloc(allocator: std.mem.Allocator, prefix: []c
     try writer.writeBits(allocator, 1, 1); // seed command code
     try writeCommandLengthExtras(allocator, &writer, seed, prefix.len, prefix.len);
     var literal_lengths: [256]u4 = @splat(0);
-    for (prefix) |byte| literal_lengths[byte] = 2;
+    for (prefix, 0..) |byte, i| literal_lengths[byte] = if (prefix.len == 3 and i == 0) 1 else @intCast(std.math.log2_int_ceil(usize, prefix.len));
     const literal_encoder = try huffman.HuffmanTable(256).Encoder.init(&literal_lengths);
     for (prefix) |byte| try writer.writeBits(allocator, literal_encoder.codes[byte], literal_encoder.bits[byte]);
     for (1..repeat_count - 1) |_| {
@@ -529,6 +531,10 @@ pub fn encodeSimpleStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayLis
         const encoded = try encodeAlternatingStreamAlloc(allocator, input[0], input[1], len);
         defer allocator.free(encoded);
         try out.appendSlice(allocator, encoded);
+    } else if (pattern.repeatedDistinctPrefixLength(input)) |period| {
+        const encoded = try encodeRepeatedPrefixStreamAlloc(allocator, input[0..period], input.len / period);
+        defer allocator.free(encoded);
+        try out.appendSlice(allocator, encoded);
     } else {
         try encodeStoredStreamAppend(allocator, out, input);
     }
@@ -538,6 +544,13 @@ pub fn encodeSimpleStreamInto(input: []const u8, output: []u8) Error!usize {
     if (isRleInput(input)) return encodeRleStreamInto(input, output);
     if (alternatingLength(input)) |len| {
         const encoded = try encodeAlternatingStreamAlloc(std.heap.smp_allocator, input[0], input[1], len);
+        defer std.heap.smp_allocator.free(encoded);
+        if (output.len < encoded.len) return error.OutOfMemory;
+        @memcpy(output[0..encoded.len], encoded);
+        return encoded.len;
+    }
+    if (pattern.repeatedDistinctPrefixLength(input)) |period| {
+        const encoded = try encodeRepeatedPrefixStreamAlloc(std.heap.smp_allocator, input[0..period], input.len / period);
         defer std.heap.smp_allocator.free(encoded);
         if (output.len < encoded.len) return error.OutOfMemory;
         @memcpy(output[0..encoded.len], encoded);
@@ -5428,19 +5441,26 @@ test "br proven ababa encoder slice round trips" {
 }
 
 test "br repeated prefix encoder emits multiple commands" {
-    inline for (.{ 2, 3, 7, 31 }) |repeat_count| {
-        const encoded = try encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "abcd", repeat_count);
-        defer std.testing.allocator.free(encoded);
-        const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
-        defer std.testing.allocator.free(decoded);
-        try std.testing.expectEqual(repeat_count * 4, decoded.len);
-        for (decoded, 0..) |byte, i| try std.testing.expectEqual("abcd"[i & 3], byte);
+    inline for (.{ "xy", "xyz", "abcd" }) |prefix| {
+        inline for (.{ 2, 3, 7, 31 }) |repeat_count| {
+            const encoded = try encodeRepeatedPrefixStreamAlloc(std.testing.allocator, prefix, repeat_count);
+            defer std.testing.allocator.free(encoded);
+            const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+            defer std.testing.allocator.free(decoded);
+            try std.testing.expectEqual(repeat_count * prefix.len, decoded.len);
+            for (decoded, 0..) |byte, i| try std.testing.expectEqual(prefix[i % prefix.len], byte);
+        }
     }
+    const binary_prefix = [_]u8{ 0, 0x80, 0xff };
+    const binary = try encodeRepeatedPrefixStreamAlloc(std.testing.allocator, &binary_prefix, 7);
+    defer std.testing.allocator.free(binary);
+    const binary_decoded = try decodeStreamAlloc(std.testing.allocator, binary);
+    defer std.testing.allocator.free(binary_decoded);
+    for (binary_decoded, 0..) |byte, i| try std.testing.expectEqual(binary_prefix[i % binary_prefix.len], byte);
     try std.testing.expectError(error.InvalidBlockPlan, encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "a", 3));
     try std.testing.expectError(error.InvalidBlockPlan, encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "aba", 3));
-    try std.testing.expectError(error.InvalidBlockPlan, encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "abc", 3));
     try std.testing.expectError(error.InvalidBlockPlan, encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "abcd", 1));
-    try std.testing.expectError(error.InvalidBlockPlan, encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "abcd", 2050));
+    try std.testing.expectError(error.IntegerOverflow, encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "abcd", std.math.maxInt(usize)));
 }
 
 test "br simple encoder selects RLE or stored streams" {
@@ -5478,6 +5498,13 @@ test "br simple encoder selects RLE or stored streams" {
     defer std.testing.allocator.free(expected_long);
     try std.testing.expectEqualSlices(u8, expected_long, simple_long);
     try std.testing.expect(simple_long.len < 16);
+
+    const repeated_three = "xyzxyzxyzxyzxyz";
+    const simple_three = try encodeSimpleStreamAlloc(std.testing.allocator, repeated_three);
+    defer std.testing.allocator.free(simple_three);
+    const expected_three = try encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "xyz", 5);
+    defer std.testing.allocator.free(expected_three);
+    try std.testing.expectEqualSlices(u8, expected_three, simple_three);
 }
 
 test "br minimal compressed stream reuses last distance" {
@@ -12630,7 +12657,7 @@ fn writeRepeatedPrefixCompressedHeader(allocator: std.mem.Allocator, writer: *Bi
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
     try writer.writeBits(allocator, 0, 2); // NPOSTFIX
-    try writer.writeBits(allocator, 0, 4); // NDIRECT; command embeds distance code 0
+    try writer.writeBits(allocator, @intCast(prefix.len), 4); // direct distances 1...prefix.len
     try writer.writeBits(allocator, 0, 2); // literal context mode
     try writeBlockTypeCount(allocator, writer, 1); // NTREESL
     try writeBlockTypeCount(allocator, writer, 1); // NTREESD
@@ -12640,7 +12667,7 @@ fn writeRepeatedPrefixCompressedHeader(allocator: std.mem.Allocator, writer: *Bi
     // The two-symbol simple tree assigns one-bit codes in listed order.
     try writer.writeBits(allocator, copy_symbol, alphabetBits(704));
     try writer.writeBits(allocator, seed_symbol, alphabetBits(704));
-    try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0); // unused distance tree
+    try writeSimpleSingleSymbolPrefixRuntime(allocator, writer, 16 + prefix.len + 48, 15 + prefix.len);
 }
 
 fn writeMinimalCompressedHeaderForDistanceContext(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
@@ -14153,6 +14180,13 @@ fn writeSimpleSingleSymbolPrefix(
     try writer.writeBits(allocator, 1, 2); // simple prefix code
     try writer.writeBits(allocator, 0, 2); // NSYM = 1
     try writer.writeBits(allocator, symbol, alphabetBits(alphabet_size));
+}
+
+fn writeSimpleSingleSymbolPrefixRuntime(allocator: std.mem.Allocator, writer: *BitWriter, alphabet_size: usize, symbol: usize) Error!void {
+    if (alphabet_size == 0 or symbol >= alphabet_size) return error.InvalidHuffmanCode;
+    try writer.writeBits(allocator, 1, 2);
+    try writer.writeBits(allocator, 0, 2);
+    try writer.writeBits(allocator, symbol, alphabetBitsRuntime(alphabet_size));
 }
 
 fn writeSimplePrefixRuntime(allocator: std.mem.Allocator, writer: *BitWriter, alphabet_size: usize, symbols: []const u8, tree_select: bool) Error!void {

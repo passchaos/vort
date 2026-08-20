@@ -19,6 +19,9 @@ def main() -> int:
             for n in (*range(6, 24), 71, 327, 1095, 1096, 1097, 2119, 2120, 65535, 65536, 1048576, 16777216)
         ),
         *((f"repeated-prefix-{n}", b"abcd" * n) for n in (2, 3, 7, 31)),
+        *((f"repeated-prefix2-{n}", b"xy" * n) for n in (2, 3, 7, 31)),
+        *((f"repeated-prefix3-{n}", b"xyz" * n) for n in (2, 3, 7, 31)),
+        *((f"binary-prefix3-{n}", bytes((0, 0x80, 0xFF)) * n) for n in (2, 7, 31)),
     )
     script = (
         "const z=require('zlib');let b=[];"

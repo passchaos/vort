@@ -5591,9 +5591,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   ReleaseFast run measured about `11.6 ms` versus `310.7 ms` for 16384 sweeps
   (`~26.8x`), so production retains the verified table rather than recomputing.
 - Added the first production multi-command Brotli encoder slice.
-  `encodeRepeatedPrefixStreamAlloc` encodes a distinct four-byte seed and up
-  to 2048 subsequent non-overlapping copies as separate command symbols, using
-  the verified command LUT and a shared recent-distance command. Representative
-  2/3/7/31-repeat streams round-trip through Vort and the Node interoperability
-  gate; this establishes command-tree emission and repeated command sequencing
+  `encodeRepeatedPrefixStreamAlloc` encodes distinct two-, three-, or four-byte
+  seeds and subsequent non-overlapping copies as separate command symbols up to
+  the 16 MiB meta-block limit, using the verified command LUT and direct seed
+  distance. Representative 2/3/7/31-repeat streams, including binary seeds,
+  round-trip through Vort and the Node interoperability gate. The simple
+  encoder now detects exact three- and four-byte repetitions through the focused
+  `src/br/pattern.zig` helper (two-byte repetitions retain the smaller alternating
+  stream); this establishes command-tree emission and repeated command sequencing
   needed by a future general match planner.
