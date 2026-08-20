@@ -5243,6 +5243,18 @@ architecture blindly.
   result (`272` bytes). Tests pin the exact one-shot size, bounded option
   validation, round-trip behavior, and the zlib-ng gate now requires this row
   to match or beat the competitor rather than merely remain within a loose ratio.
+- Split rolling-match hashing into `match_finder/hash.zig` and specialized the
+  overwhelmingly common block-local path to hash contiguous 3/4-byte anchors
+  directly; only the two history/block boundary anchors use joined access. A
+  same-machine ReleaseFast before/after comparison on 256 KiB rows improved
+  persistent JSON from about `988` to `1270` MiB/s, source from `1151` to `1425`
+  MiB/s, and exact 32 KiB cross-window repetition from `352` to `441` MiB/s,
+  without changing compressed sizes or CRC mixes. Hash-layout equivalence tests
+  cover contiguous and boundary inputs, and the zlib-ng multi-corpus gate remains
+  green; zlib-ng still leads the JSON/source rows by roughly `2x`. The gate uses
+  32 iterations because 8-iteration sub-millisecond rows proved scheduler-noise
+  sensitive despite identical bytes/mixes; the strict `>=1.0` geometric threshold
+  remains unchanged.
 - Added a byte-progressive raw-DEFLATE stored-block decoder under
   `src/deflate/incremental/decoder/`. It preserves split header state, streams
   payload directly caller-to-caller through tiny output, enforces exact/maximum

@@ -1,8 +1,7 @@
 const std = @import("std");
 const lz77 = @import("../../../../lz77.zig");
+const hash = @import("hash.zig");
 
-const hash_bits: usize = 15;
-const hash_size: usize = 1 << hash_bits;
 const invalid_position = std.math.maxInt(usize);
 
 /// Persistent 32 KiB hash-chain parser for incremental DEFLATE blocks.
@@ -161,9 +160,9 @@ pub const Matcher = struct {
 
     fn ensureTables(self: *Matcher, allocator: std.mem.Allocator) !void {
         if (self.head.items.len != 0) return;
-        try self.head.resize(allocator, hash_size);
+        try self.head.resize(allocator, hash.size);
         errdefer self.head.clearAndFree(allocator);
-        try self.head_epoch.resize(allocator, hash_size);
+        try self.head_epoch.resize(allocator, hash.size);
         errdefer self.head_epoch.clearAndFree(allocator);
         try self.prev.resize(allocator, lz77.default_window_len);
         @memset(self.head_epoch.items, 0);
@@ -193,7 +192,7 @@ pub const Matcher = struct {
     fn findBest(self: *const Matcher, history: []const u8, block: []const u8, pos: usize, options: lz77.GreedyOptions, anchor_len: usize) Candidate {
         if (pos + anchor_len > block.len) return .{};
         const current = self.absolute_position + pos;
-        const h = hashAt(history, block, self.absolute_position, current, anchor_len);
+        const h = hash.block(block, pos, anchor_len);
         if (self.head_epoch.items[h] != self.epoch) return .{};
 
         var candidate = self.head.items[h];
@@ -222,12 +221,18 @@ pub const Matcher = struct {
     }
 
     fn insertBlockPosition(self: *Matcher, history: []const u8, block: []const u8, pos: usize, anchor_len: usize) void {
-        self.insertAbsolute(history, block, self.absolute_position + pos, anchor_len);
+        _ = history;
+        if (pos + anchor_len > block.len) return;
+        self.insertKnown(self.absolute_position + pos, hash.block(block, pos, anchor_len));
     }
 
     fn insertAbsolute(self: *Matcher, history: []const u8, block: []const u8, absolute: usize, anchor_len: usize) void {
         if (absolute + anchor_len > self.absolute_position + block.len) return;
         const h = hashAt(history, block, self.absolute_position, absolute, anchor_len);
+        self.insertKnown(absolute, h);
+    }
+
+    fn insertKnown(self: *Matcher, absolute: usize, h: usize) void {
         const previous = if (self.head_epoch.items[h] == self.epoch) self.head.items[h] else invalid_position;
         const slot = absolute & (lz77.default_window_len - 1);
         self.prev.items[slot] = previous;
@@ -275,18 +280,9 @@ fn crossSliceMatchLength(left: []const u8, left_pos: usize, right: []const u8, r
 }
 
 fn hashAt(history: []const u8, block: []const u8, block_absolute: usize, absolute: usize, anchor_len: usize) usize {
-    var bytes: [4]u8 = undefined;
-    for (0..anchor_len) |i| bytes[i] = byteAt(history, block, block_absolute, absolute + i);
-    return hashBytes(&bytes, anchor_len);
-}
-
-fn hashBytes(bytes: *const [4]u8, anchor_len: usize) usize {
-    if (anchor_len == 4) {
-        const word = std.mem.readInt(u32, bytes, .little);
-        return (word *% 2654435761) >> (32 - hash_bits);
-    }
-    const value: usize = (@as(usize, bytes[0]) << 16) | (@as(usize, bytes[1]) << 8) | bytes[2];
-    return ((value *% 2654435761) >> 16) & (hash_size - 1);
+    if (absolute >= block_absolute) return hash.block(block, absolute - block_absolute, anchor_len);
+    const history_absolute = block_absolute - history.len;
+    return hash.joined(history, block, absolute - history_absolute, anchor_len);
 }
 
 fn acceptMatch(input: []const u8, pos: usize, length: usize, distance: usize, options: lz77.GreedyOptions) bool {

@@ -608,7 +608,7 @@ pub fn build(b: *std.Build) void {
         "tools/deflate_incremental_encode_gate.py",
     });
     const run_deflate_incremental_encode_gate_bench = b.addRunArtifact(deflate_incremental_encode_bench_exe);
-    run_deflate_incremental_encode_gate_bench.addArg("8");
+    run_deflate_incremental_encode_gate_bench.addArg("32");
     const deflate_incremental_encode_gate_output = run_deflate_incremental_encode_gate_bench.captureStdOut(.{});
     deflate_incremental_encode_gate.addArg("--csv");
     deflate_incremental_encode_gate.addFileArg(deflate_incremental_encode_gate_output);
