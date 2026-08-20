@@ -5195,6 +5195,9 @@ architecture blindly.
   dictionary reselection, boundary/count/index snapshots, and later-stream error
   offsets. Byte-at-a-time two-dictionary input and a corrupt second stream are
   covered alongside the one-shot concatenated APIs.
+  Regression coverage pins cumulative `max_output_len`, short/long exact sizes,
+  EOF validation, and reset after an error so wrapper limits cannot silently
+  degrade into per-stream limits.
 - Added bounded adaptive block sizing to the incremental best core. Full input
   windows use the existing stored/fixed/dynamic cost scorer and split policy to
   choose a shorter prefix, while buffering never exceeds `max_block_len`; raw,

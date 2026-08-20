@@ -353,6 +353,44 @@ test "zlib incremental concatenation diagnoses corrupt later stream" {
     try std.testing.expectEqual(@as(?usize, first.len), decoder.snapshot().last_error_stream_offset);
 }
 
+test "zlib incremental concatenation enforces cumulative sizes and reset" {
+    const first_payload = "first-size";
+    const second_payload = "second-size";
+    const first = try deflate.encodeZlibFixedAlloc(std.testing.allocator, first_payload);
+    defer std.testing.allocator.free(first);
+    const second = try deflate.encodeZlibFixedAlloc(std.testing.allocator, second_payload);
+    defer std.testing.allocator.free(second);
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    try encoded.appendSlice(std.testing.allocator, first);
+    try encoded.appendSlice(std.testing.allocator, second);
+    var history: [32 * 1024]u8 = undefined;
+    var output: [64]u8 = undefined;
+
+    var limited = try deflate.ZlibIncrementalDecoder.init(.{
+        .allow_concatenated = true,
+        .max_output_len = first_payload.len + second_payload.len - 1,
+    }, &history);
+    try std.testing.expectError(error.OutputLimitExceeded, limited.step(encoded.items, &output));
+
+    var too_short = try deflate.ZlibIncrementalDecoder.init(.{
+        .allow_concatenated = true,
+        .expected_output_len = first_payload.len + second_payload.len - 1,
+    }, &history);
+    try std.testing.expectError(error.SizeMismatch, too_short.step(encoded.items, &output));
+
+    var too_long = try deflate.ZlibIncrementalDecoder.init(.{
+        .allow_concatenated = true,
+        .expected_output_len = first_payload.len + second_payload.len + 1,
+    }, &history);
+    _ = try too_long.step(encoded.items, &output);
+    try std.testing.expectError(error.SizeMismatch, too_long.finish());
+    too_long.reset();
+    try std.testing.expectEqual(deflate.ZlibIncrementalDecoder.Phase.header, too_long.snapshot().phase);
+    try std.testing.expectEqual(@as(usize, 0), too_long.snapshot().stream_count);
+    try std.testing.expectEqual(@as(?usize, null), too_long.snapshot().last_error_stream_index);
+}
+
 fn appendZlibBestStream(encoder: *deflate.ZlibIncrementalBestEncoder, encoded: *std.ArrayList(u8), payload: []const u8) !void {
     var scratch: [23]u8 = undefined;
     var offset: usize = 0;
