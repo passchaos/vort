@@ -5320,6 +5320,19 @@ architecture blindly.
   all full-path time, so future optimization should measure stream buffering,
   history retention, and pending-output copying rather than blindly changing
   the match search.
+- Expanded those staged rows with `history-retain`, `staged-pipeline`, and
+  `stage-reset`, fixed the build target to forward caller iteration arguments,
+  and made the gate require every staged row, equal token checksums, and staged
+  output sizes matching production. The persistent benchmark now also reuses
+  its scratch/output buffers between iterations so allocation noise is not
+  misattributed to the encoder. A local 64-iteration sample measured source at
+  about `2296` MiB/s end-to-end versus `2534` for the staged pipeline, `3983`
+  for matcher-only, `8733` for tree/emission, and `38097` for history retention.
+  This bounds the remaining stream-state/buffering overhead to roughly 9% of
+  the staged pipeline on that run. Full-window buffer swapping and direct
+  caller-input planning trials did not improve aggregate throughput (and the
+  latter defeated low-entropy block coalescing), so both were rejected rather
+  than adding complexity without reproducible benefit.
 - Added a byte-progressive raw-DEFLATE stored-block decoder under
   `src/deflate/incremental/decoder/`. It preserves split header state, streams
   payload directly caller-to-caller through tiny output, enforces exact/maximum

@@ -600,6 +600,7 @@ pub fn build(b: *std.Build) void {
     }
     deflate_incremental_encode_bench_exe.root_module.addImport("zlib", zlib_translate.createModule());
     const run_deflate_incremental_encode_bench = b.addRunArtifact(deflate_incremental_encode_bench_exe);
+    if (b.args) |args| run_deflate_incremental_encode_bench.addArgs(args);
     const deflate_incremental_encode_bench_step = b.step("bench-deflate-incremental-encode", "Compare persistent and rebuilt incremental DEFLATE match indexes");
     deflate_incremental_encode_bench_step.dependOn(&run_deflate_incremental_encode_bench.step);
 

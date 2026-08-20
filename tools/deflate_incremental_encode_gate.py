@@ -10,6 +10,8 @@ import sys
 
 CASES = {"json-log", "source", "repetitive", "binary", "cross-window"}
 MODES = {"persistent-lazy", "rebuild-lazy"}
+STAGED_MODES = {"matcher-lazy", "tree-emit", "history-retain", "staged-pipeline", "stage-reset"}
+STAGED_CASES = {"json-log", "source"}
 COMPRESSIBLE = {"json-log", "source", "repetitive"}
 
 
@@ -34,6 +36,9 @@ def main() -> int:
     missing = expected - set(by_key)
     if missing:
         raise SystemExit(f"missing benchmark coverage: {sorted(missing)}")
+    missing_stages = {(case, mode) for case in STAGED_CASES for mode in STAGED_MODES} - set(by_key)
+    if missing_stages:
+        raise SystemExit(f"missing staged benchmark coverage: {sorted(missing_stages)}")
 
     persistent_over_rebuild = []
     for case in CASES:
@@ -54,6 +59,14 @@ def main() -> int:
             raise SystemExit(f"binary: persistent throughput does not beat {competitor}")
         if case != "binary":
             persistent_over_rebuild.append(persistent_speed / rebuild_speed)
+        if case in STAGED_CASES:
+            staged = by_key[(case, "staged-pipeline")]
+            emitted = by_key[(case, "tree-emit")]
+            if int(staged["output_bytes"]) != persistent_size or int(emitted["output_bytes"]) != persistent_size:
+                raise SystemExit(f"{case}: staged output size differs from production")
+            staged_mix = staged["mix"]
+            if any(by_key[(case, mode)]["mix"] != staged_mix for mode in STAGED_MODES):
+                raise SystemExit(f"{case}: staged token checksums disagree")
 
     geometric = product(persistent_over_rebuild) ** (1.0 / len(persistent_over_rebuild))
     if geometric < 1.0:

@@ -4,6 +4,9 @@ const vort = @import("vort");
 pub const Measurement = struct {
     matcher_ns: i96,
     emit_ns: i96,
+    history_ns: i96,
+    pipeline_ns: i96,
+    reset_ns: i96,
     output_bytes: usize,
     token_mix: u64,
 };
@@ -36,18 +39,24 @@ pub fn measure(
     var token_mix: u64 = 0;
     var matcher_ns: i96 = 0;
     var emit_ns: i96 = 0;
+    var history_ns: i96 = 0;
+    var pipeline_ns: i96 = 0;
+    var reset_ns: i96 = 0;
     var output_bytes: usize = 0;
     for (0..iterations) |_| {
+        const reset_start = std.Io.Clock.awake.now(init.io);
         matcher.reset();
         tokens.clearRetainingCapacity();
         history.clearRetainingCapacity();
         writer.bytes.clearRetainingCapacity();
         writer.scratch = 0;
         writer.bit_index = 0;
+        reset_ns += reset_start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
         var offset: usize = 0;
         while (offset < input.len) {
             const end = @min(input.len, offset + block_len);
-            const matcher_start = std.Io.Clock.awake.now(init.io);
+            const pipeline_start = std.Io.Clock.awake.now(init.io);
+            const matcher_start = pipeline_start;
             const plan = try matcher.plan(
                 init.gpa,
                 &tokens,
@@ -71,7 +80,10 @@ pub fn measure(
                 plan.dynamic,
             );
             emit_ns += emit_start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
+            const history_start = std.Io.Clock.awake.now(init.io);
             try retainHistory(init.gpa, &history, input[offset..end]);
+            history_ns += history_start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
+            pipeline_ns += pipeline_start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds();
             offset = end;
         }
         output_bytes = writer.bytes.items.len + @intFromBool(writer.bit_index != 0);
@@ -79,6 +91,9 @@ pub fn measure(
     return .{
         .matcher_ns = matcher_ns,
         .emit_ns = emit_ns,
+        .history_ns = history_ns,
+        .pipeline_ns = pipeline_ns,
+        .reset_ns = reset_ns,
         .output_bytes = output_bytes,
         .token_mix = token_mix,
     };

@@ -58,8 +58,12 @@ pub fn main(init: std.process.Init) !void {
         for (rows) |result| try writeRow(stdout, result);
         if (stages.supports(case.name)) {
             const profile = try measureStages(init, case, compression, iterations);
+            if (profile.emit.output_bytes != rows[0].output_bytes) return error.InvalidBlockPlan;
             try writeRow(stdout, profile.matcher);
             try writeRow(stdout, profile.emit);
+            try writeRow(stdout, profile.history);
+            try writeRow(stdout, profile.pipeline);
+            try writeRow(stdout, profile.reset);
         }
     }
     try stdout.flush();
@@ -90,13 +94,16 @@ fn writeRow(stdout: *std.Io.Writer, result: Row) !void {
 fn measurePersistent(init: std.process.Init, encoder: *vort.RawDeflateIncrementalBestEncoder, case: Case, iterations: usize) !Row {
     var mix: u64 = 0;
     var output_bytes: usize = 0;
+    var scratch: [4096]u8 = undefined;
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(init.gpa);
     const start = std.Io.Clock.awake.now(init.io);
     for (0..iterations) |_| {
         encoder.reset();
-        const encoded = try encodeIncremental(init.gpa, encoder, case.input);
-        defer init.gpa.free(encoded);
-        output_bytes = encoded.len;
-        mix +%= vort.crc32(encoded);
+        encoded.clearRetainingCapacity();
+        try encodeIncremental(init.gpa, encoder, case.input, &scratch, &encoded);
+        output_bytes = encoded.items.len;
+        mix +%= vort.crc32(encoded.items);
     }
     return row(case, "persistent-lazy", iterations, output_bytes, start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds(), mix);
 }
@@ -128,13 +135,16 @@ fn measureZlib(init: std.process.Init, case: Case, iterations: usize) !Row {
     return row(case, zlib.VORT_ZLIB_BENCH_NAME, iterations, output_bytes, start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds(), mix);
 }
 
-const MatcherProfile = struct { matcher: Row, emit: Row };
+const StageProfile = struct { matcher: Row, emit: Row, history: Row, pipeline: Row, reset: Row };
 
-fn measureStages(init: std.process.Init, case: Case, compression: vort.CompressionOptions, iterations: usize) !MatcherProfile {
+fn measureStages(init: std.process.Init, case: Case, compression: vort.CompressionOptions, iterations: usize) !StageProfile {
     const measurement = try stages.measure(init, case.input, compression, block_len, iterations);
     return .{
         .matcher = row(case, "matcher-lazy", iterations, 0, measurement.matcher_ns, measurement.token_mix),
         .emit = row(case, "tree-emit", iterations, measurement.output_bytes, measurement.emit_ns, measurement.token_mix),
+        .history = row(case, "history-retain", iterations, 0, measurement.history_ns, measurement.token_mix),
+        .pipeline = row(case, "staged-pipeline", iterations, measurement.output_bytes, measurement.pipeline_ns, measurement.token_mix),
+        .reset = row(case, "stage-reset", iterations, 0, measurement.reset_ns, measurement.token_mix),
     };
 }
 
@@ -172,23 +182,25 @@ fn row(case: Case, mode: []const u8, iterations: usize, output_bytes: usize, ela
     };
 }
 
-fn encodeIncremental(allocator: std.mem.Allocator, encoder: *vort.RawDeflateIncrementalBestEncoder, input: []const u8) ![]u8 {
-    var encoded: std.ArrayList(u8) = .empty;
-    errdefer encoded.deinit(allocator);
-    var scratch: [4096]u8 = undefined;
+fn encodeIncremental(
+    allocator: std.mem.Allocator,
+    encoder: *vort.RawDeflateIncrementalBestEncoder,
+    input: []const u8,
+    scratch: []u8,
+    encoded: *std.ArrayList(u8),
+) !void {
     var offset: usize = 0;
     while (offset < input.len) {
-        const result = try encoder.step(input[offset..], &scratch);
+        const result = try encoder.step(input[offset..], scratch);
         offset += result.progress.input_read;
         try encoded.appendSlice(allocator, scratch[0..result.progress.output_written]);
     }
     encoder.finish();
     while (true) {
-        const result = try encoder.step("", &scratch);
+        const result = try encoder.step("", scratch);
         try encoded.appendSlice(allocator, scratch[0..result.progress.output_written]);
         if (result.status == .done) break;
     }
-    return encoded.toOwnedSlice(allocator);
 }
 
 fn buildCases(allocator: std.mem.Allocator) ![]Case {
