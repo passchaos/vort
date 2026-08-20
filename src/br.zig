@@ -503,7 +503,7 @@ pub fn encodeRepeatedPrefixStreamAlloc(allocator: std.mem.Allocator, prefix: []c
 /// so the convenience encoder can retain its stored fallback.
 pub fn encodePlannedStreamAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
     if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
-    const lz_plan = try lz77.hashGreedyPlanAutoAlloc(allocator, input, .{
+    const lz_plan = try lz77.hashGreedyPlanAutoTinyAlloc(allocator, input, .{
         .window_len = @min(input.len, 32 * 1024),
         .max_chain = 64,
         .nice_len = 64,

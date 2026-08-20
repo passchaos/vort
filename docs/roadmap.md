@@ -5635,3 +5635,9 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   JSON/source/log.
   This is explicit evidence that planner-backed encoding is now functional on
   these shapes but still trails the industry reference in both speed and ratio.
+  Switching sub-32-KiB inputs from heap-backed hash tables to the existing
+  stack-table LZ77 planner preserves byte-identical output and raises the
+  persisted 100-iteration throughput ratios to `0.186x`, `0.236x`, and `0.214x`
+  (38.0/47.7/52.9 MiB/s). A focused max-chain 8 experiment did not improve the
+  interleaved result and was rejected, so the production search budget remains
+  unchanged.
