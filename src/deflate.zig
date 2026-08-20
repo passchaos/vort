@@ -1687,9 +1687,10 @@ pub fn encodeRawFixedSyncFlushAppend(
 /// Chunked-input counterpart that never joins caller plaintext slices.
 ///
 /// All non-empty slices feed one non-final fixed block, followed by the final
-/// sync-flush block. A bounded rolling dictionary preserves cross-slice
-/// matches without ever joining the complete caller message into one plaintext
-/// allocation or repeating block framing for every slice.
+/// sync-flush block. Physically adjacent slices are planned as one zero-copy
+/// run; separate allocations use a bounded rolling dictionary. This preserves
+/// cross-slice matches without ever joining the complete caller message into
+/// one plaintext allocation or repeating block framing for every slice.
 pub fn encodeRawFixedSyncFlushChunksAppend(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
@@ -1706,13 +1707,14 @@ pub fn encodeRawFixedSyncFlushChunksAppend(
     var history: std.ArrayList(u8) = .empty;
     defer history.deinit(allocator);
     var wrote_block = false;
-    for (chunks) |chunk| {
-        if (chunk.len == 0) continue;
+    var index: usize = 0;
+    while (nextNonEmptyChunk(chunks, &index)) |first| {
+        const run = contiguousChunkRun(chunks, first, &index);
         if (!wrote_block) try writeFixedBlockHeader(allocator, &writer, false);
-        const plan = try planTokensWithDictionaryAlloc(allocator, chunk, history.items, options);
+        const plan = try planTokensWithDictionaryAlloc(allocator, run, history.items, options);
         defer plan.deinit(allocator);
         try writeFixedTokenSequence(allocator, &writer, plan.tokens);
-        try appendRollingHistory(allocator, &history, chunk, history_limit);
+        try appendRollingHistory(allocator, &history, run, history_limit);
         wrote_block = true;
     }
     if (!wrote_block) {
@@ -1722,6 +1724,49 @@ pub fn encodeRawFixedSyncFlushChunksAppend(
     try writeStoredBlock(allocator, &writer, "", false);
     try out.appendSlice(allocator, writer.bytes.items);
     return out.items.len - start;
+}
+
+const NonEmptyChunk = struct { bytes: []const u8, next_index: usize };
+
+fn peekNonEmptyChunk(
+    chunks: []const []const u8,
+    start: usize,
+) ?NonEmptyChunk {
+    var index = start;
+    while (index < chunks.len) : (index += 1) {
+        if (chunks[index].len != 0) {
+            return .{ .bytes = chunks[index], .next_index = index + 1 };
+        }
+    }
+    return null;
+}
+
+fn nextNonEmptyChunk(
+    chunks: []const []const u8,
+    index: *usize,
+) ?[]const u8 {
+    const next = peekNonEmptyChunk(chunks, index.*) orelse return null;
+    index.* = next.next_index;
+    return next.bytes;
+}
+
+fn contiguousChunkRun(
+    chunks: []const []const u8,
+    first: []const u8,
+    index: *usize,
+) []const u8 {
+    var run_len = first.len;
+    while (peekNonEmptyChunk(chunks, index.*)) |next| {
+        const expected = std.math.add(
+            usize,
+            @intFromPtr(first.ptr),
+            run_len,
+        ) catch break;
+        if (@intFromPtr(next.bytes.ptr) != expected) break;
+        run_len = std.math.add(usize, run_len, next.bytes.len) catch break;
+        index.* = next.next_index;
+    }
+    return first.ptr[0..run_len];
 }
 
 fn appendRollingHistory(
@@ -1857,6 +1902,25 @@ test "raw fixed sync flush chunks use bounded cross-slice history" {
     const decoded = try decodeRawAutoAlloc(allocator, chunked.items);
     defer allocator.free(decoded);
     try std.testing.expectEqualStrings(input, decoded);
+}
+
+test "raw fixed sync flush chunks preserve non-adjacent input" {
+    const allocator = std.testing.allocator;
+    const first = "separate allocation payload " ** 8;
+    const second = "separate allocation payload " ** 8;
+    const chunks = [_][]const u8{ first, "", second };
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(allocator);
+    _ = try encodeRawFixedSyncFlushChunksAppend(
+        allocator,
+        &encoded,
+        &chunks,
+        .{ .parser = .hash },
+    );
+    try encoded.appendSlice(allocator, "\x01\x00\x00\xff\xff");
+    const decoded = try decodeRawAutoAlloc(allocator, encoded.items);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualStrings(first ++ second, decoded);
 }
 
 fn encodeRawFixedTokensFinalAlloc(allocator: std.mem.Allocator, tokens: []const lz77.Token, final: bool) ![]u8 {
