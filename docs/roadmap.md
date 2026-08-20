@@ -5571,7 +5571,7 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   `encodeAbabaPatternStreamAlloc(first,second)` supports any distinct byte pair;
   both ASCII and binary `00 ff 00 ff 00` patterns pass Vort and Node decoding.
   The same externally gated command shape now covers odd alternating lengths
-  every length `5...71` through `encodeAlternatingStreamAlloc`; copy-length extra bits and
+  every length `5...135` through `encodeAlternatingStreamAlloc`; copy-length extra bits and
   command symbols are selected from the upstream-verified LUT, and every odd
   length is Node-gated. `encodeSimpleStream` selects
   these patterns automatically and otherwise retains its stored fallback.
