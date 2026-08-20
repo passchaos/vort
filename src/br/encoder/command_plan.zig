@@ -91,6 +91,23 @@ pub const PrefixAlphabet = struct {
     }
 };
 
+/// O(1) frequency collection used by the planner hot path. Converting to the
+/// compact ordered alphabet happens once after all commands are scanned, rather
+/// than linearly searching up to 704 symbols for every literal/command/distance.
+pub fn alphabetFromFrequencies(comptime alphabet_size: usize, frequencies: *const [alphabet_size]u32) !PrefixAlphabet {
+    var alphabet = PrefixAlphabet{};
+    for (frequencies, 0..) |frequency, symbol| {
+        if (frequency == 0) continue;
+        if (alphabet.len == alphabet.symbols.len) return error.InvalidBlockPlan;
+        alphabet.symbols[alphabet.len] = @intCast(symbol);
+        alphabet.frequencies[alphabet.len] = frequency;
+        alphabet.len += 1;
+    }
+    if (alphabet.len == 0) return error.InvalidBlockPlan;
+    alphabet.finish();
+    return alphabet;
+}
+
 /// Coalesce consecutive literal tokens into the insert portion of the next
 /// match command. This is format-neutral planning only: command-code and
 /// distance-alphabet limits are checked by the Brotli wire writer.

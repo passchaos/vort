@@ -5652,3 +5652,8 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   fixed scratch API, the first small-corpus A/B was slower than the default path
   after accounting for final-result copies, so it is exposed for allocation
   control rather than selected by the throughput benchmark.
+  Planner alphabet collection now accumulates fixed literal/command/distance
+  frequency arrays and compacts them once, replacing the former per-symbol
+  linear search through up to 704 entries. The persisted 100-iteration sample
+  improved source/log throughput from 47.7/52.9 to 61.8/56.6 MiB/s while JSON
+  measured 42.4 MiB/s; output remains byte-identical.

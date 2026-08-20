@@ -702,25 +702,24 @@ fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, comma
     if (commands.len == 0) return error.InvalidBlockPlan;
     const wire = try allocator.alloc(PlannedWireCommand, commands.len);
     defer allocator.free(wire);
-    var literal_alphabet = command_plan.PrefixAlphabet{};
-    var command_alphabet = command_plan.PrefixAlphabet{};
-    var distance_alphabet = command_plan.PrefixAlphabet{};
+    var literal_frequencies: [256]u32 = @splat(0);
+    var command_frequencies: [704]u32 = @splat(0);
+    var distance_frequencies: [max_distance_alphabet_size]u32 = @splat(0);
     for (commands, 0..) |command, i| {
         const encoding = commandEntryForLengths(command.insert_len, command.copy_len) orelse return error.InvalidBlockPlan;
         wire[i] = .{ .plan = command, .encoding = encoding };
-        try command_alphabet.add(encoding.symbol);
-        for (input[command.insert_start..][0..command.insert_len]) |literal| try literal_alphabet.add(literal);
+        command_frequencies[encoding.symbol] += 1;
+        for (input[command.insert_start..][0..command.insert_len]) |literal| literal_frequencies[literal] += 1;
         if (!command.has_copy) continue;
         const distance = encoder_distance.encode(command.distance, 15) orelse return error.InvalidBlockPlan;
         wire[i].distance_symbol = distance.symbol;
         wire[i].distance_extra = distance.extra;
         wire[i].distance_extra_bits = distance.extra_bits;
-        try distance_alphabet.add(distance.symbol);
+        distance_frequencies[distance.symbol] += 1;
     }
-    if (literal_alphabet.len == 0 or command_alphabet.len == 0 or distance_alphabet.len == 0) return error.InvalidBlockPlan;
-    literal_alphabet.finish();
-    command_alphabet.finish();
-    distance_alphabet.finish();
+    const literal_alphabet = try command_plan.alphabetFromFrequencies(256, &literal_frequencies);
+    const command_alphabet = try command_plan.alphabetFromFrequencies(704, &command_frequencies);
+    const distance_alphabet = try command_plan.alphabetFromFrequencies(max_distance_alphabet_size, &distance_frequencies);
 
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
