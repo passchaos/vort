@@ -119,6 +119,9 @@ const IncrementalEncoderCodec = struct {
             try out.appendSlice(allocator, &checksum);
         }
     }
+    pub fn writeSkippable(allocator: std.mem.Allocator, out: *std.ArrayList(u8), skippable_id: u4, payload: []const u8) lz4.Error!void {
+        try encodeSkippableFrameAppend(allocator, out, skippable_id, payload);
+    }
 };
 
 const lz4 = @This();

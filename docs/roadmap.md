@@ -5096,6 +5096,10 @@ architecture blindly.
   checksum state resets independently while snapshots retain cumulative bytes
   and completed frame count/index. A mixed independent/no-dictionary plus
   linked/dictionary concatenation round-trips through dictionary-set decode.
+  After a drained data frame, `writeSkippable` can queue a standard LZ4
+  skippable frame and drain it through tiny output before `nextFrame` starts the
+  next data frame. Stream summary and concatenated decode tests cover the
+  data-skippable-data layout without illegally embedding it inside a data frame.
 - Added a no-content-size incremental native Zstd raw/RLE frame encoder under
   `src/zstd/incremental/`. It retains one bounded block, delays the Zstd final
   block bit until explicit finish, maintains the optional XXH64 content checksum

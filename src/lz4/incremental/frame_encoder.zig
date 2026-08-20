@@ -24,6 +24,7 @@ pub fn Encoder(comptime Codec: type) type {
         expected_input_len: ?usize = null,
         dictionary_id: ?u32 = null,
         dictionary: []const u8 = &.{},
+        skippable_only: bool = false,
         stream_input: usize = 0,
         stream_output: usize = 0,
         frame_count: usize = 0,
@@ -100,6 +101,7 @@ pub fn Encoder(comptime Codec: type) type {
             self.expected_input_len = expected_input_len;
             self.dictionary_id = dictionary_id;
             self.dictionary = dictionary;
+            self.skippable_only = false;
         }
         pub fn nextFrame(self: *Self, options: Codec.Options) Error!void {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
@@ -140,6 +142,16 @@ pub fn Encoder(comptime Codec: type) type {
         pub fn flush(self: *Self) void {
             if (!self.finishing and !self.done) self.flush_requested = true;
         }
+        /// Queue a complete LZ4 skippable frame after a drained data frame.
+        /// Skippable frames cannot appear inside an LZ4 data frame; callers may
+        /// start the next data frame with `nextFrame` after this one drains.
+        pub fn writeSkippable(self: *Self, skippable_id: u4, payload: []const u8) Error!void {
+            if (payload.len > std.math.maxInt(u32)) return error.IntegerOverflow;
+            if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
+            try Codec.writeSkippable(self.allocator, &self.pending, skippable_id, payload);
+            self.done = false;
+            self.skippable_only = true;
+        }
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
             if (self.done) {
                 if (input.len != 0) return error.TrailingData;
@@ -161,6 +173,11 @@ pub fn Encoder(comptime Codec: type) type {
                     self.pending.clearRetainingCapacity();
                     self.pending_offset = 0;
                     if (output_written == output.len and output.len != 0) return result(input_read, output_written, .need_output);
+                }
+                if (self.skippable_only) {
+                    self.skippable_only = false;
+                    self.done = true;
+                    return result(input_read, output_written, .done);
                 }
                 if (!self.header_written) {
                     try Codec.writeHeader(self.allocator, &self.pending, self.options, self.expected_input_len, self.dictionary_id);
