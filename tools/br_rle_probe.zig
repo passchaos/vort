@@ -11,6 +11,8 @@ pub fn main(init: std.process.Init) !void {
         try vort.brEncodeRleStreamAlloc(init.gpa, "a" ** 4096)
     else if (std.mem.eql(u8, mode, "ababa"))
         try vort.brEncodeAbabaStreamAlloc(init.gpa)
+    else if (std.mem.eql(u8, mode, "binary-ababa"))
+        try vort.brEncodeAbabaPatternStreamAlloc(init.gpa, 0, 0xff)
     else
         return error.InvalidBlockPlan;
     defer init.gpa.free(encoded);

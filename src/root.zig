@@ -57,6 +57,7 @@ pub const brEncodeRleStreamAlloc = br.encodeRleStreamAlloc;
 pub const brEncodeRleStreamAppend = br.encodeRleStreamAppend;
 pub const brEncodeRleStreamInto = br.encodeRleStreamInto;
 pub const brEncodeAbabaStreamAlloc = br.encodeAbabaStreamAlloc;
+pub const brEncodeAbabaPatternStreamAlloc = br.encodeAbabaPatternStreamAlloc;
 pub const brEncodedSimpleStreamBound = br.encodedSimpleStreamBound;
 pub const brEncodeSimpleStreamAlloc = br.encodeSimpleStreamAlloc;
 pub const brEncodeSimpleStreamAppend = br.encodeSimpleStreamAppend;

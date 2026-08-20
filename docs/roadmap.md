@@ -5545,7 +5545,9 @@ architecture blindly.
   with Node, checks all 4096 bytes, and protects a minimum 16x ratio win. The
   same gate now covers the first externally proven distance-copy production
   slice, `encodeAbabaStreamAlloc`, derived from the existing Node/Vort fixture
-  and yielding an 11-byte interoperable compressed stream.
+  and yielding an 11-byte interoperable compressed stream. The parameterized
+  `encodeAbabaPatternStreamAlloc(first,second)` supports any distinct byte pair;
+  both ASCII and binary `00 ff 00 ff 00` patterns pass Vort and Node decoding.
   `encodeSimpleStream` provides a safe general entry point over this initial
   slice: eligible runs use compressed RLE, while all other inputs deterministically
   fall back to the mature stored encoder. Alloc/append/into/bound and root APIs

@@ -427,6 +427,11 @@ pub fn encodeRleStreamAlloc(allocator: std.mem.Allocator, input: []const u8) Err
 /// This intentionally exposes only the proven five-byte slice while the
 /// general command/literal encoder is still under construction.
 pub fn encodeAbabaStreamAlloc(allocator: std.mem.Allocator) Error![]u8 {
+    return encodeAbabaPatternStreamAlloc(allocator, 'a', 'b');
+}
+
+pub fn encodeAbabaPatternStreamAlloc(allocator: std.mem.Allocator, first: u8, second: u8) Error![]u8 {
+    if (first == second) return error.InvalidBlockPlan;
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
     var writer = BitWriter{ .out = &out };
@@ -435,9 +440,10 @@ pub fn encodeAbabaStreamAlloc(allocator: std.mem.Allocator) Error![]u8 {
     try writer.writeBits(allocator, 0, 1);
     try writer.writeBits(allocator, 0, 2);
     try writer.writeBits(allocator, 4, 16);
-    try writeMinimalCompressedHeaderForRegularDistance(allocator, &writer);
-    try writer.writeBits(allocator, 0, 1); // a
-    try writer.writeBits(allocator, 1, 1); // b
+    try writeMinimalCompressedHeaderForRegularDistancePattern(allocator, &writer, first, second);
+    // Two-symbol simple trees assign code 0/1 by listed symbol order.
+    try writer.writeBits(allocator, 0, 1);
+    try writer.writeBits(allocator, 1, 1);
     try writer.writeBits(allocator, 0, 1); // distance extra bit
     if (writer.bit_index != 0) writer.alignToByte();
     return out.toOwnedSlice(allocator);
@@ -5336,6 +5342,12 @@ test "br proven ababa encoder slice round trips" {
     const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "ababa", decoded);
+    const binary = try encodeAbabaPatternStreamAlloc(std.testing.allocator, 0x00, 0xff);
+    defer std.testing.allocator.free(binary);
+    const binary_decoded = try decodeStreamAlloc(std.testing.allocator, binary);
+    defer std.testing.allocator.free(binary_decoded);
+    try std.testing.expectEqualSlices(u8, &.{ 0, 0xff, 0, 0xff, 0 }, binary_decoded);
+    try std.testing.expectError(error.InvalidBlockPlan, encodeAbabaPatternStreamAlloc(std.testing.allocator, 'x', 'x'));
 }
 
 test "br simple encoder selects RLE or stored streams" {
@@ -12472,6 +12484,11 @@ fn writeMinimalCompressedHeaderForShortDistance(allocator: std.mem.Allocator, wr
 }
 
 fn writeMinimalCompressedHeaderForRegularDistance(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    return writeMinimalCompressedHeaderForRegularDistancePattern(allocator, writer, 'a', 'b');
+}
+
+fn writeMinimalCompressedHeaderForRegularDistancePattern(allocator: std.mem.Allocator, writer: *BitWriter, first: u8, second: u8) Error!void {
+    if (first == second) return error.InvalidBlockPlan;
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
@@ -12483,8 +12500,8 @@ fn writeMinimalCompressedHeaderForRegularDistance(allocator: std.mem.Allocator, 
 
     try writer.writeBits(allocator, 1, 2); // simple literal prefix
     try writer.writeBits(allocator, 1, 2); // NSYM = 2
-    try writer.writeBits(allocator, 'a', alphabetBits(256));
-    try writer.writeBits(allocator, 'b', alphabetBits(256));
+    try writer.writeBits(allocator, first, alphabetBits(256));
+    try writer.writeBits(allocator, second, alphabetBits(256));
 
     try writer.writeBits(allocator, 1, 2); // simple insert-copy prefix
     try writer.writeBits(allocator, 0, 2); // NSYM = 1

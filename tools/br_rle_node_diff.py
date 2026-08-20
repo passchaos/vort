@@ -10,7 +10,11 @@ import sys
 def main() -> int:
     if len(sys.argv) != 2:
         raise SystemExit("usage: br_rle_node_diff.py <probe>")
-    cases = (("rle", b"a" * 4096), ("ababa", b"ababa"))
+    cases = (
+        ("rle", b"a" * 4096),
+        ("ababa", b"ababa"),
+        ("binary-ababa", bytes((0, 255, 0, 255, 0))),
+    )
     script = (
         "const z=require('zlib');let b=[];"
         "process.stdin.on('data',x=>b.push(x));"
