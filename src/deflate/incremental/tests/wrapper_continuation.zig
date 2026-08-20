@@ -285,6 +285,74 @@ test "zlib concatenated dictionary set resolves each stream DICTID" {
     try std.testing.expectError(error.NeedDictionary, deflate.decodeZlibConcatenatedWithDictionarySet(encoded.items, &output, missing));
 }
 
+test "zlib incremental decoder streams concatenated dictionary-set streams" {
+    const first_dictionary = "incremental first zlib dictionary";
+    const second_dictionary = "incremental second zlib dictionary";
+    const first = "incremental first zlib dictionary payload" ** 8;
+    const second = "incremental second zlib dictionary payload" ** 7;
+    var encoder = deflate.ZlibIncrementalBestEncoder.initExactSizeWithDictionary(
+        std.testing.allocator,
+        .{},
+        first.len,
+        first_dictionary,
+    );
+    defer encoder.deinit();
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    try appendZlibBestStream(&encoder, &encoded, first);
+    const second_offset = encoded.items.len;
+    try encoder.nextStreamExactSize(.{}, second_dictionary, second.len);
+    try appendZlibBestStream(&encoder, &encoded, second);
+
+    const entries = [_]deflate.ZlibDictionaryEntry{
+        deflate.ZlibDictionarySet.entry(first_dictionary),
+        deflate.ZlibDictionarySet.entry(second_dictionary),
+    };
+    var history: [32 * 1024]u8 = undefined;
+    var decoder = try deflate.ZlibIncrementalDecoder.initWithDictionarySet(.{
+        .allow_concatenated = true,
+        .expected_output_len = first.len + second.len,
+    }, &history, deflate.ZlibDictionarySet.fromEntries(&entries));
+    var output: [first.len + second.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (input_offset < encoded.items.len) {
+        const result = try decoder.step(encoded.items[input_offset .. input_offset + 1], output[output_offset..][0..@min(3, output.len - output_offset)]);
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+        if (input_offset == second_offset) {
+            const boundary = decoder.snapshot();
+            try std.testing.expectEqual(deflate.ZlibIncrementalDecoder.Phase.between_streams, boundary.phase);
+            try std.testing.expectEqual(@as(usize, 1), boundary.stream_count);
+        }
+    }
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, first ++ second, &output);
+    try std.testing.expectEqual(@as(usize, 2), decoder.snapshot().stream_count);
+    try std.testing.expectEqual(@as(usize, 1), decoder.snapshot().stream_index);
+    try std.testing.expectEqual(second_offset, decoder.snapshot().stream_offset);
+}
+
+test "zlib incremental concatenation diagnoses corrupt later stream" {
+    const first = try deflate.encodeZlibFixedAlloc(std.testing.allocator, "first");
+    defer std.testing.allocator.free(first);
+    var second = try deflate.encodeZlibFixedAlloc(std.testing.allocator, "second");
+    defer std.testing.allocator.free(second);
+    second[second.len - 1] ^= 1;
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    try encoded.appendSlice(std.testing.allocator, first);
+    try encoded.appendSlice(std.testing.allocator, second);
+    var history: [32 * 1024]u8 = undefined;
+    var decoder = try deflate.ZlibIncrementalDecoder.init(.{ .allow_concatenated = true }, &history);
+    var output: [32]u8 = undefined;
+    try std.testing.expectError(error.ChecksumMismatch, decoder.step(encoded.items, &output));
+    try std.testing.expectEqual(@as(usize, 1), decoder.snapshot().stream_count);
+    try std.testing.expectEqual(@as(usize, 1), decoder.snapshot().stream_index);
+    try std.testing.expectEqual(@as(?usize, 1), decoder.snapshot().last_error_stream_index);
+    try std.testing.expectEqual(@as(?usize, first.len), decoder.snapshot().last_error_stream_offset);
+}
+
 fn appendZlibBestStream(encoder: *deflate.ZlibIncrementalBestEncoder, encoded: *std.ArrayList(u8), payload: []const u8) !void {
     var scratch: [23]u8 = undefined;
     var offset: usize = 0;

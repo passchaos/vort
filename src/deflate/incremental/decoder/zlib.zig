@@ -21,23 +21,49 @@ pub fn Decoder(comptime Codec: type) type {
         input_finished: bool = false,
         total_input: usize = 0,
         total_output: usize = 0,
+        stream_output: usize = 0,
+        stream_count: usize = 0,
+        stream_offset: usize = 0,
         last_error_name: []const u8 = "",
         last_error_phase: Phase = .header,
+        last_error_stream_index: ?usize = null,
+        last_error_stream_offset: ?usize = null,
+        last_error_input_offset: ?usize = null,
 
         const Self = @This();
         pub const Error = Codec.Error;
         pub const Options = struct {
             max_output_len: usize = std.math.maxInt(usize),
             expected_output_len: ?usize = null,
+            allow_concatenated: bool = false,
         };
-        pub const Phase = enum { header, dictid, raw, footer, done };
+        pub const Phase = enum { header, dictid, raw, footer, between_streams, done };
+        pub const Snapshot = struct {
+            phase: Phase,
+            total_input: usize,
+            total_output: usize,
+            stream_output: usize,
+            stream_count: usize,
+            stream_index: usize,
+            stream_offset: usize,
+            stream_input: usize,
+            header_received: usize,
+            dictid_received: usize,
+            footer_received: usize,
+            last_error_name: []const u8,
+            last_error_phase: ?Phase,
+            last_error_stream_index: ?usize,
+            last_error_stream_offset: ?usize,
+            last_error_input_offset: ?usize,
+            done: bool,
+        };
 
         pub fn init(options: Options, history: []u8) Error!Self {
             return .{
                 .options = options,
                 .raw = try Codec.RawDecoder.initWithHistory(.{
-                    .max_output_len = options.max_output_len,
-                    .expected_output_len = options.expected_output_len,
+                    .max_output_len = initialRawLimit(options),
+                    .expected_output_len = if (options.allow_concatenated) null else options.expected_output_len,
                 }, history),
             };
         }
@@ -45,8 +71,8 @@ pub fn Decoder(comptime Codec: type) type {
             return .{
                 .options = options,
                 .raw = try Codec.RawDecoder.initWithDictionary(.{
-                    .max_output_len = options.max_output_len,
-                    .expected_output_len = options.expected_output_len,
+                    .max_output_len = initialRawLimit(options),
+                    .expected_output_len = if (options.allow_concatenated) null else options.expected_output_len,
                 }, history, dictionary),
                 .dictionary = dictionary,
             };
@@ -55,8 +81,8 @@ pub fn Decoder(comptime Codec: type) type {
             return .{
                 .options = options,
                 .raw = try Codec.RawDecoder.initWithHistory(.{
-                    .max_output_len = options.max_output_len,
-                    .expected_output_len = options.expected_output_len,
+                    .max_output_len = initialRawLimit(options),
+                    .expected_output_len = if (options.allow_concatenated) null else options.expected_output_len,
                 }, history),
                 .dictionaries = dictionaries,
             };
@@ -71,8 +97,36 @@ pub fn Decoder(comptime Codec: type) type {
             self.input_finished = false;
             self.total_input = 0;
             self.total_output = 0;
+            self.stream_output = 0;
+            self.stream_count = 0;
+            self.stream_offset = 0;
+            self.configureRawForStream();
             self.last_error_name = "";
             self.last_error_phase = .header;
+            self.last_error_stream_index = null;
+            self.last_error_stream_offset = null;
+            self.last_error_input_offset = null;
+        }
+        pub fn snapshot(self: *const Self) Snapshot {
+            return .{
+                .phase = self.phase,
+                .total_input = self.total_input,
+                .total_output = self.total_output,
+                .stream_output = self.stream_output,
+                .stream_count = self.stream_count,
+                .stream_index = self.diagnosticStreamIndex(self.phase),
+                .stream_offset = self.stream_offset,
+                .stream_input = self.total_input - self.stream_offset,
+                .header_received = self.header_received,
+                .dictid_received = self.dictid_received,
+                .footer_received = self.footer_received,
+                .last_error_name = self.last_error_name,
+                .last_error_phase = if (self.last_error_name.len == 0) null else self.last_error_phase,
+                .last_error_stream_index = self.last_error_stream_index,
+                .last_error_stream_offset = self.last_error_stream_offset,
+                .last_error_input_offset = self.last_error_input_offset,
+                .done = self.phase == .done,
+            };
         }
         pub fn diagnostics(self: *const Self) core.StreamingDiagnostics {
             return .{
@@ -88,7 +142,13 @@ pub fn Decoder(comptime Codec: type) type {
         }
         pub fn finish(self: *Self) Error!void {
             self.input_finished = true;
+            if (self.options.allow_concatenated and self.phase == .between_streams) {
+                try self.validateExpectedOutput();
+                self.phase = .done;
+                return;
+            }
             if (self.phase != .done) return self.fail(self.phase, error.TruncatedFrame);
+            try self.validateExpectedOutput();
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
@@ -126,6 +186,7 @@ pub fn Decoder(comptime Codec: type) type {
                         self.raw.seedDictionary(self.dictionary);
                     } else {
                         if (self.dictionary.len == 0 or id != Codec.Adler32.hash(self.dictionary)) return self.fail(.dictid, error.NeedDictionary);
+                        self.raw.seedDictionary(self.dictionary);
                     }
                     self.phase = .raw;
                 },
@@ -139,6 +200,7 @@ pub fn Decoder(comptime Codec: type) type {
                         self.adler.update(produced);
                         output_written += produced.len;
                         self.total_output += produced.len;
+                        self.stream_output += produced.len;
                     }
                     if (raw_result.status == .done) {
                         self.phase = .footer;
@@ -158,7 +220,12 @@ pub fn Decoder(comptime Codec: type) type {
                     if (self.footer_received != self.footer.len) return result(input_read, output_written, .need_input);
                     const expected = std.mem.readInt(u32, &self.footer, .big);
                     if (expected != self.adler.digest()) return self.fail(.footer, error.ChecksumMismatch);
-                    self.phase = .done;
+                    self.stream_count += 1;
+                    self.phase = if (self.options.allow_concatenated) .between_streams else .done;
+                },
+                .between_streams => {
+                    if (input_read == input.len) return result(input_read, output_written, .need_input);
+                    self.beginStream();
                 },
                 .done => {
                     if (input_read != input.len) return self.fail(.done, error.TrailingData);
@@ -173,13 +240,57 @@ pub fn Decoder(comptime Codec: type) type {
             if ((cmf & 0x0f) != 8 or (cmf >> 4) > 7) return self.fail(.header, error.BadZlibHeader);
             if ((@as(u16, cmf) << 8 | flg) % 31 != 0) return self.fail(.header, error.BadZlibHeader);
         }
+        fn beginStream(self: *Self) void {
+            self.raw.reset();
+            self.configureRawForStream();
+            self.phase = .header;
+            self.header_received = 0;
+            self.footer_received = 0;
+            self.dictid_received = 0;
+            self.dictionary = if (self.dictionaries == null) self.dictionary else "";
+            self.adler = Codec.Adler32.init();
+            self.stream_output = 0;
+            self.stream_offset = self.total_input;
+        }
+        fn configureRawForStream(self: *Self) void {
+            self.raw.options.max_output_len = self.remainingRawLimit();
+            self.raw.options.expected_output_len = if (self.options.allow_concatenated) null else self.options.expected_output_len;
+        }
+        fn remainingRawLimit(self: *const Self) usize {
+            return rawLimit(self.options, self.total_output);
+        }
+        fn validateExpectedOutput(self: *Self) Error!void {
+            if (self.options.expected_output_len) |expected|
+                if (self.total_output != expected) return self.fail(self.phase, error.SizeMismatch);
+        }
+        fn diagnosticStreamIndex(self: *const Self, phase: Phase) usize {
+            if ((phase == .between_streams or phase == .done) and self.stream_count != 0) return self.stream_count - 1;
+            return self.stream_count;
+        }
         fn fail(self: *Self, phase: Phase, err: Error) Error {
             self.last_error_name = @errorName(err);
             self.last_error_phase = phase;
+            self.last_error_stream_index = self.diagnosticStreamIndex(phase);
+            self.last_error_stream_offset = self.stream_offset;
+            self.last_error_input_offset = self.total_input;
             return err;
         }
         fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
             return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = status };
         }
     };
+}
+
+fn initialRawLimit(options: anytype) usize {
+    return rawLimit(options, 0);
+}
+
+fn rawLimit(options: anytype, total_output: usize) usize {
+    const max_remaining = if (total_output < options.max_output_len) options.max_output_len - total_output else 0;
+    if (!options.allow_concatenated) return max_remaining;
+    if (options.expected_output_len) |expected| {
+        const expected_remaining = if (total_output < expected) expected - total_output else 0;
+        return @min(max_remaining, expected_remaining);
+    }
+    return max_remaining;
 }

@@ -5190,6 +5190,11 @@ architecture blindly.
   waits for a split four-byte DICTID, selects/seeds the matching history before
   raw decoding, and retains its existing retry-oriented `NeedDictionary`
   diagnostic when no entry matches.
+  It also supports opt-in concatenated streams with cumulative output limits
+  and exact-size validation, independent raw history/Adler state, per-stream
+  dictionary reselection, boundary/count/index snapshots, and later-stream error
+  offsets. Byte-at-a-time two-dictionary input and a corrupt second stream are
+  covered alongside the one-shot concatenated APIs.
 - Added bounded adaptive block sizing to the incremental best core. Full input
   windows use the existing stored/fixed/dynamic cost scorer and split policy to
   choose a shorter prefix, while buffering never exceeds `max_block_len`; raw,
