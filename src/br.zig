@@ -454,6 +454,40 @@ pub fn encodeAlternatingStreamAlloc(allocator: std.mem.Allocator, first: u8, sec
     return out.toOwnedSlice(allocator);
 }
 
+/// Encode a byte prefix followed by copies of that prefix. This is the first
+/// production multi-command Brotli slice: it emits one seed command and one
+/// copy command per repetition instead of relying on a
+/// single copy whose overlap happens to generate the rest of the payload.
+pub fn encodeRepeatedPrefixStreamAlloc(allocator: std.mem.Allocator, prefix: []const u8, repeat_count: usize) Error![]u8 {
+    if (prefix.len != 4 or repeat_count < 2) return error.InvalidBlockPlan;
+    const len = std.math.mul(usize, prefix.len, repeat_count) catch return error.IntegerOverflow;
+    if (len > max_uncompressed_meta_block_len or repeat_count - 1 > 2048) return error.InvalidBlockPlan;
+    for (prefix, 0..) |byte, i|
+        for (prefix[0..i]) |previous|
+            if (byte == previous) return error.InvalidBlockPlan;
+
+    const seed = commandEntryForLengths(prefix.len, prefix.len) orelse return error.InvalidBlockPlan;
+    const copy = commandEntryForLengths(0, prefix.len) orelse return error.InvalidBlockPlan;
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    var writer = BitWriter{ .out = &out };
+    try writeWindowBits(allocator, &writer, default_window_bits);
+    try writeLastCompressedMetaBlockHeader(allocator, &writer, len);
+    try writeRepeatedPrefixCompressedHeader(allocator, &writer, prefix, seed.symbol, copy.symbol);
+    try writer.writeBits(allocator, 1, 1); // seed command code
+    try writeCommandLengthExtras(allocator, &writer, seed, prefix.len, prefix.len);
+    var literal_lengths: [256]u4 = @splat(0);
+    for (prefix) |byte| literal_lengths[byte] = 2;
+    const literal_encoder = try huffman.HuffmanTable(256).Encoder.init(&literal_lengths);
+    for (prefix) |byte| try writer.writeBits(allocator, literal_encoder.codes[byte], literal_encoder.bits[byte]);
+    for (1..repeat_count - 1) |_| {
+        try writer.writeBits(allocator, 0, 1); // copy-only command code
+        try writeCommandLengthExtras(allocator, &writer, copy, 0, prefix.len);
+    }
+    if (writer.bit_index != 0) writer.alignToByte();
+    return out.toOwnedSlice(allocator);
+}
+
 pub fn encodeRleStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) Error!void {
     var writer = BitWriter{ .out = out };
     try encodeRleStreamWrite(allocator, &writer, input);
@@ -539,6 +573,13 @@ fn commandEntryForLengths(insert_len: usize, copy_len: usize) ?CommandEncoding {
     return null;
 }
 
+fn writeCommandLengthExtras(allocator: std.mem.Allocator, writer: *BitWriter, command: CommandEncoding, insert_len: usize, copy_len: usize) Error!void {
+    if (command.command.insert_extra_bits != 0)
+        try writer.writeBits(allocator, insert_len - command.command.insert_base, command.command.insert_extra_bits);
+    if (command.command.copy_extra_bits != 0)
+        try writer.writeBits(allocator, copy_len - command.command.copy_base, command.command.copy_extra_bits);
+}
+
 fn encodeRleStreamWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8) Error!void {
     if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
     for (input[1..]) |byte| if (byte != input[0]) return error.InvalidBlockPlan;
@@ -562,24 +603,7 @@ fn writeLastCompressedMetaBlockHeader(allocator: std.mem.Allocator, writer: *Bit
 
 fn writeMinimalCompressedHeaderForRun(allocator: std.mem.Allocator, writer: *BitWriter, byte: u8, run_len: usize) Error!void {
     const copy_len = run_len - 1;
-    var copy_code: u16 = 0;
-    while (copy_code < 24) : (copy_code += 1) {
-        const spec = copyLengthSpec(copy_code);
-        const span = @as(usize, 1) << @intCast(spec.extra_bits);
-        if (copy_len >= spec.base and copy_len - spec.base < span) break;
-    }
-    if (copy_code == 24) return error.InvalidBlockPlan;
-    // Select insert code 1 (one seed literal), the requested copy-length code,
-    // and an explicit distance. Find the RFC command symbol through the same
-    // mapping used by the decoder rather than duplicating its range layout.
-    var command_symbol: u16 = 0;
-    while (command_symbol < 704) : (command_symbol += 1) {
-        const ranges = insertCopyCodeRanges(command_symbol);
-        const insert_code = ranges.insert_base + ((command_symbol >> 3) & 0x7);
-        const candidate_copy = ranges.copy_base + (command_symbol & 0x7);
-        if (insert_code == 1 and candidate_copy == copy_code and command_symbol >= 128) break;
-    }
-    if (command_symbol == 704) return error.InvalidBlockPlan;
+    const command = commandEntryForLengths(1, copy_len) orelse return error.InvalidBlockPlan;
     try writeBlockTypeCount(allocator, writer, 1);
     try writeBlockTypeCount(allocator, writer, 1);
     try writeBlockTypeCount(allocator, writer, 1);
@@ -589,11 +613,10 @@ fn writeMinimalCompressedHeaderForRun(allocator: std.mem.Allocator, writer: *Bit
     try writeBlockTypeCount(allocator, writer, 1);
     try writeBlockTypeCount(allocator, writer, 1);
     try writeSimpleSingleSymbolPrefix(allocator, writer, 256, byte);
-    try writeSimpleSingleSymbolPrefix(allocator, writer, 704, command_symbol);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 704, command.symbol);
     try writeSimpleSingleSymbolPrefix(allocator, writer, 65, 16);
-    const spec = copyLengthSpec(copy_code);
-    if (spec.extra_bits != 0)
-        try writer.writeBits(allocator, copy_len - spec.base, spec.extra_bits);
+    if (command.command.copy_extra_bits != 0)
+        try writer.writeBits(allocator, copy_len - command.command.copy_base, command.command.copy_extra_bits);
     // RFC Brotli streams may end mid-byte, but the trailing unused bits must be
     // zero. Materialize the final partial byte for external decoders.
     if (writer.bit_index != 0) writer.alignToByte();
@@ -5402,6 +5425,22 @@ test "br proven ababa encoder slice round trips" {
     }
     try std.testing.expectError(error.InvalidBlockPlan, encodeAlternatingStreamAlloc(std.testing.allocator, 'x', 'y', 4));
     try std.testing.expectError(error.InvalidBlockPlan, encodeAlternatingStreamAlloc(std.testing.allocator, 'x', 'y', max_uncompressed_meta_block_len + 1));
+}
+
+test "br repeated prefix encoder emits multiple commands" {
+    inline for (.{ 2, 3, 7, 31 }) |repeat_count| {
+        const encoded = try encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "abcd", repeat_count);
+        defer std.testing.allocator.free(encoded);
+        const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqual(repeat_count * 4, decoded.len);
+        for (decoded, 0..) |byte, i| try std.testing.expectEqual("abcd"[i & 3], byte);
+    }
+    try std.testing.expectError(error.InvalidBlockPlan, encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "a", 3));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "aba", 3));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "abc", 3));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "abcd", 1));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "abcd", 2050));
 }
 
 test "br simple encoder selects RLE or stored streams" {
@@ -12586,6 +12625,24 @@ fn writeMinimalCompressedHeaderForAlternatingPattern(allocator: std.mem.Allocato
     try writeSimpleSingleSymbolPrefix(allocator, writer, 112, 17);
 }
 
+fn writeRepeatedPrefixCompressedHeader(allocator: std.mem.Allocator, writer: *BitWriter, prefix: []const u8, seed_symbol: u16, copy_symbol: u16) Error!void {
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
+    try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESD
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 0, 4); // NDIRECT; command embeds distance code 0
+    try writer.writeBits(allocator, 0, 2); // literal context mode
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESL
+    try writeBlockTypeCount(allocator, writer, 1); // NTREESD
+    try writeSimplePrefixRuntime(allocator, writer, 256, prefix, false);
+    try writer.writeBits(allocator, 1, 2); // simple command prefix
+    try writer.writeBits(allocator, 1, 2); // two symbols
+    // The two-symbol simple tree assigns one-bit codes in listed order.
+    try writer.writeBits(allocator, copy_symbol, alphabetBits(704));
+    try writer.writeBits(allocator, seed_symbol, alphabetBits(704));
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0); // unused distance tree
+}
+
 fn writeMinimalCompressedHeaderForDistanceContext(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
@@ -14096,6 +14153,17 @@ fn writeSimpleSingleSymbolPrefix(
     try writer.writeBits(allocator, 1, 2); // simple prefix code
     try writer.writeBits(allocator, 0, 2); // NSYM = 1
     try writer.writeBits(allocator, symbol, alphabetBits(alphabet_size));
+}
+
+fn writeSimplePrefixRuntime(allocator: std.mem.Allocator, writer: *BitWriter, alphabet_size: usize, symbols: []const u8, tree_select: bool) Error!void {
+    if (symbols.len == 0 or symbols.len > 4) return error.InvalidBlockPlan;
+    try writer.writeBits(allocator, 1, 2);
+    try writer.writeBits(allocator, symbols.len - 1, 2);
+    for (symbols) |symbol| {
+        if (symbol >= alphabet_size) return error.InvalidHuffmanCode;
+        try writer.writeBits(allocator, symbol, alphabetBitsRuntime(alphabet_size));
+    }
+    if (symbols.len == 4) try writer.writeBits(allocator, @intFromBool(tree_select), 1);
 }
 
 fn writeCodeLengthSymbol(

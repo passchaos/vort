@@ -15,6 +15,8 @@ pub fn main(init: std.process.Init) !void {
         try vort.brEncodeAbabaPatternStreamAlloc(init.gpa, 0, 0xff)
     else if (std.mem.startsWith(u8, mode, "alternating-"))
         try vort.brEncodeAlternatingStreamAlloc(init.gpa, 'x', 'y', try std.fmt.parseInt(usize, mode["alternating-".len..], 10))
+    else if (std.mem.startsWith(u8, mode, "repeated-prefix-"))
+        try vort.brEncodeRepeatedPrefixStreamAlloc(init.gpa, "abcd", try std.fmt.parseInt(usize, mode["repeated-prefix-".len..], 10))
     else
         return error.InvalidBlockPlan;
     defer init.gpa.free(encoded);

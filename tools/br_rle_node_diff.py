@@ -18,6 +18,7 @@ def main() -> int:
             (f"alternating-{n}", (b"xy" * ((n + 1) // 2))[:n])
             for n in (*range(6, 24), 71, 327, 1095, 1096, 1097, 2119, 2120, 65535, 65536, 1048576, 16777216)
         ),
+        *((f"repeated-prefix-{n}", b"abcd" * n) for n in (2, 3, 7, 31)),
     )
     script = (
         "const z=require('zlib');let b=[];"

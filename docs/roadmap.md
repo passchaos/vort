@@ -5590,3 +5590,10 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   upstream construction formula across all 704 symbols. The first local
   ReleaseFast run measured about `11.6 ms` versus `310.7 ms` for 16384 sweeps
   (`~26.8x`), so production retains the verified table rather than recomputing.
+- Added the first production multi-command Brotli encoder slice.
+  `encodeRepeatedPrefixStreamAlloc` encodes a distinct four-byte seed and up
+  to 2048 subsequent non-overlapping copies as separate command symbols, using
+  the verified command LUT and a shared recent-distance command. Representative
+  2/3/7/31-repeat streams round-trip through Vort and the Node interoperability
+  gate; this establishes command-tree emission and repeated command sequencing
+  needed by a future general match planner.
