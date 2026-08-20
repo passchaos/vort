@@ -19,6 +19,9 @@ pub fn Encoder(comptime BlockEncoder: type, comptime Codec: type) type {
         total_input: usize = 0,
         total_output: usize = 0,
         expected_input_len: ?usize = null,
+        pending_skippable: []const u8 = &.{},
+        pending_skippable_type: u8 = 0,
+        skippable_requested: bool = false,
         stream_input: usize = 0,
         stream_output: usize = 0,
         stream_count: usize = 0,
@@ -73,6 +76,9 @@ pub fn Encoder(comptime BlockEncoder: type, comptime Codec: type) type {
             self.total_input = 0;
             self.total_output = 0;
             self.expected_input_len = expected_input_len;
+            self.pending_skippable = &.{};
+            self.pending_skippable_type = 0;
+            self.skippable_requested = false;
         }
         pub fn nextStream(self: *Self, options: Options) Error!void {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
@@ -104,6 +110,17 @@ pub fn Encoder(comptime BlockEncoder: type, comptime Codec: type) type {
         /// ending the stream. Empty repeated flushes are idempotent.
         pub fn flush(self: *Self) void {
             if (!self.finishing and !self.done) self.flush_requested = true;
+        }
+        /// Insert a skippable framed chunk after all accepted input. The caller
+        /// retains payload ownership until `need_input` acknowledges the event.
+        pub fn writeSkippable(self: *Self, chunk_type: u8, payload: []const u8) Error!void {
+            if (chunk_type < Codec.min_skippable_chunk_type or chunk_type == Codec.stream_identifier_chunk_type) return error.InvalidBlockPlan;
+            if (payload.len > 0x00ff_ffff) return error.InvalidBlockPlan;
+            if (self.finishing or self.done or self.skippable_requested) return error.InvalidBlockPlan;
+            self.pending_skippable_type = chunk_type;
+            self.pending_skippable = payload;
+            self.skippable_requested = true;
+            self.flush_requested = true;
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
@@ -155,6 +172,12 @@ pub fn Encoder(comptime BlockEncoder: type, comptime Codec: type) type {
                     continue;
                 }
                 if (self.flush_requested) {
+                    if (self.skippable_requested) {
+                        try Codec.writeSkippable(self.allocator, &self.pending, self.pending_skippable_type, self.pending_skippable);
+                        self.pending_skippable = &.{};
+                        self.skippable_requested = false;
+                        continue;
+                    }
                     self.flush_requested = false;
                     return result(input_read, output_written, .need_input);
                 }

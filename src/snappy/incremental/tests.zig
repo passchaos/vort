@@ -231,6 +231,49 @@ test "incremental Snappy encoder and decoder continue streams" {
     try std.testing.expectEqual(first.len + second.len, decoder.snapshot().total_output);
 }
 
+test "incremental Snappy encoder inserts skippable chunks" {
+    const first = "before skippable";
+    const second = "after skippable";
+    const metadata = "snappy-metadata";
+    var encoder = snappy.IncrementalFrameEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    var scratch: [5]u8 = undefined;
+    var offset: usize = 0;
+    while (offset < first.len) {
+        const result = try encoder.step(first[offset..], &scratch);
+        offset += result.progress.input_read;
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    try encoder.writeSkippable(0x80, metadata);
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.writeSkippable(0x81, "duplicate"));
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .need_input) break;
+    }
+    offset = 0;
+    while (offset < second.len) {
+        const result = try encoder.step(second[offset..], &scratch);
+        offset += result.progress.input_read;
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    try encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    const summary = try snappy.summarizeFrame(frame.items);
+    try std.testing.expectEqual(@as(usize, 1), summary.skippable_chunk_count);
+    try std.testing.expectEqual(metadata.len, summary.skippable_payload_bytes);
+    const decoded = try snappy.decodeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, first ++ second, decoded);
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.writeSkippable(0x7f, "bad"));
+}
+
 fn encodeIncrementalFrameTest(encoder: *snappy.IncrementalFrameEncoder, payload: []const u8) ![]u8 {
     var frame: std.ArrayList(u8) = .empty;
     errdefer frame.deinit(std.testing.allocator);

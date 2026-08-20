@@ -83,6 +83,8 @@ pub const IncrementalFrameDecoder = incremental_frame.Decoder(IncrementalFrameCo
 const IncrementalEncoderCodec = struct {
     pub const Error = snappy.Error;
     pub const max_chunk_len = snappy.max_uncompressed_chunk_len;
+    pub const min_skippable_chunk_type = frame_format.min_skippable_chunk_type;
+    pub const stream_identifier_chunk_type = frame_format.stream_identifier_chunk_type;
     pub fn encodeChunk(encoder: *snappy.Encoder, plain: []const u8, out: *std.ArrayList(u8)) snappy.Error!void {
         encoder.block_scratch.clearRetainingCapacity();
         try encoder.encodeBlockAppend(&encoder.block_scratch, plain);
@@ -93,7 +95,10 @@ const IncrementalEncoderCodec = struct {
         }
     }
     pub fn writeIdentifier(allocator: std.mem.Allocator, out: *std.ArrayList(u8)) snappy.Error!void {
-        try writeChunk(allocator, out, stream_identifier_chunk_type, stream_identifier_payload);
+        try writeChunk(allocator, out, frame_format.stream_identifier_chunk_type, frame_format.stream_identifier_payload);
+    }
+    pub fn writeSkippable(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunk_type: u8, payload: []const u8) snappy.Error!void {
+        try writeChunk(allocator, out, chunk_type, payload);
     }
 };
 

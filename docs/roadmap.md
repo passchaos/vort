@@ -5061,6 +5061,11 @@ architecture blindly.
   checksum/chunk state independent, while snapshots expose cumulative bytes and
   completed stream count/index. Two-stream exact-size round trips and root API
   coverage protect the continuation contract.
+- Incremental Snappy encoders can insert borrowed skippable chunks with any
+  valid `0x80...0xfe` type after accepted content. The encoder flushes the data
+  boundary, drains the event through tiny output, then resumes content; duplicate,
+  invalid-type, oversized, or post-finish requests fail deterministically. Frame
+  summary and decode tests verify payload accounting and transparent skipping.
 - Added a no-content-size incremental native LZ4 frame encoder under
   `src/lz4/incremental/`. It preserves linked or independent block policy, one
   bounded frame block, 64 KiB linked history, block/content XXH32 checksums, and
