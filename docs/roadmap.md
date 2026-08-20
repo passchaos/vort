@@ -5628,3 +5628,10 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   versus source bytes. Command alphabets up to 704 entries are now representable;
   further prefix-cost optimization and heterogeneous corpus expansion remain
   follow-up work.
+  A ReleaseFast interleaved encoder A/B against runtime libbrotli 1.1.0 quality
+  3 is available through `run-br-planned-encode-bench{-gate}`. The persisted
+  100-iteration gate sample measured Vort/reference ratios of `0.101x`, `0.159x`,
+  and `0.127x` throughput, with size ratios `1.484x`, `1.523x`, and `1.437x` for
+  JSON/source/log.
+  This is explicit evidence that planner-backed encoding is now functional on
+  these shapes but still trails the industry reference in both speed and ratio.

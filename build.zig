@@ -925,6 +925,26 @@ pub fn build(b: *std.Build) void {
     br_planned_node_diff.addArtifactArg(br_planned_probe_exe);
     const br_planned_node_diff_step = b.step("run-br-planned-node-diff", "Validate planner-backed Brotli corpora with Node");
     br_planned_node_diff_step.dependOn(&br_planned_node_diff.step);
+    const br_planned_encode_bench_exe = b.addExecutable(.{
+        .name = "vort-br-planned-encode-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/planned_encode_bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .link_libc = true,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const run_br_planned_encode_bench = b.addRunArtifact(br_planned_encode_bench_exe);
+    if (b.args) |args| run_br_planned_encode_bench.addArgs(args);
+    const br_planned_encode_bench_step = b.step("run-br-planned-encode-bench", "Compare planner-backed Brotli encode with libbrotli");
+    br_planned_encode_bench_step.dependOn(&run_br_planned_encode_bench.step);
+    const run_br_planned_encode_bench_csv = b.addRunArtifact(br_planned_encode_bench_exe);
+    run_br_planned_encode_bench_csv.addArgs(&.{ "--iterations", "100", "--csv", "zig-out/vort-br-planned-encode-bench.csv" });
+    const br_planned_encode_bench_gate = b.addSystemCommand(&.{ "python3", "tools/br/planned_encode_bench_gate.py", "--csv", "zig-out/vort-br-planned-encode-bench.csv" });
+    br_planned_encode_bench_gate.step.dependOn(&run_br_planned_encode_bench_csv.step);
+    const br_planned_encode_bench_gate_step = b.step("run-br-planned-encode-bench-gate", "Validate planner-backed Brotli encode A/B CSV");
+    br_planned_encode_bench_gate_step.dependOn(&br_planned_encode_bench_gate.step);
 
     const br_command_lut_bench_exe = b.addExecutable(.{
         .name = "vort-bench-br-command-lut",
@@ -3518,6 +3538,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&br_rle_probe_exe.step);
     check_step.dependOn(&br_planned_corpus_exe.step);
     check_step.dependOn(&br_planned_probe_exe.step);
+    check_step.dependOn(&br_planned_encode_bench_exe.step);
     check_step.dependOn(&br_command_lut_bench_exe.step);
     check_step.dependOn(&compression_report_exe.step);
     check_step.dependOn(&dictionary_report_exe.step);
