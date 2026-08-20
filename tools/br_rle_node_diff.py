@@ -23,6 +23,7 @@ def main() -> int:
         *((f"repeated-prefix3-{n}", b"xyz" * n) for n in (2, 3, 7, 31)),
         *((f"binary-prefix3-{n}", bytes((0, 0x80, 0xFF)) * n) for n in (2, 7, 31)),
         ("planned-mixed", b"abcabcXabcabcXabcabcX"),
+        ("planned-distance42", (b"abcd" * 10) + b"aa" + (b"abcd" * 10)),
     )
     script = (
         "const z=require('zlib');let b=[];"

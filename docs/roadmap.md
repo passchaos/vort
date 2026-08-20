@@ -5608,4 +5608,8 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   payload (`abcabcX...`) compresses from 21 to 16 bytes and passes both Vort and
   Node decoding. `encodeSimpleStream` selects this planned path when supported
   and retains the stored fallback for plans that need broader Huffman trees or
-  regular distances.
+  broader Huffman trees. The planner now uses the normal 32 KiB LZ77 window;
+  `src/br/encoder/distance.zig` inverts Brotli's regular-distance formula and
+  emits the matching extra bits beyond the 15 direct distances. A gated
+  distance-42 payload compresses from 82 to 18 bytes and round-trips through
+  both Vort and Node.

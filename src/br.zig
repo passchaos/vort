@@ -8,6 +8,7 @@ const static_dictionary = @import("br/static_dictionary.zig");
 const command_lut = @import("br/command_lut.zig");
 const pattern = @import("br/pattern.zig");
 const command_plan = @import("br/encoder/command_plan.zig");
+const encoder_distance = @import("br/encoder/distance.zig");
 const incremental = @import("br/incremental/stream_decoder.zig");
 const incremental_tests = @import("br/incremental/tests.zig");
 const incremental_stored = @import("br/incremental/stored/decoder.zig");
@@ -67,6 +68,7 @@ test {
     _ = incremental_stored_tests;
     _ = pattern;
     _ = command_plan;
+    _ = encoder_distance;
 }
 
 pub const IncrementalTestSupport = struct {
@@ -501,7 +503,7 @@ pub fn encodeRepeatedPrefixStreamAlloc(allocator: std.mem.Allocator, prefix: []c
 pub fn encodePlannedStreamAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
     if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
     const lz_plan = try lz77.hashGreedyPlanAutoAlloc(allocator, input, .{
-        .window_len = @min(input.len, 15),
+        .window_len = @min(input.len, 32 * 1024),
         .max_chain = 64,
         .nice_len = 64,
         .max_candidates = 8,
@@ -639,6 +641,8 @@ const PlannedWireCommand = struct {
     plan: command_plan.Command,
     encoding: CommandEncoding,
     distance_symbol: u16 = 0,
+    distance_extra: u32 = 0,
+    distance_extra_bits: u5 = 0,
 };
 
 fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command) Error![]u8 {
@@ -654,9 +658,11 @@ fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, comma
         try command_alphabet.add(encoding.symbol);
         for (input[command.insert_start..][0..command.insert_len]) |literal| try literal_alphabet.add(literal);
         if (!command.has_copy) continue;
-        const distance_symbol = directDistanceSymbol(command.distance) orelse return error.InvalidBlockPlan;
-        wire[i].distance_symbol = distance_symbol;
-        try distance_alphabet.add(distance_symbol);
+        const distance = encoder_distance.encode(command.distance, 15) orelse return error.InvalidBlockPlan;
+        wire[i].distance_symbol = distance.symbol;
+        wire[i].distance_extra = distance.extra;
+        wire[i].distance_extra_bits = distance.extra_bits;
+        try distance_alphabet.add(distance.symbol);
     }
     if (literal_alphabet.len == 0 or command_alphabet.len == 0 or distance_alphabet.len == 0) return error.InvalidBlockPlan;
     literal_alphabet.finish();
@@ -668,7 +674,8 @@ fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, comma
     var writer = BitWriter{ .out = &out };
     try writeWindowBits(allocator, &writer, default_window_bits);
     try writeLastCompressedMetaBlockHeader(allocator, &writer, input.len);
-    try writePlannedCompressedHeader(allocator, &writer, literal_alphabet, command_alphabet, distance_alphabet);
+    const distance_alphabet_size = plannedDistanceAlphabetSize(distance_alphabet);
+    try writePlannedCompressedHeader(allocator, &writer, literal_alphabet, command_alphabet, distance_alphabet, distance_alphabet_size);
 
     const literal_lengths = try literal_alphabet.codeLengths(256);
     const literal_encoder = try huffman.HuffmanTable(256).Encoder.init(&literal_lengths);
@@ -684,17 +691,12 @@ fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, comma
         if (item.plan.has_copy and item.encoding.command.distance_code == -1) {
             if (distance_alphabet.len > 1)
                 try writer.writeBits(allocator, distance_encoder.codes[item.distance_symbol], distance_encoder.bits[item.distance_symbol]);
-            // With NDIRECT=15 every accepted planned distance is direct and therefore
-            // carries no regular-distance extra bits.
+            if (item.distance_extra_bits != 0)
+                try writer.writeBits(allocator, item.distance_extra, item.distance_extra_bits);
         }
     }
     if (writer.bit_index != 0) writer.alignToByte();
     return out.toOwnedSlice(allocator);
-}
-
-fn directDistanceSymbol(distance: usize) ?u16 {
-    if (distance == 0 or distance > 15) return null;
-    return @intCast(15 + distance);
 }
 
 fn encodeRleStreamWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8) Error!void {
@@ -5576,6 +5578,17 @@ test "br planner-backed encoder emits mixed literal and match commands" {
     try std.testing.expectEqualSlices(u8, payload, decoded);
     try std.testing.expect(encoded.len < payload.len);
     try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamAlloc(std.testing.allocator, "all unique"));
+}
+
+test "br planner-backed encoder emits regular distances" {
+    const prefix = "abcd" ** 10;
+    const payload = prefix ++ "aa" ++ prefix;
+    const encoded = try encodePlannedStreamAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < payload.len);
 }
 
 test "br simple encoder selects RLE or stored streams" {
@@ -12798,6 +12811,7 @@ fn writePlannedCompressedHeader(
     literal_alphabet: command_plan.SimpleAlphabet,
     command_alphabet: command_plan.SimpleAlphabet,
     distance_alphabet: command_plan.SimpleAlphabet,
+    distance_alphabet_size: usize,
 ) Error!void {
     try writeBlockTypeCount(allocator, writer, 1);
     try writeBlockTypeCount(allocator, writer, 1);
@@ -12809,7 +12823,13 @@ fn writePlannedCompressedHeader(
     try writeBlockTypeCount(allocator, writer, 1);
     try writeSimplePrefixSymbols(allocator, writer, 256, literal_alphabet);
     try writeSimplePrefixSymbols(allocator, writer, 704, command_alphabet);
-    try writeSimplePrefixSymbols(allocator, writer, 16 + 15 + 48, distance_alphabet);
+    try writeSimplePrefixSymbols(allocator, writer, distance_alphabet_size, distance_alphabet);
+}
+
+fn plannedDistanceAlphabetSize(alphabet: command_plan.SimpleAlphabet) usize {
+    var highest: usize = 0;
+    for (alphabet.symbols[0..alphabet.len]) |symbol| highest = @max(highest, symbol);
+    return @max(@as(usize, 16 + 15 + 48), highest + 1);
 }
 
 fn writeSimplePrefixSymbols(allocator: std.mem.Allocator, writer: *BitWriter, alphabet_size: usize, alphabet: command_plan.SimpleAlphabet) Error!void {
