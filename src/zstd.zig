@@ -1796,6 +1796,11 @@ pub const NativeIncrementalFrameDecoder = struct {
     direct_frame_len: usize = 0,
     input_received: usize = 0,
     output_written: usize = 0,
+    skippable_output: []u8 = &.{},
+    skippable_written: usize = 0,
+    skippable_total: usize = 0,
+    skippable_events: []SkippableEvent = &.{},
+    skippable_event_count: usize = 0,
     last_error_name: []const u8 = "",
     last_error_phase: ?Phase = null,
 
@@ -1817,7 +1822,10 @@ pub const NativeIncrementalFrameDecoder = struct {
         /// `SizeMismatch`; callers use `finish` to distinguish a clean EOF from
         /// a truncated stream that decoded fewer bytes than expected.
         expected_output_len: ?usize = null,
+        skippable_output: []u8 = &.{},
+        skippable_events: []SkippableEvent = &.{},
     };
+    pub const SkippableEvent = struct { id: u4, payload_len: usize };
 
     pub const Snapshot = struct {
         phase: Phase,
@@ -1825,6 +1833,11 @@ pub const NativeIncrementalFrameDecoder = struct {
         output_written: usize,
         decoded_len: ?usize,
         decoded_remaining: ?usize,
+        skippable_written: usize,
+        skippable_total: usize,
+        skippable_truncated: bool,
+        skippable_event_count: usize,
+        skippable_events_captured: usize,
         last_error_name: []const u8,
         last_error_phase: ?Phase,
     };
@@ -1834,7 +1847,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     pub fn initWithOptions(allocator: std.mem.Allocator, options: Options) NativeIncrementalFrameDecoder {
-        return .{ .allocator = allocator, .options = options };
+        return .{ .allocator = allocator, .options = options, .skippable_output = options.skippable_output, .skippable_events = options.skippable_events };
     }
 
     pub fn initWithDictionary(allocator: std.mem.Allocator, dictionary: NativeDictionary) NativeIncrementalFrameDecoder {
@@ -1850,7 +1863,7 @@ pub const NativeIncrementalFrameDecoder = struct {
     }
 
     pub fn initWithDictionarySetAndOptions(allocator: std.mem.Allocator, dictionary_set: NativeDictionarySet, options: Options) NativeIncrementalFrameDecoder {
-        return .{ .allocator = allocator, .dictionary_set = dictionary_set, .options = options };
+        return .{ .allocator = allocator, .dictionary_set = dictionary_set, .options = options, .skippable_output = options.skippable_output, .skippable_events = options.skippable_events };
     }
 
     pub fn deinit(self: *NativeIncrementalFrameDecoder) void {
@@ -1870,6 +1883,9 @@ pub const NativeIncrementalFrameDecoder = struct {
         self.output_written = 0;
         self.last_error_name = "";
         self.last_error_phase = null;
+        self.skippable_written = 0;
+        self.skippable_total = 0;
+        self.skippable_event_count = 0;
     }
 
     pub fn snapshot(self: *const NativeIncrementalFrameDecoder) Snapshot {
@@ -1889,6 +1905,11 @@ pub const NativeIncrementalFrameDecoder = struct {
             .output_written = self.output_written,
             .decoded_len = decoded_len,
             .decoded_remaining = decoded_remaining,
+            .skippable_written = self.skippable_written,
+            .skippable_total = self.skippable_total,
+            .skippable_truncated = self.skippable_written != self.skippable_total,
+            .skippable_event_count = self.skippable_event_count,
+            .skippable_events_captured = @min(self.skippable_event_count, self.skippable_events.len),
             .last_error_name = self.last_error_name,
             .last_error_phase = self.last_error_phase,
         };
@@ -2256,6 +2277,7 @@ pub const NativeIncrementalFrameDecoder = struct {
                     return err;
                 };
                 if (self.frame_scratch.items.len < total) return null;
+                self.captureSkippable(magic, self.frame_scratch.items[8..total]);
                 self.discardFrameScratchPrefix(total);
                 continue;
             }
@@ -2281,6 +2303,17 @@ pub const NativeIncrementalFrameDecoder = struct {
         } else {
             _ = try decodeRawOrRleFrameAppendLimited(self.allocator, &self.decoded_scratch, frame, self.options.max_decoded_buffer_len);
         }
+    }
+
+    fn captureSkippable(self: *NativeIncrementalFrameDecoder, magic: u32, payload: []const u8) void {
+        const copy_len = @min(payload.len, self.skippable_output.len -| self.skippable_written);
+        if (copy_len != 0)
+            @memcpy(self.skippable_output[self.skippable_written..][0..copy_len], payload[0..copy_len]);
+        self.skippable_written += copy_len;
+        self.skippable_total += payload.len;
+        if (self.skippable_event_count < self.skippable_events.len)
+            self.skippable_events[self.skippable_event_count] = .{ .id = @intCast(magic - skippable_magic_min), .payload_len = payload.len };
+        self.skippable_event_count += 1;
     }
 
     fn beginDirectOutputIfSupported(self: *NativeIncrementalFrameDecoder, frame_end: usize) Error!bool {
@@ -14453,7 +14486,12 @@ test "zstd native incremental decoder drains concatenated streams and skippable 
     try stream.appendSlice(std.testing.allocator, second.frame);
     try stream.appendSlice(std.testing.allocator, skip);
 
-    var decoder = NativeIncrementalFrameDecoder.init(std.testing.allocator);
+    var captured: [8]u8 = undefined;
+    var events: [2]NativeIncrementalFrameDecoder.SkippableEvent = undefined;
+    var decoder = NativeIncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .skippable_output = &captured,
+        .skippable_events = &events,
+    });
     defer decoder.deinit();
     var output: [first_payload.len + second_payload.len]u8 = undefined;
     const initial = try decoder.step(stream.items, output[0..0]);
@@ -14482,6 +14520,13 @@ test "zstd native incremental decoder drains concatenated streams and skippable 
     try std.testing.expectEqualSlices(u8, third_payload, &continued);
     try std.testing.expectEqual(stream.items.len + third.frame.len, decoder.snapshot().input_received);
     try std.testing.expectEqual(output.len + third_payload.len, decoder.diagnostics().output_written);
+    const snapshot = decoder.snapshot();
+    try std.testing.expectEqualSlices(u8, "incremental metadata"[0..captured.len], &captured);
+    try std.testing.expectEqual(@as(usize, 2 * "incremental metadata".len), snapshot.skippable_total);
+    try std.testing.expect(snapshot.skippable_truncated);
+    try std.testing.expectEqual(@as(usize, 2), snapshot.skippable_event_count);
+    try std.testing.expectEqual(@as(u4, 7), events[0].id);
+    try std.testing.expectEqual("incremental metadata".len, events[1].payload_len);
 }
 
 test "zstd native incremental decoder enforces buffer limits" {
