@@ -5647,3 +5647,8 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   found it slower than the ordinary allocator path on the current small corpus,
   so production convenience encoding and throughput benchmarks retain the faster
   default path.
+  `PlannedStreamEncoder` adds a reusable arena-backed state object whose retained
+  capacity is observable and whose outputs remain independently owned. Like the
+  fixed scratch API, the first small-corpus A/B was slower than the default path
+  after accounting for final-result copies, so it is exposed for allocation
+  control rather than selected by the throughput benchmark.

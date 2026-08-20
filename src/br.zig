@@ -543,6 +543,33 @@ pub fn encodePlannedStreamWithScratchAlloc(allocator: std.mem.Allocator, scratch
     return allocator.dupe(u8, encoded);
 }
 
+/// Reusable planner encoder retaining arena capacity across calls. The result is
+/// owned by the allocator passed to `encodeAlloc`; encoder state itself is not
+/// thread-safe and must outlive no returned borrow (results are independent).
+pub const PlannedStreamEncoder = struct {
+    arena: std.heap.ArenaAllocator,
+
+    pub fn init(allocator: std.mem.Allocator) PlannedStreamEncoder {
+        return .{ .arena = std.heap.ArenaAllocator.init(allocator) };
+    }
+
+    pub fn deinit(self: *PlannedStreamEncoder) void {
+        self.arena.deinit();
+        self.* = undefined;
+    }
+
+    pub fn encodeAlloc(self: *PlannedStreamEncoder, allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+        _ = self.arena.reset(.retain_capacity);
+        const scratch_allocator = self.arena.allocator();
+        const encoded = try encodePlannedStreamAlloc(scratch_allocator, input);
+        return allocator.dupe(u8, encoded);
+    }
+
+    pub fn retainedCapacity(self: *const PlannedStreamEncoder) usize {
+        return self.arena.queryCapacity();
+    }
+};
+
 pub fn encodeRleStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) Error!void {
     var writer = BitWriter{ .out = out };
     try encodeRleStreamWrite(allocator, &writer, input);
@@ -5659,6 +5686,20 @@ test "br planner-backed encoder accepts caller scratch" {
     try std.testing.expectEqualSlices(u8, payload, decoded);
     var tiny: [64]u8 = undefined;
     try std.testing.expectError(error.OutOfMemory, encodePlannedStreamWithScratchAlloc(std.testing.allocator, &tiny, payload));
+}
+
+test "br planner-backed encoder retains reusable arena capacity" {
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const payload = "abcabcXabcabcXabcabcX";
+    const first = try encoder.encodeAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(first);
+    const capacity = encoder.retainedCapacity();
+    try std.testing.expect(capacity != 0);
+    const second = try encoder.encodeAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(second);
+    try std.testing.expectEqualSlices(u8, first, second);
+    try std.testing.expect(encoder.retainedCapacity() >= capacity);
 }
 
 test "br simple encoder selects RLE or stored streams" {
