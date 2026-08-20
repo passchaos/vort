@@ -29,7 +29,9 @@ pub fn main(init: std.process.Init) !void {
     _ = args.next();
     const iterations = if (args.next()) |text| try std.fmt.parseInt(usize, text, 10) else default_iterations;
     const case_filter = args.next();
+    const cpu = if (args.next()) |text| try std.fmt.parseInt(usize, text, 10) else null;
     if (args.next() != null or iterations == 0) return error.InvalidBlockPlan;
+    if (cpu) |index| try pinCurrentThread(index);
 
     const cases = try buildCases(init.gpa);
     defer {
@@ -74,6 +76,16 @@ pub fn main(init: std.process.Init) !void {
     }
     if (!matched_case) return error.InvalidBlockPlan;
     try stdout.flush();
+}
+
+fn pinCurrentThread(cpu: usize) !void {
+    if (@import("builtin").os.tag != .linux) return error.InvalidBlockPlan;
+    const linux = std.os.linux;
+    if (cpu >= linux.CPU_SETSIZE * 8) return error.InvalidBlockPlan;
+    var set: linux.cpu_set_t = @splat(0);
+    const bits = @bitSizeOf(usize);
+    set[cpu / bits] = @as(usize, 1) << @intCast(cpu % bits);
+    try linux.sched_setaffinity(0, &set);
 }
 
 fn compressionForCase(name: []const u8, defaults: vort.CompressionOptions) vort.CompressionOptions {

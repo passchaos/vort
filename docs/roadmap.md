@@ -5350,6 +5350,18 @@ architecture blindly.
   were both rejected after 2048/4096-iteration A/B runs failed to show stable
   gains. The filter is retained as reproducible tooling; neither speculative
   matcher change remains in production.
+- Added an optional Linux CPU index after the corpus filter for pinned
+  incremental-DEFLATE measurements. This machine mixes 5.8 GHz performance
+  cores with 4.3 GHz efficiency cores; unpinned 4096-iteration source runs had
+  swung by more than 30% and obscured small A/B effects. Five consecutive
+  2048-iteration source runs pinned to CPU 10 held full-stream throughput within
+  roughly 0.6% (`2078-2090` MiB/s), making subsequent matcher/tree experiments
+  substantially more trustworthy without changing the default gate behavior.
+  Profiling also ruled out two more speculative tree changes: adjacent dynamic
+  stats were almost never identical (JSON 1/7, source 0/7), both corpora already
+  fit the existing 64-symbol compact package-merge path, and neither a 96-symbol
+  specialization nor an unconstrained-Huffman fast path produced a pinned
+  source win; none remains in production.
 - Added a byte-progressive raw-DEFLATE stored-block decoder under
   `src/deflate/incremental/decoder/`. It preserves split header state, streams
   payload directly caller-to-caller through tiny output, enforces exact/maximum
