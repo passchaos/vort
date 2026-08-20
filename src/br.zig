@@ -436,15 +436,12 @@ pub fn encodeAbabaPatternStreamAlloc(allocator: std.mem.Allocator, first: u8, se
 }
 
 pub fn encodeAlternatingStreamAlloc(allocator: std.mem.Allocator, first: u8, second: u8, len: usize) Error![]u8 {
-    if (first == second or len < 5 or len > 2119) return error.InvalidBlockPlan;
+    if (first == second or len < 5 or len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
     var writer = BitWriter{ .out = &out };
     try writeWindowBits(allocator, &writer, default_window_bits);
-    try writer.writeBits(allocator, 1, 1);
-    try writer.writeBits(allocator, 0, 1);
-    try writer.writeBits(allocator, 0, 2);
-    try writer.writeBits(allocator, len - 1, 16);
+    try writeLastCompressedMetaBlockHeader(allocator, &writer, len);
     const copy_len = len - 2;
     const entry = commandEntryForLengths(2, copy_len) orelse return error.InvalidBlockPlan;
     try writeMinimalCompressedHeaderForAlternatingPattern(allocator, &writer, first, second, entry.symbol);
@@ -522,7 +519,7 @@ fn isRleInput(input: []const u8) bool {
 }
 
 fn alternatingLength(input: []const u8) ?usize {
-    if (input.len < 5 or input.len > 2119 or input[0] == input[1]) return null;
+    if (input.len < 5 or input.len > max_uncompressed_meta_block_len or input[0] == input[1]) return null;
     for (input, 0..) |byte, i|
         if (byte != input[i & 1]) return null;
     return input.len;
@@ -546,13 +543,21 @@ fn encodeRleStreamWrite(allocator: std.mem.Allocator, writer: *BitWriter, input:
     if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
     for (input[1..]) |byte| if (byte != input[0]) return error.InvalidBlockPlan;
     try writeWindowBits(allocator, writer, default_window_bits);
+    try writeLastCompressedMetaBlockHeader(allocator, writer, input.len);
+    try writeMinimalCompressedHeaderForRun(allocator, writer, input[0], input.len);
+}
+
+/// Emit the shared header used by the narrow one-meta-block compressed
+/// encoders. Choosing the shortest legal length field keeps small streams
+/// compact while still covering Brotli's full 24-bit meta-block limit.
+fn writeLastCompressedMetaBlockHeader(allocator: std.mem.Allocator, writer: *BitWriter, len: usize) Error!void {
+    if (len == 0 or len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
     try writer.writeBits(allocator, 1, 1);
     try writer.writeBits(allocator, 0, 1);
-    const len_minus_one = input.len - 1;
+    const len_minus_one = len - 1;
     const mnibbles: usize = if (len_minus_one <= 0xffff) 4 else if (len_minus_one <= 0xfffff) 5 else 6;
     try writer.writeBits(allocator, @intCast(mnibbles - 4), 2);
     try writer.writeBits(allocator, len_minus_one, @intCast(mnibbles * 4));
-    try writeMinimalCompressedHeaderForRun(allocator, writer, input[0], input.len);
 }
 
 fn writeMinimalCompressedHeaderForRun(allocator: std.mem.Allocator, writer: *BitWriter, byte: u8, run_len: usize) Error!void {
@@ -5387,7 +5392,7 @@ test "br proven ababa encoder slice round trips" {
     defer std.testing.allocator.free(binary_decoded);
     try std.testing.expectEqualSlices(u8, &.{ 0, 0xff, 0, 0xff, 0 }, binary_decoded);
     try std.testing.expectError(error.InvalidBlockPlan, encodeAbabaPatternStreamAlloc(std.testing.allocator, 'x', 'x'));
-    inline for (.{ 5, 6, 23, 71, 327, 1095, 1096, 1097, 1500, 2119 }) |len| {
+    inline for (.{ 5, 6, 23, 71, 327, 1095, 1096, 2119, 2120, 2121, 65_535, 65_536, 65_537, 1_048_575, 1_048_576, 1_048_577, max_uncompressed_meta_block_len }) |len| {
         const alternating = try encodeAlternatingStreamAlloc(std.testing.allocator, 'x', 'y', len);
         defer std.testing.allocator.free(alternating);
         const alternating_decoded = try decodeStreamAlloc(std.testing.allocator, alternating);
@@ -5395,7 +5400,8 @@ test "br proven ababa encoder slice round trips" {
         try std.testing.expectEqual(len, alternating_decoded.len);
         for (alternating_decoded, 0..) |byte, i| try std.testing.expectEqual(if (i & 1 == 0) @as(u8, 'x') else 'y', byte);
     }
-    try std.testing.expectError(error.InvalidBlockPlan, encodeAlternatingStreamAlloc(std.testing.allocator, 'x', 'y', 2120));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeAlternatingStreamAlloc(std.testing.allocator, 'x', 'y', 4));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeAlternatingStreamAlloc(std.testing.allocator, 'x', 'y', max_uncompressed_meta_block_len + 1));
 }
 
 test "br simple encoder selects RLE or stored streams" {
@@ -5422,6 +5428,17 @@ test "br simple encoder selects RLE or stored streams" {
     const expected_alternating = try encodeAlternatingStreamAlloc(std.testing.allocator, 'x', 'y', alternating.len);
     defer std.testing.allocator.free(expected_alternating);
     try std.testing.expectEqualSlices(u8, expected_alternating, simple_alternating);
+
+    const long_len = 65_536;
+    const long_alternating = try std.testing.allocator.alloc(u8, long_len);
+    defer std.testing.allocator.free(long_alternating);
+    for (long_alternating, 0..) |*byte, i| byte.* = if (i & 1 == 0) 'x' else 'y';
+    const simple_long = try encodeSimpleStreamAlloc(std.testing.allocator, long_alternating);
+    defer std.testing.allocator.free(simple_long);
+    const expected_long = try encodeAlternatingStreamAlloc(std.testing.allocator, 'x', 'y', long_len);
+    defer std.testing.allocator.free(expected_long);
+    try std.testing.expectEqualSlices(u8, expected_long, simple_long);
+    try std.testing.expect(simple_long.len < 16);
 }
 
 test "br minimal compressed stream reuses last distance" {
