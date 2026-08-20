@@ -5489,3 +5489,7 @@ architecture blindly.
   through `nextStream`, retaining allocations and cumulative byte/count/index
   diagnostics. Tests decode both differently configured outputs and cover the
   root public facade.
+  `writeMetadata` can insert additional metadata meta-blocks after previously
+  accepted content, drain them through tiny output, and resume content in the
+  same bitstream. Caller metadata remains borrowed only until `need_input`; a
+  payload-metadata-payload round trip validates captured event bytes/boundary.

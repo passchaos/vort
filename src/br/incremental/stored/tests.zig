@@ -231,6 +231,54 @@ test "incremental stored encoder continues independent streams" {
     try std.testing.expectEqualSlices(u8, second, second_decoded);
 }
 
+test "incremental stored encoder inserts metadata between payloads" {
+    const first = "content before metadata";
+    const second = "content after metadata";
+    const metadata = "runtime-metadata-event";
+    var encoder = br.IncrementalStoredStreamEncoder.initWithOptions(std.testing.allocator, .{ .block_len = 64 });
+    defer encoder.deinit();
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var scratch: [5]u8 = undefined;
+    var first_offset: usize = 0;
+    while (first_offset < first.len) {
+        const result = try encoder.step(first[first_offset..], &scratch);
+        first_offset += result.progress.input_read;
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    try encoder.writeMetadata(metadata);
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .need_input) break;
+    }
+    var second_offset: usize = 0;
+    while (second_offset < second.len) {
+        const result = try encoder.step(second[second_offset..], &scratch);
+        second_offset += result.progress.input_read;
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    try encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+
+    var metadata_output: [metadata.len]u8 = undefined;
+    var block_lengths: [1]usize = undefined;
+    var decoder = br.IncrementalStoredStreamDecoder.initWithOptions(.{
+        .metadata_output = &metadata_output,
+        .metadata_block_lengths = &block_lengths,
+    });
+    var output: [first.len + second.len]u8 = undefined;
+    _ = try decoder.step(encoded.items, &output);
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, first ++ second, &output);
+    try std.testing.expectEqualSlices(u8, metadata, &metadata_output);
+    try std.testing.expectEqual(metadata.len, block_lengths[0]);
+}
+
 fn encodeStoredIncrementalTest(encoder: *br.IncrementalStoredStreamEncoder, payload: []const u8) ![]u8 {
     var encoded: std.ArrayList(u8) = .empty;
     errdefer encoded.deinit(std.testing.allocator);

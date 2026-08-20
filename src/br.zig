@@ -43,6 +43,11 @@ const IncrementalStoredEncoderCodec = struct {
         try writeUncompressedMetaBlock(allocator, &writer, block);
         state.bit_index = writer.bit_index;
     }
+    pub fn writeMetadata(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, metadata: []const u8) br.Error!void {
+        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+        try writeMetadataMetaBlock(allocator, &writer, metadata);
+        state.bit_index = writer.bit_index;
+    }
     pub fn writeFinal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State) br.Error!void {
         var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
         try writer.writeBits(allocator, 1, 1);

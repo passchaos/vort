@@ -12,6 +12,8 @@ pub fn Encoder(comptime Codec: type) type {
         plain: std.ArrayList(u8) = .empty,
         pending: std.ArrayList(u8) = .empty,
         pending_offset: usize = 0,
+        pending_metadata: []const u8 = &.{},
+        metadata_requested: bool = false,
         prefix_written: bool = false,
         flush_requested: bool = false,
         finishing: bool = false,
@@ -66,6 +68,8 @@ pub fn Encoder(comptime Codec: type) type {
             self.pending.clearRetainingCapacity();
             self.codec_state = .{};
             self.pending_offset = 0;
+            self.pending_metadata = &.{};
+            self.metadata_requested = false;
             self.prefix_written = false;
             self.flush_requested = false;
             self.finishing = false;
@@ -101,6 +105,15 @@ pub fn Encoder(comptime Codec: type) type {
         /// Brotli stream after `step` acknowledges the flush with `need_input`.
         pub fn flush(self: *Self) void {
             if (!self.finishing and !self.done) self.flush_requested = true;
+        }
+        /// Insert a metadata meta-block after all previously accepted content.
+        /// The caller must keep `metadata` alive until the encoder returns
+        /// `need_input`; content can then continue in the same Brotli stream.
+        pub fn writeMetadata(self: *Self, metadata: []const u8) Error!void {
+            if (self.finishing or self.done or self.metadata_requested) return error.InvalidBlockPlan;
+            self.pending_metadata = metadata;
+            self.metadata_requested = true;
+            self.flush_requested = true;
         }
 
         pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
@@ -153,6 +166,12 @@ pub fn Encoder(comptime Codec: type) type {
                     continue;
                 }
                 if (self.flush_requested) {
+                    if (self.metadata_requested) {
+                        try Codec.writeMetadata(self.allocator, &self.pending, &self.codec_state, self.pending_metadata);
+                        self.pending_metadata = &.{};
+                        self.metadata_requested = false;
+                        continue;
+                    }
                     self.flush_requested = false;
                     return result(input_read, output_written, .need_input);
                 }
