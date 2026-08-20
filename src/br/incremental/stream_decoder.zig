@@ -15,6 +15,9 @@ pub fn Decoder(comptime Codec: type) type {
         compressed: std.ArrayList(u8) = .empty,
         decoded: std.ArrayList(u8) = .empty,
         decoded_offset: usize = 0,
+        total_compressed: usize = 0,
+        total_output: usize = 0,
+        frame_count: usize = 0,
         last_error_name: []const u8 = "",
         last_error_phase: Phase = .input,
 
@@ -38,6 +41,10 @@ pub fn Decoder(comptime Codec: type) type {
             output_written: usize,
             expected_output_len: ?usize,
             payload_remaining: usize,
+            total_compressed: usize,
+            total_output: usize,
+            frame_count: usize,
+            frame_index: usize,
             last_error_name: []const u8,
             last_error_phase: Phase,
         };
@@ -59,13 +66,39 @@ pub fn Decoder(comptime Codec: type) type {
             self.* = undefined;
         }
         pub fn reset(self: *Self) void {
+            self.total_compressed = 0;
+            self.total_output = 0;
+            self.frame_count = 0;
+            self.resetFrame(self.options);
+        }
+        fn resetFrame(self: *Self, options: Options) void {
             const allocator = self.allocator;
-            const options = self.options;
             var compressed = self.compressed;
             var decoded = self.decoded;
             compressed.clearRetainingCapacity();
             decoded.clearRetainingCapacity();
-            self.* = .{ .allocator = allocator, .options = options, .compressed = compressed, .decoded = decoded };
+            const total_compressed = self.total_compressed;
+            const total_output = self.total_output;
+            const frame_count = self.frame_count;
+            self.* = .{
+                .allocator = allocator,
+                .options = options,
+                .compressed = compressed,
+                .decoded = decoded,
+                .total_compressed = total_compressed,
+                .total_output = total_output,
+                .frame_count = frame_count,
+            };
+        }
+        /// Reuse allocations for another independently framed Brotli payload.
+        pub fn nextFrame(self: *Self, options: Options) Error!void {
+            if (self.phase != .done) return error.InvalidBlockPlan;
+            self.resetFrame(options);
+        }
+        pub fn nextFrameExactCompressedSize(self: *Self, options: Options, expected_compressed_len: usize) Error!void {
+            var exact = options;
+            exact.expected_compressed_len = expected_compressed_len;
+            return self.nextFrame(exact);
         }
         pub fn snapshot(self: *const Self) Snapshot {
             return .{
@@ -75,6 +108,10 @@ pub fn Decoder(comptime Codec: type) type {
                 .output_written = self.decoded_offset,
                 .expected_output_len = if (self.phase == .input) self.options.expected_output_len else self.decoded.items.len,
                 .payload_remaining = self.decoded.items.len - self.decoded_offset,
+                .total_compressed = self.total_compressed + if (self.phase == .done) 0 else self.compressed.items.len,
+                .total_output = self.total_output + if (self.phase == .done) 0 else self.decoded_offset,
+                .frame_count = self.frame_count,
+                .frame_index = if (self.phase == .done and self.frame_count != 0) self.frame_count - 1 else self.frame_count,
                 .last_error_name = self.last_error_name,
                 .last_error_phase = self.last_error_phase,
             };
@@ -122,7 +159,12 @@ pub fn Decoder(comptime Codec: type) type {
                     @memcpy(output[output_written..][0..n], remaining[0..n]);
                     self.decoded_offset += n;
                     output_written += n;
-                    if (self.decoded_offset == self.decoded.items.len) self.phase = .done;
+                    if (self.decoded_offset == self.decoded.items.len) {
+                        self.phase = .done;
+                        self.total_compressed += self.compressed.items.len;
+                        self.total_output += self.decoded.items.len;
+                        self.frame_count += 1;
+                    }
                     return result(input_read, output_written, if (self.phase == .done) .done else .need_output);
                 },
                 .done => {
@@ -151,7 +193,13 @@ pub fn Decoder(comptime Codec: type) type {
                 return self.fail(.input, err);
             };
             if (written != decoded_len) return self.fail(.input, error.SizeMismatch);
-            self.phase = if (decoded_len == 0) .done else .output;
+            if (decoded_len == 0) {
+                self.phase = .done;
+                self.total_compressed += self.compressed.items.len;
+                self.frame_count += 1;
+            } else {
+                self.phase = .output;
+            }
         }
 
         fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {

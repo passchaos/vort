@@ -5131,6 +5131,12 @@ architecture blindly.
   decode automatically at the known payload boundary, consume the boundary
   call's tiny output immediately, and receive deterministic short/long
   `SizeMismatch` errors without a separate finish call.
+- The general Brotli incremental decoder can reuse its retained compressed and
+  decoded allocations across independently framed payloads through `nextFrame`
+  and `nextFrameExactCompressedSize`. Per-frame limits/pledges reset while
+  snapshots retain cumulative compressed/output bytes plus completed frame
+  count/index. Tests continue from a stored frame to a compressed meta-block
+  frame and exercise the root public facade.
 - Added a modular raw-DEFLATE incremental stored-block encoder under
   `src/deflate/incremental/`. It accepts split input, drains through tiny output,
   emits resumable non-final flush blocks, supports pledged and maximum input

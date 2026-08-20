@@ -122,3 +122,39 @@ test "Brotli incremental decoder auto completes compressed meta-block input" {
     }
     try std.testing.expectEqualSlices(u8, "hello", &output);
 }
+
+test "Brotli incremental decoder reuses allocations across framed payloads" {
+    const first_payload = "first framed Brotli payload" ** 8;
+    const first = try br.IncrementalTestSupport.encodeStored(std.testing.allocator, first_payload);
+    defer std.testing.allocator.free(first);
+    const second = try br.IncrementalTestSupport.encodeCompressedHello(std.testing.allocator);
+    defer std.testing.allocator.free(second);
+
+    var decoder = br.IncrementalStreamDecoder.initExactCompressedSize(std.testing.allocator, .{
+        .expected_output_len = first_payload.len,
+    }, first.len);
+    defer decoder.deinit();
+    var first_output: [first_payload.len]u8 = undefined;
+    _ = try decoder.step(first, &.{});
+    _ = try decoder.step("", &first_output);
+    try std.testing.expectEqualSlices(u8, first_payload, &first_output);
+    try std.testing.expectEqual(@as(usize, 1), decoder.snapshot().frame_count);
+    try std.testing.expectEqual(@as(usize, 0), decoder.snapshot().frame_index);
+
+    try decoder.nextFrameExactCompressedSize(.{ .expected_output_len = 5 }, second.len);
+    var second_output: [5]u8 = undefined;
+    _ = try decoder.step(second, &.{});
+    _ = try decoder.step("", &second_output);
+    try std.testing.expectEqualSlices(u8, "hello", &second_output);
+    const snapshot = decoder.snapshot();
+    try std.testing.expectEqual(@as(usize, 2), snapshot.frame_count);
+    try std.testing.expectEqual(@as(usize, 1), snapshot.frame_index);
+    try std.testing.expectEqual(first.len + second.len, snapshot.total_compressed);
+    try std.testing.expectEqual(first_payload.len + second_output.len, snapshot.total_output);
+}
+
+test "Brotli incremental decoder rejects early next frame" {
+    var decoder = br.IncrementalStreamDecoder.init(std.testing.allocator);
+    defer decoder.deinit();
+    try std.testing.expectError(error.InvalidBlockPlan, decoder.nextFrame(.{}));
+}

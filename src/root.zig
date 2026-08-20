@@ -74,6 +74,22 @@ pub const BrotliStreamDecoder = br.StreamDecoder;
 pub const BrotliIncrementalStreamDecoder = br.IncrementalStreamDecoder;
 pub const BrotliIncrementalStoredStreamDecoder = br.IncrementalStoredStreamDecoder;
 pub const BrotliIncrementalStoredStreamEncoder = br.IncrementalStoredStreamEncoder;
+
+test "root Brotli incremental decoder continues framed payloads" {
+    const first = try br.IncrementalTestSupport.encodeStored(std.testing.allocator, "one");
+    defer std.testing.allocator.free(first);
+    const second = try br.IncrementalTestSupport.encodeStored(std.testing.allocator, "two");
+    defer std.testing.allocator.free(second);
+    var decoder = BrotliIncrementalStreamDecoder.initExactCompressedSize(std.testing.allocator, .{ .expected_output_len = 3 }, first.len);
+    defer decoder.deinit();
+    var output: [3]u8 = undefined;
+    _ = try decoder.step(first, &.{});
+    _ = try decoder.step("", &output);
+    try decoder.nextFrameExactCompressedSize(.{ .expected_output_len = 3 }, second.len);
+    _ = try decoder.step(second, &.{});
+    _ = try decoder.step("", &output);
+    try std.testing.expectEqual(@as(usize, 2), decoder.snapshot().frame_count);
+}
 pub const brCompressedSupportLimits = br.compressedSupportLimits;
 pub const brMinimalStaticDictionaryCoverage = br.minimalStaticDictionaryCoverage;
 pub const brMinimalStaticDictionarySizeBits = br.minimalStaticDictionarySizeBits;
