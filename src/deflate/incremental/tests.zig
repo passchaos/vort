@@ -460,6 +460,45 @@ test "gzip incremental next member enforces its pledged size" {
     try std.testing.expectError(error.SizeMismatch, encoder.step("", &scratch));
 }
 
+test "gzip incremental members switch compression options" {
+    const first = "dynamic member content alpha beta gamma delta\n" ** 256;
+    var second: [16 * 1024]u8 = undefined;
+    var random = std.Random.DefaultPrng.init(0xa62f_401d_9bc3_75e8);
+    random.random().bytes(&second);
+
+    var first_options = try deflate.gzipIncrementalBestOptionsForLevel(6, .{ .filename = "dynamic.txt" });
+    first_options.raw.block_len = 32 * 1024;
+    var encoder = deflate.GzipIncrementalBestEncoder.initExactSize(std.testing.allocator, first_options, first.len);
+    defer encoder.deinit();
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    try appendGzipBestMember(&encoder, &encoded, first);
+    const second_offset = encoded.items.len;
+
+    var second_options = try deflate.gzipIncrementalBestOptionsForLevel(1, .{ .filename = "random.bin" });
+    second_options.raw.block_len = 32 * 1024;
+    try encoder.nextMemberExactSizeWithOptions(second_options, second.len);
+    try appendGzipBestMember(&encoder, &encoded, &second);
+
+    const first_header = try deflate.parseGzipHeaderInfo(encoded.items);
+    const first_raw = try deflate.parseRawDeflateHeaderInfo(encoded.items[first_header.data_offset..]);
+    try std.testing.expectEqual(deflate.RawDeflateBlockType.dynamic, first_raw.block_type);
+    const second_header = try deflate.parseGzipHeaderInfo(encoded.items[second_offset..]);
+    try std.testing.expectEqualSlices(u8, "random.bin", second_header.filename.?);
+    const second_raw = try deflate.parseRawDeflateHeaderInfo(encoded.items[second_offset + second_header.data_offset ..]);
+    try std.testing.expectEqual(deflate.RawDeflateBlockType.stored, second_raw.block_type);
+
+    var history: [32 * 1024]u8 = undefined;
+    var decoder = try deflate.GzipIncrementalDecoder.init(.{
+        .allow_concatenated = true,
+        .expected_output_len = first.len + second.len,
+    }, &history);
+    const decoded = try decodeGzipMembersTest(&decoder, encoded.items, first.len + second.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, first, decoded[0..first.len]);
+    try std.testing.expectEqualSlices(u8, &second, decoded[first.len..]);
+}
+
 fn appendGzipBestMember(encoder: *deflate.GzipIncrementalBestEncoder, encoded: *std.ArrayList(u8), payload: []const u8) !void {
     var scratch: [31]u8 = undefined;
     var offset: usize = 0;

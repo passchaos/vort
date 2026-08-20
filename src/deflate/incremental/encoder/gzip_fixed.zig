@@ -78,11 +78,27 @@ pub fn Encoder(comptime Codec: type) type {
             self.options.header = header;
             self.resetMember();
         }
+        /// Start a member with independent wrapper metadata and raw-DEFLATE
+        /// settings. This permits mixed compression levels and block policies
+        /// within one concatenated gzip stream.
+        pub fn nextMemberWithOptions(self: *Self, options: Options) Error!void {
+            if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
+            self.options = options;
+            self.raw.options = options.raw;
+            self.resetMember();
+        }
         /// Start a member with a new pledged uncompressed size. This is the
         /// multi-member counterpart of `initExactSize`.
         pub fn nextMemberExactSize(self: *Self, header: Codec.HeaderOptions, expected_input_len: usize) Error!void {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
             self.options.header = header;
+            self.resetMemberExactSize(expected_input_len);
+        }
+        /// Combine per-member raw/header options with a pledged input size.
+        pub fn nextMemberExactSizeWithOptions(self: *Self, options: Options, expected_input_len: usize) Error!void {
+            if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
+            self.options = options;
+            self.raw.options = options.raw;
             self.resetMemberExactSize(expected_input_len);
         }
         pub fn snapshot(self: *const Self) Snapshot {
