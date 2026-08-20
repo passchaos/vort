@@ -14,13 +14,7 @@ def main() -> int:
         ("rle", b"a" * 4096),
         ("ababa", b"ababa"),
         ("binary-ababa", bytes((0, 255, 0, 255, 0))),
-        ("alternating-7", b"xyxyxyx"),
-        ("alternating-9", b"xyxyxyxyx"),
-        ("alternating-11", b"xyxyxyxyxyx"),
-        ("alternating-13", b"xyxyxyxyxyxyx"),
-        ("alternating-15", b"xyxyxyxyxyxyxyx"),
-        ("alternating-17", b"xyxyxyxyxyxyxyxyx"),
-        ("alternating-19", b"xyxyxyxyxyxyxyxyxyx"),
+        *((f"alternating-{n}", (b"xy" * ((n + 1) // 2))[:n]) for n in range(6, 24)),
     )
     script = (
         "const z=require('zlib');let b=[];"
