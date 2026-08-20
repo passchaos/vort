@@ -57,6 +57,9 @@ pub fn Encoder(comptime Codec: type) type {
         }
         fn resetMember(self: *Self) void {
             self.raw.reset();
+            self.resetMemberWrapper();
+        }
+        fn resetMemberWrapper(self: *Self) void {
             self.pending.clearRetainingCapacity();
             self.pending_offset = 0;
             self.crc = Codec.Crc32.init();
@@ -74,6 +77,13 @@ pub fn Encoder(comptime Codec: type) type {
             if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
             self.options.header = header;
             self.resetMember();
+        }
+        /// Start a member with a new pledged uncompressed size. This is the
+        /// multi-member counterpart of `initExactSize`.
+        pub fn nextMemberExactSize(self: *Self, header: Codec.HeaderOptions, expected_input_len: usize) Error!void {
+            if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
+            self.options.header = header;
+            self.resetMemberExactSize(expected_input_len);
         }
         pub fn snapshot(self: *const Self) Snapshot {
             return .{
@@ -152,6 +162,11 @@ pub fn Encoder(comptime Codec: type) type {
 
         fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
             return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = status };
+        }
+
+        fn resetMemberExactSize(self: *Self, expected_input_len: usize) void {
+            self.raw.resetExactSize(expected_input_len);
+            self.resetMemberWrapper();
         }
     };
 }

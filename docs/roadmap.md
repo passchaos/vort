@@ -5161,6 +5161,9 @@ architecture blindly.
   member counts remain cumulative in the new encoder snapshot. Transitions
   before completion are rejected, and tests round-trip two differently headed
   members through the concatenation-aware incremental decoder using tiny output.
+  `nextMemberExactSize` additionally changes the pledged uncompressed size for
+  each member, with strict too-short/too-long validation rather than carrying
+  the first member's size contract into later members.
 - Added bounded adaptive block sizing to the incremental best core. Full input
   windows use the existing stored/fixed/dynamic cost scorer and split policy to
   choose a shorter prefix, while buffering never exceeds `max_block_len`; raw,

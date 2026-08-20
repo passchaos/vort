@@ -408,14 +408,14 @@ test "gzip incremental best encoder emits concatenated members" {
     const second = "second independent gzip member delta epsilon" ** 48;
     var options = try deflate.gzipIncrementalBestOptionsForLevel(6, .{ .filename = "first.txt" });
     options.raw.block_len = 1024;
-    var encoder = deflate.GzipIncrementalBestEncoder.initWithOptions(std.testing.allocator, options);
+    var encoder = deflate.GzipIncrementalBestEncoder.initExactSize(std.testing.allocator, options, first.len);
     defer encoder.deinit();
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(std.testing.allocator);
     try appendGzipBestMember(&encoder, &encoded, first);
     try std.testing.expectEqual(@as(usize, 1), encoder.snapshot().member_count);
     try std.testing.expectEqual(first.len, encoder.snapshot().input_read);
-    try encoder.nextMember(.{ .filename = "second.txt", .header_crc = true });
+    try encoder.nextMemberExactSize(.{ .filename = "second.txt", .header_crc = true }, second.len);
     try std.testing.expectEqual(@as(usize, 1), encoder.snapshot().member_count);
     try std.testing.expectEqual(@as(usize, 0), encoder.snapshot().member_input);
     try appendGzipBestMember(&encoder, &encoded, second);
@@ -444,6 +444,20 @@ test "gzip incremental encoder rejects member transition before drain" {
     _ = try encoder.step("payload", &scratch);
     encoder.finish();
     try std.testing.expectError(error.InvalidBlockPlan, encoder.nextMember(.{}));
+}
+
+test "gzip incremental next member enforces its pledged size" {
+    const first = "first";
+    var encoder = deflate.GzipIncrementalBestEncoder.initExactSize(std.testing.allocator, .{}, first.len);
+    defer encoder.deinit();
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    try appendGzipBestMember(&encoder, &encoded, first);
+    try encoder.nextMemberExactSize(.{}, 4);
+    var scratch: [64]u8 = undefined;
+    _ = try encoder.step("abc", &scratch);
+    encoder.finish();
+    try std.testing.expectError(error.SizeMismatch, encoder.step("", &scratch));
 }
 
 fn appendGzipBestMember(encoder: *deflate.GzipIncrementalBestEncoder, encoded: *std.ArrayList(u8), payload: []const u8) !void {

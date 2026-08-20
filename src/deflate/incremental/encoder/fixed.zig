@@ -99,6 +99,12 @@ pub fn Encoder(comptime Codec: type) type {
             self.total_output = 0;
             self.expected_input_len = expected;
         }
+        /// Reset the stream while changing its pledged input size. Wrapper
+        /// encoders use this between independent gzip members.
+        pub fn resetExactSize(self: *Self, expected_input_len: usize) void {
+            self.expected_input_len = expected_input_len;
+            self.reset();
+        }
         pub fn matchFinderSnapshot(self: *const Self) MatchFinderSnapshot {
             return self.match_finder.snapshot();
         }
