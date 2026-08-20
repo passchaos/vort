@@ -5577,3 +5577,9 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   slice: eligible runs use compressed RLE, while all other inputs deterministically
   fall back to the mature stored encoder. Alloc/append/into/bound and root APIs
   therefore improve useful ratios without narrowing accepted input.
+- Replaced the compressed Brotli decoder's hand-simplified command-range logic
+  with a generated 704-entry table from upstream `dec/prefix_inc.h`, including
+  exact insert/copy bases, extra-bit widths, distance-code mode, and context.
+  All unit tests, the production RLE/alternating Node gate, and the 225-case
+  Vort/Node literal differential suite remain green, establishing a trustworthy
+  oracle for the next general command encoder slice.

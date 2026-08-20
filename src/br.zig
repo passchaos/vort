@@ -4,6 +4,7 @@ const bitstream = @import("bitstream.zig");
 const huffman = @import("huffman.zig");
 const match_copy = @import("br/match_copy.zig");
 const static_dictionary = @import("br/static_dictionary.zig");
+const command_lut = @import("br/command_lut.zig");
 const incremental = @import("br/incremental/stream_decoder.zig");
 const incremental_tests = @import("br/incremental/tests.zig");
 const incremental_stored = @import("br/incremental/stored/decoder.zig");
@@ -1687,15 +1688,13 @@ fn applyInverseMoveToFront(context_map: []u8) void {
 
 fn readInsertCopyLengths(symbol: u16, reader: *bitstream.BitReader) Error!InsertCopyLengths {
     if (symbol >= 704) return error.InvalidHuffmanCode;
-    const ranges = insertCopyCodeRanges(symbol);
-    const insert_code = ranges.insert_base + ((symbol >> 3) & 0x7);
-    const copy_code = ranges.copy_base + (symbol & 0x7);
-    const insert = try readInsertLength(insert_code, reader);
-    const copy = try readCopyLength(copy_code, reader);
+    const entry = command_lut.entries[symbol];
+    const insert_extra = if (entry.insert_extra_bits == 0) 0 else try reader.readBits(u32, entry.insert_extra_bits);
+    const copy_extra = if (entry.copy_extra_bits == 0) 0 else try reader.readBits(u32, entry.copy_extra_bits);
     return .{
-        .insert_len = insert,
-        .copy_len = copy,
-        .distance_symbol_zero = symbol < 128,
+        .insert_len = entry.insert_base + insert_extra,
+        .copy_len = entry.copy_base + copy_extra,
+        .distance_symbol_zero = entry.distance_code == 0,
     };
 }
 
