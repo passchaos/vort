@@ -414,12 +414,16 @@ test "gzip incremental best encoder emits concatenated members" {
     defer encoded.deinit(std.testing.allocator);
     try appendGzipBestMember(&encoder, &encoded, first);
     try std.testing.expectEqual(@as(usize, 1), encoder.snapshot().member_count);
+    try std.testing.expectEqual(@as(usize, 0), encoder.snapshot().member_index);
+    try std.testing.expectEqual(@as(usize, 0), encoder.snapshot().pending_output);
     try std.testing.expectEqual(first.len, encoder.snapshot().input_read);
     try encoder.nextMemberExactSize(.{ .filename = "second.txt", .header_crc = true }, second.len);
     try std.testing.expectEqual(@as(usize, 1), encoder.snapshot().member_count);
+    try std.testing.expectEqual(@as(usize, 1), encoder.snapshot().member_index);
     try std.testing.expectEqual(@as(usize, 0), encoder.snapshot().member_input);
     try appendGzipBestMember(&encoder, &encoded, second);
     try std.testing.expectEqual(@as(usize, 2), encoder.snapshot().member_count);
+    try std.testing.expectEqual(@as(usize, 1), encoder.snapshot().member_index);
     try std.testing.expectEqual(first.len + second.len, encoder.snapshot().input_read);
 
     const expected = try deflate.encodeGzipBestAlloc(std.testing.allocator, first, options.raw.compression);
@@ -444,6 +448,17 @@ test "gzip incremental encoder rejects member transition before drain" {
     _ = try encoder.step("payload", &scratch);
     encoder.finish();
     try std.testing.expectError(error.InvalidBlockPlan, encoder.nextMember(.{}));
+}
+
+test "gzip incremental encoder snapshot reports pending member output" {
+    var encoder = deflate.GzipIncrementalBestEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    var one: [1]u8 = undefined;
+    const first = try encoder.step("payload", &one);
+    try std.testing.expectEqual(@as(usize, 1), first.progress.output_written);
+    try std.testing.expect(encoder.snapshot().pending_output != 0);
+    try std.testing.expectEqual(@as(usize, 0), encoder.snapshot().member_index);
+    try std.testing.expectEqual(@as(usize, 0), encoder.snapshot().member_count);
 }
 
 test "gzip incremental next member enforces its pledged size" {

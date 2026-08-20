@@ -30,7 +30,9 @@ pub fn Encoder(comptime Codec: type) type {
             output_written: usize,
             member_input: usize,
             member_output: usize,
+            pending_output: usize,
             member_count: usize,
+            member_index: usize,
             finishing: bool,
             done: bool,
         };
@@ -107,7 +109,9 @@ pub fn Encoder(comptime Codec: type) type {
                 .output_written = self.stream_output,
                 .member_input = self.total_input,
                 .member_output = self.total_output,
+                .pending_output = self.pending.items.len - self.pending_offset,
                 .member_count = self.member_count,
+                .member_index = if (self.done and self.member_count != 0) self.member_count - 1 else self.member_count,
                 .finishing = self.finishing,
                 .done = self.done,
             };

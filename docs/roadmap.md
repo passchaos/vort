@@ -5167,7 +5167,10 @@ architecture blindly.
   `nextMemberWithOptions` and `nextMemberExactSizeWithOptions` also switch raw
   compression/block settings as well as metadata, enabling dynamic, fixed, or
   stored members with different levels in one stream. Mixed dynamic-text and
-  stored-random members are wire-inspected and concatenated-decoder tested.
+  stored-random members are wire-inspected and concatenated-decoder tested. The
+  encoder snapshot exposes pending output and the active/last member index so
+  tiny-output schedulers can distinguish a drained boundary from an in-flight
+  member before calling `nextMember`.
 - Added bounded adaptive block sizing to the incremental best core. Full input
   windows use the existing stored/fixed/dynamic cost scorer and split policy to
   choose a shorter prefix, while buffering never exceeds `max_block_len`; raw,
