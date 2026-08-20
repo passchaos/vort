@@ -5541,3 +5541,7 @@ architecture blindly.
   than pretending to be a general encoder, and provides a conservative bound.
   A 4096-byte run encodes to 12 bytes, round-trips through Vort, and decodes
   successfully with Node v26's Brotli implementation.
+  `encodeSimpleStream` provides a safe general entry point over this initial
+  slice: eligible runs use compressed RLE, while all other inputs deterministically
+  fall back to the mature stored encoder. Alloc/append/into/bound and root APIs
+  therefore improve useful ratios without narrowing accepted input.

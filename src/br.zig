@@ -444,6 +444,37 @@ pub fn encodeRleStreamInto(input: []const u8, output: []u8) Error!usize {
     return out.items.len;
 }
 
+pub fn encodedSimpleStreamBound(input_len: usize) Error!usize {
+    return encodedStoredStreamBound(input_len);
+}
+
+/// Dependency-free Brotli encoder entry point that selects the compressed RLE
+/// slice for eligible runs and otherwise emits the fully general stored form.
+pub fn encodeSimpleStreamAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    try encodeSimpleStreamAppend(allocator, &out, input);
+    return out.toOwnedSlice(allocator);
+}
+
+pub fn encodeSimpleStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) Error!void {
+    if (isRleInput(input)) {
+        try encodeRleStreamAppend(allocator, out, input);
+    } else {
+        try encodeStoredStreamAppend(allocator, out, input);
+    }
+}
+
+pub fn encodeSimpleStreamInto(input: []const u8, output: []u8) Error!usize {
+    return if (isRleInput(input)) encodeRleStreamInto(input, output) else encodeStoredStreamInto(input, output);
+}
+
+fn isRleInput(input: []const u8) bool {
+    if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return false;
+    for (input[1..]) |byte| if (byte != input[0]) return false;
+    return true;
+}
+
 fn encodeRleStreamWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8) Error!void {
     if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
     for (input[1..]) |byte| if (byte != input[0]) return error.InvalidBlockPlan;
@@ -5277,6 +5308,25 @@ test "br RLE encoder emits compressed runs" {
     try std.testing.expectError(error.OutOfMemory, encodeRleStreamInto(payload, into[0 .. encoded.len - 1]));
     try std.testing.expectError(error.InvalidBlockPlan, encodeRleStreamAlloc(std.testing.allocator, "abcde"));
     try std.testing.expectError(error.InvalidBlockPlan, encodeRleStreamAlloc(std.testing.allocator, "aaaa"));
+}
+
+test "br simple encoder selects RLE or stored streams" {
+    const run = "z" ** 1024;
+    const simple_run = try encodeSimpleStreamAlloc(std.testing.allocator, run);
+    defer std.testing.allocator.free(simple_run);
+    const rle = try encodeRleStreamAlloc(std.testing.allocator, run);
+    defer std.testing.allocator.free(rle);
+    try std.testing.expectEqualSlices(u8, rle, simple_run);
+
+    const mixed = "simple Brotli mixed payload";
+    const simple_mixed = try encodeSimpleStreamAlloc(std.testing.allocator, mixed);
+    defer std.testing.allocator.free(simple_mixed);
+    const stored = try encodeStoredStreamAlloc(std.testing.allocator, mixed);
+    defer std.testing.allocator.free(stored);
+    try std.testing.expectEqualSlices(u8, stored, simple_mixed);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, simple_mixed);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, mixed, decoded);
 }
 
 test "br minimal compressed stream reuses last distance" {
