@@ -19,6 +19,9 @@ pub fn Encoder(comptime Codec: type) type {
         done: bool = false,
         total_input: usize = 0,
         total_output: usize = 0,
+        stream_input: usize = 0,
+        stream_output: usize = 0,
+        stream_count: usize = 0,
 
         const Self = @This();
         pub const Error = Codec.Error;
@@ -27,7 +30,18 @@ pub fn Encoder(comptime Codec: type) type {
             max_input_len: usize = std.math.maxInt(usize),
             block_len: usize = 64 * 1024,
         };
-        pub const Snapshot = struct { input_read: usize, output_written: usize, buffered_input: usize, pending_output: usize, finishing: bool, done: bool };
+        pub const Snapshot = struct {
+            input_read: usize,
+            output_written: usize,
+            stream_input: usize,
+            stream_output: usize,
+            buffered_input: usize,
+            pending_output: usize,
+            stream_count: usize,
+            stream_index: usize,
+            finishing: bool,
+            done: bool,
+        };
 
         pub fn init(allocator: std.mem.Allocator) Self {
             return initWithOptions(allocator, .{});
@@ -41,6 +55,13 @@ pub fn Encoder(comptime Codec: type) type {
             self.* = undefined;
         }
         pub fn reset(self: *Self) void {
+            self.stream_input = 0;
+            self.stream_output = 0;
+            self.stream_count = 0;
+            self.resetStream(self.options);
+        }
+        fn resetStream(self: *Self, options: Options) void {
+            self.options = options;
             self.plain.clearRetainingCapacity();
             self.pending.clearRetainingCapacity();
             self.codec_state = .{};
@@ -53,12 +74,20 @@ pub fn Encoder(comptime Codec: type) type {
             self.total_input = 0;
             self.total_output = 0;
         }
+        pub fn nextStream(self: *Self, options: Options) Error!void {
+            if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
+            self.resetStream(options);
+        }
         pub fn snapshot(self: *const Self) Snapshot {
             return .{
                 .input_read = self.total_input,
-                .output_written = self.total_output,
+                .output_written = self.stream_output,
+                .stream_input = self.total_input,
+                .stream_output = self.total_output,
                 .buffered_input = self.plain.items.len,
                 .pending_output = self.pending.items.len - self.pending_offset,
+                .stream_count = self.stream_count,
+                .stream_index = if (self.done and self.stream_count != 0) self.stream_count - 1 else self.stream_count,
                 .finishing = self.finishing,
                 .done = self.done,
             };
@@ -97,6 +126,7 @@ pub fn Encoder(comptime Codec: type) type {
                     self.pending_offset += n;
                     output_written += n;
                     self.total_output += n;
+                    self.stream_output += n;
                     if (self.pending_offset != self.pending.items.len) return result(input_read, output_written, .need_output);
                     self.pending.clearRetainingCapacity();
                     self.pending_offset = 0;
@@ -114,6 +144,7 @@ pub fn Encoder(comptime Codec: type) type {
                     try self.plain.appendSlice(self.allocator, input[input_read..][0..n]);
                     input_read += n;
                     self.total_input = total;
+                    self.stream_input += n;
                 }
                 if (self.plain.items.len == self.options.block_len or
                     ((self.finishing or self.flush_requested) and self.plain.items.len != 0))
@@ -131,6 +162,7 @@ pub fn Encoder(comptime Codec: type) type {
                     continue;
                 }
                 if (self.finishing) {
+                    self.stream_count += 1;
                     self.done = true;
                     return result(input_read, output_written, .done);
                 }

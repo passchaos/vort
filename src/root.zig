@@ -90,6 +90,17 @@ test "root Brotli incremental decoder continues framed payloads" {
     _ = try decoder.step("", &output);
     try std.testing.expectEqual(@as(usize, 2), decoder.snapshot().frame_count);
 }
+
+test "root Brotli incremental stored encoder continues streams" {
+    var encoder = BrotliIncrementalStoredStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    var output: [64]u8 = undefined;
+    _ = try encoder.step("one", &output);
+    try encoder.finish();
+    while ((try encoder.step("", &output)).status != .done) {}
+    try encoder.nextStream(.{ .stream = .{ .window_bits = 20 } });
+    try std.testing.expectEqual(@as(usize, 1), encoder.snapshot().stream_index);
+}
 pub const brCompressedSupportLimits = br.compressedSupportLimits;
 pub const brMinimalStaticDictionaryCoverage = br.minimalStaticDictionaryCoverage;
 pub const brMinimalStaticDictionarySizeBits = br.minimalStaticDictionarySizeBits;

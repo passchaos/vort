@@ -5475,3 +5475,7 @@ architecture blindly.
   caller input, drains encoded bytes through tiny caller output, and supports
   input limits, explicit finish, reset/reuse, and snapshots. Split-input,
   multi-block, metadata, and window-bit round trips use the production decoder.
+  It can now start independent streams with new window/metadata/block options
+  through `nextStream`, retaining allocations and cumulative byte/count/index
+  diagnostics. Tests decode both differently configured outputs and cover the
+  root public facade.

@@ -148,3 +148,50 @@ test "incremental stored encoder flushes and resumes" {
     encoder.reset();
     try std.testing.expectEqual(@as(usize, 0), encoder.snapshot().input_read);
 }
+
+test "incremental stored encoder continues independent streams" {
+    const first = "first stored Brotli stream" ** 16;
+    const second = "second stored Brotli stream" ** 12;
+    var encoder = br.IncrementalStoredStreamEncoder.initWithOptions(std.testing.allocator, .{
+        .stream = .{ .window_bits = 18, .metadata = "first-meta" },
+        .block_len = 64,
+    });
+    defer encoder.deinit();
+    const first_encoded = try encodeStoredIncrementalTest(&encoder, first);
+    defer std.testing.allocator.free(first_encoded);
+    try std.testing.expectEqual(@as(usize, 1), encoder.snapshot().stream_count);
+    try encoder.nextStream(.{
+        .stream = .{ .window_bits = 22, .metadata = "second-meta" },
+        .block_len = 31,
+    });
+    const second_encoded = try encodeStoredIncrementalTest(&encoder, second);
+    defer std.testing.allocator.free(second_encoded);
+    try std.testing.expectEqual(@as(usize, 2), encoder.snapshot().stream_count);
+    try std.testing.expectEqual(@as(usize, 1), encoder.snapshot().stream_index);
+    try std.testing.expectEqual(first.len + second.len, encoder.snapshot().input_read);
+    const first_decoded = try br.decodeStreamAlloc(std.testing.allocator, first_encoded);
+    defer std.testing.allocator.free(first_decoded);
+    const second_decoded = try br.decodeStreamAlloc(std.testing.allocator, second_encoded);
+    defer std.testing.allocator.free(second_decoded);
+    try std.testing.expectEqualSlices(u8, first, first_decoded);
+    try std.testing.expectEqualSlices(u8, second, second_decoded);
+}
+
+fn encodeStoredIncrementalTest(encoder: *br.IncrementalStoredStreamEncoder, payload: []const u8) ![]u8 {
+    var encoded: std.ArrayList(u8) = .empty;
+    errdefer encoded.deinit(std.testing.allocator);
+    var scratch: [11]u8 = undefined;
+    var offset: usize = 0;
+    while (offset < payload.len) {
+        const result = try encoder.step(payload[offset..], &scratch);
+        offset += result.progress.input_read;
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    try encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    return encoded.toOwnedSlice(std.testing.allocator);
+}
