@@ -5473,6 +5473,10 @@ architecture blindly.
   stream with new limits through `nextStream`; cumulative compressed/output
   byte counts and stream count/index remain visible without allocating. Tests
   switch window bits and metadata across frames and exercise the root facade.
+  Callers may now provide bounded metadata scratch to the byte-progressive
+  stored decoder. Metadata remains excluded from content output, but snapshots
+  expose captured and total metadata bytes plus truncation; split metadata can
+  therefore be inspected without hidden allocation or unbounded retention.
 - Added the matching incremental stored Brotli encoder under
   `src/br/incremental/stored/encoder.zig`. It preserves bit-writer state across
   metadata and multiple configurable meta-blocks, buffers only one block of

@@ -32,6 +32,29 @@ test "byte-progressive stored decoder streams headers metadata and payload" {
     try std.testing.expectEqual(payload.len, decoder.snapshot().output_written);
 }
 
+test "byte-progressive stored decoder captures bounded metadata" {
+    const metadata = "captured Brotli metadata";
+    const encoded = try br.encodeStoredStreamWithOptionsAlloc(std.testing.allocator, "payload", .{ .metadata = metadata });
+    defer std.testing.allocator.free(encoded);
+    var metadata_output: [8]u8 = undefined;
+    var decoder = br.IncrementalStoredStreamDecoder.initWithOptions(.{ .metadata_output = &metadata_output });
+    var payload_output: [7]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (input_offset < encoded.len) {
+        const result = try decoder.step(encoded[input_offset .. input_offset + 1], payload_output[output_offset..]);
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+    }
+    try decoder.finish();
+    const snapshot = decoder.snapshot();
+    try std.testing.expectEqualSlices(u8, metadata[0..metadata_output.len], &metadata_output);
+    try std.testing.expectEqual(metadata_output.len, snapshot.metadata_written);
+    try std.testing.expectEqual(metadata.len, snapshot.metadata_total);
+    try std.testing.expect(snapshot.metadata_truncated);
+    try std.testing.expectEqualSlices(u8, "payload", &payload_output);
+}
+
 test "byte-progressive stored decoder rejects compressed and truncated streams" {
     const compressed = [_]u8{ 0x1b, 0x02, 0x00, 0x00 };
     var unsupported = br.IncrementalStoredStreamDecoder.init();

@@ -21,12 +21,18 @@ pub const Decoder = struct {
     stream_input: usize = 0,
     stream_output: usize = 0,
     stream_count: usize = 0,
+    metadata_output: []u8 = &.{},
+    metadata_written: usize = 0,
+    metadata_total: usize = 0,
     finished: bool = false,
     last_error_name: []const u8 = "",
     last_error_phase: Phase = .window,
 
     pub const Error = core.Error;
-    pub const Options = struct { max_output_len: usize = std.math.maxInt(usize) };
+    pub const Options = struct {
+        max_output_len: usize = std.math.maxInt(usize),
+        metadata_output: []u8 = &.{},
+    };
     pub const Phase = enum { window, header, payload, done };
     const WindowState = enum { first, low3, tail };
     const HeaderState = enum { is_last, last_empty, nibbles, metadata_reserved, metadata_count, metadata_len, block_len, uncompressed, padding };
@@ -39,6 +45,9 @@ pub const Decoder = struct {
         stream_output: usize,
         stream_count: usize,
         stream_index: usize,
+        metadata_written: usize,
+        metadata_total: usize,
+        metadata_truncated: bool,
         metadata: bool,
         last_error_name: []const u8,
         last_error_phase: Phase,
@@ -48,10 +57,10 @@ pub const Decoder = struct {
         return initWithOptions(.{});
     }
     pub fn initWithOptions(options: Options) Decoder {
-        return .{ .options = options };
+        return .{ .options = options, .metadata_output = options.metadata_output };
     }
     pub fn reset(self: *Decoder) void {
-        self.* = .{ .options = self.options };
+        self.* = .{ .options = self.options, .metadata_output = self.options.metadata_output };
     }
     pub fn nextStream(self: *Decoder, options: Options) Error!void {
         if (self.phase != .done or !self.finished) return error.InvalidBlockPlan;
@@ -60,6 +69,7 @@ pub const Decoder = struct {
         const stream_count = self.stream_count + 1;
         self.* = .{
             .options = options,
+            .metadata_output = options.metadata_output,
             .stream_input = stream_input,
             .stream_output = stream_output,
             .stream_count = stream_count,
@@ -75,6 +85,9 @@ pub const Decoder = struct {
             .stream_output = self.stream_output + self.total_output,
             .stream_count = self.stream_count + @intFromBool(self.phase == .done and self.finished),
             .stream_index = self.stream_count,
+            .metadata_written = self.metadata_written,
+            .metadata_total = self.metadata_total,
+            .metadata_truncated = self.metadata_written != self.metadata_total,
             .metadata = self.metadata,
             .last_error_name = self.last_error_name,
             .last_error_phase = self.last_error_phase,
@@ -109,7 +122,13 @@ pub const Decoder = struct {
             if (self.phase == .payload) {
                 const available_output = if (self.metadata) self.payload_remaining else output.len - output_written;
                 const n = @min(self.payload_remaining, @min(input.len - input_read, available_output));
-                if (!self.metadata) {
+                if (self.metadata) {
+                    const capture_len = @min(n, self.metadata_output.len -| self.metadata_written);
+                    if (capture_len != 0)
+                        @memcpy(self.metadata_output[self.metadata_written..][0..capture_len], input[input_read..][0..capture_len]);
+                    self.metadata_written += capture_len;
+                    self.metadata_total += n;
+                } else {
                     @memcpy(output[output_written..][0..n], input[input_read..][0..n]);
                     output_written += n;
                     self.total_output += n;
