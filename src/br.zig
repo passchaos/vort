@@ -5614,6 +5614,17 @@ test "br planner-backed encoder covers wider literal alphabet" {
     try std.testing.expect(encoded.len < payload.len);
 }
 
+test "br planner-backed encoder covers full byte literal alphabet" {
+    var payload: [768]u8 = undefined;
+    for (&payload, 0..) |*byte, i| byte.* = @intCast(i & 0xff);
+    const encoded = try encodePlannedStreamAlloc(std.testing.allocator, &payload);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &payload, decoded);
+    try std.testing.expect(encoded.len < payload.len);
+}
+
 test "br simple encoder selects RLE or stored streams" {
     const run = "z" ** 1024;
     const simple_run = try encodeSimpleStreamAlloc(std.testing.allocator, run);

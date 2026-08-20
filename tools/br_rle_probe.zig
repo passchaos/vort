@@ -31,8 +31,12 @@ pub fn main(init: std.process.Init) !void {
         try vort.brEncodePlannedStreamAlloc(init.gpa, "abcdefabcdefXabcdefabcdefXabcdefabcdefX")
     else if (std.mem.eql(u8, mode, "planned-complex16"))
         try vort.brEncodePlannedStreamAlloc(init.gpa, "abcdefghijklmnop" ** 8)
-    else
-        return error.InvalidBlockPlan;
+    else if (std.mem.eql(u8, mode, "planned-byte-alphabet")) blk: {
+        const payload = try init.gpa.alloc(u8, 768);
+        defer init.gpa.free(payload);
+        for (payload, 0..) |*byte, i| byte.* = @intCast(i & 0xff);
+        break :blk try vort.brEncodePlannedStreamAlloc(init.gpa, payload);
+    } else return error.InvalidBlockPlan;
     defer init.gpa.free(encoded);
     var stdout_buffer: [128]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);

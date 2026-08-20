@@ -16,8 +16,11 @@ pub fn encodeAlloc(allocator: std.mem.Allocator, lengths: []const u4, stop_index
     var i: usize = 0;
     while (i < stop_index) {
         if (lengths[i] != 0) {
-            try tokens.append(allocator, .{ .symbol = lengths[i] });
-            i += 1;
+            const length = lengths[i];
+            var end = i + 1;
+            while (end < stop_index and lengths[end] == length) end += 1;
+            try appendNonzeroRun(allocator, &tokens, length, end - i);
+            i = end;
             continue;
         }
         var end = i + 1;
@@ -28,46 +31,70 @@ pub fn encodeAlloc(allocator: std.mem.Allocator, lengths: []const u4, stop_index
     return tokens.toOwnedSlice(allocator);
 }
 
+fn appendNonzeroRun(allocator: std.mem.Allocator, tokens: *std.ArrayList(Token), length: u4, run: usize) !void {
+    try tokens.append(allocator, .{ .symbol = length });
+    if (run == 1) return;
+    const remaining = run - 1;
+    // One or two repeats are smaller as explicit lengths; symbol 16 starts at
+    // three and chains in base four for longer runs.
+    if (remaining < 3) {
+        for (0..remaining) |_| try tokens.append(allocator, .{ .symbol = length });
+        return;
+    }
+    try appendRepeatRun(allocator, tokens, 16, remaining, 4);
+}
+
 fn appendZeroRun(allocator: std.mem.Allocator, tokens: *std.ArrayList(Token), run: usize) !void {
     if (run < 3) {
         for (0..run) |_| try tokens.append(allocator, .{ .symbol = 0 });
         return;
     }
 
+    try appendRepeatRun(allocator, tokens, 17, run, 8);
+}
+
+fn appendRepeatRun(allocator: std.mem.Allocator, tokens: *std.ArrayList(Token), symbol: u5, run: usize, comptime radix: usize) !void {
+    const max_extra = radix - 1;
     // Reverse the chaining recurrence until the predecessor can be represented
-    // by one symbol-17 token (3...10 zeros), then emit the chain forward.
+    // by one repeat token, then emit the chain forward.
     var extras: [16]u3 = undefined;
     var extra_len: usize = 0;
     var current = run;
-    while (current > 10) {
-        var extra: usize = 7;
-        while (extra != 0 and (current - (extra + 3)) % 8 != 0) extra -= 1;
-        const previous = (current - (extra + 3)) / 8 + 2;
+    while (current > max_extra + 3) {
+        var extra: usize = max_extra;
+        while (extra != 0 and (current - (extra + 3)) % radix != 0) extra -= 1;
+        const previous = (current - (extra + 3)) / radix + 2;
         if (previous < 3 or previous >= current) return error.InvalidBlockPlan;
         extras[extra_len] = @intCast(extra);
         extra_len += 1;
         current = previous;
     }
-    try tokens.append(allocator, .{ .symbol = 17, .extra = @intCast(current - 3) });
+    try tokens.append(allocator, .{ .symbol = symbol, .extra = @intCast(current - 3) });
     while (extra_len != 0) {
         extra_len -= 1;
-        try tokens.append(allocator, .{ .symbol = 17, .extra = extras[extra_len] });
+        try tokens.append(allocator, .{ .symbol = symbol, .extra = extras[extra_len] });
     }
 }
 
 pub fn decodedLength(tokens: []const Token) !usize {
     var total: usize = 0;
     var pending: usize = 0;
-    var previous_repeat = false;
+    var previous_repeat_symbol: ?u5 = null;
     for (tokens) |token| {
-        if (token.symbol == 17) {
+        if (token.symbol == 17 or token.symbol == 16) {
             const repeat = @as(usize, token.extra) + 3;
-            pending = if (previous_repeat) 8 * (pending - 2) + repeat else repeat;
-            previous_repeat = true;
+            const radix: usize = if (token.symbol == 17) 8 else 4;
+            if (previous_repeat_symbol == token.symbol) {
+                pending = radix * (pending - 2) + repeat;
+            } else {
+                total += pending;
+                pending = repeat;
+            }
+            previous_repeat_symbol = token.symbol;
         } else {
             total += pending + 1;
             pending = 0;
-            previous_repeat = false;
+            previous_repeat_symbol = null;
         }
     }
     return total + pending;
@@ -82,4 +109,13 @@ test "zero run chaining covers Brotli alphabet gaps" {
         defer std.testing.allocator.free(tokens);
         try std.testing.expectEqual(run, try decodedLength(tokens));
     }
+}
+
+test "nonzero run chaining uses symbol sixteen" {
+    var lengths: [97]u4 = @splat(8);
+    const tokens = try encodeAlloc(std.testing.allocator, &lengths, lengths.len);
+    defer std.testing.allocator.free(tokens);
+    try std.testing.expectEqual(lengths.len, try decodedLength(tokens));
+    try std.testing.expect(tokens.len < 8);
+    try std.testing.expect(tokens[1].symbol == 16);
 }
