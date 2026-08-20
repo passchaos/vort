@@ -16,6 +16,7 @@ pub fn Decoder(comptime Codec: type) type {
         dictid: [4]u8 = undefined,
         dictid_received: usize = 0,
         dictionary: []const u8 = &.{},
+        dictionaries: ?Codec.DictionarySet = null,
         adler: Codec.Adler32 = Codec.Adler32.init(),
         input_finished: bool = false,
         total_input: usize = 0,
@@ -48,6 +49,16 @@ pub fn Decoder(comptime Codec: type) type {
                     .expected_output_len = options.expected_output_len,
                 }, history, dictionary),
                 .dictionary = dictionary,
+            };
+        }
+        pub fn initWithDictionarySet(options: Options, history: []u8, dictionaries: Codec.DictionarySet) Error!Self {
+            return .{
+                .options = options,
+                .raw = try Codec.RawDecoder.initWithHistory(.{
+                    .max_output_len = options.max_output_len,
+                    .expected_output_len = options.expected_output_len,
+                }, history),
+                .dictionaries = dictionaries,
             };
         }
         pub fn reset(self: *Self) void {
@@ -109,8 +120,13 @@ pub fn Decoder(comptime Codec: type) type {
                         self.total_input += n;
                     }
                     if (self.dictid_received != self.dictid.len) return result(input_read, output_written, .need_input);
-                    if (self.dictionary.len == 0) return self.fail(.dictid, error.NeedDictionary);
-                    if (std.mem.readInt(u32, &self.dictid, .big) != Codec.Adler32.hash(self.dictionary)) return self.fail(.dictid, error.NeedDictionary);
+                    const id = std.mem.readInt(u32, &self.dictid, .big);
+                    if (self.dictionaries) |dictionaries| {
+                        self.dictionary = dictionaries.find(id) orelse return self.fail(.dictid, error.NeedDictionary);
+                        self.raw.seedDictionary(self.dictionary);
+                    } else {
+                        if (self.dictionary.len == 0 or id != Codec.Adler32.hash(self.dictionary)) return self.fail(.dictid, error.NeedDictionary);
+                    }
                     self.phase = .raw;
                 },
                 .raw => {

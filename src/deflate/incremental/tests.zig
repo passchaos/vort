@@ -849,6 +849,31 @@ test "zlib incremental decoder validates and uses preset dictionary" {
     try std.testing.expectError(error.NeedDictionary, wrong.step(encoded[2..6], &.{}));
 }
 
+test "zlib incremental decoder resolves split DICTID from dictionary set" {
+    const dictionary = "dictionary set phrase for split zlib header";
+    const payload = "dictionary set phrase for split zlib header payload";
+    const encoded = try deflate.encodeZlibFixedWithDictionaryAlloc(std.testing.allocator, payload, dictionary, .{});
+    defer std.testing.allocator.free(encoded);
+    const entries = [_]deflate.ZlibDictionaryEntry{deflate.ZlibDictionarySet.entry(dictionary)};
+    const set = deflate.ZlibDictionarySet.fromEntries(&entries);
+    var history: [32 * 1024]u8 = undefined;
+    var decoder = try deflate.ZlibIncrementalDecoder.initWithDictionarySet(.{ .expected_output_len = payload.len }, &history, set);
+    var output: [payload.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (input_offset < encoded.len) {
+        const result = try decoder.step(encoded[input_offset .. input_offset + 1], output[output_offset..][0..@min(2, output.len - output_offset)]);
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+    }
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, payload, &output);
+
+    var missing = try deflate.ZlibIncrementalDecoder.initWithDictionarySet(.{}, &history, deflate.ZlibDictionarySet.fromEntries(&.{}));
+    _ = try missing.step(encoded[0..2], &.{});
+    try std.testing.expectError(error.NeedDictionary, missing.step(encoded[2..6], &.{}));
+}
+
 test "gzip incremental decoder streams dynamic input and validates footer" {
     const payload = "byte progressive gzip dynamic payload alpha beta gamma" ** 40;
     const encoded = try deflate.encodeGzipBestAlloc(std.testing.allocator, payload, deflate.optionsForLevel(.default));

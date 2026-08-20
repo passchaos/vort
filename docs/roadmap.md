@@ -5186,6 +5186,10 @@ architecture blindly.
   through borrowed `ZlibDictionarySet` entries keyed by DICTID; the focused API
   covers caller-provided output and exact-size allocation, reports
   `NeedDictionary` when a later ID is absent, and is exported from the root.
+  The byte-progressive `ZlibIncrementalDecoder` accepts the same borrowed set,
+  waits for a split four-byte DICTID, selects/seeds the matching history before
+  raw decoding, and retains its existing retry-oriented `NeedDictionary`
+  diagnostic when no entry matches.
 - Added bounded adaptive block sizing to the incremental best core. Full input
   windows use the existing stored/fixed/dynamic cost scorer and split policy to
   choose a shorter prefix, while buffering never exceeds `max_block_len`; raw,

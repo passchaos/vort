@@ -269,6 +269,7 @@ const IncrementalZlibDecoderCodec = struct {
     pub const Error = deflate.Error;
     pub const RawDecoder = deflate.RawDeflateIncrementalFixedLiteralDecoder;
     pub const Adler32 = checksum.Adler32;
+    pub const DictionarySet = deflate.ZlibDictionarySet;
 };
 
 pub const ZlibIncrementalDecoder = incremental_zlib_decoder.Decoder(IncrementalZlibDecoderCodec);

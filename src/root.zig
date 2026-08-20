@@ -1286,6 +1286,20 @@ test "root gzip incremental fixed encoder exposes member continuation" {
     try encoder.nextMember(.{ .filename = "two.txt" });
     try std.testing.expectEqual(@as(usize, 1), encoder.snapshot().member_index);
 }
+
+test "root incremental zlib decoder exposes dictionary-set selection" {
+    const preset = "root incremental zlib set dictionary";
+    const payload = "root incremental zlib set dictionary payload";
+    const encoded = try encodeZlibFixedWithDictionaryAlloc(std.testing.allocator, payload, preset, .{});
+    defer std.testing.allocator.free(encoded);
+    const entries = [_]ZlibDictionaryEntry{ZlibDictionarySet.entry(preset)};
+    var history: [32 * 1024]u8 = undefined;
+    var decoder = try ZlibIncrementalDecoder.initWithDictionarySet(.{ .expected_output_len = payload.len }, &history, ZlibDictionarySet.fromEntries(&entries));
+    var output: [payload.len]u8 = undefined;
+    _ = try decoder.step(encoded, &output);
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, payload, &output);
+}
 pub const optionsForZlibLevel = deflate.optionsForZlibLevel;
 pub const normalizeCompressionOptionsForStrategy = deflate.normalizeOptionsForStrategy;
 pub const usesStoredFastPath = deflate.usesStoredFastPath;
