@@ -1,6 +1,7 @@
 const std = @import("std");
 const lz77 = @import("../../../../lz77.zig");
 const hash = @import("hash.zig");
+const profitability = @import("profitability.zig");
 
 const invalid_position = std.math.maxInt(usize);
 
@@ -287,17 +288,5 @@ fn hashAt(history: []const u8, block: []const u8, block_absolute: usize, absolut
 
 fn acceptMatch(input: []const u8, pos: usize, length: usize, distance: usize, options: lz77.GreedyOptions) bool {
     const minimum = @max(@as(usize, 3), @min(options.min_match, @max(@as(usize, 3), @min(options.max_match, lz77.max_match_len))));
-    if (length < minimum or distance == 0 or distance > lz77.default_window_len) return false;
-    const literal_bits = blk: {
-        var bits = length * 8;
-        for (input[pos..][0..length]) |byte| bits += @intFromBool(byte > 143);
-        break :blk bits;
-    };
-    return literal_bits >= fixedMatchBits(length, distance) + options.min_savings_bits;
-}
-
-fn fixedMatchBits(length: usize, distance: usize) usize {
-    const length_bits: usize = if (length <= 10) 7 else if (length <= 18) 8 else if (length <= 34) 9 else if (length <= 66) 10 else if (length <= 130) 11 else if (length <= 257) 12 else 8;
-    const distance_extra: usize = if (distance <= 4) 0 else std.math.log2_int(usize, distance - 1) - 1;
-    return length_bits + 5 + distance_extra;
+    return profitability.accept(input, pos, length, distance, minimum, lz77.default_window_len, options.min_savings_bits);
 }

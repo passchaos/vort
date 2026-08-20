@@ -5255,6 +5255,17 @@ architecture blindly.
   32 iterations because 8-iteration sub-millisecond rows proved scheduler-noise
   sensitive despite identical bytes/mixes; the strict `>=1.0` geometric threshold
   remains unchanged.
+- Incremental match profitability now uses fixed-code lower/upper bounds before
+  inspecting replaced literal bytes: if all 8-bit literals already pay the
+  match it accepts immediately, and if even all 9-bit literals cannot pay it
+  rejects immediately. Only the narrow ambiguous interval scans bytes. The
+  proof is isolated in `match_finder/profitability.zig` with exhaustive
+  representative byte/length/distance/savings comparison against the full scan.
+  A same-machine 32-iteration before/after run improved persistent JSON from
+  about `1394` to `1652` MiB/s, source from `1459` to `2087` MiB/s, and repetitive
+  input from `1443` to `2225` MiB/s without changing compressed sizes or CRC
+  mixes. The remaining local zlib-ng lead on JSON/source is now about `1.26x`/
+  `1.28x`, down substantially from the earlier roughly `2x` gap.
 - Added a byte-progressive raw-DEFLATE stored-block decoder under
   `src/deflate/incremental/decoder/`. It preserves split header state, streams
   payload directly caller-to-caller through tiny output, enforces exact/maximum
