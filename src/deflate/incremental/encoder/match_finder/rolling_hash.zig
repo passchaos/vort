@@ -71,14 +71,15 @@ pub const Matcher = struct {
         };
     }
 
-    pub fn planAlloc(
+    pub fn plan(
         self: *Matcher,
         allocator: std.mem.Allocator,
+        tokens: *std.ArrayList(lz77.Token),
         block: []const u8,
         history: []const u8,
         options: lz77.GreedyOptions,
         lazy: bool,
-    ) !lz77.GreedyPlan {
+    ) !struct { tokens: []const lz77.Token, stats: lz77.PlanStats } {
         if (options.window_len == 0 or options.window_len > lz77.default_window_len or
             options.min_match < 3 or options.min_match > 4) return error.InvalidMatch;
         try self.ensureTables(allocator);
@@ -93,8 +94,8 @@ pub const Matcher = struct {
             self.seedBoundary(history, block, anchor_len);
         }
 
-        var tokens = try std.ArrayList(lz77.Token).initCapacity(allocator, @min(block.len, 4096));
-        errdefer tokens.deinit(allocator);
+        tokens.clearRetainingCapacity();
+        try tokens.ensureTotalCapacity(allocator, @min(block.len, 4096));
         var stats: lz77.PlanStats = .{};
 
         var pos: usize = 0;
@@ -156,7 +157,7 @@ pub const Matcher = struct {
             }
         }
         self.absolute_position = std.math.add(usize, self.absolute_position, block.len) catch return error.IntegerOverflow;
-        return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+        return .{ .tokens = tokens.items, .stats = stats };
     }
 
     fn ensureTables(self: *Matcher, allocator: std.mem.Allocator) !void {

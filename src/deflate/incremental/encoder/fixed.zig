@@ -14,6 +14,7 @@ pub fn Encoder(comptime Codec: type) type {
         options: Options,
         state: Codec.State = .{},
         match_finder: rolling_hash.Matcher = .{},
+        plan_tokens: std.ArrayList(Codec.Token) = .empty,
         plain: std.ArrayList(u8) = .empty,
         history: std.ArrayList(u8) = .empty,
         pending: std.ArrayList(u8) = .empty,
@@ -30,6 +31,15 @@ pub fn Encoder(comptime Codec: type) type {
         const Self = @This();
         pub const Error = Codec.Error;
         pub const MatchFinderSnapshot = rolling_hash.Matcher.Snapshot;
+        pub const Snapshot = struct {
+            input_read: usize,
+            output_written: usize,
+            buffered_input: usize,
+            pending_output: usize,
+            retained_token_capacity: usize,
+            finishing: bool,
+            done: bool,
+        };
         pub const Options = struct {
             max_input_len: usize = std.math.maxInt(usize),
             block_len: usize = 32 * 1024,
@@ -66,6 +76,7 @@ pub fn Encoder(comptime Codec: type) type {
         pub fn deinit(self: *Self) void {
             Codec.deinitState(&self.state, self.allocator);
             self.match_finder.deinit(self.allocator);
+            self.plan_tokens.deinit(self.allocator);
             self.plain.deinit(self.allocator);
             self.history.deinit(self.allocator);
             self.pending.deinit(self.allocator);
@@ -75,6 +86,7 @@ pub fn Encoder(comptime Codec: type) type {
             const expected = self.expected_input_len;
             Codec.resetState(&self.state);
             self.match_finder.reset();
+            self.plan_tokens.clearRetainingCapacity();
             self.plain.clearRetainingCapacity();
             self.history.clearRetainingCapacity();
             self.pending.clearRetainingCapacity();
@@ -89,6 +101,17 @@ pub fn Encoder(comptime Codec: type) type {
         }
         pub fn matchFinderSnapshot(self: *const Self) MatchFinderSnapshot {
             return self.match_finder.snapshot();
+        }
+        pub fn snapshot(self: *const Self) Snapshot {
+            return .{
+                .input_read = self.total_input,
+                .output_written = self.total_output,
+                .buffered_input = self.plain.items.len,
+                .pending_output = self.pending.items.len - self.pending_offset,
+                .retained_token_capacity = self.plan_tokens.capacity,
+                .finishing = self.finishing,
+                .done = self.done,
+            };
         }
         pub fn flush(self: *Self) void {
             if (!self.finishing and !self.done) self.flush_requested = true;
@@ -189,7 +212,7 @@ pub fn Encoder(comptime Codec: type) type {
                 self.plain.items.len;
             if ((selected_len == 0 and !(final and self.plain.items.len == 0)) or selected_len > self.plain.items.len) return error.InvalidBlockPlan;
             const block = self.plain.items[0..selected_len];
-            try Codec.writeBlock(self.allocator, &self.pending, &self.state, &self.match_finder, block, self.history.items, final, self.options.compression);
+            try Codec.writeBlock(self.allocator, &self.pending, &self.state, &self.match_finder, &self.plan_tokens, block, self.history.items, final, self.options.compression);
             if (block.len >= Codec.history_len) {
                 self.history.clearRetainingCapacity();
                 self.history.appendSliceAssumeCapacity(block[block.len - Codec.history_len ..]);

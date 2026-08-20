@@ -68,6 +68,7 @@ pub const RawDeflateIncrementalStoredEncoder = incremental_stored_encoder.Encode
 const IncrementalFixedEncoderCodec = struct {
     pub const Error = deflate.Error || std.mem.Allocator.Error;
     pub const CompressionOptions = deflate.CompressionOptions;
+    pub const Token = lz77.Token;
     pub const history_len = lz77.default_window_len;
     pub const State = bitstream.BitWriter;
 
@@ -79,19 +80,19 @@ const IncrementalFixedEncoderCodec = struct {
         state.scratch = 0;
         state.bit_index = 0;
     }
-    pub fn writeBlock(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State, matcher: *incremental_rolling_hash.Matcher, block: []const u8, history: []const u8, final: bool, options: IncrementalFixedEncoderCodec.CompressionOptions) IncrementalFixedEncoderCodec.Error!void {
-        const rolling_parser = rollingParser(options);
-        const plan = if (rolling_parser) |parser|
-            try matcher.planAlloc(allocator, block, history, normalizeOptionsForStrategy(options).lz77_options, parser == .lazy)
-        else blk: {
-            break :blk if (history.len == 0)
+    pub fn writeBlock(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State, matcher: *incremental_rolling_hash.Matcher, plan_tokens: *std.ArrayList(lz77.Token), block: []const u8, history: []const u8, final: bool, options: IncrementalFixedEncoderCodec.CompressionOptions) IncrementalFixedEncoderCodec.Error!void {
+        if (rollingParser(options)) |parser| {
+            const plan = try matcher.plan(allocator, plan_tokens, block, history, normalizeOptionsForStrategy(options).lz77_options, parser == .lazy);
+            try writeFixedTokens(allocator, state, plan.tokens, final);
+        } else {
+            const plan = if (history.len == 0)
                 try planTokensAlloc(allocator, block, options)
             else
                 try planTokensWithDictionaryAlloc(allocator, block, history, options);
-        };
-        defer plan.deinit(allocator);
-        try writeFixedTokens(allocator, state, plan.tokens, final);
-        if (rolling_parser == null) try matcher.observeUnindexedBlock(block.len, history.len);
+            defer plan.deinit(allocator);
+            try writeFixedTokens(allocator, state, plan.tokens, final);
+            try matcher.observeUnindexedBlock(block.len, history.len);
+        }
         try drainWriterBytes(allocator, pending, state);
     }
     pub fn writeSyncFlush(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) IncrementalFixedEncoderCodec.Error!void {
@@ -121,6 +122,7 @@ pub const RawDeflateIncrementalFixedEncoder = incremental_fixed_encoder.Encoder(
 const IncrementalBestEncoderCodec = struct {
     pub const Error = deflate.Error || std.mem.Allocator.Error;
     pub const CompressionOptions = deflate.CompressionOptions;
+    pub const Token = lz77.Token;
     pub const history_len = lz77.default_window_len;
     pub const State = bitstream.BitWriter;
 
@@ -130,7 +132,7 @@ const IncrementalBestEncoderCodec = struct {
     pub fn resetState(state: *State) void {
         IncrementalFixedEncoderCodec.resetState(state);
     }
-    pub fn writeBlock(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State, matcher: *incremental_rolling_hash.Matcher, block: []const u8, history: []const u8, final: bool, options: IncrementalBestEncoderCodec.CompressionOptions) IncrementalBestEncoderCodec.Error!void {
+    pub fn writeBlock(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State, matcher: *incremental_rolling_hash.Matcher, plan_tokens: *std.ArrayList(lz77.Token), block: []const u8, history: []const u8, final: bool, options: IncrementalBestEncoderCodec.CompressionOptions) IncrementalBestEncoderCodec.Error!void {
         if (usesStoredFastPath(block, options) and !sampledHistoryMatch(block, history)) {
             // Incompressible blocks should not pay for a match plan that the
             // stored/fixed/dynamic selector will immediately discard. A sparse
@@ -141,18 +143,18 @@ const IncrementalBestEncoderCodec = struct {
             try drainWriterBytes(allocator, pending, state);
             return;
         }
-        const rolling_parser = rollingParser(options);
-        const plan = if (rolling_parser) |parser|
-            try matcher.planAlloc(allocator, block, history, normalizeOptionsForStrategy(options).lz77_options, parser == .lazy)
-        else blk: {
-            break :blk if (history.len == 0)
+        if (rollingParser(options)) |parser| {
+            const plan = try matcher.plan(allocator, plan_tokens, block, history, normalizeOptionsForStrategy(options).lz77_options, parser == .lazy);
+            try writeBestTokensBlock(allocator, state, block, plan.tokens, final, options);
+        } else {
+            const plan = if (history.len == 0)
                 try planTokensAlloc(allocator, block, options)
             else
                 try planTokensWithDictionaryAlloc(allocator, block, history, options);
-        };
-        defer plan.deinit(allocator);
-        try writeBestTokensBlock(allocator, state, block, plan.tokens, final, options);
-        if (rolling_parser == null) try matcher.observeUnindexedBlock(block.len, history.len);
+            defer plan.deinit(allocator);
+            try writeBestTokensBlock(allocator, state, block, plan.tokens, final, options);
+            try matcher.observeUnindexedBlock(block.len, history.len);
+        }
         try drainWriterBytes(allocator, pending, state);
     }
     pub fn writeSyncFlush(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) IncrementalBestEncoderCodec.Error!void {

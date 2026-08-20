@@ -5255,6 +5255,14 @@ architecture blindly.
   32 iterations because 8-iteration sub-millisecond rows proved scheduler-noise
   sensitive despite identical bytes/mixes; the strict `>=1.0` geometric threshold
   remains unchanged.
+- Incremental raw fixed/best state now owns a reusable token buffer alongside
+  the persistent matcher. Rolling plans borrow that buffer instead of allocating
+  a token list, converting it to an owned slice, and freeing it for every block;
+  reset clears the length while retaining capacity. Encoder snapshots expose the
+  retained capacity and tests pin its reuse plus byte-identical reset output. In
+  the latest local 32-run zlib-ng comparison, source reached about `2268` MiB/s
+  versus zlib-ng `2702` (remaining gap ~`1.19x`), repetitive `2300` versus `3058`,
+  and cross-window `487` versus `67`, with unchanged sizes and CRC mixes.
 - Incremental match profitability now uses fixed-code lower/upper bounds before
   inspecting replaced literal bytes: if all 8-bit literals already pay the
   match it accepts immediately, and if even all 9-bit literals cannot pay it

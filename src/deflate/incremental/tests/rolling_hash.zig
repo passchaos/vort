@@ -19,19 +19,23 @@ test "raw deflate incremental hash encoder persists index across blocks and rese
     try std.testing.expectEqualSlices(u8, payload, decoded);
 
     const used = encoder.matchFinderSnapshot();
+    const encoder_used = encoder.snapshot();
     try std.testing.expect(used.initialized);
     try std.testing.expectEqual(payload.len, used.absolute_position);
     try std.testing.expect(used.indexed_positions > 0);
     try std.testing.expectEqual(@as(usize, 3 * 32 * 1024), used.table_entries);
+    try std.testing.expect(encoder_used.retained_token_capacity > 0);
 
     encoder.reset();
     const reset = encoder.matchFinderSnapshot();
+    const encoder_reset = encoder.snapshot();
     try std.testing.expect(!reset.initialized);
     try std.testing.expectEqual(@as(usize, 0), reset.absolute_position);
     try std.testing.expectEqual(@as(usize, 0), reset.indexed_positions);
     // Reset advances an epoch and retains caller-paid table capacity rather
     // than clearing/reallocating the persistent index.
     try std.testing.expectEqual(used.table_entries, reset.table_entries);
+    try std.testing.expectEqual(encoder_used.retained_token_capacity, encoder_reset.retained_token_capacity);
 
     const encoded_again = try encodeStream(&encoder, payload);
     defer std.testing.allocator.free(encoded_again);
