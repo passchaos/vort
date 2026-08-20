@@ -5341,6 +5341,15 @@ architecture blindly.
   path now avoids the `plain` copy only for contiguous non-final blocks with no
   adaptive split or lookahead; history remains caller-independent before
   `step` returns.
+- The incremental DEFLATE benchmark accepts an optional corpus name after the
+  iteration count, allowing long source-only or JSON-only matcher experiments
+  without paying for unrelated competitor rows. A source-only `perf` profile
+  confirmed rolling `findBest`/match-length as the largest Vort matcher hotspot
+  and dynamic tree construction as the next major stage. Two plausible local
+  changes—pointer-indexed match comparison and contiguous first-window seeding—
+  were both rejected after 2048/4096-iteration A/B runs failed to show stable
+  gains. The filter is retained as reproducible tooling; neither speculative
+  matcher change remains in production.
 - Added a byte-progressive raw-DEFLATE stored-block decoder under
   `src/deflate/incremental/decoder/`. It preserves split header state, streams
   payload directly caller-to-caller through tiny output, enforces exact/maximum

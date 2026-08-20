@@ -28,6 +28,7 @@ pub fn main(init: std.process.Init) !void {
     defer args.deinit();
     _ = args.next();
     const iterations = if (args.next()) |text| try std.fmt.parseInt(usize, text, 10) else default_iterations;
+    const case_filter = args.next();
     if (args.next() != null or iterations == 0) return error.InvalidBlockPlan;
 
     const cases = try buildCases(init.gpa);
@@ -47,7 +48,12 @@ pub fn main(init: std.process.Init) !void {
     var stdout_writer = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     const stdout = &stdout_writer.interface;
     try stdout.writeAll("case,mode,input_bytes,output_bytes,iterations,elapsed_s,throughput_mib_s,mix\n");
+    var matched_case = case_filter == null;
     for (cases) |case| {
+        if (case_filter) |filter| {
+            if (!std.mem.eql(u8, case.name, filter)) continue;
+            matched_case = true;
+        }
         const compression = compressionForCase(case.name, options);
         persistent.options.compression = compression;
         const rows = [_]Row{
@@ -66,6 +72,7 @@ pub fn main(init: std.process.Init) !void {
             try writeRow(stdout, profile.reset);
         }
     }
+    if (!matched_case) return error.InvalidBlockPlan;
     try stdout.flush();
 }
 
