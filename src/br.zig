@@ -436,7 +436,7 @@ pub fn encodeAbabaPatternStreamAlloc(allocator: std.mem.Allocator, first: u8, se
 }
 
 pub fn encodeAlternatingStreamAlloc(allocator: std.mem.Allocator, first: u8, second: u8, len: usize) Error![]u8 {
-    if (first == second or len < 5 or len > 135) return error.InvalidBlockPlan;
+    if (first == second or len < 5 or len > 327) return error.InvalidBlockPlan;
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
     var writer = BitWriter{ .out = &out };
@@ -523,7 +523,7 @@ fn isRleInput(input: []const u8) bool {
 }
 
 fn alternatingLength(input: []const u8) ?usize {
-    if (input.len < 5 or input.len > 135 or input[0] == input[1]) return null;
+    if (input.len < 5 or input.len > 327 or input[0] == input[1]) return null;
     for (input, 0..) |byte, i|
         if (byte != input[i & 1]) return null;
     return input.len;
@@ -5388,7 +5388,7 @@ test "br proven ababa encoder slice round trips" {
     defer std.testing.allocator.free(binary_decoded);
     try std.testing.expectEqualSlices(u8, &.{ 0, 0xff, 0, 0xff, 0 }, binary_decoded);
     try std.testing.expectError(error.InvalidBlockPlan, encodeAbabaPatternStreamAlloc(std.testing.allocator, 'x', 'x'));
-    inline for (5..136) |len| {
+    inline for (.{ 5, 6, 11, 13, 23, 39, 71, 72, 73, 103, 135, 136, 137, 199, 255, 327 }) |len| {
         const alternating = try encodeAlternatingStreamAlloc(std.testing.allocator, 'x', 'y', len);
         defer std.testing.allocator.free(alternating);
         const alternating_decoded = try decodeStreamAlloc(std.testing.allocator, alternating);
