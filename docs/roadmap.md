@@ -5143,6 +5143,12 @@ architecture blindly.
   accepted partial block as non-final, drains through arbitrary caller output,
   acknowledges completion with `need_input`, preserves rolling history for
   subsequent writes, and treats repeated empty flushes as idempotent. Encoder
+  instances can now reuse retained history/index/block buffers for independent
+  frames through `nextFrame` variants. Each frame may change raw/entropy
+  selection, checksum/content-size pledge, and preset dictionary; frame-local
+  entropy/history/checksum state resets while snapshots retain cumulative bytes
+  and frame count/index. Mixed entropy plus dictionary-backed concatenation is
+  decoded through a dictionary set and covered by the root facade.
   state and helpers now live under `src/zstd/incremental/encoder/` instead of
   expanding the incremental directory as a flat list.
 - Extended the same resumable, idempotent flush contract to the LZ4 and framed

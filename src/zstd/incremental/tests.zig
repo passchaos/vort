@@ -289,6 +289,44 @@ test "Zstd incremental frame encoder flushes and resumes through tiny output" {
     try std.testing.expectEqualSlices(u8, "after flush reset", reset_decoded);
 }
 
+test "Zstd incremental encoder continues mixed dictionary frames" {
+    const first = "first entropy Zstd frame alpha beta gamma" ** 32;
+    const dictionary = zstd.NativeDictionary.init(0x5172_93a4, "second-zstd-dictionary-prefix");
+    const second = "second-zstd-dictionary-prefix payload" ** 24;
+    const first_options: zstd.NativeFrameOptions = .{
+        .include_content_size = true,
+        .content_checksum = true,
+        .selection = .auto,
+        .block_size_max = 1024,
+    };
+    var encoder = try zstd.NativeIncrementalFrameEncoder.initExactSize(std.testing.allocator, first_options, first.len);
+    defer encoder.deinit();
+    const first_frame = try encodeSplit(&encoder, first);
+    defer std.testing.allocator.free(first_frame);
+    var second_options = first_options;
+    second_options.selection = .literal_only;
+    second_options.dictionary_id = dictionary.id;
+    try encoder.nextFrameExactSizeWithPresetDictionary(second_options, second.len, dictionary);
+    const second_frame = try encodeSplit(&encoder, second);
+    defer std.testing.allocator.free(second_frame);
+    try std.testing.expectEqual(@as(usize, 2), encoder.snapshot().frame_count);
+    try std.testing.expectEqual(first.len + second.len, encoder.snapshot().input_read);
+
+    var stream: std.ArrayList(u8) = .empty;
+    defer stream.deinit(std.testing.allocator);
+    try stream.appendSlice(std.testing.allocator, first_frame);
+    try stream.appendSlice(std.testing.allocator, second_frame);
+    const set = try zstd.NativeDictionarySet.initChecked(&.{dictionary});
+    const decoded = try zstd.decodeNativeConcatenatedFrameAllocWithDictionarySetExactSize(
+        std.testing.allocator,
+        stream.items,
+        set,
+        first.len + second.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, first ++ second, decoded);
+}
+
 fn encodeSplit(encoder: *zstd.NativeIncrementalFrameEncoder, payload: []const u8) ![]u8 {
     var frame: std.ArrayList(u8) = .empty;
     errdefer frame.deinit(std.testing.allocator);

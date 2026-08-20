@@ -25,9 +25,24 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
         dictionary: ?Codec.Dictionary = null,
         codec_state: Codec.State = .{},
         history: history_mod.Rolling = .{},
+        stream_input: usize = 0,
+        stream_output: usize = 0,
+        frame_count: usize = 0,
 
         const Self = @This();
         pub const Error = Codec.Error;
+        pub const Snapshot = struct {
+            input_read: usize,
+            output_written: usize,
+            frame_input: usize,
+            frame_output: usize,
+            buffered_input: usize,
+            pending_output: usize,
+            frame_count: usize,
+            frame_index: usize,
+            finishing: bool,
+            done: bool,
+        };
         pub fn init(allocator: std.mem.Allocator, options: Codec.Options) Error!Self {
             try Codec.validate(options, null, null);
             return .{ .allocator = allocator, .options = options };
@@ -79,6 +94,13 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
         }
         pub fn reset(self: *Self) void {
             const expected_input_len = self.expected_input_len;
+            self.stream_input = 0;
+            self.stream_output = 0;
+            self.frame_count = 0;
+            self.resetFrame(self.options, expected_input_len, self.dictionary_id, self.dictionary);
+        }
+        fn resetFrame(self: *Self, options: Codec.Options, expected_input_len: ?usize, dictionary_id: ?u32, dictionary: ?Codec.Dictionary) void {
+            self.options = options;
             self.block.clearRetainingCapacity();
             self.pending.clearRetainingCapacity();
             self.pending_offset = 0;
@@ -93,6 +115,38 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
             self.expected_input_len = expected_input_len;
             self.codec_state = .{};
             self.history.clearRetainingCapacity();
+            self.dictionary_id = dictionary_id;
+            self.dictionary = dictionary;
+        }
+        pub fn nextFrame(self: *Self, options: Codec.Options) Error!void {
+            if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
+            try Codec.validate(options, null, null);
+            self.resetFrame(options, null, null, null);
+        }
+        pub fn nextFrameExactSize(self: *Self, options: Codec.Options, expected_input_len: usize) Error!void {
+            if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
+            try Codec.validate(options, expected_input_len, null);
+            self.resetFrame(options, expected_input_len, null, null);
+        }
+        pub fn nextFrameExactSizeWithPresetDictionary(self: *Self, options: Codec.Options, expected_input_len: usize, dictionary: Codec.Dictionary) Error!void {
+            if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
+            if (dictionary.id == 0) return error.NeedDictionary;
+            try Codec.validate(options, expected_input_len, dictionary.id);
+            self.resetFrame(options, expected_input_len, dictionary.id, dictionary);
+        }
+        pub fn snapshot(self: *const Self) Snapshot {
+            return .{
+                .input_read = self.stream_input,
+                .output_written = self.stream_output,
+                .frame_input = self.total_input,
+                .frame_output = self.total_output,
+                .buffered_input = self.block.items.len,
+                .pending_output = self.pending.items.len - self.pending_offset,
+                .frame_count = self.frame_count,
+                .frame_index = if (self.done and self.frame_count != 0) self.frame_count - 1 else self.frame_count,
+                .finishing = self.finishing,
+                .done = self.done,
+            };
         }
         pub fn finish(self: *Self) void {
             self.finishing = true;
@@ -121,6 +175,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
                     self.pending_offset += n;
                     output_written += n;
                     self.total_output += n;
+                    self.stream_output += n;
                     if (self.pending_offset != self.pending.items.len) return result(input_read, output_written, .need_output);
                     self.pending.clearRetainingCapacity();
                     self.pending_offset = 0;
@@ -139,6 +194,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
                     if (self.options.content_checksum) self.hasher.update(bytes);
                     input_read += n;
                     self.total_input += n;
+                    self.stream_input += n;
                     if (self.expected_input_len) |expected| {
                         if (self.total_input > expected) return error.SizeMismatch;
                     }
@@ -171,6 +227,7 @@ pub fn Encoder(comptime Codec: type, comptime BlockEmitter: type) type {
                     continue;
                 }
                 if (self.finishing) {
+                    self.frame_count += 1;
                     self.done = true;
                     return result(input_read, output_written, .done);
                 }

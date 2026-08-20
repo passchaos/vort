@@ -804,6 +804,17 @@ pub const ZstdNativeFrameEncodeIntoResult = zstd.NativeFrameEncodeIntoResult;
 pub const ZstdNativeFrameEncodeScratchResult = zstd.NativeFrameEncodeScratchResult;
 pub const ZstdNativeFrameEncoder = zstd.NativeFrameEncoder;
 pub const ZstdNativeIncrementalFrameEncoder = zstd.NativeIncrementalFrameEncoder;
+
+test "root Zstd incremental encoder continues frames" {
+    var encoder = try ZstdNativeIncrementalFrameEncoder.initExactSize(std.testing.allocator, .{ .include_content_size = true }, 3);
+    defer encoder.deinit();
+    var output: [128]u8 = undefined;
+    _ = try encoder.step("one", &output);
+    encoder.finish();
+    while ((try encoder.step("", &output)).status != .done) {}
+    try encoder.nextFrameExactSize(.{ .include_content_size = true }, 3);
+    try std.testing.expectEqual(@as(usize, 1), encoder.snapshot().frame_index);
+}
 pub const ZstdNativeFrameDecoder = zstd.NativeFrameDecoder;
 pub const ZstdNativeIncrementalFrameDecoder = zstd.NativeIncrementalFrameDecoder;
 pub const ZstdNativeDictionary = zstd.NativeDictionary;
