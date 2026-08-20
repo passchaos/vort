@@ -483,6 +483,60 @@ fn encodeRawBestTestStream(encoder: *deflate.RawDeflateIncrementalBestEncoder, p
     return try encoded.toOwnedSlice(std.testing.allocator);
 }
 
+test "raw deflate incremental direct blocks match buffered input" {
+    const payload = ("direct incremental source-like payload alpha beta gamma delta\n" ** 2400);
+    var options = deflate.optionsForLevel(.default);
+    options.block_selection = .stored_fixed_dynamic;
+    var direct = deflate.RawDeflateIncrementalBestEncoder.initWithOptions(std.testing.allocator, .{
+        .block_len = 32 * 1024,
+        .compression = options,
+    });
+    defer direct.deinit();
+    const direct_encoded = try encodeRawBestSingleInput(&direct, payload);
+    defer std.testing.allocator.free(direct_encoded);
+
+    var buffered = deflate.RawDeflateIncrementalBestEncoder.initWithOptions(std.testing.allocator, .{
+        .block_len = 32 * 1024,
+        .compression = options,
+    });
+    defer buffered.deinit();
+    const buffered_encoded = try encodeRawBestTestStream(&buffered, payload);
+    defer std.testing.allocator.free(buffered_encoded);
+    try std.testing.expectEqualSlices(u8, buffered_encoded, direct_encoded);
+}
+
+test "raw deflate incremental direct path preserves low entropy coalescing" {
+    const payload = "a" ** (256 * 1024);
+    var encoder = deflate.RawDeflateIncrementalBestEncoder.initWithOptions(std.testing.allocator, .{
+        .block_len = 32 * 1024,
+        .low_entropy_block_len = payload.len,
+        .compression = deflate.optionsForLevel(.default),
+    });
+    defer encoder.deinit();
+    const encoded = try encodeRawBestSingleInput(&encoder, payload);
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expectEqual(@as(usize, 271), encoded.len);
+}
+
+fn encodeRawBestSingleInput(encoder: *deflate.RawDeflateIncrementalBestEncoder, payload: []const u8) ![]u8 {
+    var encoded: std.ArrayList(u8) = .empty;
+    errdefer encoded.deinit(std.testing.allocator);
+    var scratch: [4096]u8 = undefined;
+    var offset: usize = 0;
+    while (offset < payload.len) {
+        const result = try encoder.step(payload[offset..], &scratch);
+        offset += result.progress.input_read;
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    return encoded.toOwnedSlice(std.testing.allocator);
+}
+
 test "raw deflate incremental lookahead preserves boundary matches" {
     const phrase = "cross-boundary-match-abcdefghijklmnopqrstuvwxyz";
     const first = ("history-padding-" ** 20) ++ phrase;

@@ -5333,6 +5333,14 @@ architecture blindly.
   caller-input planning trials did not improve aggregate throughput (and the
   latter defeated low-entropy block coalescing), so both were rejected rather
   than adding complexity without reproducible benefit.
+- Revisited direct caller-input planning with an explicit low-entropy guard and
+  byte-identical buffered-path tests. Alternating 128/256-iteration A/B runs
+  showed repeatable gains of roughly `4.5-4.9%` on JSON/source, about `0.4-1.0%`
+  on binary and exact-window repetition, while low-entropy input deliberately
+  stays on the coalescing path and retains its `271`-byte result. The direct
+  path now avoids the `plain` copy only for contiguous non-final blocks with no
+  adaptive split or lookahead; history remains caller-independent before
+  `step` returns.
 - Added a byte-progressive raw-DEFLATE stored-block decoder under
   `src/deflate/incremental/decoder/`. It preserves split header state, streams
   payload directly caller-to-caller through tiny output, enforces exact/maximum

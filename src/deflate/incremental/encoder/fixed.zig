@@ -150,6 +150,21 @@ pub fn Encoder(comptime Codec: type) type {
                 const block_target = self.activeBlockTarget(base_block_target);
                 const block_capacity = std.math.add(usize, block_target, self.options.lookahead_len) catch return error.IntegerOverflow;
                 const room = block_capacity - self.plain.items.len;
+                if (self.canWriteDirectBlock(input[input_read..], base_block_target, block_capacity)) {
+                    // The complete non-final block already lives contiguously
+                    // in caller input. Plan and emit it in place instead of
+                    // copying it into `plain`; retainHistory copies the owned
+                    // window before this call returns. Low-entropy prefixes
+                    // still take the buffered coalescing path.
+                    const block = input[input_read..][0..block_capacity];
+                    try self.writeDirectBlock(block);
+                    input_read += block.len;
+                    self.total_input += block.len;
+                    if (self.expected_input_len) |expected| {
+                        if (self.total_input > expected) return error.SizeMismatch;
+                    }
+                    continue;
+                }
                 const n = @min(room, input.len - input_read);
                 if (n != 0) {
                     try self.plain.appendSlice(self.allocator, input[input_read..][0..n]);
@@ -192,12 +207,24 @@ pub fn Encoder(comptime Codec: type) type {
             }
         }
 
+        fn canWriteDirectBlock(self: *const Self, input: []const u8, base_target: usize, block_capacity: usize) bool {
+            if (self.plain.items.len != 0 or
+                self.options.adaptive_blocks or
+                self.options.lookahead_len != 0 or
+                block_capacity != base_target or
+                input.len <= block_capacity) return false;
+            if (self.options.low_entropy_block_len == 0) return true;
+            return uniqueByteCount(input[0..block_capacity]) > 4;
+        }
+
+        fn writeDirectBlock(self: *Self, block: []const u8) Error!void {
+            try self.prepareHistory();
+            try Codec.writeBlock(self.allocator, &self.pending, &self.state, &self.match_finder, &self.plan_tokens, block, self.history.items, false, self.options.compression);
+            self.retainHistory(block);
+        }
+
         fn writeDataBlock(self: *Self, final: bool) Error!void {
-            try self.history.ensureTotalCapacity(self.allocator, Codec.history_len);
-            if (self.history.items.len == 0 and self.dictionary.len != 0) {
-                const keep = @min(self.dictionary.len, Codec.history_len);
-                self.history.appendSliceAssumeCapacity(self.dictionary[self.dictionary.len - keep ..]);
-            }
+            try self.prepareHistory();
             const selected_len = if (!final and !self.flush_requested and self.options.lookahead_len != 0)
                 try Codec.chooseLookaheadLen(
                     self.allocator,
@@ -213,6 +240,22 @@ pub fn Encoder(comptime Codec: type) type {
             if ((selected_len == 0 and !(final and self.plain.items.len == 0)) or selected_len > self.plain.items.len) return error.InvalidBlockPlan;
             const block = self.plain.items[0..selected_len];
             try Codec.writeBlock(self.allocator, &self.pending, &self.state, &self.match_finder, &self.plan_tokens, block, self.history.items, final, self.options.compression);
+            self.retainHistory(block);
+            if (selected_len == self.plain.items.len) {
+                self.plain.clearRetainingCapacity();
+            } else {
+                std.mem.copyForwards(u8, self.plain.items[0 .. self.plain.items.len - selected_len], self.plain.items[selected_len..]);
+                self.plain.items.len -= selected_len;
+            }
+        }
+        fn prepareHistory(self: *Self) Error!void {
+            try self.history.ensureTotalCapacity(self.allocator, Codec.history_len);
+            if (self.history.items.len == 0 and self.dictionary.len != 0) {
+                const keep = @min(self.dictionary.len, Codec.history_len);
+                self.history.appendSliceAssumeCapacity(self.dictionary[self.dictionary.len - keep ..]);
+            }
+        }
+        fn retainHistory(self: *Self, block: []const u8) void {
             if (block.len >= Codec.history_len) {
                 self.history.clearRetainingCapacity();
                 self.history.appendSliceAssumeCapacity(block[block.len - Codec.history_len ..]);
@@ -222,12 +265,6 @@ pub fn Encoder(comptime Codec: type) type {
                 std.mem.copyForwards(u8, self.history.items[0..keep], self.history.items[start..]);
                 self.history.items.len = keep;
                 self.history.appendSliceAssumeCapacity(block);
-            }
-            if (selected_len == self.plain.items.len) {
-                self.plain.clearRetainingCapacity();
-            } else {
-                std.mem.copyForwards(u8, self.plain.items[0 .. self.plain.items.len - selected_len], self.plain.items[selected_len..]);
-                self.plain.items.len -= selected_len;
             }
         }
         fn blockTarget(self: *const Self) Error!usize {
