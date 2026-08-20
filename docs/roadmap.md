@@ -5493,3 +5493,5 @@ architecture blindly.
   accepted content, drain them through tiny output, and resume content in the
   same bitstream. Caller metadata remains borrowed only until `need_input`; a
   payload-metadata-payload round trip validates captured event bytes/boundary.
+  Snapshots expose pending metadata length and flush state, while duplicate or
+  post-finish requests fail deterministically.

@@ -140,6 +140,7 @@ test "incremental stored encoder enforces limits and finish" {
     encoder.reset();
     _ = try encoder.step("abc", &.{});
     try encoder.finish();
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.writeMetadata("late"));
     try std.testing.expectError(error.TrailingData, encoder.step("x", &.{}));
 }
 
@@ -247,11 +248,16 @@ test "incremental stored encoder inserts metadata between payloads" {
         try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
     }
     try encoder.writeMetadata(metadata);
+    try std.testing.expect(encoder.snapshot().metadata_pending);
+    try std.testing.expectEqual(metadata.len, encoder.snapshot().metadata_bytes);
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.writeMetadata("duplicate"));
     while (true) {
         const result = try encoder.step("", &scratch);
         try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
         if (result.status == .need_input) break;
     }
+    try std.testing.expect(!encoder.snapshot().metadata_pending);
+    try std.testing.expect(!encoder.snapshot().flush_requested);
     var second_offset: usize = 0;
     while (second_offset < second.len) {
         const result = try encoder.step(second[second_offset..], &scratch);

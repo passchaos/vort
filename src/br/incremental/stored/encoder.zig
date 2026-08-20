@@ -41,6 +41,9 @@ pub fn Encoder(comptime Codec: type) type {
             pending_output: usize,
             stream_count: usize,
             stream_index: usize,
+            metadata_pending: bool,
+            metadata_bytes: usize,
+            flush_requested: bool,
             finishing: bool,
             done: bool,
         };
@@ -92,6 +95,9 @@ pub fn Encoder(comptime Codec: type) type {
                 .pending_output = self.pending.items.len - self.pending_offset,
                 .stream_count = self.stream_count,
                 .stream_index = if (self.done and self.stream_count != 0) self.stream_count - 1 else self.stream_count,
+                .metadata_pending = self.metadata_requested,
+                .metadata_bytes = if (self.metadata_requested) self.pending_metadata.len else 0,
+                .flush_requested = self.flush_requested,
                 .finishing = self.finishing,
                 .done = self.done,
             };
