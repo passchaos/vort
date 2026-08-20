@@ -5666,3 +5666,9 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   49.1/42.8/73.8 MiB/s for JSON/source/log with byte-identical output; variance
   remains high enough that this is recorded as a structural hot-path reduction,
   not an across-the-board speed claim.
+  The transient `PlannedWireCommand[]` materialization is removed: frequency
+  collection and final emission now derive indexed command/distance metadata
+  directly from the typed command plan in two passes. This eliminates one
+  allocation and one command-sized copy while preserving byte-identical wire;
+  short A/B samples improved, but the 100-iteration run remained scheduler-noisy
+  and is therefore recorded as a structural allocation reduction only.

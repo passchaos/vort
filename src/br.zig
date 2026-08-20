@@ -719,31 +719,17 @@ fn writeCommandLengthExtras(allocator: std.mem.Allocator, writer: *BitWriter, co
         try writer.writeBits(allocator, copy_len - command.command.copy_base, command.command.copy_extra_bits);
 }
 
-const PlannedWireCommand = struct {
-    plan: command_plan.Command,
-    encoding: CommandEncoding,
-    distance_symbol: u16 = 0,
-    distance_extra: u32 = 0,
-    distance_extra_bits: u5 = 0,
-};
-
 fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command) Error![]u8 {
     if (commands.len == 0) return error.InvalidBlockPlan;
-    const wire = try allocator.alloc(PlannedWireCommand, commands.len);
-    defer allocator.free(wire);
     var literal_frequencies: [256]u32 = @splat(0);
     var command_frequencies: [704]u32 = @splat(0);
     var distance_frequencies: [max_distance_alphabet_size]u32 = @splat(0);
-    for (commands, 0..) |command, i| {
+    for (commands) |command| {
         const encoding = commandEntryForLengths(command.insert_len, command.copy_len) orelse return error.InvalidBlockPlan;
-        wire[i] = .{ .plan = command, .encoding = encoding };
         command_frequencies[encoding.symbol] += 1;
         for (input[command.insert_start..][0..command.insert_len]) |literal| literal_frequencies[literal] += 1;
         if (!command.has_copy) continue;
         const distance = encoder_distance.encode(command.distance, 15) orelse return error.InvalidBlockPlan;
-        wire[i].distance_symbol = distance.symbol;
-        wire[i].distance_extra = distance.extra;
-        wire[i].distance_extra_bits = distance.extra_bits;
         distance_frequencies[distance.symbol] += 1;
     }
     const literal_alphabet = try command_plan.alphabetFromFrequencies(256, &literal_frequencies);
@@ -764,16 +750,18 @@ fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, comma
     const command_encoder = try huffman.HuffmanTable(704).Encoder.init(&command_lengths);
     const distance_lengths = try distance_alphabet.codeLengths(max_distance_alphabet_size);
     const distance_encoder = try huffman.HuffmanTable(max_distance_alphabet_size).Encoder.init(&distance_lengths);
-    for (wire) |item| {
-        if (command_alphabet.len > 1) try writer.writeBits(allocator, command_encoder.codes[item.encoding.symbol], command_encoder.bits[item.encoding.symbol]);
-        try writeCommandLengthExtras(allocator, &writer, item.encoding, item.plan.insert_len, item.plan.copy_len);
-        for (input[item.plan.insert_start..][0..item.plan.insert_len]) |literal|
+    for (commands) |command| {
+        const encoding = commandEntryForLengths(command.insert_len, command.copy_len) orelse unreachable;
+        if (command_alphabet.len > 1) try writer.writeBits(allocator, command_encoder.codes[encoding.symbol], command_encoder.bits[encoding.symbol]);
+        try writeCommandLengthExtras(allocator, &writer, encoding, command.insert_len, command.copy_len);
+        for (input[command.insert_start..][0..command.insert_len]) |literal|
             if (literal_alphabet.len > 1) try writer.writeBits(allocator, literal_encoder.codes[literal], literal_encoder.bits[literal]);
-        if (item.plan.has_copy and item.encoding.command.distance_code == -1) {
+        if (command.has_copy and encoding.command.distance_code == -1) {
+            const distance = encoder_distance.encode(command.distance, 15) orelse unreachable;
             if (distance_alphabet.len > 1)
-                try writer.writeBits(allocator, distance_encoder.codes[item.distance_symbol], distance_encoder.bits[item.distance_symbol]);
-            if (item.distance_extra_bits != 0)
-                try writer.writeBits(allocator, item.distance_extra, item.distance_extra_bits);
+                try writer.writeBits(allocator, distance_encoder.codes[distance.symbol], distance_encoder.bits[distance.symbol]);
+            if (distance.extra_bits != 0)
+                try writer.writeBits(allocator, distance.extra, distance.extra_bits);
         }
     }
     if (writer.bit_index != 0) writer.alignToByte();
