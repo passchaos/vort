@@ -13,6 +13,8 @@ pub fn main(init: std.process.Init) !void {
         try vort.brEncodeAbabaStreamAlloc(init.gpa)
     else if (std.mem.eql(u8, mode, "binary-ababa"))
         try vort.brEncodeAbabaPatternStreamAlloc(init.gpa, 0, 0xff)
+    else if (std.mem.startsWith(u8, mode, "alternating-"))
+        try vort.brEncodeAlternatingStreamAlloc(init.gpa, 'x', 'y', try std.fmt.parseInt(usize, mode["alternating-".len..], 10))
     else
         return error.InvalidBlockPlan;
     defer init.gpa.free(encoded);

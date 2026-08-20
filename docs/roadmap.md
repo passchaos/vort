@@ -5548,6 +5548,9 @@ architecture blindly.
   and yielding an 11-byte interoperable compressed stream. The parameterized
   `encodeAbabaPatternStreamAlloc(first,second)` supports any distinct byte pair;
   both ASCII and binary `00 ff 00 ff 00` patterns pass Vort and Node decoding.
+  The same externally gated command shape now covers odd alternating lengths
+  `5,7,9,11` through `encodeAlternatingStreamAlloc`; `encodeSimpleStream` selects
+  these patterns automatically and otherwise retains its stored fallback.
   `encodeSimpleStream` provides a safe general entry point over this initial
   slice: eligible runs use compressed RLE, while all other inputs deterministically
   fall back to the mature stored encoder. Alloc/append/into/bound and root APIs

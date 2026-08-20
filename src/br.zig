@@ -431,7 +431,11 @@ pub fn encodeAbabaStreamAlloc(allocator: std.mem.Allocator) Error![]u8 {
 }
 
 pub fn encodeAbabaPatternStreamAlloc(allocator: std.mem.Allocator, first: u8, second: u8) Error![]u8 {
-    if (first == second) return error.InvalidBlockPlan;
+    return encodeAlternatingStreamAlloc(allocator, first, second, 5);
+}
+
+pub fn encodeAlternatingStreamAlloc(allocator: std.mem.Allocator, first: u8, second: u8, len: usize) Error![]u8 {
+    if (first == second or len < 5 or len > 11 or len & 1 == 0) return error.InvalidBlockPlan;
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
     var writer = BitWriter{ .out = &out };
@@ -439,8 +443,8 @@ pub fn encodeAbabaPatternStreamAlloc(allocator: std.mem.Allocator, first: u8, se
     try writer.writeBits(allocator, 1, 1);
     try writer.writeBits(allocator, 0, 1);
     try writer.writeBits(allocator, 0, 2);
-    try writer.writeBits(allocator, 4, 16);
-    try writeMinimalCompressedHeaderForRegularDistancePattern(allocator, &writer, first, second);
+    try writer.writeBits(allocator, len - 1, 16);
+    try writeMinimalCompressedHeaderForAlternatingPattern(allocator, &writer, first, second, len - 2);
     // Two-symbol simple trees assign code 0/1 by listed symbol order.
     try writer.writeBits(allocator, 0, 1);
     try writer.writeBits(allocator, 1, 1);
@@ -486,19 +490,38 @@ pub fn encodeSimpleStreamAlloc(allocator: std.mem.Allocator, input: []const u8) 
 pub fn encodeSimpleStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) Error!void {
     if (isRleInput(input)) {
         try encodeRleStreamAppend(allocator, out, input);
+    } else if (alternatingLength(input)) |len| {
+        const encoded = try encodeAlternatingStreamAlloc(allocator, input[0], input[1], len);
+        defer allocator.free(encoded);
+        try out.appendSlice(allocator, encoded);
     } else {
         try encodeStoredStreamAppend(allocator, out, input);
     }
 }
 
 pub fn encodeSimpleStreamInto(input: []const u8, output: []u8) Error!usize {
-    return if (isRleInput(input)) encodeRleStreamInto(input, output) else encodeStoredStreamInto(input, output);
+    if (isRleInput(input)) return encodeRleStreamInto(input, output);
+    if (alternatingLength(input)) |len| {
+        const encoded = try encodeAlternatingStreamAlloc(std.heap.smp_allocator, input[0], input[1], len);
+        defer std.heap.smp_allocator.free(encoded);
+        if (output.len < encoded.len) return error.OutOfMemory;
+        @memcpy(output[0..encoded.len], encoded);
+        return encoded.len;
+    }
+    return encodeStoredStreamInto(input, output);
 }
 
 fn isRleInput(input: []const u8) bool {
     if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return false;
     for (input[1..]) |byte| if (byte != input[0]) return false;
     return true;
+}
+
+fn alternatingLength(input: []const u8) ?usize {
+    if (input.len < 5 or input.len > 11 or input.len & 1 == 0 or input[0] == input[1]) return null;
+    for (input, 0..) |byte, i|
+        if (byte != input[i & 1]) return null;
+    return input.len;
 }
 
 fn encodeRleStreamWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8) Error!void {
@@ -5348,6 +5371,15 @@ test "br proven ababa encoder slice round trips" {
     defer std.testing.allocator.free(binary_decoded);
     try std.testing.expectEqualSlices(u8, &.{ 0, 0xff, 0, 0xff, 0 }, binary_decoded);
     try std.testing.expectError(error.InvalidBlockPlan, encodeAbabaPatternStreamAlloc(std.testing.allocator, 'x', 'x'));
+    inline for (.{ 5, 7, 9, 11 }) |len| {
+        const alternating = try encodeAlternatingStreamAlloc(std.testing.allocator, 'x', 'y', len);
+        defer std.testing.allocator.free(alternating);
+        const alternating_decoded = try decodeStreamAlloc(std.testing.allocator, alternating);
+        defer std.testing.allocator.free(alternating_decoded);
+        try std.testing.expectEqual(len, alternating_decoded.len);
+        for (alternating_decoded, 0..) |byte, i| try std.testing.expectEqual(if (i & 1 == 0) @as(u8, 'x') else 'y', byte);
+    }
+    try std.testing.expectError(error.InvalidBlockPlan, encodeAlternatingStreamAlloc(std.testing.allocator, 'x', 'y', 6));
 }
 
 test "br simple encoder selects RLE or stored streams" {
@@ -5367,6 +5399,13 @@ test "br simple encoder selects RLE or stored streams" {
     const decoded = try decodeStreamAlloc(std.testing.allocator, simple_mixed);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, mixed, decoded);
+
+    const alternating = "xyxyxyxyx";
+    const simple_alternating = try encodeSimpleStreamAlloc(std.testing.allocator, alternating);
+    defer std.testing.allocator.free(simple_alternating);
+    const expected_alternating = try encodeAlternatingStreamAlloc(std.testing.allocator, 'x', 'y', alternating.len);
+    defer std.testing.allocator.free(expected_alternating);
+    try std.testing.expectEqualSlices(u8, expected_alternating, simple_alternating);
 }
 
 test "br minimal compressed stream reuses last distance" {
@@ -12488,6 +12527,10 @@ fn writeMinimalCompressedHeaderForRegularDistance(allocator: std.mem.Allocator, 
 }
 
 fn writeMinimalCompressedHeaderForRegularDistancePattern(allocator: std.mem.Allocator, writer: *BitWriter, first: u8, second: u8) Error!void {
+    return writeMinimalCompressedHeaderForAlternatingPattern(allocator, writer, first, second, 3);
+}
+
+fn writeMinimalCompressedHeaderForAlternatingPattern(allocator: std.mem.Allocator, writer: *BitWriter, first: u8, second: u8, copy_len: usize) Error!void {
     if (first == second) return error.InvalidBlockPlan;
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESL
     try writeBlockTypeCount(allocator, writer, 1); // NBLTYPESI
@@ -12505,7 +12548,8 @@ fn writeMinimalCompressedHeaderForRegularDistancePattern(allocator: std.mem.Allo
 
     try writer.writeBits(allocator, 1, 2); // simple insert-copy prefix
     try writer.writeBits(allocator, 0, 2); // NSYM = 1
-    try writer.writeBits(allocator, 145, alphabetBits(704));
+    if (copy_len < 3 or copy_len > 9) return error.InvalidBlockPlan;
+    try writer.writeBits(allocator, 145 + (copy_len - 3), alphabetBits(704));
 
     try writeSimpleSingleSymbolPrefix(allocator, writer, 112, 17);
 }
