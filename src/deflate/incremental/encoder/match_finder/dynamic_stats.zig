@@ -6,22 +6,35 @@ pub const Stats = struct {
     distance_frequencies: [30]u32 = @splat(0),
     length_extra_bits: usize = 0,
     distance_extra_bits: usize = 0,
+    literal_active_count: usize = 0,
+    distance_active_count: usize = 0,
 
     pub fn reset(self: *Stats) void {
         self.* = .{};
     }
 
     pub fn recordLiteral(self: *Stats, byte: u8) void {
+        if (self.literal_frequencies[byte] == 0) self.literal_active_count += 1;
         self.literal_frequencies[byte] += 1;
     }
 
     pub fn recordMatch(self: *Stats, match: lz77.Token.Match) void {
         const length = lengthSymbol(match.length);
         const distance = distanceSymbol(match.distance);
+        if (self.literal_frequencies[length.symbol] == 0) self.literal_active_count += 1;
         self.literal_frequencies[length.symbol] += 1;
+        if (self.distance_frequencies[distance.symbol] == 0) self.distance_active_count += 1;
         self.distance_frequencies[distance.symbol] += 1;
         self.length_extra_bits += length.extra_bits;
         self.distance_extra_bits += distance.extra_bits;
+    }
+
+    pub fn literalActiveCount(self: Stats) usize {
+        return self.literal_active_count;
+    }
+
+    pub fn distanceActiveCount(self: Stats) usize {
+        return self.distance_active_count;
     }
 };
 

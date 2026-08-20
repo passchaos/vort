@@ -1391,11 +1391,38 @@ const DynamicCodingPlan = struct {
     fn initFromIncrementalStats(stats: incremental_dynamic_stats.Stats) !DynamicCodingPlan {
         var lit_freqs = stats.literal_frequencies;
         lit_freqs[256] = 1;
-        return initFromStats(
+        return initFromStatsKnownActive(
             lit_freqs,
             stats.distance_frequencies,
             stats.length_extra_bits,
             stats.distance_extra_bits,
+            stats.literalActiveCount() + @intFromBool(stats.literal_frequencies[256] == 0),
+            stats.distanceActiveCount(),
+        );
+    }
+
+    fn initFromStatsKnownActive(
+        lit_freqs: [286]u32,
+        dist_freqs: [30]u32,
+        length_extra_bits: usize,
+        distance_extra_bits: usize,
+        literal_active: usize,
+        distance_active: usize,
+    ) !DynamicCodingPlan {
+        var fixed_bits: usize = 3 + length_extra_bits + distance_extra_bits;
+        for (lit_freqs, huffman.fixed_literal_encoder.bits[0..lit_freqs.len]) |frequency, code_bits|
+            fixed_bits += @as(usize, frequency) * code_bits;
+        for (dist_freqs, huffman.fixed_distance_encoder.bits[0..dist_freqs.len]) |frequency, code_bits|
+            fixed_bits += @as(usize, frequency) * code_bits;
+        for (280..285) |symbol| fixed_bits -= lit_freqs[symbol];
+        return initFromStatsCore(
+            lit_freqs,
+            dist_freqs,
+            length_extra_bits,
+            distance_extra_bits,
+            fixed_bits,
+            literal_active,
+            distance_active,
         );
     }
 
@@ -1418,16 +1445,38 @@ const DynamicCodingPlan = struct {
         // block selection and is deliberately left to a separate size/ratio
         // change; this optimization only removes redundant token scans.
         for (280..285) |symbol| fixed_bits -= lit_freqs[symbol];
+        var literal_active: usize = 0;
+        for (lit_freqs) |frequency| literal_active += @intFromBool(frequency != 0);
+        var distance_active: usize = 0;
+        for (dist_freqs) |frequency| distance_active += @intFromBool(frequency != 0);
+        return initFromStatsCore(
+            lit_freqs,
+            dist_freqs,
+            length_extra_bits,
+            distance_extra_bits,
+            fixed_bits,
+            literal_active,
+            distance_active,
+        );
+    }
+
+    fn initFromStatsCore(
+        lit_freqs: [286]u32,
+        dist_freqs: [30]u32,
+        length_extra_bits: usize,
+        distance_extra_bits: usize,
+        fixed_bits: usize,
+        literal_active: usize,
+        distance_active: usize,
+    ) !DynamicCodingPlan {
 
         // Single-symbol alphabets need synthetic frequencies to produce a
         // complete tree, but those synthetic symbols are never emitted. Keep
         // the actual histograms intact for exact payload cost accounting.
         var lit_tree_freqs = lit_freqs;
         var dist_tree_freqs = dist_freqs;
-        completeLiteralFrequencySet(&lit_tree_freqs);
-        if (hasDistanceSymbols(&dist_tree_freqs)) {
-            completeDistanceFrequencySet(&dist_tree_freqs);
-        }
+        completeFrequencySetKnownActive(286, &lit_tree_freqs, literal_active);
+        if (distance_active != 0) completeFrequencySetKnownActive(30, &dist_tree_freqs, distance_active);
 
         var lit_lengths_full = huffman.treeCodeLengths(286, &lit_tree_freqs, 15);
         var dist_lengths_full = huffman.treeCodeLengths(30, &dist_tree_freqs, 15);
@@ -1818,6 +1867,19 @@ fn completeLiteralFrequencySet(freqs: *[286]u32) void {
                 active += 1;
                 if (active >= 2) break;
             }
+        }
+    }
+}
+
+fn completeFrequencySetKnownActive(comptime n: usize, freqs: *[n]u32, active_count: usize) void {
+    if (active_count >= 2) return;
+    var active = active_count;
+    for (freqs, 0..) |*frequency, symbol| {
+        _ = symbol;
+        if (frequency.* == 0) {
+            frequency.* = 1;
+            active += 1;
+            if (active == 2) return;
         }
     }
 }

@@ -5280,6 +5280,14 @@ architecture blindly.
   JSON versus local zlib-ng `2294` (remaining gap ~`1.10x`) and `2134` source
   versus `2637` (~`1.24x`); multi-corpus gate geomean reaches `1.933x` over the
   per-block rebuild baseline.
+- Incremental dynamic statistics now retain active literal/length and distance
+  symbol counts. `DynamicCodingPlan` uses those counts to decide single-symbol
+  completion and whether a distance tree exists, avoiding the 286+30 frequency
+  presence scans on every rolling block while leaving non-rolling planners on
+  the reference path. Synthetic-symbol/wire tests and CRC/size evidence remain
+  unchanged. The latest 32-run local comparison reports about `2224` MiB/s JSON
+  (ahead of that run's zlib-ng `1878`), `2233` source versus `2768`, `2351`
+  repetitive versus `3063`, and `487` cross-window versus `67`.
 - Incremental match profitability now uses fixed-code lower/upper bounds before
   inspecting replaced literal bytes: if all 8-bit literals already pay the
   match it accepts immediately, and if even all 9-bit literals cannot pay it
