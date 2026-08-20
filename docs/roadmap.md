@@ -5354,8 +5354,8 @@ architecture blindly.
   incremental-DEFLATE measurements. This machine mixes 5.8 GHz performance
   cores with 4.3 GHz efficiency cores; unpinned 4096-iteration source runs had
   swung by more than 30% and obscured small A/B effects. Five consecutive
-  2048-iteration source runs pinned to CPU 10 held full-stream throughput within
-  roughly 0.6% (`2078-2090` MiB/s), making subsequent matcher/tree experiments
+  2048-iteration source runs pinned to one selected logical CPU held full-stream
+  throughput far tighter than unpinned runs, making subsequent matcher/tree experiments
   substantially more trustworthy without changing the default gate behavior.
   Profiling also ruled out two more speculative tree changes: adjacent dynamic
   stats were almost never identical (JSON 1/7, source 0/7), both corpora already
