@@ -37,7 +37,11 @@ test "byte-progressive stored decoder captures bounded metadata" {
     const encoded = try br.encodeStoredStreamWithOptionsAlloc(std.testing.allocator, "payload", .{ .metadata = metadata });
     defer std.testing.allocator.free(encoded);
     var metadata_output: [8]u8 = undefined;
-    var decoder = br.IncrementalStoredStreamDecoder.initWithOptions(.{ .metadata_output = &metadata_output });
+    var block_lengths: [1]usize = undefined;
+    var decoder = br.IncrementalStoredStreamDecoder.initWithOptions(.{
+        .metadata_output = &metadata_output,
+        .metadata_block_lengths = &block_lengths,
+    });
     var payload_output: [7]u8 = undefined;
     var input_offset: usize = 0;
     var output_offset: usize = 0;
@@ -52,6 +56,10 @@ test "byte-progressive stored decoder captures bounded metadata" {
     try std.testing.expectEqual(metadata_output.len, snapshot.metadata_written);
     try std.testing.expectEqual(metadata.len, snapshot.metadata_total);
     try std.testing.expect(snapshot.metadata_truncated);
+    try std.testing.expectEqual(@as(usize, 1), snapshot.metadata_block_count);
+    try std.testing.expectEqual(@as(usize, 1), snapshot.metadata_blocks_captured);
+    try std.testing.expectEqual(metadata.len, block_lengths[0]);
+    try std.testing.expect(!snapshot.metadata_blocks_truncated);
     try std.testing.expectEqualSlices(u8, "payload", &payload_output);
 }
 

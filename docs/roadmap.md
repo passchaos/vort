@@ -5476,7 +5476,9 @@ architecture blindly.
   Callers may now provide bounded metadata scratch to the byte-progressive
   stored decoder. Metadata remains excluded from content output, but snapshots
   expose captured and total metadata bytes plus truncation; split metadata can
-  therefore be inspected without hidden allocation or unbounded retention.
+  therefore be inspected without hidden allocation or unbounded retention. A
+  second caller-owned slice captures per-meta-block lengths and independently
+  reports boundary truncation, so multiple metadata events remain distinguishable.
 - Added the matching incremental stored Brotli encoder under
   `src/br/incremental/stored/encoder.zig`. It preserves bit-writer state across
   metadata and multiple configurable meta-blocks, buffers only one block of

@@ -24,6 +24,9 @@ pub const Decoder = struct {
     metadata_output: []u8 = &.{},
     metadata_written: usize = 0,
     metadata_total: usize = 0,
+    metadata_block_lengths: []usize = &.{},
+    metadata_block_count: usize = 0,
+    current_metadata_len: usize = 0,
     finished: bool = false,
     last_error_name: []const u8 = "",
     last_error_phase: Phase = .window,
@@ -32,6 +35,7 @@ pub const Decoder = struct {
     pub const Options = struct {
         max_output_len: usize = std.math.maxInt(usize),
         metadata_output: []u8 = &.{},
+        metadata_block_lengths: []usize = &.{},
     };
     pub const Phase = enum { window, header, payload, done };
     const WindowState = enum { first, low3, tail };
@@ -48,6 +52,9 @@ pub const Decoder = struct {
         metadata_written: usize,
         metadata_total: usize,
         metadata_truncated: bool,
+        metadata_block_count: usize,
+        metadata_blocks_captured: usize,
+        metadata_blocks_truncated: bool,
         metadata: bool,
         last_error_name: []const u8,
         last_error_phase: Phase,
@@ -57,10 +64,18 @@ pub const Decoder = struct {
         return initWithOptions(.{});
     }
     pub fn initWithOptions(options: Options) Decoder {
-        return .{ .options = options, .metadata_output = options.metadata_output };
+        return .{
+            .options = options,
+            .metadata_output = options.metadata_output,
+            .metadata_block_lengths = options.metadata_block_lengths,
+        };
     }
     pub fn reset(self: *Decoder) void {
-        self.* = .{ .options = self.options, .metadata_output = self.options.metadata_output };
+        self.* = .{
+            .options = self.options,
+            .metadata_output = self.options.metadata_output,
+            .metadata_block_lengths = self.options.metadata_block_lengths,
+        };
     }
     pub fn nextStream(self: *Decoder, options: Options) Error!void {
         if (self.phase != .done or !self.finished) return error.InvalidBlockPlan;
@@ -70,6 +85,7 @@ pub const Decoder = struct {
         self.* = .{
             .options = options,
             .metadata_output = options.metadata_output,
+            .metadata_block_lengths = options.metadata_block_lengths,
             .stream_input = stream_input,
             .stream_output = stream_output,
             .stream_count = stream_count,
@@ -88,6 +104,9 @@ pub const Decoder = struct {
             .metadata_written = self.metadata_written,
             .metadata_total = self.metadata_total,
             .metadata_truncated = self.metadata_written != self.metadata_total,
+            .metadata_block_count = self.metadata_block_count,
+            .metadata_blocks_captured = @min(self.metadata_block_count, self.metadata_block_lengths.len),
+            .metadata_blocks_truncated = self.metadata_block_count > self.metadata_block_lengths.len,
             .metadata = self.metadata,
             .last_error_name = self.last_error_name,
             .last_error_phase = self.last_error_phase,
@@ -139,6 +158,7 @@ pub const Decoder = struct {
                 if (self.payload_remaining != 0) {
                     return result(input_read, output_written, if (!self.metadata and output_written == output.len) .need_output else .need_input);
                 }
+                if (self.metadata) self.recordMetadataBlock();
                 self.metadata = false;
                 self.phase = .header;
             }
@@ -212,6 +232,7 @@ pub const Decoder = struct {
                         self.length_width = @intCast(count_bytes * 8);
                         if (count_bytes == 0) {
                             self.payload_remaining = 0;
+                            self.current_metadata_len = 0;
                             self.header_state = .padding;
                         } else {
                             self.header_state = .metadata_len;
@@ -223,6 +244,7 @@ pub const Decoder = struct {
                         const count_bytes = self.length_width / 8;
                         if (count_bytes > 1 and ((len_minus_one >> @intCast((count_bytes - 1) * 8)) & 0xff) == 0) return self.fail(.header, error.CorruptFrame);
                         self.payload_remaining = len_minus_one + 1;
+                        self.current_metadata_len = self.payload_remaining;
                         self.header_state = .padding;
                     },
                     .block_len => {
@@ -245,6 +267,7 @@ pub const Decoder = struct {
                             self.phase = .done;
                             continue;
                         }
+                        if (self.metadata and self.payload_remaining == 0) self.recordMetadataBlock();
                         self.normalizeAlignedPayload(&input_read);
                         self.phase = if (self.payload_remaining == 0) .header else .payload;
                         self.header_state = .is_last;
@@ -265,6 +288,12 @@ pub const Decoder = struct {
         self.total_input -= staged_bytes;
         self.staged = 0;
         self.staged_bits = 0;
+    }
+    fn recordMetadataBlock(self: *Decoder) void {
+        if (self.metadata_block_count < self.metadata_block_lengths.len)
+            self.metadata_block_lengths[self.metadata_block_count] = self.current_metadata_len;
+        self.metadata_block_count += 1;
+        self.current_metadata_len = 0;
     }
 
     fn readBits(self: *Decoder, input: []const u8, input_read: *usize, count: u6) ?usize {
