@@ -23,16 +23,16 @@ pub const Plan = struct {
     }
 };
 
-/// A Brotli simple prefix alphabet (at most four symbols), ordered by
-/// descending frequency so the three-symbol shape gives its one-bit code to
-/// the hottest symbol. Brotli preserves listed-symbol order when constructing
-/// this simple tree; equal-frequency ordering is deterministic by symbol.
-pub const SimpleAlphabet = struct {
-    symbols: [4]u16 = @splat(0),
-    frequencies: [4]usize = @splat(0),
+/// A compact Brotli prefix alphabet, ordered by descending frequency so shorter
+/// codes go to hotter symbols. Up to four entries use Brotli's simple prefix
+/// representation; five through eight use the first production complex-tree
+/// slice. Equal-frequency ordering is deterministic by symbol.
+pub const PrefixAlphabet = struct {
+    symbols: [8]u16 = @splat(0),
+    frequencies: [8]usize = @splat(0),
     len: usize = 0,
 
-    pub fn add(self: *SimpleAlphabet, symbol: u16) !void {
+    pub fn add(self: *PrefixAlphabet, symbol: u16) !void {
         for (self.symbols[0..self.len], 0..) |known, i| {
             if (known == symbol) {
                 self.frequencies[i] += 1;
@@ -45,7 +45,7 @@ pub const SimpleAlphabet = struct {
         self.len += 1;
     }
 
-    pub fn finish(self: *SimpleAlphabet) void {
+    pub fn finish(self: *PrefixAlphabet) void {
         var i: usize = 1;
         while (i < self.len) : (i += 1) {
             var j = i;
@@ -56,7 +56,7 @@ pub const SimpleAlphabet = struct {
         }
     }
 
-    pub fn codeLengths(self: SimpleAlphabet, comptime alphabet_size: usize) ![alphabet_size]u4 {
+    pub fn codeLengths(self: PrefixAlphabet, comptime alphabet_size: usize) ![alphabet_size]u4 {
         if (self.len == 0) return error.InvalidBlockPlan;
         var lengths: [alphabet_size]u4 = @splat(0);
         switch (self.len) {
@@ -72,12 +72,19 @@ pub const SimpleAlphabet = struct {
             4 => {
                 for (self.symbols[0..4]) |symbol| lengths[symbol] = 2;
             },
+            5...8 => {
+                const long_bits: u4 = @intCast(std.math.log2_int_ceil(usize, self.len));
+                const short_bits = long_bits - 1;
+                const short_count = (@as(usize, 1) << long_bits) - self.len;
+                for (self.symbols[0..self.len], 0..) |symbol, i|
+                    lengths[symbol] = if (i < short_count) short_bits else long_bits;
+            },
             else => unreachable,
         }
         return lengths;
     }
 
-    fn less(self: *const SimpleAlphabet, left: usize, right: usize) bool {
+    fn less(self: *const PrefixAlphabet, left: usize, right: usize) bool {
         return self.frequencies[left] > self.frequencies[right] or
             (self.frequencies[left] == self.frequencies[right] and self.symbols[left] < self.symbols[right]);
     }
@@ -148,7 +155,7 @@ test "coalesces literals around LZ77 matches" {
 }
 
 test "simple alphabet orders hot symbols first" {
-    var alphabet = SimpleAlphabet{};
+    var alphabet = PrefixAlphabet{};
     for ([_]u16{ 9, 4, 9, 7, 9, 4 }) |symbol| try alphabet.add(symbol);
     alphabet.finish();
     try std.testing.expectEqualSlices(u16, &.{ 9, 4, 7 }, alphabet.symbols[0..alphabet.len]);
@@ -156,4 +163,17 @@ test "simple alphabet orders hot symbols first" {
     try std.testing.expectEqual(@as(u4, 1), lengths[9]);
     try std.testing.expectEqual(@as(u4, 2), lengths[4]);
     try std.testing.expectEqual(@as(u4, 2), lengths[7]);
+}
+
+test "complex alphabet produces a complete balanced tree" {
+    var alphabet = PrefixAlphabet{};
+    for ([_]u16{ 9, 8, 7, 6, 5 }) |symbol| try alphabet.add(symbol);
+    alphabet.finish();
+    const lengths = try alphabet.codeLengths(16);
+    try std.testing.expectEqual(@as(u4, 2), lengths[5]);
+    try std.testing.expectEqual(@as(u4, 2), lengths[6]);
+    try std.testing.expectEqual(@as(u4, 2), lengths[7]);
+    try std.testing.expectEqual(@as(u4, 3), lengths[8]);
+    try std.testing.expectEqual(@as(u4, 3), lengths[9]);
+    _ = try @import("../../huffman.zig").HuffmanTable(16).init(&lengths);
 }

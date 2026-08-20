@@ -9,6 +9,7 @@ const command_lut = @import("br/command_lut.zig");
 const pattern = @import("br/pattern.zig");
 const command_plan = @import("br/encoder/command_plan.zig");
 const encoder_distance = @import("br/encoder/distance.zig");
+const complex_prefix = @import("br/encoder/complex_prefix.zig");
 const incremental = @import("br/incremental/stream_decoder.zig");
 const incremental_tests = @import("br/incremental/tests.zig");
 const incremental_stored = @import("br/incremental/stored/decoder.zig");
@@ -69,6 +70,7 @@ test {
     _ = pattern;
     _ = command_plan;
     _ = encoder_distance;
+    _ = complex_prefix;
 }
 
 pub const IncrementalTestSupport = struct {
@@ -205,7 +207,7 @@ const BitWriter = struct {
     bit_index: u3 = 0,
     bounded: bool = false,
 
-    fn writeBits(self: *BitWriter, allocator: std.mem.Allocator, value: u64, count: u6) Error!void {
+    pub fn writeBits(self: *BitWriter, allocator: std.mem.Allocator, value: u64, count: u6) Error!void {
         if (count > 64) return error.CorruptFrame;
         var remaining = count;
         var cursor = value;
@@ -649,9 +651,9 @@ fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, comma
     if (commands.len == 0) return error.InvalidBlockPlan;
     const wire = try allocator.alloc(PlannedWireCommand, commands.len);
     defer allocator.free(wire);
-    var literal_alphabet = command_plan.SimpleAlphabet{};
-    var command_alphabet = command_plan.SimpleAlphabet{};
-    var distance_alphabet = command_plan.SimpleAlphabet{};
+    var literal_alphabet = command_plan.PrefixAlphabet{};
+    var command_alphabet = command_plan.PrefixAlphabet{};
+    var distance_alphabet = command_plan.PrefixAlphabet{};
     for (commands, 0..) |command, i| {
         const encoding = commandEntryForLengths(command.insert_len, command.copy_len) orelse return error.InvalidBlockPlan;
         wire[i] = .{ .plan = command, .encoding = encoding };
@@ -5589,6 +5591,16 @@ test "br planner-backed encoder emits regular distances" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
     try std.testing.expect(encoded.len < payload.len);
+}
+
+test "br planner-backed encoder emits complex literal prefix" {
+    const payload = "abcdefabcdefXabcdefabcdefXabcdefabcdefX";
+    const encoded = try encodePlannedStreamAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < 96);
 }
 
 test "br simple encoder selects RLE or stored streams" {
@@ -12808,9 +12820,9 @@ fn writeRepeatedPrefixCompressedHeader(allocator: std.mem.Allocator, writer: *Bi
 fn writePlannedCompressedHeader(
     allocator: std.mem.Allocator,
     writer: *BitWriter,
-    literal_alphabet: command_plan.SimpleAlphabet,
-    command_alphabet: command_plan.SimpleAlphabet,
-    distance_alphabet: command_plan.SimpleAlphabet,
+    literal_alphabet: command_plan.PrefixAlphabet,
+    command_alphabet: command_plan.PrefixAlphabet,
+    distance_alphabet: command_plan.PrefixAlphabet,
     distance_alphabet_size: usize,
 ) Error!void {
     try writeBlockTypeCount(allocator, writer, 1);
@@ -12826,14 +12838,19 @@ fn writePlannedCompressedHeader(
     try writeSimplePrefixSymbols(allocator, writer, distance_alphabet_size, distance_alphabet);
 }
 
-fn plannedDistanceAlphabetSize(alphabet: command_plan.SimpleAlphabet) usize {
+fn plannedDistanceAlphabetSize(alphabet: command_plan.PrefixAlphabet) usize {
     var highest: usize = 0;
     for (alphabet.symbols[0..alphabet.len]) |symbol| highest = @max(highest, symbol);
     return @max(@as(usize, 16 + 15 + 48), highest + 1);
 }
 
-fn writeSimplePrefixSymbols(allocator: std.mem.Allocator, writer: *BitWriter, alphabet_size: usize, alphabet: command_plan.SimpleAlphabet) Error!void {
-    if (alphabet.len == 0 or alphabet.len > 4) return error.InvalidBlockPlan;
+fn writeSimplePrefixSymbols(allocator: std.mem.Allocator, writer: *BitWriter, alphabet_size: usize, alphabet: command_plan.PrefixAlphabet) Error!void {
+    if (alphabet.len == 0) return error.InvalidBlockPlan;
+    if (alphabet.len > 4) {
+        if (alphabet_size > max_distance_alphabet_size) return error.InvalidBlockPlan;
+        const lengths = try alphabet.codeLengths(max_distance_alphabet_size);
+        return complex_prefix.write(allocator, writer, alphabet_size, &lengths);
+    }
     try writer.writeBits(allocator, 1, 2);
     try writer.writeBits(allocator, alphabet.len - 1, 2);
     for (alphabet.symbols[0..alphabet.len]) |symbol| {
