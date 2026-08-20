@@ -5659,3 +5659,10 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   linear search through up to 704 entries. The persisted 100-iteration sample
   improved source/log throughput from 47.7/52.9 to 61.8/56.6 MiB/s while JSON
   measured 42.4 MiB/s; output remains byte-identical.
+  Command selection no longer scans all 704 upstream LUT entries for every
+  planned match. A compile-time 24×24 insert/copy-code index retains the first
+  exact upstream symbol for O(1) lookup; an exhaustive equivalence test covers
+  both ends of every LUT range. The latest 100-iteration sample measured
+  49.1/42.8/73.8 MiB/s for JSON/source/log with byte-identical output; variance
+  remains high enough that this is recorded as a structural hot-path reduction,
+  not an across-the-board speed claim.

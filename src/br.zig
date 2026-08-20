@@ -682,14 +682,32 @@ fn alternatingLength(input: []const u8) ?usize {
 
 const CommandEncoding = struct { symbol: u16, command: command_lut.Entry };
 
-fn commandEntryForLengths(insert_len: usize, copy_len: usize) ?CommandEncoding {
+const explicit_command_symbol_index = blk: {
+    @setEvalBranchQuota(100_000);
+    var index: [24][24]u16 = @splat(@splat(std.math.maxInt(u16)));
     for (command_lut.entries, 0..) |entry, symbol| {
         if (entry.distance_code != -1) continue;
-        const insert_span = @as(usize, 1) << @intCast(entry.insert_extra_bits);
-        const copy_span = @as(usize, 1) << @intCast(entry.copy_extra_bits);
-        if (insert_len >= entry.insert_base and insert_len - entry.insert_base < insert_span and
-            copy_len >= entry.copy_base and copy_len - entry.copy_base < copy_span)
-            return .{ .symbol = @intCast(symbol), .command = entry };
+        const insert_code = lengthCodeForValue(entry.insert_base, true) orelse continue;
+        const copy_code = lengthCodeForValue(entry.copy_base, false) orelse continue;
+        if (index[insert_code][copy_code] == std.math.maxInt(u16)) index[insert_code][copy_code] = @intCast(symbol);
+    }
+    break :blk index;
+};
+
+fn commandEntryForLengths(insert_len: usize, copy_len: usize) ?CommandEncoding {
+    const insert_code = lengthCodeForValue(insert_len, true) orelse return null;
+    const copy_code = lengthCodeForValue(copy_len, false) orelse return null;
+    const symbol = explicit_command_symbol_index[insert_code][copy_code];
+    if (symbol == std.math.maxInt(u16)) return null;
+    return .{ .symbol = symbol, .command = command_lut.entries[symbol] };
+}
+
+fn lengthCodeForValue(value: usize, comptime insert: bool) ?u5 {
+    var code: u5 = 0;
+    while (code < 24) : (code += 1) {
+        const spec = if (insert) insertLengthSpec(code) else copyLengthSpec(code);
+        const span = @as(usize, 1) << spec.extra_bits;
+        if (value >= spec.base and value - spec.base < span) return code;
     }
     return null;
 }
@@ -5630,6 +5648,32 @@ test "br repeated prefix encoder emits multiple commands" {
     try std.testing.expectError(error.InvalidBlockPlan, encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "aba", 3));
     try std.testing.expectError(error.InvalidBlockPlan, encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "abcd", 1));
     try std.testing.expectError(error.IntegerOverflow, encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "abcd", std.math.maxInt(usize)));
+}
+
+test "br explicit command index matches exhaustive LUT search" {
+    for (command_lut.entries, 0..) |entry, symbol| {
+        if (entry.distance_code != -1) continue;
+        const insert_values = [_]usize{ entry.insert_base, entry.insert_base + ((@as(usize, 1) << entry.insert_extra_bits) - 1) };
+        const copy_values = [_]usize{ entry.copy_base, entry.copy_base + ((@as(usize, 1) << entry.copy_extra_bits) - 1) };
+        for (insert_values) |insert_len| for (copy_values) |copy_len| {
+            const indexed = commandEntryForLengths(insert_len, copy_len) orelse return error.TestUnexpectedResult;
+            const expected = exhaustiveCommandEntryForLengths(insert_len, copy_len) orelse return error.TestUnexpectedResult;
+            try std.testing.expectEqual(expected.symbol, indexed.symbol);
+            _ = symbol;
+        };
+    }
+}
+
+fn exhaustiveCommandEntryForLengths(insert_len: usize, copy_len: usize) ?CommandEncoding {
+    for (command_lut.entries, 0..) |entry, symbol| {
+        if (entry.distance_code != -1) continue;
+        const insert_span = @as(usize, 1) << entry.insert_extra_bits;
+        const copy_span = @as(usize, 1) << entry.copy_extra_bits;
+        if (insert_len >= entry.insert_base and insert_len - entry.insert_base < insert_span and
+            copy_len >= entry.copy_base and copy_len - entry.copy_base < copy_span)
+            return .{ .symbol = @intCast(symbol), .command = entry };
+    }
+    return null;
 }
 
 test "br planner-backed encoder emits mixed literal and match commands" {
