@@ -165,6 +165,21 @@ pub const snappyEncodedFrameBound = snappy.encodedFrameBound;
 pub const SnappyEncoder = snappy.Encoder;
 pub const SnappyIncrementalFrameDecoder = snappy.IncrementalFrameDecoder;
 pub const SnappyIncrementalFrameEncoder = snappy.IncrementalFrameEncoder;
+
+test "root incremental Snappy streams continue" {
+    var encoder = SnappyIncrementalFrameEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    var output: [128]u8 = undefined;
+    _ = try encoder.step("one", &output);
+    try encoder.finish();
+    while ((try encoder.step("", &output)).status != .done) {}
+    try encoder.nextStreamExactSize(.{}, 3);
+    try std.testing.expectEqual(@as(usize, 1), encoder.snapshot().stream_index);
+
+    var decoder = SnappyIncrementalFrameDecoder.init(std.testing.allocator);
+    defer decoder.deinit();
+    try std.testing.expectError(error.InvalidBlockPlan, decoder.nextStream(.{}));
+}
 pub const SnappyFrameSummary = snappy.FrameSummary;
 pub const SnappyBlockSummary = snappy.BlockSummary;
 pub const snappySummarizeBlock = snappy.summarizeBlock;

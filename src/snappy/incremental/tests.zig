@@ -202,3 +202,50 @@ test "incremental frame encoder flushes and resumes" {
     try std.testing.expectEqualSlices(u8, first ++ second, decoded);
     encoder.reset();
 }
+
+test "incremental Snappy encoder and decoder continue streams" {
+    const first = "first framed Snappy stream" ** 32;
+    const second = "second framed Snappy stream" ** 24;
+    var encoder = snappy.IncrementalFrameEncoder.initExactSize(std.testing.allocator, .{}, first.len);
+    defer encoder.deinit();
+    const first_frame = try encodeIncrementalFrameTest(&encoder, first);
+    defer std.testing.allocator.free(first_frame);
+    try encoder.nextStreamExactSize(.{}, second.len);
+    const second_frame = try encodeIncrementalFrameTest(&encoder, second);
+    defer std.testing.allocator.free(second_frame);
+    try std.testing.expectEqual(@as(usize, 2), encoder.snapshot().stream_count);
+    try std.testing.expectEqual(first.len + second.len, encoder.snapshot().input_read);
+
+    var decoder = snappy.IncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{ .expected_output_len = first.len });
+    defer decoder.deinit();
+    var first_output: [first.len]u8 = undefined;
+    _ = try decoder.step(first_frame, &first_output);
+    try decoder.finish();
+    try decoder.nextStream(.{ .expected_output_len = second.len });
+    var second_output: [second.len]u8 = undefined;
+    _ = try decoder.step(second_frame, &second_output);
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, first, &first_output);
+    try std.testing.expectEqualSlices(u8, second, &second_output);
+    try std.testing.expectEqual(@as(usize, 2), decoder.snapshot().stream_count);
+    try std.testing.expectEqual(first.len + second.len, decoder.snapshot().total_output);
+}
+
+fn encodeIncrementalFrameTest(encoder: *snappy.IncrementalFrameEncoder, payload: []const u8) ![]u8 {
+    var frame: std.ArrayList(u8) = .empty;
+    errdefer frame.deinit(std.testing.allocator);
+    var scratch: [17]u8 = undefined;
+    var offset: usize = 0;
+    while (offset < payload.len) {
+        const result = try encoder.step(payload[offset..], &scratch);
+        offset += result.progress.input_read;
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    try encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    return frame.toOwnedSlice(std.testing.allocator);
+}

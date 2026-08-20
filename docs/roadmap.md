@@ -5055,6 +5055,12 @@ architecture blindly.
   chunks cannot exceed the remaining pledged output, and `finish` rejects a
   shorter stream with `SizeMismatch`, giving framed Snappy symmetric exact-size
   contracts for incremental encode and decode.
+- Incremental Snappy framed encoders/decoders can reuse retained buffers across
+  independent streams through `nextStream`; the encoder also accepts a new
+  pledged input size. Every stream emits/requires its own identifier and keeps
+  checksum/chunk state independent, while snapshots expose cumulative bytes and
+  completed stream count/index. Two-stream exact-size round trips and root API
+  coverage protect the continuation contract.
 - Added a no-content-size incremental native LZ4 frame encoder under
   `src/lz4/incremental/`. It preserves linked or independent block policy, one
   bounded frame block, 64 KiB linked history, block/content XXH32 checksums, and

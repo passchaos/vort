@@ -18,6 +18,8 @@ pub fn Decoder(comptime Codec: type) type {
         saw_identifier: bool = false,
         input_finished: bool = false,
         total_output: usize = 0,
+        stream_output: usize = 0,
+        stream_count: usize = 0,
         last_error_name: []const u8 = "",
         last_error_phase: Phase = .header,
 
@@ -37,6 +39,9 @@ pub fn Decoder(comptime Codec: type) type {
             output_written: usize,
             payload_remaining: usize,
             saw_identifier: bool,
+            total_output: usize,
+            stream_count: usize,
+            stream_index: usize,
             last_error_name: []const u8,
             last_error_phase: Phase,
         };
@@ -53,13 +58,23 @@ pub fn Decoder(comptime Codec: type) type {
             self.* = undefined;
         }
         pub fn reset(self: *Self) void {
+            self.stream_output = 0;
+            self.stream_count = 0;
+            self.resetStream(self.options);
+        }
+        fn resetStream(self: *Self, options: Options) void {
             const allocator = self.allocator;
-            const options = self.options;
             var chunk = self.chunk;
             var decoded = self.decoded;
             chunk.clearRetainingCapacity();
             decoded.clearRetainingCapacity();
-            self.* = .{ .allocator = allocator, .options = options, .chunk = chunk, .decoded = decoded };
+            const stream_output = self.stream_output;
+            const stream_count = self.stream_count;
+            self.* = .{ .allocator = allocator, .options = options, .chunk = chunk, .decoded = decoded, .stream_output = stream_output, .stream_count = stream_count };
+        }
+        pub fn nextStream(self: *Self, options: Options) Error!void {
+            if (self.phase != .done) return error.InvalidBlockPlan;
+            self.resetStream(options);
         }
         pub fn snapshot(self: *const Self) Snapshot {
             return .{
@@ -70,6 +85,9 @@ pub fn Decoder(comptime Codec: type) type {
                 .output_written = self.total_output,
                 .payload_remaining = self.decoded.items.len - self.decoded_offset,
                 .saw_identifier = self.saw_identifier,
+                .total_output = self.stream_output + if (self.phase == .done) 0 else self.total_output,
+                .stream_count = self.stream_count,
+                .stream_index = if (self.phase == .done and self.stream_count != 0) self.stream_count - 1 else self.stream_count,
                 .last_error_name = self.last_error_name,
                 .last_error_phase = self.last_error_phase,
             };
@@ -103,6 +121,7 @@ pub fn Decoder(comptime Codec: type) type {
                     }
                 }
                 self.phase = .done;
+                self.completeStream();
             }
         }
 
@@ -131,6 +150,7 @@ pub fn Decoder(comptime Codec: type) type {
                             if (self.total_output != expected) return self.fail(.output, error.SizeMismatch);
                         }
                         self.phase = .done;
+                        self.completeStream();
                         return result(input_read, output_written, .done);
                     }
                     if (output_written == output.len and output.len != 0) return result(input_read, output_written, .need_output);
@@ -202,6 +222,10 @@ pub fn Decoder(comptime Codec: type) type {
                 if (total > expected) return error.SizeMismatch;
             }
             try self.decoded.ensureTotalCapacity(self.allocator, n);
+        }
+        fn completeStream(self: *Self) void {
+            self.stream_output += self.total_output;
+            self.stream_count += 1;
         }
         fn fail(self: *Self, phase: Phase, err: Error) Error {
             self.recordError(phase, err);
