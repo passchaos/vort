@@ -102,7 +102,7 @@ pub const Matcher = struct {
         while (pos < block.len) {
             const best = self.findBest(history, block, pos, options, anchor_len);
             if (!acceptMatch(block, pos, best.length, best.distance, options)) {
-                try tokens.append(allocator, .{ .literal = block[pos] });
+                try appendToken(tokens, allocator, .{ .literal = block[pos] });
                 stats.literals += 1;
                 self.insertBlockPosition(history, block, pos, anchor_len);
                 pos += 1;
@@ -120,14 +120,14 @@ pub const Matcher = struct {
                 if (next.length >= best.length + options.lazy_min_gain and
                     acceptMatch(block, pos + 1, next.length, next.distance, options))
                 {
-                    try tokens.append(allocator, .{ .literal = block[pos] });
+                    try appendToken(tokens, allocator, .{ .literal = block[pos] });
                     stats.literals += 1;
                     pos += 1;
                     continue;
                 }
             }
 
-            try tokens.append(allocator, .{ .match = .{
+            try appendToken(tokens, allocator, .{ .match = .{
                 .length = @intCast(best.length),
                 .distance = @intCast(best.distance),
             } });
@@ -249,6 +249,14 @@ pub const Matcher = struct {
         self.indexed_positions += 1;
     }
 };
+
+inline fn appendToken(tokens: *std.ArrayList(lz77.Token), allocator: std.mem.Allocator, token: lz77.Token) !void {
+    if (tokens.items.len < tokens.capacity) {
+        tokens.appendAssumeCapacity(token);
+    } else {
+        try tokens.append(allocator, token);
+    }
+}
 
 fn byteAt(history: []const u8, block: []const u8, block_absolute: usize, absolute: usize) u8 {
     const history_absolute = block_absolute - history.len;

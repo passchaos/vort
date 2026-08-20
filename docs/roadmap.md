@@ -5263,6 +5263,13 @@ architecture blindly.
   the latest local 32-run zlib-ng comparison, source reached about `2268` MiB/s
   versus zlib-ng `2702` (remaining gap ~`1.19x`), repetitive `2300` versus `3058`,
   and cross-window `487` versus `67`, with unchanged sizes and CRC mixes.
+- Rolling token emission now mirrors the one-shot parser's proven ArrayList
+  shape: an inline capacity check writes with `appendAssumeCapacity` in the hot
+  path, and only a true growth boundary calls allocator-backed `append`. This
+  compounds the reusable token-buffer change without changing ownership or wire
+  output. The latest 32-run local evidence reports about `2069` MiB/s JSON,
+  `2211` source, `2277` repetitive, and `483` exact-window history; compressed
+  sizes and CRC mixes are unchanged and the strict zlib-ng gate remains green.
 - Incremental match profitability now uses fixed-code lower/upper bounds before
   inspecting replaced literal bytes: if all 8-bit literals already pay the
   match it accepts immediately, and if even all 9-bit literals cannot pay it
