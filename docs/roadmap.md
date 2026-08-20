@@ -5647,11 +5647,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   found it slower than the ordinary allocator path on the current small corpus,
   so production convenience encoding and throughput benchmarks retain the faster
   default path.
-  `PlannedStreamEncoder` adds a reusable arena-backed state object whose retained
-  capacity is observable and whose outputs remain independently owned. Like the
-  fixed scratch API, the first small-corpus A/B was slower than the default path
-  after accounting for final-result copies, so it is exposed for allocation
-  control rather than selected by the throughput benchmark.
+  `PlannedStreamEncoder` now owns typed reusable LZ77-token and Brotli-command
+  buffers; retained capacity is observable and outputs remain independently
+  owned. It replaces the initial arena prototype and is benchmarked after a
+  warmup call. The persisted 100-iteration run measured 37.4/43.4/56.7 MiB/s
+  for JSON/source/log; this is roughly neutral/noisy versus the default path,
+  so reuse is exposed primarily to bound allocation churn rather than claimed
+  as a throughput win.
   Planner alphabet collection now accumulates fixed literal/command/distance
   frequency arrays and compacts them once, replacing the former per-symbol
   linear search through up to 704 entries. The persisted 100-iteration sample

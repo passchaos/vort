@@ -683,6 +683,57 @@ pub fn hashGreedyPlanAutoTinyAlloc(allocator: std.mem.Allocator, input: []const 
     };
 }
 
+/// Reusable-token counterpart to `hashGreedyPlanAutoTinyAlloc`. Existing
+/// capacity is preserved and overwritten; callers own the ArrayList and can
+/// reuse it across independent inputs without a token allocation per plan.
+pub fn hashGreedyPlanAutoTinyReuse(tokens: *std.ArrayList(Token), allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
+    const anchor: HashAnchor = if (minMatch(options) >= 4) .four else .three;
+    if (input.len > 32 * 1024) return error.InvalidBlockPlan;
+    tokens.clearRetainingCapacity();
+    var head: [4096]isize = @splat(-1);
+    var prev_stack: [32 * 1024]isize = undefined;
+    return switch (anchor) {
+        .three => hashGreedyPlanWithTablesReuse(tokens, allocator, input, options, &head, prev_stack[0..input.len], .three),
+        .four => hashGreedyPlanWithTablesReuse(tokens, allocator, input, options, &head, prev_stack[0..input.len], .four),
+    };
+}
+
+fn hashGreedyPlanWithTablesReuse(
+    tokens: *std.ArrayList(Token),
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    head: []isize,
+    prev: []isize,
+    comptime anchor: HashAnchor,
+) !PlanStats {
+    var stats = PlanStats{};
+    const accept_all_matches = acceptsEveryHashMatch(options);
+    var pos: usize = 0;
+    while (pos < input.len) {
+        const search = findBestHashMatchWithLayoutAndHash(input, pos, options, head, prev, false, false, {}, anchor);
+        const best = search.best;
+        const accepted = if (accept_all_matches) best.length != 0 else acceptMatch(input, pos, best.length, best.distance, options);
+        if (accepted) {
+            try appendToken(tokens, allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
+            stats.matches += 1;
+            stats.matched_bytes += best.length;
+            const end = @min(input.len, pos + best.length);
+            insertKnownHashWithLayout(pos, search.hash.?, head, prev, false, false, {});
+            const tail_start = if (end > pos + 4) end - 4 else pos + 1;
+            pos += 1;
+            if (pos < tail_start) pos = tail_start;
+            while (pos < end) : (pos += 1) insertHashWithLayout(input, pos, head, prev, false, false, {}, anchor);
+        } else {
+            try appendToken(tokens, allocator, .{ .literal = input[pos] });
+            stats.literals += 1;
+            if (search.hash) |hash| insertKnownHashWithLayout(pos, hash, head, prev, false, false, {});
+            pos += 1;
+        }
+    }
+    return stats;
+}
+
 fn hashGreedyPlanTinyAllocWithAnchor(
     allocator: std.mem.Allocator,
     input: []const u8,
@@ -1450,6 +1501,21 @@ test "automatic hash anchor preserves three-byte match configurations" {
         error.InvalidMatch,
         hashGreedyPlanFourAlloc(std.testing.allocator, input, options),
     );
+}
+
+test "reusable tiny hash planner preserves tokens and capacity" {
+    const input = "abcabcXabcabcXabcabcX";
+    const options = GreedyOptions{ .window_len = input.len, .max_chain = 64, .nice_len = 64, .max_candidates = 8 };
+    const reference = try hashGreedyPlanAutoTinyAlloc(std.testing.allocator, input, options);
+    defer reference.deinit(std.testing.allocator);
+    var tokens: std.ArrayList(Token) = .empty;
+    defer tokens.deinit(std.testing.allocator);
+    const first_stats = try hashGreedyPlanAutoTinyReuse(&tokens, std.testing.allocator, input, options);
+    try expectEqualTokenSlices(reference.tokens, tokens.items);
+    try std.testing.expectEqual(reference.stats, first_stats);
+    const capacity = tokens.capacity;
+    _ = try hashGreedyPlanAutoTinyReuse(&tokens, std.testing.allocator, input, options);
+    try std.testing.expectEqual(capacity, tokens.capacity);
 }
 
 test "automatic hash anchor selects four-byte planner and round trips" {

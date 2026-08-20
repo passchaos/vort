@@ -547,26 +547,37 @@ pub fn encodePlannedStreamWithScratchAlloc(allocator: std.mem.Allocator, scratch
 /// owned by the allocator passed to `encodeAlloc`; encoder state itself is not
 /// thread-safe and must outlive no returned borrow (results are independent).
 pub const PlannedStreamEncoder = struct {
-    arena: std.heap.ArenaAllocator,
+    allocator: std.mem.Allocator,
+    tokens: std.ArrayList(lz77.Token) = .empty,
+    commands: std.ArrayList(command_plan.Command) = .empty,
 
     pub fn init(allocator: std.mem.Allocator) PlannedStreamEncoder {
-        return .{ .arena = std.heap.ArenaAllocator.init(allocator) };
+        return .{ .allocator = allocator };
     }
 
     pub fn deinit(self: *PlannedStreamEncoder) void {
-        self.arena.deinit();
+        self.tokens.deinit(self.allocator);
+        self.commands.deinit(self.allocator);
         self.* = undefined;
     }
 
     pub fn encodeAlloc(self: *PlannedStreamEncoder, allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
-        _ = self.arena.reset(.retain_capacity);
-        const scratch_allocator = self.arena.allocator();
-        const encoded = try encodePlannedStreamAlloc(scratch_allocator, input);
-        return allocator.dupe(u8, encoded);
+        if (input.len < 5 or input.len > 32 * 1024) return error.InvalidBlockPlan;
+        const stats = try lz77.hashGreedyPlanAutoTinyReuse(&self.tokens, self.allocator, input, .{
+            .window_len = input.len,
+            .max_chain = 64,
+            .nice_len = 64,
+            .max_candidates = 8,
+            .min_match = 3,
+            .max_match = lz77.max_match_len,
+        });
+        if (stats.matches == 0) return error.InvalidBlockPlan;
+        _ = try command_plan.buildReuse(&self.commands, self.allocator, input, self.tokens.items);
+        return encodeCommandPlanAlloc(allocator, input, self.commands.items);
     }
 
     pub fn retainedCapacity(self: *const PlannedStreamEncoder) usize {
-        return self.arena.queryCapacity();
+        return self.tokens.capacity * @sizeOf(lz77.Token) + self.commands.capacity * @sizeOf(command_plan.Command);
     }
 };
 

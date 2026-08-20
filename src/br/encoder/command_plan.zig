@@ -156,6 +156,37 @@ pub fn buildAlloc(allocator: std.mem.Allocator, input: []const u8, tokens: []con
     return .{ .commands = try commands.toOwnedSlice(allocator), .match_count = match_count };
 }
 
+/// Rebuild into caller-owned typed storage, preserving command capacity across
+/// independent inputs. The returned match count is diagnostic only.
+pub fn buildReuse(commands: *std.ArrayList(Command), allocator: std.mem.Allocator, input: []const u8, tokens: []const lz77.Token) !usize {
+    commands.clearRetainingCapacity();
+    var position: usize = 0;
+    var insert_start: usize = 0;
+    var insert_len: usize = 0;
+    var match_count: usize = 0;
+    for (tokens) |token| switch (token) {
+        .literal => |byte| {
+            if (position >= input.len or input[position] != byte) return error.InvalidBlockPlan;
+            position += 1;
+            insert_len += 1;
+        },
+        .match => |match| {
+            const copy_len: usize = match.length;
+            const distance: usize = match.distance;
+            if (copy_len == 0 or distance == 0 or distance > position or copy_len > input.len - position) return error.InvalidBlockPlan;
+            for (0..copy_len) |i| if (input[position + i] != input[position + i - distance]) return error.InvalidBlockPlan;
+            try commands.append(allocator, .{ .insert_start = insert_start, .insert_len = insert_len, .copy_len = copy_len, .distance = distance, .has_copy = true });
+            position += copy_len;
+            insert_start = position;
+            insert_len = 0;
+            match_count += 1;
+        },
+    };
+    if (position != input.len) return error.InvalidBlockPlan;
+    if (insert_len != 0) try commands.append(allocator, .{ .insert_start = insert_start, .insert_len = insert_len });
+    return match_count;
+}
+
 test "coalesces literals around LZ77 matches" {
     const input = "abcabc!";
     const tokens = [_]lz77.Token{

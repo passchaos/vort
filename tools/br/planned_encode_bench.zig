@@ -66,9 +66,13 @@ fn measureInterleaved(io: std.Io, allocator: std.mem.Allocator, reference: libbr
 
 fn measureVort(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, iterations: usize) !Sample {
     var mix: usize = 0;
+    var encoder = vort.BrotliPlannedStreamEncoder.init(allocator);
+    defer encoder.deinit();
+    const warmup = try encoder.encodeAlloc(allocator, payload);
+    allocator.free(warmup);
     const start = std.Io.Clock.awake.now(io);
     for (0..iterations) |_| {
-        const encoded = try vort.brEncodePlannedStreamAlloc(allocator, payload);
+        const encoded = try encoder.encodeAlloc(allocator, payload);
         mix +%= encoded.len;
         allocator.free(encoded);
     }
