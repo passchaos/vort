@@ -5535,3 +5535,9 @@ architecture blindly.
   payload-metadata-payload round trip validates captured event bytes/boundary.
   Snapshots expose pending metadata length and flush state, while duplicate or
   post-finish requests fail deterministically.
+- Added the first production compressed Brotli encoder slice for single-byte
+  runs. `encodeRleStream{Alloc,Append,Into}` emits a real compressed meta-block
+  with one seed literal plus a direct-distance-one copy, rejects non-runs rather
+  than pretending to be a general encoder, and provides a conservative bound.
+  A 4096-byte run encodes to 12 bytes, round-trips through Vort, and decodes
+  successfully with Node v26's Brotli implementation.

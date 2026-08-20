@@ -413,6 +413,89 @@ pub fn encodeStoredStreamChunksWithOptionsAppend(allocator: std.mem.Allocator, o
     try encodeStoredStreamChunksWithOptionsWrite(allocator, &writer, chunks, options);
 }
 
+/// Encode a single-byte run as one compressed Brotli meta-block. This is a
+/// deliberately narrow first production compressed-encoder slice; non-runs or
+/// lengths below five are rejected rather than silently falling back to stored.
+pub fn encodeRleStreamAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    try encodeRleStreamAppend(allocator, &out, input);
+    return out.toOwnedSlice(allocator);
+}
+
+pub fn encodeRleStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) Error!void {
+    var writer = BitWriter{ .out = out };
+    try encodeRleStreamWrite(allocator, &writer, input);
+}
+
+pub fn encodedRleStreamBound(input_len: usize) Error!usize {
+    if (input_len < 5 or input_len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
+    // The narrow header and one command are bounded well below 64 bytes for
+    // every legal meta-block length; callers may use this stable conservative
+    // bound without running the encoder twice.
+    return 64;
+}
+
+pub fn encodeRleStreamInto(input: []const u8, output: []u8) Error!usize {
+    _ = try encodedRleStreamBound(input.len);
+    var out: std.ArrayList(u8) = .{ .items = output[0..0], .capacity = output.len };
+    var writer = BitWriter{ .out = &out, .bounded = true };
+    try encodeRleStreamWrite(std.heap.smp_allocator, &writer, input);
+    return out.items.len;
+}
+
+fn encodeRleStreamWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8) Error!void {
+    if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
+    for (input[1..]) |byte| if (byte != input[0]) return error.InvalidBlockPlan;
+    try writeWindowBits(allocator, writer, default_window_bits);
+    try writer.writeBits(allocator, 1, 1);
+    try writer.writeBits(allocator, 0, 1);
+    const len_minus_one = input.len - 1;
+    const mnibbles: usize = if (len_minus_one <= 0xffff) 4 else if (len_minus_one <= 0xfffff) 5 else 6;
+    try writer.writeBits(allocator, @intCast(mnibbles - 4), 2);
+    try writer.writeBits(allocator, len_minus_one, @intCast(mnibbles * 4));
+    try writeMinimalCompressedHeaderForRun(allocator, writer, input[0], input.len);
+}
+
+fn writeMinimalCompressedHeaderForRun(allocator: std.mem.Allocator, writer: *BitWriter, byte: u8, run_len: usize) Error!void {
+    const copy_len = run_len - 1;
+    var copy_code: u16 = 0;
+    while (copy_code < 24) : (copy_code += 1) {
+        const spec = copyLengthSpec(copy_code);
+        const span = @as(usize, 1) << @intCast(spec.extra_bits);
+        if (copy_len >= spec.base and copy_len - spec.base < span) break;
+    }
+    if (copy_code == 24) return error.InvalidBlockPlan;
+    // Select insert code 1 (one seed literal), the requested copy-length code,
+    // and an explicit distance. Find the RFC command symbol through the same
+    // mapping used by the decoder rather than duplicating its range layout.
+    var command_symbol: u16 = 0;
+    while (command_symbol < 704) : (command_symbol += 1) {
+        const ranges = insertCopyCodeRanges(command_symbol);
+        const insert_code = ranges.insert_base + ((command_symbol >> 3) & 0x7);
+        const candidate_copy = ranges.copy_base + (command_symbol & 0x7);
+        if (insert_code == 1 and candidate_copy == copy_code and command_symbol >= 128) break;
+    }
+    if (command_symbol == 704) return error.InvalidBlockPlan;
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 1, 4); // NDIRECT = 1
+    try writer.writeBits(allocator, 0, 2); // literal context mode
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, byte);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 704, command_symbol);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 65, 16);
+    const spec = copyLengthSpec(copy_code);
+    if (spec.extra_bits != 0)
+        try writer.writeBits(allocator, copy_len - spec.base, spec.extra_bits);
+    // RFC Brotli streams may end mid-byte, but the trailing unused bits must be
+    // zero. Materialize the final partial byte for external decoders.
+    if (writer.bit_index != 0) writer.alignToByte();
+}
+
 pub fn encodeStoredStreamInto(input: []const u8, output: []u8) Error!usize {
     return try encodeStoredStreamWithOptionsInto(input, output, .{});
 }
@@ -5176,6 +5259,24 @@ test "br minimal compressed stream decodes direct-distance copy" {
     const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "aaaaa", decoded);
+}
+
+test "br RLE encoder emits compressed runs" {
+    const payload = "a" ** 4096;
+    const encoded = try encodeRleStreamAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    const stored_bound = try encodedStoredStreamBound(payload.len);
+    try std.testing.expect(encoded.len < stored_bound / 16);
+    var into: [64]u8 = undefined;
+    const into_len = try encodeRleStreamInto(payload, &into);
+    try std.testing.expectEqualSlices(u8, encoded, into[0..into_len]);
+    try std.testing.expectEqual(@as(usize, 64), try encodedRleStreamBound(payload.len));
+    try std.testing.expectError(error.OutOfMemory, encodeRleStreamInto(payload, into[0 .. encoded.len - 1]));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeRleStreamAlloc(std.testing.allocator, "abcde"));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeRleStreamAlloc(std.testing.allocator, "aaaa"));
 }
 
 test "br minimal compressed stream reuses last distance" {
