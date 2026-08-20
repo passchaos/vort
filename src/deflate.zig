@@ -1614,10 +1614,27 @@ pub fn encodeRawFixedWithDictionaryAlloc(allocator: std.mem.Allocator, input: []
 }
 
 fn writeFixedTokens(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, tokens: []const lz77.Token, final: bool) !void {
-    const lit_encoder = huffman.fixed_literal_encoder;
-    const dist_encoder = huffman.fixed_distance_encoder;
+    try writeFixedBlockHeader(allocator, writer, final);
+    try writeFixedTokenSequence(allocator, writer, tokens);
+    try writeFixedBlockEnd(allocator, writer);
+}
+
+fn writeFixedBlockHeader(
+    allocator: std.mem.Allocator,
+    writer: *bitstream.BitWriter,
+    final: bool,
+) !void {
     try writer.writeBits(allocator, @intFromBool(final), 1);
     try writer.writeBits(allocator, 0b01, 2);
+}
+
+fn writeFixedTokenSequence(
+    allocator: std.mem.Allocator,
+    writer: *bitstream.BitWriter,
+    tokens: []const lz77.Token,
+) !void {
+    const lit_encoder = huffman.fixed_literal_encoder;
+    const dist_encoder = huffman.fixed_distance_encoder;
     for (tokens) |token| {
         switch (token) {
             .literal => |byte| try lit_encoder.writeSymbol(writer, allocator, byte),
@@ -1631,7 +1648,13 @@ fn writeFixedTokens(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, 
             },
         }
     }
-    try lit_encoder.writeSymbol(writer, allocator, 256);
+}
+
+fn writeFixedBlockEnd(
+    allocator: std.mem.Allocator,
+    writer: *bitstream.BitWriter,
+) !void {
+    try huffman.fixed_literal_encoder.writeSymbol(writer, allocator, 256);
 }
 
 pub fn encodeRawFixedTokensAlloc(allocator: std.mem.Allocator, tokens: []const lz77.Token) ![]u8 {
@@ -1663,10 +1686,10 @@ pub fn encodeRawFixedSyncFlushAppend(
 
 /// Chunked-input counterpart that never joins caller plaintext slices.
 ///
-/// Each non-empty slice becomes a non-final fixed block. DEFLATE bit packing
-/// remains continuous and one final sync-flush block terminates the message.
-/// A bounded rolling dictionary preserves cross-slice matches without ever
-/// joining the complete caller message into one plaintext allocation.
+/// All non-empty slices feed one non-final fixed block, followed by the final
+/// sync-flush block. A bounded rolling dictionary preserves cross-slice
+/// matches without ever joining the complete caller message into one plaintext
+/// allocation or repeating block framing for every slice.
 pub fn encodeRawFixedSyncFlushChunksAppend(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
@@ -1685,16 +1708,17 @@ pub fn encodeRawFixedSyncFlushChunksAppend(
     var wrote_block = false;
     for (chunks) |chunk| {
         if (chunk.len == 0) continue;
+        if (!wrote_block) try writeFixedBlockHeader(allocator, &writer, false);
         const plan = try planTokensWithDictionaryAlloc(allocator, chunk, history.items, options);
         defer plan.deinit(allocator);
-        try writeFixedTokens(allocator, &writer, plan.tokens, false);
+        try writeFixedTokenSequence(allocator, &writer, plan.tokens);
         try appendRollingHistory(allocator, &history, chunk, history_limit);
         wrote_block = true;
     }
     if (!wrote_block) {
-        const empty: [0]lz77.Token = .{};
-        try writeFixedTokens(allocator, &writer, &empty, false);
+        try writeFixedBlockHeader(allocator, &writer, false);
     }
+    try writeFixedBlockEnd(allocator, &writer);
     try writeStoredBlock(allocator, &writer, "", false);
     try out.appendSlice(allocator, writer.bytes.items);
     return out.items.len - start;
@@ -1826,10 +1850,9 @@ test "raw fixed sync flush chunks use bounded cross-slice history" {
             },
         },
     );
-    // One fixed-block header/EOB per slice creates modest overhead, but the
-    // rolling dictionary should keep the result near one-shot compression
-    // rather than re-encoding the repeated telemetry prefix in every slice.
-    try std.testing.expect(chunked.items.len <= contiguous.items.len + 64);
+    // Slice planning changes a few match choices, but one shared fixed block
+    // and rolling history should keep the wire shape close to one-shot output.
+    try std.testing.expect(chunked.items.len <= contiguous.items.len + 32);
     try chunked.appendSlice(allocator, "\x01\x00\x00\xff\xff");
     const decoded = try decodeRawAutoAlloc(allocator, chunked.items);
     defer allocator.free(decoded);
