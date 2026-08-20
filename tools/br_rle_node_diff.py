@@ -10,17 +10,21 @@ import sys
 def main() -> int:
     if len(sys.argv) != 2:
         raise SystemExit("usage: br_rle_node_diff.py <probe>")
-    encoded = subprocess.check_output([sys.argv[1]])
+    cases = (("rle", b"a" * 4096), ("ababa", b"ababa"))
     script = (
         "const z=require('zlib');let b=[];"
         "process.stdin.on('data',x=>b.push(x));"
         "process.stdin.on('end',()=>{const o=z.brotliDecompressSync(Buffer.concat(b));"
-        "if(o.length!==4096||!o.every(x=>x===97))process.exit(2);});"
+        "process.stdout.write(o);});"
     )
-    subprocess.run(["node", "-e", script], input=encoded, check=True)
-    if len(encoded) >= 4096 // 16:
-        raise SystemExit(f"RLE ratio regression: {len(encoded)} bytes")
-    print(f"brotli rle node diff: encoded={len(encoded)} decoded=4096")
+    for mode, expected in cases:
+        encoded = subprocess.check_output([sys.argv[1], mode])
+        completed = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True)
+        if completed.stdout != expected:
+            raise SystemExit(f"{mode}: node output mismatch")
+        if mode == "rle" and len(encoded) >= 4096 // 16:
+            raise SystemExit(f"RLE ratio regression: {len(encoded)} bytes")
+        print(f"brotli {mode} node diff: encoded={len(encoded)} decoded={len(expected)}")
     return 0
 
 

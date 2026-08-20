@@ -5542,7 +5542,10 @@ architecture blindly.
   A 4096-byte run encodes to 12 bytes, round-trips through Vort, and decodes
   successfully with Node v26's Brotli implementation. The reproducible
   `run-br-rle-node-diff` gate now generates production API output, decodes it
-  with Node, checks all 4096 bytes, and protects a minimum 16x ratio win.
+  with Node, checks all 4096 bytes, and protects a minimum 16x ratio win. The
+  same gate now covers the first externally proven distance-copy production
+  slice, `encodeAbabaStreamAlloc`, derived from the existing Node/Vort fixture
+  and yielding an 11-byte interoperable compressed stream.
   `encodeSimpleStream` provides a safe general entry point over this initial
   slice: eligible runs use compressed RLE, while all other inputs deterministically
   fall back to the mature stored encoder. Alloc/append/into/bound and root APIs

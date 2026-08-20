@@ -423,6 +423,26 @@ pub fn encodeRleStreamAlloc(allocator: std.mem.Allocator, input: []const u8) Err
     return out.toOwnedSlice(allocator);
 }
 
+/// Encode the already externally-validated `ababa` compressed-distance shape.
+/// This intentionally exposes only the proven five-byte slice while the
+/// general command/literal encoder is still under construction.
+pub fn encodeAbabaStreamAlloc(allocator: std.mem.Allocator) Error![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    var writer = BitWriter{ .out = &out };
+    try writeWindowBits(allocator, &writer, default_window_bits);
+    try writer.writeBits(allocator, 1, 1);
+    try writer.writeBits(allocator, 0, 1);
+    try writer.writeBits(allocator, 0, 2);
+    try writer.writeBits(allocator, 4, 16);
+    try writeMinimalCompressedHeaderForRegularDistance(allocator, &writer);
+    try writer.writeBits(allocator, 0, 1); // a
+    try writer.writeBits(allocator, 1, 1); // b
+    try writer.writeBits(allocator, 0, 1); // distance extra bit
+    if (writer.bit_index != 0) writer.alignToByte();
+    return out.toOwnedSlice(allocator);
+}
+
 pub fn encodeRleStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) Error!void {
     var writer = BitWriter{ .out = out };
     try encodeRleStreamWrite(allocator, &writer, input);
@@ -5308,6 +5328,14 @@ test "br RLE encoder emits compressed runs" {
     try std.testing.expectError(error.OutOfMemory, encodeRleStreamInto(payload, into[0 .. encoded.len - 1]));
     try std.testing.expectError(error.InvalidBlockPlan, encodeRleStreamAlloc(std.testing.allocator, "abcde"));
     try std.testing.expectError(error.InvalidBlockPlan, encodeRleStreamAlloc(std.testing.allocator, "aaaa"));
+}
+
+test "br proven ababa encoder slice round trips" {
+    const encoded = try encodeAbabaStreamAlloc(std.testing.allocator);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, "ababa", decoded);
 }
 
 test "br simple encoder selects RLE or stored streams" {
