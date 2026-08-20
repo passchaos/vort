@@ -18,11 +18,25 @@ pub fn Encoder(comptime Codec: type) type {
         done: bool = false,
         total_input: usize = 0,
         total_output: usize = 0,
+        stream_input: usize = 0,
+        stream_output: usize = 0,
+        stream_count: usize = 0,
         dictionary: []const u8 = &.{},
 
         const Self = @This();
         pub const Error = Codec.Error;
         pub const Options = struct { raw: Codec.RawOptions = .{} };
+        pub const Snapshot = struct {
+            input_read: usize,
+            output_written: usize,
+            stream_input: usize,
+            stream_output: usize,
+            pending_output: usize,
+            stream_count: usize,
+            stream_index: usize,
+            finishing: bool,
+            done: bool,
+        };
 
         pub fn init(allocator: std.mem.Allocator) Self {
             return initWithOptions(allocator, .{});
@@ -45,6 +59,9 @@ pub fn Encoder(comptime Codec: type) type {
             self.* = undefined;
         }
         pub fn reset(self: *Self) void {
+            self.stream_input = 0;
+            self.stream_output = 0;
+            self.stream_count = 0;
             self.raw.reset();
             self.resetWrapper();
         }
@@ -79,6 +96,19 @@ pub fn Encoder(comptime Codec: type) type {
             self.raw.resetExactSizeDictionary(expected_input_len, dictionary);
             self.resetWrapper();
         }
+        pub fn snapshot(self: *const Self) Snapshot {
+            return .{
+                .input_read = self.stream_input,
+                .output_written = self.stream_output,
+                .stream_input = self.total_input,
+                .stream_output = self.total_output,
+                .pending_output = self.pending.items.len - self.pending_offset,
+                .stream_count = self.stream_count,
+                .stream_index = if (self.done and self.stream_count != 0) self.stream_count - 1 else self.stream_count,
+                .finishing = self.finishing,
+                .done = self.done,
+            };
+        }
         pub fn flush(self: *Self) void {
             if (!self.finishing and !self.done) self.raw.flush();
         }
@@ -103,6 +133,7 @@ pub fn Encoder(comptime Codec: type) type {
                     self.pending_offset += n;
                     output_written += n;
                     self.total_output += n;
+                    self.stream_output += n;
                     if (self.pending_offset != self.pending.items.len) return result(input_read, output_written, .need_output);
                     self.pending.clearRetainingCapacity();
                     self.pending_offset = 0;
@@ -121,6 +152,7 @@ pub fn Encoder(comptime Codec: type) type {
                     self.adler.update(accepted);
                     input_read += accepted.len;
                     self.total_input += accepted.len;
+                    self.stream_input += accepted.len;
                 }
                 if (raw_result.progress.output_written != 0) {
                     try self.pending.appendSlice(self.allocator, raw_scratch[0..raw_result.progress.output_written]);
@@ -133,6 +165,7 @@ pub fn Encoder(comptime Codec: type) type {
                     continue;
                 }
                 if (raw_result.status == .done) {
+                    self.stream_count += 1;
                     self.done = true;
                     return result(input_read, output_written, .done);
                 }

@@ -5178,7 +5178,10 @@ architecture blindly.
   concatenated-zlib convention. Each stream can switch raw compression options,
   preset dictionary/DICTID, and pledged size while retaining allocations; a
   mixed level/no-dictionary + dictionary stream round-trips through the public
-  concatenated decoder with exact-size enforcement.
+  concatenated decoder with exact-size enforcement. Zlib snapshots mirror the
+  gzip member diagnostics with cumulative/current byte counts, pending output,
+  stream count, and active/last index. Wrapper continuation tests now live in a
+  focused submodule instead of further expanding the main incremental test file.
 - Added bounded adaptive block sizing to the incremental best core. Full input
   windows use the existing stored/fixed/dynamic cost scorer and split policy to
   choose a shorter prefix, while buffering never exceeds `max_block_len`; raw,
