@@ -436,7 +436,7 @@ pub fn encodeAbabaPatternStreamAlloc(allocator: std.mem.Allocator, first: u8, se
 }
 
 pub fn encodeAlternatingStreamAlloc(allocator: std.mem.Allocator, first: u8, second: u8, len: usize) Error![]u8 {
-    if (first == second or len < 5 or len > 1095) return error.InvalidBlockPlan;
+    if (first == second or len < 5 or len > 2119) return error.InvalidBlockPlan;
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
     var writer = BitWriter{ .out = &out };
@@ -453,7 +453,6 @@ pub fn encodeAlternatingStreamAlloc(allocator: std.mem.Allocator, first: u8, sec
     // Two-symbol simple trees assign code 0/1 by listed symbol order.
     try writer.writeBits(allocator, 0, 1);
     try writer.writeBits(allocator, 1, 1);
-    try writer.writeBits(allocator, 0, 1); // distance extra bit
     if (writer.bit_index != 0) writer.alignToByte();
     return out.toOwnedSlice(allocator);
 }
@@ -523,7 +522,7 @@ fn isRleInput(input: []const u8) bool {
 }
 
 fn alternatingLength(input: []const u8) ?usize {
-    if (input.len < 5 or input.len > 1095 or input[0] == input[1]) return null;
+    if (input.len < 5 or input.len > 2119 or input[0] == input[1]) return null;
     for (input, 0..) |byte, i|
         if (byte != input[i & 1]) return null;
     return input.len;
@@ -5388,7 +5387,7 @@ test "br proven ababa encoder slice round trips" {
     defer std.testing.allocator.free(binary_decoded);
     try std.testing.expectEqualSlices(u8, &.{ 0, 0xff, 0, 0xff, 0 }, binary_decoded);
     try std.testing.expectError(error.InvalidBlockPlan, encodeAbabaPatternStreamAlloc(std.testing.allocator, 'x', 'x'));
-    inline for (.{ 5, 6, 11, 13, 23, 39, 71, 135, 327, 328, 329, 583, 777, 1095 }) |len| {
+    inline for (.{ 5, 6, 23, 71, 327, 1095, 1096, 1097, 1500, 2119 }) |len| {
         const alternating = try encodeAlternatingStreamAlloc(std.testing.allocator, 'x', 'y', len);
         defer std.testing.allocator.free(alternating);
         const alternating_decoded = try decodeStreamAlloc(std.testing.allocator, alternating);
@@ -5396,7 +5395,7 @@ test "br proven ababa encoder slice round trips" {
         try std.testing.expectEqual(len, alternating_decoded.len);
         for (alternating_decoded, 0..) |byte, i| try std.testing.expectEqual(if (i & 1 == 0) @as(u8, 'x') else 'y', byte);
     }
-    try std.testing.expectError(error.InvalidBlockPlan, encodeAlternatingStreamAlloc(std.testing.allocator, 'x', 'y', 6));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeAlternatingStreamAlloc(std.testing.allocator, 'x', 'y', 2120));
 }
 
 test "br simple encoder selects RLE or stored streams" {
