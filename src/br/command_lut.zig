@@ -715,3 +715,29 @@ pub const entries = [_]Entry{
     .{ .insert_extra_bits = 24, .copy_extra_bits = 10, .distance_code = -1, .context = 3, .insert_base = 22594, .copy_base = 1094 },
     .{ .insert_extra_bits = 24, .copy_extra_bits = 24, .distance_code = -1, .context = 3, .insert_base = 22594, .copy_base = 2118 },
 };
+
+pub fn formula(symbol: u16) Entry {
+    const insert_extra = [_]u5{ 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 7, 8, 9, 10, 12, 14, 24 };
+    const copy_extra = [_]u5{ 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 7, 8, 9, 10, 24 };
+    const cells = [_]u5{ 0, 1, 0, 1, 8, 9, 2, 16, 10, 17, 18 };
+    const cell = cells[symbol >> 6];
+    const insert_code: usize = (cell & 0x18) + ((symbol >> 3) & 7);
+    const copy_code: usize = ((cell << 3) & 0x18) + (symbol & 7);
+    var insert_base: u32 = 0;
+    var copy_base: u32 = 2;
+    for (insert_extra[0..insert_code]) |bits| insert_base += @as(u32, 1) << @intCast(bits);
+    for (copy_extra[0..copy_code]) |bits| copy_base += @as(u32, 1) << @intCast(bits);
+    return .{
+        .insert_extra_bits = insert_extra[insert_code],
+        .copy_extra_bits = copy_extra[copy_code],
+        .distance_code = if (symbol >> 6 >= 2) -1 else 0,
+        .context = if (copy_base > 4) 3 else @intCast(copy_base - 2),
+        .insert_base = insert_base,
+        .copy_base = copy_base,
+    };
+}
+
+test "upstream Brotli command table matches formula" {
+    for (entries, 0..) |entry, symbol|
+        try @import("std").testing.expectEqual(entry, formula(@intCast(symbol)));
+}

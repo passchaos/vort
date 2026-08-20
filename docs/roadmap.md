@@ -5583,3 +5583,7 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   All unit tests, the production RLE/alternating Node gate, and the 225-case
   Vort/Node literal differential suite remain green, establishing a trustworthy
   oracle for the next general command encoder slice.
+  A focused interleaved benchmark compares the generated table with the exact
+  upstream construction formula across all 704 symbols. The first local
+  ReleaseFast run measured about `11.6 ms` versus `310.7 ms` for 16384 sweeps
+  (`~26.8x`), so production retains the verified table rather than recomputing.
