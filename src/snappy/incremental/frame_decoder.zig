@@ -20,6 +20,11 @@ pub fn Decoder(comptime Codec: type) type {
         total_output: usize = 0,
         stream_output: usize = 0,
         stream_count: usize = 0,
+        skippable_output: []u8 = &.{},
+        skippable_written: usize = 0,
+        skippable_total: usize = 0,
+        skippable_events: []SkippableEvent = &.{},
+        skippable_event_count: usize = 0,
         last_error_name: []const u8 = "",
         last_error_phase: Phase = .header,
 
@@ -29,7 +34,10 @@ pub fn Decoder(comptime Codec: type) type {
             max_chunk_payload_len: usize = 0x00ff_ffff,
             max_output_len: usize = std.math.maxInt(usize),
             expected_output_len: ?usize = null,
+            skippable_output: []u8 = &.{},
+            skippable_events: []SkippableEvent = &.{},
         };
+        pub const SkippableEvent = struct { chunk_type: u8, payload_len: usize };
         pub const Phase = enum { header, payload, output, done };
         pub const Snapshot = struct {
             phase: Phase,
@@ -42,6 +50,11 @@ pub fn Decoder(comptime Codec: type) type {
             total_output: usize,
             stream_count: usize,
             stream_index: usize,
+            skippable_written: usize,
+            skippable_total: usize,
+            skippable_truncated: bool,
+            skippable_event_count: usize,
+            skippable_events_captured: usize,
             last_error_name: []const u8,
             last_error_phase: Phase,
         };
@@ -50,7 +63,12 @@ pub fn Decoder(comptime Codec: type) type {
             return initWithOptions(allocator, .{});
         }
         pub fn initWithOptions(allocator: std.mem.Allocator, options: Options) Self {
-            return .{ .allocator = allocator, .options = options };
+            return .{
+                .allocator = allocator,
+                .options = options,
+                .skippable_output = options.skippable_output,
+                .skippable_events = options.skippable_events,
+            };
         }
         pub fn deinit(self: *Self) void {
             self.chunk.deinit(self.allocator);
@@ -70,7 +88,16 @@ pub fn Decoder(comptime Codec: type) type {
             decoded.clearRetainingCapacity();
             const stream_output = self.stream_output;
             const stream_count = self.stream_count;
-            self.* = .{ .allocator = allocator, .options = options, .chunk = chunk, .decoded = decoded, .stream_output = stream_output, .stream_count = stream_count };
+            self.* = .{
+                .allocator = allocator,
+                .options = options,
+                .chunk = chunk,
+                .decoded = decoded,
+                .stream_output = stream_output,
+                .stream_count = stream_count,
+                .skippable_output = options.skippable_output,
+                .skippable_events = options.skippable_events,
+            };
         }
         pub fn nextStream(self: *Self, options: Options) Error!void {
             if (self.phase != .done) return error.InvalidBlockPlan;
@@ -88,6 +115,11 @@ pub fn Decoder(comptime Codec: type) type {
                 .total_output = self.stream_output + if (self.phase == .done) 0 else self.total_output,
                 .stream_count = self.stream_count,
                 .stream_index = if (self.phase == .done and self.stream_count != 0) self.stream_count - 1 else self.stream_count,
+                .skippable_written = self.skippable_written,
+                .skippable_total = self.skippable_total,
+                .skippable_truncated = self.skippable_written != self.skippable_total,
+                .skippable_event_count = self.skippable_event_count,
+                .skippable_events_captured = @min(self.skippable_event_count, self.skippable_events.len),
                 .last_error_name = self.last_error_name,
                 .last_error_phase = self.last_error_phase,
             };
@@ -212,6 +244,7 @@ pub fn Decoder(comptime Codec: type) type {
                 else => {
                     if (self.chunk_type < Codec.min_skippable_chunk_type) return error.UnsupportedSnappyFeature;
                     if (!self.saw_identifier) return error.InvalidMagic;
+                    self.captureSkippable(payload);
                 },
             }
         }
@@ -226,6 +259,16 @@ pub fn Decoder(comptime Codec: type) type {
         fn completeStream(self: *Self) void {
             self.stream_output += self.total_output;
             self.stream_count += 1;
+        }
+        fn captureSkippable(self: *Self, payload: []const u8) void {
+            const copy_len = @min(payload.len, self.skippable_output.len -| self.skippable_written);
+            if (copy_len != 0)
+                @memcpy(self.skippable_output[self.skippable_written..][0..copy_len], payload[0..copy_len]);
+            self.skippable_written += copy_len;
+            self.skippable_total += payload.len;
+            if (self.skippable_event_count < self.skippable_events.len)
+                self.skippable_events[self.skippable_event_count] = .{ .chunk_type = self.chunk_type, .payload_len = payload.len };
+            self.skippable_event_count += 1;
         }
         fn fail(self: *Self, phase: Phase, err: Error) Error {
             self.recordError(phase, err);

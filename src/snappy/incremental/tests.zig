@@ -274,6 +274,52 @@ test "incremental Snappy encoder inserts skippable chunks" {
     try std.testing.expectError(error.InvalidBlockPlan, encoder.writeSkippable(0x7f, "bad"));
 }
 
+test "incremental Snappy decoder captures skippable events" {
+    const payload = "captured-skippable";
+    var encoder = snappy.IncrementalFrameEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    var scratch: [64]u8 = undefined;
+    var content_offset: usize = 0;
+    while (content_offset < "content".len) {
+        const result = try encoder.step("content"[content_offset..], &scratch);
+        content_offset += result.progress.input_read;
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    try encoder.writeSkippable(0x82, payload);
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .need_input) break;
+    }
+    try encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+
+    var captured: [8]u8 = undefined;
+    var events: [1]snappy.IncrementalFrameDecoder.SkippableEvent = undefined;
+    var decoder = snappy.IncrementalFrameDecoder.initWithOptions(std.testing.allocator, .{
+        .skippable_output = &captured,
+        .skippable_events = &events,
+    });
+    defer decoder.deinit();
+    var output: [7]u8 = undefined;
+    _ = try decoder.step(frame.items, &output);
+    try decoder.finish();
+    const snapshot = decoder.snapshot();
+    try std.testing.expectEqualSlices(u8, payload[0..captured.len], &captured);
+    try std.testing.expectEqual(captured.len, snapshot.skippable_written);
+    try std.testing.expectEqual(payload.len, snapshot.skippable_total);
+    try std.testing.expect(snapshot.skippable_truncated);
+    try std.testing.expectEqual(@as(usize, 1), snapshot.skippable_event_count);
+    try std.testing.expectEqual(@as(u8, 0x82), events[0].chunk_type);
+    try std.testing.expectEqual(payload.len, events[0].payload_len);
+}
+
 fn encodeIncrementalFrameTest(encoder: *snappy.IncrementalFrameEncoder, payload: []const u8) ![]u8 {
     var frame: std.ArrayList(u8) = .empty;
     errdefer frame.deinit(std.testing.allocator);

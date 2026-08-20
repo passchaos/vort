@@ -5066,6 +5066,10 @@ architecture blindly.
   boundary, drains the event through tiny output, then resumes content; duplicate,
   invalid-type, oversized, or post-finish requests fail deterministically. Frame
   summary and decode tests verify payload accounting and transparent skipping.
+  Incremental decoders can optionally capture bounded skippable payload bytes
+  and caller-owned `(type,length)` events. Snapshots distinguish total versus
+  captured bytes/events and truncation, preserving transparent decode without
+  hidden allocations.
 - Added a no-content-size incremental native LZ4 frame encoder under
   `src/lz4/incremental/`. It preserves linked or independent block policy, one
   bounded frame block, 64 KiB linked history, block/content XXH32 checksums, and
