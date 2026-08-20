@@ -12,6 +12,7 @@ const dynamic_code_length_rle = @import("deflate/dynamic/code_length_rle.zig");
 const incremental_stored_encoder = @import("deflate/incremental/encoder/stored.zig");
 const incremental_fixed_encoder = @import("deflate/incremental/encoder/fixed.zig");
 const incremental_rolling_hash = @import("deflate/incremental/encoder/match_finder/rolling_hash.zig");
+const incremental_dynamic_stats = @import("deflate/incremental/encoder/match_finder/dynamic_stats.zig");
 const incremental_zlib_fixed_encoder = @import("deflate/incremental/encoder/zlib_fixed.zig");
 const incremental_gzip_fixed_encoder = @import("deflate/incremental/encoder/gzip_fixed.zig");
 const incremental_stored_decoder = @import("deflate/incremental/decoder/stored.zig");
@@ -145,7 +146,7 @@ const IncrementalBestEncoderCodec = struct {
         }
         if (rollingParser(options)) |parser| {
             const plan = try matcher.plan(allocator, plan_tokens, block, history, normalizeOptionsForStrategy(options).lz77_options, parser == .lazy);
-            try writeBestTokensBlock(allocator, state, block, plan.tokens, final, options);
+            try writeBestTokensBlockWithStats(allocator, state, block, plan.tokens, final, options, plan.dynamic);
         } else {
             const plan = if (history.len == 0)
                 try planTokensAlloc(allocator, block, options)
@@ -1216,6 +1217,14 @@ fn uniqueByteCount(input: []const u8) usize {
 }
 
 fn writeBestTokensBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, plain: []const u8, tokens: []const lz77.Token, final: bool, options: CompressionOptions) !void {
+    return writeBestTokensBlockMaybeStats(allocator, writer, plain, tokens, final, options, null);
+}
+
+fn writeBestTokensBlockWithStats(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, plain: []const u8, tokens: []const lz77.Token, final: bool, options: CompressionOptions, stats: incremental_dynamic_stats.Stats) !void {
+    return writeBestTokensBlockMaybeStats(allocator, writer, plain, tokens, final, options, stats);
+}
+
+fn writeBestTokensBlockMaybeStats(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, plain: []const u8, tokens: []const lz77.Token, final: bool, options: CompressionOptions, stats: ?incremental_dynamic_stats.Stats) !void {
     const stored_len = storedBlocksEncodedSizeFromState(writer.*, plain.len);
 
     if (options.block_selection == .stored_fixed) {
@@ -1227,7 +1236,10 @@ fn writeBestTokensBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWrit
         return writeFixedTokens(allocator, writer, tokens, final);
     }
 
-    const dynamic_plan = try DynamicCodingPlan.init(tokens);
+    const dynamic_plan = if (stats) |cached|
+        try DynamicCodingPlan.initFromIncrementalStats(cached)
+    else
+        try DynamicCodingPlan.init(tokens);
     const fixed_len = encodedBytesForBitsFromState(writer.*, dynamic_plan.fixed_bits);
     const dynamic_len = encodedBytesForBitsFromState(writer.*, dynamic_plan.bitCost());
     if (stored_len <= fixed_len and stored_len <= dynamic_len) {
@@ -1373,7 +1385,26 @@ const DynamicCodingPlan = struct {
             }
         }
         lit_freqs[256] = 1;
+        return initFromStats(lit_freqs, dist_freqs, length_extra_bits, distance_extra_bits);
+    }
 
+    fn initFromIncrementalStats(stats: incremental_dynamic_stats.Stats) !DynamicCodingPlan {
+        var lit_freqs = stats.literal_frequencies;
+        lit_freqs[256] = 1;
+        return initFromStats(
+            lit_freqs,
+            stats.distance_frequencies,
+            stats.length_extra_bits,
+            stats.distance_extra_bits,
+        );
+    }
+
+    fn initFromStats(
+        lit_freqs: [286]u32,
+        dist_freqs: [30]u32,
+        length_extra_bits: usize,
+        distance_extra_bits: usize,
+    ) !DynamicCodingPlan {
         var fixed_bits: usize = 3 + length_extra_bits + distance_extra_bits;
         for (lit_freqs, huffman.fixed_literal_encoder.bits[0..lit_freqs.len]) |frequency, code_bits| {
             fixed_bits += @as(usize, frequency) * code_bits;

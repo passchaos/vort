@@ -2,6 +2,7 @@ const std = @import("std");
 const lz77 = @import("../../../../lz77.zig");
 const hash = @import("hash.zig");
 const profitability = @import("profitability.zig");
+const dynamic_stats = @import("dynamic_stats.zig");
 
 const invalid_position = std.math.maxInt(usize);
 
@@ -79,7 +80,7 @@ pub const Matcher = struct {
         history: []const u8,
         options: lz77.GreedyOptions,
         lazy: bool,
-    ) !struct { tokens: []const lz77.Token, stats: lz77.PlanStats } {
+    ) !struct { tokens: []const lz77.Token, stats: lz77.PlanStats, dynamic: dynamic_stats.Stats } {
         if (options.window_len == 0 or options.window_len > lz77.default_window_len or
             options.min_match < 3 or options.min_match > 4) return error.InvalidMatch;
         try self.ensureTables(allocator);
@@ -97,6 +98,7 @@ pub const Matcher = struct {
         tokens.clearRetainingCapacity();
         try tokens.ensureTotalCapacity(allocator, @min(block.len, 4096));
         var stats: lz77.PlanStats = .{};
+        var dynamic: dynamic_stats.Stats = .{};
 
         var pos: usize = 0;
         while (pos < block.len) {
@@ -104,6 +106,7 @@ pub const Matcher = struct {
             if (!acceptMatch(block, pos, best.length, best.distance, options)) {
                 try appendToken(tokens, allocator, .{ .literal = block[pos] });
                 stats.literals += 1;
+                dynamic.recordLiteral(block[pos]);
                 self.insertBlockPosition(history, block, pos, anchor_len);
                 pos += 1;
                 continue;
@@ -122,6 +125,7 @@ pub const Matcher = struct {
                 {
                     try appendToken(tokens, allocator, .{ .literal = block[pos] });
                     stats.literals += 1;
+                    dynamic.recordLiteral(block[pos]);
                     pos += 1;
                     continue;
                 }
@@ -133,6 +137,7 @@ pub const Matcher = struct {
             } });
             stats.matches += 1;
             stats.matched_bytes += best.length;
+            dynamic.recordMatch(.{ .length = @intCast(best.length), .distance = @intCast(best.distance) });
             const end = @min(block.len, pos + best.length);
             if (lazy) {
                 if (!current_inserted) self.insertBlockPosition(history, block, pos, anchor_len);
@@ -157,7 +162,7 @@ pub const Matcher = struct {
             }
         }
         self.absolute_position = std.math.add(usize, self.absolute_position, block.len) catch return error.IntegerOverflow;
-        return .{ .tokens = tokens.items, .stats = stats };
+        return .{ .tokens = tokens.items, .stats = stats, .dynamic = dynamic };
     }
 
     fn ensureTables(self: *Matcher, allocator: std.mem.Allocator) !void {

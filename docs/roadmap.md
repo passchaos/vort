@@ -5270,6 +5270,16 @@ architecture blindly.
   output. The latest 32-run local evidence reports about `2069` MiB/s JSON,
   `2211` source, `2277` repetitive, and `483` exact-window history; compressed
   sizes and CRC mixes are unchanged and the strict zlib-ng gate remains green.
+- Rolling match planning now accumulates dynamic literal/length and distance
+  frequencies plus length/distance extra-bit totals while it emits tokens. The
+  incremental best writer consumes those cached statistics to construct its
+  `DynamicCodingPlan`, eliminating the full token rescan before Huffman tree
+  construction; non-rolling planners retain the original path. Formula tests
+  cover every DEFLATE length `3...258` and distance `1...32768`, and wire sizes/
+  CRC mixes remain unchanged. Latest 32-run evidence reports about `2079` MiB/s
+  JSON versus local zlib-ng `2294` (remaining gap ~`1.10x`) and `2134` source
+  versus `2637` (~`1.24x`); multi-corpus gate geomean reaches `1.933x` over the
+  per-block rebuild baseline.
 - Incremental match profitability now uses fixed-code lower/upper bounds before
   inspecting replaced literal bytes: if all 8-bit literals already pay the
   match it accepts immediately, and if even all 9-bit literals cannot pay it
