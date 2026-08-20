@@ -115,6 +115,63 @@ test "LZ4 incremental frame encoder resolves dictionary set" {
     encoder.reset();
 }
 
+test "LZ4 incremental encoder continues mixed dictionary frames" {
+    const first = "first independent LZ4 frame" ** 32;
+    const dictionary = lz4.NativeDictionary.init(0x31415926, "second-frame-dictionary-prefix");
+    const second = "second-frame-dictionary-prefix payload" ** 24;
+    const first_options: lz4.NativeFrameOptions = .{
+        .include_content_size = true,
+        .block_mode = .independent,
+        .content_checksum = true,
+    };
+    var encoder = try lz4.NativeIncrementalFrameEncoder.initExactSize(std.testing.allocator, first_options, first.len);
+    defer encoder.deinit();
+    const first_frame = try encodeIncrementalLz4FrameTest(&encoder, first);
+    defer std.testing.allocator.free(first_frame);
+    var second_options = first_options;
+    second_options.block_mode = .linked;
+    second_options.block_checksum = true;
+    second_options.dictionary_id = dictionary.id;
+    try encoder.nextFrameExactSizeWithDictionary(second_options, second.len, dictionary.id, dictionary.content);
+    const second_frame = try encodeIncrementalLz4FrameTest(&encoder, second);
+    defer std.testing.allocator.free(second_frame);
+    try std.testing.expectEqual(@as(usize, 2), encoder.snapshot().frame_count);
+    try std.testing.expectEqual(first.len + second.len, encoder.snapshot().input_read);
+
+    var concatenated: std.ArrayList(u8) = .empty;
+    defer concatenated.deinit(std.testing.allocator);
+    try concatenated.appendSlice(std.testing.allocator, first_frame);
+    try concatenated.appendSlice(std.testing.allocator, second_frame);
+    const set = try lz4.NativeDictionarySet.initChecked(&.{dictionary});
+    const decoded = try lz4.decodeNativeConcatenatedFrameAllocWithDictionarySetExactSize(
+        std.testing.allocator,
+        concatenated.items,
+        set,
+        first.len + second.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, first ++ second, decoded);
+}
+
+fn encodeIncrementalLz4FrameTest(encoder: *lz4.NativeIncrementalFrameEncoder, payload: []const u8) ![]u8 {
+    var frame: std.ArrayList(u8) = .empty;
+    errdefer frame.deinit(std.testing.allocator);
+    var scratch: [19]u8 = undefined;
+    var offset: usize = 0;
+    while (offset < payload.len) {
+        const result = try encoder.step(payload[offset..], &scratch);
+        offset += result.progress.input_read;
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try frame.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+    return frame.toOwnedSlice(std.testing.allocator);
+}
+
 test "LZ4 incremental frame encoder flushes and resumes" {
     const first = "first linked LZ4 flush segment repeated repeated";
     const second = "second linked segment reuses repeated repeated";

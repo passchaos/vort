@@ -5090,6 +5090,12 @@ architecture blindly.
   pledged-size mode. The encoder resolves Dictionary_ID once at construction,
   borrows the selected history bytes, and returns `NeedDictionary` before any
   frame output when the catalog has no matching entry.
+- The incremental LZ4 encoder can reuse its block encoder and buffers for new
+  frames through `nextFrame` variants. Each frame may change block/checksum
+  policy, content-size pledge, and preset dictionary; history/hash/content
+  checksum state resets independently while snapshots retain cumulative bytes
+  and completed frame count/index. A mixed independent/no-dictionary plus
+  linked/dictionary concatenation round-trips through dictionary-set decode.
 - Added a no-content-size incremental native Zstd raw/RLE frame encoder under
   `src/zstd/incremental/`. It retains one bounded block, delays the Zstd final
   block bit until explicit finish, maintains the optional XXH64 content checksum

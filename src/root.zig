@@ -277,6 +277,17 @@ pub const Lz4BlockEncoder = lz4.BlockEncoder;
 pub const Lz4BlockDecoder = lz4.BlockDecoder;
 pub const Lz4NativeFrameEncoder = lz4.NativeFrameEncoder;
 pub const Lz4NativeIncrementalFrameEncoder = lz4.NativeIncrementalFrameEncoder;
+
+test "root LZ4 incremental encoder continues frames" {
+    var encoder = try Lz4NativeIncrementalFrameEncoder.initExactSize(std.testing.allocator, .{ .include_content_size = true }, 3);
+    defer encoder.deinit();
+    var output: [128]u8 = undefined;
+    _ = try encoder.step("one", &output);
+    encoder.finish();
+    while ((try encoder.step("", &output)).status != .done) {}
+    try encoder.nextFrameExactSize(.{ .include_content_size = true }, 3);
+    try std.testing.expectEqual(@as(usize, 1), encoder.snapshot().frame_index);
+}
 pub const Lz4NativeFrameDecoder = lz4.NativeFrameDecoder;
 pub const Lz4NativeIncrementalFrameDecoder = lz4.NativeIncrementalFrameDecoder;
 pub const Lz4NativeDictionary = lz4.NativeDictionary;
