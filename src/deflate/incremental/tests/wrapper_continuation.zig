@@ -246,6 +246,45 @@ test "zlib incremental encoder snapshot reports pending output" {
     try std.testing.expectEqual(@as(usize, 0), encoder.snapshot().stream_index);
 }
 
+test "zlib concatenated dictionary set resolves each stream DICTID" {
+    const first_dictionary = "first zlib dictionary phrase";
+    const second_dictionary = "second zlib dictionary phrase";
+    const first = "first zlib dictionary phrase payload" ** 12;
+    const second = "second zlib dictionary phrase payload" ** 10;
+    var options = try deflate.zlibIncrementalBestOptionsForLevel(6);
+    var encoder = deflate.ZlibIncrementalBestEncoder.initExactSizeWithDictionary(
+        std.testing.allocator,
+        options,
+        first.len,
+        first_dictionary,
+    );
+    defer encoder.deinit();
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    try appendZlibBestStream(&encoder, &encoded, first);
+    options.raw.compression = deflate.optionsForLevel(.fast);
+    try encoder.nextStreamExactSize(options, second_dictionary, second.len);
+    try appendZlibBestStream(&encoder, &encoded, second);
+
+    const entries = [_]deflate.ZlibDictionaryEntry{
+        deflate.ZlibDictionarySet.entry(first_dictionary),
+        deflate.ZlibDictionarySet.entry(second_dictionary),
+    };
+    const set = deflate.ZlibDictionarySet.fromEntries(&entries);
+    const decoded = try deflate.decodeZlibConcatenatedAllocWithDictionarySetExactSize(
+        std.testing.allocator,
+        encoded.items,
+        set,
+        first.len + second.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, first ++ second, decoded);
+
+    const missing = deflate.ZlibDictionarySet.fromEntries(entries[0..1]);
+    var output: [first.len + second.len]u8 = undefined;
+    try std.testing.expectError(error.NeedDictionary, deflate.decodeZlibConcatenatedWithDictionarySet(encoded.items, &output, missing));
+}
+
 fn appendZlibBestStream(encoder: *deflate.ZlibIncrementalBestEncoder, encoded: *std.ArrayList(u8), payload: []const u8) !void {
     var scratch: [23]u8 = undefined;
     var offset: usize = 0;

@@ -9,6 +9,7 @@ const png_windowed_history =
     @import("deflate/png/windowed_history.zig");
 const semantic_rle258 = @import("deflate/semantic/rle258.zig");
 const dynamic_code_length_rle = @import("deflate/dynamic/code_length_rle.zig");
+const zlib_dictionary_set = @import("deflate/zlib/dictionary_set.zig");
 const incremental_stored_encoder = @import("deflate/incremental/encoder/stored.zig");
 const incremental_fixed_encoder = @import("deflate/incremental/encoder/fixed.zig");
 const incremental_rolling_hash = @import("deflate/incremental/encoder/match_finder/rolling_hash.zig");
@@ -44,6 +45,8 @@ const pngImageOutputLen = png.pngImageOutputLen;
 const pngScanlinePayloadLen = png.pngScanlinePayloadLen;
 
 pub const Error = core.Error;
+pub const ZlibDictionaryEntry = zlib_dictionary_set.Entry;
+pub const ZlibDictionarySet = zlib_dictionary_set.Set;
 pub const max_stored_block_len: usize = std.math.maxInt(u16);
 pub const png_windowed_history_scratch_len =
     png_windowed_history.general_scratch_len;
@@ -13714,6 +13717,40 @@ fn decodeZlibConcatenatedWithOptionalDictionaryAndOptions(input: []const u8, out
         offset = footer_offset + 4;
     }
     return out_offset;
+}
+
+pub fn decodeZlibConcatenatedWithDictionarySet(input: []const u8, output: []u8, dictionaries: ZlibDictionarySet) Error!usize {
+    return decodeZlibConcatenatedWithDictionarySetAndOptions(input, output, dictionaries, .{});
+}
+
+pub fn decodeZlibConcatenatedWithDictionarySetAndOptions(input: []const u8, output: []u8, dictionaries: ZlibDictionarySet, options: ZlibDecodeOptions) Error!usize {
+    if (input.len == 0) return error.TruncatedFrame;
+    var offset: usize = 0;
+    var out_offset: usize = 0;
+    while (offset < input.len) {
+        const info = parseZlibHeaderInfo(input[offset..]) catch |err| {
+            if (options.allow_trailing_data and offset != 0) break;
+            return err;
+        };
+        const dictionary = if (info.dictionary_id) |id| dictionaries.find(id) orelse return error.NeedDictionary else "";
+        const raw_offset = offset + info.data_offset;
+        const before_stream = out_offset;
+        const raw = try decodeRawAutoWithDictionary(input[raw_offset..], dictionary, output[out_offset..]);
+        out_offset += raw.output_written;
+        const footer_offset = raw_offset + raw.input_read;
+        const actual_adler = if (options.ignore_adler) 0 else checksum.adler32(output[before_stream..out_offset]);
+        try validateZlibFooterPartialWithOptions(input, footer_offset, actual_adler, options);
+        offset = footer_offset + 4;
+    }
+    return out_offset;
+}
+
+pub fn decodeZlibConcatenatedAllocWithDictionarySetExactSize(allocator: std.mem.Allocator, input: []const u8, dictionaries: ZlibDictionarySet, expected_output_len: usize) ![]u8 {
+    const output = try allocator.alloc(u8, expected_output_len);
+    errdefer allocator.free(output);
+    const written = try decodeZlibConcatenatedWithDictionarySet(input, output, dictionaries);
+    if (written != expected_output_len) return error.SizeMismatch;
+    return output;
 }
 
 pub fn decodeZlibConcatenatedAlloc(allocator: std.mem.Allocator, input: []const u8) ![]u8 {

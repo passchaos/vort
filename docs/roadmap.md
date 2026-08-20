@@ -5182,6 +5182,10 @@ architecture blindly.
   gzip member diagnostics with cumulative/current byte counts, pending output,
   stream count, and active/last index. Wrapper continuation tests now live in a
   focused submodule instead of further expanding the main incremental test file.
+  Concatenated decode can resolve a different preset dictionary for each stream
+  through borrowed `ZlibDictionarySet` entries keyed by DICTID; the focused API
+  covers caller-provided output and exact-size allocation, reports
+  `NeedDictionary` when a later ID is absent, and is exported from the root.
 - Added bounded adaptive block sizing to the incremental best core. Full input
   windows use the existing stored/fixed/dynamic cost scorer and split policy to
   choose a shorter prefix, while buffering never exceeds `max_block_len`; raw,
