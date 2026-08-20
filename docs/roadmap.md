@@ -5614,12 +5614,17 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   distance-42 payload compresses from 82 to 18 bytes and round-trips through
   both Vort and Node.
   Planner prefix alphabets now expand from four to the full 256-byte literal
-  alphabet through the
-  focused `src/br/encoder/complex_prefix.zig` writer. It emits valid Brotli
+  literal alphabet and all 704 command symbols through the focused
+  `src/br/encoder/complex_prefix.zig` writer. It emits valid Brotli
   complex prefix trees and `src/br/encoder/code_length_rle.zig` chains symbol-17
   zero runs across sparse literal/command/distance alphabets and symbol 16
   chains repeated non-zero lengths. The code-length tree is frequency-built
   rather than fixed. The seven-literal fixture is 20 bytes for 39 source bytes,
   the 16-literal fixture is 23 for 128, and a full 0...255 alphabet repeated
   three times is 276 for 768; all pass Node. Broader command/distance alphabet
-  stress and further prefix-cost optimization remain follow-up work.
+  stress now includes real-shape JSON, Zig source, and log corpora through
+  `run-br-planned-corpus` plus the independent `run-br-planned-node-diff` gate.
+  Their first results are respectively 92/2640, 131/3600, and 125/3320 encoded
+  versus source bytes. Command alphabets up to 704 entries are now representable;
+  further prefix-cost optimization and heterogeneous corpus expansion remain
+  follow-up work.

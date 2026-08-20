@@ -23,7 +23,7 @@ pub const Plan = struct {
     }
 };
 
-pub const max_prefix_symbols = 256;
+pub const max_prefix_symbols = 704;
 
 /// A compact Brotli prefix alphabet, ordered by descending frequency so shorter
 /// codes go to hotter symbols. Up to four entries use Brotli's simple prefix;

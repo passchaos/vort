@@ -497,11 +497,10 @@ pub fn encodeRepeatedPrefixStreamAlloc(allocator: std.mem.Allocator, prefix: []c
     return out.toOwnedSlice(allocator);
 }
 
-/// Build a small general Brotli command stream from the shared LZ77 matcher.
-/// This first planner-backed slice deliberately accepts only plans whose
-/// literal, command, and distance alphabets each fit Brotli's simple-prefix
-/// representation (at most four symbols); unsupported inputs return a precise
-/// error so the general simple encoder can retain its stored fallback.
+/// Build a general single-meta-block Brotli command stream from the shared LZ77
+/// matcher. Prefix alphabets use simple or complex trees automatically; inputs
+/// outside the current one-block/32 KiB matcher contract return a precise error
+/// so the convenience encoder can retain its stored fallback.
 pub fn encodePlannedStreamAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
     if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
     const lz_plan = try lz77.hashGreedyPlanAutoAlloc(allocator, input, .{
@@ -12869,7 +12868,10 @@ fn plannedDistanceAlphabetSize(alphabet: command_plan.PrefixAlphabet) usize {
 fn writeSimplePrefixSymbols(allocator: std.mem.Allocator, writer: *BitWriter, alphabet_size: usize, alphabet: command_plan.PrefixAlphabet) Error!void {
     if (alphabet.len == 0) return error.InvalidBlockPlan;
     if (alphabet.len > 4) {
-        if (alphabet_size > max_distance_alphabet_size) return error.InvalidBlockPlan;
+        if (alphabet_size == 704) {
+            const lengths = try alphabet.codeLengths(704);
+            return complex_prefix.write(allocator, writer, alphabet_size, &lengths);
+        }
         const lengths = try alphabet.codeLengths(max_distance_alphabet_size);
         return complex_prefix.write(allocator, writer, alphabet_size, &lengths);
     }

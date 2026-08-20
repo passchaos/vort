@@ -61,9 +61,18 @@ fn appendRepeatRun(allocator: std.mem.Allocator, tokens: *std.ArrayList(Token), 
     var extra_len: usize = 0;
     var current = run;
     while (current > max_extra + 3) {
-        var extra: usize = max_extra;
-        while (extra != 0 and (current - (extra + 3)) % radix != 0) extra -= 1;
-        const previous = (current - (extra + 3)) / radix + 2;
+        var chosen: ?struct { extra: usize, previous: usize } = null;
+        for (0..max_extra + 1) |extra| {
+            if (current < extra + 3 or (current - (extra + 3)) % radix != 0) continue;
+            const previous = (current - (extra + 3)) / radix + 2;
+            if (previous >= 3 and previous < current) {
+                chosen = .{ .extra = extra, .previous = previous };
+                break;
+            }
+        }
+        const step = chosen orelse return error.InvalidBlockPlan;
+        const extra = step.extra;
+        const previous = step.previous;
         if (previous < 3 or previous >= current) return error.InvalidBlockPlan;
         extras[extra_len] = @intCast(extra);
         extra_len += 1;

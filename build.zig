@@ -900,6 +900,32 @@ pub fn build(b: *std.Build) void {
     const br_rle_node_diff_step = b.step("run-br-rle-node-diff", "Validate compressed Brotli RLE output with Node");
     br_rle_node_diff_step.dependOn(&br_rle_node_diff.step);
 
+    const br_planned_corpus_exe = b.addExecutable(.{
+        .name = "vort-br-planned-corpus",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br_planned_corpus.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const run_br_planned_corpus = b.addRunArtifact(br_planned_corpus_exe);
+    const br_planned_corpus_step = b.step("run-br-planned-corpus", "Run planner-backed Brotli text/JSON/log corpus smoke");
+    br_planned_corpus_step.dependOn(&run_br_planned_corpus.step);
+    const br_planned_probe_exe = b.addExecutable(.{
+        .name = "vort-br-planned-probe",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br_planned_probe.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const br_planned_node_diff = b.addSystemCommand(&.{ "python3", "tools/br_planned_node_diff.py" });
+    br_planned_node_diff.addArtifactArg(br_planned_probe_exe);
+    const br_planned_node_diff_step = b.step("run-br-planned-node-diff", "Validate planner-backed Brotli corpora with Node");
+    br_planned_node_diff_step.dependOn(&br_planned_node_diff.step);
+
     const br_command_lut_bench_exe = b.addExecutable(.{
         .name = "vort-bench-br-command-lut",
         .root_module = b.createModule(.{
@@ -3490,6 +3516,8 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zlib_diff_exe.step);
     check_step.dependOn(&gzip_diff_exe.step);
     check_step.dependOn(&br_rle_probe_exe.step);
+    check_step.dependOn(&br_planned_corpus_exe.step);
+    check_step.dependOn(&br_planned_probe_exe.step);
     check_step.dependOn(&br_command_lut_bench_exe.step);
     check_step.dependOn(&compression_report_exe.step);
     check_step.dependOn(&dictionary_report_exe.step);
