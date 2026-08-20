@@ -5100,6 +5100,9 @@ architecture blindly.
   skippable frame and drain it through tiny output before `nextFrame` starts the
   next data frame. Stream summary and concatenated decode tests cover the
   data-skippable-data layout without illegally embedding it inside a data frame.
+  The native incremental decoder can capture bounded skippable payload bytes and
+  caller-owned `(id,length)` events while continuing concatenated data frames.
+  Snapshots report total/captured/truncated metadata without allocating.
 - Added a no-content-size incremental native Zstd raw/RLE frame encoder under
   `src/zstd/incremental/`. It retains one bounded block, delays the Zstd final
   block bit until explicit finish, maintains the optional XXH64 content checksum
