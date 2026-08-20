@@ -101,6 +101,17 @@ test "root Brotli incremental stored encoder continues streams" {
     try encoder.nextStream(.{ .stream = .{ .window_bits = 20 } });
     try std.testing.expectEqual(@as(usize, 1), encoder.snapshot().stream_index);
 }
+
+test "root Brotli stored decoder continues streams" {
+    const encoded = try br.IncrementalTestSupport.encodeStored(std.testing.allocator, "one");
+    defer std.testing.allocator.free(encoded);
+    var decoder = BrotliIncrementalStoredStreamDecoder.init();
+    var output: [3]u8 = undefined;
+    _ = try decoder.step(encoded, &output);
+    try decoder.finish();
+    try decoder.nextStream(.{});
+    try std.testing.expectEqual(@as(usize, 1), decoder.snapshot().stream_index);
+}
 pub const brCompressedSupportLimits = br.compressedSupportLimits;
 pub const brMinimalStaticDictionaryCoverage = br.minimalStaticDictionaryCoverage;
 pub const brMinimalStaticDictionarySizeBits = br.minimalStaticDictionarySizeBits;

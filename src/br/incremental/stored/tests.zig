@@ -49,6 +49,29 @@ test "byte-progressive stored decoder rejects compressed and truncated streams" 
     try std.testing.expectEqual(br.IncrementalStoredStreamDecoder.Phase.window, limited.snapshot().phase);
 }
 
+test "byte-progressive stored decoder continues framed streams" {
+    const first_payload = "first stored decoder stream" ** 8;
+    const second_payload = "second stored decoder stream" ** 6;
+    const first = try br.encodeStoredStreamWithOptionsAlloc(std.testing.allocator, first_payload, .{ .window_bits = 18, .metadata = "first" });
+    defer std.testing.allocator.free(first);
+    const second = try br.encodeStoredStreamWithOptionsAlloc(std.testing.allocator, second_payload, .{ .window_bits = 22, .metadata = "second" });
+    defer std.testing.allocator.free(second);
+    var decoder = br.IncrementalStoredStreamDecoder.init();
+    var first_output: [first_payload.len]u8 = undefined;
+    _ = try decoder.step(first, &first_output);
+    try decoder.finish();
+    try std.testing.expectEqual(@as(usize, 1), decoder.snapshot().stream_count);
+    try decoder.nextStream(.{});
+    var second_output: [second_payload.len]u8 = undefined;
+    _ = try decoder.step(second, &second_output);
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, first_payload, &first_output);
+    try std.testing.expectEqualSlices(u8, second_payload, &second_output);
+    try std.testing.expectEqual(@as(usize, 2), decoder.snapshot().stream_count);
+    try std.testing.expectEqual(first.len + second.len, decoder.snapshot().stream_input);
+    try std.testing.expectEqual(first_payload.len + second_payload.len, decoder.snapshot().stream_output);
+}
+
 test "incremental stored encoder round trips split input and tiny output" {
     const payload = "incremental Brotli stored encode payload " ** 100;
     var encoder = br.IncrementalStoredStreamEncoder.initWithOptions(std.testing.allocator, .{

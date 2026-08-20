@@ -5469,6 +5469,10 @@ architecture blindly.
   input to arbitrarily small caller output. Output limits, compressed-block
   rejection, padding validation, explicit finish/truncation, reset, snapshots,
   and diagnostics are covered in the colocated module tests.
+  After a finished stream it can continue another independently framed stored
+  stream with new limits through `nextStream`; cumulative compressed/output
+  byte counts and stream count/index remain visible without allocating. Tests
+  switch window bits and metadata across frames and exercise the root facade.
 - Added the matching incremental stored Brotli encoder under
   `src/br/incremental/stored/encoder.zig`. It preserves bit-writer state across
   metadata and multiple configurable meta-blocks, buffers only one block of

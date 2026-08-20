@@ -18,6 +18,9 @@ pub const Decoder = struct {
     metadata: bool = false,
     total_input: usize = 0,
     total_output: usize = 0,
+    stream_input: usize = 0,
+    stream_output: usize = 0,
+    stream_count: usize = 0,
     finished: bool = false,
     last_error_name: []const u8 = "",
     last_error_phase: Phase = .window,
@@ -32,6 +35,10 @@ pub const Decoder = struct {
         input_read: usize,
         output_written: usize,
         payload_remaining: usize,
+        stream_input: usize,
+        stream_output: usize,
+        stream_count: usize,
+        stream_index: usize,
         metadata: bool,
         last_error_name: []const u8,
         last_error_phase: Phase,
@@ -46,12 +53,28 @@ pub const Decoder = struct {
     pub fn reset(self: *Decoder) void {
         self.* = .{ .options = self.options };
     }
+    pub fn nextStream(self: *Decoder, options: Options) Error!void {
+        if (self.phase != .done or !self.finished) return error.InvalidBlockPlan;
+        const stream_input = self.stream_input + self.total_input;
+        const stream_output = self.stream_output + self.total_output;
+        const stream_count = self.stream_count + 1;
+        self.* = .{
+            .options = options,
+            .stream_input = stream_input,
+            .stream_output = stream_output,
+            .stream_count = stream_count,
+        };
+    }
     pub fn snapshot(self: *const Decoder) Snapshot {
         return .{
             .phase = self.phase,
             .input_read = self.total_input,
             .output_written = self.total_output,
             .payload_remaining = self.payload_remaining,
+            .stream_input = self.stream_input + self.total_input,
+            .stream_output = self.stream_output + self.total_output,
+            .stream_count = self.stream_count + @intFromBool(self.phase == .done and self.finished),
+            .stream_index = self.stream_count,
             .metadata = self.metadata,
             .last_error_name = self.last_error_name,
             .last_error_phase = self.last_error_phase,
