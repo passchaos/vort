@@ -403,6 +403,83 @@ test "gzip incremental best encoder selects stored and preserves metadata" {
     try std.testing.expectEqualSlices(u8, &payload, decoded);
 }
 
+test "gzip incremental best encoder emits concatenated members" {
+    const first = "first incremental gzip member alpha beta gamma" ** 64;
+    const second = "second independent gzip member delta epsilon" ** 48;
+    var options = try deflate.gzipIncrementalBestOptionsForLevel(6, .{ .filename = "first.txt" });
+    options.raw.block_len = 1024;
+    var encoder = deflate.GzipIncrementalBestEncoder.initWithOptions(std.testing.allocator, options);
+    defer encoder.deinit();
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    try appendGzipBestMember(&encoder, &encoded, first);
+    try std.testing.expectEqual(@as(usize, 1), encoder.snapshot().member_count);
+    try std.testing.expectEqual(first.len, encoder.snapshot().input_read);
+    try encoder.nextMember(.{ .filename = "second.txt", .header_crc = true });
+    try std.testing.expectEqual(@as(usize, 1), encoder.snapshot().member_count);
+    try std.testing.expectEqual(@as(usize, 0), encoder.snapshot().member_input);
+    try appendGzipBestMember(&encoder, &encoded, second);
+    try std.testing.expectEqual(@as(usize, 2), encoder.snapshot().member_count);
+    try std.testing.expectEqual(first.len + second.len, encoder.snapshot().input_read);
+
+    const expected = try deflate.encodeGzipBestAlloc(std.testing.allocator, first, options.raw.compression);
+    defer std.testing.allocator.free(expected);
+    try std.testing.expect(encoded.items.len > expected.len);
+    var history: [32 * 1024]u8 = undefined;
+    var decoder = try deflate.GzipIncrementalDecoder.init(.{
+        .allow_concatenated = true,
+        .expected_output_len = first.len + second.len,
+    }, &history);
+    const decoded = try decodeGzipMembersTest(&decoder, encoded.items, first.len + second.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, first ++ second, decoded);
+    try std.testing.expectEqual(@as(usize, 2), decoder.snapshot().member_count);
+}
+
+test "gzip incremental encoder rejects member transition before drain" {
+    var encoder = deflate.GzipIncrementalBestEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.nextMember(.{}));
+    var scratch: [16]u8 = undefined;
+    _ = try encoder.step("payload", &scratch);
+    encoder.finish();
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.nextMember(.{}));
+}
+
+fn appendGzipBestMember(encoder: *deflate.GzipIncrementalBestEncoder, encoded: *std.ArrayList(u8), payload: []const u8) !void {
+    var scratch: [31]u8 = undefined;
+    var offset: usize = 0;
+    while (offset < payload.len) {
+        const result = try encoder.step(payload[offset..], &scratch);
+        offset += result.progress.input_read;
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+}
+
+fn decodeGzipMembersTest(decoder: *deflate.GzipIncrementalDecoder, encoded: []const u8, expected_len: usize) ![]u8 {
+    const decoded = try std.testing.allocator.alloc(u8, expected_len);
+    errdefer std.testing.allocator.free(decoded);
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (input_offset < encoded.len) {
+        const result = try decoder.step(encoded[input_offset..], decoded[output_offset..]);
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+    }
+    while (decoder.snapshot().phase != .done) {
+        const result = try decoder.step("", decoded[output_offset..]);
+        output_offset += result.progress.output_written;
+    }
+    try std.testing.expectEqual(expected_len, output_offset);
+    return decoded;
+}
+
 fn encodeZlibBestTestStream(encoder: *deflate.ZlibIncrementalBestEncoder, payload: []const u8) ![]u8 {
     var encoded: std.ArrayList(u8) = .empty;
     errdefer encoded.deinit(std.testing.allocator);

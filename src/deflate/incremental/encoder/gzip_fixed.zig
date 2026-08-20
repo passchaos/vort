@@ -18,10 +18,22 @@ pub fn Encoder(comptime Codec: type) type {
         done: bool = false,
         total_input: usize = 0,
         total_output: usize = 0,
+        stream_input: usize = 0,
+        stream_output: usize = 0,
+        member_count: usize = 0,
 
         const Self = @This();
         pub const Error = Codec.Error;
         pub const Options = struct { raw: Codec.RawOptions = .{}, header: Codec.HeaderOptions = .{} };
+        pub const Snapshot = struct {
+            input_read: usize,
+            output_written: usize,
+            member_input: usize,
+            member_output: usize,
+            member_count: usize,
+            finishing: bool,
+            done: bool,
+        };
 
         pub fn init(allocator: std.mem.Allocator) Self {
             return initWithOptions(allocator, .{});
@@ -38,6 +50,12 @@ pub fn Encoder(comptime Codec: type) type {
             self.* = undefined;
         }
         pub fn reset(self: *Self) void {
+            self.member_count = 0;
+            self.stream_input = 0;
+            self.stream_output = 0;
+            self.resetMember();
+        }
+        fn resetMember(self: *Self) void {
             self.raw.reset();
             self.pending.clearRetainingCapacity();
             self.pending_offset = 0;
@@ -48,6 +66,25 @@ pub fn Encoder(comptime Codec: type) type {
             self.done = false;
             self.total_input = 0;
             self.total_output = 0;
+        }
+        /// Start another RFC 1952 member after the current member has been
+        /// fully drained. Allocations are retained, while DEFLATE history, CRC,
+        /// ISIZE, and header state reset because gzip members are independent.
+        pub fn nextMember(self: *Self, header: Codec.HeaderOptions) Error!void {
+            if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
+            self.options.header = header;
+            self.resetMember();
+        }
+        pub fn snapshot(self: *const Self) Snapshot {
+            return .{
+                .input_read = self.stream_input,
+                .output_written = self.stream_output,
+                .member_input = self.total_input,
+                .member_output = self.total_output,
+                .member_count = self.member_count,
+                .finishing = self.finishing,
+                .done = self.done,
+            };
         }
         pub fn flush(self: *Self) void {
             if (!self.finishing and !self.done) self.raw.flush();
@@ -73,6 +110,7 @@ pub fn Encoder(comptime Codec: type) type {
                     self.pending_offset += n;
                     output_written += n;
                     self.total_output += n;
+                    self.stream_output += n;
                     if (self.pending_offset != self.pending.items.len) return result(input_read, output_written, .need_output);
                     self.pending.clearRetainingCapacity();
                     self.pending_offset = 0;
@@ -91,6 +129,7 @@ pub fn Encoder(comptime Codec: type) type {
                     self.crc.update(accepted);
                     input_read += accepted.len;
                     self.total_input += accepted.len;
+                    self.stream_input += accepted.len;
                 }
                 if (raw_result.progress.output_written != 0) {
                     try self.pending.appendSlice(self.allocator, raw_scratch[0..raw_result.progress.output_written]);
@@ -103,6 +142,7 @@ pub fn Encoder(comptime Codec: type) type {
                     continue;
                 }
                 if (raw_result.status == .done) {
+                    self.member_count += 1;
                     self.done = true;
                     return result(input_read, output_written, .done);
                 }

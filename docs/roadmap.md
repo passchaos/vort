@@ -5154,6 +5154,13 @@ architecture blindly.
   public level-to-options helpers. Wrapper checksum, dictionary/metadata, flush,
   exact sizing, and tiny-output behavior now automatically cover stored, fixed,
   and dynamic block choices.
+- Gzip fixed and best incremental encoders can now continue with
+  `nextMember(header)` after a completed member has been fully drained. Each
+  RFC 1952 member gets independent DEFLATE history, CRC-32, ISIZE, and metadata
+  while allocations are retained; stream-level input/output and completed
+  member counts remain cumulative in the new encoder snapshot. Transitions
+  before completion are rejected, and tests round-trip two differently headed
+  members through the concatenation-aware incremental decoder using tiny output.
 - Added bounded adaptive block sizing to the incremental best core. Full input
   windows use the existing stored/fixed/dynamic cost scorer and split policy to
   choose a shorter prefix, while buffering never exceeds `max_block_len`; raw,
