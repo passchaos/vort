@@ -105,6 +105,15 @@ pub fn Encoder(comptime Codec: type) type {
             self.expected_input_len = expected_input_len;
             self.reset();
         }
+        pub fn resetDictionary(self: *Self, dictionary: []const u8) void {
+            self.dictionary = dictionary;
+            self.reset();
+        }
+        pub fn resetExactSizeDictionary(self: *Self, expected_input_len: usize, dictionary: []const u8) void {
+            self.expected_input_len = expected_input_len;
+            self.dictionary = dictionary;
+            self.reset();
+        }
         pub fn matchFinderSnapshot(self: *const Self) MatchFinderSnapshot {
             return self.match_finder.snapshot();
         }

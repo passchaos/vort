@@ -46,6 +46,9 @@ pub fn Encoder(comptime Codec: type) type {
         }
         pub fn reset(self: *Self) void {
             self.raw.reset();
+            self.resetWrapper();
+        }
+        fn resetWrapper(self: *Self) void {
             self.pending.clearRetainingCapacity();
             self.pending_offset = 0;
             self.adler = Codec.Adler32.init();
@@ -55,6 +58,26 @@ pub fn Encoder(comptime Codec: type) type {
             self.done = false;
             self.total_input = 0;
             self.total_output = 0;
+        }
+        /// Start another independently wrapped zlib stream after the prior
+        /// stream has been fully drained. Concatenation is a container-level
+        /// convention (not an RFC 1950 single-stream feature), matching the
+        /// library's concatenated zlib decoders.
+        pub fn nextStream(self: *Self, options: Options, dictionary: []const u8) Error!void {
+            if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
+            self.options = options;
+            self.dictionary = dictionary;
+            self.raw.options = options.raw;
+            self.raw.resetDictionary(dictionary);
+            self.resetWrapper();
+        }
+        pub fn nextStreamExactSize(self: *Self, options: Options, dictionary: []const u8, expected_input_len: usize) Error!void {
+            if (!self.done or self.pending_offset != self.pending.items.len) return error.InvalidBlockPlan;
+            self.options = options;
+            self.dictionary = dictionary;
+            self.raw.options = options.raw;
+            self.raw.resetExactSizeDictionary(expected_input_len, dictionary);
+            self.resetWrapper();
         }
         pub fn flush(self: *Self) void {
             if (!self.finishing and !self.done) self.raw.flush();

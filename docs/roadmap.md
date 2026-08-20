@@ -5173,6 +5173,12 @@ architecture blindly.
   member before calling `nextMember`. Both fixed and best encoders share this
   surface; fixed-member concatenation and the root public export have dedicated
   coverage rather than relying only on generic instantiation.
+- Zlib fixed/best incremental wrappers now have symmetric `nextStream` and
+  `nextStreamExactSize` continuation for the library's established
+  concatenated-zlib convention. Each stream can switch raw compression options,
+  preset dictionary/DICTID, and pledged size while retaining allocations; a
+  mixed level/no-dictionary + dictionary stream round-trips through the public
+  concatenated decoder with exact-size enforcement.
 - Added bounded adaptive block sizing to the incremental best core. Full input
   windows use the existing stored/fixed/dynamic cost scorer and split policy to
   choose a shorter prefix, while buffering never exceeds `max_block_len`; raw,

@@ -613,6 +613,58 @@ fn encodeZlibBestTestStream(encoder: *deflate.ZlibIncrementalBestEncoder, payloa
     return try encoded.toOwnedSlice(std.testing.allocator);
 }
 
+test "zlib incremental best encoder emits concatenated streams" {
+    const dictionary = "zlib member dictionary phrase";
+    const first = "first zlib member alpha beta gamma" ** 32;
+    const second = "zlib member dictionary phrase and payload" ** 24;
+    var first_options = try deflate.zlibIncrementalBestOptionsForLevel(6);
+    first_options.raw.block_len = 1024;
+    var encoder = deflate.ZlibIncrementalBestEncoder.initExactSize(std.testing.allocator, first_options, first.len);
+    defer encoder.deinit();
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    try appendZlibBestStream(&encoder, &encoded, first);
+    const second_offset = encoded.items.len;
+
+    var second_options = try deflate.zlibIncrementalBestOptionsForLevel(1);
+    second_options.raw.block_len = 512;
+    try encoder.nextStreamExactSize(second_options, dictionary, second.len);
+    try appendZlibBestStream(&encoder, &encoded, second);
+    const second_header = try deflate.parseZlibHeaderInfo(encoded.items[second_offset..]);
+    try std.testing.expect(second_header.dictionary_id != null);
+
+    const decoded = try deflate.decodeZlibConcatenatedAllocWithDictionaryExactSize(
+        std.testing.allocator,
+        encoded.items,
+        dictionary,
+        first.len + second.len,
+    );
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, first ++ second, decoded);
+}
+
+test "zlib incremental encoder rejects early stream transition" {
+    var encoder = deflate.ZlibIncrementalBestEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.nextStream(.{}, ""));
+}
+
+fn appendZlibBestStream(encoder: *deflate.ZlibIncrementalBestEncoder, encoded: *std.ArrayList(u8), payload: []const u8) !void {
+    var scratch: [23]u8 = undefined;
+    var offset: usize = 0;
+    while (offset < payload.len) {
+        const result = try encoder.step(payload[offset..], &scratch);
+        offset += result.progress.input_read;
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+    }
+    encoder.finish();
+    while (true) {
+        const result = try encoder.step("", &scratch);
+        try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
+        if (result.status == .done) break;
+    }
+}
+
 test "raw deflate incremental best encoder adapts block boundaries" {
     const payload = ("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" ** 512) ++
         ("structured-json-field:value,structured-json-field:value\n" ** 512);
