@@ -5307,6 +5307,19 @@ architecture blindly.
   evidence moved JSON from about `1652` to `1669` MiB/s, source `2087→2155`,
   repetitive `2225→2270`, and exact-window repetition `376→479`, with identical
   sizes and CRC mixes. The multi-corpus zlib-ng gate remains strict and green.
+- The incremental DEFLATE benchmark now reports staged `matcher-lazy` and
+  `tree-emit` rows for the JSON/source corpora, using the same persistent
+  matcher, retained 32 KiB history, token buffer, cached dynamic statistics,
+  and bit writer as production. Token-count checksums keep staged work
+  observable, while the emitted byte count must match the full encoder. In a
+  local 32-iteration ReleaseFast run, matcher-only throughput was about `2874`
+  MiB/s for JSON and `3908` MiB/s for source, tree planning plus emission was
+  about `7081`/`8286` MiB/s, and the corresponding full paths were `1602`/
+  `1646` MiB/s. This shows the remaining source gap is not a single Huffman
+  emission hotspot: matcher and tree/emission together account for most but not
+  all full-path time, so future optimization should measure stream buffering,
+  history retention, and pending-output copying rather than blindly changing
+  the match search.
 - Added a byte-progressive raw-DEFLATE stored-block decoder under
   `src/deflate/incremental/decoder/`. It preserves split header state, streams
   payload directly caller-to-caller through tiny output, enforces exact/maximum

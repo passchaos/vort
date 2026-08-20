@@ -1,6 +1,7 @@
 const std = @import("std");
 const vort = @import("vort");
 const zlib = @import("zlib");
+const stages = @import("incremental_encode/stages.zig");
 
 const input_len: usize = 256 * 1024;
 const block_len: usize = 32 * 1024;
@@ -55,6 +56,11 @@ pub fn main(init: std.process.Init) !void {
             try measureZlib(init, case, iterations),
         };
         for (rows) |result| try writeRow(stdout, result);
+        if (stages.supports(case.name)) {
+            const profile = try measureStages(init, case, compression, iterations);
+            try writeRow(stdout, profile.matcher);
+            try writeRow(stdout, profile.emit);
+        }
     }
     try stdout.flush();
 }
@@ -120,6 +126,16 @@ fn measureZlib(init: std.process.Init, case: Case, iterations: usize) !Row {
         mix +%= vort.crc32(output[0..output_bytes]);
     }
     return row(case, zlib.VORT_ZLIB_BENCH_NAME, iterations, output_bytes, start.durationTo(std.Io.Clock.awake.now(init.io)).toNanoseconds(), mix);
+}
+
+const MatcherProfile = struct { matcher: Row, emit: Row };
+
+fn measureStages(init: std.process.Init, case: Case, compression: vort.CompressionOptions, iterations: usize) !MatcherProfile {
+    const measurement = try stages.measure(init, case.input, compression, block_len, iterations);
+    return .{
+        .matcher = row(case, "matcher-lazy", iterations, 0, measurement.matcher_ns, measurement.token_mix),
+        .emit = row(case, "tree-emit", iterations, measurement.output_bytes, measurement.emit_ns, measurement.token_mix),
+    };
 }
 
 fn zlibRawDeflate(input: []const u8, output: []u8) !usize {

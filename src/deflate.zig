@@ -177,6 +177,23 @@ const IncrementalBestEncoderCodec = struct {
 };
 
 pub const RawDeflateIncrementalBestEncoder = incremental_fixed_encoder.Encoder(IncrementalBestEncoderCodec);
+/// Internal instrumentation surface used by the staged DEFLATE benchmark.
+/// It is not re-exported from the package root; external callers should prefer
+/// `RawDeflateIncrementalBestEncoder`.
+pub const IncrementalDeflateMatcher = incremental_rolling_hash.Matcher;
+
+/// Internal staged-benchmark companion for `IncrementalDeflateMatcher`.
+pub fn writeIncrementalBestPlannedBlock(
+    allocator: std.mem.Allocator,
+    writer: *bitstream.BitWriter,
+    plain: []const u8,
+    tokens: []const lz77.Token,
+    final: bool,
+    options: CompressionOptions,
+    stats: incremental_dynamic_stats.Stats,
+) !void {
+    return writeBestTokensBlockWithStats(allocator, writer, plain, tokens, final, options, stats);
+}
 
 const IncrementalZlibFixedEncoderCodec = struct {
     pub const Error = deflate.Error || std.mem.Allocator.Error;
