@@ -525,7 +525,13 @@ fn planTokensWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8
     if (dictionary.len == 0) return planTokensAlloc(allocator, input, normalized);
     return switch (normalized.strategy) {
         .default => switch (normalized.parser) {
-            .hash, .greedy => try lz77.hashGreedyPlanAllocWithDictionary(allocator, input, dictionary, normalized.lz77_options),
+            .hash => if (input.len <= 256 and
+                normalized.lz77_options.window_len <= 16 * 1024 and
+                normalized.lz77_options.max_chain <= 8)
+                try lz77.greedyPlanAllocWithDictionary(allocator, input, dictionary, normalized.lz77_options)
+            else
+                try lz77.hashGreedyPlanAllocWithDictionary(allocator, input, dictionary, normalized.lz77_options),
+            .greedy => try lz77.greedyPlanAllocWithDictionary(allocator, input, dictionary, normalized.lz77_options),
             .lazy, .optimal => try lz77.lazyGreedyPlanAllocWithDictionary(allocator, input, dictionary, normalized.lz77_options),
         },
         .filtered => try lz77.lazyGreedyPlanAllocWithDictionary(allocator, input, dictionary, normalized.lz77_options),
@@ -1658,9 +1664,9 @@ pub fn encodeRawFixedSyncFlushAppend(
 /// Chunked-input counterpart that never joins caller plaintext slices.
 ///
 /// Each non-empty slice becomes a non-final fixed block. DEFLATE bit packing
-/// remains continuous and one final sync-flush block terminates the message;
-/// match search is intentionally scoped to each caller slice so no temporary
-/// contiguous plaintext buffer is required.
+/// remains continuous and one final sync-flush block terminates the message.
+/// A bounded rolling dictionary preserves cross-slice matches without ever
+/// joining the complete caller message into one plaintext allocation.
 pub fn encodeRawFixedSyncFlushChunksAppend(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
@@ -1670,12 +1676,19 @@ pub fn encodeRawFixedSyncFlushChunksAppend(
     const start = out.items.len;
     var writer = bitstream.BitWriter{};
     defer writer.deinit(allocator);
+    const history_limit = @min(
+        options.lz77_options.window_len,
+        lz77.default_window_len,
+    );
+    var history: std.ArrayList(u8) = .empty;
+    defer history.deinit(allocator);
     var wrote_block = false;
     for (chunks) |chunk| {
         if (chunk.len == 0) continue;
-        const plan = try planTokensAlloc(allocator, chunk, options);
+        const plan = try planTokensWithDictionaryAlloc(allocator, chunk, history.items, options);
         defer plan.deinit(allocator);
         try writeFixedTokens(allocator, &writer, plan.tokens, false);
+        try appendRollingHistory(allocator, &history, chunk, history_limit);
         wrote_block = true;
     }
     if (!wrote_block) {
@@ -1685,6 +1698,34 @@ pub fn encodeRawFixedSyncFlushChunksAppend(
     try writeStoredBlock(allocator, &writer, "", false);
     try out.appendSlice(allocator, writer.bytes.items);
     return out.items.len - start;
+}
+
+fn appendRollingHistory(
+    allocator: std.mem.Allocator,
+    history: *std.ArrayList(u8),
+    chunk: []const u8,
+    limit: usize,
+) !void {
+    if (limit == 0) {
+        history.clearRetainingCapacity();
+        return;
+    }
+    const required = @min(
+        limit,
+        std.math.add(usize, history.items.len, chunk.len) catch limit,
+    );
+    try history.ensureTotalCapacity(allocator, required);
+    if (chunk.len >= limit) {
+        history.clearRetainingCapacity();
+        history.appendSliceAssumeCapacity(chunk[chunk.len - limit ..]);
+        return;
+    }
+
+    const retained_len = @min(history.items.len, limit - chunk.len);
+    const retained = history.items[history.items.len - retained_len ..];
+    std.mem.copyForwards(u8, history.items[0..retained_len], retained);
+    history.items.len = retained_len;
+    history.appendSliceAssumeCapacity(chunk);
 }
 
 test "raw fixed sync flush round trips after RFC 7692 tail elision" {
@@ -1742,6 +1783,57 @@ test "raw fixed sync flush chunks preserve split input" {
         "split websocket payload split websocket payload",
         decoded,
     );
+}
+
+test "raw fixed sync flush chunks use bounded cross-slice history" {
+    const allocator = std.testing.allocator;
+    const input = "sensor=42;status=nominal;" ** 64;
+    var chunks: [16][]const u8 = undefined;
+    for (&chunks, 0..) |*chunk, index| {
+        const start = index * input.len / chunks.len;
+        const end = (index + 1) * input.len / chunks.len;
+        chunk.* = input[start..end];
+    }
+
+    var contiguous: std.ArrayList(u8) = .empty;
+    defer contiguous.deinit(allocator);
+    _ = try encodeRawFixedSyncFlushAppend(
+        allocator,
+        &contiguous,
+        input,
+        .{
+            .parser = .hash,
+            .lz77_options = .{
+                .window_len = 16 * 1024,
+                .max_chain = 4,
+                .nice_len = 32,
+            },
+        },
+    );
+
+    var chunked: std.ArrayList(u8) = .empty;
+    defer chunked.deinit(allocator);
+    _ = try encodeRawFixedSyncFlushChunksAppend(
+        allocator,
+        &chunked,
+        &chunks,
+        .{
+            .parser = .hash,
+            .lz77_options = .{
+                .window_len = 16 * 1024,
+                .max_chain = 4,
+                .nice_len = 32,
+            },
+        },
+    );
+    // One fixed-block header/EOB per slice creates modest overhead, but the
+    // rolling dictionary should keep the result near one-shot compression
+    // rather than re-encoding the repeated telemetry prefix in every slice.
+    try std.testing.expect(chunked.items.len <= contiguous.items.len + 64);
+    try chunked.appendSlice(allocator, "\x01\x00\x00\xff\xff");
+    const decoded = try decodeRawAutoAlloc(allocator, chunked.items);
+    defer allocator.free(decoded);
+    try std.testing.expectEqualStrings(input, decoded);
 }
 
 fn encodeRawFixedTokensFinalAlloc(allocator: std.mem.Allocator, tokens: []const lz77.Token, final: bool) ![]u8 {

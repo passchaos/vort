@@ -206,6 +206,43 @@ pub fn hashGreedyPlanAllocWithDictionary(allocator: std.mem.Allocator, input: []
     return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
 }
 
+/// Scan-backed preset-history planner for small discontiguous blocks.
+///
+/// This avoids clearing the dictionary hash tables once per caller slice. It
+/// deliberately targets bounded fast-parser inputs: `max_chain` caps the
+/// number of matching first-byte candidates examined at every position.
+pub fn greedyPlanAllocWithDictionary(
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    dictionary: []const u8,
+    options: GreedyOptions,
+) !GreedyPlan {
+    const dict = activeDictionary(dictionary, options);
+    if (dict.len == 0) return greedyPlanAlloc(allocator, input, options);
+
+    var tokens = try initTokenList(allocator, input.len);
+    errdefer tokens.deinit(allocator);
+    var stats = PlanStats{};
+    var pos: usize = 0;
+    while (pos < input.len) {
+        const best = findBestCombinedScanMatch(dict, input, pos, options);
+        if (acceptMatch(input, pos, best.length, best.distance, options)) {
+            try appendToken(&tokens, allocator, .{ .match = .{
+                .length = @intCast(best.length),
+                .distance = @intCast(best.distance),
+            } });
+            stats.matches += 1;
+            stats.matched_bytes += best.length;
+            pos += best.length;
+        } else {
+            try appendToken(&tokens, allocator, .{ .literal = input[pos] });
+            stats.literals += 1;
+            pos += 1;
+        }
+    }
+    return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+}
+
 pub fn lazyGreedyPlanAllocWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: GreedyOptions) !GreedyPlan {
     const dict = activeDictionary(dictionary, options);
     if (dict.len == 0) return lazyGreedyPlanAlloc(allocator, input, options);
@@ -955,6 +992,39 @@ fn findBestCombinedHashMatch(dict: []const u8, input: []const u8, current: usize
     return best;
 }
 
+fn findBestCombinedScanMatch(
+    dict: []const u8,
+    input: []const u8,
+    pos: usize,
+    options: GreedyOptions,
+) MatchCandidate {
+    const minimum = minMatch(options);
+    if (input.len - pos < minimum or options.max_chain == 0) return .{};
+    const current = dict.len + pos;
+    const start = current -| @min(options.window_len, default_window_len);
+    const max_len = @min(maxMatch(options), input.len - pos);
+    var best = MatchCandidate{};
+    var checked: usize = 0;
+    var candidate = current;
+    while (candidate > start and checked < options.max_chain) {
+        candidate -= 1;
+        if (byteAt(dict, input, candidate) != input[pos]) continue;
+        checked += 1;
+        const len = combinedMatchLength(
+            dict,
+            input,
+            candidate,
+            current,
+            max_len,
+        );
+        if (len >= minimum and len > best.length) {
+            best = .{ .length = len, .distance = current - candidate };
+            if (len >= options.nice_len) break;
+        }
+    }
+    return best;
+}
+
 fn matchLength(input: []const u8, a: usize, b: usize, max_len: usize) usize {
     var len: usize = 0;
     while (len + 8 <= max_len) : (len += 8) {
@@ -1653,6 +1723,27 @@ test "dictionary-backed hash and lazy planners can emit preset-history matches" 
             else => return error.TestExpectedEqual,
         }
     }
+}
+
+test "scan dictionary planner emits preset-history matches" {
+    const dictionary = "sensor=42;status=nominal;" ** 4;
+    const input = "sensor=42;status=nominal;sensor=42";
+    const plan = try greedyPlanAllocWithDictionary(
+        std.testing.allocator,
+        input,
+        dictionary,
+        .{ .window_len = 16 * 1024, .max_chain = 4, .nice_len = 32 },
+    );
+    defer plan.deinit(std.testing.allocator);
+    try std.testing.expect(plan.stats.matches > 0);
+    try std.testing.expect(plan.stats.matched_bytes >= 32);
+    for (plan.tokens) |token| switch (token) {
+        .match => |match| {
+            try std.testing.expect(match.distance <= dictionary.len);
+            break;
+        },
+        .literal => {},
+    };
 }
 
 test "dictionary hash planner skips non-viable prefix collisions" {
