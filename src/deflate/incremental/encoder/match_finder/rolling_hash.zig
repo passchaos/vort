@@ -197,6 +197,7 @@ pub const Matcher = struct {
         if (self.head_epoch.items[h] != self.epoch) return .{};
 
         var candidate = self.head.items[h];
+        const history_chain = candidate < self.absolute_position;
         var checked: usize = 0;
         var best: Candidate = .{};
         const minimum = @max(@as(usize, 3), @min(options.min_match, @max(@as(usize, 3), @min(options.max_match, lz77.max_match_len))));
@@ -216,7 +217,12 @@ pub const Matcher = struct {
                     if (length >= options.nice_len or length == maximum) break;
                 }
             }
-            candidate = self.prev.items[candidate & (lz77.default_window_len - 1)];
+            const next_candidate = self.prev.items[candidate & (lz77.default_window_len - 1)];
+            if (history_chain and next_candidate != invalid_position and next_candidate < self.absolute_position) {
+                const history_pos = next_candidate - (self.absolute_position - history.len);
+                @prefetch(history.ptr + history_pos, .{ .locality = 1 });
+            }
+            candidate = next_candidate;
         }
         return best;
     }

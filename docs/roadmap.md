@@ -5266,6 +5266,14 @@ architecture blindly.
   input from `1443` to `2225` MiB/s without changing compressed sizes or CRC
   mixes. The remaining local zlib-ng lead on JSON/source is now about `1.26x`/
   `1.28x`, down substantially from the earlier roughly `2x` gap.
+- Candidate-chain traversal now prefetches the next source only when the hash
+  head begins in the retained history window. An unconditional prefetch trial
+  improved cross-window input but regressed JSON/source and was rejected; the
+  history-only guard leaves their block-local chains untouched. Against the
+  no-prefetch bounded-profitability baseline, the latest same-machine 32-run
+  evidence moved JSON from about `1652` to `1669` MiB/s, source `2087→2155`,
+  repetitive `2225→2270`, and exact-window repetition `376→479`, with identical
+  sizes and CRC mixes. The multi-corpus zlib-ng gate remains strict and green.
 - Added a byte-progressive raw-DEFLATE stored-block decoder under
   `src/deflate/incremental/decoder/`. It preserves split header state, streams
   payload directly caller-to-caller through tiny output, enforces exact/maximum
