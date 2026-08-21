@@ -536,7 +536,7 @@ pub fn encodePlannedStreamAllocWithStatsTimed(allocator: std.mem.Allocator, inpu
     defer plan.deinit(allocator);
     if (io) |active| stats.command_plan_ns = elapsedNs(command_start.?, active);
     const wire_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
-    const encoded = try encodeCommandPlanAlloc(allocator, input, plan.commands, stats);
+    const encoded = try encodeCommandPlanAlloc(allocator, input, plan.commands, io, stats);
     if (io) |active| stats.wire_ns = elapsedNs(wire_start.?, active);
     stats.input_bytes = input.len;
     stats.token_count = lz_plan.tokens.len;
@@ -573,7 +573,7 @@ pub fn encodePlannedStreamWithScratchAlloc(allocator: std.mem.Allocator, scratch
     const plan = try command_plan.buildAlloc(scratch_allocator, input, lz_plan.tokens);
     defer plan.deinit(scratch_allocator);
     var stats: encoder_stats.PlannedEncodeStats = .{};
-    const encoded = try encodeCommandPlanAlloc(scratch_allocator, input, plan.commands, &stats);
+    const encoded = try encodeCommandPlanAlloc(scratch_allocator, input, plan.commands, null, &stats);
     defer scratch_allocator.free(encoded);
     return allocator.dupe(u8, encoded);
 }
@@ -609,7 +609,7 @@ pub const PlannedStreamEncoder = struct {
         if (stats.matches == 0) return error.InvalidBlockPlan;
         _ = try command_plan.buildReuse(&self.commands, self.allocator, input, self.tokens.items);
         var stats_out: encoder_stats.PlannedEncodeStats = .{};
-        return encodeCommandPlanAlloc(allocator, input, self.commands.items, &stats_out);
+        return encodeCommandPlanAlloc(allocator, input, self.commands.items, null, &stats_out);
     }
 
     pub fn retainedCapacity(self: *const PlannedStreamEncoder) usize {
@@ -781,11 +781,12 @@ fn writeCommandLengthExtras(allocator: std.mem.Allocator, writer: *BitWriter, co
         try writer.writeBits(allocator, copy_len - command.command.copy_base, command.command.copy_extra_bits);
 }
 
-fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats) Error![]u8 {
+fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats) Error![]u8 {
     if (commands.len == 0) return error.InvalidBlockPlan;
     var literal_frequencies: [256]u32 = @splat(0);
     var command_frequencies: [704]u32 = @splat(0);
     var distance_frequencies: [max_distance_alphabet_size]u32 = @splat(0);
+    const frequency_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     for (commands) |command| {
         const encoding = commandEntryForLengths(command.insert_len, command.copy_len) orelse return error.InvalidBlockPlan;
         command_frequencies[encoding.symbol] += 1;
@@ -794,12 +795,15 @@ fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, comma
         const distance = encoder_distance.encode(command.distance, 15) orelse return error.InvalidBlockPlan;
         distance_frequencies[distance.symbol] += 1;
     }
+    if (io) |active| stats.frequency_ns = elapsedNs(frequency_start.?, active);
+    const alphabet_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     const literal_alphabet = try command_plan.alphabetFromFrequencies(256, &literal_frequencies);
     const command_alphabet = try command_plan.alphabetFromFrequencies(704, &command_frequencies);
     const distance_alphabet = try command_plan.alphabetFromFrequencies(max_distance_alphabet_size, &distance_frequencies);
     stats.literal_symbol_count = literal_alphabet.len;
     stats.command_symbol_count = command_alphabet.len;
     stats.distance_symbol_count = distance_alphabet.len;
+    if (io) |active| stats.alphabet_ns = elapsedNs(alphabet_start.?, active);
 
     // Useful planner streams are usually a small fraction of input. Reserving
     // a capped fraction removes ArrayList's early growth ladder without scaling
@@ -810,14 +814,21 @@ fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, comma
     try writeWindowBits(allocator, &writer, default_window_bits);
     try writeLastCompressedMetaBlockHeader(allocator, &writer, input.len);
     const distance_alphabet_size = plannedDistanceAlphabetSize(distance_alphabet);
+    const lengths_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     const literal_lengths = try literal_alphabet.codeLengths(256);
     const command_lengths = try command_alphabet.codeLengths(704);
     const distance_lengths = try distance_alphabet.codeLengths(max_distance_alphabet_size);
+    if (io) |active| stats.lengths_ns = elapsedNs(lengths_start.?, active);
+    const header_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     try writePlannedCompressedHeader(allocator, &writer, literal_alphabet, command_alphabet, distance_alphabet, distance_alphabet_size, &literal_lengths, &command_lengths, &distance_lengths);
+    if (io) |active| stats.header_ns = elapsedNs(header_start.?, active);
 
+    const encoder_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     const literal_encoder = try huffman.HuffmanTable(256).Encoder.init(&literal_lengths);
     const command_encoder = try huffman.HuffmanTable(704).Encoder.init(&command_lengths);
     const distance_encoder = try huffman.HuffmanTable(max_distance_alphabet_size).Encoder.init(&distance_lengths);
+    if (io) |active| stats.encoder_ns = elapsedNs(encoder_start.?, active);
+    const payload_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     for (commands) |command| {
         const encoding = commandEntryForLengths(command.insert_len, command.copy_len) orelse unreachable;
         if (command_alphabet.len > 1) try writer.writeBits(allocator, command_encoder.codes[encoding.symbol], command_encoder.bits[encoding.symbol]);
@@ -832,6 +843,7 @@ fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, comma
                 try writer.writeBits(allocator, distance.extra, distance.extra_bits);
         }
     }
+    if (io) |active| stats.payload_ns = elapsedNs(payload_start.?, active);
     if (writer.bit_index != 0) writer.alignToByte();
     return out.toOwnedSlice(allocator);
 }

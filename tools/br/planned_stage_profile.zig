@@ -15,10 +15,11 @@ pub fn main(init: std.process.Init) !void {
         const encoded = try vort.brEncodePlannedStreamAllocWithStatsTimed(init.gpa, case.payload, init.io, &stats);
         defer init.gpa.free(encoded);
         const total_ns = stats.lz77_ns + stats.command_plan_ns + stats.wire_ns;
-        try stdout.interface.print("{s}: input={d} encoded={d} tokens={d} commands={d} literal_bytes={d} matched_bytes={d} literal_symbols={d} command_symbols={d} distance_symbols={d} lz77_ns={d} command_ns={d} wire_ns={d} shares={d:.3}/{d:.3}/{d:.3}\n", .{
+        try stdout.interface.print("{s}: input={d} encoded={d} tokens={d} commands={d} literal_bytes={d} matched_bytes={d} literal_symbols={d} command_symbols={d} distance_symbols={d} lz77_ns={d} command_ns={d} wire_ns={d} shares={d:.3}/{d:.3}/{d:.3} wire_parts=freq:{d},alpha:{d},lengths:{d},header:{d},encoder:{d},payload:{d}\n", .{
             case.name,                                                                          stats.input_bytes,                                                          stats.encoded_bytes,         stats.token_count, stats.command_count,   stats.literal_bytes, stats.matched_bytes,
             stats.literal_symbol_count,                                                         stats.command_symbol_count,                                                 stats.distance_symbol_count, stats.lz77_ns,     stats.command_plan_ns, stats.wire_ns,       @as(f64, @floatFromInt(stats.lz77_ns)) / @as(f64, @floatFromInt(total_ns)),
-            @as(f64, @floatFromInt(stats.command_plan_ns)) / @as(f64, @floatFromInt(total_ns)), @as(f64, @floatFromInt(stats.wire_ns)) / @as(f64, @floatFromInt(total_ns)),
+            @as(f64, @floatFromInt(stats.command_plan_ns)) / @as(f64, @floatFromInt(total_ns)), @as(f64, @floatFromInt(stats.wire_ns)) / @as(f64, @floatFromInt(total_ns)), stats.frequency_ns,          stats.alphabet_ns, stats.lengths_ns,      stats.header_ns,     stats.encoder_ns,
+            stats.payload_ns,
         });
     }
     try stdout.interface.flush();

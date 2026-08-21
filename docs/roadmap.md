@@ -5670,6 +5670,14 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   100-iteration sample measured 44.2/90.8/93.7 MiB/s for JSON/source/log with
   unchanged 92/131/125-byte streams; JSON remains scheduler-variable while the
   source/log improvement is consistent with fewer output reallocations.
+  Wire-stage subprofiling splits frequency collection, alphabet compaction,
+  package-merge lengths, complex header, canonical encoder setup, and payload.
+  On JSON/source/log the dominant pieces are lengths (10.6–15.9 µs) and header
+  (12.1–18.6 µs), while payload emission is only 1.8–2.6 µs. PrefixAlphabet
+  therefore runs package-merge directly on 32/64/256-sized compact frequency
+  arrays and scatters once, avoiding full 704/520 sparse compaction. Besides
+  lowering length-build time, this improved source/log wire sizes from 131/125
+  to 130/122 bytes; Node and corpus gates accept the new deterministic wire.
   Command selection no longer scans all 704 upstream LUT entries for every
   planned match. A compile-time 24×24 insert/copy-code index retains the first
   exact upstream symbol for O(1) lookup; an exhaustive equivalence test covers

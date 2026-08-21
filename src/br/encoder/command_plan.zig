@@ -75,10 +75,14 @@ pub const PrefixAlphabet = struct {
                 for (self.symbols[0..4]) |symbol| lengths[symbol] = 2;
             },
             5...max_prefix_symbols => {
-                var frequencies: [alphabet_size]u32 = @splat(0);
-                for (self.symbols[0..self.len], self.frequencies[0..self.len]) |symbol, frequency|
-                    frequencies[symbol] = @intCast(@min(frequency, std.math.maxInt(u32)));
-                lengths = @import("../../huffman.zig").treeCodeLengths(alphabet_size, &frequencies, 15);
+                if (self.len <= 32)
+                    self.fillTreeLengths(alphabet_size, 32, &lengths)
+                else if (self.len <= 64)
+                    self.fillTreeLengths(alphabet_size, 64, &lengths)
+                else if (self.len <= 256)
+                    self.fillTreeLengths(alphabet_size, 256, &lengths)
+                else
+                    self.fillTreeLengths(alphabet_size, max_prefix_symbols, &lengths);
             },
             else => unreachable,
         }
@@ -88,6 +92,15 @@ pub const PrefixAlphabet = struct {
     fn less(self: *const PrefixAlphabet, left: usize, right: usize) bool {
         return self.frequencies[left] > self.frequencies[right] or
             (self.frequencies[left] == self.frequencies[right] and self.symbols[left] < self.symbols[right]);
+    }
+
+    fn fillTreeLengths(self: PrefixAlphabet, comptime alphabet_size: usize, comptime compact_size: usize, lengths: *[alphabet_size]u4) void {
+        std.debug.assert(self.len <= compact_size);
+        var frequencies: [compact_size]u32 = @splat(0);
+        for (self.frequencies[0..self.len], 0..) |frequency, i|
+            frequencies[i] = @intCast(@min(frequency, std.math.maxInt(u32)));
+        const compact_lengths = @import("../../huffman.zig").treeCodeLengths(compact_size, &frequencies, 15);
+        for (self.symbols[0..self.len], compact_lengths[0..self.len]) |symbol, bits| lengths[symbol] = bits;
     }
 };
 

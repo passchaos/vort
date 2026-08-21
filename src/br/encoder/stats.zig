@@ -10,5 +10,11 @@ pub const PlannedEncodeStats = struct {
     encoded_bytes: usize = 0,
     lz77_ns: u64 = 0,
     command_plan_ns: u64 = 0,
+    frequency_ns: u64 = 0,
+    alphabet_ns: u64 = 0,
+    lengths_ns: u64 = 0,
+    header_ns: u64 = 0,
+    encoder_ns: u64 = 0,
+    payload_ns: u64 = 0,
     wire_ns: u64 = 0,
 };
