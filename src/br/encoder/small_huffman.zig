@@ -14,27 +14,23 @@ pub fn build(comptime capacity: usize, frequencies: []const usize, lengths: *[ca
     }
     const Node = struct { weight: u64, parent: i16 = -1, serial: u8 };
     var nodes: [2 * capacity - 1]Node = undefined;
-    var active: [2 * capacity - 1]u8 = undefined;
+    var heap: [2 * capacity - 1]u8 = undefined;
     var node_len = frequencies.len;
-    var active_len = frequencies.len;
+    var heap_len = frequencies.len;
     for (frequencies, 0..) |frequency, i| {
         nodes[i] = .{ .weight = frequency, .serial = @intCast(i) };
-        active[i] = @intCast(i);
+        heap[i] = @intCast(i);
     }
-    while (active_len > 1) {
-        const first_pos = minNode(nodes[0..node_len], active[0..active_len]);
-        const first = active[first_pos];
-        removeActive(&active, &active_len, first_pos);
-        const second_pos = minNode(nodes[0..node_len], active[0..active_len]);
-        const second = active[second_pos];
-        removeActive(&active, &active_len, second_pos);
+    heapify(Node, nodes[0..node_len], &heap, heap_len);
+    while (heap_len > 1) {
+        const first = heapPop(Node, nodes[0..node_len], &heap, &heap_len);
+        const second = heapPop(Node, nodes[0..node_len], &heap, &heap_len);
         const parent: u8 = @intCast(node_len);
         nodes[node_len] = .{ .weight = nodes[first].weight + nodes[second].weight, .serial = parent };
         nodes[first].parent = parent;
         nodes[second].parent = parent;
         node_len += 1;
-        active[active_len] = parent;
-        active_len += 1;
+        heapPush(Node, nodes[0..node_len], &heap, &heap_len, parent);
     }
     for (frequencies, 0..) |_, symbol| {
         var depth: u4 = 0;
@@ -49,19 +45,51 @@ pub fn build(comptime capacity: usize, frequencies: []const usize, lengths: *[ca
     return true;
 }
 
-fn minNode(nodes: anytype, active: []const u8) usize {
-    var best: usize = 0;
-    for (active[1..], 1..) |index, pos| {
-        const left = nodes[index];
-        const right = nodes[active[best]];
-        if (left.weight < right.weight or (left.weight == right.weight and left.serial < right.serial)) best = pos;
-    }
-    return best;
+fn less(comptime Node: type, nodes: []const Node, left_index: u8, right_index: u8) bool {
+    const left = nodes[left_index];
+    const right = nodes[right_index];
+    return left.weight < right.weight or (left.weight == right.weight and left.serial < right.serial);
 }
 
-fn removeActive(active: anytype, len: *usize, pos: usize) void {
+fn heapify(comptime Node: type, nodes: []const Node, heap: anytype, len: usize) void {
+    var i = len / 2;
+    while (i != 0) {
+        i -= 1;
+        siftDown(Node, nodes, heap, len, i);
+    }
+}
+
+fn heapPop(comptime Node: type, nodes: []const Node, heap: anytype, len: *usize) u8 {
+    const result = heap[0];
     len.* -= 1;
-    active[pos] = active[len.*];
+    if (len.* != 0) {
+        heap[0] = heap[len.*];
+        siftDown(Node, nodes, heap, len.*, 0);
+    }
+    return result;
+}
+
+fn heapPush(comptime Node: type, nodes: []const Node, heap: anytype, len: *usize, value: u8) void {
+    var index = len.*;
+    len.* += 1;
+    while (index != 0) {
+        const parent = (index - 1) / 2;
+        if (!less(Node, nodes, value, heap[parent])) break;
+        heap[index] = heap[parent];
+        index = parent;
+    }
+    heap[index] = value;
+}
+
+fn siftDown(comptime Node: type, nodes: []const Node, heap: anytype, len: usize, start: usize) void {
+    var root = start;
+    while (root * 2 + 1 < len) {
+        var child = root * 2 + 1;
+        if (child + 1 < len and less(Node, nodes, heap[child + 1], heap[child])) child += 1;
+        if (!less(Node, nodes, heap[child], heap[root])) break;
+        std.mem.swap(u8, &heap[root], &heap[child]);
+        root = child;
+    }
 }
 
 test "small Huffman builds complete tree" {

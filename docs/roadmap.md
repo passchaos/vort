@@ -5690,6 +5690,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   limit. Length time dropped to roughly 6.7–8.3 µs, with wires unchanged. Short
   A/B reached 108/123/119 MiB/s; the persisted 100-iteration sample measured
   99/70/120 MiB/s for JSON/source/log under the noisy mixed-core environment.
+  The small-tree builder now maintains its active nodes in a binary min-heap
+  keyed by the same `(weight,serial)` order, reducing construction from O(n²)
+  scans to O(n log n) without changing depths or wire. Focused length time fell
+  further to about 4.0–6.1 µs; a clean 100-iteration run measured stable
+  102/118/118 MiB/s versus libbrotli q3's 315/289/376 MiB/s.
   Command selection no longer scans all 704 upstream LUT entries for every
   planned match. A compile-time 24×24 insert/copy-code index retains the first
   exact upstream symbol for O(1) lookup; an exhaustive equivalence test covers
