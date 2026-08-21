@@ -2436,6 +2436,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   but the gap contracts from roughly `10–14x` to `1.1–3.1x`. Existing shape-
   specific tests now assert semantic properties rather than a fixed sequence
   count/table mode when the new strictly smaller candidate legitimately wins.
+  The same shared-parser candidate now compares a 128-chain greedy parse with a
+  lazy parse (`lazy_min_gain=1`) and keeps the shorter final Zstd block. This
+  trims JSON level 1/3/9 again to 2,484/1,697/1,312 bytes and mixed binary to
+  11,802/10,170/9,358, with no text regression. The remaining ratio gap is now
+  about `1.94–2.96x` on JSON and `1.09–1.37x` on binary; throughput remains far
+  behind because ratio-first one-shot mode evaluates multiple complete parser,
+  table, block-size, and frame candidates.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

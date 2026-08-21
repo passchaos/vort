@@ -6812,7 +6812,11 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
 
     var greedy_block: std.ArrayList(u8) = .empty;
     defer greedy_block.deinit(allocator);
-    const greedy_ok = try emitGreedyHashMatchCompressedBlock(allocator, &greedy_block, block, last);
+    const greedy_ok = try emitHashMatchCompressedBlock(allocator, &greedy_block, block, last, .greedy);
+
+    var lazy_block: std.ArrayList(u8) = .empty;
+    defer lazy_block.deinit(allocator);
+    const lazy_ok = try emitHashMatchCompressedBlock(allocator, &lazy_block, block, last, .lazy);
 
     var repeated_block: std.ArrayList(u8) = .empty;
     defer repeated_block.deinit(allocator);
@@ -6830,6 +6834,7 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     var best_len: usize = std.math.maxInt(usize);
     chooseShortestPlannedBlock(mixed_ok, mixed_block.items, &best, &best_len);
     chooseShortestPlannedBlock(greedy_ok, greedy_block.items, &best, &best_len);
+    chooseShortestPlannedBlock(lazy_ok, lazy_block.items, &best, &best_len);
     chooseShortestPlannedBlock(repeated_ok, repeated_block.items, &best, &best_len);
     chooseShortestPlannedBlock(multi_duplicate_ok, multi_duplicate_block.items, &best, &best_len);
     chooseShortestPlannedBlock(single_duplicate_ok, single_duplicate_block.items, &best, &best_len);
@@ -6839,16 +6844,23 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     return true;
 }
 
-fn emitGreedyHashMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
-    const plan = try lz77.hashGreedyPlanAutoTinyAlloc(allocator, block, .{
+const ZstdHashParser = enum { greedy, lazy };
+
+fn emitHashMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, parser: ZstdHashParser) Error!bool {
+    const parser_options: lz77.GreedyOptions = .{
         .window_len = @min(block.len, lz77.default_window_len),
-        .max_chain = 64,
-        .nice_len = 128,
+        .max_chain = 128,
+        .nice_len = 258,
         .max_candidates = 8,
         .min_match = 4,
         .max_match = lz77.max_match_len,
         .min_savings_bits = 0,
-    });
+        .lazy_min_gain = 1,
+    };
+    const plan = switch (parser) {
+        .greedy => try lz77.hashGreedyPlanAutoTinyAlloc(allocator, block, parser_options),
+        .lazy => try lz77.lazyGreedyPlanAlloc(allocator, block, parser_options),
+    };
     defer plan.deinit(allocator);
     if (plan.stats.matches < 2 or plan.stats.matches > max_bootstrap_sequence_count) return false;
 
