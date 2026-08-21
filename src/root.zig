@@ -606,6 +606,8 @@ pub const lz4EncodedBlockBound = lz4.encodedBlockBound;
 
 pub const ZstdError = zstd.Error;
 pub const zstdDefaultCompressionLevel = zstd.default_compression_level;
+pub const zstdMinCompressionLevel = zstd.min_compression_level;
+pub const zstdMaxCompressionLevel = zstd.max_compression_level;
 pub const zstdEncodeFrameAlloc = zstd.encodeFrameAlloc;
 pub const zstdEncodeFrameWithLevelAlloc = zstd.encodeFrameWithLevelAlloc;
 pub const zstdEncodeFrameWithOptionsAlloc = zstd.encodeFrameWithOptionsAlloc;

@@ -24,6 +24,8 @@ const huffman = @import("huffman.zig");
 pub const Error = core.Error || std.mem.Allocator.Error;
 
 pub const default_compression_level: c_int = 1;
+pub const min_compression_level: c_int = 0;
+pub const max_compression_level: c_int = 22;
 
 const frame_magic = [_]u8{ 0x28, 0xb5, 0x2f, 0xfd };
 const frame_magic_u32: u32 = 0xfd2fb528;
@@ -3508,7 +3510,7 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
     level: c_int,
     options: FrameOptions,
 ) Error![]u8 {
-    const primary_options = nativeFrameOptionsForLevel(level, options);
+    const primary_options = try nativeFrameOptionsForLevel(level, options);
     var best = try encodeNativeFrameWithOptionsAlloc(allocator, input, primary_options);
     if (level <= 0 or input.len <= 8 * 1024) return best.frame;
     errdefer allocator.free(best.frame);
@@ -3543,7 +3545,7 @@ pub fn encodedFrameBoundWithOptions(input_len: usize, options: FrameOptions) Err
 }
 
 pub fn encodedFrameBoundWithLevelAndOptions(input_len: usize, level: c_int, options: FrameOptions) Error!usize {
-    return try encodedNativeFrameBoundWithOptions(input_len, nativeFrameOptionsForLevel(level, options));
+    return try encodedNativeFrameBoundWithOptions(input_len, try nativeFrameOptionsForLevel(level, options));
 }
 
 pub fn encodeFrameAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) Error!usize {
@@ -3560,7 +3562,7 @@ pub fn encodeFrameAppendWithOptions(allocator: std.mem.Allocator, out: *std.Arra
 
 pub fn encodeFrameAppendWithLevelAndOptions(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, level: c_int, options: FrameOptions) Error!usize {
     const start = out.items.len;
-    _ = try encodeNativeFrameAppend(allocator, out, input, nativeFrameOptionsForLevel(level, options));
+    _ = try encodeNativeFrameAppend(allocator, out, input, try nativeFrameOptionsForLevel(level, options));
     return out.items.len - start;
 }
 
@@ -3577,7 +3579,7 @@ pub fn encodeFrameIntoSliceWithOptions(allocator: std.mem.Allocator, input: []co
 }
 
 pub fn encodeFrameIntoSliceWithLevelAndOptions(allocator: std.mem.Allocator, input: []const u8, level: c_int, options: FrameOptions, output: []u8) Error!usize {
-    const result = try encodeNativeFrameIntoSlice(allocator, input, nativeFrameOptionsForLevel(level, options), output);
+    const result = try encodeNativeFrameIntoSlice(allocator, input, try nativeFrameOptionsForLevel(level, options), output);
     return result.written;
 }
 
@@ -3590,7 +3592,7 @@ pub fn encodedFrameBoundWithOptionsAndDictionary(input_len: usize, options: Fram
 }
 
 pub fn encodedFrameBoundWithLevelAndOptionsAndDictionary(input_len: usize, level: c_int, options: FrameOptions, dictionary: NativeDictionary) Error!usize {
-    return try encodedNativeFrameBoundWithDictionary(input_len, nativeFrameOptionsForLevel(level, options), dictionary);
+    return try encodedNativeFrameBoundWithDictionary(input_len, try nativeFrameOptionsForLevel(level, options), dictionary);
 }
 
 pub fn encodeFrameWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary: NativeDictionary) Error![]u8 {
@@ -3602,7 +3604,7 @@ pub fn encodeFrameWithOptionsAndDictionaryAlloc(allocator: std.mem.Allocator, in
 }
 
 pub fn encodeFrameWithLevelAndOptionsAndDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, level: c_int, options: FrameOptions, dictionary: NativeDictionary) Error![]u8 {
-    const result = try encodeNativeFrameWithDictionaryAlloc(allocator, input, nativeFrameOptionsForLevel(level, options), dictionary);
+    const result = try encodeNativeFrameWithDictionaryAlloc(allocator, input, try nativeFrameOptionsForLevel(level, options), dictionary);
     return result.frame;
 }
 
@@ -3616,7 +3618,7 @@ pub fn encodeFrameAppendWithOptionsAndDictionary(allocator: std.mem.Allocator, o
 
 pub fn encodeFrameAppendWithLevelAndOptionsAndDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, level: c_int, options: FrameOptions, dictionary: NativeDictionary) Error!usize {
     const start = out.items.len;
-    _ = try encodeNativeFrameAppendWithDictionary(allocator, out, input, nativeFrameOptionsForLevel(level, options), dictionary);
+    _ = try encodeNativeFrameAppendWithDictionary(allocator, out, input, try nativeFrameOptionsForLevel(level, options), dictionary);
     return out.items.len - start;
 }
 
@@ -3629,7 +3631,7 @@ pub fn encodeFrameIntoSliceWithOptionsAndDictionary(allocator: std.mem.Allocator
 }
 
 pub fn encodeFrameIntoSliceWithLevelAndOptionsAndDictionary(allocator: std.mem.Allocator, input: []const u8, level: c_int, options: FrameOptions, dictionary: NativeDictionary, output: []u8) Error!usize {
-    const result = try encodeNativeFrameIntoSliceWithDictionary(allocator, input, nativeFrameOptionsForLevel(level, options), dictionary, output);
+    const result = try encodeNativeFrameIntoSliceWithDictionary(allocator, input, try nativeFrameOptionsForLevel(level, options), dictionary, output);
     return result.written;
 }
 
@@ -3642,7 +3644,7 @@ pub fn encodedFrameBoundWithOptionsAndDictionarySet(input_len: usize, options: F
 }
 
 pub fn encodedFrameBoundWithLevelAndOptionsAndDictionarySet(input_len: usize, level: c_int, options: FrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error!usize {
-    return try encodedNativeFrameBoundWithDictionarySet(input_len, nativeFrameOptionsForLevel(level, options), dictionary_set, dictionary_id);
+    return try encodedNativeFrameBoundWithDictionarySet(input_len, try nativeFrameOptionsForLevel(level, options), dictionary_set, dictionary_id);
 }
 
 pub fn encodeFrameWithDictionarySetAlloc(allocator: std.mem.Allocator, input: []const u8, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error![]u8 {
@@ -3654,7 +3656,7 @@ pub fn encodeFrameWithOptionsAndDictionarySetAlloc(allocator: std.mem.Allocator,
 }
 
 pub fn encodeFrameWithLevelAndOptionsAndDictionarySetAlloc(allocator: std.mem.Allocator, input: []const u8, level: c_int, options: FrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error![]u8 {
-    const result = try encodeNativeFrameWithDictionarySetAlloc(allocator, input, nativeFrameOptionsForLevel(level, options), dictionary_set, dictionary_id);
+    const result = try encodeNativeFrameWithDictionarySetAlloc(allocator, input, try nativeFrameOptionsForLevel(level, options), dictionary_set, dictionary_id);
     return result.frame;
 }
 
@@ -3668,7 +3670,7 @@ pub fn encodeFrameAppendWithOptionsAndDictionarySet(allocator: std.mem.Allocator
 
 pub fn encodeFrameAppendWithLevelAndOptionsAndDictionarySet(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, level: c_int, options: FrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error!usize {
     const start = out.items.len;
-    _ = try encodeNativeFrameAppendWithDictionarySet(allocator, out, input, nativeFrameOptionsForLevel(level, options), dictionary_set, dictionary_id);
+    _ = try encodeNativeFrameAppendWithDictionarySet(allocator, out, input, try nativeFrameOptionsForLevel(level, options), dictionary_set, dictionary_id);
     return out.items.len - start;
 }
 
@@ -3681,11 +3683,12 @@ pub fn encodeFrameIntoSliceWithOptionsAndDictionarySet(allocator: std.mem.Alloca
 }
 
 pub fn encodeFrameIntoSliceWithLevelAndOptionsAndDictionarySet(allocator: std.mem.Allocator, input: []const u8, level: c_int, options: FrameOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32, output: []u8) Error!usize {
-    const result = try encodeNativeFrameIntoSliceWithDictionarySet(allocator, input, nativeFrameOptionsForLevel(level, options), dictionary_set, dictionary_id, output);
+    const result = try encodeNativeFrameIntoSliceWithDictionarySet(allocator, input, try nativeFrameOptionsForLevel(level, options), dictionary_set, dictionary_id, output);
     return result.written;
 }
 
-fn nativeFrameOptionsForLevel(level: c_int, options: FrameOptions) NativeFrameOptions {
+fn nativeFrameOptionsForLevel(level: c_int, options: FrameOptions) Error!NativeFrameOptions {
+    if (level < min_compression_level or level > max_compression_level) return error.InvalidBlockPlan;
     var native_options: NativeFrameOptions = .{
         .content_checksum = options.content_checksum,
         .include_content_size = options.include_content_size,
@@ -12109,19 +12112,25 @@ test "zstd pure Zig facade maps level zero to fastest native mode" {
 
 test "zstd compression levels map to increasing search budgets" {
     const options: FrameOptions = .{ .include_content_size = false, .content_checksum = true };
-    try std.testing.expectEqual(@as(usize, 0), nativeFrameOptionsForLevel(0, options).match_search_budget);
-    try std.testing.expectEqual(@as(usize, 16), nativeFrameOptionsForLevel(1, options).match_search_budget);
-    try std.testing.expectEqual(@as(usize, 64), nativeFrameOptionsForLevel(3, options).match_search_budget);
-    try std.testing.expectEqual(@as(usize, mixed_match_path_search_budget), nativeFrameOptionsForLevel(9, options).match_search_budget);
-    try std.testing.expect(nativeFrameOptionsForLevel(3, options).match_search_budget > nativeFrameOptionsForLevel(1, options).match_search_budget);
-    try std.testing.expect(nativeFrameOptionsForLevel(9, options).match_search_budget > nativeFrameOptionsForLevel(3, options).match_search_budget);
-    try std.testing.expect(!nativeFrameOptionsForLevel(3, options).include_content_size);
-    try std.testing.expect(nativeFrameOptionsForLevel(3, options).content_checksum);
+    const level0 = try nativeFrameOptionsForLevel(0, options);
+    const level1 = try nativeFrameOptionsForLevel(1, options);
+    const level3 = try nativeFrameOptionsForLevel(3, options);
+    const level9 = try nativeFrameOptionsForLevel(9, options);
+    try std.testing.expectEqual(@as(usize, 0), level0.match_search_budget);
+    try std.testing.expectEqual(@as(usize, 16), level1.match_search_budget);
+    try std.testing.expectEqual(@as(usize, 64), level3.match_search_budget);
+    try std.testing.expectEqual(@as(usize, mixed_match_path_search_budget), level9.match_search_budget);
+    try std.testing.expect(level3.match_search_budget > level1.match_search_budget);
+    try std.testing.expect(level9.match_search_budget > level3.match_search_budget);
+    try std.testing.expect(!level3.include_content_size);
+    try std.testing.expect(level3.content_checksum);
+    try std.testing.expectError(error.InvalidBlockPlan, nativeFrameOptionsForLevel(-1, options));
+    try std.testing.expectError(error.InvalidBlockPlan, nativeFrameOptionsForLevel(max_compression_level + 1, options));
 }
 
 test "zstd adaptive block candidate never expands the selected frame" {
     const repeated = "Zstandard adaptive split repeated text with a long cross-block match.\n" ** 512;
-    const primary_options = nativeFrameOptionsForLevel(1, .{});
+    const primary_options = try nativeFrameOptionsForLevel(1, .{});
     const primary = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, repeated, primary_options);
     defer std.testing.allocator.free(primary.frame);
     const selected = try encodeFrameWithLevelAlloc(std.testing.allocator, repeated, 1);

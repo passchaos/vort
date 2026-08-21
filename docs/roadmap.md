@@ -2528,6 +2528,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   raw-content dictionaries, while imported full dictionaries retain entropy and
   repcode metadata. This removes API ambiguity without falsely labeling the
   phrase trainer as COVER/fastCover-compatible.
+  Public Zstd compression levels now declare and enforce the supported `0...22`
+  range across bound, alloc, append, into, dictionary, and dictionary-set
+  facades. Invalid negative or above-maximum levels fail with
+  `InvalidBlockPlan` instead of silently mapping to fastest or maximum search;
+  level 0 remains the explicit raw/RLE fastest mode.
   `summarizeStandardDictionary` exposes validated entropy metadata without
   leaking internal decode tables: LL/OF/ML entry counts and accuracy logs, the
   content boundary, Dictionary_ID, and repcodes. The trained-dictionary probe
