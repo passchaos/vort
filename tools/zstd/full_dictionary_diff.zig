@@ -24,6 +24,21 @@ pub fn main(init: std.process.Init) !void {
     const decoded = try vort.zstdDecodeFrameAllocWithDictionary(init.gpa, reference_encoded, parsed.dictionary);
     defer init.gpa.free(decoded);
     if (!std.mem.eql(u8, payload, decoded)) return error.SizeMismatch;
+    var incremental = vort.ZstdNativeIncrementalFrameDecoder.initWithDictionaryAndOptions(init.gpa, parsed.dictionary, .{ .expected_output_len = payload.len });
+    defer incremental.deinit();
+    var incremental_output: [payload.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (output_offset < payload.len) {
+        const input_end = @min(reference_encoded.len, input_offset + 3);
+        const output_end = @min(payload.len, output_offset + 5);
+        const result = try incremental.step(reference_encoded[input_offset..input_end], incremental_output[output_offset..output_end]);
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+        if (result.status == .done) break;
+    }
+    try incremental.finish();
+    if (!std.mem.eql(u8, payload, &incremental_output)) return error.SizeMismatch;
 
     var buffer: [256]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);

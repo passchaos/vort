@@ -2411,6 +2411,8 @@ pub const NativeIncrementalFrameDecoder = struct {
             error.NeedDictionary => return false,
             else => return err,
         };
+        const dictionary = self.resolveDirectDictionary(header);
+        const initial_sequence_state = initialSequenceFrameState(dictionary) catch return false;
         const frame_expected_len: ?usize = if (header.content_size) |size| blk: {
             const len = try checkedU64ToUsize(size);
             if (len > self.options.max_decoded_buffer_len) {
@@ -2442,7 +2444,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         var total: usize = 0;
         var block_count: usize = 0;
         var any_block_compressed = false;
-        var preflight_state: SequenceFrameState = .{};
+        var preflight_state = initial_sequence_state;
         var content_hasher = std.hash.XxHash64.init(0);
         while (true) {
             if (frame.len - offset < 3) return error.TruncatedFrame;
@@ -2531,7 +2533,7 @@ pub const NativeIncrementalFrameDecoder = struct {
         try self.rememberDirectOutput(dictionary_history);
         self.direct_frame_output_start = self.output_written;
         self.direct_dictionary_history = dictionary_history;
-        self.direct_sequence_state = .{};
+        self.direct_sequence_state = initial_sequence_state;
         self.direct_next_block_header_offset = first_next_header;
         self.direct_decoded_len = total;
         self.direct_decoded_read = 0;
@@ -2552,6 +2554,13 @@ pub const NativeIncrementalFrameDecoder = struct {
             return dictionary.content;
         }
         return try validateNativeDictionary(header, self.dictionary);
+    }
+
+    fn resolveDirectDictionary(self: *const NativeIncrementalFrameDecoder, header: NativeFrameHeader) ?NativeDictionary {
+        if (header.dictionary_id == 0) return null;
+        if (self.dictionary_set) |dictionary_set| return dictionary_set.find(header.dictionary_id);
+        if (self.dictionary) |dictionary| if (dictionary.id == header.dictionary_id) return dictionary;
+        return null;
     }
 
     fn advanceDirectOutputBlock(self: *NativeIncrementalFrameDecoder) Error!void {

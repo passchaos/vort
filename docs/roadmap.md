@@ -2486,6 +2486,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   the frame's Huffman tree, OF/ML/LL FSE tables, and repcodes before the first
   block. This closes libzstd full-dictionary first-block `Repeat_Mode` decoding
   without changing raw-content dictionary behavior or introducing global state.
+  The incremental direct-output preflight and active sequence state now receive
+  the same parsed dictionary entropy seed, and the bidirectional differential
+  drains a libzstd full-dictionary frame through 3-byte input and 5-byte output
+  chunks before `finish()`. One-shot, size-preflight, buffered fallback, and
+  direct incremental decoding therefore share full-dictionary behavior.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
