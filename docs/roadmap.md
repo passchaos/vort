@@ -5634,6 +5634,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   encoder is byte-for-byte tested against the allocating reference. Header time
   fell from roughly 12–19 µs to 4.7–9.6 µs on JSON/source/log; short A/B reached
   87/100/101 MiB/s with unchanged 92/130/122-byte output.
+  Complex-prefix RLE stack storage is now specialized to the actual alphabet
+  class (256 literal, 520 distance, 704 command) instead of reserving 704 tokens
+  for every tree. This reduces stack/cache pressure without changing tokens or
+  wire. A clean 100-iteration run measured 158/182/188 MiB/s for JSON/source/log
+  versus libbrotli q3 at 352/328/435 MiB/s.
   A ReleaseFast interleaved encoder A/B against runtime libbrotli 1.1.0 quality
   3 is available through `run-br-planned-encode-bench{-gate}`. The persisted
   100-iteration gate sample measured Vort/reference ratios of `0.101x`, `0.159x`,

@@ -11,7 +11,16 @@ pub fn write(allocator: std.mem.Allocator, writer: anytype, alphabet_size: usize
     try writer.writeBits(allocator, 0, 2); // HSKIP=0, complex prefix.
 
     const stop_index = try code_length_rle.validatedStopIndex(lengths[0..alphabet_size]);
-    var rle_storage: [704]code_length_rle.Token = undefined;
+    return if (alphabet_size <= 256)
+        writeWithStorage(256, allocator, writer, lengths, stop_index)
+    else if (alphabet_size <= 520)
+        writeWithStorage(520, allocator, writer, lengths, stop_index)
+    else
+        writeWithStorage(704, allocator, writer, lengths, stop_index);
+}
+
+fn writeWithStorage(comptime storage_len: usize, allocator: std.mem.Allocator, writer: anytype, lengths: []const u4, stop_index: usize) !void {
+    var rle_storage: [storage_len]code_length_rle.Token = undefined;
     const rle_len = try code_length_rle.encodeInto(&rle_storage, lengths, stop_index);
     const rle = rle_storage[0..rle_len];
 
