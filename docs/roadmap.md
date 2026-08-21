@@ -2450,6 +2450,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   only its smaller actual Zstd block survives. JSON remains `1.83–2.92x`
   libzstd, so future ratio work needs a Zstd-specific entropy-aware parser rather
   than further tuning the shared deflate-style fixed-cost model.
+  One-shot multi-block encoding now uses the same caller-owned rolling-history
+  index as the incremental encoder. Completed blocks are indexed before the next
+  block is planned, letting adaptive splits retain legal cross-block matches
+  instead of treating every entropy block as an independent stream. JSON level
+  1/3/9 falls to 2,420/1,648/1,239 bytes; text and binary remain unchanged. The
+  history is bounded to the advertised Zstd window and allocator reservation
+  occurs before emitting each block, preserving deterministic failure semantics.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

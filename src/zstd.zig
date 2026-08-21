@@ -3646,12 +3646,17 @@ fn encodeLiteralOnlyFrameAppendWithDictionaryInternal(
     var offset: usize = 0;
     const block_size_max = try nativeBlockSizeMax(frame_options);
     var encoder_state: LiteralOnlyEncoderState = .{};
+    var frame_history: incremental_history.Rolling = .{};
+    defer frame_history.deinit(allocator);
     if (input.len == 0) {
         try emitLiteralOnlyCompressedBlockWithDictionary(allocator, out, "", true, &encoder_state, dictionary, 0, match_search_budget);
     } else {
         while (offset < input.len) {
             const block_end = @min(input.len, offset + block_size_max);
-            try emitLiteralOnlyCompressedBlockWithDictionary(allocator, out, input[offset..block_end], block_end == input.len, &encoder_state, dictionary, offset, match_search_budget);
+            const block = input[offset..block_end];
+            try frame_history.prepareCompletedBlock(allocator, block, native_dictionary_window_len);
+            try emitLiteralOnlyCompressedBlockWithHistory(allocator, out, block, block_end == input.len, &encoder_state, dictionary, frame_history.view(), offset, match_search_budget);
+            frame_history.appendCompletedBlock(block, native_dictionary_window_len);
             offset = block_end;
         }
     }

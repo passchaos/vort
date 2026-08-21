@@ -46,9 +46,9 @@ def main() -> int:
     assert int(json_rows[1]["vort_bytes"]) <= 13_688, json_rows
     assert int(json_rows[3]["vort_bytes"]) <= 13_688, json_rows
     assert int(json_rows[9]["vort_bytes"]) <= 13_506, json_rows
-    assert int(json_rows[1]["vort_bytes"]) <= 2_443, json_rows
-    assert int(json_rows[3]["vort_bytes"]) <= 1_671, json_rows
-    assert int(json_rows[9]["vort_bytes"]) <= 1_262, json_rows
+    assert int(json_rows[1]["vort_bytes"]) <= 2_420, json_rows
+    assert int(json_rows[3]["vort_bytes"]) <= 1_648, json_rows
+    assert int(json_rows[9]["vort_bytes"]) <= 1_239, json_rows
     binary_rows = {int(row["level"]): row for row in rows if row["case"] == "binary"}
     assert int(binary_rows[1]["vort_bytes"]) <= 11_802, binary_rows
     assert int(binary_rows[3]["vort_bytes"]) <= 10_155, binary_rows
