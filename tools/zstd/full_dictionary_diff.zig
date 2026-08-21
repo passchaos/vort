@@ -28,6 +28,8 @@ pub fn main(init: std.process.Init) !void {
     const dictionary_set = vort.ZstdNativeDictionarySet.init(&.{ other, parsed.dictionary });
     const stream_summary = try vort.zstdSummarizeNativeStreamWithDictionarySet(reference_encoded, dictionary_set);
     if (stream_summary.resolved_dictionary_frame_count != 1 or stream_summary.standard_dictionary_frame_count != 1) return error.InvalidDictionaryMetadata;
+    const single_summary = try vort.zstdSummarizeNativeStreamWithDictionary(reference_encoded, parsed.dictionary);
+    if (single_summary.standard_dictionary_frame_count != 1) return error.InvalidDictionaryMetadata;
     const set_decoded = try vort.zstdDecodeFrameAllocWithDictionarySet(init.gpa, reference_encoded, dictionary_set);
     defer init.gpa.free(set_decoded);
     if (!std.mem.eql(u8, payload, set_decoded)) return error.SizeMismatch;

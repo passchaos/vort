@@ -6715,15 +6715,36 @@ pub fn summarizeNativeStream(frames: []const u8) Error!NativeStreamSummary {
 }
 
 pub fn summarizeNativeStreamWithDiagnostics(frames: []const u8, diagnostics: *NativeStreamSummaryErrorDiagnostics) Error!NativeStreamSummary {
-    return try summarizeNativeStreamWithDictionarySetDiagnostics(frames, null, diagnostics);
+    return try summarizeNativeStreamInternal(frames, null, diagnostics);
 }
 
 pub fn summarizeNativeStreamWithDictionarySet(frames: []const u8, dictionary_set: NativeDictionarySet) Error!NativeStreamSummary {
     var diagnostics: NativeStreamSummaryErrorDiagnostics = .{};
-    return try summarizeNativeStreamWithDictionarySetDiagnostics(frames, dictionary_set, &diagnostics);
+    return try summarizeNativeStreamWithDictionarySetAndDiagnostics(frames, dictionary_set, &diagnostics);
 }
 
-fn summarizeNativeStreamWithDictionarySetDiagnostics(frames: []const u8, dictionary_set: ?NativeDictionarySet, diagnostics: *NativeStreamSummaryErrorDiagnostics) Error!NativeStreamSummary {
+pub fn summarizeNativeStreamWithDictionary(frames: []const u8, dictionary: NativeDictionary) Error!NativeStreamSummary {
+    return try summarizeNativeStreamWithDictionarySet(frames, NativeDictionarySet.init(&.{dictionary}));
+}
+
+pub fn summarizeNativeStreamWithDictionaryDiagnostics(frames: []const u8, dictionary: NativeDictionary, diagnostics: *NativeStreamSummaryErrorDiagnostics) Error!NativeStreamSummary {
+    return try summarizeNativeStreamWithDictionarySetAndDiagnostics(frames, NativeDictionarySet.init(&.{dictionary}), diagnostics);
+}
+
+pub fn summarizeNativeStreamWithDictionarySetAndDiagnostics(frames: []const u8, dictionary_set: NativeDictionarySet, diagnostics: *NativeStreamSummaryErrorDiagnostics) Error!NativeStreamSummary {
+    // Match dictionary-set codec entry points: unchecked static catalogs are
+    // accepted by `init`, but every consuming API rejects zero and duplicate
+    // IDs before selecting a frame dictionary. Without this validation, the
+    // first duplicate silently won and summary metadata could disagree with
+    // the dictionary the decoder was permitted to consume.
+    dictionary_set.validate() catch |err| {
+        diagnostics.* = .{ .phase = .stream, .offset = 0 };
+        return err;
+    };
+    return try summarizeNativeStreamInternal(frames, dictionary_set, diagnostics);
+}
+
+fn summarizeNativeStreamInternal(frames: []const u8, dictionary_set: ?NativeDictionarySet, diagnostics: *NativeStreamSummaryErrorDiagnostics) Error!NativeStreamSummary {
     diagnostics.* = .{};
     var offset: usize = 0;
     var summary: NativeStreamSummary = .{};
@@ -11033,6 +11054,47 @@ test "zstd raw/RLE native decoder handles skippable and concatenated frames" {
     const reusable_chunked_exact_written = try reusable.decodeConcatenatedChunksIntoSliceExactSize(&chunks, join, &into_buffer, "firstsecond".len);
     try std.testing.expectEqual(@as(usize, "firstsecond".len), reusable_chunked_exact_written);
     try std.testing.expectEqualSlices(u8, "firstsecond", &into_buffer);
+}
+
+test "zstd stream summary resolves dictionary catalogs with diagnostics" {
+    const first_dictionary = NativeDictionary.init(0x1234, "first dictionary history");
+    const second_dictionary = NativeDictionary.init(0x5678, "second dictionary history");
+    const first = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, "first", .{
+        .content_checksum = false,
+        .dictionary_id = first_dictionary.id,
+    });
+    defer std.testing.allocator.free(first);
+    const second = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, "second", .{
+        .content_checksum = false,
+        .dictionary_id = second_dictionary.id,
+    });
+    defer std.testing.allocator.free(second);
+
+    var stream: std.ArrayList(u8) = .empty;
+    defer stream.deinit(std.testing.allocator);
+    try stream.appendSlice(std.testing.allocator, first);
+    try stream.appendSlice(std.testing.allocator, second);
+
+    const dictionaries = [_]NativeDictionary{ first_dictionary, second_dictionary };
+    const summary = try summarizeNativeStreamWithDictionarySet(stream.items, NativeDictionarySet.init(&dictionaries));
+    try std.testing.expectEqual(@as(usize, 2), summary.frame_count);
+    try std.testing.expectEqual(@as(usize, 2), summary.dictionary_id_frame_count);
+    try std.testing.expectEqual(@as(usize, 2), summary.resolved_dictionary_frame_count);
+    try std.testing.expectEqual(@as(usize, 0), summary.standard_dictionary_frame_count);
+
+    var diagnostics: NativeStreamSummaryErrorDiagnostics = .{};
+    try std.testing.expectError(error.NeedDictionary, summarizeNativeStreamWithDictionaryDiagnostics(stream.items, first_dictionary, &diagnostics));
+    try std.testing.expectEqual(NativeStreamSummaryErrorPhase.frame_header, diagnostics.phase);
+    try std.testing.expectEqual(first.len, diagnostics.offset);
+
+    const duplicate_dictionaries = [_]NativeDictionary{ first_dictionary, NativeDictionary.init(first_dictionary.id, "duplicate") };
+    diagnostics = .{ .phase = .frame, .offset = 99 };
+    try std.testing.expectError(
+        error.DuplicateDictionaryId,
+        summarizeNativeStreamWithDictionarySetAndDiagnostics(stream.items, NativeDictionarySet.init(&duplicate_dictionaries), &diagnostics),
+    );
+    try std.testing.expectEqual(NativeStreamSummaryErrorPhase.stream, diagnostics.phase);
+    try std.testing.expectEqual(@as(usize, 0), diagnostics.offset);
 }
 
 test "zstd skippable frame writer composes with native streams" {

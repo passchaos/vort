@@ -2547,6 +2547,9 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   non-zero frame Dictionary_ID against the caller's catalog, fail early with
   `NeedDictionary` when missing, and report resolved plus standard-full frame
   counts alongside existing block/checksum/content-size metadata.
+  Single-dictionary convenience and dictionary/dictionary-set diagnostics
+  variants complete the summary API matrix, matching the decode surfaces while
+  retaining phase/offset context for missing catalog entries.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
