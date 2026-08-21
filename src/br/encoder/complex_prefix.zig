@@ -15,8 +15,9 @@ pub fn write(allocator: std.mem.Allocator, writer: anytype, alphabet_size: usize
     }
     var stop_index = alphabet_size;
     while (stop_index != 0 and lengths[stop_index - 1] == 0) stop_index -= 1;
-    const rle = try code_length_rle.encodeAlloc(allocator, lengths, stop_index);
-    defer allocator.free(rle);
+    var rle_storage: [704]code_length_rle.Token = undefined;
+    const rle_len = try code_length_rle.encodeInto(&rle_storage, lengths, stop_index);
+    const rle = rle_storage[0..rle_len];
 
     var code_length_freqs: [18]u32 = @splat(0);
     for (rle) |token| code_length_freqs[token.symbol] += 1;

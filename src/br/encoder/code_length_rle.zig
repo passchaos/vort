@@ -31,6 +31,68 @@ pub fn encodeAlloc(allocator: std.mem.Allocator, lengths: []const u4, stop_index
     return tokens.toOwnedSlice(allocator);
 }
 
+pub fn encodeInto(output: []Token, lengths: []const u4, stop_index: usize) !usize {
+    if (stop_index > lengths.len or output.len < stop_index) return error.OutOfMemory;
+    var tokens: std.ArrayList(Token) = .{ .items = output[0..0], .capacity = output.len };
+    try encodeIntoList(&tokens, lengths, stop_index);
+    return tokens.items.len;
+}
+
+fn encodeIntoList(tokens: *std.ArrayList(Token), lengths: []const u4, stop_index: usize) !void {
+    var i: usize = 0;
+    while (i < stop_index) {
+        if (lengths[i] != 0) {
+            const length = lengths[i];
+            var end = i + 1;
+            while (end < stop_index and lengths[end] == length) end += 1;
+            try appendNonzeroRunBounded(tokens, length, end - i);
+            i = end;
+            continue;
+        }
+        var end = i + 1;
+        while (end < stop_index and lengths[end] == 0) end += 1;
+        try appendZeroRunBounded(tokens, end - i);
+        i = end;
+    }
+}
+
+fn appendNonzeroRunBounded(tokens: *std.ArrayList(Token), length: u4, run: usize) !void {
+    try tokens.appendBounded(.{ .symbol = length });
+    if (run == 1) return;
+    const remaining = run - 1;
+    if (remaining < 3) {
+        for (0..remaining) |_| try tokens.appendBounded(.{ .symbol = length });
+        return;
+    }
+    try appendRepeatRunBounded(tokens, 16, remaining, 4);
+}
+
+fn appendZeroRunBounded(tokens: *std.ArrayList(Token), run: usize) !void {
+    if (run < 3) {
+        for (0..run) |_| try tokens.appendBounded(.{ .symbol = 0 });
+        return;
+    }
+    try appendRepeatRunBounded(tokens, 17, run, 8);
+}
+
+fn appendRepeatRunBounded(tokens: *std.ArrayList(Token), symbol: u5, run: usize, comptime radix: usize) !void {
+    const max_extra = radix - 1;
+    var extras: [16]u3 = undefined;
+    var extra_len: usize = 0;
+    var current = run;
+    while (current > max_extra + 3) {
+        const extra = (current - 3) & max_extra;
+        current = ((current - (extra + 3)) / radix) + 2;
+        extras[extra_len] = @intCast(extra);
+        extra_len += 1;
+    }
+    try tokens.appendBounded(.{ .symbol = symbol, .extra = @intCast(current - 3) });
+    while (extra_len != 0) {
+        extra_len -= 1;
+        try tokens.appendBounded(.{ .symbol = symbol, .extra = extras[extra_len] });
+    }
+}
+
 fn appendNonzeroRun(allocator: std.mem.Allocator, tokens: *std.ArrayList(Token), length: u4, run: usize) !void {
     try tokens.append(allocator, .{ .symbol = length });
     if (run == 1) return;
@@ -134,4 +196,16 @@ test "nonzero run chaining uses symbol sixteen" {
     try std.testing.expectEqual(lengths.len, try decodedLength(tokens));
     try std.testing.expect(tokens.len < 8);
     try std.testing.expect(tokens[1].symbol == 16);
+}
+
+test "bounded RLE matches allocating encoder" {
+    var lengths: [704]u4 = @splat(0);
+    for (&lengths, 0..) |*length, i| if (i % 17 == 0) {
+        length.* = @intCast(1 + (i % 8));
+    };
+    const allocated = try encodeAlloc(std.testing.allocator, &lengths, lengths.len);
+    defer std.testing.allocator.free(allocated);
+    var bounded: [704]Token = undefined;
+    const len = try encodeInto(&bounded, &lengths, lengths.len);
+    try std.testing.expectEqualSlices(Token, allocated, bounded[0..len]);
 }

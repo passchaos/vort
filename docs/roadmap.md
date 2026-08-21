@@ -5628,6 +5628,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   versus source bytes. Command alphabets up to 704 entries are now representable;
   further prefix-cost optimization and heterogeneous corpus expansion remain
   follow-up work.
+  Complex-prefix code-length RLE now writes into a fixed 704-token stack buffer,
+  whose size is the trivial worst-case bound (one output token per input length),
+  eliminating three temporary heap allocations per planner stream. The bounded
+  encoder is byte-for-byte tested against the allocating reference. Header time
+  fell from roughly 12–19 µs to 4.7–9.6 µs on JSON/source/log; short A/B reached
+  87/100/101 MiB/s with unchanged 92/130/122-byte output.
   A ReleaseFast interleaved encoder A/B against runtime libbrotli 1.1.0 quality
   3 is available through `run-br-planned-encode-bench{-gate}`. The persisted
   100-iteration gate sample measured Vort/reference ratios of `0.101x`, `0.159x`,
