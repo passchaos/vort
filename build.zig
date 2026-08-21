@@ -2765,6 +2765,10 @@ pub fn build(b: *std.Build) void {
             .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
         }),
     });
+    const zstd_full_dictionary_diff = b.addSystemCommand(&.{ "python3", "tools/zstd/full_dictionary_diff.py" });
+    zstd_full_dictionary_diff.addArtifactArg(zstd_full_dictionary_diff_exe);
+    const zstd_full_dictionary_diff_step = b.step("run-zstd-full-dictionary-diff", "Train and validate a standard Zstd full dictionary");
+    zstd_full_dictionary_diff_step.dependOn(&zstd_full_dictionary_diff.step);
 
     const zstd_compat_probe_exe = b.addExecutable(.{
         .name = "vort-zstd-compat-probe",

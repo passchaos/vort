@@ -2501,6 +2501,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   `DictionarySet`, two compressed input chunks, and dictionary-set incremental
   direct output. Selection is strictly by frame Dictionary_ID, so a preceding
   unrelated raw dictionary cannot shadow the full dictionary's entropy state.
+  `run-zstd-full-dictionary-diff` now creates a deterministic 40-file JSON
+  training corpus, invokes the installed zstd trainer with a fixed Dictionary_ID,
+  and runs the bidirectional one-shot/chunked/incremental Zig probe. Standard
+  dictionary compatibility is therefore reproducible from a clean checkout
+  instead of depending on a manually retained temporary dictionary.
   Added `OwnedStandardDictionary.initCopy` for applications that load trained
   dictionaries from temporary I/O buffers. It validates before allocation,
   reparses the owned slice so the view/content/full-byte borrows share its
