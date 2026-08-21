@@ -2443,6 +2443,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   about `1.94–2.96x` on JSON and `1.09–1.37x` on binary; throughput remains far
   behind because ratio-first one-shot mode evaluates multiple complete parser,
   table, block-size, and frame candidates.
+  Adding the shared fixed-cost optimal parser to that same final-wire selection
+  trims JSON level 1/3/9 to 2,443/1,671/1,262 bytes and binary level 3/9 to
+  10,155/9,344, while text and binary level 1 remain unchanged. The optimal
+  parser is not trusted as universally better: it competes with greedy/lazy and
+  only its smaller actual Zstd block survives. JSON remains `1.83–2.92x`
+  libzstd, so future ratio work needs a Zstd-specific entropy-aware parser rather
+  than further tuning the shared deflate-style fixed-cost model.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

@@ -6818,6 +6818,10 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     defer lazy_block.deinit(allocator);
     const lazy_ok = try emitHashMatchCompressedBlock(allocator, &lazy_block, block, last, .lazy);
 
+    var optimal_block: std.ArrayList(u8) = .empty;
+    defer optimal_block.deinit(allocator);
+    const optimal_ok = try emitHashMatchCompressedBlock(allocator, &optimal_block, block, last, .optimal);
+
     var repeated_block: std.ArrayList(u8) = .empty;
     defer repeated_block.deinit(allocator);
     const repeated_ok = try emitRepeatedPatternCompressedBlock(allocator, &repeated_block, block, last);
@@ -6835,6 +6839,7 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     chooseShortestPlannedBlock(mixed_ok, mixed_block.items, &best, &best_len);
     chooseShortestPlannedBlock(greedy_ok, greedy_block.items, &best, &best_len);
     chooseShortestPlannedBlock(lazy_ok, lazy_block.items, &best, &best_len);
+    chooseShortestPlannedBlock(optimal_ok, optimal_block.items, &best, &best_len);
     chooseShortestPlannedBlock(repeated_ok, repeated_block.items, &best, &best_len);
     chooseShortestPlannedBlock(multi_duplicate_ok, multi_duplicate_block.items, &best, &best_len);
     chooseShortestPlannedBlock(single_duplicate_ok, single_duplicate_block.items, &best, &best_len);
@@ -6844,7 +6849,7 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     return true;
 }
 
-const ZstdHashParser = enum { greedy, lazy };
+const ZstdHashParser = enum { greedy, lazy, optimal };
 
 fn emitHashMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, parser: ZstdHashParser) Error!bool {
     const parser_options: lz77.GreedyOptions = .{
@@ -6860,6 +6865,7 @@ fn emitHashMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayLis
     const plan = switch (parser) {
         .greedy => try lz77.hashGreedyPlanAutoTinyAlloc(allocator, block, parser_options),
         .lazy => try lz77.lazyGreedyPlanAlloc(allocator, block, parser_options),
+        .optimal => try lz77.optimalPlanAlloc(allocator, block, parser_options),
     };
     defer plan.deinit(allocator);
     if (plan.stats.matches < 2 or plan.stats.matches > max_bootstrap_sequence_count) return false;
