@@ -2418,6 +2418,14 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   falls from 13,688 to 13,042 bytes and mixed binary from 31,953 to 30,690.
   Focused tests require the selector never to expand repeated text and to pick
   the split winner for structured data; the encode gate locks both improvements.
+  Expanding that selection from one split to a two-entry per-level ladder finds
+  much smaller entropy blocks without risking the repeated-text regression. For
+  levels 1/3/9 it evaluates `1/2`, `2/4`, and `4/8 KiB` respectively; JSON now
+  measures 11,208/9,983/9,728 bytes, while mixed binary reaches
+  29,073/29,735/30,690. The full-frame selector retains the original 93-byte
+  text frame at every level. This remains ratio-first and expensive because each
+  one-shot call builds three complete candidates; reusable planning and cheap
+  split scoring are explicit follow-up performance work.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

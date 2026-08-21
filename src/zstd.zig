@@ -3333,20 +3333,25 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
     options: FrameOptions,
 ) Error![]u8 {
     const primary_options = nativeFrameOptionsForLevel(level, options);
-    const primary = try encodeNativeFrameWithOptionsAlloc(allocator, input, primary_options);
-    if (level <= 0 or input.len <= 8 * 1024) return primary.frame;
-    errdefer allocator.free(primary.frame);
+    var best = try encodeNativeFrameWithOptionsAlloc(allocator, input, primary_options);
+    if (level <= 0 or input.len <= 8 * 1024) return best.frame;
+    errdefer allocator.free(best.frame);
 
-    var split_options = primary_options;
-    split_options.block_size_max = adaptiveLevelBlockSize(level);
-    if (split_options.block_size_max >= input.len or split_options.block_size_max == primary_options.block_size_max) return primary.frame;
-    const split = try encodeNativeFrameWithOptionsAlloc(allocator, input, split_options);
-    if (split.frame.len < primary.frame.len) {
-        allocator.free(primary.frame);
-        return split.frame;
+    // Evaluate a small deterministic split ladder. Different corpora have
+    // different entropy-header versus match-coverage optima; selecting the
+    // shortest complete frame preserves ratio monotonically without baking a
+    // single fragile block size into a compression level.
+    for (adaptiveLevelBlockSizes(level)) |block_size| {
+        if (block_size >= input.len or block_size == primary_options.block_size_max) continue;
+        var split_options = primary_options;
+        split_options.block_size_max = block_size;
+        const candidate = try encodeNativeFrameWithOptionsAlloc(allocator, input, split_options);
+        if (candidate.frame.len < best.frame.len) {
+            allocator.free(best.frame);
+            best = candidate;
+        } else allocator.free(candidate.frame);
     }
-    allocator.free(split.frame);
-    return primary.frame;
+    return best.frame;
 }
 
 pub fn encodedFrameBound(input_len: usize) Error!usize {
@@ -3533,11 +3538,11 @@ fn nativeFrameOptionsForLevel(level: c_int, options: FrameOptions) NativeFrameOp
     return native_options;
 }
 
-fn adaptiveLevelBlockSize(level: c_int) usize {
+fn adaptiveLevelBlockSizes(level: c_int) [2]usize {
     return switch (level) {
-        1, 2 => 8 * 1024,
-        3...5 => 16 * 1024,
-        else => 32 * 1024,
+        1, 2 => .{ 1024, 2 * 1024 },
+        3...5 => .{ 2 * 1024, 4 * 1024 },
+        else => .{ 4 * 1024, 8 * 1024 },
     };
 }
 

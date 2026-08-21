@@ -46,9 +46,13 @@ def main() -> int:
     assert int(json_rows[1]["vort_bytes"]) <= 13_688, json_rows
     assert int(json_rows[3]["vort_bytes"]) <= 13_688, json_rows
     assert int(json_rows[9]["vort_bytes"]) <= 13_506, json_rows
-    assert int(json_rows[1]["vort_bytes"]) <= 13_042, json_rows
+    assert int(json_rows[1]["vort_bytes"]) <= 11_208, json_rows
+    assert int(json_rows[3]["vort_bytes"]) <= 9_983, json_rows
+    assert int(json_rows[9]["vort_bytes"]) <= 9_728, json_rows
     binary_rows = {int(row["level"]): row for row in rows if row["case"] == "binary"}
-    assert int(binary_rows[1]["vort_bytes"]) <= 30_690, binary_rows
+    assert int(binary_rows[1]["vort_bytes"]) <= 29_073, binary_rows
+    assert int(binary_rows[3]["vort_bytes"]) <= 29_735, binary_rows
+    assert int(binary_rows[9]["vort_bytes"]) <= 30_690, binary_rows
     print(f"zstd_encode_bench_gate=ok rows={len(rows)} reference_version={rows[0]['reference_version']}")
     return 0
 
