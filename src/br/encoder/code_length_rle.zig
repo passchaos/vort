@@ -61,18 +61,12 @@ fn appendRepeatRun(allocator: std.mem.Allocator, tokens: *std.ArrayList(Token), 
     var extra_len: usize = 0;
     var current = run;
     while (current > max_extra + 3) {
-        var chosen: ?struct { extra: usize, previous: usize } = null;
-        for (0..max_extra + 1) |extra| {
-            if (current < extra + 3 or (current - (extra + 3)) % radix != 0) continue;
-            const previous = (current - (extra + 3)) / radix + 2;
-            if (previous >= 3 and previous < current) {
-                chosen = .{ .extra = extra, .previous = previous };
-                break;
-            }
-        }
-        const step = chosen orelse return error.InvalidBlockPlan;
-        const extra = step.extra;
-        const previous = step.previous;
+        // `current = radix * (previous - 2) + extra + 3`; both Brotli
+        // repeat radices are powers of two, so the unique legal extra is the
+        // low log2(radix) bits of current-3. This replaces an inner search and
+        // modulo per chain level with one mask and shift.
+        const extra = (current - 3) & max_extra;
+        const previous = ((current - (extra + 3)) / radix) + 2;
         if (previous < 3 or previous >= current) return error.InvalidBlockPlan;
         extras[extra_len] = @intCast(extra);
         extra_len += 1;
@@ -82,6 +76,19 @@ fn appendRepeatRun(allocator: std.mem.Allocator, tokens: *std.ArrayList(Token), 
     while (extra_len != 0) {
         extra_len -= 1;
         try tokens.append(allocator, .{ .symbol = symbol, .extra = extras[extra_len] });
+    }
+}
+
+test "repeat inverse step reconstructs every bounded run" {
+    inline for (.{ 4, 8 }) |radix| {
+        const max_extra = radix - 1;
+        var current: usize = max_extra + 4;
+        while (current <= 703) : (current += 1) {
+            const extra = (current - 3) & max_extra;
+            const previous = ((current - (extra + 3)) / radix) + 2;
+            try std.testing.expect(previous >= 3 and previous < current);
+            try std.testing.expectEqual(current, radix * (previous - 2) + extra + 3);
+        }
     }
 }
 

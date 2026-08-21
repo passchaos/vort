@@ -5704,3 +5704,7 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   allocation and one command-sized copy while preserving byte-identical wire;
   short A/B samples improved, but the 100-iteration run remained scheduler-noisy
   and is therefore recorded as a structural allocation reduction only.
+  Symbol-16/17 repeat-chain inversion now derives the unique extra value from
+  `(current-3) & (radix-1)` and computes the predecessor directly, replacing an
+  inner 4/8-way modulo search at every RLE chain level. An exhaustive run test
+  covers both radices through 703 symbols; all planner wires remain unchanged.
