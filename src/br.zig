@@ -562,6 +562,19 @@ pub fn encodePlannedStreamLazyWithOptionsAlloc(allocator: std.mem.Allocator, inp
     return encodeCommandPlanAlloc(allocator, input, plan.commands, null, &stats);
 }
 
+/// Experimental planner-backed encoder for the built-in RFC 7932 static
+/// dictionary. It establishes complete command/wire support with an exhaustive
+/// reference matcher; stable compression levels remain on the faster LZ path.
+pub fn encodePlannedStreamStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    const max_backward_distance = (@as(usize, 1) << default_window_bits) - 16;
+    if (input.len < 5 or input.len > max_backward_distance) return error.InvalidBlockPlan;
+    const plan = try command_plan.buildStaticDictionaryAlloc(allocator, input);
+    defer plan.deinit(allocator);
+    if (plan.match_count == 0) return error.InvalidBlockPlan;
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    return encodeCommandPlanAlloc(allocator, input, plan.commands, null, &stats);
+}
+
 pub fn encodePlannedStreamAllocWithStats(allocator: std.mem.Allocator, input: []const u8, stats: *encoder_stats.PlannedEncodeStats) Error![]u8 {
     return encodePlannedStreamAllocWithStatsTimed(allocator, input, null, stats);
 }
@@ -841,9 +854,13 @@ fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, comma
         command_frequencies[encoding.symbol] += 1;
         for (input[command.insert_start..][0..command.insert_len]) |literal| literal_frequencies[literal] += 1;
         if (!command.has_copy) continue;
-        const distance = encoder_distance.encode(command.distance, 15) orelse return error.InvalidBlockPlan;
+        const distance = encoder_distance.encode(commandWireDistance(command), 15) orelse return error.InvalidBlockPlan;
         distance_frequencies[distance.symbol] += 1;
     }
+    // Brotli still carries a literal tree when dictionary commands cover the
+    // entire meta-block. A deterministic unused symbol keeps that tree legal
+    // without adding payload bits.
+    if (allZeroFrequencies(256, &literal_frequencies)) literal_frequencies[0] = 1;
     if (io) |active| stats.frequency_ns = elapsedNs(frequency_start.?, active);
     const alphabet_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     var literal_alphabet = command_plan.PrefixAlphabet{};
@@ -893,7 +910,7 @@ fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, comma
         for (input[command.insert_start..][0..command.insert_len]) |literal|
             if (literal_alphabet.len > 1) try writer.writeBits(allocator, literal_encoder.codes[literal], literal_encoder.bits[literal]);
         if (command.has_copy and encoding.command.distance_code == -1) {
-            const distance = encoder_distance.encode(command.distance, 15) orelse unreachable;
+            const distance = encoder_distance.encode(commandWireDistance(command), 15) orelse unreachable;
             if (distance_alphabet.len > 1) {
                 if (distance_alphabet.len <= 4) {
                     const code = distance_alphabet.simpleCode(distance.symbol).?;
@@ -907,6 +924,20 @@ fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, comma
     if (io) |active| stats.payload_ns = elapsedNs(payload_start.?, active);
     if (writer.bit_index != 0) writer.alignToByte();
     return out.toOwnedSlice(allocator);
+}
+
+fn allZeroFrequencies(comptime len: usize, frequencies: *const [len]u32) bool {
+    for (frequencies) |frequency| if (frequency != 0) return false;
+    return true;
+}
+
+fn commandWireDistance(command: command_plan.Command) usize {
+    if (command.dictionary_output_len == 0) return command.distance;
+    // A dictionary copy is legal only when its distance exceeds the bytes
+    // already produced. This one-meta-block planner is capped below the 16-bit
+    // Brotli window, so the current output position is the active backward
+    // limit used by both Vort and conforming external decoders.
+    return command.insert_start + command.insert_len + 1 + command.dictionary_address;
 }
 
 fn encodeRleStreamWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8) Error!void {
@@ -5858,6 +5889,16 @@ test "br lazy planner accepts bounded search options" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
     try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamLazyWithOptionsAlloc(std.testing.allocator, payload, .{ .max_chain = 0 }));
+}
+
+test "br planner emits built-in static dictionary commands" {
+    const payload = " information follows the information";
+    const encoded = try encodePlannedStreamStaticDictionaryAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(encoded.len < payload.len);
 }
 
 test "br planner-backed encoder emits regular distances" {

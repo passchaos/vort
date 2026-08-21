@@ -5760,6 +5760,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   77/116/106-byte corpus streams. A pinned, interleaved 1000-iteration A/B
   therefore reduced the balanced default from chain/nice 256/128 to 64/64:
   JSON improved by about 8%, while source/log stayed within 0.3% noise.
+  The planner wire path now also supports RFC 7932 built-in static-dictionary
+  commands, including transformed-output length versus base copy length and
+  distance addressing. An experimental exhaustive reference planner compresses
+  dictionary-heavy input without depending on libbrotli and is externally
+  decoded by Node; stable levels await an indexed matcher before enabling it.
   PrefixAlphabet's small-active insertion sort now caches the candidate pair and
   shifts predecessors instead of swapping both parallel arrays at every step.
   It preserves the exact `(frequency desc,symbol asc)` order and wire while

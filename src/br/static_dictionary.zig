@@ -1,6 +1,7 @@
 // RFC 7932 static dictionary bytes. The binary is generated from the same
 // canonical Brotli dictionary used by upstream decoders; keeping it as data
 // avoids a 120K source literal and lets this module own transform semantics.
+const std = @import("std");
 const data = @embedFile("dictionary.bin");
 
 const offsets = [_]usize{
@@ -153,6 +154,42 @@ const transforms = [_]Transform{
     .{ .prefix = 1, .kind = 10, .suffix = 143 },
 };
 
+pub const max_transformed_word_len: usize = 37;
+
+pub const Match = struct {
+    output_len: u6,
+    copy_len: u5,
+    address: usize,
+};
+
+/// Find the longest built-in static-dictionary word beginning at `input[0]`.
+/// This reference matcher deliberately enumerates dictionary addresses rather
+/// than importing upstream's generated encoder LUT: it keeps the wire model
+/// independent and provides a correctness baseline for a future indexed path.
+pub fn findLongestMatch(input: []const u8) ?Match {
+    if (input.len < 4) return null;
+    var scratch: [64]u8 = undefined;
+    var best: ?Match = null;
+    for (4..25) |copy_len| {
+        const bits = sizeBits(copy_len) orelse continue;
+        const word_count = @as(usize, 1) << bits;
+        for (0..transforms.len) |transform_index| {
+            for (0..word_count) |word_index| {
+                const address = (transform_index << bits) | word_index;
+                const transformed = transform(address, copy_len, &scratch) orelse continue;
+                if (transformed.len < 4 or transformed.len > input.len or transformed.len > max_transformed_word_len) continue;
+                if (!std.mem.eql(u8, transformed, input[0..transformed.len])) continue;
+                if (best == null or transformed.len > best.?.output_len or
+                    (transformed.len == best.?.output_len and address < best.?.address))
+                {
+                    best = .{ .output_len = @intCast(transformed.len), .copy_len = @intCast(copy_len), .address = address };
+                }
+            }
+        }
+    }
+    return best;
+}
+
 pub fn transform(address: usize, word_len: usize, out: []u8) ?[]const u8 {
     if (word_len < 4 or word_len > 24 or out.len < 64) return null;
     const bits = size_bits[word_len];
@@ -208,8 +245,15 @@ fn uppercase(bytes: []u8, all: bool) void {
 }
 
 test "full Brotli dictionary resolves quality-four omit transforms" {
-    const std = @import("std");
     var out: [64]u8 = undefined;
     try std.testing.expectEqualSlices(u8, "service", transform((27 << 10) | 161, 9, &out).?);
     try std.testing.expectEqualSlices(u8, "value", transform((42 << 10) | 721, 9, &out).?);
+}
+
+test "static dictionary reference matcher returns copy length and address" {
+    const match = findLongestMatch(" information follows").?;
+    var out: [64]u8 = undefined;
+    const transformed = transform(match.address, match.copy_len, &out).?;
+    try std.testing.expectEqualSlices(u8, " information", transformed);
+    try std.testing.expectEqual(@as(usize, transformed.len), match.output_len);
 }

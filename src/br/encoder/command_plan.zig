@@ -1,5 +1,6 @@
 const std = @import("std");
 const lz77 = @import("../../lz77.zig");
+const static_dictionary = @import("../static_dictionary.zig");
 const small_huffman = @import("small_huffman.zig");
 
 /// A Brotli insert/copy command derived from a generic LZ77 token stream.
@@ -13,6 +14,10 @@ pub const Command = struct {
     copy_len: usize = 2,
     distance: usize = 0,
     has_copy: bool = false,
+    /// RFC 7932 dictionary commands encode the untransformed word length in
+    /// the command and advance by the transformed output length.
+    dictionary_output_len: usize = 0,
+    dictionary_address: usize = 0,
 };
 
 pub const Plan = struct {
@@ -219,6 +224,45 @@ pub fn buildAlloc(allocator: std.mem.Allocator, input: []const u8, tokens: []con
     return .{ .commands = try commands.toOwnedSlice(allocator), .match_count = match_count };
 }
 
+/// Reference dictionary planner for functionality and differential tests. It
+/// prefers the longest transformed dictionary word at each position and emits
+/// the remaining bytes as literal inserts. The matcher is intentionally
+/// exhaustive; production levels can adopt an indexed matcher independently.
+pub fn buildStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8) !Plan {
+    var commands: std.ArrayList(Command) = .empty;
+    errdefer commands.deinit(allocator);
+    var position: usize = 0;
+    var insert_start: usize = 0;
+    var insert_len: usize = 0;
+    var match_count: usize = 0;
+
+    while (position < input.len) {
+        const match = static_dictionary.findLongestMatch(input[position..]) orelse {
+            position += 1;
+            insert_len += 1;
+            continue;
+        };
+        try commands.append(allocator, .{
+            .insert_start = insert_start,
+            .insert_len = insert_len,
+            .copy_len = match.copy_len,
+            .has_copy = true,
+            .dictionary_output_len = match.output_len,
+            .dictionary_address = match.address,
+        });
+        position += match.output_len;
+        insert_start = position;
+        insert_len = 0;
+        match_count += 1;
+    }
+
+    if (insert_len != 0) try commands.append(allocator, .{
+        .insert_start = insert_start,
+        .insert_len = insert_len,
+    });
+    return .{ .commands = try commands.toOwnedSlice(allocator), .match_count = match_count };
+}
+
 /// Rebuild into caller-owned typed storage, preserving command capacity across
 /// independent inputs. The returned match count is diagnostic only.
 pub fn buildReuse(commands: *std.ArrayList(Command), allocator: std.mem.Allocator, input: []const u8, tokens: []const lz77.Token) !usize {
@@ -264,6 +308,17 @@ test "coalesces literals around LZ77 matches" {
     try std.testing.expectEqual(@as(usize, 2), plan.commands.len);
     try std.testing.expectEqual(Command{ .insert_start = 0, .insert_len = 3, .copy_len = 3, .distance = 3, .has_copy = true }, plan.commands[0]);
     try std.testing.expectEqual(Command{ .insert_start = 6, .insert_len = 1 }, plan.commands[1]);
+}
+
+test "static dictionary plan preserves transformed and copy lengths" {
+    const input = " information follows";
+    const plan = try buildStaticDictionaryAlloc(std.testing.allocator, input);
+    defer plan.deinit(std.testing.allocator);
+    try std.testing.expect(plan.match_count > 0);
+    const command = plan.commands[0];
+    try std.testing.expect(command.has_copy);
+    try std.testing.expect(command.dictionary_output_len > 0);
+    try std.testing.expect(command.copy_len != command.dictionary_output_len);
 }
 
 test "simple alphabet orders hot symbols first" {

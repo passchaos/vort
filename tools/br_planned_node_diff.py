@@ -27,6 +27,14 @@ def main() -> int:
             if actual != expected:
                 raise SystemExit(f"{mode}: node output mismatch")
             print(f"brotli planned {mode} node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = b" information follows the information"
+    encoded = subprocess.check_output([sys.argv[1], "dictionary-words"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("dictionary-words: node output mismatch")
+    if len(encoded) >= len(expected):
+        raise SystemExit("dictionary-words: expected a smaller encoded stream")
+    print(f"brotli planned dictionary-words node diff: encoded={len(encoded)} decoded={len(actual)}")
     return 0
 
 

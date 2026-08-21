@@ -70,6 +70,7 @@ pub const BrotliPlannedEncodeOptions = br.PlannedEncodeOptions;
 pub const BrotliPlannedParserOptions = br.PlannedParserOptions;
 pub const brEncodePlannedStreamWithOptionsAlloc = br.encodePlannedStreamWithOptionsAlloc;
 pub const brEncodePlannedStreamLazyWithOptionsAlloc = br.encodePlannedStreamLazyWithOptionsAlloc;
+pub const brEncodePlannedStreamStaticDictionaryAlloc = br.encodePlannedStreamStaticDictionaryAlloc;
 pub const brEncodePlannedStreamWithScratchAlloc = br.encodePlannedStreamWithScratchAlloc;
 pub const BrotliPlannedStreamEncoder = br.PlannedStreamEncoder;
 pub const brEncodedSimpleStreamBound = br.encodedSimpleStreamBound;
