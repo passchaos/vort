@@ -19,6 +19,8 @@ const incremental_stored_tests = @import("br/incremental/stored/tests.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 pub const PlannedEncodeStats = encoder_stats.PlannedEncodeStats;
+pub const PlannedCompressionLevel = enum { fast, balanced };
+pub const PlannedEncodeOptions = struct { level: PlannedCompressionLevel = .fast };
 
 const IncrementalCodec = struct {
     pub const Error = br.Error;
@@ -511,6 +513,13 @@ pub fn encodeRepeatedPrefixStreamAlloc(allocator: std.mem.Allocator, prefix: []c
 pub fn encodePlannedStreamAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
     var stats: encoder_stats.PlannedEncodeStats = .{};
     return encodePlannedStreamAllocWithStats(allocator, input, &stats);
+}
+
+pub fn encodePlannedStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
+    return switch (options.level) {
+        .fast => encodePlannedStreamAlloc(allocator, input),
+        .balanced => encodePlannedStreamLazyAlloc(allocator, input),
+    };
 }
 
 /// Ratio-oriented planner variant using the shared lazy LZ77 parser. The wire
@@ -5802,6 +5811,21 @@ test "br planner-backed encoder emits mixed literal and match commands" {
     try std.testing.expectEqualSlices(u8, payload, decoded);
     try std.testing.expect(encoded.len < payload.len);
     try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamAlloc(std.testing.allocator, "all unique"));
+}
+
+test "br planner compression levels select fast and balanced streams" {
+    const payload = "{\"kind\":\"event\",\"active\":true,\"values\":[1,2,3,5,8,13]}\n" ** 12;
+    const fast = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .level = .fast });
+    defer std.testing.allocator.free(fast);
+    const balanced = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .level = .balanced });
+    defer std.testing.allocator.free(balanced);
+    const fast_decoded = try decodeStreamAlloc(std.testing.allocator, fast);
+    defer std.testing.allocator.free(fast_decoded);
+    const balanced_decoded = try decodeStreamAlloc(std.testing.allocator, balanced);
+    defer std.testing.allocator.free(balanced_decoded);
+    try std.testing.expectEqualSlices(u8, payload, fast_decoded);
+    try std.testing.expectEqualSlices(u8, payload, balanced_decoded);
+    try std.testing.expect(balanced.len <= fast.len);
 }
 
 test "br planner-backed encoder emits regular distances" {

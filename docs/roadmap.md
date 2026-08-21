@@ -5751,6 +5751,9 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   the fast planner's 92/130/122 and libbrotli q3's 62/86/87. The persisted
   100-iteration run measured 155/143/153 MiB/s, roughly matching the fast path
   while cutting the size gap to about 22–35%; both modes are Node-gated.
+  Stable public planner options now expose `.fast` and `.balanced` compression
+  levels through `encodePlannedStreamWithOptionsAlloc`; `.balanced` maps to the
+  proven lazy parser and is tested to round-trip with size no worse than fast.
   PrefixAlphabet's small-active insertion sort now caches the candidate pair and
   shifts predecessors instead of swapping both parallel arrays at every step.
   It preserves the exact `(frequency desc,symbol asc)` order and wire while
