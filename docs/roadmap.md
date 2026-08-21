@@ -4511,3 +4511,12 @@ architecture blindly.
   screenshot by roughly 1--2%. Kept history/row state modular and split general
   versus RLE258 contract tests into a descriptive subdirectory, but retained
   the token/commit driver beside the semantic loop for generated-code locality.
+- Deferred bounded-history compaction across non-final DEFLATE EOBs. The
+  transactional compressed and stored paths already pause at the real append
+  boundary, so this removes redundant retained-history copies without changing
+  the 32 KiB lookback or 128 KiB recommended scratch contract. A generated
+  dynamic-to-65,535-byte-stored transition is byte-exact. Thirty-one
+  fixed-CPU-25 imx PNG rounds improve the seven selected rows by
+  `1.036x/1.034x` strict/no-Adler geomean, including `kodim17` at
+  `1.014x/1.017x`; four non-selected controls stay within
+  `0.9945x..1.0054x` and `0.9966x..1.0026x`.

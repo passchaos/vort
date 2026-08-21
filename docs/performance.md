@@ -843,3 +843,14 @@ row lifecycle, while the token/commit driver remains beside the semantic loop
 to preserve generated-code locality. General and RLE258 public-contract tests
 are split under `src/root_exports/png/windowed/` instead of growing one flat
 test facade.
+
+The bounded-history driver now also defers compaction across non-final EOBs.
+Compressed blocks already stop before a token whose output does not fit, and
+stored blocks already split transactionally, so an EOB itself does not require
+copying the retained history. A dynamic-to-maximum-stored-block oracle proves
+the deferred transition byte-exactly. In 31 alternating fixed-CPU-25 rounds,
+the seven selected imx PNG rows improve `1.036x/1.034x` geomean for
+strict/no-Adler decode. `kodim02/07/17/23` improve
+`1.093/1.046/1.014/1.079x` strict and
+`1.078/1.049/1.017/1.079x` no-Adler; four non-selected controls remain within
+`0.9945x..1.0054x` and `0.9966x..1.0026x`.
