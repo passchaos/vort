@@ -2495,6 +2495,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   `DictionarySet`, two compressed input chunks, and dictionary-set incremental
   direct output. Selection is strictly by frame Dictionary_ID, so a preceding
   unrelated raw dictionary cannot shadow the full dictionary's entropy state.
+  Added `OwnedStandardDictionary.initCopy` for applications that load trained
+  dictionaries from temporary I/O buffers. It validates before allocation,
+  reparses the owned slice so the view/content/full-byte borrows share its
+  lifetime, exposes `asDictionary()` with entropy-capable standard bytes, and
+  has explicit allocator deinitialization. The external probe checks ownership
+  pointer relationships as well as ID/repcodes/content metadata.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

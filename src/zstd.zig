@@ -203,6 +203,28 @@ pub const StandardDictionaryNativeView = struct {
     view: StandardDictionaryView,
 };
 
+pub const OwnedStandardDictionary = struct {
+    bytes: []u8,
+    view: StandardDictionaryView,
+
+    pub fn initCopy(allocator: std.mem.Allocator, bytes: []const u8) Error!OwnedStandardDictionary {
+        // Validate before allocating, then re-parse the owned slice so every
+        // returned borrow points into memory controlled by this object.
+        _ = try inspectStandardDictionary(bytes);
+        const owned = try allocator.dupe(u8, bytes);
+        errdefer allocator.free(owned);
+        return .{ .bytes = owned, .view = try inspectStandardDictionary(owned) };
+    }
+
+    pub fn asDictionary(self: OwnedStandardDictionary) NativeDictionary {
+        return .{ .id = self.view.id, .content = self.view.content, .standard_bytes = self.bytes };
+    }
+
+    pub fn deinit(self: OwnedStandardDictionary, allocator: std.mem.Allocator) void {
+        allocator.free(self.bytes);
+    }
+};
+
 pub const NativeDictionary = struct {
     id: u32,
     content: []const u8,

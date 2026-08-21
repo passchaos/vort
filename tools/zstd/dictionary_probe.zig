@@ -8,7 +8,11 @@ pub fn main(init: std.process.Init) !void {
     const path = args.next() orelse return error.MissingCorpusPath;
     const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(1 << 20));
     defer init.gpa.free(bytes);
-    const parsed = try vort.ZstdNativeDictionary.initFromStandardDictionary(bytes);
+    const owned = try vort.ZstdOwnedStandardDictionary.initCopy(init.gpa, bytes);
+    defer owned.deinit(init.gpa);
+    const parsed = try vort.ZstdNativeDictionary.initFromStandardDictionary(owned.bytes);
+    const owned_dictionary = owned.asDictionary();
+    if (owned_dictionary.id != parsed.dictionary.id or owned_dictionary.content.ptr != owned.view.content.ptr) return error.InvalidDictionaryMetadata;
     const view = parsed.view;
     if (parsed.dictionary.id != view.id or parsed.dictionary.content.ptr != view.content.ptr) return error.InvalidDictionaryMetadata;
     var buffer: [256]u8 = undefined;
