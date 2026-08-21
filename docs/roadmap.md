@@ -2463,6 +2463,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   mixed binary from 11,802/10,155 to 9,274/9,274; text and level-9 winners are
   unchanged. Each lookup remains four-way set associative, so work is bounded
   at 128 candidate comparisons per block rather than growing with stream size.
+  A final capacity sweep from 64 to 128 history matches unlocks the high-budget
+  level-9 winner: JSON falls from 1,239 to 1,058 bytes and mixed binary from
+  9,116 to 9,009, with all other rows unchanged. The fixed plan grows by about
+  1.5 KiB (`Match` plus four `usize` arrays), while lookup work stays bounded to
+  four candidates per emitted match. Level-9 binary is now `1.046x` libzstd and
+  JSON `1.563x`.
   Raising only the history-plan output capacity from 32 to 64 (without changing
   four-way hash associativity) gives the remaining structured blocks room to
   retain more valid cross-block matches. JSON level 3 falls from 1,505 to 1,350
