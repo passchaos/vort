@@ -97,6 +97,43 @@ pub const PrefixAlphabet = struct {
         return lengths;
     }
 
+    pub fn simpleCode(self: *const PrefixAlphabet, symbol: u16) ?struct { code: u16, bits: u4 } {
+        if (self.len == 0 or self.len > 4) return null;
+        var index: usize = 0;
+        while (index < self.len and self.symbols[index] != symbol) : (index += 1) {}
+        if (index == self.len) return null;
+        if (self.len == 1) return .{ .code = 0, .bits = 0 };
+        const bits: u4 = switch (self.len) {
+            2 => 1,
+            3 => if (index == 0) 1 else 2,
+            4 => 2,
+            else => unreachable,
+        };
+        var counts: [3]u16 = @splat(0);
+        for (0..self.len) |i| counts[
+            switch (self.len) {
+                2 => 1,
+                3 => if (i == 0) 1 else 2,
+                4 => 2,
+                else => unreachable,
+            }
+        ] += 1;
+        var next: [3]u16 = @splat(0);
+        next[2] = counts[1] << 1;
+        var rank: u16 = 0;
+        for (0..self.len) |i| {
+            const other_bits: u4 = switch (self.len) {
+                2 => 1,
+                3 => if (i == 0) 1 else 2,
+                4 => 2,
+                else => unreachable,
+            };
+            if (other_bits == bits and self.symbols[i] < symbol) rank += 1;
+        }
+        const canonical = next[bits] + rank;
+        return .{ .code = @bitReverse(canonical) >> @intCast(16 - @as(usize, bits)), .bits = bits };
+    }
+
     fn lessValue(left_symbol: u16, left_frequency: usize, right_symbol: u16, right_frequency: usize) bool {
         return left_frequency > right_frequency or
             (left_frequency == right_frequency and left_symbol < right_symbol);
@@ -238,6 +275,25 @@ test "simple alphabet orders hot symbols first" {
     try std.testing.expectEqual(@as(u4, 1), lengths[9]);
     try std.testing.expectEqual(@as(u4, 2), lengths[4]);
     try std.testing.expectEqual(@as(u4, 2), lengths[7]);
+}
+
+test "simple alphabet direct codes match canonical encoder" {
+    const huffman = @import("../../huffman.zig");
+    inline for (2..5) |count| {
+        var alphabet = PrefixAlphabet{};
+        for (0..count) |i| {
+            alphabet.symbols[i] = @intCast(9 - i * 2);
+            alphabet.frequencies[i] = count - i;
+        }
+        alphabet.len = count;
+        const lengths = try alphabet.codeLengths(32);
+        const generic = try huffman.HuffmanTable(32).Encoder.init(&lengths);
+        for (alphabet.symbols[0..count]) |symbol| {
+            const direct = alphabet.simpleCode(symbol).?;
+            try std.testing.expectEqual(generic.bits[symbol], direct.bits);
+            try std.testing.expectEqual(generic.codes[symbol], direct.code);
+        }
+    }
 }
 
 test "complex alphabet produces a complete balanced tree" {

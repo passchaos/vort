@@ -5740,6 +5740,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   three alphabets by value. Focused JSON alphabet time fell from roughly
   19–21 µs to about 10 µs with unchanged wire; short A/B reached 92/103/122
   MiB/s for JSON/source/log.
+  Planner payload setup now bypasses full 704/520 length arrays and canonical
+  encoders for simple command/distance alphabets (<=4 symbols), deriving the
+  exact canonical reversed codes directly from the already ordered alphabet.
+  Direct/generic code equivalence is tested for 2–4 symbols. A clean 100-run
+  sample measured 139/155/166 MiB/s versus libbrotli q3 at 231/234/283 MiB/s,
+  with unchanged 92/130/122-byte streams.
   PrefixAlphabet's small-active insertion sort now caches the candidate pair and
   shifts predecessors instead of swapping both parallel arrays at every step.
   It preserves the exact `(frequency desc,symbol asc)` order and wire while

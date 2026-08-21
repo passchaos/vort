@@ -819,8 +819,8 @@ fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, comma
     const distance_alphabet_size = plannedDistanceAlphabetSize(&distance_alphabet);
     const lengths_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     const literal_lengths = try literal_alphabet.codeLengths(256);
-    const command_lengths = try command_alphabet.codeLengths(704);
-    const distance_lengths = try distance_alphabet.codeLengths(max_distance_alphabet_size);
+    const command_lengths = if (command_alphabet.len <= 4) @as([704]u4, @splat(0)) else try command_alphabet.codeLengths(704);
+    const distance_lengths = if (distance_alphabet.len <= 4) @as([max_distance_alphabet_size]u4, @splat(0)) else try distance_alphabet.codeLengths(max_distance_alphabet_size);
     if (io) |active| stats.lengths_ns = elapsedNs(lengths_start.?, active);
     const header_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     try writePlannedCompressedHeader(allocator, &writer, &literal_alphabet, &command_alphabet, &distance_alphabet, distance_alphabet_size, &literal_lengths, &command_lengths, &distance_lengths);
@@ -828,20 +828,29 @@ fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, comma
 
     const encoder_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     const literal_encoder = try huffman.HuffmanTable(256).Encoder.init(&literal_lengths);
-    const command_encoder = try huffman.HuffmanTable(704).Encoder.init(&command_lengths);
-    const distance_encoder = try huffman.HuffmanTable(max_distance_alphabet_size).Encoder.init(&distance_lengths);
+    const command_encoder = if (command_alphabet.len <= 4) huffman.HuffmanTable(704).Encoder{} else try huffman.HuffmanTable(704).Encoder.init(&command_lengths);
+    const distance_encoder = if (distance_alphabet.len <= 4) huffman.HuffmanTable(max_distance_alphabet_size).Encoder{} else try huffman.HuffmanTable(max_distance_alphabet_size).Encoder.init(&distance_lengths);
     if (io) |active| stats.encoder_ns = elapsedNs(encoder_start.?, active);
     const payload_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     for (commands) |command| {
         const encoding = commandEntryForLengths(command.insert_len, command.copy_len) orelse unreachable;
-        if (command_alphabet.len > 1) try writer.writeBits(allocator, command_encoder.codes[encoding.symbol], command_encoder.bits[encoding.symbol]);
+        if (command_alphabet.len > 1) {
+            if (command_alphabet.len <= 4) {
+                const code = command_alphabet.simpleCode(encoding.symbol).?;
+                try writer.writeBits(allocator, code.code, code.bits);
+            } else try writer.writeBits(allocator, command_encoder.codes[encoding.symbol], command_encoder.bits[encoding.symbol]);
+        }
         try writeCommandLengthExtras(allocator, &writer, encoding, command.insert_len, command.copy_len);
         for (input[command.insert_start..][0..command.insert_len]) |literal|
             if (literal_alphabet.len > 1) try writer.writeBits(allocator, literal_encoder.codes[literal], literal_encoder.bits[literal]);
         if (command.has_copy and encoding.command.distance_code == -1) {
             const distance = encoder_distance.encode(command.distance, 15) orelse unreachable;
-            if (distance_alphabet.len > 1)
-                try writer.writeBits(allocator, distance_encoder.codes[distance.symbol], distance_encoder.bits[distance.symbol]);
+            if (distance_alphabet.len > 1) {
+                if (distance_alphabet.len <= 4) {
+                    const code = distance_alphabet.simpleCode(distance.symbol).?;
+                    try writer.writeBits(allocator, code.code, code.bits);
+                } else try writer.writeBits(allocator, distance_encoder.codes[distance.symbol], distance_encoder.bits[distance.symbol]);
+            }
             if (distance.extra_bits != 0)
                 try writer.writeBits(allocator, distance.extra, distance.extra_bits);
         }
