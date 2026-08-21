@@ -2463,6 +2463,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   mixed binary from 11,802/10,155 to 9,274/9,274; text and level-9 winners are
   unchanged. Each lookup remains four-way set associative, so work is bounded
   at 128 candidate comparisons per block rather than growing with stream size.
+  Raising only the history-plan output capacity from 32 to 64 (without changing
+  four-way hash associativity) gives the remaining structured blocks room to
+  retain more valid cross-block matches. JSON level 3 falls from 1,505 to 1,350
+  bytes and mixed binary level 3/9 from 9,274/9,344 to 9,116/9,116; other rows
+  are unchanged. The plan remains fixed-size and bounded to 256 candidate checks
+  per block.
   Added a dependency-free standard Zstandard full-dictionary inspector. It
   validates the `0xEC30A437` magic and non-zero Dictionary_ID, parses the
   embedded Huffman plus OF/ML/LL FSE entropy headers through the production
