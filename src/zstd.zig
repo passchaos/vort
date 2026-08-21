@@ -206,6 +206,7 @@ pub const StandardDictionaryNativeView = struct {
 pub const NativeDictionary = struct {
     id: u32,
     content: []const u8,
+    standard_bytes: ?[]const u8 = null,
 
     pub fn init(id: u32, content: []const u8) NativeDictionary {
         return .{ .id = id, .content = content };
@@ -236,7 +237,7 @@ pub const NativeDictionary = struct {
     /// encoder/decoder public state can seed Repeat_Mode from full dictionaries.
     pub fn initFromStandardDictionary(bytes: []const u8) Error!StandardDictionaryNativeView {
         const view = try inspectStandardDictionary(bytes);
-        return .{ .dictionary = init(view.id, view.content), .view = view };
+        return .{ .dictionary = .{ .id = view.id, .content = view.content, .standard_bytes = bytes }, .view = view };
     }
 
     /// Validate a persisted metadata record before constructing a borrowed
@@ -4425,6 +4426,48 @@ fn validateNativeDictionary(header: NativeFrameHeader, dictionary: ?NativeDictio
     return dict.content;
 }
 
+fn initialSequenceFrameState(dictionary: ?NativeDictionary) Error!SequenceFrameState {
+    const dict = dictionary orelse return .{};
+    const bytes = dict.standard_bytes orelse return .{};
+    return try parseStandardDictionaryState(bytes);
+}
+
+fn parseStandardDictionaryState(bytes: []const u8) Error!SequenceFrameState {
+    const view = try inspectStandardDictionary(bytes);
+    var offset: usize = 8;
+    var reader: std.Io.Reader = .fixed(bytes[offset..]);
+    var remaining: std.Io.Limit = .limited(bytes.len - offset);
+    const huffman_tree = decodeStdZstdHuffmanTree(&reader, &remaining) catch return error.InvalidDictionaryMetadata;
+    offset += reader.seek;
+    const parse_table = struct {
+        fn run(data: []const u8, position: *usize, bases: []const usize, bits: []const u8, symbol_count: usize, max_log: u4) Error!SequenceFseTable {
+            return readFseSequenceTable(data, position, bases, bits, symbol_count, max_log) catch |err| switch (err) {
+                error.TruncatedFrame => error.TruncatedFrame,
+                else => error.InvalidDictionaryMetadata,
+            };
+        }
+    }.run;
+    const offset_fse = try parse_table(bytes, &offset, &of_base, &of_bits, sequence_table_symbol_count_max.offset, sequence_table_accuracy_log_max.offset);
+    const match_fse = try parse_table(bytes, &offset, &ml_base, &ml_bits, sequence_table_symbol_count_max.match, sequence_table_accuracy_log_max.match);
+    const literal_fse = try parse_table(bytes, &offset, &ll_base, &ll_bits, sequence_table_symbol_count_max.literal, sequence_table_accuracy_log_max.literal);
+    if (offset + 12 != view.content_offset) return error.InvalidDictionaryMetadata;
+    return .{
+        .previous_tables = .{
+            .ll_mode = .compressed,
+            .of_mode = .compressed,
+            .ml_mode = .compressed,
+            .literal_rle = null,
+            .offset_rle = null,
+            .match_rle = null,
+            .literal_fse = literal_fse,
+            .offset_fse = offset_fse,
+            .match_fse = match_fse,
+        },
+        .repeated_offsets = .{ view.repcodes[0], view.repcodes[1], view.repcodes[2] },
+        .previous_huffman_tree = huffman_tree,
+    };
+}
+
 fn dictionaryForNativeFrame(frame: []const u8, dictionary_set: NativeDictionarySet) Error!?NativeDictionary {
     const header = try inspectNativeFrameHeader(frame);
     if (header.dictionary_id == 0) return null;
@@ -4442,7 +4485,7 @@ fn decodeRawOrRleZstandardFrameInto(
     const dictionary_history = try validateNativeDictionary(header, dictionary);
     const frame_out_start = out.items.len;
     if (header.content_size) |size| try out.ensureUnusedCapacity(allocator, try checkedU64ToUsize(size));
-    var frame_state: SequenceFrameState = .{};
+    var frame_state = try initialSequenceFrameState(dictionary);
 
     while (true) {
         if (frame.len - offset.* < 3) return error.TruncatedFrame;
@@ -4505,7 +4548,7 @@ fn decodeRawOrRleZstandardFrameIntoBuffer(
         const needed = try checkedU64ToUsize(size);
         if (output.len - written.* < needed) return error.OutputTooSmall;
     }
-    var frame_state: SequenceFrameState = .{};
+    var frame_state = try initialSequenceFrameState(dictionary);
 
     while (true) {
         if (frame.len - offset.* < 3) return error.TruncatedFrame;
@@ -6234,7 +6277,7 @@ fn rawOrRleDecodedSizeLimitedWithDictionary(
             const header = try parseRawOrRleFrameHeaderWithOptions(frame, &offset, true);
             const dictionary_history = try validateNativeDictionary(header, dictionary);
             const frame_start = total;
-            var frame_state: SequenceFrameState = .{};
+            var frame_state = try initialSequenceFrameState(dictionary);
             while (true) {
                 if (frame.len - offset < 3) return error.TruncatedFrame;
                 const block_header = std.mem.readInt(u24, frame[offset..][0..3], .little);

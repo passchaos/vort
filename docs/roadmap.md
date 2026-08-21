@@ -2481,9 +2481,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   The libzstd runtime harness now exposes dictionary-aware encode/decode calls,
   and a focused differential verifies that libzstd 1.5.5 decodes Vort output
   produced from a standard full dictionary's borrowed content and ID. The
-  reverse direction currently reaches a valid libzstd frame but Vort correctly
-  rejects its first-block `Repeat_Mode` without seeded dictionary entropy; this
-  records the exact next compatibility boundary instead of weakening validation.
+  reverse direction now also passes: `NativeDictionary` retains an optional
+  borrowed full-dictionary byte view, and all one-shot size/decode paths seed
+  the frame's Huffman tree, OF/ML/LL FSE tables, and repcodes before the first
+  block. This closes libzstd full-dictionary first-block `Repeat_Mode` decoding
+  without changing raw-content dictionary behavior or introducing global state.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
