@@ -58,7 +58,7 @@ pub const PrefixAlphabet = struct {
         }
     }
 
-    pub fn codeLengths(self: PrefixAlphabet, comptime alphabet_size: usize) ![alphabet_size]u4 {
+    pub fn codeLengths(self: *const PrefixAlphabet, comptime alphabet_size: usize) ![alphabet_size]u4 {
         if (self.len == 0) return error.InvalidBlockPlan;
         var lengths: [alphabet_size]u4 = @splat(0);
         switch (self.len) {
@@ -94,7 +94,7 @@ pub const PrefixAlphabet = struct {
             (self.frequencies[left] == self.frequencies[right] and self.symbols[left] < self.symbols[right]);
     }
 
-    fn fillTreeLengths(self: PrefixAlphabet, comptime alphabet_size: usize, comptime compact_size: usize, lengths: *[alphabet_size]u4) void {
+    fn fillTreeLengths(self: *const PrefixAlphabet, comptime alphabet_size: usize, comptime compact_size: usize, lengths: *[alphabet_size]u4) void {
         std.debug.assert(self.len <= compact_size);
         var frequencies: [compact_size]u32 = @splat(0);
         for (self.frequencies[0..self.len], 0..) |frequency, i|

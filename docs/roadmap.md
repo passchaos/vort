@@ -5714,3 +5714,8 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   `(current-3) & (radix-1)` and computes the predecessor directly, replacing an
   inner 4/8-way modulo search at every RLE chain level. An exhaustive run test
   covers both radices through 703 symbols; all planner wires remain unchanged.
+  `PrefixAlphabet` is an approximately 11 KiB full-command-space value. Its
+  code-length and header helpers now take const pointers rather than copying
+  three alphabets by value. Focused JSON alphabet time fell from roughly
+  19–21 µs to about 10 µs with unchanged wire; short A/B reached 92/103/122
+  MiB/s for JSON/source/log.

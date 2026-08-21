@@ -813,14 +813,14 @@ fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, comma
     var writer = BitWriter{ .out = &out };
     try writeWindowBits(allocator, &writer, default_window_bits);
     try writeLastCompressedMetaBlockHeader(allocator, &writer, input.len);
-    const distance_alphabet_size = plannedDistanceAlphabetSize(distance_alphabet);
+    const distance_alphabet_size = plannedDistanceAlphabetSize(&distance_alphabet);
     const lengths_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     const literal_lengths = try literal_alphabet.codeLengths(256);
     const command_lengths = try command_alphabet.codeLengths(704);
     const distance_lengths = try distance_alphabet.codeLengths(max_distance_alphabet_size);
     if (io) |active| stats.lengths_ns = elapsedNs(lengths_start.?, active);
     const header_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
-    try writePlannedCompressedHeader(allocator, &writer, literal_alphabet, command_alphabet, distance_alphabet, distance_alphabet_size, &literal_lengths, &command_lengths, &distance_lengths);
+    try writePlannedCompressedHeader(allocator, &writer, &literal_alphabet, &command_alphabet, &distance_alphabet, distance_alphabet_size, &literal_lengths, &command_lengths, &distance_lengths);
     if (io) |active| stats.header_ns = elapsedNs(header_start.?, active);
 
     const encoder_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
@@ -13056,9 +13056,9 @@ fn writeRepeatedPrefixCompressedHeader(allocator: std.mem.Allocator, writer: *Bi
 fn writePlannedCompressedHeader(
     allocator: std.mem.Allocator,
     writer: *BitWriter,
-    literal_alphabet: command_plan.PrefixAlphabet,
-    command_alphabet: command_plan.PrefixAlphabet,
-    distance_alphabet: command_plan.PrefixAlphabet,
+    literal_alphabet: *const command_plan.PrefixAlphabet,
+    command_alphabet: *const command_plan.PrefixAlphabet,
+    distance_alphabet: *const command_plan.PrefixAlphabet,
     distance_alphabet_size: usize,
     literal_lengths: *const [256]u4,
     command_lengths: *const [704]u4,
@@ -13077,13 +13077,13 @@ fn writePlannedCompressedHeader(
     try writePrefixSymbolsWithLengths(allocator, writer, distance_alphabet_size, distance_alphabet, distance_lengths);
 }
 
-fn plannedDistanceAlphabetSize(alphabet: command_plan.PrefixAlphabet) usize {
+fn plannedDistanceAlphabetSize(alphabet: *const command_plan.PrefixAlphabet) usize {
     var highest: usize = 0;
     for (alphabet.symbols[0..alphabet.len]) |symbol| highest = @max(highest, symbol);
     return @max(@as(usize, 16 + 15 + 48), highest + 1);
 }
 
-fn writePrefixSymbolsWithLengths(allocator: std.mem.Allocator, writer: *BitWriter, alphabet_size: usize, alphabet: command_plan.PrefixAlphabet, lengths: []const u4) Error!void {
+fn writePrefixSymbolsWithLengths(allocator: std.mem.Allocator, writer: *BitWriter, alphabet_size: usize, alphabet: *const command_plan.PrefixAlphabet, lengths: []const u4) Error!void {
     if (alphabet.len == 0) return error.InvalidBlockPlan;
     if (alphabet.len > 4) {
         return complex_prefix.write(allocator, writer, alphabet_size, lengths);
