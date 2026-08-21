@@ -52,10 +52,14 @@ pub const PrefixAlphabet = struct {
         var i: usize = 1;
         while (i < self.len) : (i += 1) {
             var j = i;
-            while (j != 0 and less(self, j, j - 1)) : (j -= 1) {
-                std.mem.swap(u16, &self.symbols[j], &self.symbols[j - 1]);
-                std.mem.swap(usize, &self.frequencies[j], &self.frequencies[j - 1]);
+            const symbol = self.symbols[j];
+            const frequency = self.frequencies[j];
+            while (j != 0 and lessValue(symbol, frequency, self.symbols[j - 1], self.frequencies[j - 1])) : (j -= 1) {
+                self.symbols[j] = self.symbols[j - 1];
+                self.frequencies[j] = self.frequencies[j - 1];
             }
+            self.symbols[j] = symbol;
+            self.frequencies[j] = frequency;
         }
     }
 
@@ -93,9 +97,9 @@ pub const PrefixAlphabet = struct {
         return lengths;
     }
 
-    fn less(self: *const PrefixAlphabet, left: usize, right: usize) bool {
-        return self.frequencies[left] > self.frequencies[right] or
-            (self.frequencies[left] == self.frequencies[right] and self.symbols[left] < self.symbols[right]);
+    fn lessValue(left_symbol: u16, left_frequency: usize, right_symbol: u16, right_frequency: usize) bool {
+        return left_frequency > right_frequency or
+            (left_frequency == right_frequency and left_symbol < right_symbol);
     }
 
     fn fillTreeLengths(self: *const PrefixAlphabet, comptime alphabet_size: usize, comptime compact_size: usize, lengths: *[alphabet_size]u4) void {

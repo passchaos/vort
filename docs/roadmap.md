@@ -5735,6 +5735,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   three alphabets by value. Focused JSON alphabet time fell from roughly
   19–21 µs to about 10 µs with unchanged wire; short A/B reached 92/103/122
   MiB/s for JSON/source/log.
+  PrefixAlphabet's small-active insertion sort now caches the candidate pair and
+  shifts predecessors instead of swapping both parallel arrays at every step.
+  It preserves the exact `(frequency desc,symbol asc)` order and wire while
+  reducing typical alphabet time to roughly 6–7 µs. A clean 100-iteration sample
+  measured 104/166/143 MiB/s for JSON/source/log.
   Alphabet compaction now fills caller-owned PrefixAlphabet objects through an
   out-parameter instead of returning/copying ~11 KiB values. Focused alphabet
   time is about 7–8 µs; short A/B reached 117/133/134 MiB/s while source/log
