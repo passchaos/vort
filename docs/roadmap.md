@@ -2426,6 +2426,16 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   text frame at every level. This remains ratio-first and expensive because each
   one-shot call builds three complete candidates; reusable planning and cheap
   split scoring are explicit follow-up performance work.
+  The encoder now adds a full-block greedy hash-chain sequence candidate built
+  on the shared LZ77 planner. Unlike bounded recursive lookahead, it covers the
+  whole entropy block linearly and then reuses the existing RLE/predefined/FSE
+  wire cost selection. On the locked 32 KiB matrix this is the first order-of-
+  magnitude ratio improvement: JSON level 1/3/9 falls to 2,568/1,782/1,336
+  bytes and mixed binary to 11,809/10,176/9,384, while repeated text remains
+  93 bytes. Libzstd is still smaller (`838/912/677` JSON and `8,609` binary),
+  but the gap contracts from roughly `10–14x` to `1.1–3.1x`. Existing shape-
+  specific tests now assert semantic properties rather than a fixed sequence
+  count/table mode when the new strictly smaller candidate legitimately wins.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
