@@ -1,5 +1,6 @@
 const std = @import("std");
 const lz77 = @import("../../lz77.zig");
+const small_huffman = @import("small_huffman.zig");
 
 /// A Brotli insert/copy command derived from a generic LZ77 token stream.
 /// `insert_start` indexes the original input so the wire writer can emit the
@@ -75,11 +76,14 @@ pub const PrefixAlphabet = struct {
                 for (self.symbols[0..4]) |symbol| lengths[symbol] = 2;
             },
             5...max_prefix_symbols => {
-                if (self.len <= 32)
-                    self.fillTreeLengths(alphabet_size, 32, &lengths)
-                else if (self.len <= 64)
-                    self.fillTreeLengths(alphabet_size, 64, &lengths)
-                else if (self.len <= 256)
+                if (self.len <= 64) {
+                    var compact_lengths: [64]u4 = undefined;
+                    if (small_huffman.build(64, self.frequencies[0..self.len], &compact_lengths)) {
+                        for (self.symbols[0..self.len], compact_lengths[0..self.len]) |symbol, bits| lengths[symbol] = bits;
+                    } else {
+                        self.fillTreeLengths(alphabet_size, 64, &lengths);
+                    }
+                } else if (self.len <= 256)
                     self.fillTreeLengths(alphabet_size, 256, &lengths)
                 else
                     self.fillTreeLengths(alphabet_size, max_prefix_symbols, &lengths);

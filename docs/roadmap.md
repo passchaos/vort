@@ -5684,6 +5684,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   arrays and scatters once, avoiding full 704/520 sparse compaction. Besides
   lowering length-build time, this improved source/log wire sizes from 131/125
   to 130/122 bytes; Node and corpus gates accept the new deterministic wire.
+  For the currently dominant <=64-symbol alphabets, a focused heap-based Huffman
+  builder now computes unconstrained optimal depths in O(active²) over compact
+  nodes and falls back to package-merge only if depth exceeds Brotli's 15-bit
+  limit. Length time dropped to roughly 6.7–8.3 µs, with wires unchanged. Short
+  A/B reached 108/123/119 MiB/s; the persisted 100-iteration sample measured
+  99/70/120 MiB/s for JSON/source/log under the noisy mixed-core environment.
   Command selection no longer scans all 704 upstream LUT entries for every
   planned match. A compile-time 24×24 insert/copy-code index retains the first
   exact upstream symbol for O(1) lookup; an exhaustive equivalence test covers
