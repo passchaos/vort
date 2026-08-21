@@ -2528,6 +2528,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   raw-content dictionaries, while imported full dictionaries retain entropy and
   repcode metadata. This removes API ambiguity without falsely labeling the
   phrase trainer as COVER/fastCover-compatible.
+  `summarizeStandardDictionary` exposes validated entropy metadata without
+  leaking internal decode tables: LL/OF/ML entry counts and accuracy logs, the
+  content boundary, Dictionary_ID, and repcodes. The trained-dictionary probe
+  prints and cross-checks this summary, giving catalogs an auditable surface for
+  selecting compatible dictionaries before constructing codec state.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

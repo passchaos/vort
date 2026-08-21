@@ -198,6 +198,18 @@ test {
 
 pub const StandardDictionaryView = dictionary_format.View;
 pub const standard_dictionary_magic = dictionary_format.magic;
+pub const StandardDictionaryEntropySummary = struct {
+    id: u32,
+    content_offset: usize,
+    content_len: usize,
+    repcodes: [3]u32,
+    literal_table_entries: usize,
+    offset_table_entries: usize,
+    match_table_entries: usize,
+    literal_accuracy_log: u8,
+    offset_accuracy_log: u8,
+    match_accuracy_log: u8,
+};
 pub const StandardDictionaryNativeView = struct {
     dictionary: NativeDictionary,
     view: StandardDictionaryView,
@@ -288,6 +300,15 @@ pub const NativeDictionary = struct {
 /// readers used for frame decoding, but remain internal until the public
 /// dictionary codec can seed Repeat_Mode state from them.
 pub fn inspectStandardDictionary(bytes: []const u8) Error!StandardDictionaryView {
+    return (try inspectStandardDictionaryWithEntropy(bytes)).view;
+}
+
+const StandardDictionaryInspection = struct {
+    view: StandardDictionaryView,
+    summary: StandardDictionaryEntropySummary,
+};
+
+fn inspectStandardDictionaryWithEntropy(bytes: []const u8) Error!StandardDictionaryInspection {
     if (bytes.len < 8) return error.TruncatedFrame;
     if (std.mem.readInt(u32, bytes[0..4], .little) != standard_dictionary_magic) return error.InvalidMagic;
     var offset: usize = 8;
@@ -301,6 +322,9 @@ pub fn inspectStandardDictionary(bytes: []const u8) Error!StandardDictionaryView
     offset += reader.seek;
 
     var dummy_entries: [max_sequence_fse_table_size]FseTableEntry = undefined;
+    var table_entries: [3]usize = undefined;
+    var table_logs: [3]u8 = undefined;
+    var table_index: usize = 0;
     inline for (.{
         .{ @as(usize, sequence_table_symbol_count_max.offset), sequence_table_accuracy_log_max.offset },
         .{ @as(usize, sequence_table_symbol_count_max.match), sequence_table_accuracy_log_max.match },
@@ -308,13 +332,35 @@ pub fn inspectStandardDictionary(bytes: []const u8) Error!StandardDictionaryView
     }) |spec| {
         if (offset >= bytes.len) return error.TruncatedFrame;
         var fse_reader: ForwardBitReader = .{ .bytes = bytes[offset..] };
-        _ = decodeFseTable(&fse_reader, spec[0], spec[1], &dummy_entries) catch |err| switch (err) {
+        const entry_count = decodeFseTable(&fse_reader, spec[0], spec[1], &dummy_entries) catch |err| switch (err) {
             error.TruncatedFrame => return error.TruncatedFrame,
             else => return error.InvalidDictionaryMetadata,
         };
+        table_entries[table_index] = entry_count;
+        table_logs[table_index] = @intCast(std.math.log2_int(usize, entry_count));
+        table_index += 1;
         offset += fse_reader.byteIndex();
     }
-    return dictionary_format.viewAfterEntropy(bytes, offset - 8);
+    const view = try dictionary_format.viewAfterEntropy(bytes, offset - 8);
+    return .{
+        .view = view,
+        .summary = .{
+            .id = view.id,
+            .content_offset = view.content_offset,
+            .content_len = view.content.len,
+            .repcodes = view.repcodes,
+            .offset_table_entries = table_entries[0],
+            .match_table_entries = table_entries[1],
+            .literal_table_entries = table_entries[2],
+            .offset_accuracy_log = table_logs[0],
+            .match_accuracy_log = table_logs[1],
+            .literal_accuracy_log = table_logs[2],
+        },
+    };
+}
+
+pub fn summarizeStandardDictionary(bytes: []const u8) Error!StandardDictionaryEntropySummary {
+    return (try inspectStandardDictionaryWithEntropy(bytes)).summary;
 }
 
 test "standard Zstd dictionary inspector rejects malformed headers" {
