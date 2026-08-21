@@ -2463,6 +2463,15 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   mixed binary from 11,802/10,155 to 9,274/9,274; text and level-9 winners are
   unchanged. Each lookup remains four-way set associative, so work is bounded
   at 128 candidate comparisons per block rather than growing with stream size.
+  Added a dependency-free standard Zstandard full-dictionary inspector. It
+  validates the `0xEC30A437` magic and non-zero Dictionary_ID, parses the
+  embedded Huffman plus OF/ML/LL FSE entropy headers through the production
+  readers, validates all three repcodes against the remaining history content,
+  and returns a borrowed `{id, content}` view. A locally trained libzstd 1.5.5
+  dictionary is accepted with the same ID reported in its header; malformed
+  magic, entropy payloads, zero IDs, truncated repcodes, and out-of-range
+  repcodes are rejected. Entropy seeding for Repeat_Mode remains the next full-
+  dictionary integration step rather than silently treating headers as content.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

@@ -12,6 +12,7 @@ const sequence_fse_builder = @import("zstd/sequence/fse_builder.zig");
 const raw_frame = @import("zstd/frame/raw.zig");
 const known_size_frame = @import("zstd/frame/known_size.zig");
 const huffman_lookup = @import("zstd/literals/huffman_lookup.zig");
+const dictionary_format = @import("zstd/dictionary_format.zig");
 const incremental_encoder = @import("zstd/incremental/encoder/frame.zig");
 const incremental_block_emitter = @import("zstd/incremental/encoder/block_emitter.zig");
 const incremental_history_match = @import("zstd/incremental/encoder/history_match.zig");
@@ -192,7 +193,11 @@ test {
     _ = incremental_history;
     _ = incremental_history_index;
     _ = incremental_history_match;
+    _ = dictionary_format;
 }
+
+pub const StandardDictionaryView = dictionary_format.View;
+pub const standard_dictionary_magic = dictionary_format.magic;
 
 pub const NativeDictionary = struct {
     id: u32,
@@ -228,6 +233,49 @@ pub const NativeDictionary = struct {
         return init(derivedId(content), content);
     }
 };
+
+/// Parse a standard Zstandard full dictionary and expose its Dictionary_ID plus
+/// raw history content. Entropy tables are validated with the same Huffman/FSE
+/// readers used for frame decoding, but remain internal until the public
+/// dictionary codec can seed Repeat_Mode state from them.
+pub fn inspectStandardDictionary(bytes: []const u8) Error!StandardDictionaryView {
+    if (bytes.len < 8) return error.TruncatedFrame;
+    if (std.mem.readInt(u32, bytes[0..4], .little) != standard_dictionary_magic) return error.InvalidMagic;
+    var offset: usize = 8;
+
+    var reader: std.Io.Reader = .fixed(bytes[offset..]);
+    var remaining: std.Io.Limit = .limited(bytes.len - offset);
+    _ = decodeStdZstdHuffmanTree(&reader, &remaining) catch |err| switch (err) {
+        error.EndOfStream => return error.TruncatedFrame,
+        else => return error.InvalidDictionaryMetadata,
+    };
+    offset += reader.seek;
+
+    var dummy_entries: [max_sequence_fse_table_size]FseTableEntry = undefined;
+    inline for (.{
+        .{ @as(usize, sequence_table_symbol_count_max.offset), sequence_table_accuracy_log_max.offset },
+        .{ @as(usize, sequence_table_symbol_count_max.match), sequence_table_accuracy_log_max.match },
+        .{ @as(usize, sequence_table_symbol_count_max.literal), sequence_table_accuracy_log_max.literal },
+    }) |spec| {
+        if (offset >= bytes.len) return error.TruncatedFrame;
+        var fse_reader: ForwardBitReader = .{ .bytes = bytes[offset..] };
+        _ = decodeFseTable(&fse_reader, spec[0], spec[1], &dummy_entries) catch |err| switch (err) {
+            error.TruncatedFrame => return error.TruncatedFrame,
+            else => return error.InvalidDictionaryMetadata,
+        };
+        offset += fse_reader.byteIndex();
+    }
+    return dictionary_format.viewAfterEntropy(bytes, offset - 8);
+}
+
+test "standard Zstd dictionary inspector rejects malformed headers" {
+    try std.testing.expectError(error.TruncatedFrame, inspectStandardDictionary(&.{ 0x37, 0xa4, 0x30, 0xec }));
+    var bad_magic: [8]u8 = @splat(0);
+    try std.testing.expectError(error.InvalidMagic, inspectStandardDictionary(&bad_magic));
+    std.mem.writeInt(u32, bad_magic[0..4], standard_dictionary_magic, .little);
+    std.mem.writeInt(u32, bad_magic[4..8], 1, .little);
+    try std.testing.expectError(error.TruncatedFrame, inspectStandardDictionary(&bad_magic));
+}
 
 pub const NativeDictionaryTrainOptions = dictionary_mod.TrainOptions;
 pub const Dictionary = NativeDictionary;
