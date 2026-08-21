@@ -34,6 +34,13 @@ def main() -> int:
         len({int(row["reference_bytes"]) for row in rows if row["case"] == case}) >= 2
         for case in CASES
     ), rows
+    # Higher public levels must spend at least as much measured planning time
+    # on the locked structured corpus. Size may remain equal until the planner
+    # can express more than 32 sequences, but the level must no longer be a
+    # completely ignored parameter.
+    json_rows = {int(row["level"]): row for row in rows if row["case"] == "json"}
+    assert int(json_rows[3]["vort_ns"]) > int(json_rows[1]["vort_ns"]), json_rows
+    assert int(json_rows[9]["vort_ns"]) > int(json_rows[3]["vort_ns"]), json_rows
     print(f"zstd_encode_bench_gate=ok rows={len(rows)} reference_version={rows[0]['reference_version']}")
     return 0
 

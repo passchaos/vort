@@ -2390,9 +2390,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   first pinned evidence exposes the encoder gap directly: text is `1.16x` the
   reference size, JSON is `18.5–25.0x`, and mixed binary is `3.71x`; encoding
   throughput is below 1% of libzstd on every row. Vort output is currently
-  identical across levels 1/3/9, confirming that the public level surface still
-  lacks real strategy differentiation. The gate is intentionally evidence-first
-  and will anchor the next sequence-planner and level-policy work.
+  identical across levels 1/3/9 in this first matrix, confirming that output
+  strategy differentiation remains incomplete. Levels now at least map to
+  increasing bounded planner budgets (`16/64/512` for 1/3/9); the pinned JSON
+  row shows the expected search-cost progression, while its unchanged size
+  localizes the next ratio target to the 32-sequence bootstrap-plan ceiling
+  rather than another budget increase. The gate is intentionally evidence-first
+  and will anchor the next sequence-planner work.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

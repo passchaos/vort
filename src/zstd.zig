@@ -3495,6 +3495,23 @@ fn nativeFrameOptionsForLevel(level: c_int, options: FrameOptions) NativeFrameOp
     if (level <= 0) {
         native_options.selection = .raw_or_rle;
         native_options.match_search_budget = 0;
+    } else {
+        // The bootstrap planner's budget is an explicit upper bound on branch
+        // states, so it is the first meaningful level control available to the
+        // native encoder. Keep level 1 latency bounded and spend progressively
+        // more search through level 9; higher levels currently share the most
+        // exhaustive supported search until additional parser strategies land.
+        native_options.match_search_budget = switch (level) {
+            1 => 16,
+            2 => 32,
+            3 => 64,
+            4 => 96,
+            5 => 128,
+            6 => 192,
+            7 => 256,
+            8 => 384,
+            else => mixed_match_path_search_budget,
+        };
     }
     return native_options;
 }
@@ -11727,6 +11744,18 @@ test "zstd pure Zig facade maps level zero to fastest native mode" {
     const decoded = try decodeFrameAlloc(std.testing.allocator, fastest);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "zstd compression levels map to increasing search budgets" {
+    const options: FrameOptions = .{ .include_content_size = false, .content_checksum = true };
+    try std.testing.expectEqual(@as(usize, 0), nativeFrameOptionsForLevel(0, options).match_search_budget);
+    try std.testing.expectEqual(@as(usize, 16), nativeFrameOptionsForLevel(1, options).match_search_budget);
+    try std.testing.expectEqual(@as(usize, 64), nativeFrameOptionsForLevel(3, options).match_search_budget);
+    try std.testing.expectEqual(@as(usize, mixed_match_path_search_budget), nativeFrameOptionsForLevel(9, options).match_search_budget);
+    try std.testing.expect(nativeFrameOptionsForLevel(3, options).match_search_budget > nativeFrameOptionsForLevel(1, options).match_search_budget);
+    try std.testing.expect(nativeFrameOptionsForLevel(9, options).match_search_budget > nativeFrameOptionsForLevel(3, options).match_search_budget);
+    try std.testing.expect(!nativeFrameOptionsForLevel(3, options).include_content_size);
+    try std.testing.expect(nativeFrameOptionsForLevel(3, options).content_checksum);
 }
 
 test "zstd native decoder rejects malformed FSE compressed sequence tables" {
