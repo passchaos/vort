@@ -2560,6 +2560,14 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   1.27/2.99/0.35 s. These absolute times still trail libzstd by orders of
   magnitude; the ReleaseFast gate now prevents the low-level planner cliff from
   returning while broader parser consolidation remains open.
+  Candidate-family ablation then showed that the separate lazy hash pass does
+  not improve any locked level-1 wire. Level 1 now defers that duplicated search
+  while level 2+ retains it; this preserves all nine encode-gate sizes instead
+  of taking the observed two-byte level-3 regression from a broader cutoff.
+  Scheduler variance obscured a stable end-to-end multiplier, so this is
+  retained as a structural full-pass removal rather than a throughput claim.
+  The ReleaseFast encode gate pins the level-1/3 1505/1350-byte wires and
+  cross-decoder round trips; unit tests pin the level-to-budget boundary.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

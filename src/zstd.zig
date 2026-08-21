@@ -52,6 +52,10 @@ const mixed_match_path_search_budget = 512;
 // improving the locked 32 KiB structured corpus. Keep it for level 4+ and for
 // callers that explicitly request a larger native search budget.
 const mixed_match_min_search_budget = 96;
+// Level 1 already evaluates greedy and optimal hash plans. A third lazy pass
+// preserves its locked wires but cannot improve them, so begin that extra ratio
+// work at level 2's 32-state budget.
+const lazy_match_min_search_budget = 32;
 const repeated_pattern_period_max = 64;
 const repeated_pattern_start_scan = 48;
 const max_direct_huffman_symbol = 128;
@@ -7115,7 +7119,13 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
 
     var lazy_block: std.ArrayList(u8) = .empty;
     defer lazy_block.deinit(allocator);
-    const lazy_ok = try emitHashMatchCompressedBlock(allocator, &lazy_block, block, last, .lazy);
+    // The separate lazy pass duplicates hash search at level 1 without winning
+    // a locked corpus block. Level 2+ retains it because it can still produce a
+    // different ratio-oriented candidate as the planner budget grows.
+    const lazy_ok = if (match_search_budget >= lazy_match_min_search_budget)
+        try emitHashMatchCompressedBlock(allocator, &lazy_block, block, last, .lazy)
+    else
+        false;
 
     var optimal_block: std.ArrayList(u8) = .empty;
     defer optimal_block.deinit(allocator);
@@ -12244,8 +12254,12 @@ test "zstd compression levels map to increasing search budgets" {
 }
 
 test "zstd low latency levels defer mixed-family match search" {
+    const level1 = try nativeFrameOptionsForLevel(1, .{});
+    const level2 = try nativeFrameOptionsForLevel(2, .{});
     const level3 = try nativeFrameOptionsForLevel(3, .{});
     const level4 = try nativeFrameOptionsForLevel(4, .{});
+    try std.testing.expect(level1.match_search_budget < lazy_match_min_search_budget);
+    try std.testing.expect(level2.match_search_budget >= lazy_match_min_search_budget);
     try std.testing.expect(level3.match_search_budget < mixed_match_min_search_budget);
     try std.testing.expect(level4.match_search_budget >= mixed_match_min_search_budget);
 }
