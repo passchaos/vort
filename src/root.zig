@@ -801,6 +801,7 @@ pub const ZstdFrameEncoder = zstd.FrameEncoder;
 pub const ZstdFrameDecoder = zstd.FrameDecoder;
 pub const ZstdIncrementalFrameDecoder = zstd.IncrementalFrameDecoder;
 pub const ZstdDictionary = zstd.Dictionary;
+pub const ZstdDictionaryKind = zstd.DictionaryKind;
 pub const ZstdDictionaryTrainOptions = zstd.DictionaryTrainOptions;
 pub const ZstdOwnedDictionary = zstd.OwnedDictionary;
 pub const ZstdDictionarySet = zstd.DictionarySet;

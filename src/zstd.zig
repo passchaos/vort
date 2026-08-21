@@ -203,6 +203,8 @@ pub const StandardDictionaryNativeView = struct {
     view: StandardDictionaryView,
 };
 
+pub const DictionaryKind = enum { raw_content, standard_full };
+
 pub const OwnedStandardDictionary = struct {
     bytes: []u8,
     view: StandardDictionaryView,
@@ -229,6 +231,17 @@ pub const NativeDictionary = struct {
     id: u32,
     content: []const u8,
     standard_bytes: ?[]const u8 = null,
+
+    pub fn kind(self: NativeDictionary) DictionaryKind {
+        return if (self.standard_bytes == null) .raw_content else .standard_full;
+    }
+
+    pub fn standardView(self: NativeDictionary) Error!?StandardDictionaryView {
+        const bytes = self.standard_bytes orelse return null;
+        const view = try inspectStandardDictionary(bytes);
+        if (view.id != self.id or view.content.ptr != self.content.ptr or view.content.len != self.content.len) return error.InvalidDictionaryMetadata;
+        return view;
+    }
 
     pub fn init(id: u32, content: []const u8) NativeDictionary {
         return .{ .id = id, .content = content };
@@ -326,6 +339,8 @@ test "standard Zstd dictionary view constructs raw-content native dictionary" {
     @memcpy(bytes[20..], "dict");
     const view = try dictionary_format.viewAfterEntropy(&bytes, 0);
     const dictionary = NativeDictionary.init(view.id, view.content);
+    try std.testing.expectEqual(DictionaryKind.raw_content, dictionary.kind());
+    try std.testing.expectEqual(@as(?StandardDictionaryView, null), try dictionary.standardView());
     try std.testing.expectEqual(@as(u32, 0x4455), dictionary.id);
     try std.testing.expectEqualSlices(u8, "dict", dictionary.content);
 }
@@ -340,6 +355,10 @@ pub const OwnedNativeDictionary = struct {
 
     pub fn asDictionary(self: OwnedNativeDictionary) NativeDictionary {
         return NativeDictionary.init(self.id, self.content);
+    }
+
+    pub fn kind(_: OwnedNativeDictionary) DictionaryKind {
+        return .raw_content;
     }
 
     /// Summarize trained bytes for application-level dictionary catalogs.

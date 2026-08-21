@@ -13,6 +13,7 @@ pub fn main(init: std.process.Init) !void {
     const parsed = try vort.ZstdNativeDictionary.initFromStandardDictionary(owned.bytes);
     const owned_dictionary = owned.asDictionary();
     if (owned_dictionary.id != parsed.dictionary.id or owned_dictionary.content.ptr != owned.view.content.ptr) return error.InvalidDictionaryMetadata;
+    if (owned_dictionary.kind() != .standard_full or (try owned_dictionary.standardView()) == null) return error.InvalidDictionaryMetadata;
     const view = parsed.view;
     if (parsed.dictionary.id != view.id or parsed.dictionary.content.ptr != view.content.ptr) return error.InvalidDictionaryMetadata;
     var buffer: [256]u8 = undefined;

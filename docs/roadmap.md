@@ -2522,6 +2522,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   lifetime, exposes `asDictionary()` with entropy-capable standard bytes, and
   has explicit allocator deinitialization. The external probe checks ownership
   pointer relationships as well as ID/repcodes/content metadata.
+  Public dictionary values now report `DictionaryKind` (`raw_content` versus
+  `standard_full`) and standard dictionaries can return a revalidated optional
+  `standardView()`. The lightweight deterministic trainer explicitly produces
+  raw-content dictionaries, while imported full dictionaries retain entropy and
+  repcode metadata. This removes API ambiguity without falsely labeling the
+  phrase trainer as COVER/fastCover-compatible.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
