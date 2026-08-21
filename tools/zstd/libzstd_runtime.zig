@@ -16,6 +16,12 @@ const DecompressFn = *const fn (
 ) callconv(.c) usize;
 const IsErrorFn = *const fn (usize) callconv(.c) c_uint;
 const VersionStringFn = *const fn () callconv(.c) [*:0]const u8;
+const CreateCCtxFn = *const fn () callconv(.c) ?*anyopaque;
+const FreeCCtxFn = *const fn (?*anyopaque) callconv(.c) usize;
+const CompressUsingDictFn = *const fn (?*anyopaque, [*]u8, usize, [*]const u8, usize, [*]const u8, usize, c_int) callconv(.c) usize;
+const CreateDCtxFn = *const fn () callconv(.c) ?*anyopaque;
+const FreeDCtxFn = *const fn (?*anyopaque) callconv(.c) usize;
+const DecompressUsingDictFn = *const fn (?*anyopaque, [*]u8, usize, [*]const u8, usize, [*]const u8, usize) callconv(.c) usize;
 
 pub const Runtime = struct {
     library: std.DynLib,
@@ -24,6 +30,12 @@ pub const Runtime = struct {
     decompress: DecompressFn,
     is_error: IsErrorFn,
     version_string: VersionStringFn,
+    create_cctx: CreateCCtxFn,
+    free_cctx: FreeCCtxFn,
+    compress_using_dict: CompressUsingDictFn,
+    create_dctx: CreateDCtxFn,
+    free_dctx: FreeDCtxFn,
+    decompress_using_dict: DecompressUsingDictFn,
 
     pub fn open() !Runtime {
         const names = [_][:0]const u8{
@@ -69,6 +81,30 @@ pub const Runtime = struct {
                 library.close();
                 continue;
             };
+            const create_cctx = library.lookup(CreateCCtxFn, "ZSTD_createCCtx") orelse {
+                library.close();
+                continue;
+            };
+            const free_cctx = library.lookup(FreeCCtxFn, "ZSTD_freeCCtx") orelse {
+                library.close();
+                continue;
+            };
+            const compress_using_dict = library.lookup(CompressUsingDictFn, "ZSTD_compress_usingDict") orelse {
+                library.close();
+                continue;
+            };
+            const create_dctx = library.lookup(CreateDCtxFn, "ZSTD_createDCtx") orelse {
+                library.close();
+                continue;
+            };
+            const free_dctx = library.lookup(FreeDCtxFn, "ZSTD_freeDCtx") orelse {
+                library.close();
+                continue;
+            };
+            const decompress_using_dict = library.lookup(DecompressUsingDictFn, "ZSTD_decompress_usingDict") orelse {
+                library.close();
+                continue;
+            };
             return .{
                 .library = library,
                 .compress_bound = compress_bound,
@@ -76,6 +112,12 @@ pub const Runtime = struct {
                 .decompress = decompress,
                 .is_error = is_error,
                 .version_string = version_string,
+                .create_cctx = create_cctx,
+                .free_cctx = free_cctx,
+                .compress_using_dict = compress_using_dict,
+                .create_dctx = create_dctx,
+                .free_dctx = free_dctx,
+                .decompress_using_dict = decompress_using_dict,
             };
         }
         return error.ReferenceUnavailable;
@@ -122,6 +164,24 @@ pub const Runtime = struct {
             encoded.ptr,
             encoded.len,
         );
+        if (self.is_error(written) != 0) return error.ReferenceDecodeFailed;
+        if (written != output.len) return error.SizeMismatch;
+    }
+
+    pub fn encodeUsingDictAlloc(self: Runtime, allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, level: c_int) ![]u8 {
+        const context = self.create_cctx() orelse return error.ReferenceUnavailable;
+        defer _ = self.free_cctx(context);
+        const output = try allocator.alloc(u8, self.compress_bound(input.len));
+        errdefer allocator.free(output);
+        const written = self.compress_using_dict(context, output.ptr, output.len, input.ptr, input.len, dictionary.ptr, dictionary.len, level);
+        if (self.is_error(written) != 0) return error.ReferenceEncodeFailed;
+        return allocator.realloc(output, written);
+    }
+
+    pub fn decodeUsingDict(self: Runtime, encoded: []const u8, output: []u8, dictionary: []const u8) !void {
+        const context = self.create_dctx() orelse return error.ReferenceUnavailable;
+        defer _ = self.free_dctx(context);
+        const written = self.decompress_using_dict(context, output.ptr, output.len, encoded.ptr, encoded.len, dictionary.ptr, dictionary.len);
         if (self.is_error(written) != 0) return error.ReferenceDecodeFailed;
         if (written != output.len) return error.SizeMismatch;
     }

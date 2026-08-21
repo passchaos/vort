@@ -2478,6 +2478,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   returning the full view for future entropy-state seeding. This makes partial
   support explicit: content matches interoperate today, but callers can see that
   trained entropy tables/repcodes are parsed rather than falsely claimed active.
+  The libzstd runtime harness now exposes dictionary-aware encode/decode calls,
+  and a focused differential verifies that libzstd 1.5.5 decodes Vort output
+  produced from a standard full dictionary's borrowed content and ID. The
+  reverse direction currently reaches a valid libzstd frame but Vort correctly
+  rejects its first-block `Repeat_Mode` without seeded dictionary entropy; this
+  records the exact next compatibility boundary instead of weakening validation.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

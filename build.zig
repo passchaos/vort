@@ -2755,6 +2755,16 @@ pub fn build(b: *std.Build) void {
     });
     const zstd_dictionary_probe_step = b.step("build-zstd-dictionary-probe", "Build standard Zstd dictionary inspector");
     zstd_dictionary_probe_step.dependOn(&zstd_dictionary_probe_exe.step);
+    const zstd_full_dictionary_diff_exe = b.addExecutable(.{
+        .name = "vort-zstd-full-dictionary-diff",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/full_dictionary_diff.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .link_libc = true,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
 
     const zstd_compat_probe_exe = b.addExecutable(.{
         .name = "vort-zstd-compat-probe",
@@ -3623,6 +3633,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_reference_bench_exe.step);
     check_step.dependOn(&zstd_encode_bench_exe.step);
     check_step.dependOn(&zstd_dictionary_probe_exe.step);
+    check_step.dependOn(&zstd_full_dictionary_diff_exe.step);
     check_step.dependOn(&dictionary_deflate_report_exe.step);
     check_step.dependOn(&dictionary_decode_bench_exe.step);
     check_step.dependOn(&level_report_exe.step);
