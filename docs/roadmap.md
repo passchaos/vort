@@ -2457,6 +2457,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   1/3/9 falls to 2,420/1,648/1,239 bytes; text and binary remain unchanged. The
   history is bounded to the advertised Zstd window and allocator reservation
   occurs before emitting each block, preserving deterministic failure semantics.
+  Expanding the bounded rolling-history plan from 8 to 32 matches lets one block
+  exploit many repeated regions from its predecessors instead of stopping after
+  the first few. JSON level 1/3 falls from 2,420/1,648 to 1,505/1,505 bytes and
+  mixed binary from 11,802/10,155 to 9,274/9,274; text and level-9 winners are
+  unchanged. Each lookup remains four-way set associative, so work is bounded
+  at 128 candidate comparisons per block rather than growing with stream size.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

@@ -2,7 +2,7 @@ const std = @import("std");
 const history_mod = @import("history.zig");
 const history_index = @import("history_index.zig");
 
-pub const max_matches = 8;
+pub const max_matches = 32;
 
 pub const Match = struct {
     history_start: usize,
@@ -25,7 +25,7 @@ pub const Plan = struct {
 };
 
 /// Build a greedy multi-sequence plan from the persistent rolling-history
-/// index. At most four same-hash candidates and eight matches are examined per
+/// index. At most four same-hash candidates and 32 matches are examined per
 /// block, so planner work stays bounded even with the full advertised window.
 pub fn findPlan(history: history_mod.View, block: []const u8) Plan {
     var plan: Plan = .{};
