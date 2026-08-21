@@ -3,7 +3,13 @@ const vort = @import("vort");
 const libzstd = @import("libzstd_runtime.zig");
 
 const Case = struct { name: []const u8, payload: []const u8 };
-const Options = struct { iterations: usize = 1, rounds: usize = 3, csv_path: ?[]const u8 = null };
+const Options = struct {
+    iterations: usize = 1,
+    rounds: usize = 3,
+    csv_path: ?[]const u8 = null,
+    only_case: ?[]const u8 = null,
+    only_level: ?c_int = null,
+};
 const Sample = struct { ns: u64, mix: usize };
 
 pub fn main(init: std.process.Init) !void {
@@ -39,7 +45,11 @@ pub fn main(init: std.process.Init) !void {
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
     try csv.writer.writeAll("case,reference_version,level,input_bytes,vort_bytes,reference_bytes,size_over_reference,iterations,rounds,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum\n");
+    var selected_rows: usize = 0;
     for (cases) |case| for (levels) |level| {
+        if (options.only_case) |wanted| if (!std.mem.eql(u8, wanted, case.name)) continue;
+        if (options.only_level) |wanted| if (wanted != level) continue;
+        selected_rows += 1;
         const vort_encoded = try vort.zstdEncodeFrameWithLevelAlloc(init.gpa, case.payload, level);
         defer init.gpa.free(vort_encoded);
         const reference_encoded = try runtime.encodeAlloc(init.gpa, case.payload, level);
@@ -55,6 +65,7 @@ pub fn main(init: std.process.Init) !void {
             reference_rate,                                                                             vort_rate / reference_rate, samples.vort.mix +% samples.reference.mix,
         });
     };
+    if (selected_rows == 0) return error.InvalidBlockPlan;
     if (options.csv_path) |path| {
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = csv.written() });
     } else {
@@ -124,7 +135,18 @@ fn mibPerSecond(bytes: usize, ns: u64) f64 {
 fn parseOptions(args: *std.process.Args.Iterator) !Options {
     var options: Options = .{};
     while (args.next()) |arg| {
-        if (std.mem.eql(u8, arg, "--iterations")) options.iterations = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--rounds")) options.rounds = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--csv")) options.csv_path = args.next() orelse return error.MissingCorpusPath else return error.UnknownArgument;
+        if (std.mem.eql(u8, arg, "--iterations"))
+            options.iterations = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10)
+        else if (std.mem.eql(u8, arg, "--rounds"))
+            options.rounds = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10)
+        else if (std.mem.eql(u8, arg, "--case"))
+            options.only_case = args.next() orelse return error.MissingCorpusPath
+        else if (std.mem.eql(u8, arg, "--level"))
+            options.only_level = try std.fmt.parseInt(c_int, args.next() orelse return error.MissingLimit, 10)
+        else if (std.mem.eql(u8, arg, "--csv"))
+            options.csv_path = args.next() orelse return error.MissingCorpusPath
+        else
+            return error.UnknownArgument;
     }
     if (options.iterations == 0 or options.rounds == 0) return error.InvalidBlockPlan;
     return options;
