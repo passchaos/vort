@@ -24,6 +24,18 @@ pub fn main(init: std.process.Init) !void {
     const decoded = try vort.zstdDecodeFrameAllocWithDictionary(init.gpa, reference_encoded, parsed.dictionary);
     defer init.gpa.free(decoded);
     if (!std.mem.eql(u8, payload, decoded)) return error.SizeMismatch;
+    const other = vort.ZstdNativeDictionary.init(parsed.dictionary.id + 1, "other dictionary");
+    const dictionary_set = vort.ZstdNativeDictionarySet.init(&.{ other, parsed.dictionary });
+    const set_decoded = try vort.zstdDecodeFrameAllocWithDictionarySet(init.gpa, reference_encoded, dictionary_set);
+    defer init.gpa.free(set_decoded);
+    if (!std.mem.eql(u8, payload, set_decoded)) return error.SizeMismatch;
+    const split = reference_encoded.len / 2;
+    const chunks = [_][]const u8{ reference_encoded[0..split], reference_encoded[split..] };
+    const compressed_scratch = try init.gpa.alloc(u8, reference_encoded.len);
+    defer init.gpa.free(compressed_scratch);
+    const chunked = try vort.zstdDecodeFrameChunksAllocWithDictionarySet(init.gpa, &chunks, compressed_scratch, dictionary_set);
+    defer init.gpa.free(chunked);
+    if (!std.mem.eql(u8, payload, chunked)) return error.SizeMismatch;
     var incremental = vort.ZstdNativeIncrementalFrameDecoder.initWithDictionaryAndOptions(init.gpa, parsed.dictionary, .{ .expected_output_len = payload.len });
     defer incremental.deinit();
     var incremental_output: [payload.len]u8 = undefined;
@@ -39,6 +51,13 @@ pub fn main(init: std.process.Init) !void {
     }
     try incremental.finish();
     if (!std.mem.eql(u8, payload, &incremental_output)) return error.SizeMismatch;
+    var set_incremental = vort.ZstdNativeIncrementalFrameDecoder.initWithDictionarySetAndOptions(init.gpa, dictionary_set, .{ .expected_output_len = payload.len });
+    defer set_incremental.deinit();
+    var set_output: [payload.len]u8 = undefined;
+    const set_step = try set_incremental.step(reference_encoded, &set_output);
+    if (set_step.progress.output_written != payload.len) return error.SizeMismatch;
+    try set_incremental.finish();
+    if (!std.mem.eql(u8, payload, &set_output)) return error.SizeMismatch;
 
     var buffer: [256]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);

@@ -2491,6 +2491,10 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   drains a libzstd full-dictionary frame through 3-byte input and 5-byte output
   chunks before `finish()`. One-shot, size-preflight, buffered fallback, and
   direct incremental decoding therefore share full-dictionary behavior.
+  The same externally generated frame now passes through a mixed raw/full
+  `DictionarySet`, two compressed input chunks, and dictionary-set incremental
+  direct output. Selection is strictly by frame Dictionary_ID, so a preceding
+  unrelated raw dictionary cannot shadow the full dictionary's entropy state.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
