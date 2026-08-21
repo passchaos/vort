@@ -5746,6 +5746,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Direct/generic code equivalence is tested for 2–4 symbols. A clean 100-run
   sample measured 139/155/166 MiB/s versus libbrotli q3 at 231/234/283 MiB/s,
   with unchanged 92/130/122-byte streams.
+  A ratio-oriented `encodePlannedStreamLazyAlloc` now shares the same wire path
+  with the lazy LZ77 parser. On JSON/source/log it emits 77/116/106 bytes versus
+  the fast planner's 92/130/122 and libbrotli q3's 62/86/87. The persisted
+  100-iteration run measured 155/143/153 MiB/s, roughly matching the fast path
+  while cutting the size gap to about 22–35%; both modes are Node-gated.
   PrefixAlphabet's small-active insertion sort now caches the candidate pair and
   shifts predecessors instead of swapping both parallel arrays at every step.
   It preserves the exact `(frequency desc,symbol asc)` order and wire while

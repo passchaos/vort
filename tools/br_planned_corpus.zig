@@ -31,8 +31,13 @@ pub fn main(init: std.process.Init) !void {
         const stored = try vort.brEncodeStoredStreamAlloc(init.gpa, case.payload);
         defer init.gpa.free(stored);
         if (planned.len >= stored.len) return error.InvalidBlockPlan;
-        try stdout.print("brotli planned corpus {s}: input={d} planned={d} stored={d} tokens={d} commands={d} literals={d} matches={d} alphabets={d}/{d}/{d}\n", .{
-            case.name,                  case.payload.len,           planned.len,                 stored.len, stats.token_count, stats.command_count, stats.literal_bytes, stats.matched_bytes,
+        const lazy = try vort.brEncodePlannedStreamLazyAlloc(init.gpa, case.payload);
+        defer init.gpa.free(lazy);
+        const lazy_decoded = try vort.brDecodeStreamAlloc(init.gpa, lazy);
+        defer init.gpa.free(lazy_decoded);
+        if (!std.mem.eql(u8, case.payload, lazy_decoded)) return error.SizeMismatch;
+        try stdout.print("brotli planned corpus {s}: input={d} planned={d} lazy={d} stored={d} tokens={d} commands={d} literals={d} matches={d} alphabets={d}/{d}/{d}\n", .{
+            case.name,                  case.payload.len,           planned.len,                 lazy.len, stored.len, stats.token_count, stats.command_count, stats.literal_bytes, stats.matched_bytes,
             stats.literal_symbol_count, stats.command_symbol_count, stats.distance_symbol_count,
         });
     }

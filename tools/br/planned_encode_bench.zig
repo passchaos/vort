@@ -23,20 +23,24 @@ pub fn main(init: std.process.Init) !void {
     };
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.writeAll("case,reference_version,quality,input_bytes,vort_bytes,reference_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,vort_size_over_reference,checksum\n");
+    try csv.writer.writeAll("case,reference_version,quality,input_bytes,vort_bytes,lazy_bytes,reference_bytes,iterations,vort_ns,lazy_ns,reference_ns,vort_mib_s,lazy_mib_s,reference_mib_s,vort_over_reference,lazy_over_reference,vort_size_over_reference,lazy_size_over_reference,checksum\n");
     for (cases) |case| {
         const vort_encoded = try vort.brEncodePlannedStreamAlloc(init.gpa, case.payload);
         defer init.gpa.free(vort_encoded);
         const reference_encoded = try reference.encodeAlloc(init.gpa, case.payload, options.quality);
         defer init.gpa.free(reference_encoded);
+        const lazy_encoded = try vort.brEncodePlannedStreamLazyAlloc(init.gpa, case.payload);
+        defer init.gpa.free(lazy_encoded);
         const samples = try measureInterleaved(init.io, init.gpa, reference, case.payload, options);
+        const lazy_sample = try measureLazy(init.io, init.gpa, case.payload, options.iterations);
         const total_bytes = case.payload.len * options.iterations;
         const vort_rate = mibPerSecond(total_bytes, samples.vort.ns);
         const reference_rate = mibPerSecond(total_bytes, samples.reference.ns);
-        try csv.writer.print("{s},{x},{d},{d},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d:.4},{d}\n", .{
-            case.name,                                                                                  reference.version(),                       options.quality,      case.payload.len, vort_encoded.len, reference_encoded.len,
-            options.iterations,                                                                         samples.vort.ns,                           samples.reference.ns, vort_rate,        reference_rate,   vort_rate / reference_rate,
-            @as(f64, @floatFromInt(vort_encoded.len)) / @as(f64, @floatFromInt(reference_encoded.len)), samples.vort.mix +% samples.reference.mix,
+        const lazy_rate = mibPerSecond(total_bytes, lazy_sample.ns);
+        try csv.writer.print("{s},{x},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.2},{d:.4},{d:.4},{d:.4},{d:.4},{d}\n", .{
+            case.name,                  reference.version(),        options.quality,                                                                            case.payload.len,                                                                           vort_encoded.len,                                             lazy_encoded.len, reference_encoded.len,
+            options.iterations,         samples.vort.ns,            lazy_sample.ns,                                                                             samples.reference.ns,                                                                       vort_rate,                                                    lazy_rate,        reference_rate,
+            vort_rate / reference_rate, lazy_rate / reference_rate, @as(f64, @floatFromInt(vort_encoded.len)) / @as(f64, @floatFromInt(reference_encoded.len)), @as(f64, @floatFromInt(lazy_encoded.len)) / @as(f64, @floatFromInt(reference_encoded.len)), samples.vort.mix +% lazy_sample.mix +% samples.reference.mix,
         });
     }
     if (options.csv_path) |path| {
@@ -47,6 +51,22 @@ pub fn main(init: std.process.Init) !void {
         try stdout.interface.writeAll(csv.written());
         try stdout.interface.flush();
     }
+}
+
+fn measureLazy(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, iterations: usize) !Sample {
+    var best = Sample{ .ns = std.math.maxInt(u64), .mix = 0 };
+    for (0..5) |_| {
+        var mix: usize = 0;
+        const start = std.Io.Clock.awake.now(io);
+        for (0..iterations) |_| {
+            const encoded = try vort.brEncodePlannedStreamLazyAlloc(allocator, payload);
+            mix +%= encoded.len;
+            allocator.free(encoded);
+        }
+        const sample = Sample{ .ns = elapsed(start, io), .mix = mix };
+        if (sample.ns < best.ns) best = sample;
+    }
+    return best;
 }
 
 fn measureInterleaved(io: std.Io, allocator: std.mem.Allocator, reference: libbrotli.Runtime, payload: []const u8, options: Options) !struct { vort: Sample, reference: Sample } {

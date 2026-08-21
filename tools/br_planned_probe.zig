@@ -6,15 +6,17 @@ pub fn main(init: std.process.Init) !void {
     defer args.deinit();
     _ = args.next();
     const mode = args.next() orelse return error.InvalidBlockPlan;
-    const payload = if (std.mem.eql(u8, mode, "json"))
+    const lazy = std.mem.startsWith(u8, mode, "lazy-");
+    const name = if (lazy) mode["lazy-".len..] else mode;
+    const payload = if (std.mem.eql(u8, name, "json"))
         "{\"kind\":\"event\",\"active\":true,\"values\":[1,2,3,5,8,13]}\n" ** 48
-    else if (std.mem.eql(u8, mode, "source"))
+    else if (std.mem.eql(u8, name, "source"))
         "pub fn update(state: *State, value: u32) void { state.total += value; state.count += 1; }\n" ** 40
-    else if (std.mem.eql(u8, mode, "log"))
+    else if (std.mem.eql(u8, name, "log"))
         "2026-08-21T02:00:00Z level=info service=vort request=compress status=ok bytes=4096\n" ** 40
     else
         return error.InvalidBlockPlan;
-    const encoded = try vort.brEncodePlannedStreamAlloc(init.gpa, payload);
+    const encoded = if (lazy) try vort.brEncodePlannedStreamLazyAlloc(init.gpa, payload) else try vort.brEncodePlannedStreamAlloc(init.gpa, payload);
     defer init.gpa.free(encoded);
     var buffer: [256]u8 = undefined;
     var writer = std.Io.File.stdout().writerStreaming(init.io, &buffer);

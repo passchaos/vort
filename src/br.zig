@@ -513,6 +513,28 @@ pub fn encodePlannedStreamAlloc(allocator: std.mem.Allocator, input: []const u8)
     return encodePlannedStreamAllocWithStats(allocator, input, &stats);
 }
 
+/// Ratio-oriented planner variant using the shared lazy LZ77 parser. The wire
+/// format and Huffman construction are identical to the fast planner; only the
+/// token choice differs.
+pub fn encodePlannedStreamLazyAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
+    const lz_plan = try lz77.lazyGreedyPlanAlloc(allocator, input, .{
+        .window_len = @min(input.len, 32 * 1024),
+        .max_chain = 256,
+        .nice_len = 128,
+        .max_candidates = 16,
+        .lazy_min_gain = 1,
+        .min_match = 3,
+        .max_match = lz77.max_match_len,
+    });
+    defer lz_plan.deinit(allocator);
+    if (lz_plan.stats.matches == 0) return error.InvalidBlockPlan;
+    const plan = try command_plan.buildAlloc(allocator, input, lz_plan.tokens);
+    defer plan.deinit(allocator);
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    return encodeCommandPlanAlloc(allocator, input, plan.commands, null, &stats);
+}
+
 pub fn encodePlannedStreamAllocWithStats(allocator: std.mem.Allocator, input: []const u8, stats: *encoder_stats.PlannedEncodeStats) Error![]u8 {
     return encodePlannedStreamAllocWithStatsTimed(allocator, input, null, stats);
 }

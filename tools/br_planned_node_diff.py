@@ -21,11 +21,12 @@ def main() -> int:
         "process.stdin.on('end',()=>process.stdout.write(z.brotliDecompressSync(Buffer.concat(b))));"
     )
     for name, expected in cases:
-        encoded = subprocess.check_output([sys.argv[1], name])
-        actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
-        if actual != expected:
-            raise SystemExit(f"{name}: node output mismatch")
-        print(f"brotli planned {name} node diff: encoded={len(encoded)} decoded={len(actual)}")
+        for mode in (name, f"lazy-{name}"):
+            encoded = subprocess.check_output([sys.argv[1], mode])
+            actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+            if actual != expected:
+                raise SystemExit(f"{mode}: node output mismatch")
+            print(f"brotli planned {mode} node diff: encoded={len(encoded)} decoded={len(actual)}")
     return 0
 
 
