@@ -5754,6 +5754,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Stable public planner options now expose `.fast` and `.balanced` compression
   levels through `encodePlannedStreamWithOptionsAlloc`; `.balanced` maps to the
   proven lazy parser and is tested to round-trip with size no worse than fast.
+  The lazy planner also exposes an explicit search-budget options API and a
+  reproducible `run-br-lazy-sweep` target. All 24 combinations across chain
+  budgets 64–512, nice lengths 64–258, and lazy gains 1–2 retained the same
+  77/116/106-byte corpus streams. A pinned, interleaved 1000-iteration A/B
+  therefore reduced the balanced default from chain/nice 256/128 to 64/64:
+  JSON improved by about 8%, while source/log stayed within 0.3% noise.
   PrefixAlphabet's small-active insertion sort now caches the candidate pair and
   shifts predecessors instead of swapping both parallel arrays at every step.
   It preserves the exact `(frequency desc,symbol asc)` order and wire while

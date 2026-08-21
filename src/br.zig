@@ -21,6 +21,14 @@ pub const Error = core.Error || std.mem.Allocator.Error;
 pub const PlannedEncodeStats = encoder_stats.PlannedEncodeStats;
 pub const PlannedCompressionLevel = enum { fast, balanced };
 pub const PlannedEncodeOptions = struct { level: PlannedCompressionLevel = .fast };
+/// Search budget for the ratio-oriented planner. These knobs affect token
+/// selection only; the resulting stream still uses the same Brotli command
+/// and prefix-code writer as the stable `.balanced` level.
+pub const PlannedParserOptions = struct {
+    max_chain: usize = 64,
+    nice_len: usize = 64,
+    lazy_min_gain: usize = 1,
+};
 
 const IncrementalCodec = struct {
     pub const Error = br.Error;
@@ -526,13 +534,23 @@ pub fn encodePlannedStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: 
 /// format and Huffman construction are identical to the fast planner; only the
 /// token choice differs.
 pub fn encodePlannedStreamLazyAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    return encodePlannedStreamLazyWithOptionsAlloc(allocator, input, .{});
+}
+
+/// Experimental entry point for measuring lazy-parser search budgets without
+/// duplicating the production Brotli wire path. Zero-sized budgets are rejected
+/// rather than silently changing the caller's requested search semantics.
+pub fn encodePlannedStreamLazyWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: PlannedParserOptions) Error![]u8 {
     if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
+    if (options.max_chain == 0 or options.nice_len == 0 or options.lazy_min_gain == 0) return error.InvalidBlockPlan;
     const lz_plan = try lz77.lazyGreedyPlanAlloc(allocator, input, .{
         .window_len = @min(input.len, 32 * 1024),
-        .max_chain = 256,
-        .nice_len = 128,
-        .max_candidates = 16,
-        .lazy_min_gain = 1,
+        .max_chain = options.max_chain,
+        .nice_len = options.nice_len,
+        // The lazy parser chooses one best match per position; unlike the
+        // optimal parser, it has no separate candidate-count budget.
+        .max_candidates = 1,
+        .lazy_min_gain = options.lazy_min_gain,
         .min_match = 3,
         .max_match = lz77.max_match_len,
     });
@@ -5826,6 +5844,20 @@ test "br planner compression levels select fast and balanced streams" {
     try std.testing.expectEqualSlices(u8, payload, fast_decoded);
     try std.testing.expectEqualSlices(u8, payload, balanced_decoded);
     try std.testing.expect(balanced.len <= fast.len);
+}
+
+test "br lazy planner accepts bounded search options" {
+    const payload = "{\"kind\":\"event\",\"active\":true,\"values\":[1,2,3,5,8,13]}\n" ** 12;
+    const encoded = try encodePlannedStreamLazyWithOptionsAlloc(std.testing.allocator, payload, .{
+        .max_chain = 64,
+        .nice_len = 64,
+        .lazy_min_gain = 1,
+    });
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamLazyWithOptionsAlloc(std.testing.allocator, payload, .{ .max_chain = 0 }));
 }
 
 test "br planner-backed encoder emits regular distances" {

@@ -970,6 +970,18 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| run_br_planned_stage_bench.addArgs(args);
     const br_planned_stage_bench_step = b.step("run-br-planned-stage-bench", "Measure LZ77 parser share of planner-backed Brotli encoding");
     br_planned_stage_bench_step.dependOn(&run_br_planned_stage_bench.step);
+    const br_lazy_sweep_exe = b.addExecutable(.{
+        .name = "vort-br-lazy-sweep",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/lazy_sweep.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const run_br_lazy_sweep = b.addRunArtifact(br_lazy_sweep_exe);
+    const br_lazy_sweep_step = b.step("run-br-lazy-sweep", "Sweep Brotli lazy planner ratio parameters");
+    br_lazy_sweep_step.dependOn(&run_br_lazy_sweep.step);
 
     const br_command_lut_bench_exe = b.addExecutable(.{
         .name = "vort-bench-br-command-lut",
@@ -3566,6 +3578,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&br_planned_encode_bench_exe.step);
     check_step.dependOn(&br_planned_stage_profile_exe.step);
     check_step.dependOn(&br_planned_stage_bench_exe.step);
+    check_step.dependOn(&br_lazy_sweep_exe.step);
     check_step.dependOn(&br_command_lut_bench_exe.step);
     check_step.dependOn(&compression_report_exe.step);
     check_step.dependOn(&dictionary_report_exe.step);
