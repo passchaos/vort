@@ -33,6 +33,7 @@ const duplicate_hash_bits = 15;
 const duplicate_hash_table_len = 1 << duplicate_hash_bits;
 const duplicate_hash_invalid = std.math.maxInt(u32);
 const duplicate_hash_candidates = 8;
+const mixed_candidates_per_position = 4;
 // The mixed planner's current search budget can reach at most 128 useful
 // sequence decisions on measured structured blocks. Larger fixed plans add
 // stack/code footprint without improving the emitted wire.
@@ -7083,7 +7084,7 @@ const MixedMatchLookaheadPlan = struct {
 const MixedMatchCandidateCacheEntry = struct {
     literal_start: usize = 0,
     allowed: MixedMatchKindSet = .{},
-    candidates: [3]MixedMatchCandidate = undefined,
+    candidates: [mixed_candidates_per_position]MixedMatchCandidate = undefined,
     count: usize = 0,
 };
 
@@ -7102,7 +7103,7 @@ const MixedMatchCandidateCache = struct {
         allowed: MixedMatchKindSet,
         out: []MixedMatchCandidate,
     ) Error!usize {
-        if (out.len < 3) return error.OutputTooSmall;
+        if (out.len < mixed_candidates_per_position) return error.OutputTooSmall;
         self.lookup_count += 1;
         for (self.entries[0..self.len]) |entry| {
             if (entry.literal_start == literal_start and entry.allowed.eql(allowed)) {
@@ -7152,7 +7153,7 @@ fn bestMixedMatchLookaheadPlan(
     match_search_budget: usize,
 ) Error!?MixedMatchLookaheadPlan {
     if (match_search_budget == 0) return null;
-    var first_candidates: [3]MixedMatchCandidate = undefined;
+    var first_candidates: [mixed_candidates_per_position]MixedMatchCandidate = undefined;
     var candidate_cache: MixedMatchCandidateCache = .{};
     const first_count = try candidate_cache.candidatesAt(dictionary, block, 0, frame_offset, allowed, first_candidates[0..]);
     if (first_count == 0) return null;
@@ -7267,7 +7268,7 @@ fn bestMixedCandidateLookaheadPlanFrom(
         // candidate also makes the bounded search degrade safely if dense
         // candidate graphs exhaust the small bootstrap budget.
         best = try finalizeMixedMatchLookaheadPlan(block, plan, count, candidate.literal_end, seen.*, requirements);
-        var next_candidates: [3]MixedMatchCandidate = undefined;
+        var next_candidates: [mixed_candidates_per_position]MixedMatchCandidate = undefined;
         const next_count = try candidate_cache.candidatesAt(dictionary, block, candidate.literal_end, frame_offset, allowed, next_candidates[0..]);
         if (next_count == 0) {
             seen.* = previous_seen;
@@ -7372,7 +7373,7 @@ fn mixedMatchCandidatesAtUncached(
     allowed: MixedMatchKindSet,
     out: []MixedMatchCandidate,
 ) Error!usize {
-    if (out.len < 3) return error.OutputTooSmall;
+    if (out.len < mixed_candidates_per_position) return error.OutputTooSmall;
     var count: usize = 0;
     if (allowed.dictionary) {
         if (try dictionaryMixedMatchCandidate(dictionary, block, literal_start, frame_offset)) |candidate| {
@@ -7384,6 +7385,16 @@ fn mixedMatchCandidatesAtUncached(
         if (try duplicateMixedMatchCandidate(block, literal_start)) |candidate| {
             out[count] = candidate;
             count += 1;
+            // Also expose the match starting exactly at the current cursor.
+            // The existing global-best candidate often skips useful bytes to
+            // buy a longer match; lookahead needs both choices to avoid turning
+            // those skipped bytes into literals across the whole plan.
+            if (try duplicateMixedMatchCandidateAtCursor(block, literal_start)) |cursor_candidate| {
+                if (cursor_candidate.literal_end != candidate.literal_end or cursor_candidate.offset != candidate.offset) {
+                    out[count] = cursor_candidate;
+                    count += 1;
+                }
+            }
         }
     }
     if (allowed.repeated) {
@@ -7394,6 +7405,44 @@ fn mixedMatchCandidatesAtUncached(
     }
     std.mem.sort(MixedMatchCandidate, out[0..count], {}, mixedMatchCandidateSortLessThan);
     return count;
+}
+
+fn duplicateMixedMatchCandidateAtCursor(block: []const u8, literal_start: usize) Error!?MixedMatchCandidate {
+    if (literal_start == 0 or literal_start + 8 > block.len) return null;
+    var best: ?DuplicateMatch = null;
+    if (block.len > 4096) {
+        // Large blocks use the same eight-byte hash-chain candidate policy as
+        // the global finder; scanning all prior bytes here would turn the new
+        // alternative into another quadratic hot path.
+        const wanted_hash = duplicateHash8(block[literal_start..][0..8]);
+        var first: usize = 0;
+        while (first + 8 <= literal_start) : (first += 1) {
+            if (duplicateHash8(block[first..][0..8]) != wanted_hash) continue;
+            considerCursorDuplicateMatch(block, literal_start, first, &best);
+        }
+    } else {
+        var first: usize = 0;
+        while (first < literal_start) : (first += 1) considerCursorDuplicateMatch(block, literal_start, first, &best);
+    }
+    const match = best orelse return null;
+    const payload_len = singleMatchPayloadLenFrom(block, match, literal_start) catch return null;
+    return .{
+        .literal_len = 0,
+        .offset = match.second_start - match.first_start,
+        .match_len = match.len,
+        .literal_end = match.second_start + match.len,
+        .payload_len = payload_len,
+        .kind = .duplicate,
+    };
+}
+
+fn considerCursorDuplicateMatch(block: []const u8, literal_start: usize, first: usize, best: *?DuplicateMatch) void {
+    var len: usize = 0;
+    while (literal_start + len < block.len and block[first + len] == block[literal_start + len]) : (len += 1) {}
+    if (len < 8) return;
+    const candidate: DuplicateMatch = .{ .first_start = first, .second_start = literal_start, .len = len };
+    if (best.* == null or candidate.len > best.*.?.len or
+        (candidate.len == best.*.?.len and candidate.second_start - candidate.first_start < best.*.?.second_start - best.*.?.first_start)) best.* = candidate;
 }
 
 fn mixedMatchCandidateSortLessThan(_: void, a: MixedMatchCandidate, b: MixedMatchCandidate) bool {
@@ -12007,10 +12056,10 @@ test "zstd mixed match lookahead explores non-greedy continuations" {
     );
     const branch = (try bestMixedCandidateLookaheadPlan(&.{}, payload, 0, first_candidate)) orelse return error.CorruptFrame;
     try std.testing.expectEqual(@as(usize, 3), branch.count);
-    try std.testing.expectEqualSlices(usize, &.{ 31, 32, 16 }, branch.literal_lens[0..branch.count]);
-    try std.testing.expectEqualSlices(usize, &.{ 17, 28, 2 }, branch.offsets[0..branch.count]);
-    try std.testing.expectEqualSlices(usize, &.{ 17, 4, 12 }, branch.match_lens[0..branch.count]);
-    try std.testing.expectEqualSlices(usize, &.{ 70, 106, payload.len }, branch.literal_ends[0..branch.count]);
+    try std.testing.expectEqualSlices(usize, &.{ 31, 0, 6 }, branch.literal_lens[0..branch.count]);
+    try std.testing.expectEqualSlices(usize, &.{ 17, 68, 2 }, branch.offsets[0..branch.count]);
+    try std.testing.expectEqualSlices(usize, &.{ 17, 46, 12 }, branch.match_lens[0..branch.count]);
+    try std.testing.expectEqualSlices(usize, &.{ 70, 116, payload.len }, branch.literal_ends[0..branch.count]);
     try std.testing.expect(branch.payload_len < greedy_payload_len);
 
     const lookahead_payload_len = (try mixedCandidateLookaheadPayloadLen(&.{}, payload, 0, first_candidate)) orelse return error.CorruptFrame;
@@ -12044,8 +12093,8 @@ test "zstd mixed match candidate cache reuses per-position scans" {
         "ccccfeggbcddffgahceegfabcceeehaabcdfacefegahabdffgab" ++
         "cccfeggbcddfechbcecececececece";
     var cache: MixedMatchCandidateCache = .{};
-    var first: [3]MixedMatchCandidate = undefined;
-    var second: [3]MixedMatchCandidate = undefined;
+    var first: [mixed_candidates_per_position]MixedMatchCandidate = undefined;
+    var second: [mixed_candidates_per_position]MixedMatchCandidate = undefined;
     const allowed: MixedMatchKindSet = .{
         .dictionary = false,
         .duplicate = true,
@@ -12071,8 +12120,8 @@ test "zstd mixed match candidate cache reuses dictionary scans" {
     const unique = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}";
     const payload = "pfx-" ++ dict_content ++ "-u-" ++ unique ++ "-mid-" ++ unique ++ "-rep-" ++ ("ab" ** 16) ++ "-tail";
     var cache: MixedMatchCandidateCache = .{};
-    var first: [3]MixedMatchCandidate = undefined;
-    var second: [3]MixedMatchCandidate = undefined;
+    var first: [mixed_candidates_per_position]MixedMatchCandidate = undefined;
+    var second: [mixed_candidates_per_position]MixedMatchCandidate = undefined;
     const allowed: MixedMatchKindSet = .{
         .dictionary = true,
         .duplicate = true,

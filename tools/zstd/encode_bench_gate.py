@@ -43,7 +43,9 @@ def main() -> int:
     assert int(json_rows[9]["vort_ns"]) > int(json_rows[3]["vort_ns"]), json_rows
     # The expanded planner must retain the measured JSON improvement over the
     # old 32-sequence 16,893-byte baseline on every level.
-    assert all(int(row["vort_bytes"]) <= 13_688 for row in json_rows.values()), json_rows
+    assert int(json_rows[1]["vort_bytes"]) <= 13_688, json_rows
+    assert int(json_rows[3]["vort_bytes"]) <= 13_688, json_rows
+    assert int(json_rows[9]["vort_bytes"]) <= 13_506, json_rows
     print(f"zstd_encode_bench_gate=ok rows={len(rows)} reference_version={rows[0]['reference_version']}")
     return 0
 

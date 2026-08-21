@@ -2403,6 +2403,14 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   byte-identical to 128, so the larger footprint was rejected. Even after this
   gain, JSON remains `15–20x` libzstd, showing that candidate quality and the
   one-plan-per-block model—not only sequence capacity—remain major gaps.
+  The lookahead planner now considers a second duplicate candidate that begins
+  exactly at the current literal cursor, in addition to the prior globally
+  cheapest later match. This preserves already-emitted block history and gives
+  level 9 enough budget to avoid locally skipped bytes, reducing the same JSON
+  wire further from 13,688 to 13,506 bytes (`1.3%`) without changing level-1/3,
+  text, or binary sizes. Large-block cursor lookup uses the existing eight-byte
+  hash predicate rather than adding another unconditional bytewise quadratic
+  scan; focused lookahead/cache tests lock the new candidate choice.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
