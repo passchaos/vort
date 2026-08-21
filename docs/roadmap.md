@@ -2411,6 +2411,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   text, or binary sizes. Large-block cursor lookup uses the existing eight-byte
   hash predicate rather than adding another unconditional bytewise quadratic
   scan; focused lookahead/cache tests lock the new candidate choice.
+  One-shot level encoding now evaluates a level-specific smaller-block frame
+  beside the standard 128 KiB-block frame and returns only the shorter complete
+  interoperable stream. This preserves the 93-byte cross-block repeated-text
+  result that a forced 8 KiB split expanded to 437 bytes, while level-1 JSON
+  falls from 13,688 to 13,042 bytes and mixed binary from 31,953 to 30,690.
+  Focused tests require the selector never to expand repeated text and to pick
+  the split winner for structured data; the encode gate locks both improvements.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

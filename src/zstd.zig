@@ -3332,8 +3332,21 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
     level: c_int,
     options: FrameOptions,
 ) Error![]u8 {
-    const result = try encodeNativeFrameWithOptionsAlloc(allocator, input, nativeFrameOptionsForLevel(level, options));
-    return result.frame;
+    const primary_options = nativeFrameOptionsForLevel(level, options);
+    const primary = try encodeNativeFrameWithOptionsAlloc(allocator, input, primary_options);
+    if (level <= 0 or input.len <= 8 * 1024) return primary.frame;
+    errdefer allocator.free(primary.frame);
+
+    var split_options = primary_options;
+    split_options.block_size_max = adaptiveLevelBlockSize(level);
+    if (split_options.block_size_max >= input.len or split_options.block_size_max == primary_options.block_size_max) return primary.frame;
+    const split = try encodeNativeFrameWithOptionsAlloc(allocator, input, split_options);
+    if (split.frame.len < primary.frame.len) {
+        allocator.free(primary.frame);
+        return split.frame;
+    }
+    allocator.free(split.frame);
+    return primary.frame;
 }
 
 pub fn encodedFrameBound(input_len: usize) Error!usize {
@@ -3518,6 +3531,14 @@ fn nativeFrameOptionsForLevel(level: c_int, options: FrameOptions) NativeFrameOp
         };
     }
     return native_options;
+}
+
+fn adaptiveLevelBlockSize(level: c_int) usize {
+    return switch (level) {
+        1, 2 => 8 * 1024,
+        3...5 => 16 * 1024,
+        else => 32 * 1024,
+    };
 }
 
 /// Emit a valid Zstandard frame composed of raw and RLE blocks.
@@ -11808,6 +11829,33 @@ test "zstd compression levels map to increasing search budgets" {
     try std.testing.expect(nativeFrameOptionsForLevel(9, options).match_search_budget > nativeFrameOptionsForLevel(3, options).match_search_budget);
     try std.testing.expect(!nativeFrameOptionsForLevel(3, options).include_content_size);
     try std.testing.expect(nativeFrameOptionsForLevel(3, options).content_checksum);
+}
+
+test "zstd adaptive block candidate never expands the selected frame" {
+    const repeated = "Zstandard adaptive split repeated text with a long cross-block match.\n" ** 512;
+    const primary_options = nativeFrameOptionsForLevel(1, .{});
+    const primary = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, repeated, primary_options);
+    defer std.testing.allocator.free(primary.frame);
+    const selected = try encodeFrameWithLevelAlloc(std.testing.allocator, repeated, 1);
+    defer std.testing.allocator.free(selected);
+    try std.testing.expect(selected.len <= primary.frame.len);
+    try std.testing.expectEqualSlices(u8, primary.frame, selected);
+
+    var structured: std.ArrayList(u8) = .empty;
+    defer structured.deinit(std.testing.allocator);
+    while (structured.items.len < 32 * 1024) {
+        var line: [96]u8 = undefined;
+        const formatted = try std.fmt.bufPrint(&line, "{{\"id\":{d},\"service\":\"vort\",\"message\":\"adaptive split\"}}\n", .{structured.items.len / 64});
+        try structured.appendSlice(std.testing.allocator, formatted);
+    }
+    const structured_primary = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, structured.items, primary_options);
+    defer std.testing.allocator.free(structured_primary.frame);
+    const structured_selected = try encodeFrameWithLevelAlloc(std.testing.allocator, structured.items, 1);
+    defer std.testing.allocator.free(structured_selected);
+    try std.testing.expect(structured_selected.len < structured_primary.frame.len);
+    const decoded = try decodeFrameAlloc(std.testing.allocator, structured_selected);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, structured.items, decoded);
 }
 
 test "zstd native decoder rejects malformed FSE compressed sequence tables" {
