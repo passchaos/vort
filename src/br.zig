@@ -797,9 +797,12 @@ fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, comma
     }
     if (io) |active| stats.frequency_ns = elapsedNs(frequency_start.?, active);
     const alphabet_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
-    const literal_alphabet = try command_plan.alphabetFromFrequencies(256, &literal_frequencies);
-    const command_alphabet = try command_plan.alphabetFromFrequencies(704, &command_frequencies);
-    const distance_alphabet = try command_plan.alphabetFromFrequencies(max_distance_alphabet_size, &distance_frequencies);
+    var literal_alphabet = command_plan.PrefixAlphabet{};
+    var command_alphabet = command_plan.PrefixAlphabet{};
+    var distance_alphabet = command_plan.PrefixAlphabet{};
+    try command_plan.alphabetFromFrequenciesInto(256, &literal_alphabet, &literal_frequencies);
+    try command_plan.alphabetFromFrequenciesInto(704, &command_alphabet, &command_frequencies);
+    try command_plan.alphabetFromFrequenciesInto(max_distance_alphabet_size, &distance_alphabet, &distance_frequencies);
     stats.literal_symbol_count = literal_alphabet.len;
     stats.command_symbol_count = command_alphabet.len;
     stats.distance_symbol_count = distance_alphabet.len;

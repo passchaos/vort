@@ -113,6 +113,12 @@ pub const PrefixAlphabet = struct {
 /// than linearly searching up to 704 symbols for every literal/command/distance.
 pub fn alphabetFromFrequencies(comptime alphabet_size: usize, frequencies: *const [alphabet_size]u32) !PrefixAlphabet {
     var alphabet = PrefixAlphabet{};
+    try alphabetFromFrequenciesInto(alphabet_size, &alphabet, frequencies);
+    return alphabet;
+}
+
+pub fn alphabetFromFrequenciesInto(comptime alphabet_size: usize, alphabet: *PrefixAlphabet, frequencies: *const [alphabet_size]u32) !void {
+    alphabet.len = 0;
     for (frequencies, 0..) |frequency, symbol| {
         if (frequency == 0) continue;
         if (alphabet.len == alphabet.symbols.len) return error.InvalidBlockPlan;
@@ -122,7 +128,6 @@ pub fn alphabetFromFrequencies(comptime alphabet_size: usize, frequencies: *cons
     }
     if (alphabet.len == 0) return error.InvalidBlockPlan;
     alphabet.finish();
-    return alphabet;
 }
 
 /// Coalesce consecutive literal tokens into the insert portion of the next
