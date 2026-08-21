@@ -2723,6 +2723,27 @@ pub fn build(b: *std.Build) void {
         &zstd_reference_bench_gate.step,
     );
 
+    const zstd_encode_bench_exe = b.addExecutable(.{
+        .name = "vort-zstd-encode-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/encode_bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .link_libc = true,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const run_zstd_encode_bench = b.addRunArtifact(zstd_encode_bench_exe);
+    if (b.args) |args| run_zstd_encode_bench.addArgs(args);
+    const zstd_encode_bench_step = b.step("run-zstd-encode-bench", "Compare Zstd encoding with runtime libzstd");
+    zstd_encode_bench_step.dependOn(&run_zstd_encode_bench.step);
+    const run_zstd_encode_bench_csv = b.addRunArtifact(zstd_encode_bench_exe);
+    run_zstd_encode_bench_csv.addArgs(&.{ "--iterations", "1", "--rounds", "1", "--csv", "zig-out/vort-zstd-encode-bench.csv" });
+    const zstd_encode_bench_gate = b.addSystemCommand(&.{ "python3", "tools/zstd/encode_bench_gate.py", "--csv", "zig-out/vort-zstd-encode-bench.csv" });
+    zstd_encode_bench_gate.step.dependOn(&run_zstd_encode_bench_csv.step);
+    const zstd_encode_bench_gate_step = b.step("run-zstd-encode-bench-gate", "Validate Zstd encode comparison CSV");
+    zstd_encode_bench_gate_step.dependOn(&zstd_encode_bench_gate.step);
+
     const zstd_compat_probe_exe = b.addExecutable(.{
         .name = "vort-zstd-compat-probe",
         .root_module = b.createModule(.{
@@ -3588,6 +3609,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&snappy_reference_bench_exe.step);
     check_step.dependOn(&lz4_reference_bench_exe.step);
     check_step.dependOn(&zstd_reference_bench_exe.step);
+    check_step.dependOn(&zstd_encode_bench_exe.step);
     check_step.dependOn(&dictionary_deflate_report_exe.step);
     check_step.dependOn(&dictionary_decode_bench_exe.step);
     check_step.dependOn(&level_report_exe.step);

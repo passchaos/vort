@@ -2383,6 +2383,17 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   pass against libzstd 1.5.5. This closes a validation naming/coverage blind
   spot without adding a runtime dependency to the production library.
 
+- Added a same-process Zstd encode comparison against libzstd 1.5.5 at levels
+  1/3/9. It validates both directions (libzstd decodes Vort output and Vort
+  decodes reference output) before timing, and records compressed size plus
+  interleaved fixed-process throughput for text, JSON, and mixed binary. The
+  first pinned evidence exposes the encoder gap directly: text is `1.16x` the
+  reference size, JSON is `18.5–25.0x`, and mixed binary is `3.71x`; encoding
+  throughput is below 1% of libzstd on every row. Vort output is currently
+  identical across levels 1/3/9, confirming that the public level surface still
+  lacks real strategy differentiation. The gate is intentionally evidence-first
+  and will anchor the next sequence-planner and level-policy work.
+
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
   summary consistency for generated native frames. The black-box
