@@ -2397,6 +2397,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   localizes the next ratio target to the 32-sequence bootstrap-plan ceiling
   rather than another budget increase. The gate is intentionally evidence-first
   and will anchor the next sequence-planner work.
+  Raising that bounded plan to 128 sequences reduces the locked 32 KiB JSON
+  stream from 16,893 to 13,688 bytes (`19.0%`) while leaving text and binary
+  unchanged. A 64-entry intermediate produced 15,740 bytes; 256 entries were
+  byte-identical to 128, so the larger footprint was rejected. Even after this
+  gain, JSON remains `15–20x` libzstd, showing that candidate quality and the
+  one-plan-per-block model—not only sequence capacity—remain major gaps.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

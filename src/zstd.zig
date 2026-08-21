@@ -33,7 +33,10 @@ const duplicate_hash_bits = 15;
 const duplicate_hash_table_len = 1 << duplicate_hash_bits;
 const duplicate_hash_invalid = std.math.maxInt(u32);
 const duplicate_hash_candidates = 8;
-const max_bootstrap_sequence_count = 32;
+// The mixed planner's current search budget can reach at most 128 useful
+// sequence decisions on measured structured blocks. Larger fixed plans add
+// stack/code footprint without improving the emitted wire.
+const max_bootstrap_sequence_count = 128;
 const min_compressed_sequence_table_count = 12;
 const max_predefined_sequence_states = 64;
 const mixed_match_path_search_budget = 512;
