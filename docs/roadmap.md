@@ -5659,6 +5659,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   linear search through up to 704 entries. The persisted 100-iteration sample
   improved source/log throughput from 47.7/52.9 to 61.8/56.6 MiB/s while JSON
   measured 42.4 MiB/s; output remains byte-identical.
+  The shared Brotli bit writer now packs up to the remaining byte width per loop
+  instead of iterating once per bit. Known-byte stored fixtures and all planner
+  wires remain identical. Short interleaved samples rose to 114.5/123.1/128.8
+  MiB/s; the longer 100-iteration run remained scheduler-sensitive (104.0/56.5/
+  50.3 MiB/s), so the change is retained for its deterministic reduction from
+  O(bits) to O(bytes) writer work rather than a single claimed multiplier.
   Command selection no longer scans all 704 upstream LUT entries for every
   planned match. A compile-time 24×24 insert/copy-code index retains the first
   exact upstream symbol for O(1) lookup; an exhaustive equivalence test covers

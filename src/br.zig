@@ -212,20 +212,24 @@ const BitWriter = struct {
 
     pub fn writeBits(self: *BitWriter, allocator: std.mem.Allocator, value: u64, count: u6) Error!void {
         if (count > 64) return error.CorruptFrame;
-        var remaining = count;
+        if (count == 0) return;
+        var remaining: usize = count;
         var cursor = value;
-        while (remaining > 0) : (remaining -= 1) {
-            if (self.bit_index == 0) {
-                if (self.bounded) {
-                    try self.out.appendBounded(0);
-                } else {
-                    try self.out.append(allocator, 0);
-                }
-            }
-            if ((cursor & 1) != 0) self.out.items[self.out.items.len - 1] |= @as(u8, 1) << self.bit_index;
-            cursor >>= 1;
-            self.bit_index +%= 1;
+        while (remaining != 0) {
+            if (self.bit_index == 0) try self.appendZeroByte(allocator);
+            const available: usize = 8 - @as(usize, self.bit_index);
+            const take = @min(remaining, available);
+            const mask = (@as(u64, 1) << @intCast(take)) - 1;
+            self.out.items[self.out.items.len - 1] |= @as(u8, @intCast(cursor & mask)) << self.bit_index;
+            cursor >>= @intCast(take);
+            remaining -= take;
+            const next = @as(usize, self.bit_index) + take;
+            self.bit_index = @intCast(next & 7);
         }
+    }
+
+    inline fn appendZeroByte(self: *BitWriter, allocator: std.mem.Allocator) Error!void {
+        if (self.bounded) try self.out.appendBounded(0) else try self.out.append(allocator, 0);
     }
 
     fn alignToByte(self: *BitWriter) void {
