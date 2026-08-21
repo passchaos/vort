@@ -10,11 +10,7 @@ pub fn write(allocator: std.mem.Allocator, writer: anytype, alphabet_size: usize
     if (lengths.len < alphabet_size) return error.InvalidBlockPlan;
     try writer.writeBits(allocator, 0, 2); // HSKIP=0, complex prefix.
 
-    for (lengths[0..alphabet_size]) |length| {
-        if (length > 15) return error.InvalidBlockPlan;
-    }
-    var stop_index = alphabet_size;
-    while (stop_index != 0 and lengths[stop_index - 1] == 0) stop_index -= 1;
+    const stop_index = try code_length_rle.validatedStopIndex(lengths[0..alphabet_size]);
     var rle_storage: [704]code_length_rle.Token = undefined;
     const rle_len = try code_length_rle.encodeInto(&rle_storage, lengths, stop_index);
     const rle = rle_storage[0..rle_len];

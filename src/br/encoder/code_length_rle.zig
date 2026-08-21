@@ -38,6 +38,18 @@ pub fn encodeInto(output: []Token, lengths: []const u4, stop_index: usize) !usiz
     return tokens.items.len;
 }
 
+/// Validate and find the last non-zero code length in one forward pass. This
+/// replaces complex-prefix's full validation pass plus backward trailing-zero
+/// scan and returns the exclusive stop index expected by the RLE encoder.
+pub fn validatedStopIndex(lengths: []const u4) !usize {
+    var stop_index: usize = 0;
+    for (lengths, 0..) |length, i| {
+        if (length > 15) return error.InvalidBlockPlan;
+        if (length != 0) stop_index = i + 1;
+    }
+    return stop_index;
+}
+
 fn encodeIntoList(tokens: *std.ArrayList(Token), lengths: []const u4, stop_index: usize) !void {
     var i: usize = 0;
     while (i < stop_index) {

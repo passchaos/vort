@@ -5720,6 +5720,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   `(current-3) & (radix-1)` and computes the predecessor directly, replacing an
   inner 4/8-way modulo search at every RLE chain level. An exhaustive run test
   covers both radices through 703 symbols; all planner wires remain unchanged.
+  Complex-prefix validation and trailing-zero discovery now share one forward
+  pass (`validatedStopIndex`) instead of validating the full alphabet and then
+  scanning backward. Focused header time is 3.5–5.8 µs for source/log and about
+  13 µs for JSON; 20-iteration A/B reached 102/116/116 MiB/s, with unchanged
+  planner streams and successful Node decoding.
   `PrefixAlphabet` is an approximately 11 KiB full-command-space value. Its
   code-length and header helpers now take const pointers rather than copying
   three alphabets by value. Focused JSON alphabet time fell from roughly
