@@ -22,7 +22,8 @@ pub fn main(init: std.process.Init) !void {
     for (cases) |case| {
         try stdout.print("checking {s} input={d}\n", .{ case.name, case.payload.len });
         try stdout.flush();
-        const planned = try vort.brEncodePlannedStreamAlloc(init.gpa, case.payload);
+        var stats: vort.BrotliPlannedEncodeStats = .{};
+        const planned = try vort.brEncodePlannedStreamAllocWithStats(init.gpa, case.payload, &stats);
         defer init.gpa.free(planned);
         const decoded = try vort.brDecodeStreamAlloc(init.gpa, planned);
         defer init.gpa.free(decoded);
@@ -30,7 +31,10 @@ pub fn main(init: std.process.Init) !void {
         const stored = try vort.brEncodeStoredStreamAlloc(init.gpa, case.payload);
         defer init.gpa.free(stored);
         if (planned.len >= stored.len) return error.InvalidBlockPlan;
-        try stdout.print("brotli planned corpus {s}: input={d} planned={d} stored={d}\n", .{ case.name, case.payload.len, planned.len, stored.len });
+        try stdout.print("brotli planned corpus {s}: input={d} planned={d} stored={d} tokens={d} commands={d} literals={d} matches={d} alphabets={d}/{d}/{d}\n", .{
+            case.name,                  case.payload.len,           planned.len,                 stored.len, stats.token_count, stats.command_count, stats.literal_bytes, stats.matched_bytes,
+            stats.literal_symbol_count, stats.command_symbol_count, stats.distance_symbol_count,
+        });
     }
     try stdout.flush();
 }

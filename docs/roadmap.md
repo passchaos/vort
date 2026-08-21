@@ -5672,6 +5672,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   remain byte-identical. The attempted token-cursor removal of the command plan
   regressed the stable A/B and was fully reverted, preserving the faster typed
   command representation.
+  `run-br-planned-stage-profile` now records token/command/alphabet shape plus
+  optional in-process LZ77/command/wire timing. Initial profiles put wire and
+  Huffman construction at 61–71% after optimization (previously 66–78%), versus
+  20–30% LZ77 and 7–15% command planning. Passing precomputed code lengths from
+  payload encoder construction into complex-prefix header writing removes three
+  duplicate package-merge builds. The persisted 100-iteration sample improved
+  to 79.3/87.8/89.2 MiB/s for JSON/source/log with identical sizes.
   The transient `PlannedWireCommand[]` materialization is removed: frequency
   collection and final emission now derive indexed command/distance metadata
   directly from the typed command plan in two passes. This eliminates one

@@ -10,6 +10,7 @@ const pattern = @import("br/pattern.zig");
 const command_plan = @import("br/encoder/command_plan.zig");
 const encoder_distance = @import("br/encoder/distance.zig");
 const complex_prefix = @import("br/encoder/complex_prefix.zig");
+const encoder_stats = @import("br/encoder/stats.zig");
 const incremental = @import("br/incremental/stream_decoder.zig");
 const incremental_tests = @import("br/incremental/tests.zig");
 const incremental_stored = @import("br/incremental/stored/decoder.zig");
@@ -17,6 +18,7 @@ const incremental_stored_encoder = @import("br/incremental/stored/encoder.zig");
 const incremental_stored_tests = @import("br/incremental/stored/tests.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
+pub const PlannedEncodeStats = encoder_stats.PlannedEncodeStats;
 
 const IncrementalCodec = struct {
     pub const Error = br.Error;
@@ -71,6 +73,7 @@ test {
     _ = command_plan;
     _ = encoder_distance;
     _ = complex_prefix;
+    _ = encoder_stats;
 }
 
 pub const IncrementalTestSupport = struct {
@@ -502,7 +505,17 @@ pub fn encodeRepeatedPrefixStreamAlloc(allocator: std.mem.Allocator, prefix: []c
 /// outside the current one-block/32 KiB matcher contract return a precise error
 /// so the convenience encoder can retain its stored fallback.
 pub fn encodePlannedStreamAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    return encodePlannedStreamAllocWithStats(allocator, input, &stats);
+}
+
+pub fn encodePlannedStreamAllocWithStats(allocator: std.mem.Allocator, input: []const u8, stats: *encoder_stats.PlannedEncodeStats) Error![]u8 {
+    return encodePlannedStreamAllocWithStatsTimed(allocator, input, null, stats);
+}
+
+pub fn encodePlannedStreamAllocWithStatsTimed(allocator: std.mem.Allocator, input: []const u8, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats) Error![]u8 {
     if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
+    const lz_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     const lz_plan = try lz77.hashGreedyPlanAutoTinyAlloc(allocator, input, .{
         .window_len = @min(input.len, 32 * 1024),
         .max_chain = 64,
@@ -512,10 +525,27 @@ pub fn encodePlannedStreamAlloc(allocator: std.mem.Allocator, input: []const u8)
         .max_match = lz77.max_match_len,
     });
     defer lz_plan.deinit(allocator);
+    if (io) |active| stats.lz77_ns = elapsedNs(lz_start.?, active);
     if (lz_plan.stats.matches == 0) return error.InvalidBlockPlan;
+    const command_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     const plan = try command_plan.buildAlloc(allocator, input, lz_plan.tokens);
     defer plan.deinit(allocator);
-    return encodeCommandPlanAlloc(allocator, input, plan.commands);
+    if (io) |active| stats.command_plan_ns = elapsedNs(command_start.?, active);
+    const wire_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
+    const encoded = try encodeCommandPlanAlloc(allocator, input, plan.commands, stats);
+    if (io) |active| stats.wire_ns = elapsedNs(wire_start.?, active);
+    stats.input_bytes = input.len;
+    stats.token_count = lz_plan.tokens.len;
+    stats.command_count = plan.commands.len;
+    stats.literal_bytes = lz_plan.stats.literals;
+    stats.matched_bytes = lz_plan.stats.matched_bytes;
+    stats.encoded_bytes = encoded.len;
+    return encoded;
+}
+
+fn elapsedNs(start: std.Io.Timestamp, io: std.Io) u64 {
+    const ns = start.durationTo(std.Io.Clock.awake.now(io)).nanoseconds;
+    return if (ns <= 0) 0 else @intCast(ns);
 }
 
 /// Same planner-backed encoder with a caller-owned scratch arena for all
@@ -538,7 +568,8 @@ pub fn encodePlannedStreamWithScratchAlloc(allocator: std.mem.Allocator, scratch
     if (lz_plan.stats.matches == 0) return error.InvalidBlockPlan;
     const plan = try command_plan.buildAlloc(scratch_allocator, input, lz_plan.tokens);
     defer plan.deinit(scratch_allocator);
-    const encoded = try encodeCommandPlanAlloc(scratch_allocator, input, plan.commands);
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const encoded = try encodeCommandPlanAlloc(scratch_allocator, input, plan.commands, &stats);
     defer scratch_allocator.free(encoded);
     return allocator.dupe(u8, encoded);
 }
@@ -573,7 +604,8 @@ pub const PlannedStreamEncoder = struct {
         });
         if (stats.matches == 0) return error.InvalidBlockPlan;
         _ = try command_plan.buildReuse(&self.commands, self.allocator, input, self.tokens.items);
-        return encodeCommandPlanAlloc(allocator, input, self.commands.items);
+        var stats_out: encoder_stats.PlannedEncodeStats = .{};
+        return encodeCommandPlanAlloc(allocator, input, self.commands.items, &stats_out);
     }
 
     pub fn retainedCapacity(self: *const PlannedStreamEncoder) usize {
@@ -745,7 +777,7 @@ fn writeCommandLengthExtras(allocator: std.mem.Allocator, writer: *BitWriter, co
         try writer.writeBits(allocator, copy_len - command.command.copy_base, command.command.copy_extra_bits);
 }
 
-fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command) Error![]u8 {
+fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats) Error![]u8 {
     if (commands.len == 0) return error.InvalidBlockPlan;
     var literal_frequencies: [256]u32 = @splat(0);
     var command_frequencies: [704]u32 = @splat(0);
@@ -761,6 +793,9 @@ fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, comma
     const literal_alphabet = try command_plan.alphabetFromFrequencies(256, &literal_frequencies);
     const command_alphabet = try command_plan.alphabetFromFrequencies(704, &command_frequencies);
     const distance_alphabet = try command_plan.alphabetFromFrequencies(max_distance_alphabet_size, &distance_frequencies);
+    stats.literal_symbol_count = literal_alphabet.len;
+    stats.command_symbol_count = command_alphabet.len;
+    stats.distance_symbol_count = distance_alphabet.len;
 
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
@@ -768,13 +803,13 @@ fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, comma
     try writeWindowBits(allocator, &writer, default_window_bits);
     try writeLastCompressedMetaBlockHeader(allocator, &writer, input.len);
     const distance_alphabet_size = plannedDistanceAlphabetSize(distance_alphabet);
-    try writePlannedCompressedHeader(allocator, &writer, literal_alphabet, command_alphabet, distance_alphabet, distance_alphabet_size);
-
     const literal_lengths = try literal_alphabet.codeLengths(256);
-    const literal_encoder = try huffman.HuffmanTable(256).Encoder.init(&literal_lengths);
     const command_lengths = try command_alphabet.codeLengths(704);
-    const command_encoder = try huffman.HuffmanTable(704).Encoder.init(&command_lengths);
     const distance_lengths = try distance_alphabet.codeLengths(max_distance_alphabet_size);
+    try writePlannedCompressedHeader(allocator, &writer, literal_alphabet, command_alphabet, distance_alphabet, distance_alphabet_size, &literal_lengths, &command_lengths, &distance_lengths);
+
+    const literal_encoder = try huffman.HuffmanTable(256).Encoder.init(&literal_lengths);
+    const command_encoder = try huffman.HuffmanTable(704).Encoder.init(&command_lengths);
     const distance_encoder = try huffman.HuffmanTable(max_distance_alphabet_size).Encoder.init(&distance_lengths);
     for (commands) |command| {
         const encoding = commandEntryForLengths(command.insert_len, command.copy_len) orelse unreachable;
@@ -13006,6 +13041,9 @@ fn writePlannedCompressedHeader(
     command_alphabet: command_plan.PrefixAlphabet,
     distance_alphabet: command_plan.PrefixAlphabet,
     distance_alphabet_size: usize,
+    literal_lengths: *const [256]u4,
+    command_lengths: *const [704]u4,
+    distance_lengths: *const [max_distance_alphabet_size]u4,
 ) Error!void {
     try writeBlockTypeCount(allocator, writer, 1);
     try writeBlockTypeCount(allocator, writer, 1);
@@ -13015,9 +13053,9 @@ fn writePlannedCompressedHeader(
     try writer.writeBits(allocator, 0, 2); // literal context mode
     try writeBlockTypeCount(allocator, writer, 1);
     try writeBlockTypeCount(allocator, writer, 1);
-    try writeSimplePrefixSymbols(allocator, writer, 256, literal_alphabet);
-    try writeSimplePrefixSymbols(allocator, writer, 704, command_alphabet);
-    try writeSimplePrefixSymbols(allocator, writer, distance_alphabet_size, distance_alphabet);
+    try writePrefixSymbolsWithLengths(allocator, writer, 256, literal_alphabet, literal_lengths);
+    try writePrefixSymbolsWithLengths(allocator, writer, 704, command_alphabet, command_lengths);
+    try writePrefixSymbolsWithLengths(allocator, writer, distance_alphabet_size, distance_alphabet, distance_lengths);
 }
 
 fn plannedDistanceAlphabetSize(alphabet: command_plan.PrefixAlphabet) usize {
@@ -13026,15 +13064,10 @@ fn plannedDistanceAlphabetSize(alphabet: command_plan.PrefixAlphabet) usize {
     return @max(@as(usize, 16 + 15 + 48), highest + 1);
 }
 
-fn writeSimplePrefixSymbols(allocator: std.mem.Allocator, writer: *BitWriter, alphabet_size: usize, alphabet: command_plan.PrefixAlphabet) Error!void {
+fn writePrefixSymbolsWithLengths(allocator: std.mem.Allocator, writer: *BitWriter, alphabet_size: usize, alphabet: command_plan.PrefixAlphabet, lengths: []const u4) Error!void {
     if (alphabet.len == 0) return error.InvalidBlockPlan;
     if (alphabet.len > 4) {
-        if (alphabet_size == 704) {
-            const lengths = try alphabet.codeLengths(704);
-            return complex_prefix.write(allocator, writer, alphabet_size, &lengths);
-        }
-        const lengths = try alphabet.codeLengths(max_distance_alphabet_size);
-        return complex_prefix.write(allocator, writer, alphabet_size, &lengths);
+        return complex_prefix.write(allocator, writer, alphabet_size, lengths);
     }
     try writer.writeBits(allocator, 1, 2);
     try writer.writeBits(allocator, alphabet.len - 1, 2);
