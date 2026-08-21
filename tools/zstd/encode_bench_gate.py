@@ -41,6 +41,12 @@ def main() -> int:
     json_rows = {int(row["level"]): row for row in rows if row["case"] == "json"}
     assert int(json_rows[3]["vort_ns"]) > int(json_rows[1]["vort_ns"]), json_rows
     assert int(json_rows[9]["vort_ns"]) > int(json_rows[3]["vort_ns"]), json_rows
+    # Levels 1-3 are latency-oriented and must not accidentally re-enable the
+    # recursive mixed-family planner. This benchmark target is always compiled
+    # in ReleaseFast, so the generous ceilings still distinguish the old
+    # 11-15 second JSON cliff from normal same-machine variance.
+    assert int(json_rows[1]["vort_ns"]) <= 4_000_000_000, json_rows
+    assert int(json_rows[3]["vort_ns"]) <= 5_000_000_000, json_rows
     # The expanded planner must retain the measured JSON improvement over the
     # old 32-sequence 16,893-byte baseline on every level.
     assert int(json_rows[1]["vort_bytes"]) <= 13_688, json_rows

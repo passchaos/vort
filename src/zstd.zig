@@ -45,6 +45,13 @@ const max_bootstrap_sequence_count = 128;
 const min_compressed_sequence_table_count = 12;
 const max_predefined_sequence_states = 64;
 const mixed_match_path_search_budget = 512;
+// The recursive mixed-family planner repeatedly prices complete sequence-table
+// candidates and is intentionally a ratio-oriented path. Levels 1-3 have only
+// 16-64 branch states and already run the greedy/lazy/optimal hash parsers, so
+// spending those states on mixed-family recursion dominates latency without
+// improving the locked 32 KiB structured corpus. Keep it for level 4+ and for
+// callers that explicitly request a larger native search budget.
+const mixed_match_min_search_budget = 96;
 const repeated_pattern_period_max = 64;
 const repeated_pattern_start_scan = 48;
 const max_direct_huffman_symbol = 128;
@@ -7097,7 +7104,10 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     // a broad mixed plan cannot hide a tighter single-family plan found later.
     var mixed_block: std.ArrayList(u8) = .empty;
     defer mixed_block.deinit(allocator);
-    const mixed_ok = try emitMixedDuplicateRepeatedMatchCompressedBlock(allocator, &mixed_block, block, last, match_search_budget);
+    const mixed_ok = if (match_search_budget >= mixed_match_min_search_budget)
+        try emitMixedDuplicateRepeatedMatchCompressedBlock(allocator, &mixed_block, block, last, match_search_budget)
+    else
+        false;
 
     var greedy_block: std.ArrayList(u8) = .empty;
     defer greedy_block.deinit(allocator);
@@ -12231,6 +12241,13 @@ test "zstd compression levels map to increasing search budgets" {
     try std.testing.expect(level3.content_checksum);
     try std.testing.expectError(error.InvalidBlockPlan, nativeFrameOptionsForLevel(-1, options));
     try std.testing.expectError(error.InvalidBlockPlan, nativeFrameOptionsForLevel(max_compression_level + 1, options));
+}
+
+test "zstd low latency levels defer mixed-family match search" {
+    const level3 = try nativeFrameOptionsForLevel(3, .{});
+    const level4 = try nativeFrameOptionsForLevel(4, .{});
+    try std.testing.expect(level3.match_search_budget < mixed_match_min_search_budget);
+    try std.testing.expect(level4.match_search_budget >= mixed_match_min_search_budget);
 }
 
 test "zstd adaptive block candidate never expands the selected frame" {

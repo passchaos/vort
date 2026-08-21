@@ -2550,6 +2550,16 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Single-dictionary convenience and dictionary/dictionary-set diagnostics
   variants complete the summary API matrix, matching the decode surfaces while
   retaining phase/offset context for missing catalog entries.
+  ReleaseFast profiling of the native Zstd encoder found that recursive
+  mixed-family lookahead dominated levels 1-3 even though the hash planners
+  selected equally small output on the locked 32 KiB corpus. The encoder now
+  reserves that ratio-oriented search for level 4+ (or explicit budgets of at
+  least 96 states). A same-machine one-iteration smoke retained all nine wire
+  sizes while moving level-1 text/JSON/binary from roughly 2.36/11.08/0.48 s to
+  0.43/2.49/0.33 s and level-3 from 20.03/15.24/0.52 s to
+  1.27/2.99/0.35 s. These absolute times still trail libzstd by orders of
+  magnitude; the ReleaseFast gate now prevents the low-level planner cliff from
+  returning while broader parser consolidation remains open.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
