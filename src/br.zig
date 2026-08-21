@@ -801,7 +801,10 @@ fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, comma
     stats.command_symbol_count = command_alphabet.len;
     stats.distance_symbol_count = distance_alphabet.len;
 
-    var out: std.ArrayList(u8) = .empty;
+    // Useful planner streams are usually a small fraction of input. Reserving
+    // a capped fraction removes ArrayList's early growth ladder without scaling
+    // scratch memory with multi-megabyte inputs.
+    var out = try std.ArrayList(u8).initCapacity(allocator, @min(@max(input.len / 8, 64), 4096));
     errdefer out.deinit(allocator);
     var writer = BitWriter{ .out = &out };
     try writeWindowBits(allocator, &writer, default_window_bits);

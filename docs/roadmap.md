@@ -5665,6 +5665,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   MiB/s; the longer 100-iteration run remained scheduler-sensitive (104.0/56.5/
   50.3 MiB/s), so the change is retained for its deterministic reduction from
   O(bits) to O(bytes) writer work rather than a single claimed multiplier.
+  Planner output now reserves a capped `max(input/8,64)` bytes (up to 4 KiB)
+  before header emission, avoiding the early ArrayList growth ladder. The latest
+  100-iteration sample measured 44.2/90.8/93.7 MiB/s for JSON/source/log with
+  unchanged 92/131/125-byte streams; JSON remains scheduler-variable while the
+  source/log improvement is consistent with fewer output reallocations.
   Command selection no longer scans all 704 upstream LUT entries for every
   planned match. A compile-time 24×24 insert/copy-code index retains the first
   exact upstream symbol for O(1) lookup; an exhaustive equivalence test covers
