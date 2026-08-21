@@ -200,6 +200,16 @@ test {
 
 pub const StandardDictionaryView = dictionary_format.View;
 pub const standard_dictionary_magic = dictionary_format.magic;
+
+pub fn standardDictionaryId(bytes: []const u8) ?u32 {
+    if (bytes.len < 8 or std.mem.readInt(u32, bytes[0..4], .little) != standard_dictionary_magic) return null;
+    const id = std.mem.readInt(u32, bytes[4..8], .little);
+    return if (id == 0) null else id;
+}
+
+pub fn isStandardDictionary(bytes: []const u8) bool {
+    return standardDictionaryId(bytes) != null;
+}
 pub const StandardDictionaryEntropySummary = struct {
     id: u32,
     content_offset: usize,
@@ -372,6 +382,18 @@ test "standard Zstd dictionary inspector rejects malformed headers" {
     std.mem.writeInt(u32, bad_magic[0..4], standard_dictionary_magic, .little);
     std.mem.writeInt(u32, bad_magic[4..8], 1, .little);
     try std.testing.expectError(error.TruncatedFrame, inspectStandardDictionary(&bad_magic));
+}
+
+test "standard Zstd dictionary probe is non-validating and bounded" {
+    try std.testing.expect(!isStandardDictionary(&.{}));
+    try std.testing.expectEqual(@as(?u32, null), standardDictionaryId(&.{ 0x37, 0xa4, 0x30, 0xec }));
+    var header: [8]u8 = @splat(0);
+    std.mem.writeInt(u32, header[0..4], standard_dictionary_magic, .little);
+    try std.testing.expectEqual(@as(?u32, null), standardDictionaryId(&header));
+    std.mem.writeInt(u32, header[4..8], 0x7788, .little);
+    try std.testing.expect(isStandardDictionary(&header));
+    try std.testing.expectEqual(@as(?u32, 0x7788), standardDictionaryId(&header));
+    try std.testing.expectError(error.TruncatedFrame, inspectStandardDictionary(&header));
 }
 
 test "standard Zstd dictionary view constructs raw-content native dictionary" {

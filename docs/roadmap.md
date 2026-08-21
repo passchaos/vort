@@ -2538,6 +2538,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   content boundary, Dictionary_ID, and repcodes. The trained-dictionary probe
   prints and cross-checks this summary, giving catalogs an auditable surface for
   selecting compatible dictionaries before constructing codec state.
+  Added allocation-free `isStandardDictionary` and `standardDictionaryId`
+  probes for catalog discovery. They inspect only the bounded 8-byte magic/ID
+  prefix and intentionally do not imply entropy validity; callers use the strict
+  inspector before codec construction. Tests distinguish short input, zero IDs,
+  valid prefixes with truncated entropy, and strict full validation.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
