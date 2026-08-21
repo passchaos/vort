@@ -63,6 +63,21 @@ pub const Window = struct {
         self.row_start += stride;
     }
 
+    /// Decide whether a safe inflater pause must reclaim released rows now.
+    ///
+    /// A token-boundary pause means the semantic loop exhausted append room,
+    /// so any released prefix must be compacted immediately. At EOB, however,
+    /// the next block can append into the remaining space. Stored blocks are
+    /// already split transactionally and compressed blocks pause before a
+    /// token that does not fit, so neither needs speculative capacity reserved
+    /// here. This avoids redundant history copies between medium blocks.
+    pub fn shouldCompactAfterStep(
+        self: *const Window,
+        block_done: bool,
+    ) bool {
+        return self.row_start != 0 and !block_done;
+    }
+
     /// Discard only rows already reconstructed by the caller. Every retained
     /// byte keeps the same relative order, so direct DEFLATE distances remain
     /// valid after rebasing the linear output cursor.
@@ -233,4 +248,21 @@ test "windowed history releases and compacts complete rows only" {
         expected[0..retained],
         scratch[0..retained],
     );
+}
+
+test "windowed history compacts only at an output boundary" {
+    var scratch: [general_scratch_len]u8 = undefined;
+    var window = try Window.init(&scratch);
+    window.row_start = 24 * 1024;
+
+    window.write_pos = scratch.len - std.math.maxInt(u16);
+    try std.testing.expect(!window.shouldCompactAfterStep(true));
+    try std.testing.expect(window.shouldCompactAfterStep(false));
+
+    window.write_pos += 1;
+    try std.testing.expect(!window.shouldCompactAfterStep(true));
+
+    window.row_start = 0;
+    try std.testing.expect(!window.shouldCompactAfterStep(false));
+    try std.testing.expect(!window.shouldCompactAfterStep(true));
 }

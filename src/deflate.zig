@@ -11842,12 +11842,18 @@ fn commitPngWindowStep(
         new_write_pos,
         stream_done,
     );
-    // Compact at every safe pause, including non-final EOB. This bounds the
-    // next block's cursor and leaves room for a maximal stored block.
-    if (!stream_done and (released or block_done)) {
+    // Ending a block does not require moving the retained lookback. Compressed
+    // blocks pause before a token that does not fit, and stored blocks already
+    // split transactionally. Defer the copy until a real output boundary.
+    const compact = !stream_done and
+        image.window.shouldCompactAfterStep(block_done);
+    if (compact) {
         try image.compactReleased();
     }
-    return released;
+    // A deferred EOB may leave already-released rows at the front. If a later
+    // zero-byte pause compacts them, report progress even when drainRows did
+    // not release another row during this exact call.
+    return released or compact;
 }
 
 fn validatePngWindowedStorage(
@@ -11862,6 +11868,81 @@ fn validatePngWindowedStorage(
         ))
     {
         return error.UnsupportedDeflateFeature;
+    }
+}
+
+test "PNG windowed decoder crosses deferred dynamic EOB into stored block" {
+    const width = 512;
+    const height = 256;
+    const info = try png.pngImageInfo(width, height, 8, .grayscale);
+    const stride = width + 1;
+    var filtered: [stride * height]u8 = undefined;
+    for (0..height) |row| {
+        filtered[row * stride] = 0;
+        for (0..width) |column| {
+            filtered[row * stride + 1 + column] = @truncate(
+                row *% 29 +% column *% 73 +% (column / 11) *% 17,
+            );
+        }
+    }
+
+    // End a compressible dynamic block after enough complete rows have become
+    // releasable, then follow it with a maximum-sized stored block. This is the
+    // transition that proves EOB compaction can be deferred: the stored path
+    // must consume its payload transactionally, compact at the real output
+    // boundary, and resume without losing the retained Deflate history.
+    const dynamic_prefix_len = 64 * 1024;
+    const plan = try planTokensAlloc(
+        std.testing.allocator,
+        filtered[0..dynamic_prefix_len],
+        optionsForLevel(.default),
+    );
+    defer plan.deinit(std.testing.allocator);
+
+    var writer: bitstream.BitWriter = .{};
+    defer writer.deinit(std.testing.allocator);
+    const header_len = try writeWrappedDeflatePrefix(
+        std.testing.allocator,
+        &writer,
+        null,
+    );
+    try writeDynamicTokens(
+        std.testing.allocator,
+        &writer,
+        plan.tokens,
+        false,
+    );
+    try writeStoredBlocks(
+        std.testing.allocator,
+        &writer,
+        filtered[dynamic_prefix_len..],
+        true,
+    );
+    const encoded = try finishZlibFrame(
+        std.testing.allocator,
+        &writer,
+        &filtered,
+        header_len,
+    );
+    defer std.testing.allocator.free(encoded);
+
+    var window: [png_windowed_history.general_scratch_len]u8 = undefined;
+    var output: [width * height]u8 = undefined;
+    const result = try decodePngWindowedZlibImageWithOptions(
+        encoded,
+        &window,
+        info,
+        .{},
+        &output,
+    );
+    try std.testing.expectEqual(height, result.rows);
+    try std.testing.expectEqual(output.len, result.output_written);
+    for (0..height) |row| {
+        try std.testing.expectEqualSlices(
+            u8,
+            filtered[row * stride + 1 ..][0..width],
+            output[row * width ..][0..width],
+        );
     }
 }
 
