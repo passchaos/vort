@@ -8,6 +8,13 @@ pub fn main(init: std.process.Init) !void {
     const mode = args.next() orelse return error.InvalidBlockPlan;
     const lazy = std.mem.startsWith(u8, mode, "lazy-");
     const static_dictionary = std.mem.startsWith(u8, mode, "dictionary-");
+    const dictionary_index_bytes = std.mem.eql(u8, mode, "dictionary-index-bytes");
+    if (dictionary_index_bytes) {
+        var text: [32]u8 = undefined;
+        const written = try std.fmt.bufPrint(&text, "{d}\n", .{vort.brPlannedStaticDictionaryIndexBytes()});
+        try std.Io.File.stdout().writeStreamingAll(init.io, written);
+        return;
+    }
     const name = if (lazy) mode["lazy-".len..] else if (static_dictionary) mode["dictionary-".len..] else mode;
     const payload = if (std.mem.eql(u8, name, "json"))
         "{\"kind\":\"event\",\"active\":true,\"values\":[1,2,3,5,8,13]}\n" ** 48

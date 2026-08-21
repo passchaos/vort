@@ -35,6 +35,10 @@ def main() -> int:
     if len(encoded) >= len(expected):
         raise SystemExit("dictionary-words: expected a smaller encoded stream")
     print(f"brotli planned dictionary-words node diff: encoded={len(encoded)} decoded={len(actual)}")
+    index_bytes = int(subprocess.check_output([sys.argv[1], "dictionary-index-bytes"]))
+    if index_bytes > 150_000:
+        raise SystemExit(f"dictionary index exceeds memory budget: {index_bytes}")
+    print(f"brotli planned dictionary index: bytes={index_bytes}")
     return 0
 
 

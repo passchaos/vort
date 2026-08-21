@@ -5765,6 +5765,10 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   distance addressing. An experimental exhaustive reference planner compresses
   dictionary-heavy input without depending on libbrotli and is externally
   decoded by Node; stable levels await an indexed matcher before enabling it.
+  A caller-owned 15-bit base-word index now reduces lookup to 13,504 entries
+  and verifies all 121 transforms through the independent transform routine.
+  Differential tests match the exhaustive reference and the 146,560-byte
+  memory budget is enforced by the Node compatibility gate.
   PrefixAlphabet's small-active insertion sort now caches the candidate pair and
   shifts predecessors instead of swapping both parallel arrays at every step.
   It preserves the exact `(frequency desc,symbol asc)` order and wire while

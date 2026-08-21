@@ -2,6 +2,7 @@ const std = @import("std");
 const lz77 = @import("../../lz77.zig");
 const static_dictionary = @import("../static_dictionary.zig");
 const small_huffman = @import("small_huffman.zig");
+const static_dictionary_matcher = @import("static_dictionary_matcher.zig");
 
 /// A Brotli insert/copy command derived from a generic LZ77 token stream.
 /// `insert_start` indexes the original input so the wire writer can emit the
@@ -229,6 +230,8 @@ pub fn buildAlloc(allocator: std.mem.Allocator, input: []const u8, tokens: []con
 /// the remaining bytes as literal inserts. The matcher is intentionally
 /// exhaustive; production levels can adopt an indexed matcher independently.
 pub fn buildStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8) !Plan {
+    var matcher = try static_dictionary_matcher.Index.init(allocator);
+    defer matcher.deinit();
     var commands: std.ArrayList(Command) = .empty;
     errdefer commands.deinit(allocator);
     var position: usize = 0;
@@ -237,7 +240,7 @@ pub fn buildStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u
     var match_count: usize = 0;
 
     while (position < input.len) {
-        const match = static_dictionary.findLongestMatch(input[position..]) orelse {
+        const match = matcher.findLongest(input[position..]) orelse {
             position += 1;
             insert_len += 1;
             continue;
@@ -261,6 +264,10 @@ pub fn buildStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u
         .insert_len = insert_len,
     });
     return .{ .commands = try commands.toOwnedSlice(allocator), .match_count = match_count };
+}
+
+pub fn staticDictionaryIndexBytes() usize {
+    return static_dictionary_matcher.max_index_bytes;
 }
 
 /// Rebuild into caller-owned typed storage, preserving command capacity across

@@ -11,6 +11,7 @@ const command_plan = @import("br/encoder/command_plan.zig");
 const encoder_distance = @import("br/encoder/distance.zig");
 const complex_prefix = @import("br/encoder/complex_prefix.zig");
 const encoder_stats = @import("br/encoder/stats.zig");
+const static_dictionary_matcher = @import("br/encoder/static_dictionary_matcher.zig");
 const incremental = @import("br/incremental/stream_decoder.zig");
 const incremental_tests = @import("br/incremental/tests.zig");
 const incremental_stored = @import("br/incremental/stored/decoder.zig");
@@ -84,6 +85,7 @@ test {
     _ = encoder_distance;
     _ = complex_prefix;
     _ = encoder_stats;
+    _ = static_dictionary_matcher;
 }
 
 pub const IncrementalTestSupport = struct {
@@ -573,6 +575,10 @@ pub fn encodePlannedStreamStaticDictionaryAlloc(allocator: std.mem.Allocator, in
     if (plan.match_count == 0) return error.InvalidBlockPlan;
     var stats: encoder_stats.PlannedEncodeStats = .{};
     return encodeCommandPlanAlloc(allocator, input, plan.commands, null, &stats);
+}
+
+pub fn plannedStaticDictionaryIndexBytes() usize {
+    return command_plan.staticDictionaryIndexBytes();
 }
 
 pub fn encodePlannedStreamAllocWithStats(allocator: std.mem.Allocator, input: []const u8, stats: *encoder_stats.PlannedEncodeStats) Error![]u8 {

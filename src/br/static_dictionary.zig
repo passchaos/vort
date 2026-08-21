@@ -155,6 +155,12 @@ const transforms = [_]Transform{
 };
 
 pub const max_transformed_word_len: usize = 37;
+pub const transform_count: usize = transforms.len;
+pub const base_word_count: usize = blk: {
+    var count: usize = 0;
+    for (4..25) |copy_len| count += @as(usize, 1) << size_bits[copy_len];
+    break :blk count;
+};
 
 pub const Match = struct {
     output_len: u6,
@@ -188,6 +194,14 @@ pub fn findLongestMatch(input: []const u8) ?Match {
         }
     }
     return best;
+}
+
+pub fn baseWord(copy_len: usize, word_index: usize) ?[]const u8 {
+    const bits = sizeBits(copy_len) orelse return null;
+    if (word_index >= (@as(usize, 1) << bits)) return null;
+    const start = offsets[copy_len] + word_index * copy_len;
+    if (start > data.len or data.len - start < copy_len) return null;
+    return data[start..][0..copy_len];
 }
 
 pub fn transform(address: usize, word_len: usize, out: []u8) ?[]const u8 {
