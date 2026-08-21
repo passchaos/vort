@@ -884,6 +884,7 @@ pub const zstdInspectNativeFrameBlockSequenceModes = zstd.inspectNativeFrameBloc
 pub const zstdSummarizeNativeFrameBlocks = zstd.summarizeNativeFrameBlocks;
 pub const zstdSummarizeNativeStream = zstd.summarizeNativeStream;
 pub const zstdSummarizeNativeStreamWithDiagnostics = zstd.summarizeNativeStreamWithDiagnostics;
+pub const zstdSummarizeNativeStreamWithDictionarySet = zstd.summarizeNativeStreamWithDictionarySet;
 pub const zstdInspectNativeSkippableFrame = zstd.inspectNativeSkippableFrame;
 pub const zstdIterateNativeFrameBlocks = zstd.iterateNativeFrameBlocks;
 pub const zstdIterateNativeStream = zstd.iterateNativeStream;

@@ -2543,6 +2543,10 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   prefix and intentionally do not imply entropy validity; callers use the strict
   inspector before codec construction. Tests distinguish short input, zero IDs,
   valid prefixes with truncated entropy, and strict full validation.
+  Added dictionary-set-aware native stream summaries. They resolve every
+  non-zero frame Dictionary_ID against the caller's catalog, fail early with
+  `NeedDictionary` when missing, and report resolved plus standard-full frame
+  counts alongside existing block/checksum/content-size metadata.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

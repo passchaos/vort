@@ -4407,6 +4407,8 @@ pub const NativeStreamSummary = struct {
     compressed_block_count: usize = 0,
     payload_bytes: usize = 0,
     skippable_payload_bytes: usize = 0,
+    resolved_dictionary_frame_count: usize = 0,
+    standard_dictionary_frame_count: usize = 0,
 };
 
 /// Zero-allocation cursor over a single native Zstandard frame's blocks.
@@ -6713,6 +6715,15 @@ pub fn summarizeNativeStream(frames: []const u8) Error!NativeStreamSummary {
 }
 
 pub fn summarizeNativeStreamWithDiagnostics(frames: []const u8, diagnostics: *NativeStreamSummaryErrorDiagnostics) Error!NativeStreamSummary {
+    return try summarizeNativeStreamWithDictionarySetDiagnostics(frames, null, diagnostics);
+}
+
+pub fn summarizeNativeStreamWithDictionarySet(frames: []const u8, dictionary_set: NativeDictionarySet) Error!NativeStreamSummary {
+    var diagnostics: NativeStreamSummaryErrorDiagnostics = .{};
+    return try summarizeNativeStreamWithDictionarySetDiagnostics(frames, dictionary_set, &diagnostics);
+}
+
+fn summarizeNativeStreamWithDictionarySetDiagnostics(frames: []const u8, dictionary_set: ?NativeDictionarySet, diagnostics: *NativeStreamSummaryErrorDiagnostics) Error!NativeStreamSummary {
     diagnostics.* = .{};
     var offset: usize = 0;
     var summary: NativeStreamSummary = .{};
@@ -6731,7 +6742,17 @@ pub fn summarizeNativeStreamWithDiagnostics(frames: []const u8, diagnostics: *Na
                 return err;
             };
             if (header.has_checksum) summary.checksum_frame_count += 1;
-            if (header.dictionary_id != 0) summary.dictionary_id_frame_count += 1;
+            if (header.dictionary_id != 0) {
+                summary.dictionary_id_frame_count += 1;
+                if (dictionary_set) |set| {
+                    const dictionary = set.find(header.dictionary_id) orelse {
+                        diagnostics.* = .{ .phase = .frame_header, .offset = frame_start };
+                        return error.NeedDictionary;
+                    };
+                    summary.resolved_dictionary_frame_count += 1;
+                    summary.standard_dictionary_frame_count += @intFromBool(dictionary.kind() == .standard_full);
+                }
+            }
             if (header.content_size) |content_size| {
                 summary.content_size_frame_count += 1;
                 summary.declared_content_bytes = std.math.add(u64, summary.declared_content_bytes, content_size) catch return error.IntegerOverflow;
