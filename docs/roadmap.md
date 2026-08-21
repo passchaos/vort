@@ -2472,6 +2472,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   magic, entropy payloads, zero IDs, truncated repcodes, and out-of-range
   repcodes are rejected. Entropy seeding for Repeat_Mode remains the next full-
   dictionary integration step rather than silently treating headers as content.
+  `StandardDictionaryView` now exposes the three validated repcodes and exact
+  raw-content offset, and `NativeDictionary.initFromStandardDictionary` creates
+  a borrowed preset-history dictionary with the standard Dictionary_ID while
+  returning the full view for future entropy-state seeding. This makes partial
+  support explicit: content matches interoperate today, but callers can see that
+  trained entropy tables/repcodes are parsed rather than falsely claimed active.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

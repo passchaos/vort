@@ -4,6 +4,8 @@ pub const magic: u32 = 0xec30_a437;
 
 pub const View = struct {
     id: u32,
+    repcodes: [3]u32,
+    content_offset: usize,
     content: []const u8,
 };
 
@@ -19,11 +21,13 @@ pub fn viewAfterEntropy(bytes: []const u8, entropy_len: usize) !View {
     const repcode_end = std.math.add(usize, content_offset, 12) catch return error.IntegerOverflow;
     if (repcode_end > bytes.len) return error.TruncatedFrame;
     const content = bytes[repcode_end..];
+    var repcodes: [3]u32 = undefined;
     for (0..3) |i| {
         const repcode = std.mem.readInt(u32, bytes[content_offset + i * 4 ..][0..4], .little);
         if (repcode == 0 or repcode > content.len) return error.InvalidDictionaryMetadata;
+        repcodes[i] = repcode;
     }
-    return .{ .id = id, .content = content };
+    return .{ .id = id, .repcodes = repcodes, .content_offset = repcode_end, .content = content };
 }
 
 test "standard dictionary prefix validates repcodes and content" {
@@ -36,6 +40,8 @@ test "standard dictionary prefix validates repcodes and content" {
     @memcpy(bytes[20..24], "dict");
     const view = try viewAfterEntropy(&bytes, 0);
     try std.testing.expectEqual(@as(u32, 0x1234), view.id);
+    try std.testing.expectEqual([3]u32{ 1, 2, 3 }, view.repcodes);
+    try std.testing.expectEqual(@as(usize, 20), view.content_offset);
     try std.testing.expectEqualSlices(u8, "dict", view.content);
     bytes[8] = 0;
     try std.testing.expectError(error.InvalidDictionaryMetadata, viewAfterEntropy(&bytes, 0));

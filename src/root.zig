@@ -806,6 +806,7 @@ pub const ZstdOwnedDictionary = zstd.OwnedDictionary;
 pub const ZstdDictionarySet = zstd.DictionarySet;
 pub const ZstdOwnedDictionarySet = zstd.OwnedDictionarySet;
 pub const ZstdStandardDictionaryView = zstd.StandardDictionaryView;
+pub const ZstdStandardDictionaryNativeView = zstd.StandardDictionaryNativeView;
 pub const zstdInspectStandardDictionary = zstd.inspectStandardDictionary;
 pub const zstdTrainDictionaryAlloc = zstd.trainDictionaryAlloc;
 pub const zstdDictionarySetFromMetadataAlloc = zstd.dictionarySetFromMetadataAlloc;

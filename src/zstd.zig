@@ -198,6 +198,10 @@ test {
 
 pub const StandardDictionaryView = dictionary_format.View;
 pub const standard_dictionary_magic = dictionary_format.magic;
+pub const StandardDictionaryNativeView = struct {
+    dictionary: NativeDictionary,
+    view: StandardDictionaryView,
+};
 
 pub const NativeDictionary = struct {
     id: u32,
@@ -224,6 +228,15 @@ pub const NativeDictionary = struct {
     /// alive for any encode/decode operation that references this dictionary.
     pub fn initFromContent(content: []const u8) NativeDictionary {
         return init(derivedId(content), content);
+    }
+
+    /// Borrow the raw history portion of a standard full dictionary. Entropy
+    /// tables and repcodes remain available through the returned `view`; this
+    /// native dictionary intentionally uses only content history until the
+    /// encoder/decoder public state can seed Repeat_Mode from full dictionaries.
+    pub fn initFromStandardDictionary(bytes: []const u8) Error!StandardDictionaryNativeView {
+        const view = try inspectStandardDictionary(bytes);
+        return .{ .dictionary = init(view.id, view.content), .view = view };
     }
 
     /// Validate a persisted metadata record before constructing a borrowed
@@ -275,6 +288,23 @@ test "standard Zstd dictionary inspector rejects malformed headers" {
     std.mem.writeInt(u32, bad_magic[0..4], standard_dictionary_magic, .little);
     std.mem.writeInt(u32, bad_magic[4..8], 1, .little);
     try std.testing.expectError(error.TruncatedFrame, inspectStandardDictionary(&bad_magic));
+}
+
+test "standard Zstd dictionary view constructs raw-content native dictionary" {
+    // A synthetic wrapper with zero entropy bytes exercises representation
+    // conversion; production full-dictionary entropy parsing is covered by the
+    // inspector and external trained-dictionary probe.
+    var bytes: [24]u8 = @splat(0);
+    std.mem.writeInt(u32, bytes[0..4], standard_dictionary_magic, .little);
+    std.mem.writeInt(u32, bytes[4..8], 0x4455, .little);
+    std.mem.writeInt(u32, bytes[8..12], 1, .little);
+    std.mem.writeInt(u32, bytes[12..16], 2, .little);
+    std.mem.writeInt(u32, bytes[16..20], 3, .little);
+    @memcpy(bytes[20..], "dict");
+    const view = try dictionary_format.viewAfterEntropy(&bytes, 0);
+    const dictionary = NativeDictionary.init(view.id, view.content);
+    try std.testing.expectEqual(@as(u32, 0x4455), dictionary.id);
+    try std.testing.expectEqualSlices(u8, "dict", dictionary.content);
 }
 
 pub const NativeDictionaryTrainOptions = dictionary_mod.TrainOptions;
