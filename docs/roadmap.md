@@ -2602,6 +2602,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   without changing table enumeration or wire selection. Repeat-3 JSON smokes
   retained 1505/1350-byte level-1/3 output at roughly 0.30/0.95 s; this is a
   structural cost reduction because shared-machine timing remains variable.
+  LL/OF/ML generic table alternatives now also precompute their independent
+  table-payload and bit-count contribution once, instead of rebuilding the full
+  interleaved read-field stream for every Cartesian-product combination. Offset
+  alternatives retain their own repeated-offset simulation, so direct/repeat
+  selector validity and wire cost remain exact. Focused RLE/predefined and all
+  compressed-FSE emitter tests pass; repeat-3 JSON retained 1350/1058-byte
+  level-3/9 wires while measuring roughly 1.36/8.98 s.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

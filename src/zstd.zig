@@ -8628,6 +8628,11 @@ const SequenceTablePlanAlternatives = struct {
     }
 };
 
+const SequenceTableBitCost = struct {
+    payload_len: usize,
+    bit_count: usize,
+};
+
 fn bestTablePlanSequence(
     block: []const u8,
     literal_lens: []const usize,
@@ -8648,6 +8653,18 @@ fn bestTablePlanSequence(
     // table combination. Compute this expensive section length once rather
     // than once for every Cartesian-product table candidate below.
     const literals_section_len = try sequenceLiteralsPayloadSectionLen(block, literal_lens, literal_ends, tail_start);
+    var literal_costs: [3]?SequenceTableBitCost = @splat(null);
+    var offset_costs: [3]?SequenceTableBitCost = @splat(null);
+    var match_costs: [3]?SequenceTableBitCost = @splat(null);
+    for (literal_alternatives.items[0..literal_alternatives.len], 0..) |plan, i| {
+        literal_costs[i] = try sequenceTablePlanBitCost(plan, .literal, literal_lens, literal_lens, offsets);
+    }
+    for (offset_alternatives.items[0..offset_alternatives.len], 0..) |plan, i| {
+        offset_costs[i] = try sequenceTablePlanBitCost(plan, .offset, offsets, literal_lens, offsets);
+    }
+    for (match_alternatives.items[0..match_alternatives.len], 0..) |plan, i| {
+        match_costs[i] = try sequenceTablePlanBitCost(plan, .match, match_lens, literal_lens, offsets);
+    }
 
     var best: ?SequenceCombinedPlanCandidate = null;
     // The bootstrap table families expose only a few alternatives (RLE,
@@ -8655,25 +8672,24 @@ fn bestTablePlanSequence(
     // planner exact for this subset and avoids baking in heuristics such as
     // "all-RLE" or "all-predefined" when one family is cheaper in a different
     // mode than the others.
-    for (literal_alternatives.items[0..literal_alternatives.len]) |literal_plan| {
-        for (offset_alternatives.items[0..offset_alternatives.len]) |offset_plan| {
-            for (match_alternatives.items[0..match_alternatives.len]) |match_plan| {
+    for (literal_alternatives.items[0..literal_alternatives.len], 0..) |literal_plan, literal_i| {
+        for (offset_alternatives.items[0..offset_alternatives.len], 0..) |offset_plan, offset_i| {
+            for (match_alternatives.items[0..match_alternatives.len], 0..) |match_plan, match_i| {
                 const combined: SequenceCombinedEmitPlan = .{
                     .literal = literal_plan,
                     .offset = offset_plan,
                     .match = match_plan,
                 };
                 if (!sequenceCombinedPlanNeedsGenericEmitter(combined)) continue;
-                const payload_len = sequencePayloadLenWithTablePlansAndLiteralsLen(
-                    literals_section_len,
-                    literal_lens,
-                    offsets,
-                    match_lens,
-                    combined,
-                ) catch |err| switch (err) {
-                    error.CorruptFrame => continue,
-                    else => return err,
-                };
+                const literal_cost = literal_costs[literal_i] orelse continue;
+                const offset_cost = offset_costs[offset_i] orelse continue;
+                const match_cost = match_costs[match_i] orelse continue;
+                var payload_len = literals_section_len;
+                payload_len = std.math.add(usize, payload_len, try sequenceCountLen(literal_lens.len)) catch return error.IntegerOverflow;
+                payload_len = std.math.add(usize, payload_len, 1) catch return error.IntegerOverflow;
+                payload_len = std.math.add(usize, payload_len, literal_cost.payload_len + offset_cost.payload_len + match_cost.payload_len) catch return error.IntegerOverflow;
+                const bit_count = std.math.add(usize, 1 + literal_cost.bit_count, offset_cost.bit_count + match_cost.bit_count) catch return error.IntegerOverflow;
+                payload_len = std.math.add(usize, payload_len, (bit_count + 7) / 8) catch return error.IntegerOverflow;
                 if (best == null or payload_len < best.?.payload_len) {
                     best = .{ .plan = combined, .payload_len = payload_len };
                 }
@@ -8681,6 +8697,40 @@ fn bestTablePlanSequence(
         }
     }
     return best;
+}
+
+fn sequenceTablePlanBitCost(
+    plan: SequenceTableEmitPlan,
+    kind: SequenceTableKind,
+    values: []const usize,
+    literal_lens: []const usize,
+    offsets: []const usize,
+) Error!?SequenceTableBitCost {
+    try validateSequenceTablePlanLen(plan, values.len);
+    var bit_count: usize = switch (plan) {
+        .rle => 0,
+        .predefined => predefinedInitialStateBits(kind),
+        .compressed => |compressed| compressed.accuracy_log,
+    };
+    var repeated_offsets = initial_repeated_offsets;
+    for (values, 0..) |value, i| {
+        const symbol = try sequenceTableSymbol(plan, kind, i);
+        if (kind == .offset) {
+            _ = sequenceOffsetExtraForEncodedOffset(symbol, literal_lens[i], offsets[i], &repeated_offsets) catch |err| switch (err) {
+                error.InvalidMatch, error.UnsupportedZstdFeature, error.CorruptFrame => return null,
+                else => return err,
+            };
+        } else if (value < symbol.base) return null;
+        bit_count = std.math.add(usize, bit_count, symbol.additional_bits) catch return error.IntegerOverflow;
+        if (i + 1 < values.len) {
+            bit_count = std.math.add(usize, bit_count, switch (plan) {
+                .rle => 0,
+                .predefined => symbol.state_bits,
+                .compressed => |compressed| compressed.transition_bits[i],
+            }) catch return error.IntegerOverflow;
+        }
+    }
+    return .{ .payload_len = sequenceTablePayloadLen(plan), .bit_count = bit_count };
 }
 
 fn sequenceCombinedPlanNeedsGenericEmitter(plan: SequenceCombinedEmitPlan) bool {
