@@ -2775,6 +2775,15 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   the one-block candidate reaches its 13506-byte plateau at 192. Levels 6+ now
   cap mixed search at 192 states; fixed-CPU-8..10 eight-pair level-9 checks
   retained 1058 bytes and moved the median from roughly 0.317 s to 0.207 s.
+  An end-to-end fixed-core comparison against the start of this optimization
+  series (`36518f8`) measures 8.283 s versus 207.425 ms, a 39.93x cumulative
+  speedup with the same 1058-byte frame. Fresh profiling then put 42% of sampled
+  self time in the bounded duplicate matcher. Its eight-entry newest-first hash
+  buckets now use a packed length/insertion-index ring instead of shifting up to
+  seven entries for every source byte, while preserving traversal and eviction
+  order. The sentinel reference oracle explicitly covers wraparound; fixed-CPU-
+  8..10 eight-pair checks retained 1058 bytes and reduced the median from
+  207.480 ms to 166.766 ms (1.244x).
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state

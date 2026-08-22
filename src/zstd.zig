@@ -10943,7 +10943,11 @@ fn findBestDuplicateMatchHashed(block: []const u8, start_min: usize) Error!?Dupl
     if (block.len > std.math.maxInt(u32)) return null;
 
     var table: [duplicate_hash_table_len][duplicate_hash_candidates]u32 = undefined;
-    var bucket_lens: [duplicate_hash_table_len]u8 = @splat(0);
+    // Each byte packs the valid length in its high bits and the next ring
+    // insertion slot in its low three bits. The old newest-first array shifted
+    // up to seven u32 entries at every input byte; a ring keeps the identical
+    // newest-to-oldest traversal and eviction order with one table write.
+    var bucket_states: [duplicate_hash_table_len]u8 = @splat(0);
 
     var best: ?DuplicateMatch = null;
     var best_payload_len: usize = std.math.maxInt(usize);
@@ -10952,15 +10956,19 @@ fn findBestDuplicateMatchHashed(block: []const u8, start_min: usize) Error!?Dupl
         if (best) |current| if (block.len - index < current.len) break;
         const hash = duplicateHash8(block[index..][0..8]);
         const bucket = &table[hash];
+        const bucket_state = bucket_states[hash];
+        const bucket_len: usize = bucket_state >> 3;
+        const next_slot: usize = bucket_state & (duplicate_hash_candidates - 1);
         defer {
-            const bucket_len: usize = bucket_lens[hash];
-            var slot: usize = @min(bucket_len, duplicate_hash_candidates - 1);
-            while (slot > 0) : (slot -= 1) bucket[slot] = bucket[slot - 1];
-            bucket[0] = @intCast(index);
-            bucket_lens[hash] = @intCast(@min(bucket_len + 1, duplicate_hash_candidates));
+            bucket[next_slot] = @intCast(index);
+            const updated_len = @min(bucket_len + 1, duplicate_hash_candidates);
+            const updated_next = (next_slot + 1) & (duplicate_hash_candidates - 1);
+            bucket_states[hash] = @intCast((updated_len << 3) | updated_next);
         }
 
-        for (bucket[0..bucket_lens[hash]]) |candidate_index| {
+        for (0..bucket_len) |age| {
+            const slot = (next_slot + duplicate_hash_candidates - 1 - age) & (duplicate_hash_candidates - 1);
+            const candidate_index = bucket[slot];
             const candidate_start: usize = @intCast(candidate_index);
             if (candidate_start < start_min or candidate_start >= index) continue;
             if (best) |current_best| {
@@ -11026,6 +11034,14 @@ test "zstd bounded duplicate hash bucket counts match sentinel reference" {
     }
     @memcpy(payload[3072..3584], payload[1024..1536]);
     @memcpy(payload[5120..5632], payload[2048..2560]);
+    const anchor = "ring-key";
+    for (0..12) |i| {
+        // More than eight occurrences force the bounded bucket through wrap
+        // and eviction before either long copied region is reached.
+        const start = 32 + i * 73;
+        @memcpy(payload[start..][0..anchor.len], anchor);
+        payload[start + anchor.len] = @intCast(i);
+    }
     for ([_]usize{ 0, 257, 2048 }) |start_min| {
         try std.testing.expectEqual(
             try findBestDuplicateMatchHashedSentinelReference(&payload, start_min),
