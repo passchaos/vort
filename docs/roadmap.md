@@ -2818,6 +2818,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   stream. This removes division and pointer write-back from the scalar tail
   loop; another fixed-core eight-pair run retained 1058 bytes and reduced the
   median from 139.424 ms to 123.109 ms (1.133x).
+  Mixed lookahead now builds each large block's newest-eight hash predecessors
+  once and reuses them across different `start_min` queries, instead of rebuilding
+  the 1 MiB ring table at every uncached search position. Multi-offset random and
+  heavily wrapped repeated-input oracles match the old rebuilt search exactly; a
+  fixed-core eight-pair check retained 1058 bytes and reduced the median from
+  122.779 ms to 119.927 ms (1.024x).
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state
