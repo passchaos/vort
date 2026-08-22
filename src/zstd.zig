@@ -9080,10 +9080,10 @@ const CompressedSequencePlan = struct {
     len: usize = 0,
     accuracy_log: u8 = 0,
     codes: [max_bootstrap_sequence_count]u8 = undefined,
-    initial_state: usize = 0,
-    next_states: [max_bootstrap_sequence_count]usize = undefined,
+    initial_state: u8 = 0,
+    next_states: [max_bootstrap_sequence_count]u8 = undefined,
     state_bits: [max_bootstrap_sequence_count]u8 = undefined,
-    transition_values: [max_bootstrap_sequence_count]usize = undefined,
+    transition_values: [max_bootstrap_sequence_count]u8 = undefined,
     transition_bits: [max_bootstrap_sequence_count]u8 = undefined,
     table_payload: [64]u8 = undefined,
     table_payload_len: usize = 0,
@@ -9441,7 +9441,7 @@ fn fillCompressedSequenceTransitions(plan: *CompressedSequencePlan, entries: []c
     if (plan.len == 0) return error.CorruptFrame;
     const last_state = findCompressedSequenceState(entries, plan.codes[plan.len - 1], null) orelse return error.CorruptFrame;
     var next_state = last_state;
-    plan.next_states[plan.len - 1] = entries[last_state].baseline;
+    plan.next_states[plan.len - 1] = @intCast(entries[last_state].baseline);
     plan.state_bits[plan.len - 1] = entries[last_state].bits;
 
     var i = plan.len - 1;
@@ -9452,13 +9452,13 @@ fn fillCompressedSequenceTransitions(plan: *CompressedSequencePlan, entries: []c
         if (next_state < entry.baseline) return error.CorruptFrame;
         const transition = next_state - entry.baseline;
         if (transition >= (@as(usize, 1) << @intCast(entry.bits))) return error.CorruptFrame;
-        plan.transition_values[i] = transition;
+        plan.transition_values[i] = @intCast(transition);
         plan.transition_bits[i] = entry.bits;
-        plan.next_states[i] = entry.baseline;
+        plan.next_states[i] = @intCast(entry.baseline);
         plan.state_bits[i] = entry.bits;
         next_state = state;
     }
-    plan.initial_state = next_state;
+    plan.initial_state = @intCast(next_state);
 }
 
 fn findCompressedSequenceState(entries: []const FseTableEntry, code: u8, maybe_next_state: ?usize) ?usize {
@@ -14878,6 +14878,16 @@ test "zstd sequence planner can choose compressed FSE for all sequence tables" {
     const std_decoded = try decodeFrameAlloc(std.testing.allocator, frame.items);
     defer std.testing.allocator.free(std_decoded);
     try std.testing.expectEqualSlices(u8, payload.items, std_decoded);
+}
+
+test "zstd compressed sequence state scratch fits one byte" {
+    const values = [_]usize{ 8, 1, 2, 3, 2, 4, 3, 1, 2, 3, 2, 4, 3, 1, 2, 3 };
+    const plan = (try planCompressedSequenceValues(&values, .literal)) orelse return error.CorruptFrame;
+    try std.testing.expect(plan.initial_state < max_predefined_sequence_states);
+    for (plan.next_states[0..plan.len]) |state| try std.testing.expect(state < max_predefined_sequence_states);
+    for (plan.transition_values[0 .. plan.len - 1], plan.transition_bits[0 .. plan.len - 1]) |value, bits| {
+        try std.testing.expect(value < (@as(usize, 1) << @intCast(bits)));
+    }
 }
 
 test "zstd sequence emitter supports compressed FSE match-length table" {

@@ -2761,7 +2761,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   allocator, then applies the original strict primary...4 KiB...8 KiB
   shortest-frame order. A serial-selection oracle preserves the exact wire;
   fixed-CPU-8..10 eight-pair JSON checks retained 1058 bytes and moved the
-  median from roughly 0.63 s to 0.31 s.
+  median from roughly 0.63 s to 0.31 s. Compressed sequence-plan scratch now
+  stores FSE states and transition values as `u8`, matching the 64-state table
+  bound and shrinking the large union copied during LL/OF/ML arbitration. A
+  state-bound oracle covers the compact fields; fixed-CPU-8..10 eight-pair
+  checks retained 1058 bytes and moved the median from roughly 0.312 s to
+  0.298 s.
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state
