@@ -7110,61 +7110,61 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     if (match_search_budget == 0) return false;
 
     // The bootstrap match emitters are intentionally independent heuristics.
-    // Plan all successful candidates and then copy the smallest encoded block so
-    // a broad mixed plan cannot hide a tighter single-family plan found later.
-    var mixed_block: std.ArrayList(u8) = .empty;
-    defer mixed_block.deinit(allocator);
+    // Reuse one scratch buffer and retain only the current winner so a broad
+    // mixed plan cannot hide a tighter single-family plan found later without
+    // keeping seven complete temporary blocks alive.
+    var candidate: std.ArrayList(u8) = .empty;
+    defer candidate.deinit(allocator);
+    var best: std.ArrayList(u8) = .empty;
+    defer best.deinit(allocator);
     const mixed_ok = if (match_search_budget >= mixed_match_min_search_budget)
-        try emitMixedDuplicateRepeatedMatchCompressedBlock(allocator, &mixed_block, block, last, match_search_budget)
+        try emitMixedDuplicateRepeatedMatchCompressedBlock(allocator, &candidate, block, last, match_search_budget)
     else
         false;
+    try retainShortestCandidate(allocator, mixed_ok, candidate.items, &best);
 
-    var greedy_block: std.ArrayList(u8) = .empty;
-    defer greedy_block.deinit(allocator);
-    const greedy_ok = try emitHashMatchCompressedBlock(allocator, &greedy_block, block, last, .greedy);
+    candidate.clearRetainingCapacity();
+    const greedy_ok = try emitHashMatchCompressedBlock(allocator, &candidate, block, last, .greedy);
+    try retainShortestCandidate(allocator, greedy_ok, candidate.items, &best);
 
-    var lazy_block: std.ArrayList(u8) = .empty;
-    defer lazy_block.deinit(allocator);
+    candidate.clearRetainingCapacity();
     // The separate lazy pass duplicates hash search at level 1 without winning
     // a locked corpus block. Level 2+ retains it because it can still produce a
     // different ratio-oriented candidate as the planner budget grows.
     const lazy_ok = if (match_search_budget >= lazy_match_min_search_budget)
-        try emitHashMatchCompressedBlock(allocator, &lazy_block, block, last, .lazy)
+        try emitHashMatchCompressedBlock(allocator, &candidate, block, last, .lazy)
     else
         false;
+    try retainShortestCandidate(allocator, lazy_ok, candidate.items, &best);
 
-    var optimal_block: std.ArrayList(u8) = .empty;
-    defer optimal_block.deinit(allocator);
-    const optimal_ok = try emitHashMatchCompressedBlock(allocator, &optimal_block, block, last, .optimal);
+    candidate.clearRetainingCapacity();
+    const optimal_ok = try emitHashMatchCompressedBlock(allocator, &candidate, block, last, .optimal);
+    try retainShortestCandidate(allocator, optimal_ok, candidate.items, &best);
 
-    var repeated_block: std.ArrayList(u8) = .empty;
-    defer repeated_block.deinit(allocator);
-    const repeated_ok = try emitRepeatedPatternCompressedBlock(allocator, &repeated_block, block, last);
+    candidate.clearRetainingCapacity();
+    const repeated_ok = try emitRepeatedPatternCompressedBlock(allocator, &candidate, block, last);
+    try retainShortestCandidate(allocator, repeated_ok, candidate.items, &best);
 
-    var multi_duplicate_block: std.ArrayList(u8) = .empty;
-    defer multi_duplicate_block.deinit(allocator);
+    candidate.clearRetainingCapacity();
     const multi_duplicate_ok = if (match_search_budget >= multi_duplicate_min_search_budget)
-        try emitMultiDuplicateMatchCompressedBlock(allocator, &multi_duplicate_block, block, last)
+        try emitMultiDuplicateMatchCompressedBlock(allocator, &candidate, block, last)
     else
         false;
+    try retainShortestCandidate(allocator, multi_duplicate_ok, candidate.items, &best);
 
-    var single_duplicate_block: std.ArrayList(u8) = .empty;
-    defer single_duplicate_block.deinit(allocator);
-    const single_duplicate_ok = try emitSingleMatchCompressedBlock(allocator, &single_duplicate_block, block, last);
+    candidate.clearRetainingCapacity();
+    const single_duplicate_ok = try emitSingleMatchCompressedBlock(allocator, &candidate, block, last);
+    try retainShortestCandidate(allocator, single_duplicate_ok, candidate.items, &best);
 
-    var best: ?[]const u8 = null;
-    var best_len: usize = std.math.maxInt(usize);
-    chooseShortestPlannedBlock(mixed_ok, mixed_block.items, &best, &best_len);
-    chooseShortestPlannedBlock(greedy_ok, greedy_block.items, &best, &best_len);
-    chooseShortestPlannedBlock(lazy_ok, lazy_block.items, &best, &best_len);
-    chooseShortestPlannedBlock(optimal_ok, optimal_block.items, &best, &best_len);
-    chooseShortestPlannedBlock(repeated_ok, repeated_block.items, &best, &best_len);
-    chooseShortestPlannedBlock(multi_duplicate_ok, multi_duplicate_block.items, &best, &best_len);
-    chooseShortestPlannedBlock(single_duplicate_ok, single_duplicate_block.items, &best, &best_len);
-
-    const best_block = best orelse return false;
-    try out.appendSlice(allocator, best_block);
+    if (best.items.len == 0) return false;
+    try out.appendSlice(allocator, best.items);
     return true;
+}
+
+fn retainShortestCandidate(allocator: std.mem.Allocator, ok: bool, candidate: []const u8, best: *std.ArrayList(u8)) Error!void {
+    if (!ok or (best.items.len != 0 and candidate.len >= best.items.len)) return;
+    best.clearRetainingCapacity();
+    try best.appendSlice(allocator, candidate);
 }
 
 const ZstdHashParser = enum { greedy, lazy, optimal };

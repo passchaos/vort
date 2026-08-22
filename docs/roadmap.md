@@ -2632,6 +2632,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   deterministic wires. Focused RLE/predefined/FSE tests remain byte-identical;
   timing was mixed on the shared host, so this is retained for lower allocation
   churn and peak temporary memory rather than a throughput claim.
+  The outer native match best-of-seven now applies the same scratch-plus-retained
+  winner design across mixed, greedy, lazy, optimal, repeated, multi-duplicate,
+  and single-duplicate candidates. Candidate order and strict-shorter tie rules
+  are unchanged; focused shortest-plan and non-greedy lookahead tests pass. A
+  repeat-3 smoke retained JSON level-3 at 1350 bytes around 0.87 s and text
+  level-1 at 93 bytes around 0.068 s.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
