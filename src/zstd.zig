@@ -10246,14 +10246,14 @@ fn fillSmallHuffmanWeights(plan: *SmallHuffmanLiteralPlan) ?void {
     }
     plan.max_bit_count = max_bit_count;
 
-    std.mem.sort(u8, plan.symbols[0..plan.len], lengths, smallHuffmanSymbolLess);
+    std.mem.sort(u8, plan.symbols[0..plan.len], &lengths, smallHuffmanSymbolLess);
     for (plan.symbols[0..plan.len], 0..) |symbol, i| {
         plan.weights[i] = plan.max_bit_count + 1 - lengths[symbol];
     }
     validateSmallHuffmanLastWeight(plan) orelse return null;
 }
 
-fn smallHuffmanSymbolLess(lengths: [256]u4, lhs: u8, rhs: u8) bool {
+fn smallHuffmanSymbolLess(lengths: *const [256]u4, lhs: u8, rhs: u8) bool {
     const lhs_bits = lengths[lhs];
     const rhs_bits = lengths[rhs];
     if (lhs_bits != rhs_bits) return lhs_bits > rhs_bits;

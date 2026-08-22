@@ -2862,6 +2862,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Huffman plan for the same match. A focused oracle recomputes the score from
   the selected match; fixed-core eight-pair checks retained 1058 bytes and
   reduced the median from 109.760 ms to 107.025 ms (1.026x).
+  Small-Huffman symbol ordering now passes the 256-entry code-length table to
+  the sort comparator by const pointer instead of by value. The ordering remains
+  exactly `(code length descending, symbol ascending)` under the compact/full
+  length oracles; fixed-core eight-pair checks retained 1058 bytes and reduced
+  the median from 107.982 ms to 107.126 ms (1.008x).
   Sequence-literal RLE detection now skips empty/already-disproved runs and uses
   the standard library's vectorized `allEqual` scan for each remaining run
   instead of branching once per byte. A focused reference oracle covers empty,
