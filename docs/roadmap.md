@@ -2615,6 +2615,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   while the production best-of-three path avoids two repeated literal/Huffman
   builds. Focused compressed-FSE and mixed-table wires remain unchanged;
   repeat-3 JSON level 3 measured about 0.92 s at the same 1350 bytes.
+  The winning generic table-plan candidate now also retains its already-built
+  interleaved read fields. Production emission consumes those fields directly
+  instead of repeating LL/OF/ML symbol lookup, FSE transition reconstruction,
+  and repeated-offset simulation after selection. Focused direct-emitter calls
+  keep the rebuilding fallback; repeat-3 JSON level 3 remained 1350 bytes at
+  roughly 0.88 s.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

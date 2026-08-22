@@ -8186,6 +8186,7 @@ fn emitTablePlanSequenceCompressedBlockWithLiterals(
         tail_start,
         best.plan,
         literals_prefix,
+        best.readFields(),
     );
 }
 
@@ -8201,6 +8202,7 @@ fn emitSequenceCompressedBlockWithTablePlans(
     tail_start: usize,
     plan: SequenceCombinedEmitPlan,
     prebuilt_literals: ?[]const u8,
+    prebuilt_read_fields: ?[]const BitField,
 ) Error!bool {
     var payload: std.ArrayList(u8) = .empty;
     defer payload.deinit(allocator);
@@ -8215,17 +8217,20 @@ fn emitSequenceCompressedBlockWithTablePlans(
     try appendSequenceTablePayload(allocator, &payload, plan.match);
 
     var read_fields: [max_bootstrap_sequence_count * 6]BitField = undefined;
-    const read_field_count = try sequenceReadFieldsWithTablePlans(
-        read_fields[0..],
-        literal_lens,
-        offsets,
-        match_lens,
-        plan,
-    );
+    const selected_read_fields = if (prebuilt_read_fields) |fields| fields else blk: {
+        const read_field_count = try sequenceReadFieldsWithTablePlans(
+            read_fields[0..],
+            literal_lens,
+            offsets,
+            match_lens,
+            plan,
+        );
+        break :blk read_fields[0..read_field_count];
+    };
 
     var sequence_bits: std.ArrayList(u8) = .empty;
     defer sequence_bits.deinit(allocator);
-    try emitReverseBitstreamFromReadOrder(allocator, &sequence_bits, read_fields[0..read_field_count]);
+    try emitReverseBitstreamFromReadOrder(allocator, &sequence_bits, selected_read_fields);
     try payload.appendSlice(allocator, sequence_bits.items);
 
     const raw_block_len = std.math.add(usize, 3, block.len) catch return error.IntegerOverflow;
@@ -8671,6 +8676,15 @@ const SequenceCombinedEmitPlan = struct {
 const SequenceCombinedPlanCandidate = struct {
     plan: SequenceCombinedEmitPlan,
     payload_len: usize,
+    // Cache the exact interleaved emission order while the winning combination
+    // is selected. The emitter can then serialize it without repeating symbol
+    // lookup, transition reconstruction, and repeated-offset simulation.
+    read_fields: [max_bootstrap_sequence_count * 6]BitField = undefined,
+    read_field_count: usize = 0,
+
+    fn readFields(self: *const SequenceCombinedPlanCandidate) []const BitField {
+        return self.read_fields[0..self.read_field_count];
+    }
 };
 
 const SequenceTablePlanAlternatives = struct {
@@ -8747,7 +8761,18 @@ fn bestTablePlanSequence(
                 const bit_count = std.math.add(usize, 1 + literal_cost.bit_count, offset_cost.bit_count + match_cost.bit_count) catch return error.IntegerOverflow;
                 payload_len = std.math.add(usize, payload_len, (bit_count + 7) / 8) catch return error.IntegerOverflow;
                 if (best == null or payload_len < best.?.payload_len) {
-                    best = .{ .plan = combined, .payload_len = payload_len };
+                    var candidate: SequenceCombinedPlanCandidate = .{ .plan = combined, .payload_len = payload_len };
+                    candidate.read_field_count = sequenceReadFieldsWithTablePlans(
+                        candidate.read_fields[0..],
+                        literal_lens,
+                        offsets,
+                        match_lens,
+                        combined,
+                    ) catch |err| switch (err) {
+                        error.CorruptFrame => continue,
+                        else => return err,
+                    };
+                    best = candidate;
                 }
             }
         }
@@ -13751,6 +13776,7 @@ test "zstd sequence emitter supports compressed FSE literal-length table" {
         payload.items.len,
         plan,
         null,
+        null,
     ));
 
     const first_block = try inspectNativeFrameFirstBlock(frame.items);
@@ -13826,6 +13852,7 @@ test "zstd sequence emitter supports compressed FSE absolute-offset table" {
         payload.items.len,
         plan,
         null,
+        null,
     ));
 
     const first_block = try inspectNativeFrameFirstBlock(frame.items);
@@ -13889,6 +13916,7 @@ test "zstd sequence emitter supports compressed FSE repeat-offset selectors" {
         &literal_ends,
         payload.items.len,
         plan,
+        null,
         null,
     ));
 
@@ -14030,6 +14058,7 @@ test "zstd sequence emitter supports compressed FSE match-length table" {
         &literal_ends,
         payload.items.len,
         plan,
+        null,
         null,
     ));
 
