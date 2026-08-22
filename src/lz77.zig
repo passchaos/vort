@@ -513,7 +513,7 @@ pub fn optimalPlanReuse(scratch: *OptimalScratch, allocator: std.mem.Allocator, 
         if (rev_i + minimum > n) continue;
 
         const max_len = @min(maxMatch(options), n - rev_i);
-        buildOptimalLengthChoices(costs, rev_i, minimum, max_len, &scratch.index.best_length_costs, &scratch.index.best_lengths);
+        var choices_built_through = minimum - 1;
         var chain_i = prev[rev_i];
         var checked: usize = 0;
         var candidates_seen: usize = 0;
@@ -533,6 +533,16 @@ pub fn optimalPlanReuse(scratch: *OptimalScratch, allocator: std.mem.Allocator, 
 
             const length = matchLength(input, candidate, rev_i, max_len);
             if (length >= minimum) {
+                extendOptimalLengthChoices(
+                    costs,
+                    rev_i,
+                    minimum,
+                    choices_built_through,
+                    length,
+                    &scratch.index.best_length_costs,
+                    &scratch.index.best_lengths,
+                );
+                choices_built_through = @max(choices_built_through, length);
                 const distance_cost = distance_costs[distance];
                 const cost = scratch.index.best_length_costs[length] + distance_cost;
                 if (cost < costs[rev_i]) {
@@ -568,17 +578,23 @@ pub fn optimalPlanReuse(scratch: *OptimalScratch, allocator: std.mem.Allocator, 
     return stats;
 }
 
-fn buildOptimalLengthChoices(
+fn extendOptimalLengthChoices(
     costs: []const usize,
     position: usize,
     minimum: usize,
+    built_through: usize,
     maximum: usize,
     best_costs: *[max_match_len + 1]usize,
     best_lengths: *[max_match_len + 1]u16,
 ) void {
+    if (maximum <= built_through) return;
     var best_cost: usize = std.math.maxInt(usize);
     var best_length: u16 = 0;
-    var length = minimum;
+    if (built_through >= minimum) {
+        best_cost = best_costs[built_through];
+        best_length = best_lengths[built_through];
+    }
+    var length = @max(minimum, built_through + 1);
     while (length <= maximum) : (length += 1) {
         const cost = fixedLengthSymbolCost(length) + costs[position + length];
         // The reference scans from longest to shortest and updates only on a
@@ -601,7 +617,9 @@ test "optimal length prefix choices match descending reference" {
     }
     var best_costs: [max_match_len + 1]usize = undefined;
     var best_lengths: [max_match_len + 1]u16 = undefined;
-    buildOptimalLengthChoices(&suffix_costs, 0, 4, max_match_len, &best_costs, &best_lengths);
+    extendOptimalLengthChoices(&suffix_costs, 0, 4, 3, 37, &best_costs, &best_lengths);
+    extendOptimalLengthChoices(&suffix_costs, 0, 4, 37, 131, &best_costs, &best_lengths);
+    extendOptimalLengthChoices(&suffix_costs, 0, 4, 131, max_match_len, &best_costs, &best_lengths);
     for (4..max_match_len + 1) |maximum| {
         var expected_cost: usize = std.math.maxInt(usize);
         var expected_length: usize = 0;

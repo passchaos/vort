@@ -2685,6 +2685,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   O(1) instead of rescanning every shorter length for every distance. A randomized
   exhaustive 4...258 oracle test preserves the old descending-scan tie rule;
   repeat-3 level-9 JSON retained 1058 bytes at roughly 9.46 s on the noisy host.
+  The prefix table is now extended lazily only when a real hash candidate
+  reaches a new maximum match length, so positions without matches and shorter
+  later candidates avoid unnecessary suffix-cost work. The oracle exercises
+  staged 4...37...131...258 growth and retains the exact longest-on-tie rule; repeat-3
+  level-9 JSON/binary kept 1058/9009 bytes at roughly 8.37/0.13 s.
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state
