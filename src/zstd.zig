@@ -10950,6 +10950,51 @@ const PredefinedSequencePlan = struct {
     values: [max_bootstrap_sequence_count]usize = undefined,
 };
 
+fn buildPredefinedStateMasks(
+    comptime symbols: []const SequenceSymbol,
+    comptime bases: []const usize,
+    comptime bits: []const u8,
+    comptime min_additional_bits: u8,
+) [bases.len]u64 {
+    @setEvalBranchQuota(10_000);
+    var masks: [bases.len]u64 = @splat(0);
+    for (symbols, 0..) |symbol, state| {
+        if (symbol.additional_bits < min_additional_bits) continue;
+        for (bases, bits, 0..) |base, bit_count, code| {
+            if (symbol.base == base and symbol.additional_bits == bit_count) {
+                masks[code] |= @as(u64, 1) << @intCast(state);
+                break;
+            }
+        }
+    }
+    return masks;
+}
+
+const predefined_literal_state_masks = buildPredefinedStateMasks(&sequence_predefined.literal_symbols, &ll_base, &ll_bits, 0);
+const predefined_offset_state_masks = buildPredefinedStateMasks(&sequence_predefined.offset_symbols, &of_base, &of_bits, 2);
+const predefined_match_state_masks = buildPredefinedStateMasks(&sequence_predefined.match_symbols, &ml_base, &ml_bits, 0);
+
+fn predefinedEncodableStateMask(value: usize, symbols: []const SequenceSymbol, min_additional_bits: u8) u64 {
+    if (symbols.ptr == sequence_predefined.literal_symbols[0..].ptr and min_additional_bits == 0) {
+        const code = sequenceCodeForValue(value, &ll_base, &ll_bits) catch return 0;
+        return predefined_literal_state_masks[code];
+    }
+    if (symbols.ptr == sequence_predefined.offset_symbols[0..].ptr and min_additional_bits == 2) {
+        const code = sequenceCodeForValue(value, &of_base, &of_bits) catch return 0;
+        return predefined_offset_state_masks[code];
+    }
+    if (symbols.ptr == sequence_predefined.match_symbols[0..].ptr and min_additional_bits == 0) {
+        const code = sequenceCodeForValue(value, &ml_base, &ml_bits) catch return 0;
+        return predefined_match_state_masks[code];
+    }
+
+    var mask: u64 = 0;
+    for (symbols, 0..) |symbol, state| {
+        if (predefinedSymbolCanEncode(symbol, value, min_additional_bits)) mask |= @as(u64, 1) << @intCast(state);
+    }
+    return mask;
+}
+
 fn planPredefinedSequenceValues(values: []const usize, symbols: []const SequenceSymbol, min_additional_bits: u8) Error!?PredefinedSequencePlan {
     if (values.len == 0 or values.len > max_bootstrap_sequence_count) return null;
     if (symbols.len > max_predefined_sequence_states) return null;
@@ -10963,13 +11008,16 @@ fn planPredefinedSequenceValues(values: []const usize, symbols: []const Sequence
         pos -= 1;
         var viable_current: u64 = 0;
 
-        for (symbols, 0..) |symbol, state| {
-            if (!predefinedSymbolCanEncode(symbol, values[pos], min_additional_bits)) continue;
+        var encodable_states = predefinedEncodableStateMask(values[pos], symbols, min_additional_bits);
+        while (encodable_states != 0) {
+            const state: usize = @ctz(encodable_states);
+            encodable_states &= encodable_states - 1;
             if (pos == values.len - 1) {
                 viable_current |= @as(u64, 1) << @intCast(state);
                 continue;
             }
 
+            const symbol = symbols[state];
             const transition_count: usize = @as(usize, 1) << @intCast(symbol.state_bits);
             const first_next: usize = symbol.next_state;
             const end_next = @min(symbols.len, first_next + transition_count);

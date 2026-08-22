@@ -2733,7 +2733,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   value-to-code conversion now uses their monotone range structure rather than
   scanning all table entries, with an exhaustive oracle over the supported
   value ranges; a six-pair check retained 1058 bytes and moved the median from
-  roughly 0.82 s to 0.79 s.
+  roughly 0.82 s to 0.79 s. Predefined FSE planning now also uses compile-time
+  code-to-state masks, iterating only states that can encode the current value
+  instead of rechecking every state; the independent matrix oracle still
+  matches through 128-value plans. A six-pair check retained 1058 bytes and
+  moved the median from roughly 0.79 s to 0.64 s.
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state
