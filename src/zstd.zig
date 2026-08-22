@@ -37,6 +37,8 @@ const duplicate_hash_bits = 15;
 const duplicate_hash_table_len = 1 << duplicate_hash_bits;
 const duplicate_hash_invalid = std.math.maxInt(u32);
 const duplicate_hash_candidates = 8;
+const duplicate_exact_hash_table_len = 1 << 12;
+const duplicate_exact_hash_input_max = 4096;
 const mixed_candidates_per_position = 4;
 // The mixed planner's current search budget can reach at most 128 useful
 // sequence decisions on measured structured blocks. Larger fixed plans add
@@ -10147,21 +10149,36 @@ fn findBestDuplicateMatch(block: []const u8) Error!?DuplicateMatch {
 }
 
 fn findBestDuplicateMatchIn(block: []const u8, start_min: usize) Error!?DuplicateMatch {
-    // This intentionally tiny O(n^2) finder is a bootstrap encoder slice, not a
-    // production match finder. Cap the search so unusual incompressible blocks do
-    // not pay a large planning cost before falling back to raw/RLE output.
     if (block.len < 24 or start_min + 16 > block.len) return null;
-    if (block.len > 4096) return try findBestDuplicateMatchHashed(block, start_min);
+    if (block.len <= duplicate_exact_hash_input_max) return try findBestDuplicateMatchExactHashed(block, start_min);
+    return try findBestDuplicateMatchHashed(block, start_min);
+}
+
+/// Exact small-block matcher used by the single-match fallback. Every match of
+/// at least eight bytes shares its first eight-byte hash, so walking the full
+/// bucket chain removes non-candidates without changing the reference scan's
+/// search space or tie order. The bounded stack tables are far cheaper than the
+/// former O(n²) byte-pair scan across level-1's 1/2/4 KiB adaptive blocks.
+fn findBestDuplicateMatchExactHashed(block: []const u8, start_min: usize) Error!?DuplicateMatch {
+    std.debug.assert(block.len <= duplicate_exact_hash_input_max);
+    var heads: [duplicate_exact_hash_table_len]u32 = @splat(duplicate_hash_invalid);
+    var tails: [duplicate_exact_hash_table_len]u32 = @splat(duplicate_hash_invalid);
+    var next: [duplicate_exact_hash_input_max]u32 = undefined;
+
     var best: ?DuplicateMatch = null;
     var best_payload_len: usize = std.math.maxInt(usize);
-    var second: usize = start_min + 1;
-    while (second + 8 <= block.len) : (second += 1) {
-        var first: usize = start_min;
-        while (first < second) : (first += 1) {
-            var len: usize = 0;
-            while (second + len < block.len and block[first + len] == block[second + len]) : (len += 1) {}
+    var index = start_min;
+    while (index + 8 <= block.len) : (index += 1) {
+        const hash = duplicateHash8(block[index..][0..8]) & (duplicate_exact_hash_table_len - 1);
+        var candidate_index = heads[hash];
+        while (candidate_index != duplicate_hash_invalid) {
+            const first: usize = @intCast(candidate_index);
+            candidate_index = next[candidate_index];
+            if (!std.mem.eql(u8, block[first..][0..8], block[index..][0..8])) continue;
+            var len: usize = 8;
+            while (index + len < block.len and block[first + len] == block[index + len]) : (len += 1) {}
             if (len >= 8) {
-                const candidate: DuplicateMatch = .{ .first_start = first, .second_start = second, .len = len };
+                const candidate: DuplicateMatch = .{ .first_start = first, .second_start = index, .len = len };
                 if (duplicateMatchCannotBeat(candidate, best)) continue;
                 const candidate_payload_len = singleMatchPayloadLenFrom(block, candidate, start_min) catch continue;
                 if (candidate_payload_len < best_payload_len or (candidate_payload_len == best_payload_len and len > (best orelse candidate).len)) {
@@ -10170,8 +10187,66 @@ fn findBestDuplicateMatchIn(block: []const u8, start_min: usize) Error!?Duplicat
                 }
             }
         }
+
+        // Append rather than prepend so walking the collision chain preserves
+        // the reference scan's earliest-first tie order without materializing
+        // and reversing a temporary candidate list for every input position.
+        next[index] = duplicate_hash_invalid;
+        if (tails[hash] == duplicate_hash_invalid) {
+            heads[hash] = @intCast(index);
+        } else {
+            next[tails[hash]] = @intCast(index);
+        }
+        tails[hash] = @intCast(index);
     }
     return best;
+}
+
+fn findBestDuplicateMatchScanReference(block: []const u8, start_min: usize) Error!?DuplicateMatch {
+    if (block.len < 24 or start_min + 16 > block.len) return null;
+    var best: ?DuplicateMatch = null;
+    var best_payload_len: usize = std.math.maxInt(usize);
+    var second: usize = start_min + 1;
+    while (second + 8 <= block.len) : (second += 1) {
+        var first: usize = start_min;
+        while (first < second) : (first += 1) {
+            var len: usize = 0;
+            while (second + len < block.len and block[first + len] == block[second + len]) : (len += 1) {}
+            if (len < 8) continue;
+            const candidate: DuplicateMatch = .{ .first_start = first, .second_start = second, .len = len };
+            if (duplicateMatchCannotBeat(candidate, best)) continue;
+            const candidate_payload_len = singleMatchPayloadLenFrom(block, candidate, start_min) catch continue;
+            if (candidate_payload_len < best_payload_len or (candidate_payload_len == best_payload_len and len > (best orelse candidate).len)) {
+                best = candidate;
+                best_payload_len = candidate_payload_len;
+            }
+        }
+    }
+    return best;
+}
+
+test "zstd exact small duplicate hash matches scan reference" {
+    var payload: [768]u8 = undefined;
+    const starts = [_]usize{ 0, 7, 93 };
+    for (0..12) |seed| {
+        var state: u32 = @intCast(0x9e37_79b9 + seed);
+        for (&payload) |*byte| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = @truncate(state >> 16);
+        }
+        // Exercise competing locations, unequal lengths, and equal-length
+        // distance ties rather than relying on accidental random matches.
+        @memcpy(payload[96..128], payload[17..49]);
+        @memcpy(payload[240..296], payload[112..168]);
+        @memcpy(payload[512..576], payload[320..384]);
+        @memcpy(payload[640..704], payload[320..384]);
+
+        for (starts) |start_min| {
+            const expected = try findBestDuplicateMatchScanReference(&payload, start_min);
+            const actual = try findBestDuplicateMatchExactHashed(&payload, start_min);
+            try std.testing.expectEqual(expected, actual);
+        }
+    }
 }
 
 fn findBestDuplicateMatchHashed(block: []const u8, start_min: usize) Error!?DuplicateMatch {

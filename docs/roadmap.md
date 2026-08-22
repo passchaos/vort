@@ -2575,6 +2575,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   single-match fallback. The same one-iteration smoke moved JSON from about
   2.60 s to 0.88 s, text from 0.46 s to 0.26 s, and binary from 0.31 s to
   0.17 s with byte-identical gate outputs; level 2+ retains ratio arbitration.
+  The required single-match fallback no longer uses an O(n²) byte-pair scan on
+  blocks up to 4 KiB. An exact 8-byte hash chain visits every possible >=8-byte
+  match in the same earliest-position order, with randomized plus adversarial
+  equivalence tests against the retained scan oracle. Repeat-3 level-1 smokes
+  kept 93/1505/9274-byte text/JSON/binary wires and measured roughly
+  0.18/0.85/0.14 s; JSON is now dominated elsewhere, while text and binary
+  benefit from removing the quadratic small-block matcher.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
