@@ -1242,6 +1242,7 @@ pub const encodeRawFixedWithOptionsAlloc = deflate.encodeRawFixedWithOptionsAllo
 pub const encodeRawFixedWithOptionsAppend = deflate.encodeRawFixedWithOptionsAppend;
 pub const encodeRawFixedSyncFlushAppend = deflate.encodeRawFixedSyncFlushAppend;
 pub const encodeRawFixedSyncFlushChunksAppend = deflate.encodeRawFixedSyncFlushChunksAppend;
+pub const RawFixedSyncFlushEncoder = deflate.RawFixedSyncFlushEncoder;
 pub const encodeRawFixedTokensAlloc = deflate.encodeRawFixedTokensAlloc;
 pub const RawDeflateEncoder = deflate.RawDeflateEncoder;
 pub const RawDeflateDecoder = deflate.RawDeflateDecoder;

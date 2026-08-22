@@ -1674,15 +1674,36 @@ pub fn encodeRawFixedSyncFlushAppend(
     input: []const u8,
     options: CompressionOptions,
 ) !usize {
+    return encodeRawFixedSyncFlushAppendWithAllocators(
+        allocator,
+        allocator,
+        out,
+        input,
+        options,
+    );
+}
+
+fn encodeRawFixedSyncFlushAppendWithAllocators(
+    scratch_allocator: std.mem.Allocator,
+    output_allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    input: []const u8,
+    options: CompressionOptions,
+) !usize {
     const start = out.items.len;
-    const plan = try planTokensAlloc(allocator, input, options);
-    defer plan.deinit(allocator);
-    var writer = bitstream.BitWriter{};
-    defer writer.deinit(allocator);
-    try writeFixedTokens(allocator, &writer, plan.tokens, false);
-    try writeStoredBlock(allocator, &writer, "", false);
-    try out.appendSlice(allocator, writer.bytes.items);
-    return out.items.len - start;
+    const plan = try planTokensAlloc(scratch_allocator, input, options);
+    defer plan.deinit(scratch_allocator);
+    // Let BitWriter append directly to caller-owned output. Its scratch byte is
+    // reset for each independent DEFLATE stream, while the ArrayList capacity
+    // remains owned by `output_allocator`. On failure retain the pre-call
+    // prefix exactly as the former temporary-writer implementation did.
+    var writer = bitstream.BitWriter{ .bytes = out.* };
+    out.* = .empty;
+    defer out.* = writer.bytes;
+    errdefer writer.bytes.shrinkRetainingCapacity(start);
+    try writeFixedTokens(output_allocator, &writer, plan.tokens, false);
+    try writeStoredBlock(output_allocator, &writer, "", false);
+    return writer.bytes.items.len - start;
 }
 
 /// Chunked-input counterpart that never joins caller plaintext slices.
@@ -1698,33 +1719,142 @@ pub fn encodeRawFixedSyncFlushChunksAppend(
     chunks: []const []const u8,
     options: CompressionOptions,
 ) !usize {
+    return encodeRawFixedSyncFlushChunksAppendWithAllocators(
+        allocator,
+        allocator,
+        out,
+        chunks,
+        options,
+    );
+}
+
+fn encodeRawFixedSyncFlushChunksAppendWithAllocators(
+    scratch_allocator: std.mem.Allocator,
+    output_allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    chunks: []const []const u8,
+    options: CompressionOptions,
+) !usize {
     const start = out.items.len;
-    var writer = bitstream.BitWriter{};
-    defer writer.deinit(allocator);
+    var writer = bitstream.BitWriter{ .bytes = out.* };
+    out.* = .empty;
+    defer out.* = writer.bytes;
+    errdefer writer.bytes.shrinkRetainingCapacity(start);
     const history_limit = @min(
         options.lz77_options.window_len,
         lz77.default_window_len,
     );
     var history: std.ArrayList(u8) = .empty;
-    defer history.deinit(allocator);
+    defer history.deinit(scratch_allocator);
     var wrote_block = false;
     var index: usize = 0;
     while (nextNonEmptyChunk(chunks, &index)) |first| {
         const run = contiguousChunkRun(chunks, first, &index);
-        if (!wrote_block) try writeFixedBlockHeader(allocator, &writer, false);
-        const plan = try planTokensWithDictionaryAlloc(allocator, run, history.items, options);
-        defer plan.deinit(allocator);
-        try writeFixedTokenSequence(allocator, &writer, plan.tokens);
-        try appendRollingHistory(allocator, &history, run, history_limit);
+        if (!wrote_block) try writeFixedBlockHeader(output_allocator, &writer, false);
+        const plan = try planTokensWithDictionaryAlloc(scratch_allocator, run, history.items, options);
+        defer plan.deinit(scratch_allocator);
+        try writeFixedTokenSequence(output_allocator, &writer, plan.tokens);
+        try appendRollingHistory(scratch_allocator, &history, run, history_limit);
         wrote_block = true;
     }
     if (!wrote_block) {
-        try writeFixedBlockHeader(allocator, &writer, false);
+        try writeFixedBlockHeader(output_allocator, &writer, false);
     }
-    try writeFixedBlockEnd(allocator, &writer);
-    try writeStoredBlock(allocator, &writer, "", false);
-    try out.appendSlice(allocator, writer.bytes.items);
-    return out.items.len - start;
+    try writeFixedBlockEnd(output_allocator, &writer);
+    try writeStoredBlock(output_allocator, &writer, "", false);
+    return writer.bytes.items.len - start;
+}
+
+/// Reuses temporary token/hash/history allocations across independent fixed
+/// sync-flush streams. Returned bytes remain owned by the caller's output list;
+/// only parser workspace lives in the arena and is invalidated on the next call.
+pub const RawFixedSyncFlushEncoder = struct {
+    allocator: std.mem.Allocator,
+    arena: std.heap.ArenaAllocator,
+
+    pub fn init(allocator: std.mem.Allocator) RawFixedSyncFlushEncoder {
+        return .{
+            .allocator = allocator,
+            .arena = .init(allocator),
+        };
+    }
+
+    pub fn deinit(self: *RawFixedSyncFlushEncoder) void {
+        self.arena.deinit();
+        self.* = undefined;
+    }
+
+    pub fn encodeAppend(
+        self: *RawFixedSyncFlushEncoder,
+        out: *std.ArrayList(u8),
+        input: []const u8,
+        options: CompressionOptions,
+    ) !usize {
+        _ = self.arena.reset(.retain_capacity);
+        return encodeRawFixedSyncFlushAppendWithAllocators(
+            self.arena.allocator(),
+            self.allocator,
+            out,
+            input,
+            options,
+        );
+    }
+
+    pub fn encodeChunksAppend(
+        self: *RawFixedSyncFlushEncoder,
+        out: *std.ArrayList(u8),
+        chunks: []const []const u8,
+        options: CompressionOptions,
+    ) !usize {
+        _ = self.arena.reset(.retain_capacity);
+        return encodeRawFixedSyncFlushChunksAppendWithAllocators(
+            self.arena.allocator(),
+            self.allocator,
+            out,
+            chunks,
+            options,
+        );
+    }
+};
+
+test "raw fixed sync flush encoder reuses parser and output storage" {
+    const allocator = std.testing.allocator;
+    const payload = "reusable websocket payload " ** 128;
+    const fragments = [_][]const u8{
+        payload[0..713],
+        payload[713..2029],
+        payload[2029..],
+    };
+    const options = CompressionOptions{
+        .parser = .hash,
+        .lz77_options = .{
+            .window_len = 16 * 1024,
+            .max_chain = 4,
+            .nice_len = 32,
+        },
+    };
+
+    var expected: std.ArrayList(u8) = .empty;
+    defer expected.deinit(allocator);
+    _ = try encodeRawFixedSyncFlushAppend(
+        allocator,
+        &expected,
+        payload,
+        options,
+    );
+
+    var encoder = RawFixedSyncFlushEncoder.init(allocator);
+    defer encoder.deinit();
+    var actual: std.ArrayList(u8) = .empty;
+    defer actual.deinit(allocator);
+    _ = try encoder.encodeAppend(&actual, payload, options);
+    try std.testing.expectEqualSlices(u8, expected.items, actual.items);
+    const output_pointer = actual.allocatedSlice().ptr;
+
+    actual.clearRetainingCapacity();
+    _ = try encoder.encodeChunksAppend(&actual, &fragments, options);
+    try std.testing.expectEqualSlices(u8, expected.items, actual.items);
+    try std.testing.expectEqual(output_pointer, actual.allocatedSlice().ptr);
 }
 
 const NonEmptyChunk = struct { bytes: []const u8, next_index: usize };
