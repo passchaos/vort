@@ -2582,6 +2582,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   kept 93/1505/9274-byte text/JSON/binary wires and measured roughly
   0.18/0.85/0.14 s; JSON is now dominated elsewhere, while text and binary
   benefit from removing the quadratic small-block matcher.
+  The bounded large-block duplicate hash path now tracks the valid length of
+  each eight-entry bucket, replacing a 1 MiB sentinel initialization with a
+  32 KiB count clear. A retained sentinel-table oracle test covers multiple
+  start offsets and long competing matches, proving identical candidate order
+  and selection.
   Both exact and bounded large-block duplicate matchers now stop once the
   remaining suffix is shorter than the current longest match: later positions
   cannot win the existing length-first ordering. An explicit late equal-length

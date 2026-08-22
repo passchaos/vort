@@ -10431,7 +10431,7 @@ fn findBestDuplicateMatchHashed(block: []const u8, start_min: usize) Error!?Dupl
     if (block.len > std.math.maxInt(u32)) return null;
 
     var table: [duplicate_hash_table_len][duplicate_hash_candidates]u32 = undefined;
-    for (&table) |*bucket| @memset(bucket[0..], duplicate_hash_invalid);
+    var bucket_lens: [duplicate_hash_table_len]u8 = @splat(0);
 
     var best: ?DuplicateMatch = null;
     var best_payload_len: usize = std.math.maxInt(usize);
@@ -10441,13 +10441,14 @@ fn findBestDuplicateMatchHashed(block: []const u8, start_min: usize) Error!?Dupl
         const hash = duplicateHash8(block[index..][0..8]);
         const bucket = &table[hash];
         defer {
-            var slot: usize = duplicate_hash_candidates - 1;
+            const bucket_len: usize = bucket_lens[hash];
+            var slot: usize = @min(bucket_len, duplicate_hash_candidates - 1);
             while (slot > 0) : (slot -= 1) bucket[slot] = bucket[slot - 1];
             bucket[0] = @intCast(index);
+            bucket_lens[hash] = @intCast(@min(bucket_len + 1, duplicate_hash_candidates));
         }
 
-        for (bucket[0..]) |candidate_index| {
-            if (candidate_index == duplicate_hash_invalid) continue;
+        for (bucket[0..bucket_lens[hash]]) |candidate_index| {
             const candidate_start: usize = @intCast(candidate_index);
             if (candidate_start < start_min or candidate_start >= index) continue;
             if (best) |current_best| {
@@ -10468,6 +10469,59 @@ fn findBestDuplicateMatchHashed(block: []const u8, start_min: usize) Error!?Dupl
         }
     }
     return best;
+}
+
+fn findBestDuplicateMatchHashedSentinelReference(block: []const u8, start_min: usize) Error!?DuplicateMatch {
+    if (block.len > std.math.maxInt(u32)) return null;
+    var table: [duplicate_hash_table_len][duplicate_hash_candidates]u32 = undefined;
+    for (&table) |*bucket| @memset(bucket[0..], duplicate_hash_invalid);
+    var best: ?DuplicateMatch = null;
+    var best_payload_len: usize = std.math.maxInt(usize);
+    var index = start_min;
+    while (index + 8 <= block.len) : (index += 1) {
+        if (best) |current| if (block.len - index < current.len) break;
+        const hash = duplicateHash8(block[index..][0..8]);
+        const bucket = &table[hash];
+        defer {
+            var slot: usize = duplicate_hash_candidates - 1;
+            while (slot > 0) : (slot -= 1) bucket[slot] = bucket[slot - 1];
+            bucket[0] = @intCast(index);
+        }
+        for (bucket) |candidate_index| {
+            if (candidate_index == duplicate_hash_invalid) continue;
+            const candidate_start: usize = @intCast(candidate_index);
+            if (candidate_start < start_min or candidate_start >= index) continue;
+            if (best) |current| if (block.len - index <= current.len) continue;
+            var len: usize = 0;
+            while (index + len < block.len and block[candidate_start + len] == block[index + len]) : (len += 1) {}
+            if (len < 8) continue;
+            const candidate: DuplicateMatch = .{ .first_start = candidate_start, .second_start = index, .len = len };
+            if (duplicateMatchCannotBeat(candidate, best)) continue;
+            const candidate_payload_len = singleMatchPayloadLenFrom(block, candidate, start_min) catch continue;
+            if (candidate_payload_len < best_payload_len or (candidate_payload_len == best_payload_len and len > (best orelse candidate).len)) {
+                best = candidate;
+                best_payload_len = candidate_payload_len;
+            }
+        }
+    }
+    return best;
+}
+
+test "zstd bounded duplicate hash bucket counts match sentinel reference" {
+    var payload: [6144]u8 = undefined;
+    var state: u32 = 0x1319_8a2e;
+    for (&payload) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 16);
+    }
+    @memcpy(payload[3072..3584], payload[1024..1536]);
+    @memcpy(payload[5120..5632], payload[2048..2560]);
+    for ([_]usize{ 0, 257, 2048 }) |start_min| {
+        try std.testing.expectEqual(
+            try findBestDuplicateMatchHashedSentinelReference(&payload, start_min),
+            try findBestDuplicateMatchHashed(&payload, start_min),
+        );
+    }
 }
 
 fn duplicateMatchCannotBeat(candidate: DuplicateMatch, current: ?DuplicateMatch) bool {
