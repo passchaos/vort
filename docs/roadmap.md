@@ -2638,6 +2638,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   are unchanged; focused shortest-plan and non-greedy lookahead tests pass. A
   repeat-3 smoke retained JSON level-3 at 1350 bytes around 0.87 s and text
   level-1 at 93 bytes around 0.068 s.
+  Greedy hash parsing on <=32 KiB blocks now reuses a token ArrayList owned by
+  the outer match planner instead of allocating a fresh token slice per block.
+  Larger blocks keep the existing heap/ring parser. A focused A/B test proves
+  byte-identical output against the allocating greedy path and verifies retained
+  capacity across calls; repeat-3 JSON level 1 retained 1505 bytes around
+  0.27 s.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

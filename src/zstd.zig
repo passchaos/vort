@@ -7117,6 +7117,8 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     defer candidate.deinit(allocator);
     var best: std.ArrayList(u8) = .empty;
     defer best.deinit(allocator);
+    var greedy_tokens: std.ArrayList(lz77.Token) = .empty;
+    defer greedy_tokens.deinit(allocator);
     const mixed_ok = if (match_search_budget >= mixed_match_min_search_budget)
         try emitMixedDuplicateRepeatedMatchCompressedBlock(allocator, &candidate, block, last, match_search_budget)
     else
@@ -7124,7 +7126,10 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     try retainShortestCandidate(allocator, mixed_ok, candidate.items, &best);
 
     candidate.clearRetainingCapacity();
-    const greedy_ok = try emitHashMatchCompressedBlock(allocator, &candidate, block, last, .greedy);
+    const greedy_ok = if (block.len <= 32 * 1024)
+        try emitGreedyHashMatchCompressedBlockReuse(allocator, &candidate, block, last, &greedy_tokens)
+    else
+        try emitHashMatchCompressedBlock(allocator, &candidate, block, last, .greedy);
     try retainShortestCandidate(allocator, greedy_ok, candidate.items, &best);
 
     candidate.clearRetainingCapacity();
@@ -7186,8 +7191,59 @@ fn emitHashMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayLis
         .optimal => try lz77.optimalPlanAlloc(allocator, block, parser_options),
     };
     defer plan.deinit(allocator);
-    if (plan.stats.matches < 2 or plan.stats.matches > max_bootstrap_sequence_count) return false;
+    return try emitHashTokenSequenceBlock(allocator, out, block, last, plan.tokens, plan.stats);
+}
 
+fn emitGreedyHashMatchCompressedBlockReuse(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    tokens: *std.ArrayList(lz77.Token),
+) Error!bool {
+    const parser_options: lz77.GreedyOptions = .{
+        .window_len = @min(block.len, lz77.default_window_len),
+        .max_chain = 128,
+        .nice_len = 258,
+        .max_candidates = 8,
+        .min_match = 4,
+        .max_match = lz77.max_match_len,
+        .min_savings_bits = 0,
+        .lazy_min_gain = 1,
+    };
+    const stats = try lz77.hashGreedyPlanAutoTinyReuse(tokens, allocator, block, parser_options);
+    return try emitHashTokenSequenceBlock(allocator, out, block, last, tokens.items, stats);
+}
+
+test "zstd reusable greedy hash emitter matches allocating wire" {
+    const payload = ("{\"service\":\"vort\",\"message\":\"reusable greedy hash\"}\n" ** 48) ++ ("abcdefghijklmnop" ** 32);
+    var expected: std.ArrayList(u8) = .empty;
+    defer expected.deinit(std.testing.allocator);
+    try std.testing.expect(try emitHashMatchCompressedBlock(std.testing.allocator, &expected, payload, true, .greedy));
+
+    var tokens: std.ArrayList(lz77.Token) = .empty;
+    defer tokens.deinit(std.testing.allocator);
+    var actual: std.ArrayList(u8) = .empty;
+    defer actual.deinit(std.testing.allocator);
+    try std.testing.expect(try emitGreedyHashMatchCompressedBlockReuse(std.testing.allocator, &actual, payload, true, &tokens));
+    try std.testing.expectEqualSlices(u8, expected.items, actual.items);
+
+    const retained_capacity = tokens.capacity;
+    actual.clearRetainingCapacity();
+    try std.testing.expect(try emitGreedyHashMatchCompressedBlockReuse(std.testing.allocator, &actual, payload, true, &tokens));
+    try std.testing.expectEqual(retained_capacity, tokens.capacity);
+    try std.testing.expectEqualSlices(u8, expected.items, actual.items);
+}
+
+fn emitHashTokenSequenceBlock(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    tokens: []const lz77.Token,
+    stats: lz77.PlanStats,
+) Error!bool {
+    if (stats.matches < 2 or stats.matches > max_bootstrap_sequence_count) return false;
     var literal_lens: [max_bootstrap_sequence_count]usize = undefined;
     var offsets: [max_bootstrap_sequence_count]usize = undefined;
     var match_lens: [max_bootstrap_sequence_count]usize = undefined;
@@ -7195,7 +7251,7 @@ fn emitHashMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayLis
     var position: usize = 0;
     var literal_start: usize = 0;
     var count: usize = 0;
-    for (plan.tokens) |token| switch (token) {
+    for (tokens) |token| switch (token) {
         .literal => position += 1,
         .match => |match| {
             if (count == max_bootstrap_sequence_count) return false;
