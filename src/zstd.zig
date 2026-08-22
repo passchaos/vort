@@ -10939,6 +10939,24 @@ test "zstd exact duplicate hash suffix pruning matches bounded boundary" {
     try std.testing.expectEqual(expected, actual);
 }
 
+test "zstd duplicate match SIMD extension reports every boundary" {
+    var payload: [160]u8 = undefined;
+    var state: u32 = 0x85a3_08d3;
+    for (&payload) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 16);
+    }
+    @memcpy(payload[80..144], payload[0..64]);
+
+    // Exercise the verified anchor, both sides of each 32-byte vector boundary,
+    // the word tail, and the final byte tail independently.
+    for ([_]usize{ 8, 31, 32, 39, 40, 55, 63, 64 }) |match_len| {
+        var probe = payload;
+        if (match_len < 64) probe[80 + match_len] = probe[match_len] ^ 0xff;
+        try std.testing.expectEqual(match_len, duplicateMatchLength(&probe, 0, 80));
+    }
+}
+
 fn findBestDuplicateMatchHashed(block: []const u8, start_min: usize) Error!?DuplicateMatch {
     if (block.len > std.math.maxInt(u32)) return null;
 
@@ -11082,19 +11100,17 @@ fn duplicateMatchLength(block: []const u8, first: usize, second: usize) usize {
     const first_right = std.mem.readInt(u64, block[second..][0..8], .little);
     if (first_left != first_right) return @ctz(first_left ^ first_right) / 8;
     var len: usize = 8;
-    while (len + 16 <= max_len) : (len += 16) {
-        const left_a = std.mem.readInt(u64, block[first + len ..][0..8], .little);
-        const right_a = std.mem.readInt(u64, block[second + len ..][0..8], .little);
-        if (left_a != right_a) return len + @ctz(left_a ^ right_a) / 8;
-        const left_b = std.mem.readInt(u64, block[first + len + 8 ..][0..8], .little);
-        const right_b = std.mem.readInt(u64, block[second + len + 8 ..][0..8], .little);
-        if (left_b != right_b) return len + 8 + @ctz(left_b ^ right_b) / 8;
+    while (len + 32 <= max_len) : (len += 32) {
+        const left: @Vector(32, u8) = block[first + len ..][0..32].*;
+        const right: @Vector(32, u8) = block[second + len ..][0..32].*;
+        const equal_mask: u32 = @bitCast(left == right);
+        const differing_mask = ~equal_mask;
+        if (differing_mask != 0) return len + @ctz(differing_mask);
     }
-    if (len + 8 <= max_len) {
+    while (len + 8 <= max_len) : (len += 8) {
         const left = std.mem.readInt(u64, block[first + len ..][0..8], .little);
         const right = std.mem.readInt(u64, block[second + len ..][0..8], .little);
         if (left != right) return len + @ctz(left ^ right) / 8;
-        len += 8;
     }
     while (len < max_len and block[first + len] == block[second + len]) : (len += 1) {}
     return len;

@@ -2783,7 +2783,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   seven entries for every source byte, while preserving traversal and eviction
   order. The sentinel reference oracle explicitly covers wraparound; fixed-CPU-
   8..10 eight-pair checks retained 1058 bytes and reduced the median from
-  207.480 ms to 166.766 ms (1.244x).
+  207.480 ms to 166.766 ms (1.244x). Long duplicate extensions now compare
+  32-byte vectors and use the first unequal-lane bit instead of issuing two
+  scalar word comparisons per loop. An explicit anchor/vector/word/byte boundary
+  oracle preserves exact match lengths; another fixed-core eight-pair run kept
+  1058 bytes and reduced the median from 166.959 ms to 160.659 ms (1.039x).
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state
