@@ -7712,9 +7712,15 @@ fn bestMixedMatchLookaheadPlan(
         .first = required_first,
         .second = required_second,
     };
-    var best: ?MixedMatchLookaheadPlan = null;
+    var plan: MixedMatchLookaheadPlan = .{};
+    var best: MixedMatchLookaheadPlan = .{};
+    var have_best = false;
     for (first_candidates[0..first_count]) |candidate| {
-        const plan = try bestMixedCandidateLookaheadPlanFromFirstWithCache(
+        // Preserve the historical contract: each top-level alternative gets
+        // the caller's complete bounded search budget.
+        var search_budget = match_search_budget;
+        var seen: MixedMatchKindSet = .{};
+        try searchMixedCandidateLookaheadPlans(
             dictionary,
             block,
             frame_offset,
@@ -7722,11 +7728,15 @@ fn bestMixedMatchLookaheadPlan(
             requirements,
             &candidate_cache,
             candidate,
-            match_search_budget,
-        ) orelse continue;
-        if (mixedMatchLookaheadPlanBetter(plan, best)) best = plan;
+            &plan,
+            0,
+            &search_budget,
+            &seen,
+            &best,
+            &have_best,
+        );
     }
-    return best;
+    return if (have_best) best else null;
 }
 
 fn bestMixedCandidateLookaheadPlanFromFirst(
@@ -7763,9 +7773,11 @@ fn bestMixedCandidateLookaheadPlanFromFirstWithCache(
     if (match_search_budget == 0) return null;
     if (!allowed.contains(first_candidate.kind)) return null;
     var plan: MixedMatchLookaheadPlan = .{};
+    var best: MixedMatchLookaheadPlan = .{};
+    var have_best = false;
     var search_budget: usize = match_search_budget;
     var seen: MixedMatchKindSet = .{};
-    const best = try bestMixedCandidateLookaheadPlanFrom(
+    try searchMixedCandidateLookaheadPlans(
         dictionary,
         block,
         frame_offset,
@@ -7777,12 +7789,14 @@ fn bestMixedCandidateLookaheadPlanFromFirstWithCache(
         0,
         &search_budget,
         &seen,
+        &best,
+        &have_best,
     );
-    if (best == null or best.?.count < 2) return null;
+    if (!have_best or best.count < 2) return null;
     return best;
 }
 
-fn bestMixedCandidateLookaheadPlanFrom(
+fn searchMixedCandidateLookaheadPlans(
     dictionary: []const u8,
     block: []const u8,
     frame_offset: usize,
@@ -7794,8 +7808,10 @@ fn bestMixedCandidateLookaheadPlanFrom(
     depth: usize,
     search_budget: *usize,
     seen: *MixedMatchKindSet,
-) Error!?MixedMatchLookaheadPlan {
-    if (search_budget.* == 0 or depth >= max_bootstrap_sequence_count) return null;
+    best: *MixedMatchLookaheadPlan,
+    have_best: *bool,
+) Error!void {
+    if (search_budget.* == 0 or depth >= max_bootstrap_sequence_count) return;
     search_budget.* -= 1;
 
     const previous_seen = seen.*;
@@ -7807,73 +7823,77 @@ fn bestMixedCandidateLookaheadPlanFrom(
     plan.kinds[depth] = candidate.kind;
     const count = depth + 1;
 
-    var best: ?MixedMatchLookaheadPlan = null;
-    if (candidate.literal_end >= block.len or count == max_bootstrap_sequence_count) {
-        best = try finalizeMixedMatchLookaheadPlan(block, plan, count, candidate.literal_end, seen.*, requirements);
-    } else {
-        // Treat "stop matching here and carry the remaining bytes as literals"
-        // as one valid branch once there are enough sequences to form a mixed
-        // block. Extra sequences are not free: their table state transitions and
-        // extra bits can outweigh the literals they remove. Keeping this prefix
-        // candidate also makes the bounded search degrade safely if dense
-        // candidate graphs exhaust the small bootstrap budget.
-        best = try finalizeMixedMatchLookaheadPlan(block, plan, count, candidate.literal_end, seen.*, requirements);
+    // Treat "stop matching here and carry the remaining bytes as literals"
+    // as one valid branch once there are enough sequences to form a mixed
+    // block. Extra sequences are not free: their table state transitions and
+    // extra bits can outweigh the literals they remove. Keeping this prefix
+    // candidate also makes the bounded search degrade safely if dense
+    // candidate graphs exhaust the small bootstrap budget.
+    try considerMixedMatchLookaheadPlan(block, plan, count, candidate.literal_end, seen.*, requirements, best, have_best);
+    if (candidate.literal_end < block.len and count < max_bootstrap_sequence_count) {
         var next_candidates: [mixed_candidates_per_position]MixedMatchCandidate = undefined;
         const next_count = try candidate_cache.candidatesAt(dictionary, block, candidate.literal_end, frame_offset, allowed, next_candidates[0..]);
-        if (next_count == 0) {
-            seen.* = previous_seen;
-            return best;
-        } else {
-            for (next_candidates[0..next_count]) |next| {
-                const branch = try bestMixedCandidateLookaheadPlanFrom(
-                    dictionary,
-                    block,
-                    frame_offset,
-                    allowed,
-                    requirements,
-                    candidate_cache,
-                    next,
-                    plan,
-                    count,
-                    search_budget,
-                    seen,
-                ) orelse continue;
-                if (mixedMatchLookaheadPlanBetter(branch, best)) best = branch;
-                if (search_budget.* == 0) break;
-            }
+        for (next_candidates[0..next_count]) |next| {
+            try searchMixedCandidateLookaheadPlans(
+                dictionary,
+                block,
+                frame_offset,
+                allowed,
+                requirements,
+                candidate_cache,
+                next,
+                plan,
+                count,
+                search_budget,
+                seen,
+                best,
+                have_best,
+            );
+            if (search_budget.* == 0) break;
         }
     }
 
     plan.count = depth;
     seen.* = previous_seen;
-    return best;
 }
 
-fn finalizeMixedMatchLookaheadPlan(
+fn considerMixedMatchLookaheadPlan(
     block: []const u8,
     plan: *MixedMatchLookaheadPlan,
     count: usize,
     tail_start: usize,
     seen: MixedMatchKindSet,
     requirements: ?MixedMatchLookaheadRequirements,
-) Error!?MixedMatchLookaheadPlan {
-    if (count < 2) return null;
+    best: *MixedMatchLookaheadPlan,
+    have_best: *bool,
+) Error!void {
+    if (count < 2) return;
     if (requirements) |required| {
         if (!mixedMatchRequirementMet(seen, required.first) or
-            !mixedMatchRequirementMet(seen, required.second)) return null;
+            !mixedMatchRequirementMet(seen, required.second)) return;
     }
-    var finalized = plan.*;
-    finalized.count = count;
-    finalized.tail_start = tail_start;
-    finalized.payload_len = try bestSequencePayloadLenWithLiteralEnds(
+    const payload_len = try bestSequencePayloadLenWithLiteralEnds(
         block,
-        finalized.literal_lens[0..count],
-        finalized.offsets[0..count],
-        finalized.match_lens[0..count],
-        finalized.literal_ends[0..count],
+        plan.literal_lens[0..count],
+        plan.offsets[0..count],
+        plan.match_lens[0..count],
+        plan.literal_ends[0..count],
         tail_start,
     );
-    return finalized;
+    if (!mixedMatchLookaheadPlanMetadataBetter(payload_len, count, plan.literal_ends[count - 1], best, have_best.*)) return;
+
+    // Only a new winner needs its path materialized. The old return-by-value
+    // recursion copied all five 128-entry arrays for every finalized branch
+    // and again while unwinding, even when that branch immediately lost.
+    @memcpy(best.literal_lens[0..count], plan.literal_lens[0..count]);
+    @memcpy(best.offsets[0..count], plan.offsets[0..count]);
+    @memcpy(best.match_lens[0..count], plan.match_lens[0..count]);
+    @memcpy(best.literal_ends[0..count], plan.literal_ends[0..count]);
+    @memcpy(best.kinds[0..count], plan.kinds[0..count]);
+    best.count = count;
+    best.tail_start = tail_start;
+    best.payload_len = payload_len;
+    have_best.* = true;
 }
 
 fn noteMixedMatchKind(seen: *MixedMatchKindSet, kind: MixedMatchKind) void {
@@ -7891,13 +7911,11 @@ fn mixedMatchRequirementMet(seen: MixedMatchKindSet, requirement: MixedMatchRequ
     };
 }
 
-fn mixedMatchLookaheadPlanBetter(candidate: MixedMatchLookaheadPlan, current: ?MixedMatchLookaheadPlan) bool {
-    const existing = current orelse return true;
-    if (candidate.payload_len != existing.payload_len) return candidate.payload_len < existing.payload_len;
-    if (candidate.count != existing.count) return candidate.count > existing.count;
-    const candidate_last = candidate.literal_ends[candidate.count - 1];
-    const existing_last = existing.literal_ends[existing.count - 1];
-    return candidate_last > existing_last;
+fn mixedMatchLookaheadPlanMetadataBetter(payload_len: usize, count: usize, last_literal_end: usize, current: *const MixedMatchLookaheadPlan, have_current: bool) bool {
+    if (!have_current) return true;
+    if (payload_len != current.payload_len) return payload_len < current.payload_len;
+    if (count != current.count) return count > current.count;
+    return last_literal_end > current.literal_ends[current.count - 1];
 }
 
 fn mixedMatchCandidatesAt(
@@ -14691,6 +14709,22 @@ test "zstd literal-only writer scores duplicate match extra bits" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
     try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd mixed match winner metadata retains historical tie order" {
+    var current: MixedMatchLookaheadPlan = .{
+        .count = 2,
+        .payload_len = 20,
+    };
+    current.literal_ends[1] = 40;
+
+    try std.testing.expect(mixedMatchLookaheadPlanMetadataBetter(99, 1, 1, &current, false));
+    try std.testing.expect(mixedMatchLookaheadPlanMetadataBetter(19, 1, 1, &current, true));
+    try std.testing.expect(mixedMatchLookaheadPlanMetadataBetter(20, 3, 1, &current, true));
+    try std.testing.expect(mixedMatchLookaheadPlanMetadataBetter(20, 2, 41, &current, true));
+    try std.testing.expect(!mixedMatchLookaheadPlanMetadataBetter(20, 2, 40, &current, true));
+    try std.testing.expect(!mixedMatchLookaheadPlanMetadataBetter(20, 2, 39, &current, true));
+    try std.testing.expect(!mixedMatchLookaheadPlanMetadataBetter(21, 3, 41, &current, true));
 }
 
 test "zstd literal-only writer emits two repeated-pattern sequences" {

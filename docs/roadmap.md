@@ -2696,7 +2696,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   every explored branch. Huffman helpers now borrow that plan and finalized
   plans carry a dense byte-to-bit-count lookup. The 32 KiB JSON wire remains
   1058 bytes while repeat-3 encode time fell from roughly 8.25 s to 2.55 s on
-  the same host.
+  the same host. Mixed lookahead now also accumulates its winner in place:
+  losing recursive branches no longer copy five fixed 128-entry plan arrays
+  on return and again while unwinding. An interleaved four-pair check retained
+  the 1058-byte wire and measured roughly 2.51 s versus the prior 2.52 s
+  median, a small improvement after the much larger Huffman lookup win.
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state
