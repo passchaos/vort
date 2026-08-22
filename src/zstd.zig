@@ -8034,17 +8034,22 @@ fn emitBestSequenceCompressedBlock(
 
     var table_plan_block: std.ArrayList(u8) = .empty;
     defer table_plan_block.deinit(allocator);
-    const table_plan_ok = try emitTablePlanSequenceCompressedBlock(
-        allocator,
-        &table_plan_block,
-        block,
-        last,
-        literal_lens,
-        offsets,
-        match_lens,
-        literal_ends,
-        tail_start,
-    );
+    // One sequence cannot amortize a compressed FSE table; its RLE and
+    // predefined representations are already emitted above.
+    const table_plan_ok = if (literal_lens.len > 1)
+        try emitTablePlanSequenceCompressedBlock(
+            allocator,
+            &table_plan_block,
+            block,
+            last,
+            literal_lens,
+            offsets,
+            match_lens,
+            literal_ends,
+            tail_start,
+        )
+    else
+        false;
 
     var best: ?[]const u8 = null;
     var best_len: usize = std.math.maxInt(usize);
@@ -8563,8 +8568,10 @@ fn bestSequencePayloadLenWithLiteralEnds(
         else => return err,
     }
 
-    if (try bestTablePlanSequence(block, literal_lens, offsets, match_lens, literal_ends, tail_start)) |candidate| {
-        chooseShortestPayloadLen(candidate.payload_len, &best);
+    if (literal_lens.len > 1) {
+        if (try bestTablePlanSequence(block, literal_lens, offsets, match_lens, literal_ends, tail_start)) |candidate| {
+            chooseShortestPayloadLen(candidate.payload_len, &best);
+        }
     }
 
     return best orelse error.CorruptFrame;
@@ -13482,6 +13489,15 @@ test "zstd match planner scores single predefined sequence payloads" {
     );
     try std.testing.expect(predefined_len < rle_len);
     try std.testing.expectEqual(predefined_len, try singleMatchPayloadLen(payload, match));
+    const generic = (try bestTablePlanSequence(
+        payload,
+        &.{literal_len},
+        &.{offset},
+        &.{match.len},
+        &.{tail_start},
+        tail_start,
+    )) orelse return error.CorruptFrame;
+    try std.testing.expect(predefined_len <= generic.payload_len);
 
     const segment = findRepeatedPatternSegment(payload) orelse return error.CorruptFrame;
     try std.testing.expectEqual(predefined_len, repeatedPatternPayloadLenFrom(payload, segment, 0) orelse return error.CorruptFrame);

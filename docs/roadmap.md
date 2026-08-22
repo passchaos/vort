@@ -2589,6 +2589,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   smoke kept the 93-byte text wire and measured about 0.097 s; binary remained
   scheduler-variable at about 0.21 s, so the safe search-bound reduction is
   retained without claiming an across-corpus multiplier.
+  Single-sequence candidates now skip generic mixed/compressed FSE table-plan
+  enumeration during both scoring and emission. RLE and predefined dedicated
+  paths already cover the useful one-sequence representations, and the focused
+  planner test proves the generic mixed plan is no smaller on the locked case.
+  Repeat-3 level-1 smokes retained 93/1505/9274-byte wires while measuring about
+  0.046/0.255/0.121 s for text/JSON/binary, substantially reducing repeated
+  full-payload pricing on the remaining single-match fallback.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
