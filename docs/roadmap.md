@@ -2770,7 +2770,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   never materializes or returns the large LL/OF/ML plan union; the emitter keeps
   the full-plan path and an oracle checks both selectors choose the same byte
   length. Fixed-CPU-8..10 eight-pair checks retained 1058 bytes and moved the
-  median from roughly 0.327 s to 0.318 s.
+  median from roughly 0.327 s to 0.318 s. A search-budget sweep showed that
+  4/8 KiB candidates retain 1350/1058 bytes from 96 through 512 states, while
+  the one-block candidate reaches its 13506-byte plateau at 192. Levels 6+ now
+  cap mixed search at 192 states; fixed-CPU-8..10 eight-pair level-9 checks
+  retained 1058 bytes and moved the median from roughly 0.317 s to 0.207 s.
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state

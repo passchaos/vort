@@ -3847,10 +3847,7 @@ fn nativeFrameOptionsForLevel(level: c_int, options: FrameOptions) Error!NativeF
             3 => 64,
             4 => 96,
             5 => 128,
-            6 => 192,
-            7 => 256,
-            8 => 384,
-            else => mixed_match_path_search_budget,
+            else => 192,
         };
     }
     return native_options;
@@ -13278,7 +13275,7 @@ test "zstd compression levels map to increasing search budgets" {
     try std.testing.expectEqual(@as(usize, 0), level0.match_search_budget);
     try std.testing.expectEqual(@as(usize, 16), level1.match_search_budget);
     try std.testing.expectEqual(@as(usize, 64), level3.match_search_budget);
-    try std.testing.expectEqual(@as(usize, mixed_match_path_search_budget), level9.match_search_budget);
+    try std.testing.expectEqual(@as(usize, 192), level9.match_search_budget);
     try std.testing.expect(level3.match_search_budget > level1.match_search_budget);
     try std.testing.expect(level9.match_search_budget > level3.match_search_budget);
     try std.testing.expect(!level3.include_content_size);
