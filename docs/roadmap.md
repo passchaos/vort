@@ -2801,6 +2801,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   oracle covers every available mode across LL/OF/ML; two fixed-core interleaved
   runs kept 1058 bytes and improved the median by roughly 7.7-7.8% (157.287 ms
   to 146.031 ms in the first run).
+  The exact matcher for <=4 KiB candidates now clears a 512-byte occupancy
+  bitmap instead of initializing two 16 KiB head/tail arrays. Head and tail are
+  initialized lazily on first use, preserving the append-only earliest-first
+  collision chains; a constructed same-bucket/non-equal-anchor oracle matches
+  the quadratic reference. Fixed-core eight-pair level-9 JSON checks retained
+  1058 bytes and reduced the median from 145.951 ms to 143.013 ms (1.021x).
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state

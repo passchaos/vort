@@ -10902,8 +10902,9 @@ fn findBestDuplicateMatchIn(block: []const u8, start_min: usize) Error!?Duplicat
 /// former O(n²) byte-pair scan across level-1's 1/2/4 KiB adaptive blocks.
 fn findBestDuplicateMatchExactHashed(block: []const u8, start_min: usize) Error!?DuplicateMatch {
     std.debug.assert(block.len <= duplicate_exact_hash_input_max);
-    var heads: [duplicate_exact_hash_table_len]u32 = @splat(duplicate_hash_invalid);
-    var tails: [duplicate_exact_hash_table_len]u32 = @splat(duplicate_hash_invalid);
+    var heads: [duplicate_exact_hash_table_len]u32 = undefined;
+    var tails: [duplicate_exact_hash_table_len]u32 = undefined;
+    var occupied: [duplicate_exact_hash_table_len / 64]u64 = @splat(0);
     var next: [duplicate_exact_hash_input_max]u32 = undefined;
 
     var best: ?DuplicateMatch = null;
@@ -10915,7 +10916,10 @@ fn findBestDuplicateMatchExactHashed(block: []const u8, start_min: usize) Error!
         // cannot improve either length or the payload tie-break.
         if (best) |current| if (block.len - index < current.len) break;
         const hash = duplicateHash8(block[index..][0..8]) & (duplicate_exact_hash_table_len - 1);
-        var candidate_index = heads[hash];
+        const word = hash / 64;
+        const bit = @as(u64, 1) << @intCast(hash & 63);
+        const was_occupied = (occupied[word] & bit) != 0;
+        var candidate_index = if (was_occupied) heads[hash] else duplicate_hash_invalid;
         while (candidate_index != duplicate_hash_invalid) {
             const first: usize = @intCast(candidate_index);
             candidate_index = next[candidate_index];
@@ -10936,8 +10940,9 @@ fn findBestDuplicateMatchExactHashed(block: []const u8, start_min: usize) Error!
         // the reference scan's earliest-first tie order without materializing
         // and reversing a temporary candidate list for every input position.
         next[index] = duplicate_hash_invalid;
-        if (tails[hash] == duplicate_hash_invalid) {
+        if (!was_occupied) {
             heads[hash] = @intCast(index);
+            occupied[word] |= bit;
         } else {
             next[tails[hash]] = @intCast(index);
         }
@@ -11011,6 +11016,34 @@ test "zstd exact duplicate hash suffix pruning matches bounded boundary" {
     try std.testing.expectEqual(@as(usize, 120), expected_match.second_start);
     try std.testing.expectEqual(@as(usize, 48), expected_match.len);
     try std.testing.expectEqual(expected, actual);
+}
+
+test "zstd exact duplicate sparse buckets preserve collision chains" {
+    var payload: [1024]u8 = undefined;
+    var state: u32 = 0x517c_c1b7;
+    for (&payload) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 16);
+    }
+
+    const base = 37;
+    const collision = 311;
+    const wanted_hash = duplicateHash8(payload[base..][0..8]) & (duplicate_exact_hash_table_len - 1);
+    var probe: u32 = 0;
+    while (true) : (probe += 1) {
+        std.mem.writeInt(u32, payload[collision..][0..4], probe, .little);
+        std.mem.writeInt(u32, payload[collision + 4 ..][0..4], probe *% 0x9e37_79b1, .little);
+        if (duplicateHash8(payload[collision..][0..8]) & (duplicate_exact_hash_table_len - 1) == wanted_hash and
+            !std.mem.eql(u8, payload[collision..][0..8], payload[base..][0..8])) break;
+    }
+    @memcpy(payload[700..756], payload[base..][0..56]);
+    // Keep the colliding non-match intact so the sparse occupancy bit cannot be
+    // mistaken for proof that the bucket's first eight bytes are equal.
+    try std.testing.expect(!std.mem.eql(u8, payload[collision..][0..8], payload[base..][0..8]));
+    try std.testing.expectEqual(
+        try findBestDuplicateMatchScanReference(&payload, 0),
+        try findBestDuplicateMatchExactHashed(&payload, 0),
+    );
 }
 
 test "zstd duplicate match SIMD extension reports every boundary" {
