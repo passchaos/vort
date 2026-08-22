@@ -2807,6 +2807,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   collision chains; a constructed same-bucket/non-equal-anchor oracle matches
   the quadratic reference. Fixed-core eight-pair level-9 JSON checks retained
   1058 bytes and reduced the median from 145.951 ms to 143.013 ms (1.021x).
+  Huffman stream sizing now accumulates eight symbol widths per iteration when
+  the group cannot cross a one- or four-stream boundary, exposing independent
+  lookup/add chains while leaving short boundary tails on the scalar path. A
+  scalar four-stream oracle covers irregular literal runs and a non-divisible
+  regenerated length; fixed-core eight-pair checks retained 1058 bytes and
+  reduced the median from 143.089 ms to 139.158 ms (1.028x).
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state
