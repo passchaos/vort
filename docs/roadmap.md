@@ -2582,6 +2582,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   kept 93/1505/9274-byte text/JSON/binary wires and measured roughly
   0.18/0.85/0.14 s; JSON is now dominated elsewhere, while text and binary
   benefit from removing the quadratic small-block matcher.
+  Both exact and bounded large-block duplicate matchers now stop once the
+  remaining suffix is shorter than the current longest match: later positions
+  cannot win the existing length-first ordering. An explicit late equal-length
+  boundary test complements the scan-oracle comparison. A repeat-5 level-1
+  smoke kept the 93-byte text wire and measured about 0.097 s; binary remained
+  scheduler-variable at about 0.21 s, so the safe search-bound reduction is
+  retained without claiming an across-corpus multiplier.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

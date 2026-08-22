@@ -10169,6 +10169,10 @@ fn findBestDuplicateMatchExactHashed(block: []const u8, start_min: usize) Error!
     var best_payload_len: usize = std.math.maxInt(usize);
     var index = start_min;
     while (index + 8 <= block.len) : (index += 1) {
+        // No match beginning here or later can exceed the remaining suffix.
+        // Once that suffix is shorter than the current winner, later positions
+        // cannot improve either length or the payload tie-break.
+        if (best) |current| if (block.len - index < current.len) break;
         const hash = duplicateHash8(block[index..][0..8]) & (duplicate_exact_hash_table_len - 1);
         var candidate_index = heads[hash];
         while (candidate_index != duplicate_hash_invalid) {
@@ -10249,6 +10253,26 @@ test "zstd exact small duplicate hash matches scan reference" {
     }
 }
 
+test "zstd exact duplicate hash suffix pruning matches bounded boundary" {
+    var payload: [192]u8 = undefined;
+    var state: u32 = 0x243f_6a88;
+    for (&payload) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 16);
+    }
+    // Two explicit matches leave a short suffix after the longer winner. The
+    // exact matcher must stop only after every position that can still tie that
+    // winner has been processed.
+    @memcpy(payload[64..96], payload[8..40]);
+    @memcpy(payload[120..168], payload[16..64]);
+    const expected = try findBestDuplicateMatchScanReference(&payload, 0);
+    const actual = try findBestDuplicateMatchExactHashed(&payload, 0);
+    const expected_match = expected orelse return error.CorruptFrame;
+    try std.testing.expectEqual(@as(usize, 120), expected_match.second_start);
+    try std.testing.expectEqual(@as(usize, 48), expected_match.len);
+    try std.testing.expectEqual(expected, actual);
+}
+
 fn findBestDuplicateMatchHashed(block: []const u8, start_min: usize) Error!?DuplicateMatch {
     if (block.len > std.math.maxInt(u32)) return null;
 
@@ -10259,6 +10283,7 @@ fn findBestDuplicateMatchHashed(block: []const u8, start_min: usize) Error!?Dupl
     var best_payload_len: usize = std.math.maxInt(usize);
     var index = start_min;
     while (index + 8 <= block.len) : (index += 1) {
+        if (best) |current| if (block.len - index < current.len) break;
         const hash = duplicateHash8(block[index..][0..8]);
         const bucket = &table[hash];
         defer {
