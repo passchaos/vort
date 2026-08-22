@@ -2690,6 +2690,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   later candidates avoid unnecessary suffix-cost work. The oracle exercises
   staged 4...37...131...258 growth and retains the exact longest-on-tie rule; repeat-3
   level-9 JSON/binary kept 1058/9009 bytes at roughly 8.37/0.13 s.
+  Profiling then exposed the recursive mixed planner, rather than optimal
+  LZ77, as the level-9 JSON bottleneck: Huffman scoring copied a roughly 3 KiB
+  plan by value and linearly searched its symbol list for every literal on
+  every explored branch. Huffman helpers now borrow that plan and finalized
+  plans carry a dense byte-to-bit-count lookup. The 32 KiB JSON wire remains
+  1058 bytes while repeat-3 encode time fell from roughly 8.25 s to 2.55 s on
+  the same host.
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state
