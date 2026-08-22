@@ -2649,6 +2649,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   wrappers delegate to that shared state machine, and LZ77 plus Zstd focused
   tests prove token/stat and wire identity while retained capacity remains
   stable. Repeat-3 JSON level 3 retained 1350 bytes around 0.88 s.
+  The optimal parser now accepts an explicit reusable scratch that owns DP
+  costs, chosen steps, hash head/predecessor arrays, and output tokens. Its
+  allocating API delegates to the same core, while Zstd retains one scratch per
+  outer match decision. LZ77 and Zstd A/B tests prove token/stat/wire identity
+  and stable capacities; repeat-3 JSON level 3 remained 1350 bytes around
+  0.85 s.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

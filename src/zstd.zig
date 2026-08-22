@@ -7121,6 +7121,8 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     defer greedy_tokens.deinit(allocator);
     var lazy_tokens: std.ArrayList(lz77.Token) = .empty;
     defer lazy_tokens.deinit(allocator);
+    var optimal_scratch: lz77.OptimalScratch = .{};
+    defer optimal_scratch.deinit(allocator);
     const mixed_ok = if (match_search_budget >= mixed_match_min_search_budget)
         try emitMixedDuplicateRepeatedMatchCompressedBlock(allocator, &candidate, block, last, match_search_budget)
     else
@@ -7148,7 +7150,7 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     try retainShortestCandidate(allocator, lazy_ok, candidate.items, &best);
 
     candidate.clearRetainingCapacity();
-    const optimal_ok = try emitHashMatchCompressedBlock(allocator, &candidate, block, last, .optimal);
+    const optimal_ok = try emitOptimalHashMatchCompressedBlockReuse(allocator, &candidate, block, last, &optimal_scratch);
     try retainShortestCandidate(allocator, optimal_ok, candidate.items, &best);
 
     candidate.clearRetainingCapacity();
@@ -7241,6 +7243,27 @@ fn emitLazyHashMatchCompressedBlockReuse(
     return try emitHashTokenSequenceBlock(allocator, out, block, last, tokens.items, stats);
 }
 
+fn emitOptimalHashMatchCompressedBlockReuse(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    scratch: *lz77.OptimalScratch,
+) Error!bool {
+    const parser_options: lz77.GreedyOptions = .{
+        .window_len = @min(block.len, lz77.default_window_len),
+        .max_chain = 128,
+        .nice_len = 258,
+        .max_candidates = 8,
+        .min_match = 4,
+        .max_match = lz77.max_match_len,
+        .min_savings_bits = 0,
+        .lazy_min_gain = 1,
+    };
+    const stats = try lz77.optimalPlanReuse(scratch, allocator, block, parser_options);
+    return try emitHashTokenSequenceBlock(allocator, out, block, last, scratch.tokens.items, stats);
+}
+
 test "zstd reusable greedy hash emitter matches allocating wire" {
     const payload = ("{\"service\":\"vort\",\"message\":\"reusable greedy hash\"}\n" ** 48) ++ ("abcdefghijklmnop" ** 32);
     var expected: std.ArrayList(u8) = .empty;
@@ -7277,6 +7300,25 @@ test "zstd reusable lazy hash emitter matches allocating wire" {
     actual.clearRetainingCapacity();
     try std.testing.expect(try emitLazyHashMatchCompressedBlockReuse(std.testing.allocator, &actual, payload, true, &tokens));
     try std.testing.expectEqual(retained_capacity, tokens.capacity);
+    try std.testing.expectEqualSlices(u8, expected.items, actual.items);
+}
+
+test "zstd reusable optimal hash emitter matches allocating wire" {
+    const payload = ("{\"service\":\"vort\",\"message\":\"reusable optimal hash\"}\n" ** 48) ++ ("abcdefghijklmnop" ** 32);
+    var expected: std.ArrayList(u8) = .empty;
+    defer expected.deinit(std.testing.allocator);
+    try std.testing.expect(try emitHashMatchCompressedBlock(std.testing.allocator, &expected, payload, true, .optimal));
+
+    var scratch: lz77.OptimalScratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    var actual: std.ArrayList(u8) = .empty;
+    defer actual.deinit(std.testing.allocator);
+    try std.testing.expect(try emitOptimalHashMatchCompressedBlockReuse(std.testing.allocator, &actual, payload, true, &scratch));
+    try std.testing.expectEqualSlices(u8, expected.items, actual.items);
+    const capacities = .{ scratch.costs.capacity, scratch.steps.capacity, scratch.head.capacity, scratch.prev.capacity, scratch.tokens.capacity };
+    actual.clearRetainingCapacity();
+    try std.testing.expect(try emitOptimalHashMatchCompressedBlockReuse(std.testing.allocator, &actual, payload, true, &scratch));
+    try std.testing.expectEqual(capacities, .{ scratch.costs.capacity, scratch.steps.capacity, scratch.head.capacity, scratch.prev.capacity, scratch.tokens.capacity });
     try std.testing.expectEqualSlices(u8, expected.items, actual.items);
 }
 

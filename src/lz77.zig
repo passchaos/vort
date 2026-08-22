@@ -54,6 +54,23 @@ pub const GreedyPlan = struct {
     }
 };
 
+pub const OptimalScratch = struct {
+    costs: std.ArrayList(usize) = .empty,
+    steps: std.ArrayList(Token) = .empty,
+    head: std.ArrayList(isize) = .empty,
+    prev: std.ArrayList(isize) = .empty,
+    tokens: std.ArrayList(Token) = .empty,
+
+    pub fn deinit(self: *OptimalScratch, allocator: std.mem.Allocator) void {
+        self.costs.deinit(allocator);
+        self.steps.deinit(allocator);
+        self.head.deinit(allocator);
+        self.prev.deinit(allocator);
+        self.tokens.deinit(allocator);
+        self.* = .{};
+    }
+};
+
 /// Production `.best` preset candidate budget for the ratio-oriented optimal
 /// parser. The hard cap below is intentionally higher for experiments/custom
 /// options, but the default stays at a measured middle ground: it recovers much
@@ -415,19 +432,26 @@ fn hashLazyGreedyPlanWithTablesReuse(tokens: *std.ArrayList(Token), allocator: s
 }
 
 pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
+    var scratch: OptimalScratch = .{};
+    defer scratch.deinit(allocator);
+    const stats = try optimalPlanReuse(&scratch, allocator, input, options);
+    return .{ .tokens = try allocator.dupe(Token, scratch.tokens.items), .stats = stats };
+}
+
+pub fn optimalPlanReuse(scratch: *OptimalScratch, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
     const n = input.len;
-    const costs = try allocator.alloc(usize, n + 1);
-    defer allocator.free(costs);
-    const steps = try allocator.alloc(Token, n);
-    defer allocator.free(steps);
+    try scratch.costs.resize(allocator, n + 1);
+    try scratch.steps.resize(allocator, n);
+    try scratch.head.resize(allocator, 1 << 15);
+    try scratch.prev.resize(allocator, n);
+    scratch.tokens.clearRetainingCapacity();
+    const costs = scratch.costs.items;
+    const steps = scratch.steps.items;
 
     // Build hash chain for fast match discovery.
-    const table_size = 1 << 15;
-    const head = try allocator.alloc(isize, table_size);
-    defer allocator.free(head);
+    const head = scratch.head.items;
     @memset(head, -1);
-    const prev = try allocator.alloc(isize, n);
-    defer allocator.free(prev);
+    const prev = scratch.prev.items;
     // `prev` entries are written by the pre-population pass below before the
     // reverse dynamic-programming search reads any insertable position.
 
@@ -478,13 +502,11 @@ pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options
         }
     }
 
-    var tokens = try initTokenList(allocator, n);
-    errdefer tokens.deinit(allocator);
     var stats = PlanStats{};
     var pos: usize = 0;
     while (pos < n) {
         const token = steps[pos];
-        try tokens.append(allocator, token);
+        try appendToken(&scratch.tokens, allocator, token);
         switch (token) {
             .literal => {
                 stats.literals += 1;
@@ -497,7 +519,7 @@ pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options
             },
         }
     }
-    return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+    return stats;
 }
 
 fn normalizedMaxCandidates(options: GreedyOptions) usize {
@@ -1401,6 +1423,21 @@ test "optimal LZ77 prototype round trips and is no worse by fixed bit cost" {
     // The hash-chain-based optimal parser may find different matches than greedy,
     // but must produce a valid round-trip and a reasonable token count.
     try std.testing.expect(optimal.stats.tokenCount() <= greedy.stats.tokenCount() + 2);
+}
+
+test "reusable optimal parser preserves tokens and capacities" {
+    const input = "abcabcXabcabcYabcabcZabcabcX" ** 8;
+    const options = GreedyOptions{ .window_len = input.len, .max_chain = 64, .nice_len = 64, .max_candidates = 8, .min_match = 4 };
+    const reference = try optimalPlanAlloc(std.testing.allocator, input, options);
+    defer reference.deinit(std.testing.allocator);
+    var scratch: OptimalScratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    const stats = try optimalPlanReuse(&scratch, std.testing.allocator, input, options);
+    try expectEqualTokenSlices(reference.tokens, scratch.tokens.items);
+    try std.testing.expectEqual(reference.stats, stats);
+    const capacities = .{ scratch.costs.capacity, scratch.steps.capacity, scratch.head.capacity, scratch.prev.capacity, scratch.tokens.capacity };
+    _ = try optimalPlanReuse(&scratch, std.testing.allocator, input, options);
+    try std.testing.expectEqual(capacities, .{ scratch.costs.capacity, scratch.steps.capacity, scratch.head.capacity, scratch.prev.capacity, scratch.tokens.capacity });
 }
 
 test "optimal LZ77 considers multiple match distances" {
