@@ -10947,45 +10947,39 @@ fn planPredefinedSequenceValues(values: []const usize, symbols: []const Sequence
 
     var next_choice: [max_bootstrap_sequence_count][max_predefined_sequence_states]u8 = undefined;
 
-    var viable_next: [max_predefined_sequence_states]bool = undefined;
-    @memset(viable_next[0..], false);
+    var viable_next: u64 = 0;
 
     var pos = values.len;
     while (pos > 0) {
         pos -= 1;
-        var viable_current: [max_predefined_sequence_states]bool = undefined;
-        @memset(viable_current[0..], false);
+        var viable_current: u64 = 0;
 
         for (symbols, 0..) |symbol, state| {
             if (!predefinedSymbolCanEncode(symbol, values[pos], min_additional_bits)) continue;
             if (pos == values.len - 1) {
-                viable_current[state] = true;
+                viable_current |= @as(u64, 1) << @intCast(state);
                 continue;
             }
 
             const transition_count: usize = @as(usize, 1) << @intCast(symbol.state_bits);
-            var bits: usize = 0;
-            while (bits < transition_count) : (bits += 1) {
-                const next_state = symbol.next_state + bits;
-                if (next_state >= symbols.len) continue;
-                if (!viable_next[next_state]) continue;
-                viable_current[state] = true;
-                next_choice[pos][state] = @intCast(next_state);
-                break;
-            }
+            const first_next: usize = symbol.next_state;
+            const end_next = @min(symbols.len, first_next + transition_count);
+            if (first_next >= end_next) continue;
+            const width = end_next - first_next;
+            const low_mask = if (width == 64) std.math.maxInt(u64) else (@as(u64, 1) << @intCast(width)) - 1;
+            const possible = viable_next & (low_mask << @intCast(first_next));
+            if (possible == 0) continue;
+            viable_current |= @as(u64, 1) << @intCast(state);
+            // `ctz` returns the same lowest viable state as the old ascending
+            // transition loop, preserving deterministic tie behavior.
+            next_choice[pos][state] = @intCast(@ctz(possible));
         }
 
         viable_next = viable_current;
     }
 
-    var first_state: ?usize = null;
-    for (viable_next[0..symbols.len], 0..) |viable, state| {
-        if (viable) {
-            first_state = state;
-            break;
-        }
-    }
-    const initial_state = first_state orelse return null;
+    if (viable_next == 0) return null;
+    const initial_state: usize = @ctz(viable_next);
 
     var plan: PredefinedSequencePlan = .{ .len = values.len };
     @memcpy(plan.values[0..values.len], values);

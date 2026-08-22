@@ -2720,7 +2720,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   matches with unaligned word loads plus `ctz` rather than a byte loop. The
   existing exact/sentinel matcher oracles and the 328-case external probe
   retain candidate, tie, and wire behavior; a six-pair check kept 1058 bytes
-  and moved the level-9 JSON median from roughly 1.56 s to 0.96 s.
+  and moved the level-9 JSON median from roughly 1.56 s to 0.96 s. Predefined
+  sequence planning now represents each viable-state row as a `u64`; range
+  masking plus `ctz` replaces per-transition scans while preserving the lowest
+  viable-state tie rule. The independent `usize`-matrix oracle covers all
+  three predefined tables through 128-value plans; a six-pair check retained
+  1058 bytes and moved the median from roughly 0.93 s to 0.86 s.
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state
