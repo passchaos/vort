@@ -7317,10 +7317,10 @@ test "zstd reusable optimal hash emitter matches allocating wire" {
     defer actual.deinit(std.testing.allocator);
     try std.testing.expect(try emitOptimalHashMatchCompressedBlockReuse(std.testing.allocator, &actual, payload, true, &scratch));
     try std.testing.expectEqualSlices(u8, expected.items, actual.items);
-    const capacities = .{ scratch.costs.capacity, scratch.steps.capacity, scratch.head.capacity, scratch.prev.capacity, scratch.tokens.capacity };
+    const capacities = .{ scratch.costs.capacity, scratch.steps.capacity, scratch.index.head.capacity, scratch.index.prev.capacity, scratch.tokens.capacity };
     actual.clearRetainingCapacity();
     try std.testing.expect(try emitOptimalHashMatchCompressedBlockReuse(std.testing.allocator, &actual, payload, true, &scratch));
-    try std.testing.expectEqual(capacities, .{ scratch.costs.capacity, scratch.steps.capacity, scratch.head.capacity, scratch.prev.capacity, scratch.tokens.capacity });
+    try std.testing.expectEqual(capacities, .{ scratch.costs.capacity, scratch.steps.capacity, scratch.index.head.capacity, scratch.index.prev.capacity, scratch.tokens.capacity });
     try std.testing.expectEqualSlices(u8, expected.items, actual.items);
 }
 

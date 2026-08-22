@@ -57,18 +57,57 @@ pub const GreedyPlan = struct {
 pub const OptimalScratch = struct {
     costs: std.ArrayList(usize) = .empty,
     steps: std.ArrayList(Token) = .empty,
-    head: std.ArrayList(isize) = .empty,
-    prev: std.ArrayList(isize) = .empty,
-    head_initialized: [hash_head_init_words]u64 = @splat(0),
+    index: HashIndex = .{},
     tokens: std.ArrayList(Token) = .empty,
 
     pub fn deinit(self: *OptimalScratch, allocator: std.mem.Allocator) void {
         self.costs.deinit(allocator);
         self.steps.deinit(allocator);
-        self.head.deinit(allocator);
-        self.prev.deinit(allocator);
+        self.index.deinit(allocator);
         self.tokens.deinit(allocator);
         self.* = .{};
+    }
+};
+
+pub const HashIndex = struct {
+    head: std.ArrayList(isize) = .empty,
+    prev: std.ArrayList(isize) = .empty,
+    head_initialized: [hash_head_init_words]u64 = @splat(0),
+    input_len: usize = 0,
+
+    pub fn deinit(self: *HashIndex, allocator: std.mem.Allocator) void {
+        self.head.deinit(allocator);
+        self.prev.deinit(allocator);
+        self.* = .{};
+    }
+
+    pub fn build(self: *HashIndex, allocator: std.mem.Allocator, input: []const u8) !void {
+        try self.head.resize(allocator, hash_head_table_size);
+        try self.prev.resize(allocator, input.len);
+        @memset(&self.head_initialized, 0);
+        self.input_len = input.len;
+        for (0..input.len) |i| insertHashWithLayout(input, i, self.head.items, self.prev.items, false, true, &self.head_initialized, .three);
+    }
+
+    pub fn bestMatch(self: *const HashIndex, input: []const u8, pos: usize, options: GreedyOptions) Error!Token.Match {
+        if (input.len != self.input_len or pos > input.len) return error.InvalidBlockPlan;
+        if (pos + minMatch(options) > input.len) return .{ .length = 0, .distance = 0 };
+        const max_len = @min(maxMatch(options), input.len - pos);
+        var chain_i = self.prev.items[pos];
+        var checked: usize = 0;
+        var best = MatchCandidate{};
+        while (chain_i >= 0 and checked < options.max_chain) : (checked += 1) {
+            const candidate: usize = @intCast(chain_i);
+            const distance = pos - candidate;
+            if (distance == 0 or distance > options.window_len) break;
+            const len = matchLength(input, candidate, pos, max_len);
+            if (len >= minMatch(options) and len > best.length) {
+                best = .{ .length = len, .distance = distance };
+                if (len >= options.nice_len or len == max_len) break;
+            }
+            chain_i = self.prev.items[candidate];
+        }
+        return .{ .length = @intCast(best.length), .distance = @intCast(best.distance) };
     }
 };
 
@@ -443,22 +482,17 @@ pub fn optimalPlanReuse(scratch: *OptimalScratch, allocator: std.mem.Allocator, 
     const n = input.len;
     try scratch.costs.resize(allocator, n + 1);
     try scratch.steps.resize(allocator, n);
-    try scratch.head.resize(allocator, 1 << 15);
-    try scratch.prev.resize(allocator, n);
+    try scratch.index.build(allocator, input);
     scratch.tokens.clearRetainingCapacity();
     const costs = scratch.costs.items;
     const steps = scratch.steps.items;
 
     // Build hash chain for fast match discovery.
-    const head = scratch.head.items;
-    @memset(&scratch.head_initialized, 0);
-    const prev = scratch.prev.items;
+    const prev = scratch.index.prev.items;
     // `prev` entries are written by the pre-population pass below before the
     // reverse dynamic-programming search reads any insertable position.
 
     // Pre-populate hash chain for all positions.
-    for (0..n) |i| insertHashWithLayout(input, i, head, prev, false, true, &scratch.head_initialized, .three);
-
     costs[n] = 0;
     var rev_i: usize = n;
     const minimum = minMatch(options);
@@ -1436,9 +1470,21 @@ test "reusable optimal parser preserves tokens and capacities" {
     const stats = try optimalPlanReuse(&scratch, std.testing.allocator, input, options);
     try expectEqualTokenSlices(reference.tokens, scratch.tokens.items);
     try std.testing.expectEqual(reference.stats, stats);
-    const capacities = .{ scratch.costs.capacity, scratch.steps.capacity, scratch.head.capacity, scratch.prev.capacity, scratch.tokens.capacity };
+    const capacities = .{ scratch.costs.capacity, scratch.steps.capacity, scratch.index.head.capacity, scratch.index.prev.capacity, scratch.tokens.capacity };
     _ = try optimalPlanReuse(&scratch, std.testing.allocator, input, options);
-    try std.testing.expectEqual(capacities, .{ scratch.costs.capacity, scratch.steps.capacity, scratch.head.capacity, scratch.prev.capacity, scratch.tokens.capacity });
+    try std.testing.expectEqual(capacities, .{ scratch.costs.capacity, scratch.steps.capacity, scratch.index.head.capacity, scratch.index.prev.capacity, scratch.tokens.capacity });
+}
+
+test "reusable hash index exposes deterministic position matches" {
+    const input = "prefix-abcdefghijklmnop-middle-abcdefghijklmnop-tail";
+    var index: HashIndex = .{};
+    defer index.deinit(std.testing.allocator);
+    try index.build(std.testing.allocator, input);
+    const second = std.mem.indexOfPos(u8, input, 8, "abcdefghijklmnop") orelse return error.InvalidMatch;
+    const match = try index.bestMatch(input, second, .{ .window_len = input.len, .max_chain = 64, .nice_len = 258, .min_match = 4 });
+    try std.testing.expectEqual(@as(u16, 17), match.length);
+    try std.testing.expectEqual(@as(u16, @intCast(second - "prefix-".len)), match.distance);
+    try std.testing.expectError(error.InvalidBlockPlan, index.bestMatch(input[0 .. input.len - 1], second, .{}));
 }
 
 test "optimal LZ77 considers multiple match distances" {

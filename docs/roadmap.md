@@ -2659,6 +2659,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   array with the existing 4 KiB initialization bitmap instead of clearing the
   full 256 KiB head table on every block. The predecessor invariant remains
   unchanged, and all optimal parser candidate-budget and token-bound tests pass.
+  Optimal's reusable hash storage is now a standalone `HashIndex` with explicit
+  build, ownership, and per-position best-match query contracts. Optimal parsing
+  consumes this index unchanged; focused tests pin deterministic position
+  matches, input-length validation, and the existing optimal token/budget wires.
+  This establishes the shared candidate-graph boundary needed to migrate greedy
+  and lazy parsing without coupling those strategies to optimal DP storage.
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state
