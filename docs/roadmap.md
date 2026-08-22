@@ -2867,6 +2867,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   exactly `(code length descending, symbol ascending)` under the compact/full
   length oracles; fixed-core eight-pair checks retained 1058 bytes and reduced
   the median from 107.982 ms to 107.126 ms (1.008x).
+  A final fixed-CPU-8..10 six-pair comparison from the pre-Huffman-hotspot
+  baseline (`36518f8`) through the completed batch measured 8.316 s versus
+  107.454 ms, a 77.39x cumulative speedup while retaining the 1058-byte JSON
+  level-9 frame. This remains far behind libzstd's roughly 0.14-0.19 ms result
+  on the same harness, so the evidence is a milestone rather than parity.
   Sequence-literal RLE detection now skips empty/already-disproved runs and uses
   the standard library's vectorized `allEqual` scan for each remaining run
   instead of branching once per byte. A focused reference oracle covers empty,
