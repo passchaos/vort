@@ -2837,6 +2837,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   each candidate's original scan and tie order; focused lookahead, parallel-wire,
   and index oracles pass. Fixed-core eight-pair checks retained 1058 bytes and
   reduced the median from 118.418 ms to 114.985 ms (1.030x).
+  The exact <=4 KiB matcher now uses the same 15-bit hash width as the bounded
+  large matcher instead of truncating it to 12 bits. Since equal eight-byte
+  anchors necessarily share all 15 bits, this only removes false collisions and
+  leaves every real candidate and earliest-first tie intact. Existing scan and
+  constructed-collision oracles pass; fixed-core eight-pair checks retained 1058
+  bytes and reduced the median from 115.602 ms to 114.111 ms (1.013x).
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state

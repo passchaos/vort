@@ -39,7 +39,7 @@ const duplicate_hash_invalid = std.math.maxInt(u32);
 const duplicate_index_invalid = std.math.maxInt(u16);
 const duplicate_hash_candidates = 8;
 const duplicate_index_max_input_len = std.math.maxInt(u16);
-const duplicate_exact_hash_table_len = 1 << 12;
+const duplicate_exact_hash_table_len = duplicate_hash_table_len;
 const duplicate_exact_hash_input_max = 4096;
 const mixed_candidates_per_position = 4;
 // The mixed planner's current search budget can reach at most 128 useful
