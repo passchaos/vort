@@ -2644,6 +2644,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   byte-identical output against the allocating greedy path and verifies retained
   capacity across calls; repeat-3 JSON level 1 retained 1505 bytes around
   0.27 s.
+  The small-block lazy hash parser now exposes the same reusable-token core and
+  Zstd owns a separate lazy token scratch for level 2+ candidates. Allocating
+  wrappers delegate to that shared state machine, and LZ77 plus Zstd focused
+  tests prove token/stat and wire identity while retained capacity remains
+  stable. Repeat-3 JSON level 3 retained 1350 bytes around 0.88 s.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

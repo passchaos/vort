@@ -7119,6 +7119,8 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     defer best.deinit(allocator);
     var greedy_tokens: std.ArrayList(lz77.Token) = .empty;
     defer greedy_tokens.deinit(allocator);
+    var lazy_tokens: std.ArrayList(lz77.Token) = .empty;
+    defer lazy_tokens.deinit(allocator);
     const mixed_ok = if (match_search_budget >= mixed_match_min_search_budget)
         try emitMixedDuplicateRepeatedMatchCompressedBlock(allocator, &candidate, block, last, match_search_budget)
     else
@@ -7137,7 +7139,10 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     // a locked corpus block. Level 2+ retains it because it can still produce a
     // different ratio-oriented candidate as the planner budget grows.
     const lazy_ok = if (match_search_budget >= lazy_match_min_search_budget)
-        try emitHashMatchCompressedBlock(allocator, &candidate, block, last, .lazy)
+        if (block.len <= 32 * 1024)
+            try emitLazyHashMatchCompressedBlockReuse(allocator, &candidate, block, last, &lazy_tokens)
+        else
+            try emitHashMatchCompressedBlock(allocator, &candidate, block, last, .lazy)
     else
         false;
     try retainShortestCandidate(allocator, lazy_ok, candidate.items, &best);
@@ -7215,6 +7220,27 @@ fn emitGreedyHashMatchCompressedBlockReuse(
     return try emitHashTokenSequenceBlock(allocator, out, block, last, tokens.items, stats);
 }
 
+fn emitLazyHashMatchCompressedBlockReuse(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    tokens: *std.ArrayList(lz77.Token),
+) Error!bool {
+    const parser_options: lz77.GreedyOptions = .{
+        .window_len = @min(block.len, lz77.default_window_len),
+        .max_chain = 128,
+        .nice_len = 258,
+        .max_candidates = 8,
+        .min_match = 4,
+        .max_match = lz77.max_match_len,
+        .min_savings_bits = 0,
+        .lazy_min_gain = 1,
+    };
+    const stats = try lz77.hashLazyGreedyPlanTinyReuse(tokens, allocator, block, parser_options);
+    return try emitHashTokenSequenceBlock(allocator, out, block, last, tokens.items, stats);
+}
+
 test "zstd reusable greedy hash emitter matches allocating wire" {
     const payload = ("{\"service\":\"vort\",\"message\":\"reusable greedy hash\"}\n" ** 48) ++ ("abcdefghijklmnop" ** 32);
     var expected: std.ArrayList(u8) = .empty;
@@ -7231,6 +7257,25 @@ test "zstd reusable greedy hash emitter matches allocating wire" {
     const retained_capacity = tokens.capacity;
     actual.clearRetainingCapacity();
     try std.testing.expect(try emitGreedyHashMatchCompressedBlockReuse(std.testing.allocator, &actual, payload, true, &tokens));
+    try std.testing.expectEqual(retained_capacity, tokens.capacity);
+    try std.testing.expectEqualSlices(u8, expected.items, actual.items);
+}
+
+test "zstd reusable lazy hash emitter matches allocating wire" {
+    const payload = ("{\"service\":\"vort\",\"message\":\"reusable lazy hash\"}\n" ** 48) ++ ("abcdefghijklmnop" ** 32);
+    var expected: std.ArrayList(u8) = .empty;
+    defer expected.deinit(std.testing.allocator);
+    try std.testing.expect(try emitHashMatchCompressedBlock(std.testing.allocator, &expected, payload, true, .lazy));
+
+    var tokens: std.ArrayList(lz77.Token) = .empty;
+    defer tokens.deinit(std.testing.allocator);
+    var actual: std.ArrayList(u8) = .empty;
+    defer actual.deinit(std.testing.allocator);
+    try std.testing.expect(try emitLazyHashMatchCompressedBlockReuse(std.testing.allocator, &actual, payload, true, &tokens));
+    try std.testing.expectEqualSlices(u8, expected.items, actual.items);
+    const retained_capacity = tokens.capacity;
+    actual.clearRetainingCapacity();
+    try std.testing.expect(try emitLazyHashMatchCompressedBlockReuse(std.testing.allocator, &actual, payload, true, &tokens));
     try std.testing.expectEqual(retained_capacity, tokens.capacity);
     try std.testing.expectEqualSlices(u8, expected.items, actual.items);
 }

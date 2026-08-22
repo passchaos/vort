@@ -360,13 +360,26 @@ fn hashLazyGreedyPlanWithTables(allocator: std.mem.Allocator, input: []const u8,
 
     var tokens = try initTokenList(allocator, input.len);
     errdefer tokens.deinit(allocator);
+    const stats = try hashLazyGreedyPlanWithTablesReuse(&tokens, allocator, input, options, head, prev);
+    return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+}
+
+pub fn hashLazyGreedyPlanTinyReuse(tokens: *std.ArrayList(Token), allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
+    if (input.len > 32 * 1024) return error.InvalidBlockPlan;
+    tokens.clearRetainingCapacity();
+    var head: [4096]isize = @splat(-1);
+    var prev_stack: [32 * 1024]isize = undefined;
+    return try hashLazyGreedyPlanWithTablesReuse(tokens, allocator, input, options, &head, prev_stack[0..input.len]);
+}
+
+fn hashLazyGreedyPlanWithTablesReuse(tokens: *std.ArrayList(Token), allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions, head: []isize, prev: []isize) !PlanStats {
     var stats = PlanStats{};
 
     var pos: usize = 0;
     while (pos < input.len) {
         const best = findBestHashMatch(input, pos, options, head, prev);
         if (!acceptMatch(input, pos, best.length, best.distance, options)) {
-            try tokens.append(allocator, .{ .literal = input[pos] });
+            try appendToken(tokens, allocator, .{ .literal = input[pos] });
             stats.literals += 1;
             insertHash(input, pos, head, prev);
             pos += 1;
@@ -382,14 +395,14 @@ fn hashLazyGreedyPlanWithTables(allocator: std.mem.Allocator, input: []const u8,
             current_inserted = true;
             const next = findBestHashMatch(input, pos + 1, options, head, prev);
             if (next.length >= best.length + options.lazy_min_gain and acceptMatch(input, pos + 1, next.length, next.distance, options)) {
-                try tokens.append(allocator, .{ .literal = input[pos] });
+                try appendToken(tokens, allocator, .{ .literal = input[pos] });
                 stats.literals += 1;
                 pos += 1;
                 continue;
             }
         }
 
-        try tokens.append(allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
+        try appendToken(tokens, allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
         stats.matches += 1;
         stats.matched_bytes += best.length;
         var insert_pos = if (current_inserted) pos + 1 else pos;
@@ -398,7 +411,7 @@ fn hashLazyGreedyPlanWithTables(allocator: std.mem.Allocator, input: []const u8,
         pos += best.length;
     }
 
-    return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+    return stats;
 }
 
 pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
@@ -1515,6 +1528,21 @@ test "reusable tiny hash planner preserves tokens and capacity" {
     try std.testing.expectEqual(reference.stats, first_stats);
     const capacity = tokens.capacity;
     _ = try hashGreedyPlanAutoTinyReuse(&tokens, std.testing.allocator, input, options);
+    try std.testing.expectEqual(capacity, tokens.capacity);
+}
+
+test "reusable tiny lazy hash planner preserves tokens and capacity" {
+    const input = "abcabcXabcabcYabcabcZabcabcX";
+    const options = GreedyOptions{ .window_len = input.len, .max_chain = 64, .nice_len = 64, .max_candidates = 8, .lazy_min_gain = 1 };
+    const reference = try hashLazyGreedyPlanTinyAlloc(std.testing.allocator, input, options);
+    defer reference.deinit(std.testing.allocator);
+    var tokens: std.ArrayList(Token) = .empty;
+    defer tokens.deinit(std.testing.allocator);
+    const first_stats = try hashLazyGreedyPlanTinyReuse(&tokens, std.testing.allocator, input, options);
+    try expectEqualTokenSlices(reference.tokens, tokens.items);
+    try std.testing.expectEqual(reference.stats, first_stats);
+    const capacity = tokens.capacity;
+    _ = try hashLazyGreedyPlanTinyReuse(&tokens, std.testing.allocator, input, options);
     try std.testing.expectEqual(capacity, tokens.capacity);
 }
 
