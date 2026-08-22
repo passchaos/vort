@@ -59,6 +59,7 @@ pub const OptimalScratch = struct {
     steps: std.ArrayList(Token) = .empty,
     head: std.ArrayList(isize) = .empty,
     prev: std.ArrayList(isize) = .empty,
+    head_initialized: [hash_head_init_words]u64 = @splat(0),
     tokens: std.ArrayList(Token) = .empty,
 
     pub fn deinit(self: *OptimalScratch, allocator: std.mem.Allocator) void {
@@ -450,13 +451,13 @@ pub fn optimalPlanReuse(scratch: *OptimalScratch, allocator: std.mem.Allocator, 
 
     // Build hash chain for fast match discovery.
     const head = scratch.head.items;
-    @memset(head, -1);
+    @memset(&scratch.head_initialized, 0);
     const prev = scratch.prev.items;
     // `prev` entries are written by the pre-population pass below before the
     // reverse dynamic-programming search reads any insertable position.
 
     // Pre-populate hash chain for all positions.
-    for (0..n) |i| insertHash(input, i, head, prev);
+    for (0..n) |i| insertHashWithLayout(input, i, head, prev, false, true, &scratch.head_initialized, .three);
 
     costs[n] = 0;
     var rev_i: usize = n;

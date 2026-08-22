@@ -2655,6 +2655,10 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   outer match decision. LZ77 and Zstd A/B tests prove token/stat/wire identity
   and stable capacities; repeat-3 JSON level 3 remained 1350 bytes around
   0.85 s.
+  Optimal hash-chain construction now protects its uninitialized reusable head
+  array with the existing 4 KiB initialization bitmap instead of clearing the
+  full 256 KiB head table on every block. The predecessor invariant remains
+  unchanged, and all optimal parser candidate-budget and token-bound tests pass.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream
