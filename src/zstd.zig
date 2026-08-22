@@ -10997,6 +10997,73 @@ fn planPredefinedSequenceValues(values: []const usize, symbols: []const Sequence
     return plan;
 }
 
+fn planPredefinedSequenceValuesReference(values: []const usize, symbols: []const SequenceSymbol, min_additional_bits: u8) Error!?PredefinedSequencePlan {
+    if (values.len == 0 or values.len > max_bootstrap_sequence_count) return null;
+    if (symbols.len > max_predefined_sequence_states) return null;
+
+    var next_choice: [max_bootstrap_sequence_count][max_predefined_sequence_states]usize = undefined;
+    for (&next_choice) |*row| @memset(row[0..], max_predefined_sequence_states);
+    var viable_next: [max_predefined_sequence_states]bool = @splat(false);
+    var pos = values.len;
+    while (pos > 0) {
+        pos -= 1;
+        var viable_current: [max_predefined_sequence_states]bool = @splat(false);
+        for (symbols, 0..) |symbol, state| {
+            if (!predefinedSymbolCanEncode(symbol, values[pos], min_additional_bits)) continue;
+            if (pos == values.len - 1) {
+                viable_current[state] = true;
+                continue;
+            }
+            const transition_count: usize = @as(usize, 1) << @intCast(symbol.state_bits);
+            for (0..transition_count) |bits| {
+                const next_state = symbol.next_state + bits;
+                if (next_state >= symbols.len or !viable_next[next_state]) continue;
+                viable_current[state] = true;
+                next_choice[pos][state] = next_state;
+                break;
+            }
+        }
+        viable_next = viable_current;
+    }
+
+    var first_state: ?usize = null;
+    for (viable_next[0..symbols.len], 0..) |viable, state| if (viable) {
+        first_state = state;
+        break;
+    };
+    var plan: PredefinedSequencePlan = .{ .len = values.len };
+    plan.states[0] = first_state orelse return null;
+    @memcpy(plan.values[0..values.len], values);
+    for (0..values.len - 1) |i| plan.states[i + 1] = next_choice[i][plan.states[i]];
+    return plan;
+}
+
+test "zstd compact predefined planner matches usize reference" {
+    var values: [max_bootstrap_sequence_count]usize = undefined;
+    var state: u32 = 0x6a09_e667;
+    const cases = [_]struct { []const SequenceSymbol, u8, usize }{
+        .{ &sequence_predefined.literal_symbols, 0, 4096 },
+        .{ &sequence_predefined.offset_symbols, 2, 32 * 1024 },
+        .{ &sequence_predefined.match_symbols, 0, 1024 },
+    };
+    for (cases) |case| {
+        for (1..values.len + 1) |len| {
+            for (values[0..len]) |*value| {
+                state = state *% 1_664_525 +% 1_013_904_223;
+                value.* = (state >> 16) % case[2];
+            }
+            const expected = try planPredefinedSequenceValuesReference(values[0..len], case[0], case[1]);
+            const actual = try planPredefinedSequenceValues(values[0..len], case[0], case[1]);
+            try std.testing.expectEqual(expected == null, actual == null);
+            if (expected) |expected_plan| {
+                const actual_plan = actual.?;
+                try std.testing.expectEqual(expected_plan.len, actual_plan.len);
+                try std.testing.expectEqualSlices(usize, expected_plan.states[0..len], actual_plan.states[0..len]);
+            }
+        }
+    }
+}
+
 fn predefinedSymbolCanEncode(symbol: SequenceSymbol, value: usize, min_additional_bits: u8) bool {
     if (symbol.additional_bits < min_additional_bits) return false;
     if (value < symbol.base) return false;
