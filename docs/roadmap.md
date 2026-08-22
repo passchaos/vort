@@ -2747,7 +2747,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   alphabet whenever the plan's highest byte permits it, avoiding full 256-way
   package-merge state for JSON/text candidates. A full-width length oracle
   preserves every active symbol length; a six-pair check retained 1058 bytes
-  and moved the median from roughly 0.76 s to 0.64 s.
+  and moved the median from roughly 0.76 s to 0.64 s. Single-stream Huffman
+  sizing now sums bit lengths directly rather than routing every byte through
+  the four-stream boundary tracker. A fragmented-run oracle preserves the
+  exact serialized length; a six-pair check retained 1058 bytes and moved the
+  median from roughly 0.66 s to 0.63 s.
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state

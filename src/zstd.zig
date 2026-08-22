@@ -8775,9 +8775,31 @@ fn smallHuffmanLiteralStreamsSerializedLenFromSequence(
     regenerated_len: usize,
     plan: *const SmallHuffmanLiteralPlan,
 ) Error!?usize {
+    if (regenerated_len <= 1023) {
+        var bit_count: usize = 0;
+        var literal_start: usize = 0;
+        for (literal_lens, 0..) |literal_len, i| {
+            if (literal_start > block.len or literal_len > block.len - literal_start) return error.CorruptFrame;
+            for (block[literal_start..][0..literal_len]) |byte| {
+                const bits = plan.bit_counts[byte];
+                if (bits == 0) return error.CorruptFrame;
+                bit_count = std.math.add(usize, bit_count, bits) catch return error.IntegerOverflow;
+            }
+            if (literal_ends[i] < literal_start + literal_len or literal_ends[i] > block.len) return error.CorruptFrame;
+            literal_start = literal_ends[i];
+        }
+        if (tail_start > block.len) return error.CorruptFrame;
+        for (block[tail_start..]) |byte| {
+            const bits = plan.bit_counts[byte];
+            if (bits == 0) return error.CorruptFrame;
+            bit_count = std.math.add(usize, bit_count, bits) catch return error.IntegerOverflow;
+        }
+        return (bit_count + 1 + 7) / 8;
+    }
+
     var bit_counts: [4]usize = .{ 0, 0, 0, 0 };
     var literal_index: usize = 0;
-    const segment_len = if (regenerated_len <= 1023) regenerated_len else (regenerated_len + 3) / 4;
+    const segment_len = (regenerated_len + 3) / 4;
     var literal_start: usize = 0;
     for (literal_lens, 0..) |literal_len, i| {
         if (literal_start > block.len or literal_len > block.len - literal_start) return error.CorruptFrame;
@@ -8788,10 +8810,6 @@ fn smallHuffmanLiteralStreamsSerializedLenFromSequence(
     if (tail_start > block.len) return error.CorruptFrame;
     try addSmallHuffmanStreamBits(block[tail_start..], plan, regenerated_len, segment_len, &literal_index, &bit_counts);
     if (literal_index != regenerated_len) return error.CorruptFrame;
-
-    if (regenerated_len <= 1023) {
-        return (bit_counts[0] + 1 + 7) / 8;
-    }
 
     var len: usize = 6;
     for (bit_counts) |bits| {
@@ -14192,6 +14210,26 @@ test "zstd Huffman literal headers reject zero compressed size as corrupt" {
         &plan,
     ));
     try std.testing.expectEqual(@as(usize, 0), out.items.len);
+}
+
+test "zstd single-stream Huffman sizing matches generic accumulator" {
+    const payload = ("abcdefg" ** 73) ++ "tail";
+    const literal_lens = [_]usize{ 37, 91, 12 };
+    const literal_ends = [_]usize{ 93, 238, 320 };
+    const regenerated_len = payload.len - literal_ends[literal_ends.len - 1] + 37 + 91 + 12;
+    try std.testing.expect(regenerated_len <= 1023);
+    const plan = smallHuffmanLiteralPlanFromSequence(payload, &literal_lens, &literal_ends, literal_ends[literal_ends.len - 1], regenerated_len) orelse return error.CorruptFrame;
+
+    var bit_counts: [4]usize = @splat(0);
+    var literal_index: usize = 0;
+    var literal_start: usize = 0;
+    for (literal_lens, literal_ends) |literal_len, literal_end| {
+        try addSmallHuffmanStreamBits(payload[literal_start..][0..literal_len], &plan, regenerated_len, regenerated_len, &literal_index, &bit_counts);
+        literal_start = literal_end;
+    }
+    try addSmallHuffmanStreamBits(payload[literal_ends[literal_ends.len - 1]..], &plan, regenerated_len, regenerated_len, &literal_index, &bit_counts);
+    const expected = (bit_counts[0] + 1 + 7) / 8;
+    try std.testing.expectEqual(expected, (try smallHuffmanLiteralStreamsSerializedLenFromSequence(payload, &literal_lens, &literal_ends, literal_ends[literal_ends.len - 1], regenerated_len, &plan)).?);
 }
 
 test "zstd FSE Huffman weight writer rejects invalid weights as corrupt" {
