@@ -4572,3 +4572,18 @@ architecture blindly.
   round, measures `1.042x/1.051x` strict/no-Adler paired-geomean gains on
   `kodim17`. Fantasy, kodim07, paletted-zune, and the lorem screenshot retain
   paired medians within `0.999x..1.002x`.
+- Optimized the PNG filter-0 single-distance RLE semantic loop by writing each
+  packed literal entry with one explicit little-endian `u16` store instead of
+  two byte stores. The semantic table already stores the two speculative
+  literal lanes in that order, and the loop guarantees two bytes of output
+  headroom. An exhaustive 65,536-pair oracle checks four aligned/unaligned
+  offsets and surrounding guards; the RLE block oracle additionally compares
+  exact output and the complete buffered-reader state against the generic
+  single-distance semantic loop.
+- The x86-64 RLE1 loop shrinks from `0xaea` to `0xa9c`. A correct dual-loop ELF
+  retains independent word/byte-store bodies and differs only in one selector
+  byte: 101 alternating fixed-CPU-25 rounds with three process samples per side
+  improve Lohengrin by `1.044x/1.041x` strict/no-Adler paired geomean. Eleven
+  counter rounds reduce instructions by `7.79%` and cycles by `2.68%` paired
+  geomean; branch misses remain neutral. Four non-selected fixture paired
+  medians stay within `0.994x..1.003x`.

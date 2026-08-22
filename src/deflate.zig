@@ -4761,20 +4761,32 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             ];
 
             const advance1: usize = @intCast((entry >> 8) & 0xf);
-            output[out_pos] = @truncate(entry >> 16);
-            output[out_pos + 1] = @truncate(entry >> 24);
+            if (comptime rle1_distance) {
+                writeSemanticLiteralPair(output, out_pos, entry);
+            } else {
+                output[out_pos] = @truncate(entry >> 16);
+                output[out_pos + 1] = @truncate(entry >> 24);
+            }
             out_pos += advance1;
 
             if ((entry2 & SemanticDynamicDecoder.literal_flag) != 0) {
                 const advance2: usize = @intCast((entry2 >> 8) & 0xf);
-                output[out_pos] = @truncate(entry2 >> 16);
-                output[out_pos + 1] = @truncate(entry2 >> 24);
+                if (comptime rle1_distance) {
+                    writeSemanticLiteralPair(output, out_pos, entry2);
+                } else {
+                    output[out_pos] = @truncate(entry2 >> 16);
+                    output[out_pos + 1] = @truncate(entry2 >> 24);
+                }
                 out_pos += advance2;
 
                 if ((entry3 & SemanticDynamicDecoder.literal_flag) != 0) {
                     const advance3: usize = @intCast((entry3 >> 8) & 0xf);
-                    output[out_pos] = @truncate(entry3 >> 16);
-                    output[out_pos + 1] = @truncate(entry3 >> 24);
+                    if (comptime rle1_distance) {
+                        writeSemanticLiteralPair(output, out_pos, entry3);
+                    } else {
+                        output[out_pos] = @truncate(entry3 >> 16);
+                        output[out_pos + 1] = @truncate(entry3 >> 24);
+                    }
                     out_pos += advance3;
 
                     bit_buffer >>= @intCast(entry123_bits);
@@ -5634,6 +5646,37 @@ inline fn emitFusedLiteralAt(output: []u8, out_pos: *usize, entry: u32) void {
     output[out_pos.*] = FusedDynamicLiteralDecoder.firstLiteral(entry);
     output[out_pos.* + 1] = FusedDynamicLiteralDecoder.secondLiteral(entry);
     out_pos.* += @as(usize, 1) + @intFromBool(FusedDynamicLiteralDecoder.hasSecondLiteral(entry));
+}
+
+inline fn writeSemanticLiteralPair(
+    output: []u8,
+    out_pos: usize,
+    entry: u32,
+) void {
+    std.debug.assert(output.len - out_pos >= 2);
+    std.mem.writeInt(u16, output[out_pos..][0..2], @truncate(entry >> 16), .little);
+}
+
+test "semantic literal-pair store preserves packed byte order and guards" {
+    for (0..256) |first| {
+        for (0..256) |second| {
+            const entry = (@as(u32, @intCast(first)) << 16) |
+                (@as(u32, @intCast(second)) << 24);
+            for (0..4) |out_pos| {
+                var bytes = [_]u8{0xa5} ** 7;
+                writeSemanticLiteralPair(&bytes, out_pos, entry);
+                for (bytes, 0..) |byte, i| {
+                    const expected: u8 = if (i == out_pos)
+                        @intCast(first)
+                    else if (i == out_pos + 1)
+                        @intCast(second)
+                    else
+                        0xa5;
+                    try std.testing.expectEqual(expected, byte);
+                }
+            }
+        }
+    }
 }
 
 fn decodeFusedDynamicNonLiteral(
@@ -12700,6 +12743,28 @@ test "png filter0 linear RLE block matches compact fallback and restores reader"
         &success_literal_table,
         &success_distance_table,
     ));
+
+    var reference_reader = success_reader;
+    var optimized_reader = success_reader;
+    var reference_block: [row_count * (row_len + 1)]u8 = undefined;
+    var optimized_block: [row_count * (row_len + 1)]u8 = undefined;
+    const reference_written = try decodeSemanticDynamicBlockIntoSingleDistanceBufferedReader(
+        &reference_reader,
+        &reference_block,
+        &success_decoder,
+    );
+    const optimized_written = try decodeSemanticDynamicBlockIntoRle1BufferedReader(
+        &optimized_reader,
+        &optimized_block,
+        &success_decoder,
+    );
+    try std.testing.expectEqual(reference_written, optimized_written);
+    try std.testing.expectEqualSlices(
+        u8,
+        reference_block[0..reference_written],
+        optimized_block[0..optimized_written],
+    );
+    try std.testing.expectEqual(reference_reader, optimized_reader);
 
     var success_output: [row_count * row_len]u8 = undefined;
     var success_sink = try PngFilter0SemanticSink.init(&success_output, info);
