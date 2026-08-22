@@ -13,6 +13,10 @@ const HashAnchor = enum { three, four };
 // allocator reuse behavior for short one-shot streams. Large image-style
 // payloads receive nearly all of the memory benefit from the bounded ring.
 const min_hash_prev_ring_input_len: usize = 512 * 1024;
+const fixed_distance_costs = blk: {
+    @setEvalBranchQuota(1_000_000);
+    break :blk fixedDistanceCostTable(default_window_len);
+};
 
 pub const Token = union(enum) {
     literal: u8,
@@ -497,7 +501,7 @@ pub fn optimalPlanReuse(scratch: *OptimalScratch, allocator: std.mem.Allocator, 
     var rev_i: usize = n;
     const minimum = minMatch(options);
     const candidate_limit = normalizedMaxCandidates(options);
-    const distance_costs = fixedDistanceCostTable(options.window_len);
+    const distance_costs = &fixed_distance_costs;
 
     while (rev_i > 0) {
         rev_i -= 1;
@@ -656,6 +660,13 @@ fn fixedDistanceCostTable(window_len: usize) [default_window_len + 1]u8 {
         table[distance] = @intCast(fixedDistanceSymbolCost(distance));
     }
     return table;
+}
+
+test "compile-time fixed distance costs match scalar range" {
+    try std.testing.expectEqual(@as(u8, 0), fixed_distance_costs[0]);
+    for (1..default_window_len + 1) |distance| {
+        try std.testing.expectEqual(@as(u8, @intCast(fixedDistanceSymbolCost(distance))), fixed_distance_costs[distance]);
+    }
 }
 
 fn lengthExtraBits(length: usize) usize {

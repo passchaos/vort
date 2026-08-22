@@ -2665,6 +2665,15 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   matches, input-length validation, and the existing optimal token/budget wires.
   This establishes the shared candidate-graph boundary needed to migrate greedy
   and lazy parsing without coupling those strategies to optimal DP storage.
+  A direct greedy-on-prebuilt-index experiment round-tripped but did not preserve
+  streaming-greedy token distances because a completed index exposes different
+  head order/visibility than incremental insertion. It was rejected rather than
+  silently changing fast-parser wires; future sharing must preserve an explicit
+  per-position snapshot or candidate list, not reuse only final hash heads.
+  Optimal's fixed-distance bit costs are now a compile-time 32 KiB lookup rather
+  than a stack table rebuilt for every block. An exhaustive 1...32768 test pins
+  every entry to the scalar formula. Together with the extracted `HashIndex`,
+  this removes another fixed per-block pass without changing parser choices.
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state
