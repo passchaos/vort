@@ -2794,6 +2794,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   oracles preserve the byte count; two fixed-core eight-pair runs retained 1058
   bytes and consistently improved the median by about 1.7% (160.265 ms to
   157.527 ms in the first run).
+  Sequence-table bit-cost scoring now dispatches once per RLE/predefined/
+  compressed alternative and walks that representation directly. This avoids
+  copying and reopening the large tagged plan for every sequence symbol while
+  retaining identical offset-history validation. A generic-symbol reference
+  oracle covers every available mode across LL/OF/ML; two fixed-core interleaved
+  runs kept 1058 bytes and improved the median by roughly 7.7-7.8% (157.287 ms
+  to 146.031 ms in the first run).
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state

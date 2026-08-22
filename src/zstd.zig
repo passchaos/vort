@@ -9230,6 +9230,58 @@ fn sequenceTablePlanBitCost(
     offsets: []const usize,
 ) Error!?SequenceTableBitCost {
     try validateSequenceTablePlanLen(plan, values.len);
+    var bit_count: usize = 0;
+    var repeated_offsets = initial_repeated_offsets;
+    switch (plan) {
+        .rle => |code| {
+            const symbol = try sequenceRleSymbol(kind, code);
+            for (values, 0..) |value, i| {
+                if (!try sequenceSymbolAcceptsValue(symbol, kind, value, literal_lens[i], offsets[i], &repeated_offsets)) return null;
+                bit_count += symbol.additional_bits;
+            }
+        },
+        .predefined => |predefined| {
+            bit_count = predefinedInitialStateBits(kind);
+            const symbols = sequenceTablePredefinedSymbols(kind);
+            for (values, 0..) |value, i| {
+                const state = predefined.states[i];
+                if (state >= symbols.len) return error.CorruptFrame;
+                const symbol = symbols[state];
+                if (!try sequenceSymbolAcceptsValue(symbol, kind, value, literal_lens[i], offsets[i], &repeated_offsets)) return null;
+                bit_count += symbol.additional_bits;
+                if (i + 1 < values.len) bit_count += symbol.state_bits;
+            }
+        },
+        .compressed => |compressed| {
+            bit_count = compressed.accuracy_log;
+            const bases = sequenceTableBases(kind);
+            const bits = sequenceTableBits(kind);
+            for (values, 0..) |value, i| {
+                const code = compressed.codes[i];
+                if (code >= bases.len or code >= bits.len) return error.CorruptFrame;
+                const symbol: SequenceSymbol = .{
+                    .base = @intCast(bases[code]),
+                    .additional_bits = bits[code],
+                    .next_state = compressed.next_states[i],
+                    .state_bits = compressed.state_bits[i],
+                };
+                if (!try sequenceSymbolAcceptsValue(symbol, kind, value, literal_lens[i], offsets[i], &repeated_offsets)) return null;
+                bit_count += symbol.additional_bits;
+                if (i + 1 < values.len) bit_count += compressed.transition_bits[i];
+            }
+        },
+    }
+    return .{ .payload_len = sequenceTablePayloadLen(plan), .bit_count = bit_count };
+}
+
+fn sequenceTablePlanBitCostReference(
+    plan: SequenceTableEmitPlan,
+    kind: SequenceTableKind,
+    values: []const usize,
+    literal_lens: []const usize,
+    offsets: []const usize,
+) Error!?SequenceTableBitCost {
+    try validateSequenceTablePlanLen(plan, values.len);
     var bit_count: usize = switch (plan) {
         .rle => 0,
         .predefined => predefinedInitialStateBits(kind),
@@ -9254,6 +9306,24 @@ fn sequenceTablePlanBitCost(
         }
     }
     return .{ .payload_len = sequenceTablePayloadLen(plan), .bit_count = bit_count };
+}
+
+fn sequenceSymbolAcceptsValue(
+    symbol: SequenceSymbol,
+    kind: SequenceTableKind,
+    value: usize,
+    literal_len: usize,
+    offset: usize,
+    repeated_offsets: *[3]usize,
+) Error!bool {
+    if (kind == .offset) {
+        _ = sequenceOffsetExtraForEncodedOffset(symbol, literal_len, offset, repeated_offsets) catch |err| switch (err) {
+            error.InvalidMatch, error.UnsupportedZstdFeature, error.CorruptFrame => return false,
+            else => return err,
+        };
+        return true;
+    }
+    return value >= symbol.base;
 }
 
 fn sequenceCombinedPlanNeedsGenericEmitter(plan: SequenceCombinedEmitPlan) bool {
@@ -14564,6 +14634,34 @@ test "zstd sequence payload scorers reuse exact literal section length" {
     var actual_fields: [max_bootstrap_sequence_count * 6]BitField = undefined;
     const actual_count = try sequenceReadFieldsWithTablePlans(&actual_fields, &literal_lens, &offsets, &match_lens, actual_table.plan);
     try std.testing.expectEqualSlices(BitField, expected_fields[0..expected_count], actual_fields[0..actual_count]);
+}
+
+test "zstd specialized sequence table cost matches generic symbol lookup" {
+    const literal_lens = [_]usize{
+        8, 1, 2, 3, 2, 4, 3, 1,
+        2, 3, 2, 4, 3, 1, 2, 3,
+    };
+    const offsets = [_]usize{
+        4, 4, 1, 8, 8, 4, 4, 8,
+        1, 1, 8, 4, 4, 8, 1, 1,
+    };
+    const match_lens = [_]usize{
+        4, 5, 4, 6, 5, 4, 6, 5,
+        4, 5, 4, 6, 5, 4, 6, 5,
+    };
+    const values = [_][]const usize{ &literal_lens, &offsets, &match_lens };
+    for ([_]SequenceTableKind{ .literal, .offset, .match }, values) |kind, selected_values| {
+        const alternatives = if (kind == .offset)
+            try offsetSequenceTablePlanAlternatives(&literal_lens, &offsets)
+        else
+            try sequenceTablePlanAlternatives(selected_values, kind);
+        for (alternatives.items[0..alternatives.len]) |plan| {
+            try std.testing.expectEqual(
+                try sequenceTablePlanBitCostReference(plan, kind, selected_values, &literal_lens, &offsets),
+                try sequenceTablePlanBitCost(plan, kind, selected_values, &literal_lens, &offsets),
+            );
+        }
+    }
 }
 
 test "zstd sequence emitter supports mixed RLE and predefined tables" {
