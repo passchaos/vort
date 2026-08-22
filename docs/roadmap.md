@@ -2659,6 +2659,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   array with the existing 4 KiB initialization bitmap instead of clearing the
   full 256 KiB head table on every block. The predecessor invariant remains
   unchanged, and all optimal parser candidate-budget and token-bound tests pass.
+  Top-level per-block arbitration now also reuses one candidate scratch and one
+  retained winner across dictionary, frame-history, Huffman, and native-match
+  blocks. The historical Huffman-wins-equal tie and transactional tree-state
+  commit are preserved; focused shortest-match plus multi-block treeless reuse
+  tests pass. Repeat-3 JSON level 3 remained 1350 bytes around 0.87 s.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

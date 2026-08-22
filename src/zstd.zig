@@ -7009,65 +7009,67 @@ fn emitLiteralOnlyCompressedBlockWithHistory(
     frame_offset: usize,
     match_search_budget: usize,
 ) Error!void {
-    var dictionary_block: std.ArrayList(u8) = .empty;
-    defer dictionary_block.deinit(allocator);
+    const CandidateKind = enum { dictionary, history, huffman, match };
+    var candidate: std.ArrayList(u8) = .empty;
+    defer candidate.deinit(allocator);
+    var best: std.ArrayList(u8) = .empty;
+    defer best.deinit(allocator);
+    var best_kind: ?CandidateKind = null;
+
     const dictionary_ok = if (dictionary) |dict|
-        try emitDictionaryMatchCompressedBlock(allocator, &dictionary_block, block, last, dict, frame_offset, match_search_budget)
+        try emitDictionaryMatchCompressedBlock(allocator, &candidate, block, last, dict, frame_offset, match_search_budget)
     else
         false;
+    if (dictionary_ok) {
+        try best.appendSlice(allocator, candidate.items);
+        best_kind = .dictionary;
+    }
 
-    var history_block: std.ArrayList(u8) = .empty;
-    defer history_block.deinit(allocator);
-    const history_ok = try emitFrameHistoryMatchCompressedBlock(allocator, &history_block, block, last, frame_history);
+    candidate.clearRetainingCapacity();
+    const history_ok = try emitFrameHistoryMatchCompressedBlock(allocator, &candidate, block, last, frame_history);
+    if (history_ok and (best_kind == null or candidate.items.len < best.items.len)) {
+        best.clearRetainingCapacity();
+        try best.appendSlice(allocator, candidate.items);
+        best_kind = .history;
+    }
 
     var huffman_state = state.*;
-    var huffman_block: std.ArrayList(u8) = .empty;
-    defer huffman_block.deinit(allocator);
-    const huffman_ok = try emitSmallHuffmanLiteralBlock(allocator, &huffman_block, block, last, &huffman_state);
-
-    var match_block: std.ArrayList(u8) = .empty;
-    defer match_block.deinit(allocator);
-    const match_ok = try emitNativeMatchCompressedBlock(allocator, &match_block, block, last, match_search_budget);
-
-    const CandidateKind = enum { dictionary, history, huffman, match };
-    var best_kind: ?CandidateKind = null;
-    var best_len: usize = std.math.maxInt(usize);
-    if (dictionary_ok) {
-        best_kind = .dictionary;
-        best_len = dictionary_block.items.len;
-    }
-    if (history_ok and history_block.items.len < best_len) {
-        best_kind = .history;
-        best_len = history_block.items.len;
-    }
-    if (huffman_ok and huffman_block.items.len <= best_len) {
+    candidate.clearRetainingCapacity();
+    const huffman_ok = try emitSmallHuffmanLiteralBlock(allocator, &candidate, block, last, &huffman_state);
+    // Preserve the historical Huffman-on-equal tie preference.
+    if (huffman_ok and (best_kind == null or candidate.items.len <= best.items.len)) {
+        best.clearRetainingCapacity();
+        try best.appendSlice(allocator, candidate.items);
         best_kind = .huffman;
-        best_len = huffman_block.items.len;
     }
-    if (match_ok and match_block.items.len < best_len) {
+
+    candidate.clearRetainingCapacity();
+    const match_ok = try emitNativeMatchCompressedBlock(allocator, &candidate, block, last, match_search_budget);
+    if (match_ok and (best_kind == null or candidate.items.len < best.items.len)) {
+        best.clearRetainingCapacity();
+        try best.appendSlice(allocator, candidate.items);
         best_kind = .match;
-        best_len = match_block.items.len;
     }
 
     if (best_kind) |kind| switch (kind) {
         .dictionary => {
             state.previous_huffman_plan = null;
-            try out.appendSlice(allocator, dictionary_block.items);
+            try out.appendSlice(allocator, best.items);
             return;
         },
         .history => {
             state.previous_huffman_plan = null;
-            try out.appendSlice(allocator, history_block.items);
+            try out.appendSlice(allocator, best.items);
             return;
         },
         .huffman => {
-            try out.appendSlice(allocator, huffman_block.items);
+            try out.appendSlice(allocator, best.items);
             state.* = huffman_state;
             return;
         },
         .match => {
             state.previous_huffman_plan = null;
-            try out.appendSlice(allocator, match_block.items);
+            try out.appendSlice(allocator, best.items);
             return;
         },
     };
