@@ -2824,6 +2824,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   heavily wrapped repeated-input oracles match the old rebuilt search exactly; a
   fixed-core eight-pair check retained 1058 bytes and reduced the median from
   122.779 ms to 119.927 ms (1.024x).
+  The same reusable index now stores a compact full predecessor link for each
+  position, letting the exact-cursor alternative visit only equal-hash history
+  instead of rehashing every earlier byte. Its explicit longest/closest tie
+  rule makes newest-first traversal equivalent; indexed-vs-scan oracles cover
+  random long matches and buckets wrapped hundreds of times. Fixed-core
+  eight-pair checks retained 1058 bytes and reduced the median from 119.842 ms
+  to 118.753 ms (1.009x).
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state

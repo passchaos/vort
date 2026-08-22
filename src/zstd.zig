@@ -36,6 +36,7 @@ const initial_repeated_offsets = [3]usize{ 1, 4, 8 };
 const duplicate_hash_bits = 15;
 const duplicate_hash_table_len = 1 << duplicate_hash_bits;
 const duplicate_hash_invalid = std.math.maxInt(u32);
+const duplicate_index_invalid = std.math.maxInt(u16);
 const duplicate_hash_candidates = 8;
 const duplicate_index_max_input_len = std.math.maxInt(u16);
 const duplicate_exact_hash_table_len = 1 << 12;
@@ -8132,7 +8133,7 @@ fn mixedMatchCandidatesAtUncached(
             // The existing global-best candidate often skips useful bytes to
             // buy a longer match; lookahead needs both choices to avoid turning
             // those skipped bytes into literals across the whole plan.
-            if (try duplicateMixedMatchCandidateAtCursor(block, literal_start)) |cursor_candidate| {
+            if (try duplicateMixedMatchCandidateAtCursor(block, literal_start, duplicate_index)) |cursor_candidate| {
                 if (cursor_candidate.literal_end != candidate.literal_end or cursor_candidate.offset != candidate.offset) {
                     out[count] = cursor_candidate;
                     count += 1;
@@ -8150,10 +8151,16 @@ fn mixedMatchCandidatesAtUncached(
     return count;
 }
 
-fn duplicateMixedMatchCandidateAtCursor(block: []const u8, literal_start: usize) Error!?MixedMatchCandidate {
+fn duplicateMixedMatchCandidateAtCursor(block: []const u8, literal_start: usize, duplicate_index: ?*const DuplicateMatchIndex) Error!?MixedMatchCandidate {
     if (literal_start == 0 or literal_start + 8 > block.len) return null;
     var best: ?DuplicateMatch = null;
-    if (block.len > 4096) {
+    if (duplicate_index) |index| {
+        var candidate_index = index.hash_predecessors[literal_start];
+        while (candidate_index != duplicate_index_invalid) {
+            considerCursorDuplicateMatch(block, literal_start, candidate_index, &best);
+            candidate_index = index.hash_predecessors[candidate_index];
+        }
+    } else if (block.len > 4096) {
         // Large blocks use the same eight-byte hash-chain candidate policy as
         // the global finder; scanning all prior bytes here would turn the new
         // alternative into another quadratic hot path.
@@ -8177,6 +8184,10 @@ fn duplicateMixedMatchCandidateAtCursor(block: []const u8, literal_start: usize)
         .payload_len = payload_len,
         .kind = .duplicate,
     };
+}
+
+fn duplicateMixedMatchCandidateAtCursorScan(block: []const u8, literal_start: usize) Error!?MixedMatchCandidate {
+    return duplicateMixedMatchCandidateAtCursor(block, literal_start, null);
 }
 
 fn considerCursorDuplicateMatch(block: []const u8, literal_start: usize, first: usize, best: *?DuplicateMatch) void {
@@ -10859,15 +10870,19 @@ const DuplicateMatch = struct {
 const DuplicateMatchIndex = struct {
     predecessors: [duplicate_index_max_input_len][duplicate_hash_candidates]u16 = undefined,
     predecessor_counts: [duplicate_index_max_input_len]u8 = undefined,
+    hash_predecessors: [duplicate_index_max_input_len]u16 = undefined,
 
     fn build(index: *DuplicateMatchIndex, block: []const u8) void {
         std.debug.assert(block.len <= duplicate_index_max_input_len);
         var table: [duplicate_hash_table_len][duplicate_hash_candidates]u16 = undefined;
+        var latest: [duplicate_hash_table_len]u16 = @splat(duplicate_index_invalid);
         var states: [duplicate_hash_table_len]u8 = @splat(0);
         for (0..block.len) |position| {
             index.predecessor_counts[position] = 0;
             if (position + 8 > block.len) continue;
             const hash = duplicateHash8(block[position..][0..8]);
+            index.hash_predecessors[position] = latest[hash];
+            latest[hash] = @intCast(position);
             const state = states[hash];
             const count: usize = state >> 3;
             const next_slot: usize = state & (duplicate_hash_candidates - 1);
@@ -11279,6 +11294,12 @@ test "zstd reusable duplicate index matches rebuilt search" {
             try findBestDuplicateMatchHashed(&payload, start_min),
             try findBestDuplicateMatchIndexed(&payload, start_min, &index),
         );
+        if (start_min != 0) {
+            try std.testing.expectEqual(
+                try duplicateMixedMatchCandidateAtCursorScan(&payload, start_min),
+                try duplicateMixedMatchCandidateAtCursor(&payload, start_min, &index),
+            );
+        }
     }
 
     const repeated = "abcdefgh" ** 1024;
@@ -11291,6 +11312,12 @@ test "zstd reusable duplicate index matches rebuilt search" {
             try findBestDuplicateMatchHashed(repeated, start_min),
             try findBestDuplicateMatchIndexed(repeated, start_min, &repeated_index),
         );
+        if (start_min != 0) {
+            try std.testing.expectEqual(
+                try duplicateMixedMatchCandidateAtCursorScan(repeated, start_min),
+                try duplicateMixedMatchCandidateAtCursor(repeated, start_min, &repeated_index),
+            );
+        }
     }
 }
 
