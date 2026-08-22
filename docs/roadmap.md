@@ -2856,6 +2856,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   oracle plus the exhaustive scan comparison preserve selection; fixed-core
   eight-pair checks retained 1058 bytes and reduced the median from 110.861 ms
   to 109.672 ms (1.011x).
+  Duplicate match finders now return the exact single-sequence payload score
+  they already computed while selecting their winner. Mixed-candidate material-
+  ization reuses that score rather than rebuilding the literal histogram and
+  Huffman plan for the same match. A focused oracle recomputes the score from
+  the selected match; fixed-core eight-pair checks retained 1058 bytes and
+  reduced the median from 109.760 ms to 107.025 ms (1.026x).
   Sequence-literal RLE detection now skips empty/already-disproved runs and uses
   the standard library's vectorized `allEqual` scan for each remaining run
   instead of branching once per byte. A focused reference oracle covers empty,

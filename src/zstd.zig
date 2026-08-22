@@ -7721,13 +7721,12 @@ fn duplicateMixedMatchCandidate(block: []const u8, literal_start: usize, duplica
     else
         try findBestDuplicateMatchIn(block, literal_start);
     if (best) |match| {
-        const payload_len = singleMatchPayloadLenFrom(block, match, literal_start) catch return null;
         return .{
             .literal_len = match.second_start - literal_start,
             .offset = match.second_start - match.first_start,
             .match_len = match.len,
             .literal_end = match.second_start + match.len,
-            .payload_len = payload_len,
+            .payload_len = match.payload_len,
             .kind = .duplicate,
         };
     }
@@ -10911,6 +10910,7 @@ const DuplicateMatch = struct {
     first_start: usize,
     second_start: usize,
     len: usize,
+    payload_len: usize = 0,
 };
 
 const DuplicateMatchIndex = struct {
@@ -11034,7 +11034,9 @@ fn findBestDuplicateMatchIndexed(block: []const u8, start_min: usize, index: *co
             if (duplicateMatchCannotBeat(candidate, best)) continue;
             const candidate_payload_len = singleMatchPayloadLenFrom(block, candidate, start_min) catch continue;
             if (candidate_payload_len < best_payload_len or (candidate_payload_len == best_payload_len and len > (best orelse candidate).len)) {
-                best = candidate;
+                var scored = candidate;
+                scored.payload_len = candidate_payload_len;
+                best = scored;
                 best_payload_len = candidate_payload_len;
             }
         }
@@ -11080,7 +11082,9 @@ fn findBestDuplicateMatchExactHashed(block: []const u8, start_min: usize) Error!
                 if (duplicateMatchCannotBeat(candidate, best)) continue;
                 const candidate_payload_len = singleMatchPayloadLenFrom(block, candidate, start_min) catch continue;
                 if (candidate_payload_len < best_payload_len or (candidate_payload_len == best_payload_len and len > (best orelse candidate).len)) {
-                    best = candidate;
+                    var scored = candidate;
+                    scored.payload_len = candidate_payload_len;
+                    best = scored;
                     best_payload_len = candidate_payload_len;
                 }
             }
@@ -11117,7 +11121,9 @@ fn findBestDuplicateMatchScanReference(block: []const u8, start_min: usize) Erro
             if (duplicateMatchCannotBeat(candidate, best)) continue;
             const candidate_payload_len = singleMatchPayloadLenFrom(block, candidate, start_min) catch continue;
             if (candidate_payload_len < best_payload_len or (candidate_payload_len == best_payload_len and len > (best orelse candidate).len)) {
-                best = candidate;
+                var scored = candidate;
+                scored.payload_len = candidate_payload_len;
+                best = scored;
                 best_payload_len = candidate_payload_len;
             }
         }
@@ -11282,7 +11288,9 @@ fn findBestDuplicateMatchHashed(block: []const u8, start_min: usize) Error!?Dupl
             if (duplicateMatchCannotBeat(candidate, best)) continue;
             const candidate_payload_len = singleMatchPayloadLenFrom(block, candidate, start_min) catch continue;
             if (candidate_payload_len < best_payload_len or (candidate_payload_len == best_payload_len and len > (best orelse candidate).len)) {
-                best = candidate;
+                var scored = candidate;
+                scored.payload_len = candidate_payload_len;
+                best = scored;
                 best_payload_len = candidate_payload_len;
             }
         }
@@ -11392,6 +11400,19 @@ test "zstd reusable duplicate index matches rebuilt search" {
                 try duplicateMixedMatchCandidateAtCursor(repeated, start_min, &repeated_index),
             );
         }
+    }
+}
+
+test "zstd duplicate match retains its selected payload score" {
+    const payload =
+        "header:{\"service\":\"vort\",\"message\":\"repeatable payload\"}\n" ** 16 ++
+        "tail:{\"service\":\"vort\",\"message\":\"repeatable payload\"}\n" ** 8;
+    for ([_]usize{ 0, 17, 73 }) |start_min| {
+        const match = (try findBestDuplicateMatchIn(payload, start_min)) orelse continue;
+        try std.testing.expectEqual(
+            try singleMatchPayloadLenFrom(payload, match, start_min),
+            match.payload_len,
+        );
     }
 }
 
