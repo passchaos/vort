@@ -3543,6 +3543,60 @@ pub fn encodeFrameWithOptionsAlloc(allocator: std.mem.Allocator, input: []const 
     return try encodeFrameWithLevelAndOptionsAlloc(allocator, input, default_compression_level, options);
 }
 
+const LockedAllocator = struct {
+    child: std.mem.Allocator,
+    mutex: std.atomic.Mutex = .unlocked,
+
+    fn allocator(self: *LockedAllocator) std.mem.Allocator {
+        return .{ .ptr = self, .vtable = &vtable };
+    }
+
+    fn alloc(context: *anyopaque, len: usize, alignment: std.mem.Alignment, return_address: usize) ?[*]u8 {
+        const self: *LockedAllocator = @ptrCast(@alignCast(context));
+        while (!self.mutex.tryLock()) std.atomic.spinLoopHint();
+        defer self.mutex.unlock();
+        return self.child.rawAlloc(len, alignment, return_address);
+    }
+
+    fn resize(context: *anyopaque, memory: []u8, alignment: std.mem.Alignment, new_len: usize, return_address: usize) bool {
+        const self: *LockedAllocator = @ptrCast(@alignCast(context));
+        while (!self.mutex.tryLock()) std.atomic.spinLoopHint();
+        defer self.mutex.unlock();
+        return self.child.rawResize(memory, alignment, new_len, return_address);
+    }
+
+    fn remap(context: *anyopaque, memory: []u8, alignment: std.mem.Alignment, new_len: usize, return_address: usize) ?[*]u8 {
+        const self: *LockedAllocator = @ptrCast(@alignCast(context));
+        while (!self.mutex.tryLock()) std.atomic.spinLoopHint();
+        defer self.mutex.unlock();
+        return self.child.rawRemap(memory, alignment, new_len, return_address);
+    }
+
+    fn free(context: *anyopaque, memory: []u8, alignment: std.mem.Alignment, return_address: usize) void {
+        const self: *LockedAllocator = @ptrCast(@alignCast(context));
+        while (!self.mutex.tryLock()) std.atomic.spinLoopHint();
+        defer self.mutex.unlock();
+        self.child.rawFree(memory, alignment, return_address);
+    }
+
+    const vtable: std.mem.Allocator.VTable = .{ .alloc = alloc, .resize = resize, .remap = remap, .free = free };
+};
+
+const LevelFrameCandidate = struct {
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: NativeFrameOptions,
+    result: ?NativeFrameEncodeResult = null,
+    err: ?Error = null,
+
+    fn run(self: *LevelFrameCandidate) void {
+        self.result = encodeNativeFrameWithOptionsAlloc(self.allocator, self.input, self.options) catch |err| {
+            self.err = err;
+            return;
+        };
+    }
+};
+
 pub fn encodeFrameWithLevelAndOptionsAlloc(
     allocator: std.mem.Allocator,
     input: []const u8,
@@ -3550,6 +3604,52 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
     options: FrameOptions,
 ) Error![]u8 {
     const primary_options = try nativeFrameOptionsForLevel(level, options);
+    if (level > 0 and input.len > 8 * 1024) {
+        var locked_allocator = LockedAllocator{ .child = allocator };
+        const parallel_allocator = locked_allocator.allocator();
+        const block_sizes = adaptiveLevelBlockSizes(level);
+        var candidates: [2]LevelFrameCandidate = undefined;
+        var candidate_count: usize = 0;
+        for (block_sizes) |block_size| {
+            if (block_size >= input.len or block_size == primary_options.block_size_max) continue;
+            var split_options = primary_options;
+            split_options.block_size_max = block_size;
+            candidates[candidate_count] = .{ .allocator = parallel_allocator, .input = input, .options = split_options };
+            candidate_count += 1;
+        }
+        if (candidate_count != 0) {
+            var threads: [2]std.Thread = undefined;
+            var spawned: usize = 0;
+            for (candidates[0..candidate_count], 0..) |*candidate, i| {
+                threads[i] = std.Thread.spawn(.{}, LevelFrameCandidate.run, .{candidate}) catch {
+                    for (threads[0..spawned]) |thread| thread.join();
+                    for (candidates[0..spawned]) |completed| if (completed.result) |result| parallel_allocator.free(result.frame);
+                    return error.InvalidBlockPlan;
+                };
+                spawned += 1;
+            }
+            var best = encodeNativeFrameWithOptionsAlloc(parallel_allocator, input, primary_options) catch |err| {
+                for (threads[0..spawned]) |thread| thread.join();
+                for (candidates[0..candidate_count]) |candidate| if (candidate.result) |result| parallel_allocator.free(result.frame);
+                return err;
+            };
+            for (threads[0..spawned]) |thread| thread.join();
+            for (candidates[0..candidate_count]) |*candidate| {
+                if (candidate.err) |err| {
+                    parallel_allocator.free(best.frame);
+                    for (candidates[0..candidate_count]) |other| if (other.result) |result| parallel_allocator.free(result.frame);
+                    return err;
+                }
+                const result = candidate.result.?;
+                if (result.frame.len < best.frame.len) {
+                    parallel_allocator.free(best.frame);
+                    best = result;
+                } else parallel_allocator.free(result.frame);
+                candidate.result = null;
+            }
+            return best.frame;
+        }
+    }
     var best = try encodeNativeFrameWithOptionsAlloc(allocator, input, primary_options);
     if (level <= 0 or input.len <= 8 * 1024) return best.frame;
     errdefer allocator.free(best.frame);
@@ -13205,6 +13305,33 @@ test "zstd adaptive block candidate never expands the selected frame" {
     const decoded = try decodeFrameAlloc(std.testing.allocator, structured_selected);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, structured.items, decoded);
+}
+
+test "zstd parallel adaptive candidates match serial selection" {
+    var structured: std.ArrayList(u8) = .empty;
+    defer structured.deinit(std.testing.allocator);
+    while (structured.items.len < 12 * 1024) {
+        var line: [96]u8 = undefined;
+        const formatted = try std.fmt.bufPrint(&line, "{{\"id\":{d},\"service\":\"vort\",\"message\":\"parallel adaptive\"}}\n", .{structured.items.len / 64});
+        try structured.appendSlice(std.testing.allocator, formatted);
+    }
+    const level: c_int = 9;
+    const primary_options = try nativeFrameOptionsForLevel(level, .{});
+    var expected = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, structured.items, primary_options);
+    defer std.testing.allocator.free(expected.frame);
+    for (adaptiveLevelBlockSizes(level)) |block_size| {
+        var split_options = primary_options;
+        split_options.block_size_max = block_size;
+        const candidate = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, structured.items, split_options);
+        if (candidate.frame.len < expected.frame.len) {
+            std.testing.allocator.free(expected.frame);
+            expected = candidate;
+        } else std.testing.allocator.free(candidate.frame);
+    }
+
+    const actual = try encodeFrameWithLevelAlloc(std.testing.allocator, structured.items, level);
+    defer std.testing.allocator.free(actual);
+    try std.testing.expectEqualSlices(u8, expected.frame, actual);
 }
 
 test "zstd native decoder rejects malformed FSE compressed sequence tables" {

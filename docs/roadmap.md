@@ -2755,7 +2755,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   fixed open-addressed index instead of linearly scanning up to 512 cached
   positions on every recursive lookup. Collision and repeat-hit oracles preserve
   candidate snapshots; a fixed-CPU eight-pair check retained 1058 bytes and
-  moved the median from roughly 0.82 s to 0.69 s.
+  moved the median from roughly 0.82 s to 0.69 s. Public allocating level encode
+  now evaluates the two adaptive split candidates on worker threads while the
+  caller thread evaluates the primary frame through a mutex-wrapped caller
+  allocator, then applies the original strict primary...4 KiB...8 KiB
+  shortest-frame order. A serial-selection oracle preserves the exact wire;
+  fixed-CPU-8..10 eight-pair JSON checks retained 1058 bytes and moved the
+  median from roughly 0.63 s to 0.31 s.
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state
