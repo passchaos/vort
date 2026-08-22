@@ -2700,7 +2700,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   losing recursive branches no longer copy five fixed 128-entry plan arrays
   on return and again while unwinding. An interleaved four-pair check retained
   the 1058-byte wire and measured roughly 2.51 s versus the prior 2.52 s
-  median, a small improvement after the much larger Huffman lookup win.
+  median, a small improvement after the much larger Huffman lookup win. Each
+  finalized mixed candidate now also computes its literal-section size once
+  and shares it across RLE, predefined, and mixed table scoring; a six-pair
+  interleaved check retained 1058 bytes and moved the median from roughly
+  2.50 s to 2.41 s.
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state

@@ -8783,15 +8783,23 @@ fn bestSequencePayloadLenWithLiteralEnds(
     // symbol bytes) or with a mixed table-mode byte can be incorrectly
     // discarded before emitBestSequenceCompressedBlock has a chance to choose
     // the smaller wire representation.
+    if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len or literal_lens.len != literal_ends.len) return error.CorruptFrame;
+    if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
+    // All three sequence-table families serialize the same literal section.
+    // Mixed lookahead calls this scorer hundreds of times, so build the
+    // histogram/Huffman estimate once per candidate rather than once per
+    // table family.
+    const literals_section_len = try sequenceLiteralsPayloadSectionLen(block, literal_lens, literal_ends, tail_start);
+
     var best: ?usize = null;
-    if (rleSequencePayloadLenForValuesWithLiteralEnds(block, literal_lens, offsets, match_lens, literal_ends, tail_start)) |len| {
+    if (rleSequencePayloadLenForValuesWithLiteralsLen(literal_lens, offsets, match_lens, literals_section_len)) |len| {
         chooseShortestPayloadLen(len, &best);
     } else |err| switch (err) {
         error.CorruptFrame => {},
         else => return err,
     }
 
-    if (multiSequencePayloadLenWithLiteralEnds(block, literal_lens, offsets, match_lens, literal_ends, tail_start)) |len| {
+    if (predefinedSequencePayloadLenWithLiteralsLen(literal_lens, offsets, match_lens, literals_section_len)) |len| {
         chooseShortestPayloadLen(len, &best);
     } else |err| switch (err) {
         error.CorruptFrame => {},
@@ -8799,7 +8807,7 @@ fn bestSequencePayloadLenWithLiteralEnds(
     }
 
     if (literal_lens.len > 1) {
-        if (try bestTablePlanSequence(block, literal_lens, offsets, match_lens, literal_ends, tail_start)) |candidate| {
+        if (try bestTablePlanSequenceWithLiteralsLen(literal_lens, offsets, match_lens, literals_section_len)) |candidate| {
             chooseShortestPayloadLen(candidate.payload_len, &best);
         }
     }
@@ -8884,14 +8892,23 @@ fn bestTablePlanSequence(
     if (literal_lens.len != literal_ends.len) return error.CorruptFrame;
     if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
 
+    const literals_section_len = try sequenceLiteralsPayloadSectionLen(block, literal_lens, literal_ends, tail_start);
+    return try bestTablePlanSequenceWithLiteralsLen(literal_lens, offsets, match_lens, literals_section_len);
+}
+
+fn bestTablePlanSequenceWithLiteralsLen(
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literals_section_len: usize,
+) Error!?SequenceCombinedPlanCandidate {
+    if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
+    if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
+
     const literal_alternatives = try sequenceTablePlanAlternatives(literal_lens, .literal);
     const offset_alternatives = try offsetSequenceTablePlanAlternatives(literal_lens, offsets);
     const match_alternatives = try sequenceTablePlanAlternatives(match_lens, .match);
     if (literal_alternatives.len == 0 or offset_alternatives.len == 0 or match_alternatives.len == 0) return null;
-    // Literal bytes and their Huffman plan are independent of the LL/OF/ML
-    // table combination. Compute this expensive section length once rather
-    // than once for every Cartesian-product table candidate below.
-    const literals_section_len = try sequenceLiteralsPayloadSectionLen(block, literal_lens, literal_ends, tail_start);
     var literal_costs: [3]?SequenceTableBitCost = @splat(null);
     var offset_costs: [3]?SequenceTableBitCost = @splat(null);
     var match_costs: [3]?SequenceTableBitCost = @splat(null);
@@ -9501,8 +9518,33 @@ fn multiSequencePayloadLenInternal(
     const offset_plan = (try planPredefinedSequenceValues(offsets, &sequence_predefined.offset_symbols, 2)) orelse return error.CorruptFrame;
     const match_plan = (try planPredefinedSequenceValues(match_lens, &sequence_predefined.match_symbols, 0)) orelse return error.CorruptFrame;
 
-    var len = try sequenceLiteralsPayloadSectionLen(block, literal_lens, literal_ends, tail_start);
-    len = std.math.add(usize, len, try sequenceCountLen(literal_lens.len)) catch return error.IntegerOverflow;
+    const literals_section_len = try sequenceLiteralsPayloadSectionLen(block, literal_lens, literal_ends, tail_start);
+    return try predefinedSequencePayloadLenFromPlans(literal_plan, offset_plan, match_plan, literals_section_len);
+}
+
+fn predefinedSequencePayloadLenWithLiteralsLen(
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literals_section_len: usize,
+) Error!usize {
+    if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
+    if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
+    const literal_plan = (try planPredefinedSequenceValues(literal_lens, &sequence_predefined.literal_symbols, 0)) orelse return error.CorruptFrame;
+    const offset_plan = (try planPredefinedSequenceValues(offsets, &sequence_predefined.offset_symbols, 2)) orelse return error.CorruptFrame;
+    const match_plan = (try planPredefinedSequenceValues(match_lens, &sequence_predefined.match_symbols, 0)) orelse return error.CorruptFrame;
+    return try predefinedSequencePayloadLenFromPlans(literal_plan, offset_plan, match_plan, literals_section_len);
+}
+
+fn predefinedSequencePayloadLenFromPlans(
+    literal_plan: PredefinedSequencePlan,
+    offset_plan: PredefinedSequencePlan,
+    match_plan: PredefinedSequencePlan,
+    literals_section_len: usize,
+) Error!usize {
+    if (literal_plan.len != offset_plan.len or literal_plan.len != match_plan.len) return error.CorruptFrame;
+    var len = literals_section_len;
+    len = std.math.add(usize, len, try sequenceCountLen(literal_plan.len)) catch return error.IntegerOverflow;
     len = std.math.add(usize, len, 1) catch return error.IntegerOverflow; // sequence mode byte
 
     var read_fields: [max_bootstrap_sequence_count * 6]BitField = undefined;
@@ -9605,17 +9647,54 @@ fn rleSequencePayloadLenForValuesWithLiteralEnds(
     tail_start: usize,
 ) Error!usize {
     if (literal_lens.len == 0 or literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
-    return try rleSequencePayloadLenWithLiteralEnds(
-        block,
+    const literals_section_len = try sequenceLiteralsPayloadSectionLen(block, literal_lens, literal_ends, tail_start);
+    return try rleSequencePayloadLenForValuesWithLiteralsLen(literal_lens, offsets, match_lens, literals_section_len);
+}
+
+fn rleSequencePayloadLenForValuesWithLiteralsLen(
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literals_section_len: usize,
+) Error!usize {
+    if (literal_lens.len == 0 or literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
+    return try rleSequencePayloadLenWithLiteralsLen(
         literal_lens,
         offsets,
         match_lens,
-        literal_ends,
-        tail_start,
+        literals_section_len,
         try sequenceCodeForValue(literal_lens[0], &ll_base, &ll_bits),
         try sequenceCodeForValue(offsets[0], &of_base, &of_bits),
         try sequenceCodeForValue(match_lens[0], &ml_base, &ml_bits),
     );
+}
+
+fn rleSequencePayloadLenWithLiteralsLen(
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literals_section_len: usize,
+    literal_code: u8,
+    offset_code: u8,
+    match_code: u8,
+) Error!usize {
+    if (literal_lens.len == 0 or literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
+    if (literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
+
+    var bit_count: usize = 1;
+    for (literal_lens, 0..) |literal_len, i| {
+        if (try sequenceCodeForValue(literal_len, &ll_base, &ll_bits) != literal_code) return error.CorruptFrame;
+        if (try sequenceCodeForValue(offsets[i], &of_base, &of_bits) != offset_code) return error.CorruptFrame;
+        if (try sequenceCodeForValue(match_lens[i], &ml_base, &ml_bits) != match_code) return error.CorruptFrame;
+        bit_count = std.math.add(usize, bit_count, ll_bits[literal_code]) catch return error.IntegerOverflow;
+        bit_count = std.math.add(usize, bit_count, ml_bits[match_code]) catch return error.IntegerOverflow;
+        bit_count = std.math.add(usize, bit_count, of_bits[offset_code]) catch return error.IntegerOverflow;
+    }
+
+    var len = literals_section_len;
+    len = std.math.add(usize, len, try sequenceCountLen(literal_lens.len)) catch return error.IntegerOverflow;
+    len = std.math.add(usize, len, 1 + 3) catch return error.IntegerOverflow;
+    return std.math.add(usize, len, (bit_count + 7) / 8) catch return error.IntegerOverflow;
 }
 
 fn rleSequencePayloadLenWithLiteralEnds(
@@ -13894,6 +13973,29 @@ test "zstd match planner scores single predefined sequence payloads" {
 
     const segment = findRepeatedPatternSegment(payload) orelse return error.CorruptFrame;
     try std.testing.expectEqual(predefined_len, repeatedPatternPayloadLenFrom(payload, segment, 0) orelse return error.CorruptFrame);
+}
+
+test "zstd sequence payload scorers reuse exact literal section length" {
+    const payload = ("ab" ** 96) ++ ("tail" ** 8);
+    const literal_lens = [_]usize{ 2, 2, 2 };
+    const offsets = [_]usize{ 2, 2, 2 };
+    const match_lens = [_]usize{ 46, 46, 46 };
+    const literal_ends = [_]usize{ 48, 96, 144 };
+    const tail_start = literal_ends[literal_ends.len - 1];
+    const literals_section_len = try sequenceLiteralsPayloadSectionLen(payload, &literal_lens, &literal_ends, tail_start);
+
+    try std.testing.expectEqual(
+        try rleSequencePayloadLenForValuesWithLiteralEnds(payload, &literal_lens, &offsets, &match_lens, &literal_ends, tail_start),
+        try rleSequencePayloadLenForValuesWithLiteralsLen(&literal_lens, &offsets, &match_lens, literals_section_len),
+    );
+    try std.testing.expectEqual(
+        try multiSequencePayloadLenWithLiteralEnds(payload, &literal_lens, &offsets, &match_lens, &literal_ends, tail_start),
+        try predefinedSequencePayloadLenWithLiteralsLen(&literal_lens, &offsets, &match_lens, literals_section_len),
+    );
+    const expected_table = (try bestTablePlanSequence(payload, &literal_lens, &offsets, &match_lens, &literal_ends, tail_start)) orelse return error.CorruptFrame;
+    const actual_table = (try bestTablePlanSequenceWithLiteralsLen(&literal_lens, &offsets, &match_lens, literals_section_len)) orelse return error.CorruptFrame;
+    try std.testing.expectEqual(expected_table.payload_len, actual_table.payload_len);
+    try std.testing.expectEqualSlices(BitField, expected_table.readFields(), actual_table.readFields());
 }
 
 test "zstd sequence emitter supports mixed RLE and predefined tables" {
