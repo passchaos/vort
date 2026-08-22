@@ -2626,6 +2626,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   and repeated-offset simulation after selection. Focused direct-emitter calls
   keep the rebuilding fallback; repeat-3 JSON level 3 remained 1350 bytes at
   roughly 0.88 s.
+  The best-of-three sequence emitter now reuses one candidate scratch buffer and
+  one retained-best buffer instead of keeping three independently allocated
+  complete blocks alive. Tie behavior remains first-candidate-wins, preserving
+  deterministic wires. Focused RLE/predefined/FSE tests remain byte-identical;
+  timing was mixed on the shared host, so this is retained for lower allocation
+  churn and peak temporary memory rather than a throughput claim.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

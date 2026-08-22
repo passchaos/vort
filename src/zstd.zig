@@ -8008,11 +8008,14 @@ fn emitBestSequenceCompressedBlock(
     defer literals_prefix.deinit(allocator);
     _ = try emitSequenceLiteralsSection(allocator, &literals_prefix, block, literal_lens, literal_ends, tail_start);
 
-    var rle_block: std.ArrayList(u8) = .empty;
-    defer rle_block.deinit(allocator);
+    var candidate_block: std.ArrayList(u8) = .empty;
+    defer candidate_block.deinit(allocator);
+    var best_block: std.ArrayList(u8) = .empty;
+    defer best_block.deinit(allocator);
+
     const rle_ok = try emitRleSequenceCompressedBlockWithLiterals(
         allocator,
-        &rle_block,
+        &candidate_block,
         block,
         last,
         literals_prefix.items,
@@ -8020,12 +8023,12 @@ fn emitBestSequenceCompressedBlock(
         offsets,
         match_lens,
     );
+    if (rle_ok) try best_block.appendSlice(allocator, candidate_block.items);
 
-    var predefined_block: std.ArrayList(u8) = .empty;
-    defer predefined_block.deinit(allocator);
+    candidate_block.clearRetainingCapacity();
     const predefined_ok = try emitMultiSequencePredefinedCompressedBlockWithLiterals(
         allocator,
-        &predefined_block,
+        &candidate_block,
         block,
         last,
         literals_prefix.items,
@@ -8033,15 +8036,18 @@ fn emitBestSequenceCompressedBlock(
         offsets,
         match_lens,
     );
+    if (predefined_ok and (best_block.items.len == 0 or candidate_block.items.len < best_block.items.len)) {
+        best_block.clearRetainingCapacity();
+        try best_block.appendSlice(allocator, candidate_block.items);
+    }
 
-    var table_plan_block: std.ArrayList(u8) = .empty;
-    defer table_plan_block.deinit(allocator);
+    candidate_block.clearRetainingCapacity();
     // One sequence cannot amortize a compressed FSE table; its RLE and
     // predefined representations are already emitted above.
     const table_plan_ok = if (literal_lens.len > 1)
         try emitTablePlanSequenceCompressedBlockWithLiterals(
             allocator,
-            &table_plan_block,
+            &candidate_block,
             block,
             last,
             literals_prefix.items,
@@ -8053,14 +8059,13 @@ fn emitBestSequenceCompressedBlock(
         )
     else
         false;
+    if (table_plan_ok and (best_block.items.len == 0 or candidate_block.items.len < best_block.items.len)) {
+        best_block.clearRetainingCapacity();
+        try best_block.appendSlice(allocator, candidate_block.items);
+    }
 
-    var best: ?[]const u8 = null;
-    var best_len: usize = std.math.maxInt(usize);
-    chooseShortestPlannedBlock(rle_ok, rle_block.items, &best, &best_len);
-    chooseShortestPlannedBlock(predefined_ok, predefined_block.items, &best, &best_len);
-    chooseShortestPlannedBlock(table_plan_ok, table_plan_block.items, &best, &best_len);
-    const best_block = best orelse return false;
-    try out.appendSlice(allocator, best_block);
+    if (best_block.items.len == 0) return false;
+    try out.appendSlice(allocator, best_block.items);
     return true;
 }
 
