@@ -2843,6 +2843,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   leaves every real candidate and earliest-first tie intact. Existing scan and
   constructed-collision oracles pass; fixed-core eight-pair checks retained 1058
   bytes and reduced the median from 115.602 ms to 114.111 ms (1.013x).
+  The exact matcher also stops reloading its already-compared eight-byte anchor
+  when extending a surviving bucket candidate; the bounded large matcher keeps
+  the validating entry point because its hash can collide. Existing scan,
+  collision, and SIMD-boundary oracles preserve exact lengths and selection;
+  fixed-core eight-pair checks retained 1058 bytes and reduced the median from
+  113.817 ms to 111.870 ms (1.017x).
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state

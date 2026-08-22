@@ -11042,7 +11042,7 @@ fn findBestDuplicateMatchExactHashed(block: []const u8, start_min: usize) Error!
             const first: usize = @intCast(candidate_index);
             candidate_index = next[candidate_index];
             if (!std.mem.eql(u8, block[first..][0..8], block[index..][0..8])) continue;
-            const len = duplicateMatchLength(block, first, index);
+            const len = duplicateMatchLengthAfterAnchor(block, first, index);
             if (len >= 8) {
                 const candidate: DuplicateMatch = .{ .first_start = first, .second_start = index, .len = len };
                 if (duplicateMatchCannotBeat(candidate, best)) continue;
@@ -11365,10 +11365,14 @@ fn duplicateMatchLength(block: []const u8, first: usize, second: usize) usize {
     // verify its anchor word before extending the remaining suffix. Structured
     // data frequently produces long true matches, so word-at-a-time comparison
     // avoids the byte loop that dominated high-level mixed-plan search.
-    const max_len = block.len - second;
     const first_left = std.mem.readInt(u64, block[first..][0..8], .little);
     const first_right = std.mem.readInt(u64, block[second..][0..8], .little);
     if (first_left != first_right) return @ctz(first_left ^ first_right) / 8;
+    return duplicateMatchLengthAfterAnchor(block, first, second);
+}
+
+fn duplicateMatchLengthAfterAnchor(block: []const u8, first: usize, second: usize) usize {
+    const max_len = block.len - second;
     var len: usize = 8;
     while (len + 32 <= max_len) : (len += 32) {
         const left: @Vector(32, u8) = block[first + len ..][0..32].*;
