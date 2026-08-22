@@ -8922,7 +8922,9 @@ fn bestTablePlanSequenceWithLiteralsLen(
         match_costs[i] = try sequenceTablePlanBitCost(plan, .match, match_lens, literal_lens, offsets);
     }
 
-    var best: ?SequenceCombinedPlanCandidate = null;
+    var best_plan: SequenceCombinedEmitPlan = undefined;
+    var best_payload_len: usize = std.math.maxInt(usize);
+    var have_best = false;
     // The bootstrap table families expose only a few alternatives (RLE,
     // predefined, and limited compressed FSE). Trying all combinations keeps the
     // planner exact for this subset and avoids baking in heuristics such as
@@ -8946,23 +8948,27 @@ fn bestTablePlanSequenceWithLiteralsLen(
                 payload_len = std.math.add(usize, payload_len, literal_cost.payload_len + offset_cost.payload_len + match_cost.payload_len) catch return error.IntegerOverflow;
                 const bit_count = std.math.add(usize, 1 + literal_cost.bit_count, offset_cost.bit_count + match_cost.bit_count) catch return error.IntegerOverflow;
                 payload_len = std.math.add(usize, payload_len, (bit_count + 7) / 8) catch return error.IntegerOverflow;
-                if (best == null or payload_len < best.?.payload_len) {
-                    var candidate: SequenceCombinedPlanCandidate = .{ .plan = combined, .payload_len = payload_len };
-                    candidate.read_field_count = sequenceReadFieldsWithTablePlans(
-                        candidate.read_fields[0..],
-                        literal_lens,
-                        offsets,
-                        match_lens,
-                        combined,
-                    ) catch |err| switch (err) {
-                        error.CorruptFrame => continue,
-                        else => return err,
-                    };
-                    best = candidate;
+                if (!have_best or payload_len < best_payload_len) {
+                    best_plan = combined;
+                    best_payload_len = payload_len;
+                    have_best = true;
                 }
             }
         }
     }
+    if (!have_best) return null;
+
+    // Materialize the large read-field schedule only for the winning table
+    // combination. During mixed lookahead, constructing it for every new
+    // interim winner caused repeated copies of the 768-entry scratch array.
+    var best: SequenceCombinedPlanCandidate = .{ .plan = best_plan, .payload_len = best_payload_len };
+    best.read_field_count = try sequenceReadFieldsWithTablePlans(
+        best.read_fields[0..],
+        literal_lens,
+        offsets,
+        match_lens,
+        best_plan,
+    );
     return best;
 }
 

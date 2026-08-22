@@ -2704,7 +2704,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   finalized mixed candidate now also computes its literal-section size once
   and shares it across RLE, predefined, and mixed table scoring; a six-pair
   interleaved check retained 1058 bytes and moved the median from roughly
-  2.50 s to 2.41 s.
+  2.50 s to 2.41 s. Generic table arbitration now defers construction of the
+  768-entry read-field schedule until after choosing the cheapest LL/OF/ML
+  combination instead of rebuilding it for interim winners. A further six-pair
+  interleaved check retained 1058 bytes and moved the median from roughly
+  2.55 s to 2.17 s.
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state
