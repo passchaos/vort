@@ -11171,6 +11171,52 @@ fn findRepeatedPatternSegmentIn(block: []const u8, start_min: usize, end: usize)
 }
 
 fn sequenceCodeForValue(value: usize, bases: []const usize, bits: []const u8) Error!u8 {
+    // All encoder hot paths use these three canonical tables. Their ranges are
+    // monotone even though the predefined FSE states are not, so direct
+    // arithmetic avoids rescanning 32-53 entries for every candidate value.
+    if (bases.ptr == ll_base[0..].ptr and bits.ptr == ll_bits[0..].ptr) return literalLengthCode(value);
+    if (bases.ptr == ml_base[0..].ptr and bits.ptr == ml_bits[0..].ptr) return matchLengthCode(value);
+    if (bases.ptr == of_base[0..].ptr and bits.ptr == of_bits[0..].ptr) return offsetCode(value);
+    return sequenceCodeForValueReference(value, bases, bits);
+}
+
+fn literalLengthCode(value: usize) Error!u8 {
+    if (value <= 15) return @intCast(value);
+    if (value < 24) {
+        const code: usize = 16 + (value - 16) / 2;
+        return @intCast(code);
+    }
+    if (value < 32) return @intCast(20 + (value - 24) / 4);
+    if (value < 48) return @intCast(22 + (value - 32) / 8);
+    if (value < 64) return 24;
+    const log = std.math.log2_int(usize, value);
+    const code: usize = 19 + log;
+    if (code >= ll_base.len or value < ll_base[code] or value - ll_base[code] >= (@as(usize, 1) << @intCast(ll_bits[code]))) return error.CorruptFrame;
+    return @intCast(code);
+}
+
+fn matchLengthCode(value: usize) Error!u8 {
+    if (value < 3) return error.CorruptFrame;
+    if (value <= 34) return @intCast(value - 3);
+    if (value < 43) return @intCast(32 + (value - 35) / 2);
+    if (value < 51) return @intCast(36 + (value - 43) / 4);
+    if (value < 67) return @intCast(38 + (value - 51) / 8);
+    if (value < 99) return @intCast(40 + (value - 67) / 16);
+    if (value < 131) return 42;
+    const log = std.math.log2_int(usize, value - 3);
+    const code: usize = 36 + log;
+    if (code >= ml_base.len or value < ml_base[code] or value - ml_base[code] >= (@as(usize, 1) << @intCast(ml_bits[code]))) return error.CorruptFrame;
+    return @intCast(code);
+}
+
+fn offsetCode(value: usize) Error!u8 {
+    if (value == 0) return 0;
+    const code: usize = std.math.log2_int(usize, value + 3);
+    if (code >= of_base.len or value < of_base[code] or value - of_base[code] >= (@as(usize, 1) << @intCast(of_bits[code]))) return error.CorruptFrame;
+    return @intCast(code);
+}
+
+fn sequenceCodeForValueReference(value: usize, bases: []const usize, bits: []const u8) Error!u8 {
     var best: ?usize = null;
     for (bases, 0..) |base, code| {
         const bit_count = bits[code];
@@ -11180,6 +11226,30 @@ fn sequenceCodeForValue(value: usize, bases: []const usize, bits: []const u8) Er
         if (best == null or base >= bases[best.?]) best = code;
     }
     return @intCast(best orelse return error.CorruptFrame);
+}
+
+test "zstd fast sequence codes match table scan" {
+    const cases = [_]struct { []const usize, []const u8, usize }{
+        .{ &ll_base, &ll_bits, 131_071 },
+        .{ &ml_base, &ml_bits, 131_074 },
+        .{ &of_base, &of_bits, 1 << 20 },
+    };
+    for (cases) |case| {
+        for (0..case[2] + 1) |value| {
+            const expected = sequenceCodeForValueReference(value, case[0], case[1]);
+            const actual = sequenceCodeForValue(value, case[0], case[1]);
+            if (expected) |code| {
+                const actual_code = actual catch |err| {
+                    std.debug.print("sequence code unexpected error case={*} value={} error={}\n", .{ case[0].ptr, value, err });
+                    return err;
+                };
+                if (code != actual_code) std.debug.print("sequence code mismatch case={*} value={} expected={} actual={}\n", .{ case[0].ptr, value, code, actual_code });
+                try std.testing.expectEqual(code, actual_code);
+            } else |expected_error| {
+                try std.testing.expectError(expected_error, actual);
+            }
+        }
+    }
 }
 
 fn emitLiteralsHeader(allocator: std.mem.Allocator, out: *std.ArrayList(u8), kind: LiteralsKind, regenerated_size: usize) Error!void {

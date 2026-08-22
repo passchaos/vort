@@ -2729,7 +2729,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   extension loop now compares two words per iteration after the verified hash
   anchor, preserving the exact `ctz` mismatch offset while reducing loop
   overhead on long structured matches. A six-pair check retained 1058 bytes
-  and moved the median from roughly 0.87 s to 0.83 s.
+  and moved the median from roughly 0.87 s to 0.83 s. Canonical LL/ML/OF
+  value-to-code conversion now uses their monotone range structure rather than
+  scanning all table entries, with an exhaustive oracle over the supported
+  value ranges; a six-pair check retained 1058 bytes and moved the median from
+  roughly 0.82 s to 0.79 s.
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state
