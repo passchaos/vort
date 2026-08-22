@@ -9022,8 +9022,8 @@ fn bestSequencePayloadLenWithLiteralEnds(
     }
 
     if (literal_lens.len > 1) {
-        if (try bestTablePlanSequenceWithLiteralsLen(literal_lens, offsets, match_lens, literals_section_len)) |candidate| {
-            chooseShortestPayloadLen(candidate.payload_len, &best);
+        if (try bestTablePayloadLenWithLiteralsLen(literal_lens, offsets, match_lens, literals_section_len)) |payload_len| {
+            chooseShortestPayloadLen(payload_len, &best);
         }
     }
 
@@ -9055,7 +9055,7 @@ fn bestSequencePayloadLenWithLiteralEndsAndHistogram(
         else => return err,
     }
     if (literal_lens.len > 1) {
-        if (try bestTablePlanSequenceWithLiteralsLen(literal_lens, offsets, match_lens, literals_section_len)) |candidate| chooseShortestPayloadLen(candidate.payload_len, &best);
+        if (try bestTablePayloadLenWithLiteralsLen(literal_lens, offsets, match_lens, literals_section_len)) |payload_len| chooseShortestPayloadLen(payload_len, &best);
     }
     return best orelse error.CorruptFrame;
 }
@@ -9138,6 +9138,26 @@ fn bestTablePlanSequenceWithLiteralsLen(
     match_lens: []const usize,
     literals_section_len: usize,
 ) Error!?SequenceCombinedPlanCandidate {
+    return try bestTablePlanSequenceWithLiteralsLenInternal(literal_lens, offsets, match_lens, literals_section_len, true);
+}
+
+fn bestTablePayloadLenWithLiteralsLen(
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literals_section_len: usize,
+) Error!?usize {
+    const candidate = try bestTablePlanSequenceWithLiteralsLenInternal(literal_lens, offsets, match_lens, literals_section_len, false) orelse return null;
+    return candidate.payload_len;
+}
+
+fn bestTablePlanSequenceWithLiteralsLenInternal(
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literals_section_len: usize,
+    comptime retain_plan: bool,
+) Error!?SequenceCombinedPlanCandidate {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
     if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
 
@@ -9185,7 +9205,7 @@ fn bestTablePlanSequenceWithLiteralsLen(
                 const bit_count = std.math.add(usize, 1 + literal_cost.bit_count, offset_cost.bit_count + match_cost.bit_count) catch return error.IntegerOverflow;
                 payload_len = std.math.add(usize, payload_len, (bit_count + 7) / 8) catch return error.IntegerOverflow;
                 if (!have_best or payload_len < best_payload_len) {
-                    best_plan = combined;
+                    if (retain_plan) best_plan = combined;
                     best_payload_len = payload_len;
                     have_best = true;
                 }
@@ -9198,7 +9218,7 @@ fn bestTablePlanSequenceWithLiteralsLen(
     // only for the single selected block; lookahead needs only the byte length
     // and table plan and would otherwise return/copy a 768-entry array for
     // every finalized branch.
-    return .{ .plan = best_plan, .payload_len = best_payload_len };
+    return .{ .plan = if (retain_plan) best_plan else undefined, .payload_len = best_payload_len };
 }
 
 fn sequenceTablePlanBitCost(
@@ -14505,6 +14525,7 @@ test "zstd sequence payload scorers reuse exact literal section length" {
     const expected_table = (try bestTablePlanSequence(payload, &literal_lens, &offsets, &match_lens, &literal_ends, tail_start)) orelse return error.CorruptFrame;
     const actual_table = (try bestTablePlanSequenceWithLiteralsLen(&literal_lens, &offsets, &match_lens, literals_section_len)) orelse return error.CorruptFrame;
     try std.testing.expectEqual(expected_table.payload_len, actual_table.payload_len);
+    try std.testing.expectEqual(actual_table.payload_len, (try bestTablePayloadLenWithLiteralsLen(&literal_lens, &offsets, &match_lens, literals_section_len)).?);
     var expected_fields: [max_bootstrap_sequence_count * 6]BitField = undefined;
     const expected_count = try sequenceReadFieldsWithTablePlans(&expected_fields, &literal_lens, &offsets, &match_lens, expected_table.plan);
     var actual_fields: [max_bootstrap_sequence_count * 6]BitField = undefined;

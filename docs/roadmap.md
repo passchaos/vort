@@ -2766,7 +2766,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   bound and shrinking the large union copied during LL/OF/ML arbitration. A
   state-bound oracle covers the compact fields; fixed-CPU-8..10 eight-pair
   checks retained 1058 bytes and moved the median from roughly 0.312 s to
-  0.298 s.
+  0.298 s. Mixed-prefix scoring now uses a payload-only table selector that
+  never materializes or returns the large LL/OF/ML plan union; the emitter keeps
+  the full-plan path and an oracle checks both selectors choose the same byte
+  length. Fixed-CPU-8..10 eight-pair checks retained 1058 bytes and moved the
+  median from roughly 0.327 s to 0.318 s.
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state
