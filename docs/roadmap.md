@@ -2712,7 +2712,10 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   longer returns the 768-entry read-field array through recursive lookahead;
   that schedule is built only when the winning table plan is actually emitted.
   A final six-pair check retained 1058 bytes and moved the median from roughly
-  2.11 s to 1.63 s.
+  2.11 s to 1.63 s. Predefined-table DP now stores next-state choices as `u8`
+  and relies on the existing per-row write invariant instead of clearing an
+  8 KiB `usize` matrix on every attempt. Another six-pair check retained 1058
+  bytes and moved the median from roughly 1.94 s to 1.71 s.
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state

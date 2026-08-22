@@ -10929,8 +10929,7 @@ fn planPredefinedSequenceValues(values: []const usize, symbols: []const Sequence
     if (values.len == 0 or values.len > max_bootstrap_sequence_count) return null;
     if (symbols.len > max_predefined_sequence_states) return null;
 
-    var next_choice: [max_bootstrap_sequence_count][max_predefined_sequence_states]usize = undefined;
-    for (&next_choice) |*row| @memset(row[0..], max_predefined_sequence_states);
+    var next_choice: [max_bootstrap_sequence_count][max_predefined_sequence_states]u8 = undefined;
 
     var viable_next: [max_predefined_sequence_states]bool = undefined;
     @memset(viable_next[0..], false);
@@ -10955,7 +10954,7 @@ fn planPredefinedSequenceValues(values: []const usize, symbols: []const Sequence
                 if (next_state >= symbols.len) continue;
                 if (!viable_next[next_state]) continue;
                 viable_current[state] = true;
-                next_choice[pos][state] = next_state;
+                next_choice[pos][state] = @intCast(next_state);
                 break;
             }
         }
