@@ -2679,6 +2679,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   configuration). An exact-four-byte regression test protects the boundary.
   Repeat-3 level-9 binary/JSON retained 9009/1058-byte wires at roughly
   0.12/9.25 s; the binary hot shape benefits while JSON remains DP-heavy.
+  Optimal DP now builds one per-position prefix table mapping each reachable
+  maximum match length to the exact best `(fixed length cost + suffix cost)`
+  and longest equal-cost length. Hash-chain candidates then query that table in
+  O(1) instead of rescanning every shorter length for every distance. A randomized
+  exhaustive 4...258 oracle test preserves the old descending-scan tie rule;
+  repeat-3 level-9 JSON retained 1058 bytes at roughly 9.46 s on the noisy host.
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state

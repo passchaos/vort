@@ -77,6 +77,8 @@ pub const HashIndex = struct {
     head: std.ArrayList(isize) = .empty,
     prev: std.ArrayList(isize) = .empty,
     head_initialized: [hash_head_init_words]u64 = @splat(0),
+    best_length_costs: [max_match_len + 1]usize = undefined,
+    best_lengths: [max_match_len + 1]u16 = undefined,
     input_len: usize = 0,
 
     pub fn deinit(self: *HashIndex, allocator: std.mem.Allocator) void {
@@ -511,6 +513,7 @@ pub fn optimalPlanReuse(scratch: *OptimalScratch, allocator: std.mem.Allocator, 
         if (rev_i + minimum > n) continue;
 
         const max_len = @min(maxMatch(options), n - rev_i);
+        buildOptimalLengthChoices(costs, rev_i, minimum, max_len, &scratch.index.best_length_costs, &scratch.index.best_lengths);
         var chain_i = prev[rev_i];
         var checked: usize = 0;
         var candidates_seen: usize = 0;
@@ -531,13 +534,10 @@ pub fn optimalPlanReuse(scratch: *OptimalScratch, allocator: std.mem.Allocator, 
             const length = matchLength(input, candidate, rev_i, max_len);
             if (length >= minimum) {
                 const distance_cost = distance_costs[distance];
-                var len = length;
-                while (len >= minimum) : (len -= 1) {
-                    const cost = fixedLengthSymbolCost(len) + distance_cost + costs[rev_i + len];
-                    if (cost < costs[rev_i]) {
-                        costs[rev_i] = cost;
-                        steps[rev_i] = .{ .match = .{ .length = @intCast(len), .distance = @intCast(distance) } };
-                    }
+                const cost = scratch.index.best_length_costs[length] + distance_cost;
+                if (cost < costs[rev_i]) {
+                    costs[rev_i] = cost;
+                    steps[rev_i] = .{ .match = .{ .length = scratch.index.best_lengths[length], .distance = @intCast(distance) } };
                 }
                 candidates_seen += 1;
                 if (length == max_len) break;
@@ -566,6 +566,56 @@ pub fn optimalPlanReuse(scratch: *OptimalScratch, allocator: std.mem.Allocator, 
         }
     }
     return stats;
+}
+
+fn buildOptimalLengthChoices(
+    costs: []const usize,
+    position: usize,
+    minimum: usize,
+    maximum: usize,
+    best_costs: *[max_match_len + 1]usize,
+    best_lengths: *[max_match_len + 1]u16,
+) void {
+    var best_cost: usize = std.math.maxInt(usize);
+    var best_length: u16 = 0;
+    var length = minimum;
+    while (length <= maximum) : (length += 1) {
+        const cost = fixedLengthSymbolCost(length) + costs[position + length];
+        // The reference scans from longest to shortest and updates only on a
+        // strict improvement, so equal costs select the longest length.
+        if (cost < best_cost or (cost == best_cost and length > best_length)) {
+            best_cost = cost;
+            best_length = @intCast(length);
+        }
+        best_costs[length] = best_cost;
+        best_lengths[length] = best_length;
+    }
+}
+
+test "optimal length prefix choices match descending reference" {
+    var suffix_costs: [max_match_len + 1]usize = undefined;
+    var state: u32 = 0x9e37_79b9;
+    for (&suffix_costs) |*cost| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        cost.* = (state >> 16) % 97;
+    }
+    var best_costs: [max_match_len + 1]usize = undefined;
+    var best_lengths: [max_match_len + 1]u16 = undefined;
+    buildOptimalLengthChoices(&suffix_costs, 0, 4, max_match_len, &best_costs, &best_lengths);
+    for (4..max_match_len + 1) |maximum| {
+        var expected_cost: usize = std.math.maxInt(usize);
+        var expected_length: usize = 0;
+        var length = maximum;
+        while (length >= 4) : (length -= 1) {
+            const cost = fixedLengthSymbolCost(length) + suffix_costs[length];
+            if (cost < expected_cost) {
+                expected_cost = cost;
+                expected_length = length;
+            }
+        }
+        try std.testing.expectEqual(expected_cost, best_costs[maximum]);
+        try std.testing.expectEqual(@as(u16, @intCast(expected_length)), best_lengths[maximum]);
+    }
 }
 
 fn normalizedMaxCandidates(options: GreedyOptions) usize {
