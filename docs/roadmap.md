@@ -2609,6 +2609,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   selector validity and wire cost remain exact. Focused RLE/predefined and all
   compressed-FSE emitter tests pass; repeat-3 JSON retained 1350/1058-byte
   level-3/9 wires while measuring roughly 1.36/8.98 s.
+  Final sequence emission now materializes the selected plan's literals section
+  once and shares the encoded prefix across RLE, predefined, and generic table
+  candidates. Direct focused emitter APIs retain their self-contained wrappers,
+  while the production best-of-three path avoids two repeated literal/Huffman
+  builds. Focused compressed-FSE and mixed-table wires remain unchanged;
+  repeat-3 JSON level 3 measured about 0.92 s at the same 1350 bytes.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

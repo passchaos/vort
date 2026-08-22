@@ -8004,32 +8004,34 @@ fn emitBestSequenceCompressedBlock(
     literal_ends: []const usize,
     tail_start: usize,
 ) Error!bool {
+    var literals_prefix: std.ArrayList(u8) = .empty;
+    defer literals_prefix.deinit(allocator);
+    _ = try emitSequenceLiteralsSection(allocator, &literals_prefix, block, literal_lens, literal_ends, tail_start);
+
     var rle_block: std.ArrayList(u8) = .empty;
     defer rle_block.deinit(allocator);
-    const rle_ok = try emitRleSequenceCompressedBlock(
+    const rle_ok = try emitRleSequenceCompressedBlockWithLiterals(
         allocator,
         &rle_block,
         block,
         last,
+        literals_prefix.items,
         literal_lens,
         offsets,
         match_lens,
-        literal_ends,
-        tail_start,
     );
 
     var predefined_block: std.ArrayList(u8) = .empty;
     defer predefined_block.deinit(allocator);
-    const predefined_ok = try emitMultiSequencePredefinedCompressedBlock(
+    const predefined_ok = try emitMultiSequencePredefinedCompressedBlockWithLiterals(
         allocator,
         &predefined_block,
         block,
         last,
+        literals_prefix.items,
         literal_lens,
         offsets,
         match_lens,
-        literal_ends,
-        tail_start,
     );
 
     var table_plan_block: std.ArrayList(u8) = .empty;
@@ -8037,11 +8039,12 @@ fn emitBestSequenceCompressedBlock(
     // One sequence cannot amortize a compressed FSE table; its RLE and
     // predefined representations are already emitted above.
     const table_plan_ok = if (literal_lens.len > 1)
-        try emitTablePlanSequenceCompressedBlock(
+        try emitTablePlanSequenceCompressedBlockWithLiterals(
             allocator,
             &table_plan_block,
             block,
             last,
+            literals_prefix.items,
             literal_lens,
             offsets,
             match_lens,
@@ -8072,8 +8075,23 @@ fn emitRleSequenceCompressedBlock(
     literal_ends: []const usize,
     tail_start: usize,
 ) Error!bool {
+    var literals_prefix: std.ArrayList(u8) = .empty;
+    defer literals_prefix.deinit(allocator);
+    _ = try emitSequenceLiteralsSection(allocator, &literals_prefix, block, literal_lens, literal_ends, tail_start);
+    return try emitRleSequenceCompressedBlockWithLiterals(allocator, out, block, last, literals_prefix.items, literal_lens, offsets, match_lens);
+}
+
+fn emitRleSequenceCompressedBlockWithLiterals(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    literals_prefix: []const u8,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+) Error!bool {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return false;
-    if (literal_lens.len != literal_ends.len) return false;
     if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return false;
 
     const literal_code = try sequenceCodeForValue(literal_lens[0], &ll_base, &ll_bits);
@@ -8087,7 +8105,7 @@ fn emitRleSequenceCompressedBlock(
 
     var payload: std.ArrayList(u8) = .empty;
     defer payload.deinit(allocator);
-    _ = try emitSequenceLiteralsSection(allocator, &payload, block, literal_lens, literal_ends, tail_start);
+    try payload.appendSlice(allocator, literals_prefix);
     try emitSequenceCount(allocator, &payload, literal_lens.len);
     try payload.append(allocator, 0x54); // LL, OF, and ML use RLE_Mode.
     try payload.append(allocator, literal_code);
@@ -8129,6 +8147,24 @@ fn emitTablePlanSequenceCompressedBlock(
     literal_ends: []const usize,
     tail_start: usize,
 ) Error!bool {
+    var literals_prefix: std.ArrayList(u8) = .empty;
+    defer literals_prefix.deinit(allocator);
+    _ = try emitSequenceLiteralsSection(allocator, &literals_prefix, block, literal_lens, literal_ends, tail_start);
+    return try emitTablePlanSequenceCompressedBlockWithLiterals(allocator, out, block, last, literals_prefix.items, literal_lens, offsets, match_lens, literal_ends, tail_start);
+}
+
+fn emitTablePlanSequenceCompressedBlockWithLiterals(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    literals_prefix: []const u8,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+) Error!bool {
     const best = (try bestTablePlanSequence(
         block,
         literal_lens,
@@ -8149,6 +8185,7 @@ fn emitTablePlanSequenceCompressedBlock(
         literal_ends,
         tail_start,
         best.plan,
+        literals_prefix,
     );
 }
 
@@ -8163,10 +8200,14 @@ fn emitSequenceCompressedBlockWithTablePlans(
     literal_ends: []const usize,
     tail_start: usize,
     plan: SequenceCombinedEmitPlan,
+    prebuilt_literals: ?[]const u8,
 ) Error!bool {
     var payload: std.ArrayList(u8) = .empty;
     defer payload.deinit(allocator);
-    _ = try emitSequenceLiteralsSection(allocator, &payload, block, literal_lens, literal_ends, tail_start);
+    if (prebuilt_literals) |prefix|
+        try payload.appendSlice(allocator, prefix)
+    else
+        _ = try emitSequenceLiteralsSection(allocator, &payload, block, literal_lens, literal_ends, tail_start);
     try emitSequenceCount(allocator, &payload, literal_lens.len);
     try payload.append(allocator, sequenceModeByte(plan));
     try appendSequenceTablePayload(allocator, &payload, plan.literal);
@@ -8205,8 +8246,23 @@ fn emitMultiSequencePredefinedCompressedBlock(
     literal_ends: []const usize,
     tail_start: usize,
 ) Error!bool {
+    var literals_prefix: std.ArrayList(u8) = .empty;
+    defer literals_prefix.deinit(allocator);
+    _ = try emitSequenceLiteralsSection(allocator, &literals_prefix, block, literal_lens, literal_ends, tail_start);
+    return try emitMultiSequencePredefinedCompressedBlockWithLiterals(allocator, out, block, last, literals_prefix.items, literal_lens, offsets, match_lens);
+}
+
+fn emitMultiSequencePredefinedCompressedBlockWithLiterals(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    block: []const u8,
+    last: bool,
+    literals_prefix: []const u8,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+) Error!bool {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return false;
-    if (literal_lens.len != literal_ends.len) return false;
     if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return false;
 
     const literal_plan = (try planPredefinedSequenceValues(literal_lens, &sequence_predefined.literal_symbols, 0)) orelse return false;
@@ -8215,7 +8271,7 @@ fn emitMultiSequencePredefinedCompressedBlock(
 
     var payload: std.ArrayList(u8) = .empty;
     defer payload.deinit(allocator);
-    _ = try emitSequenceLiteralsSection(allocator, &payload, block, literal_lens, literal_ends, tail_start);
+    try payload.appendSlice(allocator, literals_prefix);
     try emitSequenceCount(allocator, &payload, literal_lens.len);
     try payload.append(allocator, 0x00); // LL, OF, and ML all use Predefined_Mode.
 
@@ -13694,6 +13750,7 @@ test "zstd sequence emitter supports compressed FSE literal-length table" {
         &literal_ends,
         payload.items.len,
         plan,
+        null,
     ));
 
     const first_block = try inspectNativeFrameFirstBlock(frame.items);
@@ -13768,6 +13825,7 @@ test "zstd sequence emitter supports compressed FSE absolute-offset table" {
         &literal_ends,
         payload.items.len,
         plan,
+        null,
     ));
 
     const first_block = try inspectNativeFrameFirstBlock(frame.items);
@@ -13831,6 +13889,7 @@ test "zstd sequence emitter supports compressed FSE repeat-offset selectors" {
         &literal_ends,
         payload.items.len,
         plan,
+        null,
     ));
 
     const first_block = try inspectNativeFrameFirstBlock(frame.items);
@@ -13971,6 +14030,7 @@ test "zstd sequence emitter supports compressed FSE match-length table" {
         &literal_ends,
         payload.items.len,
         plan,
+        null,
     ));
 
     const first_block = try inspectNativeFrameFirstBlock(frame.items);
