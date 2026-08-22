@@ -8354,7 +8354,7 @@ fn emitTablePlanSequenceCompressedBlockWithLiterals(
         tail_start,
         best.plan,
         literals_prefix,
-        best.readFields(),
+        null,
     );
 }
 
@@ -8853,15 +8853,6 @@ const SequenceCombinedEmitPlan = struct {
 const SequenceCombinedPlanCandidate = struct {
     plan: SequenceCombinedEmitPlan,
     payload_len: usize,
-    // Cache the exact interleaved emission order while the winning combination
-    // is selected. The emitter can then serialize it without repeating symbol
-    // lookup, transition reconstruction, and repeated-offset simulation.
-    read_fields: [max_bootstrap_sequence_count * 6]BitField = undefined,
-    read_field_count: usize = 0,
-
-    fn readFields(self: *const SequenceCombinedPlanCandidate) []const BitField {
-        return self.read_fields[0..self.read_field_count];
-    }
 };
 
 const SequenceTablePlanAlternatives = struct {
@@ -8958,18 +8949,11 @@ fn bestTablePlanSequenceWithLiteralsLen(
     }
     if (!have_best) return null;
 
-    // Materialize the large read-field schedule only for the winning table
-    // combination. During mixed lookahead, constructing it for every new
-    // interim winner caused repeated copies of the 768-entry scratch array.
-    var best: SequenceCombinedPlanCandidate = .{ .plan = best_plan, .payload_len = best_payload_len };
-    best.read_field_count = try sequenceReadFieldsWithTablePlans(
-        best.read_fields[0..],
-        literal_lens,
-        offsets,
-        match_lens,
-        best_plan,
-    );
-    return best;
+    // Keep the scoring result compact. The emitter materializes read fields
+    // only for the single selected block; lookahead needs only the byte length
+    // and table plan and would otherwise return/copy a 768-entry array for
+    // every finalized branch.
+    return .{ .plan = best_plan, .payload_len = best_payload_len };
 }
 
 fn sequenceTablePlanBitCost(
@@ -14001,7 +13985,11 @@ test "zstd sequence payload scorers reuse exact literal section length" {
     const expected_table = (try bestTablePlanSequence(payload, &literal_lens, &offsets, &match_lens, &literal_ends, tail_start)) orelse return error.CorruptFrame;
     const actual_table = (try bestTablePlanSequenceWithLiteralsLen(&literal_lens, &offsets, &match_lens, literals_section_len)) orelse return error.CorruptFrame;
     try std.testing.expectEqual(expected_table.payload_len, actual_table.payload_len);
-    try std.testing.expectEqualSlices(BitField, expected_table.readFields(), actual_table.readFields());
+    var expected_fields: [max_bootstrap_sequence_count * 6]BitField = undefined;
+    const expected_count = try sequenceReadFieldsWithTablePlans(&expected_fields, &literal_lens, &offsets, &match_lens, expected_table.plan);
+    var actual_fields: [max_bootstrap_sequence_count * 6]BitField = undefined;
+    const actual_count = try sequenceReadFieldsWithTablePlans(&actual_fields, &literal_lens, &offsets, &match_lens, actual_table.plan);
+    try std.testing.expectEqualSlices(BitField, expected_fields[0..expected_count], actual_fields[0..actual_count]);
 }
 
 test "zstd sequence emitter supports mixed RLE and predefined tables" {

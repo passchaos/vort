@@ -2708,7 +2708,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   768-entry read-field schedule until after choosing the cheapest LL/OF/ML
   combination instead of rebuilding it for interim winners. A further six-pair
   interleaved check retained 1058 bytes and moved the median from roughly
-  2.55 s to 2.17 s.
+  2.55 s to 2.17 s. The scoring result itself is now compact as well: it no
+  longer returns the 768-entry read-field array through recursive lookahead;
+  that schedule is built only when the winning table plan is actually emitted.
+  A final six-pair check retained 1058 bytes and moved the median from roughly
+  2.11 s to 1.63 s.
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state
