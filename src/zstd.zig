@@ -9015,13 +9015,41 @@ fn addSmallHuffmanStreamBits(
 }
 
 fn updateLiteralRunInfo(bytes: []const u8, first_literal_byte: *u8, have_literal_byte: *bool, all_same: *bool) void {
-    for (bytes) |byte| {
-        if (!have_literal_byte.*) {
-            first_literal_byte.* = byte;
-            have_literal_byte.* = true;
-        } else if (byte != first_literal_byte.*) {
-            all_same.* = false;
+    if (bytes.len == 0 or !all_same.*) return;
+    if (!have_literal_byte.*) {
+        first_literal_byte.* = bytes[0];
+        have_literal_byte.* = true;
+    }
+    if (!std.mem.allEqual(u8, bytes, first_literal_byte.*)) all_same.* = false;
+}
+
+test "zstd literal run info matches byte reference" {
+    const Case = struct { bytes: []const u8, initial: ?u8 };
+    const cases = [_]Case{
+        .{ .bytes = "", .initial = null },
+        .{ .bytes = "a", .initial = null },
+        .{ .bytes = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", .initial = null },
+        .{ .bytes = "aaaaaaaaaaaaaaabaaaaaaaaaaaaaaaa", .initial = null },
+        .{ .bytes = "aaaaaaaaaaaaaaaa", .initial = 'a' },
+        .{ .bytes = "aaaaaaaaaaaaaaaa", .initial = 'b' },
+    };
+    for (cases) |case| {
+        var expected_first: u8 = case.initial orelse 0;
+        var expected_have = case.initial != null;
+        var expected_same = true;
+        for (case.bytes) |byte| {
+            if (!expected_have) {
+                expected_first = byte;
+                expected_have = true;
+            } else if (byte != expected_first) expected_same = false;
         }
+        var actual_first: u8 = case.initial orelse 0;
+        var actual_have = case.initial != null;
+        var actual_same = true;
+        updateLiteralRunInfo(case.bytes, &actual_first, &actual_have, &actual_same);
+        try std.testing.expectEqual(expected_first, actual_first);
+        try std.testing.expectEqual(expected_have, actual_have);
+        try std.testing.expectEqual(expected_same, actual_same);
     }
 }
 

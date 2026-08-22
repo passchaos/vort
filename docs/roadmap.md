@@ -2849,6 +2849,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   collision, and SIMD-boundary oracles preserve exact lengths and selection;
   fixed-core eight-pair checks retained 1058 bytes and reduced the median from
   113.817 ms to 111.870 ms (1.017x).
+  Sequence-literal RLE detection now skips empty/already-disproved runs and uses
+  the standard library's vectorized `allEqual` scan for each remaining run
+  instead of branching once per byte. A focused reference oracle covers empty,
+  single-byte, equal, mismatching, and cross-run cases; fixed-core eight-pair
+  checks retained 1058 bytes and reduced the median from 111.996 ms to
+  110.518 ms (1.013x).
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state
