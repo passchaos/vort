@@ -4539,3 +4539,20 @@ architecture blindly.
   and kodim07 controls remain neutral. The synchronized image-png comparison
   moves `kodim17` to about `0.872x/0.878x`, so this is a substantial weak-row
   improvement rather than uniform PNG leadership.
+- Reordered the deep-distance semantic match dispatch around its measured
+  dominant class: `kodim17` has only 225 distance-one matches among roughly
+  207,000 match tokens, while about 99.2% of match bytes are non-overlapping.
+  The specialization now tests the likely `distance >= length` case first and
+  reaches RLE/small-distance handling only through the overlap branch. Generic
+  semantic loops retain their prior distance-one-first layout.
+- Mixed-match oracles compare both the resumable window and full-output
+  specializations against their generic counterparts, including exact output,
+  full bit-reader state, RLE, short/long overlap, short/long non-overlap, and a
+  resume boundary. The x86-64 window body shrinks from `0x816` to `0x6c2`
+  bytes; focused counters reduce instructions about 1.38% and branches about
+  3.94%. A dual-layout ELF whose active/control files differ only in one data
+  selector byte measures `kodim17` at `1.095x/1.076x` strict/no-Adler paired
+  geomean across 101 alternating rounds with three samples per side per round.
+  Four non-selected controls have paired medians within `0.995x..1.001x`; the
+  wider geomean spread under host contention is retained as noise rather than
+  claimed as a cross-fixture gain.

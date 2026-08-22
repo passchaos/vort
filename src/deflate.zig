@@ -4918,16 +4918,15 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
         consumed_bits += total_bits;
         refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
         entry = decoder.literal[@intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)];
-        if (distance == 1) {
-            if (out_pos == 0) return error.InvalidMatch;
-            if (length > output.len - out_pos) return error.OutputTooSmall;
-            const byte = output[out_pos - 1];
-            fillLinearRle(output, out_pos, length, byte);
-        } else if (comptime inline_non_overlap) {
+        if (comptime inline_non_overlap) {
             // This specialization is selected only for match-heavy blocks whose
             // distance alphabet is deep enough to justify a separate loop. Keep
-            // the generic semantic loop small for all other PNGs.
+            // the generic semantic loop small for all other PNGs. Distance-one
+            // runs are necessarily overlapping (`length >= 3`), so leave that
+            // rare case behind the overlap branch instead of testing every
+            // overwhelmingly non-overlapping token for RLE first.
             if (distance >= length) {
+                @branchHint(.likely);
                 if (distance > out_pos) return error.InvalidMatch;
                 if (length > output.len - out_pos) return error.OutputTooSmall;
                 if (comptime pause_at_output_boundary) {
@@ -4945,6 +4944,11 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             } else {
                 try copyMatchAt(output, out_pos, length, distance);
             }
+        } else if (distance == 1) {
+            if (out_pos == 0) return error.InvalidMatch;
+            if (length > output.len - out_pos) return error.OutputTooSmall;
+            const byte = output[out_pos - 1];
+            fillLinearRle(output, out_pos, length, byte);
         } else {
             try copyMatchAt(output, out_pos, length, distance);
         }
@@ -12865,6 +12869,148 @@ test "semantic RLE258 window resumes only at token boundaries" {
         reference_reader.byteOffset(),
         window_reader.byteOffset(),
     );
+}
+
+const semantic_non_overlap_mixed_tokens = [_]lz77.Token{
+    .{ .literal = 'A' },
+    .{ .match = .{ .length = 258, .distance = 1 } },
+    .{ .literal = 'B' },
+    .{ .match = .{ .length = 3, .distance = 2 } },
+    .{ .match = .{ .length = 5, .distance = 8 } },
+    .{ .match = .{ .length = 8, .distance = 16 } },
+    .{ .match = .{ .length = 9, .distance = 64 } },
+    .{ .match = .{ .length = 17, .distance = 5 } },
+    .{ .match = .{ .length = 258, .distance = 258 } },
+    .{ .match = .{ .length = 258, .distance = 300 } },
+};
+
+test "semantic non-overlap window matches generic mixed-match state" {
+    const tokens = semantic_non_overlap_mixed_tokens;
+    const raw = try encodeRawDynamicTokensAlloc(std.testing.allocator, &tokens);
+    defer std.testing.allocator.free(raw);
+    const expected = try lz77.replayAlloc(std.testing.allocator, &tokens);
+    defer std.testing.allocator.free(expected);
+
+    var parsed_reader = bitstream.BufferedBitReader.init(raw);
+    const header = try readBlockHeader(&parsed_reader);
+    const parsed = try huffman.parseDynamicLengthsAfterHeader(
+        header.final,
+        &parsed_reader,
+    );
+    const literal_table_ = try huffman.HuffmanTable(286).init(
+        parsed.literal_lengths[0..parsed.header.hlit],
+    );
+    const distance_table_ = try huffman.HuffmanTable(30).init(
+        parsed.distance_lengths[0..parsed.header.hdist],
+    );
+    var decoder: SemanticDynamicDecoder = undefined;
+    try std.testing.expect(decoder.init(&literal_table_, &distance_table_));
+
+    var reference_reader = parsed_reader;
+    var active_reader = parsed_reader;
+    const reference = try std.testing.allocator.alloc(u8, expected.len);
+    defer std.testing.allocator.free(reference);
+    const active = try std.testing.allocator.alloc(u8, expected.len);
+    defer std.testing.allocator.free(active);
+
+    // Stop immediately before the first 258-byte non-overlap match. Both loops
+    // must preserve a token boundary so the larger window can resume from the
+    // exact same bit reservoir and output prefix.
+    const first_window_len: usize = 520;
+    const reference_first = try decodeSemanticDynamicBlockIntoWindow(
+        &reference_reader,
+        reference[0..first_window_len],
+        0,
+        &decoder,
+    );
+    const active_first = try decodeSemanticDynamicBlockIntoNonOverlapWindow(
+        &active_reader,
+        active[0..first_window_len],
+        0,
+        &decoder,
+    );
+    try std.testing.expectEqual(reference_first, active_first);
+    try std.testing.expectEqual(SemanticLinearStatus.need_output, active_first.status);
+    try std.testing.expectEqual(@as(usize, 302), active_first.output_written);
+    try std.testing.expectEqualSlices(
+        u8,
+        expected[0..active_first.output_written],
+        active[0..active_first.output_written],
+    );
+    try std.testing.expectEqual(reference_reader, active_reader);
+
+    const reference_done = try decodeSemanticDynamicBlockIntoWindow(
+        &reference_reader,
+        reference,
+        reference_first.output_written,
+        &decoder,
+    );
+    const active_done = try decodeSemanticDynamicBlockIntoNonOverlapWindow(
+        &active_reader,
+        active,
+        active_first.output_written,
+        &decoder,
+    );
+    try std.testing.expectEqual(reference_done, active_done);
+    try std.testing.expectEqual(SemanticLinearStatus.end_of_block, active_done.status);
+    try std.testing.expectEqual(expected.len, active_done.output_written);
+    try std.testing.expectEqualSlices(u8, expected, reference);
+    try std.testing.expectEqualSlices(u8, expected, active);
+    try std.testing.expectEqual(reference_reader, active_reader);
+}
+
+test "semantic non-overlap full-output loop matches public decode" {
+    const tokens = semantic_non_overlap_mixed_tokens;
+    const raw = try encodeRawDynamicTokensAlloc(std.testing.allocator, &tokens);
+    defer std.testing.allocator.free(raw);
+    const expected = try lz77.replayAlloc(std.testing.allocator, &tokens);
+    defer std.testing.allocator.free(expected);
+
+    var parsed_reader = bitstream.BufferedBitReader.init(raw);
+    const header = try readBlockHeader(&parsed_reader);
+    const parsed = try huffman.parseDynamicLengthsAfterHeader(
+        header.final,
+        &parsed_reader,
+    );
+    const literal_table_ = try huffman.HuffmanTable(286).init(
+        parsed.literal_lengths[0..parsed.header.hlit],
+    );
+    const distance_table_ = try huffman.HuffmanTable(30).init(
+        parsed.distance_lengths[0..parsed.header.hdist],
+    );
+    var decoder: SemanticDynamicDecoder = undefined;
+    try std.testing.expect(decoder.init(&literal_table_, &distance_table_));
+
+    var reference_reader = parsed_reader;
+    var active_reader = parsed_reader;
+    const reference = try std.testing.allocator.alloc(u8, expected.len);
+    defer std.testing.allocator.free(reference);
+    const active = try std.testing.allocator.alloc(u8, expected.len);
+    defer std.testing.allocator.free(active);
+    const reference_written = try decodeSemanticDynamicBlockIntoBufferedReader(
+        &reference_reader,
+        reference,
+        0,
+        &decoder,
+    );
+    const active_written =
+        try decodeSemanticDynamicBlockIntoBufferedReaderNonOverlapInline(
+            &active_reader,
+            active,
+            0,
+            &decoder,
+        );
+    try std.testing.expectEqual(reference_written, active_written);
+    try std.testing.expectEqual(expected.len, active_written);
+    try std.testing.expectEqualSlices(u8, expected, reference);
+    try std.testing.expectEqualSlices(u8, expected, active);
+    try std.testing.expectEqual(reference_reader, active_reader);
+
+    const public_output = try std.testing.allocator.alloc(u8, expected.len);
+    defer std.testing.allocator.free(public_output);
+    const public = try decodeRawAuto(raw, public_output);
+    try std.testing.expectEqual(expected.len, public.output_written);
+    try std.testing.expectEqualSlices(u8, expected, public_output);
 }
 
 test "png parallel reconstruction matches scalar mixed filters" {
