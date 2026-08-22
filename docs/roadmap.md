@@ -2812,7 +2812,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   lookup/add chains while leaving short boundary tails on the scalar path. A
   scalar four-stream oracle covers irregular literal runs and a non-divisible
   regenerated length; fixed-core eight-pair checks retained 1058 bytes and
-  reduced the median from 143.089 ms to 139.158 ms (1.028x).
+  reduced the median from 143.089 ms to 139.158 ms (1.028x). The helper now
+  advances one maximal run bounded by the next Huffman stream edge, unrolling
+  eight-byte groups and handling each boundary tail before recomputing its
+  stream. This removes division and pointer write-back from the scalar tail
+  loop; another fixed-core eight-pair run retained 1058 bytes and reduced the
+  median from 139.424 ms to 123.109 ms (1.133x).
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state

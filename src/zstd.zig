@@ -8941,31 +8941,35 @@ fn addSmallHuffmanStreamBits(
     bit_counts: *[4]usize,
 ) Error!void {
     var cursor: usize = 0;
-    while (cursor + 8 <= bytes.len) : (cursor += 8) {
+    while (cursor < bytes.len) {
         if (literal_index.* >= regenerated_len) return error.CorruptFrame;
         const stream_index: usize = if (regenerated_len <= 1023)
             0
         else
             @min(literal_index.* / segment_len, 3);
         const stream_end = if (regenerated_len <= 1023) regenerated_len else @min(regenerated_len, (stream_index + 1) * segment_len);
-        if (stream_end - literal_index.* < 8) break;
-        const chunk = bytes[cursor..][0..8];
-        var chunk_bits: usize = 0;
-        inline for (0..8) |i| {
-            const bits = plan.bit_counts[chunk[i]];
-            if (bits == 0) return error.CorruptFrame;
-            chunk_bits += bits;
+        const run_len = @min(bytes.len - cursor, stream_end - literal_index.*);
+        if (run_len == 0) return error.CorruptFrame;
+        const run = bytes[cursor..][0..run_len];
+
+        var run_index: usize = 0;
+        while (run_index + 8 <= run.len) : (run_index += 8) {
+            const chunk = run[run_index..][0..8];
+            var chunk_bits: usize = 0;
+            inline for (0..8) |i| {
+                const bits = plan.bit_counts[chunk[i]];
+                if (bits == 0) return error.CorruptFrame;
+                chunk_bits += bits;
+            }
+            bit_counts[stream_index] += chunk_bits;
         }
-        bit_counts[stream_index] += chunk_bits;
-        literal_index.* += 8;
-    }
-    for (bytes[cursor..]) |byte| {
-        if (literal_index.* >= regenerated_len) return error.CorruptFrame;
-        const stream_index: usize = if (regenerated_len <= 1023) 0 else @min(literal_index.* / segment_len, 3);
-        const bits = plan.bit_counts[byte];
-        if (bits == 0) return error.CorruptFrame;
-        bit_counts[stream_index] += bits;
-        literal_index.* += 1;
+        for (run[run_index..]) |byte| {
+            const bits = plan.bit_counts[byte];
+            if (bits == 0) return error.CorruptFrame;
+            bit_counts[stream_index] += bits;
+        }
+        cursor += run_len;
+        literal_index.* += run_len;
     }
 }
 
