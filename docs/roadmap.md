@@ -2674,6 +2674,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   than a stack table rebuilt for every block. An exhaustive 1...32768 test pins
   every entry to the scalar formula. Together with the extracted `HashIndex`,
   this removes another fixed per-block pass without changing parser choices.
+  Optimal's three-byte hash chain now rejects fourth-byte mismatches before the
+  full word-at-a-time match-length loop whenever `min_match >= 4` (the Zstd
+  configuration). An exact-four-byte regression test protects the boundary.
+  Repeat-3 level-9 binary/JSON retained 9009/1058-byte wires at roughly
+  0.12/9.25 s; the binary hot shape benefits while JSON remains DP-heavy.
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state

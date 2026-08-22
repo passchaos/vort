@@ -520,6 +520,13 @@ pub fn optimalPlanReuse(scratch: *OptimalScratch, allocator: std.mem.Allocator, 
             std.debug.assert(candidate < rev_i);
             const distance = rev_i - candidate;
             if (distance == 0 or distance > options.window_len) break;
+            // The optimal chain uses a three-byte anchor while Zstd requests
+            // min_match=4. Reject the common fourth-byte mismatch before the
+            // wider matchLength loop without dropping valid 4-byte matches.
+            if (minimum >= 4 and input[candidate + 3] != input[rev_i + 3]) {
+                chain_i = prev[candidate];
+                continue;
+            }
 
             const length = matchLength(input, candidate, rev_i, max_len);
             if (length >= minimum) {
@@ -1484,6 +1491,21 @@ test "reusable optimal parser preserves tokens and capacities" {
     const capacities = .{ scratch.costs.capacity, scratch.steps.capacity, scratch.index.head.capacity, scratch.index.prev.capacity, scratch.tokens.capacity };
     _ = try optimalPlanReuse(&scratch, std.testing.allocator, input, options);
     try std.testing.expectEqual(capacities, .{ scratch.costs.capacity, scratch.steps.capacity, scratch.index.head.capacity, scratch.index.prev.capacity, scratch.tokens.capacity });
+}
+
+test "optimal fourth-byte rejection preserves exact four-byte matches" {
+    const input = "abcdXabcdYabcZ";
+    const plan = try optimalPlanAlloc(std.testing.allocator, input, .{ .min_match = 4, .max_match = 32, .max_chain = 64, .max_candidates = 8 });
+    defer plan.deinit(std.testing.allocator);
+    var saw_exact_four = false;
+    for (plan.tokens) |token| switch (token) {
+        .match => |match| saw_exact_four = saw_exact_four or match.length == 4,
+        else => {},
+    };
+    try std.testing.expect(saw_exact_four);
+    const replayed = try replayAlloc(std.testing.allocator, plan.tokens);
+    defer std.testing.allocator.free(replayed);
+    try std.testing.expectEqualSlices(u8, input, replayed);
 }
 
 test "reusable hash index exposes deterministic position matches" {
