@@ -4520,3 +4520,22 @@ architecture blindly.
   `1.036x/1.034x` strict/no-Adler geomean, including `kodim17` at
   `1.014x/1.017x`; four non-selected controls stay within
   `0.9945x..1.0054x` and `0.9966x..1.0026x`.
+- Added a PNG windowed semantic specialization for the measured Kodak table
+  shape: literal code lengths at most 14 bits plus a distance tree at least 12
+  bits deep. This passes the parsed table shape into the resumable block driver
+  and reuses the existing non-overlap semantic template instead of duplicating
+  Huffman decode. Fifteen-bit literal trees such as Fantasy remain on the
+  ordinary loop after a broad-policy A/B exposed a real regression.
+- The specialized window loop copies its dominant 1..8-byte, distance>=8
+  matches with one fixed 8-byte load/store; longer, small-distance, overlapping,
+  tail, and compact-reference cases retain established paths. The isolated
+  scalar oracle covers all 264 length/distance pairs plus source/output guards,
+  and module policy tests lock both thresholds. Vort full tests, AArch64/PPC64
+  compile checks, fuzz smoke, imx full tests/check, and the 195-case PNG corpus
+  remain green.
+- A fixed-CPU-25 active/control ELF pair differs in exactly one policy immediate
+  byte. In 101 alternating rounds, `kodim17` improves `1.079x` strict and
+  `1.076x` no-Adler by paired geomean; Fantasy, paletted-zune, indexed lorem,
+  and kodim07 controls remain neutral. The synchronized image-png comparison
+  moves `kodim17` to about `0.872x/0.878x`, so this is a substantial weak-row
+  improvement rather than uniform PNG leadership.

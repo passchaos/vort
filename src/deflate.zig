@@ -7,6 +7,7 @@ const core = @import("core.zig");
 const png_ultrafast = @import("png_ultrafast.zig");
 const png_windowed_history =
     @import("deflate/png/windowed_history.zig");
+const png_non_overlap = @import("deflate/png/non_overlap.zig");
 const semantic_rle258 = @import("deflate/semantic/rle258.zig");
 
 const png = @import("png.zig");
@@ -4653,6 +4654,25 @@ noinline fn decodeSemanticDynamicBlockIntoWindow(
     );
 }
 
+noinline fn decodeSemanticDynamicBlockIntoNonOverlapWindow(
+    noalias reader: *bitstream.BufferedBitReader,
+    noalias output: []u8,
+    initial_out_offset: usize,
+    noalias decoder: *const SemanticDynamicDecoder,
+) linksection(png_non_overlap.text_section) Error!SemanticLinearStep {
+    return decodeSemanticDynamicBlockIntoLinearMode(
+        false,
+        false,
+        true,
+        false,
+        true,
+        reader,
+        output,
+        initial_out_offset,
+        decoder,
+    );
+}
+
 noinline fn decodeSemanticDynamicBlockIntoSingleDistanceWindow(
     noalias reader: *bitstream.BufferedBitReader,
     noalias output: []u8,
@@ -4910,7 +4930,18 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             if (distance >= length) {
                 if (distance > out_pos) return error.InvalidMatch;
                 if (length > output.len - out_pos) return error.OutputTooSmall;
-                @memcpy(output[out_pos..][0..length], output[out_pos - distance ..][0..length]);
+                if (comptime pause_at_output_boundary) {
+                    if (!png_non_overlap.copyShortWindowMatch(
+                        output,
+                        out_pos,
+                        length,
+                        distance,
+                    )) {
+                        @memcpy(output[out_pos..][0..length], output[out_pos - distance ..][0..length]);
+                    }
+                } else {
+                    @memcpy(output[out_pos..][0..length], output[out_pos - distance ..][0..length]);
+                }
             } else {
                 try copyMatchAt(output, out_pos, length, distance);
             }
@@ -11728,6 +11759,7 @@ pub fn decodePngWindowedZlibImageWithOptions(
                     &distance_table_,
                     null,
                     false,
+                    false,
                 );
             },
             2 => {
@@ -11760,6 +11792,10 @@ pub fn decodePngWindowedZlibImageWithOptions(
                     &distance_table_,
                     if (semantic) &semantic_decoder else null,
                     single_distance,
+                    png_non_overlap.shouldUse(
+                        parsed.literal_max_bits,
+                        parsed.distance_max_bits,
+                    ),
                 );
             },
             else => return error.InvalidDeflateBlockType,
@@ -11792,11 +11828,19 @@ fn decodePngWindowedBlock(
     distance_table_: anytype,
     semantic_decoder: ?*const SemanticDynamicDecoder,
     single_distance: bool,
+    prefer_non_overlap: bool,
 ) Error!bool {
     while (true) {
         const step = if (semantic_decoder) |decoder|
             if (single_distance)
                 try decodeSemanticDynamicBlockIntoSingleDistanceWindow(
+                    reader,
+                    image.decodeOutput(),
+                    image.window.write_pos,
+                    decoder,
+                )
+            else if (prefer_non_overlap)
+                try decodeSemanticDynamicBlockIntoNonOverlapWindow(
                     reader,
                     image.decodeOutput(),
                     image.window.write_pos,
