@@ -8883,6 +8883,10 @@ fn smallHuffmanLiteralStreamsSerializedLenFromSequence(
     regenerated_len: usize,
     plan: *const SmallHuffmanLiteralPlan,
 ) Error!?usize {
+    // Every generated literal consumes at most max_bit_count bits. Proving the
+    // aggregate bound once keeps overflow checks out of the byte-wise hot loop
+    // used for every mixed-plan candidate.
+    _ = std.math.mul(usize, regenerated_len, @as(usize, plan.max_bit_count)) catch return error.IntegerOverflow;
     if (regenerated_len <= 1023) {
         var bit_count: usize = 0;
         var literal_start: usize = 0;
@@ -8891,7 +8895,7 @@ fn smallHuffmanLiteralStreamsSerializedLenFromSequence(
             for (block[literal_start..][0..literal_len]) |byte| {
                 const bits = plan.bit_counts[byte];
                 if (bits == 0) return error.CorruptFrame;
-                bit_count = std.math.add(usize, bit_count, bits) catch return error.IntegerOverflow;
+                bit_count += bits;
             }
             if (literal_ends[i] < literal_start + literal_len or literal_ends[i] > block.len) return error.CorruptFrame;
             literal_start = literal_ends[i];
@@ -8944,7 +8948,7 @@ fn addSmallHuffmanStreamBits(
             @min(literal_index.* / segment_len, 3);
         const bits = plan.bit_counts[byte];
         if (bits == 0) return error.CorruptFrame;
-        bit_counts[stream_index] = std.math.add(usize, bit_counts[stream_index], bits) catch return error.IntegerOverflow;
+        bit_counts[stream_index] += bits;
         literal_index.* += 1;
     }
 }

@@ -2788,6 +2788,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   scalar word comparisons per loop. An explicit anchor/vector/word/byte boundary
   oracle preserves exact match lengths; another fixed-core eight-pair run kept
   1058 bytes and reduced the median from 166.959 ms to 160.659 ms (1.039x).
+  Huffman stream sizing now proves its worst-case aggregate bit count once from
+  `(regenerated length * maximum code width)`, then uses unchecked additions in
+  the per-literal loop. Existing single-stream and mixed-histogram full-scan
+  oracles preserve the byte count; two fixed-core eight-pair runs retained 1058
+  bytes and consistently improved the median by about 1.7% (160.265 ms to
+  157.527 ms in the first run).
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state
