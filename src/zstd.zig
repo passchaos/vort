@@ -56,6 +56,10 @@ const mixed_match_min_search_budget = 96;
 // preserves its locked wires but cannot improve them, so begin that extra ratio
 // work at level 2's 32-state budget.
 const lazy_match_min_search_budget = 32;
+// The greedy and optimal hash plans already cover multi-match parsing at level
+// 1. Keep the legacy multi-duplicate scan for level 2+ ratio arbitration, but do
+// not rebuild its 1 MiB candidate table repeatedly for the fastest level.
+const multi_duplicate_min_search_budget = 32;
 const repeated_pattern_period_max = 64;
 const repeated_pattern_start_scan = 48;
 const max_direct_huffman_symbol = 128;
@@ -7137,7 +7141,10 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
 
     var multi_duplicate_block: std.ArrayList(u8) = .empty;
     defer multi_duplicate_block.deinit(allocator);
-    const multi_duplicate_ok = try emitMultiDuplicateMatchCompressedBlock(allocator, &multi_duplicate_block, block, last);
+    const multi_duplicate_ok = if (match_search_budget >= multi_duplicate_min_search_budget)
+        try emitMultiDuplicateMatchCompressedBlock(allocator, &multi_duplicate_block, block, last)
+    else
+        false;
 
     var single_duplicate_block: std.ArrayList(u8) = .empty;
     defer single_duplicate_block.deinit(allocator);
@@ -12260,6 +12267,8 @@ test "zstd low latency levels defer mixed-family match search" {
     const level4 = try nativeFrameOptionsForLevel(4, .{});
     try std.testing.expect(level1.match_search_budget < lazy_match_min_search_budget);
     try std.testing.expect(level2.match_search_budget >= lazy_match_min_search_budget);
+    try std.testing.expect(level1.match_search_budget < multi_duplicate_min_search_budget);
+    try std.testing.expect(level2.match_search_budget >= multi_duplicate_min_search_budget);
     try std.testing.expect(level3.match_search_budget < mixed_match_min_search_budget);
     try std.testing.expect(level4.match_search_budget >= mixed_match_min_search_budget);
 }

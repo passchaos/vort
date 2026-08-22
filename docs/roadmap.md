@@ -2568,6 +2568,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   retained as a structural full-pass removal rather than a throughput claim.
   The ReleaseFast encode gate pins the level-1/3 1505/1350-byte wires and
   cross-decoder round trips; unit tests pin the level-to-budget boundary.
+  A second candidate-family ablation found the legacy multi-duplicate planner
+  was also redundant at level 1: greedy/optimal plans preserved all nine locked
+  sizes, while removing both single- and multi-duplicate paths broke the 93-byte
+  text wire. Level 1 therefore skips only multi-duplicate scanning and keeps the
+  single-match fallback. The same one-iteration smoke moved JSON from about
+  2.60 s to 0.88 s, text from 0.46 s to 0.26 s, and binary from 0.31 s to
+  0.17 s with byte-identical gate outputs; level 2+ retains ratio arbitration.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

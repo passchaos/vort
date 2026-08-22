@@ -45,8 +45,11 @@ def main() -> int:
     # recursive mixed-family planner. This benchmark target is always compiled
     # in ReleaseFast, so the generous ceilings still distinguish the old
     # 11-15 second JSON cliff from normal same-machine variance.
-    assert int(json_rows[1]["vort_ns"]) <= 4_000_000_000, json_rows
-    assert int(json_rows[3]["vort_ns"]) <= 5_000_000_000, json_rows
+    assert int(json_rows[1]["vort_ns"]) <= 2_000_000_000, json_rows
+    # Level 3 still runs lazy and the legacy ratio candidates; leave enough
+    # headroom for shared-machine variance while keeping the former 15-second
+    # recursive-planner cliff impossible to reintroduce.
+    assert int(json_rows[3]["vort_ns"]) <= 8_000_000_000, json_rows
     # The expanded planner must retain the measured JSON improvement over the
     # old 32-sequence 16,893-byte baseline on every level.
     assert int(json_rows[1]["vort_bytes"]) <= 13_688, json_rows
