@@ -10577,8 +10577,7 @@ fn findBestDuplicateMatchExactHashed(block: []const u8, start_min: usize) Error!
             const first: usize = @intCast(candidate_index);
             candidate_index = next[candidate_index];
             if (!std.mem.eql(u8, block[first..][0..8], block[index..][0..8])) continue;
-            var len: usize = 8;
-            while (index + len < block.len and block[first + len] == block[index + len]) : (len += 1) {}
+            const len = duplicateMatchLength(block, first, index);
             if (len >= 8) {
                 const candidate: DuplicateMatch = .{ .first_start = first, .second_start = index, .len = len };
                 if (duplicateMatchCannotBeat(candidate, best)) continue;
@@ -10699,8 +10698,7 @@ fn findBestDuplicateMatchHashed(block: []const u8, start_min: usize) Error!?Dupl
                 if (block.len - index <= current_best.len) continue;
             }
 
-            var len: usize = 0;
-            while (index + len < block.len and block[candidate_start + len] == block[index + len]) : (len += 1) {}
+            const len = duplicateMatchLength(block, candidate_start, index);
             if (len < 8) continue;
 
             const candidate: DuplicateMatch = .{ .first_start = candidate_start, .second_start = index, .len = len };
@@ -10736,8 +10734,7 @@ fn findBestDuplicateMatchHashedSentinelReference(block: []const u8, start_min: u
             const candidate_start: usize = @intCast(candidate_index);
             if (candidate_start < start_min or candidate_start >= index) continue;
             if (best) |current| if (block.len - index <= current.len) continue;
-            var len: usize = 0;
-            while (index + len < block.len and block[candidate_start + len] == block[index + len]) : (len += 1) {}
+            const len = duplicateMatchLength(block, candidate_start, index);
             if (len < 8) continue;
             const candidate: DuplicateMatch = .{ .first_start = candidate_start, .second_start = index, .len = len };
             if (duplicateMatchCannotBeat(candidate, best)) continue;
@@ -10788,6 +10785,25 @@ fn duplicateHash8(bytes: *const [8]u8) usize {
     const value = std.mem.readInt(u64, bytes, .little);
     const shift: u6 = @intCast(64 - duplicate_hash_bits);
     return @intCast((value *% 11_400_714_819_323_198_485) >> shift);
+}
+
+fn duplicateMatchLength(block: []const u8, first: usize, second: usize) usize {
+    // The large matcher uses a truncated hash and can still see collisions;
+    // verify its anchor word before extending the remaining suffix. Structured
+    // data frequently produces long true matches, so word-at-a-time comparison
+    // avoids the byte loop that dominated high-level mixed-plan search.
+    const max_len = block.len - second;
+    const first_left = std.mem.readInt(u64, block[first..][0..8], .little);
+    const first_right = std.mem.readInt(u64, block[second..][0..8], .little);
+    if (first_left != first_right) return @ctz(first_left ^ first_right) / 8;
+    var len: usize = 8;
+    while (len + 8 <= max_len) : (len += 8) {
+        const left = std.mem.readInt(u64, block[first + len ..][0..8], .little);
+        const right = std.mem.readInt(u64, block[second + len ..][0..8], .little);
+        if (left != right) return len + @ctz(left ^ right) / 8;
+    }
+    while (len < max_len and block[first + len] == block[second + len]) : (len += 1) {}
+    return len;
 }
 
 fn singleMatchPayloadLen(block: []const u8, match: DuplicateMatch) Error!usize {

@@ -2715,7 +2715,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   2.11 s to 1.63 s. Predefined-table DP now stores next-state choices as `u8`
   and relies on the existing per-row write invariant instead of clearing an
   8 KiB `usize` matrix on every attempt. Another six-pair check retained 1058
-  bytes and moved the median from roughly 1.94 s to 1.71 s.
+  bytes and moved the median from roughly 1.94 s to 1.71 s. Duplicate matching
+  now verifies its (possibly colliding) eight-byte hash anchor and extends true
+  matches with unaligned word loads plus `ctz` rather than a byte loop. The
+  existing exact/sentinel matcher oracles and the 328-case external probe
+  retain candidate, tie, and wire behavior; a six-pair check kept 1058 bytes
+  and moved the level-9 JSON median from roughly 1.56 s to 0.96 s.
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state
