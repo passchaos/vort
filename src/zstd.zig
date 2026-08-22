@@ -41,6 +41,7 @@ const duplicate_hash_candidates = 8;
 const duplicate_index_max_input_len = std.math.maxInt(u16);
 const duplicate_exact_hash_table_len = duplicate_hash_table_len;
 const duplicate_exact_hash_input_max = 4096;
+const duplicate_exact_key_table_len = 1 << 13;
 const mixed_candidates_per_position = 4;
 // The mixed planner's current search budget can reach at most 128 useful
 // sequence decisions on measured structured blocks. Larger fixed plans add
@@ -11048,10 +11049,11 @@ fn findBestDuplicateMatchIndexed(block: []const u8, start_min: usize, index: *co
 /// former O(n²) byte-pair scan across level-1's 1/2/4 KiB adaptive blocks.
 fn findBestDuplicateMatchExactHashed(block: []const u8, start_min: usize) Error!?DuplicateMatch {
     std.debug.assert(block.len <= duplicate_exact_hash_input_max);
-    var heads: [duplicate_exact_hash_table_len]u32 = undefined;
-    var tails: [duplicate_exact_hash_table_len]u32 = undefined;
-    var occupied: [duplicate_exact_hash_table_len / 64]u64 = @splat(0);
-    var next: [duplicate_exact_hash_input_max]u32 = undefined;
+    var keys: [duplicate_exact_key_table_len]u64 = undefined;
+    var heads: [duplicate_exact_key_table_len]u16 = undefined;
+    var tails: [duplicate_exact_key_table_len]u16 = undefined;
+    var occupied: [duplicate_exact_key_table_len / 64]u64 = @splat(0);
+    var next: [duplicate_exact_hash_input_max]u16 = undefined;
 
     var best: ?DuplicateMatch = null;
     var best_payload_len: usize = std.math.maxInt(usize);
@@ -11061,15 +11063,17 @@ fn findBestDuplicateMatchExactHashed(block: []const u8, start_min: usize) Error!
         // Once that suffix is shorter than the current winner, later positions
         // cannot improve either length or the payload tie-break.
         if (best) |current| if (block.len - index < current.len) break;
-        const hash = duplicateHash8(block[index..][0..8]) & (duplicate_exact_hash_table_len - 1);
-        const word = hash / 64;
-        const bit = @as(u64, 1) << @intCast(hash & 63);
+        const key = std.mem.readInt(u64, block[index..][0..8], .little);
+        var slot = duplicateHash8(block[index..][0..8]) & (duplicate_exact_key_table_len - 1);
+        while ((occupied[slot / 64] & (@as(u64, 1) << @intCast(slot & 63))) != 0 and keys[slot] != key)
+            slot = (slot + 1) & (duplicate_exact_key_table_len - 1);
+        const word = slot / 64;
+        const bit = @as(u64, 1) << @intCast(slot & 63);
         const was_occupied = (occupied[word] & bit) != 0;
-        var candidate_index = if (was_occupied) heads[hash] else duplicate_hash_invalid;
-        while (candidate_index != duplicate_hash_invalid) {
+        var candidate_index = if (was_occupied) heads[slot] else duplicate_index_invalid;
+        while (candidate_index != duplicate_index_invalid) {
             const first: usize = @intCast(candidate_index);
             candidate_index = next[candidate_index];
-            if (!std.mem.eql(u8, block[first..][0..8], block[index..][0..8])) continue;
             const len = duplicateMatchLengthAfterAnchor(block, first, index);
             if (len >= 8) {
                 const candidate: DuplicateMatch = .{ .first_start = first, .second_start = index, .len = len };
@@ -11085,14 +11089,15 @@ fn findBestDuplicateMatchExactHashed(block: []const u8, start_min: usize) Error!
         // Append rather than prepend so walking the collision chain preserves
         // the reference scan's earliest-first tie order without materializing
         // and reversing a temporary candidate list for every input position.
-        next[index] = duplicate_hash_invalid;
+        next[index] = duplicate_index_invalid;
         if (!was_occupied) {
-            heads[hash] = @intCast(index);
+            keys[slot] = key;
+            heads[slot] = @intCast(index);
             occupied[word] |= bit;
         } else {
-            next[tails[hash]] = @intCast(index);
+            next[tails[slot]] = @intCast(index);
         }
-        tails[hash] = @intCast(index);
+        tails[slot] = @intCast(index);
     }
     return best;
 }
@@ -11186,6 +11191,30 @@ test "zstd exact duplicate sparse buckets preserve collision chains" {
     // Keep the colliding non-match intact so the sparse occupancy bit cannot be
     // mistaken for proof that the bucket's first eight bytes are equal.
     try std.testing.expect(!std.mem.eql(u8, payload[collision..][0..8], payload[base..][0..8]));
+    try std.testing.expectEqual(
+        try findBestDuplicateMatchScanReference(&payload, 0),
+        try findBestDuplicateMatchExactHashed(&payload, 0),
+    );
+}
+
+test "zstd exact duplicate table preserves full-anchor collisions" {
+    var payload: [1024]u8 = undefined;
+    var state: u32 = 0x517c_c1b7;
+    for (&payload) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 16);
+    }
+    const base = 37;
+    const collision = 311;
+    const wanted_slot = duplicateHash8(payload[base..][0..8]) & (duplicate_exact_key_table_len - 1);
+    var probe: u32 = 0;
+    while (true) : (probe += 1) {
+        std.mem.writeInt(u32, payload[collision..][0..4], probe, .little);
+        std.mem.writeInt(u32, payload[collision + 4 ..][0..4], probe *% 0x9e37_79b1, .little);
+        if (duplicateHash8(payload[collision..][0..8]) & (duplicate_exact_key_table_len - 1) == wanted_slot and
+            !std.mem.eql(u8, payload[collision..][0..8], payload[base..][0..8])) break;
+    }
+    @memcpy(payload[700..756], payload[base..][0..56]);
     try std.testing.expectEqual(
         try findBestDuplicateMatchScanReference(&payload, 0),
         try findBestDuplicateMatchExactHashed(&payload, 0),

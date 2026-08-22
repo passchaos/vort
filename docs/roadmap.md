@@ -2849,6 +2849,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   collision, and SIMD-boundary oracles preserve exact lengths and selection;
   fixed-core eight-pair checks retained 1058 bytes and reduced the median from
   113.817 ms to 111.870 ms (1.017x).
+  Exact <=4 KiB matching now indexes full eight-byte anchors in an 8192-slot
+  open-addressed table and links positions with compact `u16` indices. This
+  shrinks head/tail metadata, removes false-collision anchor checks, and keeps
+  every real match in earliest-first order. A constructed full-anchor collision
+  oracle plus the exhaustive scan comparison preserve selection; fixed-core
+  eight-pair checks retained 1058 bytes and reduced the median from 110.861 ms
+  to 109.672 ms (1.011x).
   Sequence-literal RLE detection now skips empty/already-disproved runs and uses
   the standard library's vectorized `allEqual` scan for each remaining run
   instead of branching once per byte. A focused reference oracle covers empty,
