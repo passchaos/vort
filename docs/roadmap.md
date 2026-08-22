@@ -4556,3 +4556,19 @@ architecture blindly.
   Four non-selected controls have paired medians within `0.995x..1.001x`; the
   wider geomean spread under host contention is retained as noise rather than
   claimed as a cross-fixture gain.
+- Removed the remaining per-token `consumed_bits` dependency from the same
+  deep-distance semantic specialization. `BufferedBitReader` stages whole bytes
+  and stores unread bits at the low end of its reservoir, so the exact logical
+  position is `byte_index * 8 - bit_count`; the loop now derives it only when
+  committing EOB or handing off to the transactional tail. Generic loops keep
+  their incremental accounting. Existing mixed-match tests compare the entire
+  reader struct at a resume boundary and EOB, and the full-output oracle checks
+  both the generic semantic loop and public decode.
+- The derived-position x86-64 window body shrinks again from `0x6c2` to `0x683`
+  bytes and its stack frame from `0xe8` to `0xc8`. An 11-round fixed-CPU-25
+  dual-layout counter A/B reduces cycles by `4.97%` and instructions by `8.41%`;
+  branches fall `0.53%` while branch misses are effectively neutral. A separate
+  one-byte-selector 101-round A/B, taking three process medians per side per
+  round, measures `1.042x/1.051x` strict/no-Adler paired-geomean gains on
+  `kodim17`. Fantasy, kodim07, paletted-zune, and the lorem screenshot retain
+  paired medians within `0.999x..1.002x`.

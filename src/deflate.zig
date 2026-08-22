@@ -4730,7 +4730,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             {
                 bit_buffer >>= 2;
                 bit_count -= 2;
-                consumed_bits += 2;
+                if (comptime !inline_non_overlap) consumed_bits += 2;
                 refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
                 entry = decoder.literal[
                     @intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)
@@ -4779,7 +4779,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
 
                     bit_buffer >>= @intCast(entry123_bits);
                     bit_count -= entry123_bits;
-                    consumed_bits += entry123_bits;
+                    if (comptime !inline_non_overlap) consumed_bits += entry123_bits;
                     entry = entry4;
                     refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
                     continue;
@@ -4787,13 +4787,13 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
 
                 bit_buffer >>= @intCast(entry12_bits);
                 bit_count -= entry12_bits;
-                consumed_bits += entry12_bits;
+                if (comptime !inline_non_overlap) consumed_bits += entry12_bits;
                 entry = entry3;
                 entry_bits = entry3_bits;
             } else {
                 bit_buffer >>= @intCast(entry_bits);
                 bit_count -= entry_bits;
-                consumed_bits += entry_bits;
+                if (comptime !inline_non_overlap) consumed_bits += entry_bits;
                 entry = entry2;
                 entry_bits = entry2_bits;
             }
@@ -4816,7 +4816,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             if (symbol < 256) {
                 bit_buffer >>= @intCast(entry_bits);
                 bit_count -= entry_bits;
-                consumed_bits += entry_bits;
+                if (comptime !inline_non_overlap) consumed_bits += entry_bits;
                 output[out_pos] = @truncate(symbol);
                 out_pos += 1;
                 refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
@@ -4826,8 +4826,19 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             if (symbol == 256) {
                 bit_buffer >>= @intCast(entry_bits);
                 bit_count -= entry_bits;
-                consumed_bits += entry_bits;
-                storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
+                if (comptime !inline_non_overlap) consumed_bits += entry_bits;
+                storeFusedReaderState(
+                    reader,
+                    bit_buffer,
+                    bit_count,
+                    byte_index,
+                    semanticConsumedBits(
+                        inline_non_overlap,
+                        consumed_bits,
+                        byte_index,
+                        bit_count,
+                    ),
+                );
                 return semanticLinearResult(
                     pause_at_output_boundary,
                     out_pos,
@@ -4842,8 +4853,19 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             if (entry_bits == 0) return error.InvalidHuffmanCode;
             bit_buffer >>= @intCast(entry_bits);
             bit_count -= entry_bits;
-            consumed_bits += entry_bits;
-            storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
+            if (comptime !inline_non_overlap) consumed_bits += entry_bits;
+            storeFusedReaderState(
+                reader,
+                bit_buffer,
+                bit_count,
+                byte_index,
+                semanticConsumedBits(
+                    inline_non_overlap,
+                    consumed_bits,
+                    byte_index,
+                    bit_count,
+                ),
+            );
             return semanticLinearResult(
                 pause_at_output_boundary,
                 out_pos,
@@ -4865,7 +4887,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             const total_bits: u6 = entry_bits + length_extra_bits + 1;
             bit_buffer >>= @intCast(total_bits);
             bit_count -= total_bits;
-            consumed_bits += total_bits;
+            if (comptime !inline_non_overlap) consumed_bits += total_bits;
             refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
             entry = decoder.literal[@intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)];
 
@@ -4915,7 +4937,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
 
         bit_buffer >>= @intCast(total_bits);
         bit_count -= total_bits;
-        consumed_bits += total_bits;
+        if (comptime !inline_non_overlap) consumed_bits += total_bits;
         refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
         entry = decoder.literal[@intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)];
         if (comptime inline_non_overlap) {
@@ -4955,7 +4977,18 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
         out_pos += length;
     }
 
-    storeFusedReaderState(reader, bit_buffer, bit_count, byte_index, consumed_bits);
+    storeFusedReaderState(
+        reader,
+        bit_buffer,
+        bit_count,
+        byte_index,
+        semanticConsumedBits(
+            inline_non_overlap,
+            consumed_bits,
+            byte_index,
+            bit_count,
+        ),
+    );
     if (comptime pause_at_output_boundary) {
         return decodeSemanticTailWindow(
             reader,
@@ -5575,6 +5608,22 @@ inline fn storeFusedReaderState(
     reader.bit_count = bit_count;
     reader.byte_index = byte_index;
     reader.consumed_bits = consumed_bits;
+}
+
+inline fn semanticConsumedBits(
+    comptime derive_from_reservoir: bool,
+    tracked: usize,
+    byte_index: usize,
+    bit_count: usize,
+) usize {
+    if (comptime derive_from_reservoir) {
+        // BufferedBitReader stages complete bytes and keeps every unread bit in
+        // the low end of the reservoir, so its logical position is recoverable
+        // without carrying another dependency through every semantic token.
+        std.debug.assert(bit_count <= byte_index * 8);
+        return byte_index * 8 - bit_count;
+    }
+    return tracked;
 }
 
 inline fn emitFusedLiteralAt(output: []u8, out_pos: *usize, entry: u32) void {
@@ -12884,6 +12933,28 @@ const semantic_non_overlap_mixed_tokens = [_]lz77.Token{
     .{ .match = .{ .length = 258, .distance = 300 } },
 };
 
+fn initSemanticDecoderForMixedMatchTest(
+    raw: []const u8,
+    reader: *bitstream.BufferedBitReader,
+    literal_table_: *huffman.HuffmanTable(286),
+    distance_table_: *huffman.HuffmanTable(30),
+    decoder: *SemanticDynamicDecoder,
+) !void {
+    reader.* = bitstream.BufferedBitReader.init(raw);
+    const header = try readBlockHeader(reader);
+    const parsed = try huffman.parseDynamicLengthsAfterHeader(
+        header.final,
+        reader,
+    );
+    literal_table_.* = try huffman.HuffmanTable(286).init(
+        parsed.literal_lengths[0..parsed.header.hlit],
+    );
+    distance_table_.* = try huffman.HuffmanTable(30).init(
+        parsed.distance_lengths[0..parsed.header.hdist],
+    );
+    try std.testing.expect(decoder.init(literal_table_, distance_table_));
+}
+
 test "semantic non-overlap window matches generic mixed-match state" {
     const tokens = semantic_non_overlap_mixed_tokens;
     const raw = try encodeRawDynamicTokensAlloc(std.testing.allocator, &tokens);
@@ -12891,20 +12962,17 @@ test "semantic non-overlap window matches generic mixed-match state" {
     const expected = try lz77.replayAlloc(std.testing.allocator, &tokens);
     defer std.testing.allocator.free(expected);
 
-    var parsed_reader = bitstream.BufferedBitReader.init(raw);
-    const header = try readBlockHeader(&parsed_reader);
-    const parsed = try huffman.parseDynamicLengthsAfterHeader(
-        header.final,
-        &parsed_reader,
-    );
-    const literal_table_ = try huffman.HuffmanTable(286).init(
-        parsed.literal_lengths[0..parsed.header.hlit],
-    );
-    const distance_table_ = try huffman.HuffmanTable(30).init(
-        parsed.distance_lengths[0..parsed.header.hdist],
-    );
+    var parsed_reader: bitstream.BufferedBitReader = undefined;
+    var literal_table_: huffman.HuffmanTable(286) = undefined;
+    var distance_table_: huffman.HuffmanTable(30) = undefined;
     var decoder: SemanticDynamicDecoder = undefined;
-    try std.testing.expect(decoder.init(&literal_table_, &distance_table_));
+    try initSemanticDecoderForMixedMatchTest(
+        raw,
+        &parsed_reader,
+        &literal_table_,
+        &distance_table_,
+        &decoder,
+    );
 
     var reference_reader = parsed_reader;
     var active_reader = parsed_reader;
@@ -12966,20 +13034,17 @@ test "semantic non-overlap full-output loop matches public decode" {
     const expected = try lz77.replayAlloc(std.testing.allocator, &tokens);
     defer std.testing.allocator.free(expected);
 
-    var parsed_reader = bitstream.BufferedBitReader.init(raw);
-    const header = try readBlockHeader(&parsed_reader);
-    const parsed = try huffman.parseDynamicLengthsAfterHeader(
-        header.final,
-        &parsed_reader,
-    );
-    const literal_table_ = try huffman.HuffmanTable(286).init(
-        parsed.literal_lengths[0..parsed.header.hlit],
-    );
-    const distance_table_ = try huffman.HuffmanTable(30).init(
-        parsed.distance_lengths[0..parsed.header.hdist],
-    );
+    var parsed_reader: bitstream.BufferedBitReader = undefined;
+    var literal_table_: huffman.HuffmanTable(286) = undefined;
+    var distance_table_: huffman.HuffmanTable(30) = undefined;
     var decoder: SemanticDynamicDecoder = undefined;
-    try std.testing.expect(decoder.init(&literal_table_, &distance_table_));
+    try initSemanticDecoderForMixedMatchTest(
+        raw,
+        &parsed_reader,
+        &literal_table_,
+        &distance_table_,
+        &decoder,
+    );
 
     var reference_reader = parsed_reader;
     var active_reader = parsed_reader;
