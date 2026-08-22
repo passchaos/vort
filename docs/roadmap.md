@@ -2737,7 +2737,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   code-to-state masks, iterating only states that can encode the current value
   instead of rechecking every state; the independent matrix oracle still
   matches through 128-value plans. A six-pair check retained 1058 bytes and
-  moved the median from roughly 0.79 s to 0.64 s.
+  moved the median from roughly 0.79 s to 0.64 s. Mixed lookahead now maintains
+  a backtracked histogram of the logical literal stream, removing each match's
+  covered interval on descent and restoring it on unwind. Exact payload scoring
+  builds Huffman weights from that histogram instead of rescanning all literal
+  runs; a direct full-scan oracle covers a non-zero first match and three-level
+  path. A six-pair check retained 1058 bytes and moved the median from roughly
+  0.65 s to 0.63 s.
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state

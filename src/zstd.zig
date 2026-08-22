@@ -7489,6 +7489,44 @@ const MixedMatchLookaheadRequirements = struct {
     second: MixedMatchRequirement,
 };
 
+const MixedLiteralHistogram = struct {
+    frequencies: [256]u32 = .{0} ** 256,
+    regenerated_len: usize = 0,
+    unique_count: usize = 0,
+    max_symbol: u8 = 0,
+
+    fn init(bytes: []const u8) MixedLiteralHistogram {
+        var histogram: MixedLiteralHistogram = .{};
+        histogram.add(bytes);
+        return histogram;
+    }
+
+    fn remove(self: *MixedLiteralHistogram, bytes: []const u8) void {
+        self.regenerated_len -= bytes.len;
+        for (bytes) |byte| {
+            std.debug.assert(self.frequencies[byte] != 0);
+            self.frequencies[byte] -= 1;
+            if (self.frequencies[byte] == 0) self.unique_count -= 1;
+        }
+        if (self.unique_count == 0) {
+            self.max_symbol = 0;
+        } else if (self.frequencies[self.max_symbol] == 0) {
+            var symbol: usize = self.max_symbol;
+            while (self.frequencies[symbol] == 0) symbol -= 1;
+            self.max_symbol = @intCast(symbol);
+        }
+    }
+
+    fn add(self: *MixedLiteralHistogram, bytes: []const u8) void {
+        for (bytes) |byte| {
+            if (self.frequencies[byte] == 0) self.unique_count += 1;
+            self.frequencies[byte] += 1;
+            self.max_symbol = @max(self.max_symbol, byte);
+        }
+        self.regenerated_len += bytes.len;
+    }
+};
+
 fn emitMixedDictionaryDuplicateMatchCompressedBlock(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
@@ -7715,6 +7753,7 @@ fn bestMixedMatchLookaheadPlan(
     var plan: MixedMatchLookaheadPlan = .{};
     var best: MixedMatchLookaheadPlan = .{};
     var have_best = false;
+    var literal_histogram = MixedLiteralHistogram.init(block);
     for (first_candidates[0..first_count]) |candidate| {
         // Preserve the historical contract: each top-level alternative gets
         // the caller's complete bounded search budget.
@@ -7734,6 +7773,7 @@ fn bestMixedMatchLookaheadPlan(
             &seen,
             &best,
             &have_best,
+            &literal_histogram,
         );
     }
     return if (have_best) best else null;
@@ -7777,6 +7817,7 @@ fn bestMixedCandidateLookaheadPlanFromFirstWithCache(
     var have_best = false;
     var search_budget: usize = match_search_budget;
     var seen: MixedMatchKindSet = .{};
+    var literal_histogram = MixedLiteralHistogram.init(block);
     try searchMixedCandidateLookaheadPlans(
         dictionary,
         block,
@@ -7791,6 +7832,7 @@ fn bestMixedCandidateLookaheadPlanFromFirstWithCache(
         &seen,
         &best,
         &have_best,
+        &literal_histogram,
     );
     if (!have_best or best.count < 2) return null;
     return best;
@@ -7810,6 +7852,7 @@ fn searchMixedCandidateLookaheadPlans(
     seen: *MixedMatchKindSet,
     best: *MixedMatchLookaheadPlan,
     have_best: *bool,
+    literal_histogram: *MixedLiteralHistogram,
 ) Error!void {
     if (search_budget.* == 0 or depth >= max_bootstrap_sequence_count) return;
     search_budget.* -= 1;
@@ -7822,6 +7865,14 @@ fn searchMixedCandidateLookaheadPlans(
     plan.literal_ends[depth] = candidate.literal_end;
     plan.kinds[depth] = candidate.kind;
     const count = depth + 1;
+    // Match the scorer's logical source cursor, which always starts at byte
+    // zero even when a test seeds lookahead from a candidate found later.
+    const previous_end = if (depth == 0) 0 else plan.literal_ends[depth - 1];
+    const covered_start = std.math.add(usize, previous_end, candidate.literal_len) catch return error.IntegerOverflow;
+    if (covered_start > candidate.literal_end or candidate.literal_end > block.len) return error.CorruptFrame;
+    const covered = block[covered_start..candidate.literal_end];
+    literal_histogram.remove(covered);
+    defer literal_histogram.add(covered);
 
     // Treat "stop matching here and carry the remaining bytes as literals"
     // as one valid branch once there are enough sequences to form a mixed
@@ -7829,7 +7880,7 @@ fn searchMixedCandidateLookaheadPlans(
     // extra bits can outweigh the literals they remove. Keeping this prefix
     // candidate also makes the bounded search degrade safely if dense
     // candidate graphs exhaust the small bootstrap budget.
-    try considerMixedMatchLookaheadPlan(block, plan, count, candidate.literal_end, seen.*, requirements, best, have_best);
+    try considerMixedMatchLookaheadPlan(block, plan, count, candidate.literal_end, seen.*, requirements, best, have_best, literal_histogram);
     if (candidate.literal_end < block.len and count < max_bootstrap_sequence_count) {
         var next_candidates: [mixed_candidates_per_position]MixedMatchCandidate = undefined;
         const next_count = try candidate_cache.candidatesAt(dictionary, block, candidate.literal_end, frame_offset, allowed, next_candidates[0..]);
@@ -7848,6 +7899,7 @@ fn searchMixedCandidateLookaheadPlans(
                 seen,
                 best,
                 have_best,
+                literal_histogram,
             );
             if (search_budget.* == 0) break;
         }
@@ -7866,19 +7918,21 @@ fn considerMixedMatchLookaheadPlan(
     requirements: ?MixedMatchLookaheadRequirements,
     best: *MixedMatchLookaheadPlan,
     have_best: *bool,
+    literal_histogram: *const MixedLiteralHistogram,
 ) Error!void {
     if (count < 2) return;
     if (requirements) |required| {
         if (!mixedMatchRequirementMet(seen, required.first) or
             !mixedMatchRequirementMet(seen, required.second)) return;
     }
-    const payload_len = try bestSequencePayloadLenWithLiteralEnds(
+    const payload_len = try bestSequencePayloadLenWithLiteralEndsAndHistogram(
         block,
         plan.literal_lens[0..count],
         plan.offsets[0..count],
         plan.match_lens[0..count],
         plan.literal_ends[0..count],
         tail_start,
+        literal_histogram,
     );
     if (!mixedMatchLookaheadPlanMetadataBetter(payload_len, count, plan.literal_ends[count - 1], best, have_best.*)) return;
 
@@ -8604,6 +8658,38 @@ fn sequenceLiteralsPayloadSectionLen(
     return best;
 }
 
+fn sequenceLiteralsPayloadSectionLenFromHistogram(
+    block: []const u8,
+    literal_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+    histogram: *const MixedLiteralHistogram,
+) Error!usize {
+    const raw_payload_len = if (histogram.unique_count == 1) 1 else histogram.regenerated_len;
+    var best = std.math.add(usize, try literalsHeaderLen(histogram.regenerated_len), raw_payload_len) catch return error.IntegerOverflow;
+    if (histogram.unique_count < 2 or histogram.regenerated_len < 64 or histogram.max_symbol > native_max_direct_huffman_symbol) return best;
+
+    var plan: SmallHuffmanLiteralPlan = .{};
+    plan.frequencies = histogram.frequencies;
+    plan.max_symbol = histogram.max_symbol;
+    for (histogram.frequencies, 0..) |frequency, symbol| {
+        if (frequency == 0) continue;
+        plan.symbols[plan.len] = @intCast(symbol);
+        plan.len += 1;
+    }
+    finalizeSmallHuffmanLiteralPlan(&plan) orelse return best;
+    const tree_len = 1 + ((@as(usize, plan.max_symbol) + 1) / 2);
+    const streams_len = try smallHuffmanLiteralStreamsSerializedLenFromSequence(block, literal_lens, literal_ends, tail_start, histogram.regenerated_len, &plan) orelse return best;
+    const compressed_size = std.math.add(usize, tree_len, streams_len) catch return error.IntegerOverflow;
+    const header_len = huffmanLiteralsHeaderLen(histogram.regenerated_len, compressed_size) catch |err| switch (err) {
+        error.UnsupportedZstdFeature => return best,
+        else => return err,
+    };
+    const compressed = std.math.add(usize, header_len, compressed_size) catch return error.IntegerOverflow;
+    if (compressed < best) best = compressed;
+    return best;
+}
+
 fn sequenceHuffmanLiteralsSectionLen(
     block: []const u8,
     literal_lens: []const usize,
@@ -8812,6 +8898,36 @@ fn bestSequencePayloadLenWithLiteralEnds(
         }
     }
 
+    return best orelse error.CorruptFrame;
+}
+
+fn bestSequencePayloadLenWithLiteralEndsAndHistogram(
+    block: []const u8,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+    histogram: *const MixedLiteralHistogram,
+) Error!usize {
+    if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len or literal_lens.len != literal_ends.len) return error.CorruptFrame;
+    if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count or tail_start > block.len) return error.CorruptFrame;
+    var expected_literals = block.len - tail_start;
+    for (literal_lens) |literal_len| expected_literals += literal_len;
+    if (expected_literals != histogram.regenerated_len) return error.CorruptFrame;
+    const literals_section_len = try sequenceLiteralsPayloadSectionLenFromHistogram(block, literal_lens, literal_ends, tail_start, histogram);
+    var best: ?usize = null;
+    if (rleSequencePayloadLenForValuesWithLiteralsLen(literal_lens, offsets, match_lens, literals_section_len)) |len| chooseShortestPayloadLen(len, &best) else |err| switch (err) {
+        error.CorruptFrame => {},
+        else => return err,
+    }
+    if (predefinedSequencePayloadLenWithLiteralsLen(literal_lens, offsets, match_lens, literals_section_len)) |len| chooseShortestPayloadLen(len, &best) else |err| switch (err) {
+        error.CorruptFrame => {},
+        else => return err,
+    }
+    if (literal_lens.len > 1) {
+        if (try bestTablePlanSequenceWithLiteralsLen(literal_lens, offsets, match_lens, literals_section_len)) |candidate| chooseShortestPayloadLen(candidate.payload_len, &best);
+    }
     return best orelse error.CorruptFrame;
 }
 
@@ -15024,6 +15140,29 @@ test "zstd mixed match winner metadata retains historical tie order" {
     try std.testing.expect(!mixedMatchLookaheadPlanMetadataBetter(20, 2, 40, &current, true));
     try std.testing.expect(!mixedMatchLookaheadPlanMetadataBetter(20, 2, 39, &current, true));
     try std.testing.expect(!mixedMatchLookaheadPlanMetadataBetter(21, 3, 41, &current, true));
+}
+
+test "zstd mixed literal histogram matches full prefix scoring" {
+    const payload =
+        "bbeegfabcceeehaabcdfacefegahabdffgabcccfeggbcddffgah" ++
+        "ccccfeggbcddffgahceegfabcceeehaabcdfacefegahabdffgab" ++
+        "cccfeggbcddfechbcecececececece";
+    const literal_lens = [_]usize{ 31, 0, 6 };
+    const offsets = [_]usize{ 17, 68, 2 };
+    const match_lens = [_]usize{ 17, 46, 12 };
+    const literal_ends = [_]usize{ 70, 116, payload.len };
+    var histogram = MixedLiteralHistogram.init(payload);
+    var previous_end: usize = 0;
+    for (literal_lens, literal_ends) |literal_len, literal_end| {
+        const covered_start = previous_end + literal_len;
+        histogram.remove(payload[covered_start..literal_end]);
+        previous_end = literal_end;
+    }
+
+    try std.testing.expectEqual(
+        try bestSequencePayloadLenWithLiteralEnds(payload, &literal_lens, &offsets, &match_lens, &literal_ends, payload.len),
+        try bestSequencePayloadLenWithLiteralEndsAndHistogram(payload, &literal_lens, &offsets, &match_lens, &literal_ends, payload.len, &histogram),
+    );
 }
 
 test "zstd literal-only writer emits two repeated-pattern sequences" {
