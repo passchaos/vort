@@ -10797,10 +10797,19 @@ fn duplicateMatchLength(block: []const u8, first: usize, second: usize) usize {
     const first_right = std.mem.readInt(u64, block[second..][0..8], .little);
     if (first_left != first_right) return @ctz(first_left ^ first_right) / 8;
     var len: usize = 8;
-    while (len + 8 <= max_len) : (len += 8) {
+    while (len + 16 <= max_len) : (len += 16) {
+        const left_a = std.mem.readInt(u64, block[first + len ..][0..8], .little);
+        const right_a = std.mem.readInt(u64, block[second + len ..][0..8], .little);
+        if (left_a != right_a) return len + @ctz(left_a ^ right_a) / 8;
+        const left_b = std.mem.readInt(u64, block[first + len + 8 ..][0..8], .little);
+        const right_b = std.mem.readInt(u64, block[second + len + 8 ..][0..8], .little);
+        if (left_b != right_b) return len + 8 + @ctz(left_b ^ right_b) / 8;
+    }
+    if (len + 8 <= max_len) {
         const left = std.mem.readInt(u64, block[first + len ..][0..8], .little);
         const right = std.mem.readInt(u64, block[second + len ..][0..8], .little);
         if (left != right) return len + @ctz(left ^ right) / 8;
+        len += 8;
     }
     while (len < max_len and block[first + len] == block[second + len]) : (len += 1) {}
     return len;

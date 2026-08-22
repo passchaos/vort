@@ -2725,7 +2725,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   masking plus `ctz` replaces per-transition scans while preserving the lowest
   viable-state tie rule. The independent `usize`-matrix oracle covers all
   three predefined tables through 128-value plans; a six-pair check retained
-  1058 bytes and moved the median from roughly 0.93 s to 0.86 s.
+  1058 bytes and moved the median from roughly 0.93 s to 0.86 s. The duplicate
+  extension loop now compares two words per iteration after the verified hash
+  anchor, preserving the exact `ctz` mismatch offset while reducing loop
+  overhead on long structured matches. A six-pair check retained 1058 bytes
+  and moved the median from roughly 0.87 s to 0.83 s.
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state
