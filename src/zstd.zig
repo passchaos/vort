@@ -9920,7 +9920,14 @@ fn fillSmallHuffmanWeights(plan: *SmallHuffmanLiteralPlan) ?void {
     @memset(plan.weights[0..], 0);
     @memset(plan.bit_counts[0..], 0);
 
-    const lengths = huffman.treeCodeLengths(256, &plan.frequencies, 11);
+    const lengths = if (plan.max_symbol < 64) blk: {
+        var compact: [64]u32 = @splat(0);
+        @memcpy(compact[0 .. @as(usize, plan.max_symbol) + 1], plan.frequencies[0 .. @as(usize, plan.max_symbol) + 1]);
+        const compact_lengths = huffman.treeCodeLengths(64, &compact, 11);
+        var expanded: [256]u4 = @splat(0);
+        @memcpy(expanded[0..64], &compact_lengths);
+        break :blk expanded;
+    } else huffman.treeCodeLengths(256, &plan.frequencies, 11);
     var max_bit_count: u4 = 0;
     for (plan.symbols[0..plan.len]) |symbol| {
         const bit_count = lengths[symbol];
@@ -14082,6 +14089,24 @@ test "zstd finalized Huffman plan indexes bit counts by symbol" {
         try std.testing.expectEqual(expected, plan.bit_counts[symbol]);
         try std.testing.expectEqual(present[symbol], plan.bit_counts[symbol] != 0);
     }
+}
+
+test "zstd compact Huffman alphabet matches full-width lengths" {
+    var frequencies: [256]u32 = @splat(0);
+    var state: u32 = 0xbb67_ae85;
+    for (0..64) |symbol| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        frequencies[symbol] = if ((state & 3) == 0) 0 else 1 + ((state >> 8) % 4096);
+    }
+    const expected = huffman.treeCodeLengths(256, &frequencies, 11);
+    var plan: SmallHuffmanLiteralPlan = .{ .frequencies = frequencies, .max_symbol = 63 };
+    for (frequencies[0..64], 0..) |frequency, symbol| {
+        if (frequency == 0) continue;
+        plan.symbols[plan.len] = @intCast(symbol);
+        plan.len += 1;
+    }
+    fillSmallHuffmanWeights(&plan) orelse return error.CorruptFrame;
+    for (0..64) |symbol| try std.testing.expectEqual(@as(u8, expected[symbol]), plan.bit_counts[symbol]);
 }
 
 test "zstd literal-only writer emits max direct Huffman symbol set" {

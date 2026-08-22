@@ -2743,7 +2743,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   builds Huffman weights from that histogram instead of rescanning all literal
   runs; a direct full-scan oracle covers a non-zero first match and three-level
   path. A six-pair check retained 1058 bytes and moved the median from roughly
-  0.65 s to 0.63 s.
+  0.65 s to 0.63 s. Huffman length generation now uses a 64-symbol compact
+  alphabet whenever the plan's highest byte permits it, avoiding full 256-way
+  package-merge state for JSON/text candidates. A full-width length oracle
+  preserves every active symbol length; a six-pair check retained 1058 bytes
+  and moved the median from roughly 0.76 s to 0.64 s.
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state
