@@ -2751,7 +2751,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   sizing now sums bit lengths directly rather than routing every byte through
   the four-stream boundary tracker. A fragmented-run oracle preserves the
   exact serialized length; a six-pair check retained 1058 bytes and moved the
-  median from roughly 0.66 s to 0.63 s.
+  median from roughly 0.66 s to 0.63 s. Mixed-candidate memoization now uses a
+  fixed open-addressed index instead of linearly scanning up to 512 cached
+  positions on every recursive lookup. Collision and repeat-hit oracles preserve
+  candidate snapshots; a fixed-CPU eight-pair check retained 1058 bytes and
+  moved the median from roughly 0.82 s to 0.69 s.
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state

@@ -7676,8 +7676,12 @@ const MixedMatchCandidateCacheEntry = struct {
     count: usize = 0,
 };
 
+const mixed_candidate_cache_slot_count = 1024;
+const mixed_candidate_cache_invalid = std.math.maxInt(u16);
+
 const MixedMatchCandidateCache = struct {
     entries: [mixed_match_path_search_budget]MixedMatchCandidateCacheEntry = undefined,
+    slots: [mixed_candidate_cache_slot_count]u16 = @splat(mixed_candidate_cache_invalid),
     len: usize = 0,
     lookup_count: usize = 0,
     hit_count: usize = 0,
@@ -7693,7 +7697,12 @@ const MixedMatchCandidateCache = struct {
     ) Error!usize {
         if (out.len < mixed_candidates_per_position) return error.OutputTooSmall;
         self.lookup_count += 1;
-        for (self.entries[0..self.len]) |entry| {
+        const allowed_bits = @as(usize, @intFromBool(allowed.dictionary)) |
+            (@as(usize, @intFromBool(allowed.duplicate)) << 1) |
+            (@as(usize, @intFromBool(allowed.repeated)) << 2);
+        var slot = (literal_start *% 0x9e37_79b1 +% allowed_bits) & (mixed_candidate_cache_slot_count - 1);
+        while (self.slots[slot] != mixed_candidate_cache_invalid) : (slot = (slot + 1) & (mixed_candidate_cache_slot_count - 1)) {
+            const entry = self.entries[self.slots[slot]];
             if (entry.literal_start == literal_start and entry.allowed.eql(allowed)) {
                 self.hit_count += 1;
                 @memcpy(out[0..entry.count], entry.candidates[0..entry.count]);
@@ -7703,12 +7712,14 @@ const MixedMatchCandidateCache = struct {
 
         const count = try mixedMatchCandidatesAtUncached(dictionary, block, literal_start, frame_offset, allowed, out);
         if (self.len < self.entries.len) {
-            self.entries[self.len] = .{
+            const entry_index: u16 = @intCast(self.len);
+            self.entries[entry_index] = .{
                 .literal_start = literal_start,
                 .allowed = allowed,
                 .count = count,
             };
-            @memcpy(self.entries[self.len].candidates[0..count], out[0..count]);
+            @memcpy(self.entries[entry_index].candidates[0..count], out[0..count]);
+            self.slots[slot] = entry_index;
             self.len += 1;
         }
         return count;
@@ -15226,6 +15237,23 @@ test "zstd mixed literal histogram matches full prefix scoring" {
         try bestSequencePayloadLenWithLiteralEnds(payload, &literal_lens, &offsets, &match_lens, &literal_ends, payload.len),
         try bestSequencePayloadLenWithLiteralEndsAndHistogram(payload, &literal_lens, &offsets, &match_lens, &literal_ends, payload.len, &histogram),
     );
+}
+
+test "zstd mixed match candidate cache resolves hash collisions" {
+    const payload = ("abcdefghijklmnop" ** 128) ++ ("xy" ** 64);
+    var cache: MixedMatchCandidateCache = .{};
+    var first: [mixed_candidates_per_position]MixedMatchCandidate = undefined;
+    var second: [mixed_candidates_per_position]MixedMatchCandidate = undefined;
+    const allowed: MixedMatchKindSet = .{ .duplicate = true, .repeated = true };
+    const first_start: usize = 17;
+    const stride = mixed_candidate_cache_slot_count;
+    const second_start = first_start + stride;
+    const first_count = try cache.candidatesAt(&.{}, payload, first_start, 0, allowed, &first);
+    const second_count = try cache.candidatesAt(&.{}, payload, second_start, 0, allowed, &second);
+    try std.testing.expectEqual(first_count, try cache.candidatesAt(&.{}, payload, first_start, 0, allowed, &first));
+    try std.testing.expectEqual(second_count, try cache.candidatesAt(&.{}, payload, second_start, 0, allowed, &second));
+    try std.testing.expectEqual(@as(usize, 4), cache.lookup_count);
+    try std.testing.expectEqual(@as(usize, 2), cache.hit_count);
 }
 
 test "zstd literal-only writer emits two repeated-pattern sequences" {
