@@ -2596,6 +2596,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Repeat-3 level-1 smokes retained 93/1505/9274-byte wires while measuring about
   0.046/0.255/0.121 s for text/JSON/binary, substantially reducing repeated
   full-payload pricing on the remaining single-match fallback.
+  Generic multi-sequence table planning now computes the literals-section size
+  once per sequence plan and reuses it across the LL/OF/ML alternative Cartesian
+  product. This removes repeated literal scans and Huffman length construction
+  without changing table enumeration or wire selection. Repeat-3 JSON smokes
+  retained 1505/1350-byte level-1/3 output at roughly 0.30/0.95 s; this is a
+  structural cost reduction because shared-machine timing remains variable.
 
 - Added `summary-lz4-native-file`, a CLI surface for the existing native LZ4
   stream summary API, and extended the LZ4 native probe to assert block/stream

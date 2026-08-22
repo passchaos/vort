@@ -8644,6 +8644,10 @@ fn bestTablePlanSequence(
     const offset_alternatives = try offsetSequenceTablePlanAlternatives(literal_lens, offsets);
     const match_alternatives = try sequenceTablePlanAlternatives(match_lens, .match);
     if (literal_alternatives.len == 0 or offset_alternatives.len == 0 or match_alternatives.len == 0) return null;
+    // Literal bytes and their Huffman plan are independent of the LL/OF/ML
+    // table combination. Compute this expensive section length once rather
+    // than once for every Cartesian-product table candidate below.
+    const literals_section_len = try sequenceLiteralsPayloadSectionLen(block, literal_lens, literal_ends, tail_start);
 
     var best: ?SequenceCombinedPlanCandidate = null;
     // The bootstrap table families expose only a few alternatives (RLE,
@@ -8660,13 +8664,11 @@ fn bestTablePlanSequence(
                     .match = match_plan,
                 };
                 if (!sequenceCombinedPlanNeedsGenericEmitter(combined)) continue;
-                const payload_len = sequencePayloadLenWithTablePlans(
-                    block,
+                const payload_len = sequencePayloadLenWithTablePlansAndLiteralsLen(
+                    literals_section_len,
                     literal_lens,
                     offsets,
                     match_lens,
-                    literal_ends,
-                    tail_start,
                     combined,
                 ) catch |err| switch (err) {
                     error.CorruptFrame => continue,
@@ -8934,7 +8936,21 @@ fn sequencePayloadLenWithTablePlans(
         if (ends.len != literal_lens.len) return error.CorruptFrame;
     }
 
-    var len = try sequenceLiteralsPayloadSectionLen(block, literal_lens, literal_ends, tail_start);
+    const literals_section_len = try sequenceLiteralsPayloadSectionLen(block, literal_lens, literal_ends, tail_start);
+    return try sequencePayloadLenWithTablePlansAndLiteralsLen(literals_section_len, literal_lens, offsets, match_lens, plan);
+}
+
+fn sequencePayloadLenWithTablePlansAndLiteralsLen(
+    literals_section_len: usize,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
+    plan: SequenceCombinedEmitPlan,
+) Error!usize {
+    if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
+    if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
+
+    var len = literals_section_len;
     len = std.math.add(usize, len, try sequenceCountLen(literal_lens.len)) catch return error.IntegerOverflow;
     len = std.math.add(usize, len, 1) catch return error.IntegerOverflow; // sequence mode byte
     len = std.math.add(usize, len, sequenceTablePayloadLen(plan.literal)) catch return error.IntegerOverflow;
