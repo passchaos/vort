@@ -2831,6 +2831,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   random long matches and buckets wrapped hundreds of times. Fixed-core
   eight-pair checks retained 1058 bytes and reduced the median from 119.842 ms
   to 118.753 ms (1.009x).
+  Native match arbitration now owns one large-block predecessor index and shares
+  it across mixed lookahead, multi-duplicate, and single-duplicate candidates.
+  This removes two complete ring-table rebuilds after lookahead while preserving
+  each candidate's original scan and tie order; focused lookahead, parallel-wire,
+  and index oracles pass. Fixed-core eight-pair checks retained 1058 bytes and
+  reduced the median from 118.418 ms to 114.985 ms (1.030x).
   Top-level per-block arbitration now also reuses one candidate scratch and one
   retained winner across dictionary, frame-history, Huffman, and native-match
   blocks. The historical Huffman-wins-equal tie and transactional tree-state

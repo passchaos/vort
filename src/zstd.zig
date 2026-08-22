@@ -7224,8 +7224,13 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     defer lazy_tokens.deinit(allocator);
     var optimal_scratch: lz77.OptimalScratch = .{};
     defer optimal_scratch.deinit(allocator);
+    var duplicate_index: DuplicateMatchIndex = undefined;
+    const duplicate_index_ptr: ?*const DuplicateMatchIndex = if (block.len > duplicate_exact_hash_input_max and block.len <= duplicate_index_max_input_len) blk: {
+        duplicate_index.build(block);
+        break :blk &duplicate_index;
+    } else null;
     const mixed_ok = if (match_search_budget >= mixed_match_min_search_budget)
-        try emitMixedDuplicateRepeatedMatchCompressedBlock(allocator, &candidate, block, last, match_search_budget)
+        try emitMixedDuplicateRepeatedMatchCompressedBlock(allocator, &candidate, block, last, match_search_budget, duplicate_index_ptr)
     else
         false;
     try retainShortestCandidate(allocator, mixed_ok, candidate.items, &best);
@@ -7260,13 +7265,13 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
 
     candidate.clearRetainingCapacity();
     const multi_duplicate_ok = if (match_search_budget >= multi_duplicate_min_search_budget)
-        try emitMultiDuplicateMatchCompressedBlock(allocator, &candidate, block, last)
+        try emitMultiDuplicateMatchCompressedBlock(allocator, &candidate, block, last, duplicate_index_ptr)
     else
         false;
     try retainShortestCandidate(allocator, multi_duplicate_ok, candidate.items, &best);
 
     candidate.clearRetainingCapacity();
-    const single_duplicate_ok = try emitSingleMatchCompressedBlock(allocator, &candidate, block, last);
+    const single_duplicate_ok = try emitSingleMatchCompressedBlock(allocator, &candidate, block, last, duplicate_index_ptr);
     try retainShortestCandidate(allocator, single_duplicate_ok, candidate.items, &best);
 
     if (best.items.len == 0) return false;
@@ -7639,7 +7644,7 @@ fn emitMixedDictionaryDuplicateMatchCompressedBlock(
         .dictionary = true,
         .duplicate = true,
         .repeated = true,
-    }, .{ .kind = .dictionary }, .non_dictionary, match_search_budget) orelse return false;
+    }, .{ .kind = .dictionary }, .non_dictionary, match_search_budget, null) orelse return false;
     return try emitBestSequenceCompressedBlockFromLookaheadPlan(
         allocator,
         out,
@@ -7655,12 +7660,13 @@ fn emitMixedDuplicateRepeatedMatchCompressedBlock(
     block: []const u8,
     last: bool,
     match_search_budget: usize,
+    duplicate_index: ?*const DuplicateMatchIndex,
 ) Error!bool {
     const plan = try bestMixedMatchLookaheadPlan(&.{}, block, 0, .{
         .dictionary = false,
         .duplicate = true,
         .repeated = true,
-    }, .{ .kind = .duplicate }, .{ .kind = .repeated }, match_search_budget) orelse return false;
+    }, .{ .kind = .duplicate }, .{ .kind = .repeated }, match_search_budget, duplicate_index) orelse return false;
     return try emitBestSequenceCompressedBlockFromLookaheadPlan(
         allocator,
         out,
@@ -7860,10 +7866,15 @@ fn bestMixedMatchLookaheadPlan(
     required_first: MixedMatchRequirement,
     required_second: MixedMatchRequirement,
     match_search_budget: usize,
+    duplicate_index: ?*const DuplicateMatchIndex,
 ) Error!?MixedMatchLookaheadPlan {
     if (match_search_budget == 0) return null;
     var first_candidates: [mixed_candidates_per_position]MixedMatchCandidate = undefined;
     var candidate_cache: MixedMatchCandidateCache = .{};
+    if (duplicate_index) |index| {
+        candidate_cache.duplicate_index = index.*;
+        candidate_cache.duplicate_index_ready = true;
+    }
     const first_count = try candidate_cache.candidatesAt(dictionary, block, 0, frame_offset, allowed, first_candidates[0..]);
     if (first_count == 0) return null;
 
@@ -8260,9 +8271,12 @@ fn emitMultiDictionaryMatchCompressedBlock(
     );
 }
 
-fn emitSingleMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
+fn emitSingleMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*const DuplicateMatchIndex) Error!bool {
     if (rleByte(block) != null) return false;
-    const match = try findBestDuplicateMatch(block) orelse return false;
+    const match = if (duplicate_index) |index|
+        try findBestDuplicateMatchIndexed(block, 0, index) orelse return false
+    else
+        try findBestDuplicateMatch(block) orelse return false;
     const literal_len = match.second_start;
     const offset = match.second_start - match.first_start;
     const tail_start = match.second_start + match.len;
@@ -8273,14 +8287,17 @@ fn emitSingleMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     return try emitBestSequenceCompressedBlock(allocator, out, block, last, &literal_lens, &offsets, &match_lens, &literal_ends, tail_start);
 }
 
-fn emitMultiDuplicateMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool) Error!bool {
+fn emitMultiDuplicateMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*const DuplicateMatchIndex) Error!bool {
     if (rleByte(block) != null or block.len < 32) return false;
     var matches: [max_bootstrap_sequence_count]DuplicateMatch = undefined;
     var literal_lens: [max_bootstrap_sequence_count]usize = undefined;
     var count: usize = 0;
     var literal_start: usize = 0;
     while (count < matches.len and literal_start < block.len) {
-        const match = try findBestDuplicateMatchIn(block, literal_start) orelse break;
+        const match = if (duplicate_index) |index|
+            try findBestDuplicateMatchIndexed(block, literal_start, index) orelse break
+        else
+            try findBestDuplicateMatchIn(block, literal_start) orelse break;
         const literal_len = match.second_start - literal_start;
         matches[count] = match;
         literal_lens[count] = literal_len;
@@ -13895,11 +13912,11 @@ test "zstd mixed match lookahead explores non-greedy continuations" {
         .dictionary = false,
         .duplicate = true,
         .repeated = true,
-    }, .{ .kind = .duplicate }, .{ .kind = .repeated }, mixed_match_path_search_budget)) orelse return error.CorruptFrame;
+    }, .{ .kind = .duplicate }, .{ .kind = .repeated }, mixed_match_path_search_budget, null)) orelse return error.CorruptFrame;
     var frame: std.ArrayList(u8) = .empty;
     defer frame.deinit(std.testing.allocator);
     try emitFrameHeader(std.testing.allocator, &frame, payload.len, .{ .content_checksum = false });
-    try std.testing.expect(try emitMixedDuplicateRepeatedMatchCompressedBlock(std.testing.allocator, &frame, payload, true, mixed_match_path_search_budget));
+    try std.testing.expect(try emitMixedDuplicateRepeatedMatchCompressedBlock(std.testing.allocator, &frame, payload, true, mixed_match_path_search_budget, null));
 
     const first_block = try inspectNativeFrameFirstBlock(frame.items);
     try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
@@ -17636,7 +17653,7 @@ test "zstd native writer emits branch-scored dictionary duplicate repeated match
         .dictionary = true,
         .duplicate = true,
         .repeated = true,
-    }, .{ .kind = .dictionary }, .non_dictionary, mixed_match_path_search_budget)) orelse return error.CorruptFrame;
+    }, .{ .kind = .dictionary }, .non_dictionary, mixed_match_path_search_budget, null)) orelse return error.CorruptFrame;
     try std.testing.expectEqual(@as(usize, 3), plan.count);
     try std.testing.expectEqual(MixedMatchKind.dictionary, plan.kinds[0]);
     try std.testing.expectEqual(MixedMatchKind.duplicate, plan.kinds[1]);
