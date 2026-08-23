@@ -2990,6 +2990,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   and binary remained within about 0.7%/0.3% noise. An attempted lazy candidate
   depth reduction from eight to four produced no stable end-to-end gain and was
   reverted.
+  The encode CSV gate no longer requires single-sample wall time to increase
+  monotonically from level 1 through 9. Two-stage candidate scheduling can
+  legitimately make level 9 faster than level 3, while shared-machine noise
+  made the old ordering assertion flaky. Broad latency ceilings remain, and the
+  dedicated 72-row stage gate continues to pin each level/candidate search
+  budget directly.
   Large-block predecessor snapshots now carry a lazy `u16` match-length cache.
   The first mixed lookup still performs the exact existing extension and tie
   logic, while later mixed branches plus multi/single duplicate passes reuse the

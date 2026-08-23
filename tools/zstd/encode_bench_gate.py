@@ -34,13 +34,11 @@ def main() -> int:
         len({int(row["reference_bytes"]) for row in rows if row["case"] == case}) >= 2
         for case in CASES
     ), rows
-    # Higher public levels must spend at least as much measured planning time
-    # on the locked structured corpus. Size may remain equal until the planner
-    # can express more than 32 sequences, but the level must no longer be a
-    # completely ignored parameter.
+    # Keep wall-clock assertions to broad regression ceilings. Level 9 may now
+    # legitimately finish before level 3 because its primary/8 KiB screen can
+    # avoid the 4 KiB candidate; the dedicated stage gate validates the exact
+    # per-level search budgets without relying on noisy cross-level timing.
     json_rows = {int(row["level"]): row for row in rows if row["case"] == "json"}
-    assert int(json_rows[3]["vort_ns"]) > int(json_rows[1]["vort_ns"]), json_rows
-    assert int(json_rows[9]["vort_ns"]) > int(json_rows[3]["vort_ns"]), json_rows
     # Levels 1-3 are latency-oriented and must not accidentally re-enable the
     # recursive mixed-family planner. This benchmark target is always compiled
     # in ReleaseFast, so the generous ceilings still distinguish the old
