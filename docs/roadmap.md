@@ -3163,6 +3163,17 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   and the 76-case generated/source corpus remains byte-identical. Two fixed-CPU
   end-to-end binary runs retain 8611 bytes and improve medians by about 22%,
   while text/JSON remain within roughly 2% noise.
+  The repeat-aware beam's configurable cost model now charges four extra proxy
+  bits when introducing a new distance, while generic LZ77 callers retain a
+  zero default. Sequence comparison against libzstd exposed a late switch from
+  the dominant distance 256 to distance 7424 for only two extra matched bytes;
+  preserving the repeat run reduces the locked binary frame from 8611 to 8607
+  bytes (two bytes below libzstd 1.5.5) and JSON from 644 to 641 bytes. A focused
+  token oracle pins all 508 binary matches to distance 256. Across the original
+  76 cases and a new 128-case generated corpus, no frame grows; the latter has
+  five improved cases totaling 147 bytes. Strict same-source A/B keeps stage
+  and end-to-end throughput within about 1%, while longer noisy runs show no
+  systematic regression.
   Adaptive 4/8 KiB candidates explicitly disable the beam: their lower-budget
   parsers remain the ratio fallback, while only the primary level-9 block pays
   the stateful search. Twelve fixed-CPU-8..10 end-to-end pairs versus the

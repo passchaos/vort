@@ -7680,6 +7680,10 @@ fn zstdHashParserOptions(block_len: usize) lz77.GreedyOptions {
         .min_match = 4,
         .max_match = lz77.max_match_len,
         .min_savings_bits = 0,
+        // A new explicit offset also changes the OF symbol distribution/table;
+        // this small proxy prevents a two-byte local gain from replacing a long
+        // repeat-offset run with a costlier block-wide representation.
+        .new_distance_penalty_bits = 4,
         .lazy_min_gain = 1,
     };
 }

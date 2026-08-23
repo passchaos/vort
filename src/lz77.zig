@@ -47,6 +47,9 @@ pub const GreedyOptions = struct {
     min_match: usize = min_match_len,
     max_match: usize = max_match_len,
     min_savings_bits: usize = 0,
+    /// Extra model cost for introducing a new recent distance in parsers that
+    /// track repeat offsets. Generic LZ77 callers retain the historical zero.
+    new_distance_penalty_bits: u8 = 0,
 };
 
 pub const GreedyPlan = struct {
@@ -605,7 +608,7 @@ pub fn optimalRepBeamPlanAlloc(allocator: std.mem.Allocator, input: []const u8, 
 
 fn extendRepBeamMatch(states: []RepBeamState, lengths: []u8, _: []const u8, options: GreedyOptions, position: usize, slot: usize, state: RepBeamState, match: Token.Match) !void {
     if (match.length < minMatch(options) or match.distance == 0 or match.distance > position) return;
-    const distance_cost: u32 = @intCast(if (match.distance == state.rep0) 1 else fixedDistanceSymbolCost(match.distance));
+    const distance_cost: u32 = @intCast(if (match.distance == state.rep0) 1 else fixedDistanceSymbolCost(match.distance) + options.new_distance_penalty_bits);
     const match_cost: u32 = @as(u32, fixed_length_costs[match.length]) + distance_cost;
     const cost = state.cost + match_cost;
     try insertRepBeamState(states, lengths, position + match.length, .{
@@ -792,6 +795,37 @@ test "optimal length prefix choices match descending reference" {
         try std.testing.expectEqual(expected_cost, best_costs[maximum]);
         try std.testing.expectEqual(@as(u16, @intCast(expected_length)), best_lengths[maximum]);
     }
+}
+
+test "repeat beam keeps stable distance across local length gain" {
+    var input: [32 * 1024]u8 = undefined;
+    var random_state: u32 = 0xfeed_beef;
+    for (&input, 0..) |*byte, index| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (index % 64 < 48) @truncate(index * 17) else @truncate(random_state >> 16);
+    }
+    const plan = try optimalRepBeamPlanAlloc(std.testing.allocator, &input, .{
+        .window_len = input.len,
+        .max_chain = 128,
+        .nice_len = 258,
+        .max_candidates = 8,
+        .min_match = 4,
+        .max_match = max_match_len,
+        .min_savings_bits = 0,
+        .new_distance_penalty_bits = 4,
+        .lazy_min_gain = 1,
+    });
+    defer plan.deinit(std.testing.allocator);
+
+    var match_count: usize = 0;
+    for (plan.tokens) |token| switch (token) {
+        .literal => {},
+        .match => |match| {
+            try std.testing.expectEqual(@as(u16, 256), match.distance);
+            match_count += 1;
+        },
+    };
+    try std.testing.expectEqual(@as(usize, 508), match_count);
 }
 
 fn normalizedMaxCandidates(options: GreedyOptions) usize {
