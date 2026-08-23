@@ -21,6 +21,7 @@ const stages = [_]vort.zstd.NativeMatchStage{
     .greedy,
     .lazy,
     .optimal,
+    .rep_beam,
     .repeated,
     .multi_duplicate,
     .single_duplicate,

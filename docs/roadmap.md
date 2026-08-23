@@ -2890,7 +2890,7 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   26.41/0.21/0.31/2.54/0.83/3.28/0.33 ms across 8 KiB blocks, respectively.
   This localizes the next work to mixed search first and multi-duplicate second,
   rather than continuing low-signal whole-frame micro-tuning. The CSV coverage
-  gate requires all 72 case/candidate/stage rows and pins the current level-9
+  gate requires all 81 case/candidate/stage rows and pins the current level-9
   split policy so future reports cannot silently compare different pipelines.
   The stage tool additionally accepts `--candidate` and `--stage`, allowing perf
   and interleaved A/B runs to execute only one isolated row rather than spending
@@ -2994,7 +2994,7 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   monotonically from level 1 through 9. Two-stage candidate scheduling can
   legitimately make level 9 faster than level 3, while shared-machine noise
   made the old ordering assertion flaky. Broad latency ceilings remain, and the
-  dedicated 72-row stage gate continues to pin each level/candidate search
+  dedicated 81-row stage gate continues to pin each level/candidate search
   budget directly.
   The optimal LZ77 dynamic program now indexes a compile-time 259-entry fixed
   match-length cost table instead of re-running the length-code branch ladder
@@ -3032,11 +3032,18 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   rejected because one measured distribution could not construct a valid state
   chain with the current compact planner.
   Native encode stage diagnostics now split each available candidate's encoded
-  bytes into block header, literals section, and sequence section. The 72-row
+  bytes into block header, literals section, and sequence section. The 81-row
   CSV gate enforces exact accounting for every case/candidate/family. On the
   current level-9 primary JSON optimal block this records 809 bytes as a 3-byte
   block header, 318 literal bytes, and 488 sequence bytes, making the remaining
   libzstd ratio gap directly attributable and regression-testable.
+  Level 9+ now adds a two-state recent-offset beam parser over four hash matches
+  per position. It keeps a backpointer/token per state, charges repeat-distance
+  matches cheaply, and leaves levels 1–8 plus advanced callers on the prior
+  parser set. The locked JSON frame falls from 816 to 678 bytes (libzstd 677),
+  and binary from 8846 to 8619 (libzstd 8609), while text remains 93 bytes. A
+  wider eight-state/eight-match beam can reach 677 bytes but costs materially
+  more; the retained bounded shape is the measured speed/ratio compromise.
   Large-block predecessor snapshots now carry a lazy `u16` match-length cache.
   The first mixed lookup still performs the exact existing extension and tie
   logic, while later mixed branches plus multi/single duplicate passes reuse the

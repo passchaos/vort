@@ -15,7 +15,7 @@ CASES = {"text", "json", "binary"}
 CANDIDATES = {"primary", "adaptive_0", "adaptive_1"}
 STAGES = {
     "duplicate_index", "mixed", "greedy", "lazy", "optimal",
-    "repeated", "multi_duplicate", "single_duplicate",
+    "rep_beam", "repeated", "multi_duplicate", "single_duplicate",
 }
 
 
@@ -60,7 +60,7 @@ def main() -> int:
                 assert encoded_bytes == 3 * available_blocks + literals_bytes + sequence_bytes, row
             else:
                 assert literals_bytes == 0 and sequence_bytes == 0, row
-        if row["stage"] in {"greedy", "lazy", "optimal"}:
+        if row["stage"] in {"greedy", "lazy", "optimal", "rep_beam"}:
             assert sequences > 0, row
 
     # The current level-9 policy is the subject of this benchmark. Pinning its

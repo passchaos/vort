@@ -115,6 +115,31 @@ pub const HashIndex = struct {
         }
         return .{ .length = @intCast(best.length), .distance = @intCast(best.distance) };
     }
+
+    fn matchesAt(self: *const HashIndex, input: []const u8, pos: usize, options: GreedyOptions, out: []Token.Match) Error!usize {
+        if (input.len != self.input_len or pos > input.len) return error.InvalidBlockPlan;
+        if (pos + minMatch(options) > input.len or out.len == 0) return 0;
+        const maximum = @min(maxMatch(options), input.len - pos);
+        var chain_i = self.prev.items[pos];
+        var checked: usize = 0;
+        var count: usize = 0;
+        while (chain_i >= 0 and checked < options.max_chain and count < out.len) : (checked += 1) {
+            const candidate: usize = @intCast(chain_i);
+            const distance = pos - candidate;
+            if (distance == 0 or distance > options.window_len) break;
+            if (minMatch(options) >= 4 and input[candidate + 3] != input[pos + 3]) {
+                chain_i = self.prev.items[candidate];
+                continue;
+            }
+            const length = matchLength(input, candidate, pos, maximum);
+            if (length >= minMatch(options)) {
+                out[count] = .{ .length = @intCast(length), .distance = @intCast(distance) };
+                count += 1;
+            }
+            chain_i = self.prev.items[candidate];
+        }
+        return count;
+    }
 };
 
 /// Production `.best` preset candidate budget for the ratio-oriented optimal
@@ -485,6 +510,114 @@ pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options
     defer scratch.deinit(allocator);
     const stats = try optimalPlanReuse(&scratch, allocator, input, options);
     return .{ .tokens = try allocator.dupe(Token, scratch.tokens.items), .stats = stats };
+}
+
+const rep_beam_width = 2;
+const rep_beam_match_candidates = 4;
+const rep_beam_input_max = std.math.maxInt(u16);
+
+const RepBeamState = struct {
+    cost: usize = std.math.maxInt(usize),
+    rep0: u16 = 1,
+    previous_position: u16 = 0,
+    previous_slot: u8 = 0,
+    token: Token = .{ .literal = 0 },
+};
+
+/// Bounded forward parser that keeps several recent-offset histories at each
+/// byte position. This lets Zstd callers pay once for a farther match when it
+/// enables a long run of cheap repeat-offset sequences.
+pub fn optimalRepBeamPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
+    if (input.len == 0 or input.len > rep_beam_input_max) return error.InvalidBlockPlan;
+    var index: HashIndex = .{};
+    defer index.deinit(allocator);
+    try index.build(allocator, input);
+
+    const state_count = std.math.mul(usize, input.len + 1, rep_beam_width) catch return error.IntegerOverflow;
+    const states = try allocator.alloc(RepBeamState, state_count);
+    defer allocator.free(states);
+    @memset(states, .{});
+    states[0].cost = 0;
+
+    var matches: [rep_beam_match_candidates]Token.Match = undefined;
+    for (0..input.len) |position| {
+        const match_count = try index.matchesAt(input, position, options, &matches);
+        const current = states[position * rep_beam_width ..][0..rep_beam_width];
+        for (current, 0..) |state, slot| {
+            if (state.cost == std.math.maxInt(usize)) continue;
+            try insertRepBeamState(states, position + 1, .{
+                .cost = std.math.add(usize, state.cost, fixedLiteralCost(input[position])) catch continue,
+                .rep0 = state.rep0,
+                .previous_position = @intCast(position),
+                .previous_slot = @intCast(slot),
+                .token = .{ .literal = input[position] },
+            });
+
+            for (matches[0..match_count]) |match| {
+                try extendRepBeamMatch(states, input, options, position, slot, state, match);
+            }
+            if (state.rep0 <= position and position + minMatch(options) <= input.len) {
+                const length = matchLength(input, position - state.rep0, position, @min(maxMatch(options), input.len - position));
+                if (length >= minMatch(options)) {
+                    try extendRepBeamMatch(states, input, options, position, slot, state, .{ .length = @intCast(length), .distance = state.rep0 });
+                }
+            }
+        }
+    }
+
+    const final_states = states[input.len * rep_beam_width ..][0..rep_beam_width];
+    var best_slot: ?usize = null;
+    for (final_states, 0..) |state, slot| {
+        if (state.cost == std.math.maxInt(usize)) continue;
+        if (best_slot == null or state.cost < final_states[best_slot.?].cost) best_slot = slot;
+    }
+    var reversed = try initTokenList(allocator, input.len);
+    defer reversed.deinit(allocator);
+    var position = input.len;
+    var slot = best_slot orelse return error.InvalidBlockPlan;
+    while (position != 0) {
+        const state = states[position * rep_beam_width + slot];
+        try appendToken(&reversed, allocator, state.token);
+        position = state.previous_position;
+        slot = state.previous_slot;
+    }
+    std.mem.reverse(Token, reversed.items);
+
+    var stats: PlanStats = .{};
+    for (reversed.items) |token| switch (token) {
+        .literal => stats.literals += 1,
+        .match => |match| {
+            stats.matches += 1;
+            stats.matched_bytes += match.length;
+        },
+    };
+    return .{ .tokens = try reversed.toOwnedSlice(allocator), .stats = stats };
+}
+
+fn extendRepBeamMatch(states: []RepBeamState, input: []const u8, options: GreedyOptions, position: usize, slot: usize, state: RepBeamState, match: Token.Match) !void {
+    if (!acceptMatch(input, position, match.length, match.distance, options)) return;
+    const distance_cost: usize = if (match.distance == state.rep0) 1 else fixedDistanceSymbolCost(match.distance);
+    const cost = std.math.add(usize, state.cost, fixedLengthSymbolCost(match.length) + distance_cost) catch return;
+    try insertRepBeamState(states, position + match.length, .{
+        .cost = cost,
+        .rep0 = match.distance,
+        .previous_position = @intCast(position),
+        .previous_slot = @intCast(slot),
+        .token = .{ .match = match },
+    });
+}
+
+fn insertRepBeamState(states: []RepBeamState, position: usize, candidate: RepBeamState) !void {
+    const slots = states[position * rep_beam_width ..][0..rep_beam_width];
+    var replacement: usize = 0;
+    for (slots, 0..) |state, slot| {
+        if (state.rep0 == candidate.rep0) {
+            if (candidate.cost < state.cost) slots[slot] = candidate;
+            return;
+        }
+        if (state.cost > slots[replacement].cost) replacement = slot;
+    }
+    if (candidate.cost < slots[replacement].cost) slots[replacement] = candidate;
 }
 
 pub fn optimalPlanReuse(scratch: *OptimalScratch, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {

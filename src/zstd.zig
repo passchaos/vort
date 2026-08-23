@@ -163,6 +163,9 @@ pub const NativeFrameOptions = struct {
     /// dictionary-only match emitters remain available when callers provide a
     /// dictionary.
     match_search_budget: usize = mixed_match_path_search_budget,
+    /// Enable the bounded recent-offset beam parser used by ratio-oriented
+    /// one-shot levels. Incremental and latency-oriented callers leave it off.
+    rep_beam_search: bool = false,
 };
 
 pub const FrameSelection = NativeFrameSelection;
@@ -203,7 +206,7 @@ const IncrementalEncoderCodec = struct {
         try emitBlock(allocator, out, block, last);
     }
     pub fn writeEntropy(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, state: *State, dictionary: ?IncrementalEncoderCodec.Dictionary, frame_history: HistoryView, frame_offset: usize, match_search_budget: usize) zstd.Error!void {
-        try emitLiteralOnlyCompressedBlockWithHistory(allocator, out, block, last, state, dictionary, frame_history, frame_offset, match_search_budget);
+        try emitLiteralOnlyCompressedBlockWithHistory(allocator, out, block, last, state, dictionary, frame_history, frame_offset, match_search_budget, false);
     }
     pub fn writeChecksum(allocator: std.mem.Allocator, out: *std.ArrayList(u8), options: Options, hasher: *std.hash.XxHash64) zstd.Error!void {
         if (!options.content_checksum) return;
@@ -3914,6 +3917,7 @@ fn nativeFrameOptionsForLevel(level: c_int, options: FrameOptions) Error!NativeF
             5 => 128,
             else => 96,
         };
+        native_options.rep_beam_search = level >= 9;
     }
     return native_options;
 }
@@ -4057,13 +4061,13 @@ fn encodeLiteralOnlyFrameAppendWithDictionaryInternal(
     var frame_history: incremental_history.Rolling = .{};
     defer frame_history.deinit(allocator);
     if (input.len == 0) {
-        try emitLiteralOnlyCompressedBlockWithDictionary(allocator, out, "", true, &encoder_state, dictionary, 0, match_search_budget);
+        try emitLiteralOnlyCompressedBlockWithDictionary(allocator, out, "", true, &encoder_state, dictionary, 0, match_search_budget, frame_options.rep_beam_search);
     } else {
         while (offset < input.len) {
             const block_end = @min(input.len, offset + block_size_max);
             const block = input[offset..block_end];
             try frame_history.prepareCompletedBlock(allocator, block, native_dictionary_window_len);
-            try emitLiteralOnlyCompressedBlockWithHistory(allocator, out, block, block_end == input.len, &encoder_state, dictionary, frame_history.view(), offset, match_search_budget);
+            try emitLiteralOnlyCompressedBlockWithHistory(allocator, out, block, block_end == input.len, &encoder_state, dictionary, frame_history.view(), offset, match_search_budget, frame_options.rep_beam_search);
             frame_history.appendCompletedBlock(block, native_dictionary_window_len);
             offset = block_end;
         }
@@ -7156,7 +7160,7 @@ fn emitBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []con
 }
 
 fn emitLiteralOnlyCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, state: *LiteralOnlyEncoderState) Error!void {
-    return try emitLiteralOnlyCompressedBlockWithDictionary(allocator, out, block, last, state, null, 0, mixed_match_path_search_budget);
+    return try emitLiteralOnlyCompressedBlockWithDictionary(allocator, out, block, last, state, null, 0, mixed_match_path_search_budget, false);
 }
 
 fn emitLiteralOnlyCompressedBlockWithDictionary(
@@ -7168,6 +7172,7 @@ fn emitLiteralOnlyCompressedBlockWithDictionary(
     dictionary: ?NativeDictionary,
     frame_offset: usize,
     match_search_budget: usize,
+    rep_beam_search: bool,
 ) Error!void {
     return try emitLiteralOnlyCompressedBlockWithHistory(
         allocator,
@@ -7179,6 +7184,7 @@ fn emitLiteralOnlyCompressedBlockWithDictionary(
         emptyIncrementalHistoryView(),
         frame_offset,
         match_search_budget,
+        rep_beam_search,
     );
 }
 
@@ -7199,6 +7205,7 @@ fn emitLiteralOnlyCompressedBlockWithHistory(
     frame_history: incremental_history.View,
     frame_offset: usize,
     match_search_budget: usize,
+    rep_beam_search: bool,
 ) Error!void {
     const CandidateKind = enum { dictionary, history, huffman, match };
     var candidate: std.ArrayList(u8) = .empty;
@@ -7235,7 +7242,7 @@ fn emitLiteralOnlyCompressedBlockWithHistory(
     }
 
     candidate.clearRetainingCapacity();
-    const match_ok = try emitNativeMatchCompressedBlock(allocator, &candidate, block, last, match_search_budget);
+    const match_ok = try emitNativeMatchCompressedBlock(allocator, &candidate, block, last, match_search_budget, rep_beam_search);
     if (match_ok and (best_kind == null or candidate.items.len < best.items.len)) {
         best.clearRetainingCapacity();
         try best.appendSlice(allocator, candidate.items);
@@ -7299,7 +7306,7 @@ fn emitLiteralOnlyCompressedBlockWithHistory(
     try out.appendSlice(allocator, payload.items);
 }
 
-fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, match_search_budget: usize) Error!bool {
+fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, match_search_budget: usize, rep_beam_search: bool) Error!bool {
     if (match_search_budget == 0) return false;
     if (match_search_budget >= mixed_match_min_search_budget) {
         var mixed_candidate: MixedBlockCandidate = .{
@@ -7311,7 +7318,7 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
         // worker, fall through to the byte-identical serial selector below.
         if (std.Thread.spawn(.{}, MixedBlockCandidate.run, .{&mixed_candidate})) |thread| {
             const non_mixed_budget = @min(match_search_budget, mixed_match_min_search_budget - 1);
-            const non_mixed_ok = emitNativeMatchCompressedBlock(allocator, out, block, last, non_mixed_budget) catch |err| {
+            const non_mixed_ok = emitNativeMatchCompressedBlockSerialWithBeam(allocator, out, block, last, non_mixed_budget, rep_beam_search) catch |err| {
                 thread.join();
                 if (mixed_candidate.frame) |frame| std.heap.smp_allocator.free(frame);
                 return err;
@@ -7330,10 +7337,10 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
             return out.items.len != 0;
         } else |_| {}
     }
-    return try emitNativeMatchCompressedBlockSerial(allocator, out, block, last, match_search_budget);
+    return try emitNativeMatchCompressedBlockSerialWithBeam(allocator, out, block, last, match_search_budget, rep_beam_search);
 }
 
-fn emitNativeMatchCompressedBlockSerial(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, match_search_budget: usize) Error!bool {
+fn emitNativeMatchCompressedBlockSerialWithBeam(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, match_search_budget: usize, enable_rep_beam: bool) Error!bool {
     if (match_search_budget == 0) return false;
 
     // The bootstrap match emitters are intentionally independent heuristics.
@@ -7386,6 +7393,20 @@ fn emitNativeMatchCompressedBlockSerial(allocator: std.mem.Allocator, out: *std.
     try retainShortestCandidate(allocator, optimal_ok, candidate.items, &best);
 
     candidate.clearRetainingCapacity();
+    const rep_beam_plan = if (enable_rep_beam)
+        lz77.optimalRepBeamPlanAlloc(allocator, block, zstdHashParserOptions(block.len)) catch |err| switch (err) {
+            error.InvalidBlockPlan => null,
+            else => return err,
+        }
+    else
+        null;
+    if (rep_beam_plan) |plan| {
+        defer plan.deinit(allocator);
+        const rep_beam_ok = try emitHashTokenSequenceBlock(allocator, &candidate, block, last, plan.tokens, plan.stats);
+        try retainShortestCandidate(allocator, rep_beam_ok, candidate.items, &best);
+    }
+
+    candidate.clearRetainingCapacity();
     const repeated_ok = try emitRepeatedPatternCompressedBlock(allocator, &candidate, block, last);
     try retainShortestCandidate(allocator, repeated_ok, candidate.items, &best);
 
@@ -7423,6 +7444,7 @@ pub const NativeMatchStage = enum {
     greedy,
     lazy,
     optimal,
+    rep_beam,
     repeated,
     multi_duplicate,
     single_duplicate,
@@ -7564,6 +7586,15 @@ pub fn benchmarkNativeMatchStage(
             const stats = try lz77.optimalPlanReuse(&scratch.optimal, allocator, block, zstdHashParserOptions(block.len));
             sequence_count = stats.matches;
             break :blk try emitHashTokenSequenceBlock(allocator, &scratch.candidate, block, last, scratch.optimal.tokens.items, stats);
+        },
+        .rep_beam => blk: {
+            const plan = lz77.optimalRepBeamPlanAlloc(allocator, block, zstdHashParserOptions(block.len)) catch |err| switch (err) {
+                error.InvalidBlockPlan => break :blk false,
+                else => return err,
+            };
+            defer plan.deinit(allocator);
+            sequence_count = plan.stats.matches;
+            break :blk try emitHashTokenSequenceBlock(allocator, &scratch.candidate, block, last, plan.tokens, plan.stats);
         },
         .repeated => try emitRepeatedPatternCompressedBlock(allocator, &scratch.candidate, block, last),
         .multi_duplicate => if (match_search_budget >= multi_duplicate_min_search_budget)
@@ -7791,6 +7822,11 @@ test "zstd native match stage benchmark mirrors production emitters" {
             .greedy => try emitGreedyHashMatchCompressedBlockReuse(std.testing.allocator, &expected, payload, true, &scratch.greedy_tokens),
             .lazy => try emitLazyHashMatchCompressedBlockReuse(std.testing.allocator, &expected, payload, true, &scratch.lazy_tokens),
             .optimal => try emitOptimalHashMatchCompressedBlockReuse(std.testing.allocator, &expected, payload, true, &scratch.optimal),
+            .rep_beam => blk: {
+                const plan = try lz77.optimalRepBeamPlanAlloc(std.testing.allocator, payload, zstdHashParserOptions(payload.len));
+                defer plan.deinit(std.testing.allocator);
+                break :blk try emitHashTokenSequenceBlock(std.testing.allocator, &expected, payload, true, plan.tokens, plan.stats);
+            },
             .repeated => try emitRepeatedPatternCompressedBlock(std.testing.allocator, &expected, payload, true),
             .multi_duplicate => try emitMultiDuplicateMatchCompressedBlock(std.testing.allocator, &expected, payload, true, scratch.duplicate_index),
             .single_duplicate => try emitSingleMatchCompressedBlock(std.testing.allocator, &expected, payload, true, scratch.duplicate_index),
@@ -7815,10 +7851,10 @@ test "zstd parallel mixed match selection matches serial wire" {
     for (payloads) |payload| {
         var expected: std.ArrayList(u8) = .empty;
         defer expected.deinit(std.testing.allocator);
-        const expected_ok = try emitNativeMatchCompressedBlockSerial(std.testing.allocator, &expected, payload, true, 96);
+        const expected_ok = try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &expected, payload, true, 96, true);
         var actual: std.ArrayList(u8) = .empty;
         defer actual.deinit(std.testing.allocator);
-        const actual_ok = try emitNativeMatchCompressedBlock(std.testing.allocator, &actual, payload, true, 96);
+        const actual_ok = try emitNativeMatchCompressedBlock(std.testing.allocator, &actual, payload, true, 96, true);
         try std.testing.expectEqual(expected_ok, actual_ok);
         try std.testing.expectEqualSlices(u8, expected.items, actual.items);
     }
@@ -14270,12 +14306,32 @@ test "zstd compression levels map to increasing search budgets" {
     try std.testing.expectEqual(@as(usize, 16), level1.match_search_budget);
     try std.testing.expectEqual(@as(usize, 64), level3.match_search_budget);
     try std.testing.expectEqual(@as(usize, 96), level9.match_search_budget);
+    try std.testing.expect(!level1.rep_beam_search);
+    try std.testing.expect(!level3.rep_beam_search);
+    try std.testing.expect(level9.rep_beam_search);
     try std.testing.expect(level3.match_search_budget > level1.match_search_budget);
     try std.testing.expect(level9.match_search_budget > level3.match_search_budget);
     try std.testing.expect(!level3.include_content_size);
     try std.testing.expect(level3.content_checksum);
     try std.testing.expectError(error.InvalidBlockPlan, nativeFrameOptionsForLevel(-1, options));
     try std.testing.expectError(error.InvalidBlockPlan, nativeFrameOptionsForLevel(max_compression_level + 1, options));
+}
+
+test "zstd rep beam parser closes structured level nine ratio gap" {
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    while (payload.items.len < 32 * 1024) {
+        var line: [128]u8 = undefined;
+        const index = payload.items.len / 64;
+        const formatted = try std.fmt.bufPrint(&line, "{{\"id\":{d},\"service\":\"vort\",\"message\":\"structured zstd encode corpus\"}}\n", .{index});
+        try payload.appendSlice(std.testing.allocator, formatted);
+    }
+    const encoded = try encodeFrameWithLevelAlloc(std.testing.allocator, payload.items, 9);
+    defer std.testing.allocator.free(encoded);
+    try std.testing.expect(encoded.len <= 678);
+    const decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload.items, decoded);
 }
 
 test "zstd adaptive candidates cap search at measured ratio plateau" {
