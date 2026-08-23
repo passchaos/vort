@@ -3673,8 +3673,16 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
         // primary frame. Small inputs retain the complete parallel ladder: a
         // split immediately after 8 KiB can uniquely favor 4 KiB blocks.
         const defer_smallest_candidate = level >= 6 and input.len > deferred_adaptive_candidate_input_min;
-        var candidates: [2]LevelFrameCandidate = undefined;
-        var candidate_count: usize = 0;
+        // The primary and split encoders are independent full-frame jobs. Put
+        // the primary in the same worker set instead of running it on the
+        // coordinator after starting the split workers. This lets the
+        // scheduler place all codec work uniformly and, at high levels, keeps
+        // the primary mixed-search worker from being delayed behind a split.
+        var candidates: [3]LevelFrameCandidate = undefined;
+        const parallelize_primary = level >= 9 and input.len > deferred_adaptive_candidate_input_min;
+        const adaptive_start: usize = @intFromBool(parallelize_primary);
+        var candidate_count: usize = adaptive_start;
+        if (parallelize_primary) candidates[0] = .{ .allocator = parallel_allocator, .input = input, .options = primary_options };
         for (block_sizes, 0..) |block_size, i| {
             if (block_size >= input.len or block_size == primary_options.block_size_max) continue;
             if (defer_smallest_candidate and i == 0) continue;
@@ -3682,8 +3690,8 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
             candidates[candidate_count] = .{ .allocator = parallel_allocator, .input = input, .options = split_options };
             candidate_count += 1;
         }
-        if (candidate_count != 0) {
-            var threads: [2]std.Thread = undefined;
+        if (candidate_count > adaptive_start) {
+            var threads: [3]std.Thread = undefined;
             var spawned: usize = 0;
             for (candidates[0..candidate_count], 0..) |*candidate, i| {
                 threads[i] = std.Thread.spawn(.{}, LevelFrameCandidate.run, .{candidate}) catch {
@@ -3693,14 +3701,21 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
                 };
                 spawned += 1;
             }
-            var best = encodeNativeFrameWithOptionsAlloc(parallel_allocator, input, primary_options) catch |err| {
-                for (threads[0..spawned]) |thread| thread.join();
+            for (threads[0..spawned]) |thread| thread.join();
+            var best = if (parallelize_primary) blk: {
+                if (candidates[0].err) |err| {
+                    for (candidates[0..candidate_count]) |candidate| if (candidate.result) |result| parallel_allocator.free(result.frame);
+                    return err;
+                }
+                const result = candidates[0].result.?;
+                candidates[0].result = null;
+                break :blk result;
+            } else encodeNativeFrameWithOptionsAlloc(parallel_allocator, input, primary_options) catch |err| {
                 for (candidates[0..candidate_count]) |candidate| if (candidate.result) |result| parallel_allocator.free(result.frame);
                 return err;
             };
-            for (threads[0..spawned]) |thread| thread.join();
             var adaptive_competitive = false;
-            for (candidates[0..candidate_count]) |*candidate| {
+            for (candidates[adaptive_start..candidate_count]) |*candidate| {
                 if (candidate.err) |err| {
                     parallel_allocator.free(best.frame);
                     for (candidates[0..candidate_count]) |other| if (other.result) |result| parallel_allocator.free(result.frame);

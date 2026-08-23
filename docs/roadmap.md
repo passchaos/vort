@@ -3191,6 +3191,16 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   corpus is byte-identical. Twelve fixed-CPU-8..10 pairs retain 80-byte text and
   reduce its level-9 median from about 7.54 ms to 0.56 ms (13.4x); JSON/binary
   remain within 1%.
+  Exact-cache profiling of the remaining level-9 JSON mixed search found 95
+  scored prefixes at depths 2...96, with 95 distinct full score keys, literal
+  histograms, and LL/OF/ML vectors, so no speculative memoization was retained.
+  Instead, large level-9 primary frames now join the existing adaptive worker
+  set rather than running on the coordinator while split candidates occupy the
+  worker pool. Deterministic shortest-frame arbitration and the low-level
+  scheduling path stay unchanged. Twelve interleaved fixed-CPU-8..10 JSON pairs
+  retained the 640-byte frame and reduced the median from about 53.78 ms to
+  39.37 ms (1.37x); an additional eight-pair run measured 1.44x, while binary
+  remained at 8607 bytes and showed about 1.06x in the corresponding sample.
   Adaptive 4/8 KiB candidates explicitly disable the beam: their lower-budget
   parsers remain the ratio fallback, while only the primary level-9 block pays
   the stateful search. Twelve fixed-CPU-8..10 end-to-end pairs versus the
