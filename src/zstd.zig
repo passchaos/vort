@@ -10940,11 +10940,49 @@ fn emitFseCompressedHuffmanWeights(allocator: std.mem.Allocator, out: *std.Array
 fn normalizeFseCounts(counts: []const u32, total: usize, table_log: u8, normalized: []i16) ?void {
     if (counts.len != normalized.len or total == 0) return null;
     const table_size: i32 = @as(i32, 1) << @intCast(table_log);
+    const scale: u6 = @intCast(62 - table_log);
+    const step = (@as(u64, 1) << 62) / total;
+    const rounding_thresholds = [_]u32{ 0, 473_195, 504_333, 520_860, 550_000, 700_000, 750_000, 830_000 };
+    const rounding_step = @as(u64, 1) << @intCast(scale - 20);
+    const low_threshold = total >> @intCast(table_log);
+    var remaining = table_size;
+    var largest: usize = 0;
+    var largest_probability: i16 = 0;
+    var non_zero_count: usize = 0;
+    for (counts, 0..) |count, symbol| {
+        if (count == 0) {
+            normalized[symbol] = 0;
+            continue;
+        }
+        non_zero_count += 1;
+        if (count <= low_threshold) {
+            normalized[symbol] = -1;
+            remaining -= 1;
+            continue;
+        }
+        const scaled = @as(u64, count) * step;
+        var probability: i16 = @intCast(scaled >> scale);
+        if (probability < rounding_thresholds.len) {
+            const remainder = scaled - (@as(u64, @intCast(probability)) << scale);
+            if (remainder > rounding_step * rounding_thresholds[@intCast(probability)]) probability += 1;
+        }
+        if (probability <= 0) return null;
+        normalized[symbol] = probability;
+        remaining -= probability;
+        if (probability > largest_probability) {
+            largest = symbol;
+            largest_probability = probability;
+        }
+    }
+    if (non_zero_count == 0 or non_zero_count > @as(usize, @intCast(table_size))) return null;
+    if (-remaining >= @divTrunc(largest_probability, 2)) return normalizeFseCountsSecondary(counts, total, table_log, normalized);
+    normalized[largest] += @intCast(remaining);
+    if (normalized[largest] <= 0) return null;
+}
 
-    // This intentionally simple normalizer favors validity and determinism over
-    // zstd's exact probability tuning. Every present weight gets at least one
-    // state, then the most common or currently-largest symbols absorb rounding
-    // error so the probabilities sum exactly to the FSE table size.
+fn normalizeFseCountsSimple(counts: []const u32, total: usize, table_log: u8, normalized: []i16) ?void {
+    if (counts.len != normalized.len or total == 0) return null;
+    const table_size: i32 = @as(i32, 1) << @intCast(table_log);
     var sum: i32 = 0;
     var largest: usize = 0;
     var largest_count: u32 = 0;
@@ -10965,21 +11003,73 @@ fn normalizeFseCounts(counts: []const u32, total: usize, table_log: u8, normaliz
         sum += value;
     }
     if (non_zero_count == 0 or non_zero_count > @as(usize, @intCast(table_size))) return null;
-
     var diff = table_size - sum;
     if (diff > 0) {
         normalized[largest] += @intCast(diff);
-    } else {
-        while (diff < 0) {
-            var reduce: ?usize = null;
-            for (normalized, 0..) |value, symbol| {
-                if (value <= 1) continue;
-                if (reduce == null or value > normalized[reduce.?]) reduce = symbol;
-            }
-            const symbol = reduce orelse return null;
-            normalized[symbol] -= 1;
-            diff += 1;
+    } else while (diff < 0) {
+        var reduce: ?usize = null;
+        for (normalized, 0..) |value, symbol| {
+            if (value <= 1) continue;
+            if (reduce == null or value > normalized[reduce.?]) reduce = symbol;
         }
+        const symbol = reduce orelse return null;
+        normalized[symbol] -= 1;
+        diff += 1;
+    }
+}
+
+fn normalizeFseCountsSecondary(counts: []const u32, total_input: usize, table_log: u8, normalized: []i16) ?void {
+    const not_assigned: i16 = -2;
+    var total = total_input;
+    const table_size: usize = @as(usize, 1) << @intCast(table_log);
+    const low_threshold = total >> @intCast(table_log);
+    var low_one = (total * 3) >> @intCast(table_log + 1);
+    var distributed: usize = 0;
+    for (counts, 0..) |count, symbol| {
+        if (count == 0) normalized[symbol] = 0 else if (count <= low_threshold) {
+            normalized[symbol] = -1;
+            distributed += 1;
+            total -= count;
+        } else if (count <= low_one) {
+            normalized[symbol] = 1;
+            distributed += 1;
+            total -= count;
+        } else normalized[symbol] = not_assigned;
+    }
+    var to_distribute = table_size - distributed;
+    if (to_distribute == 0) return;
+    if (total / to_distribute > low_one) {
+        low_one = (total * 3) / (to_distribute * 2);
+        for (counts, 0..) |count, symbol| {
+            if (normalized[symbol] == not_assigned and count <= low_one) {
+                normalized[symbol] = 1;
+                distributed += 1;
+                total -= count;
+            }
+        }
+        to_distribute = table_size - distributed;
+    }
+    if (total == 0) {
+        var symbol: usize = 0;
+        while (to_distribute != 0) : (symbol = (symbol + 1) % normalized.len) {
+            if (normalized[symbol] > 0) {
+                normalized[symbol] += 1;
+                to_distribute -= 1;
+            }
+        }
+        return;
+    }
+    const step_log: u6 = @intCast(62 - table_log);
+    const midpoint = (@as(u64, 1) << @intCast(step_log - 1)) - 1;
+    const step = (((@as(u64, 1) << step_log) * to_distribute) + midpoint) / total;
+    var cumulative = midpoint;
+    for (counts, 0..) |count, symbol| {
+        if (normalized[symbol] != not_assigned) continue;
+        const next = cumulative + @as(u64, count) * step;
+        const weight = (next >> step_log) - (cumulative >> step_log);
+        if (weight == 0) return null;
+        normalized[symbol] = @intCast(weight);
+        cumulative = next;
     }
 }
 
@@ -15905,6 +15995,43 @@ test "zstd compressed sequence state scratch fits one byte" {
     for (plan.transition_values[0 .. plan.len - 1], plan.transition_bits[0 .. plan.len - 1]) |value, bits| {
         try std.testing.expect(value < (@as(usize, 1) << @intCast(bits)));
     }
+}
+
+test "zstd reference FSE normalization preserves probability mass" {
+    var state: u32 = 0x6a09_e667;
+    for (5..9) |table_log| {
+        for (2..33) |symbol_count| {
+            var counts: [32]u32 = @splat(0);
+            var total: usize = 0;
+            for (counts[0..symbol_count]) |*count| {
+                state = state *% 1_664_525 +% 1_013_904_223;
+                count.* = 1 + (state >> 24);
+                total += count.*;
+            }
+            var normalized: [32]i16 = @splat(0);
+            normalizeFseCounts(counts[0..symbol_count], total, @intCast(table_log), normalized[0..symbol_count]) orelse return error.CorruptFrame;
+            var sum: usize = 0;
+            for (normalized[0..symbol_count]) |value| {
+                try std.testing.expect(value != 0);
+                sum += @abs(value);
+            }
+            try std.testing.expectEqual(@as(usize, 1) << @intCast(table_log), sum);
+        }
+    }
+}
+
+test "zstd reference FSE normalization improves locked sequence distributions" {
+    const counts = [_]u32{ 184, 111, 73, 46, 31, 17, 9 };
+    var total: usize = 0;
+    for (counts) |count| total += count;
+    var simple: [counts.len]i16 = @splat(0);
+    var reference: [counts.len]i16 = @splat(0);
+    normalizeFseCountsSimple(&counts, total, 5, &simple) orelse return error.CorruptFrame;
+    normalizeFseCounts(&counts, total, 5, &reference) orelse return error.CorruptFrame;
+    try std.testing.expect(!std.mem.eql(i16, &simple, &reference));
+    var sum: usize = 0;
+    for (reference) |value| sum += @abs(value);
+    try std.testing.expectEqual(@as(usize, 32), sum);
 }
 
 test "zstd compressed transition symbol index matches scan reference" {

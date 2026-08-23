@@ -3013,6 +3013,15 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   direct serial-wire oracle covers both repetitive shapes. Twelve fixed-CPU-
   8..10 level-9 pairs retained 93/831/8850-byte frames and improved text/JSON
   medians by about 14.8%/12.1%, with binary improving 1.7%.
+  FSE count normalization now follows upstream zstd's low-probability handling,
+  fixed-point rounding thresholds, largest-symbol correction, and secondary
+  fallback instead of assigning every present symbol a floored positive count.
+  Randomized table-log-5...8 distributions verify exact probability mass, and
+  a focused non-uniform distribution proves the new result differs from the old
+  approximation. The improved level-9 sequence tables reduce JSON from 831 to
+  821 bytes and binary from 8850 to 8846 bytes while text remains 93 bytes.
+  Twelve fixed-CPU-8..10 pairs kept text/binary within 0.5% and measured JSON
+  about 1.2% slower, accepted for the deterministic ratio improvement.
   Large-block predecessor snapshots now carry a lazy `u16` match-length cache.
   The first mixed lookup still performs the exact existing extension and tie
   logic, while later mixed branches plus multi/single duplicate passes reuse the
