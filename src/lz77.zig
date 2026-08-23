@@ -555,7 +555,7 @@ pub fn optimalRepBeamPlanAlloc(allocator: std.mem.Allocator, input: []const u8, 
         for (current, 0..) |state, slot| {
             if (state.cost == std.math.maxInt(u32)) continue;
             try insertRepBeamState(states, lengths, position + 1, .{
-                .cost = std.math.add(u32, state.cost, @intCast(fixedLiteralCost(input[position]))) catch continue,
+                .cost = state.cost + @as(u32, @intCast(fixedLiteralCost(input[position]))),
                 .rep0 = state.rep0,
                 .previous_position = @intCast(position),
                 .previous_slot = @intCast(slot),
@@ -607,7 +607,7 @@ fn extendRepBeamMatch(states: []RepBeamState, lengths: []u8, _: []const u8, opti
     if (match.length < minMatch(options) or match.distance == 0 or match.distance > position) return;
     const distance_cost: u32 = @intCast(if (match.distance == state.rep0) 1 else fixedDistanceSymbolCost(match.distance));
     const match_cost: u32 = @as(u32, fixed_length_costs[match.length]) + distance_cost;
-    const cost = std.math.add(u32, state.cost, match_cost) catch return;
+    const cost = state.cost + match_cost;
     try insertRepBeamState(states, lengths, position + match.length, .{
         .cost = cost,
         .rep0 = match.distance,
