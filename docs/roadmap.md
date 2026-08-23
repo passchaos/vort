@@ -2892,6 +2892,16 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   rather than continuing low-signal whole-frame micro-tuning. The CSV coverage
   gate requires all 72 case/candidate/stage rows and pins the current level-9
   split policy so future reports cannot silently compare different pipelines.
+  The stage tool additionally accepts `--candidate` and `--stage`, allowing perf
+  and interleaved A/B runs to execute only one isolated row rather than spending
+  most samples in unrelated families. An isolated 4 KiB mixed profile puts
+  `findBestDuplicateMatchIn` at about 29.0% self time. Reusing the already loaded
+  eight-byte anchor for its hash preserves the exact open-addressed lookup and
+  avoids a redundant load; twelve fixed-CPU-8..10 interleaved pairs retained the
+  9823-byte aggregate candidate output and moved the median from 60.394 ms to
+  60.031 ms (1.006x). Two broader structural trials—borrowing the large duplicate
+  index in the candidate cache and pruning generic FSE planning with a proven
+  lower bound—were neutral or slower and were fully reverted.
   Sequence-literal RLE detection now skips empty/already-disproved runs and uses
   the standard library's vectorized `allEqual` scan for each remaining run
   instead of branching once per byte. A focused reference oracle covers empty,

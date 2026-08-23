@@ -11266,7 +11266,7 @@ fn findBestDuplicateMatchExactHashed(block: []const u8, start_min: usize) Error!
         // cannot improve either length or the payload tie-break.
         if (best) |current| if (block.len - index < current.len) break;
         const key = std.mem.readInt(u64, block[index..][0..8], .little);
-        var slot = duplicateHash8(block[index..][0..8]) & (duplicate_exact_key_table_len - 1);
+        var slot = duplicateHashKey(key) & (duplicate_exact_key_table_len - 1);
         while ((occupied[slot / 64] & (@as(u64, 1) << @intCast(slot & 63))) != 0 and keys[slot] != key)
             slot = (slot + 1) & (duplicate_exact_key_table_len - 1);
         const word = slot / 64;
@@ -11633,7 +11633,10 @@ fn duplicateMatchCannotBeat(candidate: DuplicateMatch, current: ?DuplicateMatch)
 }
 
 fn duplicateHash8(bytes: *const [8]u8) usize {
-    const value = std.mem.readInt(u64, bytes, .little);
+    return duplicateHashKey(std.mem.readInt(u64, bytes, .little));
+}
+
+inline fn duplicateHashKey(value: u64) usize {
     const shift: u6 = @intCast(64 - duplicate_hash_bits);
     return @intCast((value *% 11_400_714_819_323_198_485) >> shift);
 }
