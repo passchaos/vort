@@ -4587,3 +4587,19 @@ architecture blindly.
   counter rounds reduce instructions by `7.79%` and cycles by `2.68%` paired
   geomean; branch misses remain neutral. Four non-selected fixture paired
   medians stay within `0.994x..1.003x`.
+- Added a 12-bit primary literal table only for PNG filter-0 dynamic blocks
+  whose distance alphabet is exactly the canonical one-bit distance-one code.
+  The ordinary semantic decoder retains its 11-bit table; the RLE1 decoder
+  omits unused distance tables, remains no larger than the general decoder,
+  and lives in a dedicated executable section so unrelated DEFLATE/PNG layout
+  stays stable. A complete 1..12-bit-tree oracle proves that a 12-bit literal
+  moves from the general secondary table to the RLE1 primary table while exact
+  output and the complete buffered-reader state remain identical.
+- On fixed P-core 14, 101 alternating process rounds against Vort `122f1c1`
+  improve Lohengrin median throughput `1.026x` strict and `1.026x` no-Adler.
+  The final repeat-9 image-png `4ab5484` comparison reaches `1.022x` strict and
+  `1.049x` no-Adler for Lohengrin. The 15-fixture comparison reports
+  `1.290x/1.301x` aggregate/geomean strict and `1.309x/1.325x` no-Adler; strict
+  `kodim17` remains about `0.992x`, so PNG-wide per-fixture leadership is not
+  claimed. Fifty-one-round non-RLE controls are noise-bound rather than a
+  claimed benefit.

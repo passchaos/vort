@@ -8,6 +8,7 @@ const png_ultrafast = @import("png_ultrafast.zig");
 const png_windowed_history =
     @import("deflate/png/windowed_history.zig");
 const png_non_overlap = @import("deflate/png/non_overlap.zig");
+const semantic_rle1 = @import("deflate/semantic/rle1.zig");
 const semantic_rle258 = @import("deflate/semantic/rle258.zig");
 
 const png = @import("png.zig");
@@ -2623,93 +2624,7 @@ const SemanticDynamicDecoder = struct {
     }
 
     fn buildLiteralTable(self: *Self, table: *const huffman.HuffmanTable(286)) bool {
-        // Build the primary table one code width at a time. After entries for a
-        // width are installed, duplicating the completed prefix table grows it
-        // to the next width. This writes each primary slot only O(1) times and
-        // lets double-literal pairs be inserted once at their combined width.
-        self.literal[0] = 0;
-        self.literal[1] = 0;
-        var total_bits: usize = 1;
-        while (total_bits <= literal_lookup_bits) : (total_bits += 1) {
-            const first = table.first_by_bits[total_bits];
-            const end = first + table.count_by_bits[total_bits];
-            for (table.entries[first..end]) |entry| {
-                self.literal[entry.code] = semanticLiteralEntry(entry.symbol, entry.bits);
-            }
-
-            var first_bits: usize = 1;
-            while (first_bits + 1 < total_bits) : (first_bits += 1) {
-                const second_bits = total_bits - first_bits;
-                const first_start = table.first_by_bits[first_bits];
-                const first_end = first_start + table.count_by_bits[first_bits];
-                const second_start = table.first_by_bits[second_bits];
-                const second_end = second_start + table.count_by_bits[second_bits];
-                for (table.entries[first_start..first_end]) |first_entry| {
-                    if (first_entry.symbol >= 256) continue;
-                    for (table.entries[second_start..second_end]) |second_entry| {
-                        if (second_entry.symbol >= 256) continue;
-                        const code = @as(usize, first_entry.code) |
-                            (@as(usize, second_entry.code) << @intCast(first_bits));
-                        self.literal[code] = (@as(u32, @intCast(total_bits)) & 0xf) |
-                            literal_flag |
-                            (2 << 8) |
-                            (@as(u32, first_entry.symbol) << 16) |
-                            (@as(u32, second_entry.symbol) << 24);
-                    }
-                }
-            }
-
-            if (total_bits < literal_lookup_bits) {
-                const current_len = @as(usize, 1) << @intCast(total_bits);
-                @memcpy(
-                    self.literal[current_len .. current_len * 2],
-                    self.literal[0..current_len],
-                );
-            }
-        }
-
-        // When every literal/length code fits in the primary semantic lookup,
-        // the secondary table is provably unused. Many PNG dynamic blocks have
-        // this shape (for example small icons and several Kodak images), so
-        // avoid scanning and zero-checking the 2 KiB prefix map on every block.
-        if (table.max_bits <= literal_lookup_bits) return true;
-
-        var prefix_max_bits: [literal_lookup_len]u4 = @splat(0);
-        for (table.entries[0..table.len]) |entry| {
-            if (entry.bits > literal_lookup_bits) {
-                const prefix = @as(usize, entry.code) & (literal_lookup_len - 1);
-                prefix_max_bits[prefix] = @max(prefix_max_bits[prefix], entry.bits);
-            }
-        }
-
-        for (prefix_max_bits, 0..) |max_bits, prefix| {
-            if (max_bits == 0) continue;
-            const size = @as(usize, 1) << @intCast(max_bits - literal_lookup_bits);
-            if (self.literal_secondary_len + size > self.literal_secondary.len or size > 256) return false;
-            const start = self.literal_secondary_len;
-            self.literal_secondary_len += size;
-            self.literal[prefix] = (@as(u32, @intCast(start)) << 16) |
-                exceptional_flag |
-                secondary_flag |
-                @as(u32, @intCast(size - 1));
-        }
-
-        for (table.entries[0..table.len]) |entry| {
-            if (entry.bits <= literal_lookup_bits) continue;
-            const prefix = @as(usize, entry.code) & (literal_lookup_len - 1);
-            const primary = self.literal[prefix];
-            const start: usize = @intCast(primary >> 16);
-            const mask: usize = @intCast(primary & 0xff);
-            const suffix_bits: u4 = entry.bits - literal_lookup_bits;
-            const suffix = @as(usize, entry.code) >> literal_lookup_bits;
-            const fill = (mask + 1) >> suffix_bits;
-            var i: usize = 0;
-            while (i < fill) : (i += 1) {
-                const index = start + suffix + (i << suffix_bits);
-                self.literal_secondary[index] = (@as(u16, entry.symbol) << 4) | entry.bits;
-            }
-        }
-        return true;
+        return buildSemanticLiteralTable(literal_lookup_bits, &self.literal, &self.literal_secondary, &self.literal_secondary_len, table);
     }
 
     fn buildDistanceTable(self: *Self, table: *const huffman.HuffmanTable(30)) bool {
@@ -2809,6 +2724,147 @@ const SemanticDynamicDecoder = struct {
             bits;
     }
 };
+
+fn buildSemanticLiteralTable(
+    comptime literal_lookup_bits: u4,
+    literal: anytype,
+    literal_secondary: anytype,
+    literal_secondary_len: *usize,
+    table: *const huffman.HuffmanTable(286),
+) bool {
+    const literal_lookup_len = @as(usize, 1) << literal_lookup_bits;
+    // Build the primary table one code width at a time. After entries for a
+    // width are installed, duplicating the completed prefix table grows it
+    // to the next width. This writes each primary slot only O(1) times and
+    // lets double-literal pairs be inserted once at their combined width.
+    literal[0] = 0;
+    literal[1] = 0;
+    var total_bits: usize = 1;
+    while (total_bits <= literal_lookup_bits) : (total_bits += 1) {
+        const first = table.first_by_bits[total_bits];
+        const end = first + table.count_by_bits[total_bits];
+        for (table.entries[first..end]) |entry| {
+            literal[entry.code] = SemanticDynamicDecoder.semanticLiteralEntry(entry.symbol, entry.bits);
+        }
+
+        var first_bits: usize = 1;
+        while (first_bits + 1 < total_bits) : (first_bits += 1) {
+            const second_bits = total_bits - first_bits;
+            const first_start = table.first_by_bits[first_bits];
+            const first_end = first_start + table.count_by_bits[first_bits];
+            const second_start = table.first_by_bits[second_bits];
+            const second_end = second_start + table.count_by_bits[second_bits];
+            for (table.entries[first_start..first_end]) |first_entry| {
+                if (first_entry.symbol >= 256) continue;
+                for (table.entries[second_start..second_end]) |second_entry| {
+                    if (second_entry.symbol >= 256) continue;
+                    const code = @as(usize, first_entry.code) |
+                        (@as(usize, second_entry.code) << @intCast(first_bits));
+                    literal[code] = (@as(u32, @intCast(total_bits)) & 0xf) |
+                        SemanticDynamicDecoder.literal_flag |
+                        (2 << 8) |
+                        (@as(u32, first_entry.symbol) << 16) |
+                        (@as(u32, second_entry.symbol) << 24);
+                }
+            }
+        }
+
+        if (total_bits < literal_lookup_bits) {
+            const current_len = @as(usize, 1) << @intCast(total_bits);
+            @memcpy(
+                literal[current_len .. current_len * 2],
+                literal[0..current_len],
+            );
+        }
+    }
+
+    // When every literal/length code fits in the primary semantic lookup,
+    // the secondary table is provably unused. Many PNG dynamic blocks have
+    // this shape (for example small icons and several Kodak images), so
+    // avoid scanning and zero-checking the 2 KiB prefix map on every block.
+    if (table.max_bits <= literal_lookup_bits) return true;
+
+    var prefix_max_bits: [literal_lookup_len]u4 = @splat(0);
+    for (table.entries[0..table.len]) |entry| {
+        if (entry.bits > literal_lookup_bits) {
+            const prefix = @as(usize, entry.code) & (literal_lookup_len - 1);
+            prefix_max_bits[prefix] = @max(prefix_max_bits[prefix], entry.bits);
+        }
+    }
+
+    for (prefix_max_bits, 0..) |max_bits, prefix| {
+        if (max_bits == 0) continue;
+        const size = @as(usize, 1) << @intCast(max_bits - literal_lookup_bits);
+        if (literal_secondary_len.* + size > literal_secondary.len or size > 256) return false;
+        const start = literal_secondary_len.*;
+        literal_secondary_len.* += size;
+        literal[prefix] = (@as(u32, @intCast(start)) << 16) |
+            SemanticDynamicDecoder.exceptional_flag |
+            SemanticDynamicDecoder.secondary_flag |
+            @as(u32, @intCast(size - 1));
+    }
+
+    for (table.entries[0..table.len]) |entry| {
+        if (entry.bits <= literal_lookup_bits) continue;
+        const prefix = @as(usize, entry.code) & (literal_lookup_len - 1);
+        const primary = literal[prefix];
+        const start: usize = @intCast(primary >> 16);
+        const mask: usize = @intCast(primary & 0xff);
+        const suffix_bits: u4 = entry.bits - literal_lookup_bits;
+        const suffix = @as(usize, entry.code) >> literal_lookup_bits;
+        const fill = (mask + 1) >> suffix_bits;
+        var i: usize = 0;
+        while (i < fill) : (i += 1) {
+            const index = start + suffix + (i << suffix_bits);
+            literal_secondary[index] = (@as(u16, entry.symbol) << 4) | entry.bits;
+        }
+    }
+    return true;
+}
+
+const SemanticRle1DynamicDecoder = struct {
+    const literal_lookup_bits: u4 = 12;
+    const literal_lookup_len = @as(usize, 1) << literal_lookup_bits;
+    const literal_lookup_mask: u64 = literal_lookup_len - 1;
+    // A complete tree with at most 286 symbols needs at most 572 suffix slots
+    // behind a 12-bit prefix. Keep bounded margin without distance tables that
+    // the exact distance-one loop never reads.
+    const literal_secondary_capacity = 1024;
+
+    literal: [literal_lookup_len]u32 = undefined,
+    literal_secondary: [literal_secondary_capacity]u16 = undefined,
+    literal_secondary_len: usize = 0,
+    compact_literal: *const huffman.HuffmanTable(286) = undefined,
+    compact_distance: *const huffman.HuffmanTable(30) = undefined,
+
+    fn init(
+        self: *@This(),
+        literal_table: *const huffman.HuffmanTable(286),
+        distance_table_: *const huffman.HuffmanTable(30),
+    ) bool {
+        if (!SemanticDynamicDecoder.treeIsComplete(286, literal_table) or
+            distance_table_.len != 1) return false;
+        const distance_entry = distance_table_.entries[0];
+        if (distance_entry.symbol != 0 or distance_entry.code != 0 or
+            distance_entry.bits != 1) return false;
+
+        self.* = .{
+            .compact_literal = literal_table,
+            .compact_distance = distance_table_,
+        };
+        return buildSemanticLiteralTable(
+            literal_lookup_bits,
+            &self.literal,
+            &self.literal_secondary,
+            &self.literal_secondary_len,
+            literal_table,
+        );
+    }
+};
+
+comptime {
+    std.debug.assert(@sizeOf(SemanticRle1DynamicDecoder) <= @sizeOf(SemanticDynamicDecoder));
+}
 
 fn dynamicLiteralLookupBits(parsed: huffman.DynamicLengths) u4 {
     if (parsed.literal_max_bits <= 9) return 9;
@@ -4679,8 +4735,8 @@ noinline fn decodeSemanticDynamicBlockIntoSingleDistanceBufferedReader(
 noinline fn decodeSemanticDynamicBlockIntoRle1BufferedReader(
     noalias reader: *bitstream.BufferedBitReader,
     noalias output: []u8,
-    noalias decoder: *const SemanticDynamicDecoder,
-) Error!usize {
+    noalias decoder: *const SemanticRle1DynamicDecoder,
+) linksection(semantic_rle1.text_section) Error!usize {
     return decodeSemanticDynamicBlockIntoLinearMode(
         true,
         true,
@@ -4831,9 +4887,10 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
     noalias reader: *bitstream.BufferedBitReader,
     noalias output: []u8,
     initial_out_offset: usize,
-    noalias decoder: *const SemanticDynamicDecoder,
+    noalias decoder: anytype,
 ) Error!SemanticLinearResult(pause_at_output_boundary) {
     comptime std.debug.assert(!rle1_distance or single_distance);
+    const Decoder = @TypeOf(decoder.*);
     const input = reader.input;
     var bit_buffer = reader.bit_buffer;
     var bit_count = reader.bit_count;
@@ -4850,7 +4907,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
     if (out_pos + output_headroom <= output.len and byte_index + 8 <= input.len) {
         refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
     }
-    var entry = decoder.literal[@intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)];
+    var entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
 
     while (out_pos + output_headroom <= output.len and byte_index + 8 <= input.len) {
         if (comptime rle258_pair) {
@@ -4863,7 +4920,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
                 if (comptime !inline_non_overlap) consumed_bits += 2;
                 refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
                 entry = decoder.literal[
-                    @intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)
+                    @intCast(bit_buffer & Decoder.literal_lookup_mask)
                 ];
 
                 const byte = output[out_pos - 1];
@@ -4877,17 +4934,17 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
 
         if ((entry & SemanticDynamicDecoder.literal_flag) != 0) {
             const entry2 = decoder.literal[
-                @as(usize, @intCast((bit_buffer >> @intCast(entry_bits)) & SemanticDynamicDecoder.literal_lookup_mask))
+                @as(usize, @intCast((bit_buffer >> @intCast(entry_bits)) & Decoder.literal_lookup_mask))
             ];
             const entry2_bits: u6 = @truncate(entry2);
             const entry12_bits: u6 = entry_bits + entry2_bits;
             const entry3 = decoder.literal[
-                @as(usize, @intCast((bit_buffer >> @intCast(entry12_bits)) & SemanticDynamicDecoder.literal_lookup_mask))
+                @as(usize, @intCast((bit_buffer >> @intCast(entry12_bits)) & Decoder.literal_lookup_mask))
             ];
             const entry3_bits: u6 = @truncate(entry3);
             const entry123_bits: u6 = entry12_bits + entry3_bits;
             const entry4 = decoder.literal[
-                @as(usize, @intCast((bit_buffer >> @intCast(entry123_bits)) & SemanticDynamicDecoder.literal_lookup_mask))
+                @as(usize, @intCast((bit_buffer >> @intCast(entry123_bits)) & Decoder.literal_lookup_mask))
             ];
 
             const advance1: usize = @intCast((entry >> 8) & 0xf);
@@ -4950,7 +5007,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             const start: usize = @intCast(entry >> 16);
             const mask: usize = @intCast(entry & 0xff);
             const secondary_index = start +
-                (@as(usize, @intCast(bit_buffer >> SemanticDynamicDecoder.literal_lookup_bits)) & mask);
+                (@as(usize, @intCast(bit_buffer >> Decoder.literal_lookup_bits)) & mask);
             if (secondary_index >= decoder.literal_secondary_len) return error.InvalidHuffmanCode;
             const secondary = decoder.literal_secondary[secondary_index];
             const symbol: u16 = secondary >> 4;
@@ -4962,7 +5019,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
                 output[out_pos] = @truncate(symbol);
                 out_pos += 1;
                 refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
-                entry = decoder.literal[@intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)];
+                entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
                 continue;
             }
             if (symbol == 256) {
@@ -5031,7 +5088,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             bit_count -= total_bits;
             if (comptime !inline_non_overlap) consumed_bits += total_bits;
             refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
-            entry = decoder.literal[@intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)];
+            entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
 
             if (out_pos == 0) return error.InvalidMatch;
             if (length > output.len - out_pos) return error.OutputTooSmall;
@@ -5081,7 +5138,7 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
         bit_count -= total_bits;
         if (comptime !inline_non_overlap) consumed_bits += total_bits;
         refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
-        entry = decoder.literal[@intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)];
+        entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
         if (comptime inline_non_overlap) {
             // This specialization is selected only for match-heavy blocks whose
             // distance alphabet is deep enough to justify a separate loop. Keep
@@ -5292,8 +5349,9 @@ const SemanticTailSymbol = union(enum) {
     eob,
 };
 
-fn decodeSemanticTailSymbol(reader: *bitstream.BufferedBitReader, decoder: *const SemanticDynamicDecoder) Error!SemanticTailSymbol {
-    const peek = reader.peekBitsPadded(u16, SemanticDynamicDecoder.literal_lookup_bits);
+fn decodeSemanticTailSymbol(reader: *bitstream.BufferedBitReader, decoder: anytype) Error!SemanticTailSymbol {
+    const Decoder = @TypeOf(decoder.*);
+    const peek = reader.peekBitsPadded(u16, Decoder.literal_lookup_bits);
     const entry = decoder.literal[peek];
     var entry_bits: u6 = @truncate(entry);
     if ((entry & SemanticDynamicDecoder.literal_flag) != 0) {
@@ -5307,7 +5365,7 @@ fn decodeSemanticTailSymbol(reader: *bitstream.BufferedBitReader, decoder: *cons
     if ((entry & SemanticDynamicDecoder.exceptional_flag) != 0 and (entry & SemanticDynamicDecoder.secondary_flag) != 0) {
         const start: usize = @intCast(entry >> 16);
         const mask: usize = @intCast(entry & 0xff);
-        const secondary_index = start + (@as(usize, @intCast(reader.peekBitsPadded(u16, 15) >> SemanticDynamicDecoder.literal_lookup_bits)) & mask);
+        const secondary_index = start + (@as(usize, @intCast(reader.peekBitsPadded(u16, 15) >> Decoder.literal_lookup_bits)) & mask);
         if (secondary_index >= decoder.literal_secondary_len) return error.InvalidHuffmanCode;
         const secondary = decoder.literal_secondary[secondary_index];
         const symbol: u16 = secondary >> 4;
@@ -5385,8 +5443,8 @@ noinline fn decodeSemanticDynamicBlockIntoSingleDistanceSink(
 noinline fn decodeSemanticDynamicBlockIntoRle1Sink(
     noalias reader: *bitstream.BufferedBitReader,
     sink: anytype,
-    noalias decoder: *const SemanticDynamicDecoder,
-) Error!void {
+    noalias decoder: *const SemanticRle1DynamicDecoder,
+) linksection(semantic_rle1.text_section) Error!void {
     return decodeSemanticDynamicBlockIntoSinkMode(
         true,
         true,
@@ -5401,9 +5459,10 @@ noinline fn decodeSemanticDynamicBlockIntoSinkMode(
     comptime rle1_distance: bool,
     noalias reader: *bitstream.BufferedBitReader,
     sink: anytype,
-    noalias decoder: *const SemanticDynamicDecoder,
+    noalias decoder: anytype,
 ) Error!void {
     comptime std.debug.assert(!rle1_distance or single_distance);
+    const Decoder = @TypeOf(decoder.*);
     const input = reader.input;
     var bit_buffer = reader.bit_buffer;
     var bit_count = reader.bit_count;
@@ -5413,19 +5472,19 @@ noinline fn decodeSemanticDynamicBlockIntoSinkMode(
     if (sink.hasHeadroom(8) and byte_index + 8 <= input.len) {
         refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
     }
-    var entry = decoder.literal[@intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)];
+    var entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
 
     while (sink.hasHeadroom(8) and byte_index + 8 <= input.len) {
         var entry_bits: u6 = @truncate(entry);
 
         if ((entry & SemanticDynamicDecoder.literal_flag) != 0) {
             const entry2 = decoder.literal[
-                @as(usize, @intCast((bit_buffer >> @intCast(entry_bits)) & SemanticDynamicDecoder.literal_lookup_mask))
+                @as(usize, @intCast((bit_buffer >> @intCast(entry_bits)) & Decoder.literal_lookup_mask))
             ];
             const entry2_bits: u6 = @truncate(entry2);
             const entry12_bits: u6 = entry_bits + entry2_bits;
             const entry3 = decoder.literal[
-                @as(usize, @intCast((bit_buffer >> @intCast(entry12_bits)) & SemanticDynamicDecoder.literal_lookup_mask))
+                @as(usize, @intCast((bit_buffer >> @intCast(entry12_bits)) & Decoder.literal_lookup_mask))
             ];
             const entry3_bits: u6 = @truncate(entry3);
             const entry123_bits: u6 = entry12_bits + entry3_bits;
@@ -5434,7 +5493,7 @@ noinline fn decodeSemanticDynamicBlockIntoSinkMode(
             // subsequent reservoir refill instead of starting the next loop's
             // dependency chain from scratch.
             const entry4 = decoder.literal[
-                @as(usize, @intCast((bit_buffer >> @intCast(entry123_bits)) & SemanticDynamicDecoder.literal_lookup_mask))
+                @as(usize, @intCast((bit_buffer >> @intCast(entry123_bits)) & Decoder.literal_lookup_mask))
             ];
 
             if ((entry2 & SemanticDynamicDecoder.literal_flag) != 0) {
@@ -5475,7 +5534,7 @@ noinline fn decodeSemanticDynamicBlockIntoSinkMode(
             const start: usize = @intCast(entry >> 16);
             const mask: usize = @intCast(entry & 0xff);
             const secondary_index = start +
-                (@as(usize, @intCast(bit_buffer >> SemanticDynamicDecoder.literal_lookup_bits)) & mask);
+                (@as(usize, @intCast(bit_buffer >> Decoder.literal_lookup_bits)) & mask);
             if (secondary_index >= decoder.literal_secondary_len) return error.InvalidHuffmanCode;
             const secondary = decoder.literal_secondary[secondary_index];
             const symbol: u16 = secondary >> 4;
@@ -5486,7 +5545,7 @@ noinline fn decodeSemanticDynamicBlockIntoSinkMode(
                 consumed_bits += entry_bits;
                 try sink.emitByte(@truncate(symbol));
                 refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
-                entry = decoder.literal[@intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)];
+                entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
                 continue;
             }
             if (symbol == 256) {
@@ -5521,7 +5580,7 @@ noinline fn decodeSemanticDynamicBlockIntoSinkMode(
             bit_count -= total_bits;
             consumed_bits += total_bits;
             refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
-            entry = decoder.literal[@intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)];
+            entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
             try sink.copyMatch(length, 1);
             continue;
         }
@@ -5566,7 +5625,7 @@ noinline fn decodeSemanticDynamicBlockIntoSinkMode(
         bit_count -= total_bits;
         consumed_bits += total_bits;
         refillSemanticBits(input, &byte_index, &bit_buffer, &bit_count);
-        entry = decoder.literal[@intCast(bit_buffer & SemanticDynamicDecoder.literal_lookup_mask)];
+        entry = decoder.literal[@intCast(bit_buffer & Decoder.literal_lookup_mask)];
         try sink.copyMatch(length, distance);
     }
 
@@ -12568,7 +12627,7 @@ fn appendPngFilter0LinearBlock(
 fn tryDecodePngFilter0LinearRleBlock(
     reader: *bitstream.BufferedBitReader,
     sink: *PngFilter0SemanticSink,
-    decoder: *const SemanticDynamicDecoder,
+    decoder: *const SemanticRle1DynamicDecoder,
     scratch: []u8,
     adler: ?*checksum.Adler32,
 ) Error!bool {
@@ -12590,6 +12649,33 @@ fn tryDecodePngFilter0LinearRleBlock(
     };
     try appendPngFilter0LinearBlock(sink, scratch[0..written], adler);
     return true;
+}
+
+noinline fn decodePngFilter0DynamicRle1Block(
+    reader: *bitstream.BufferedBitReader,
+    sink: *PngFilter0SemanticSink,
+    literal_table_: *const huffman.HuffmanTable(286),
+    distance_table_: *const huffman.HuffmanTable(30),
+    scratch: []u8,
+    adler: ?*checksum.Adler32,
+) linksection(semantic_rle1.text_section) Error!bool {
+    // Keep wider table construction and decode out of the generic filter-0
+    // dispatcher so unrelated PNG/DEFLATE code retains its established layout.
+    var decoder: SemanticRle1DynamicDecoder = undefined;
+    if (!decoder.init(literal_table_, distance_table_)) {
+        return error.UnsupportedDeflateFeature;
+    }
+    const used_linear_block = try tryDecodePngFilter0LinearRleBlock(
+        reader,
+        sink,
+        &decoder,
+        scratch,
+        adler,
+    );
+    if (!used_linear_block) {
+        try decodeSemanticDynamicBlockIntoRle1Sink(reader, sink, &decoder);
+    }
+    return used_linear_block;
 }
 
 fn makeSingleDistanceTableFromLengths(lengths: []const u4) ?huffman.HuffmanTable(30) {
@@ -12649,28 +12735,28 @@ pub fn decodePngFilter0DynamicZlibImageWithOptions(
         const single_distance_table = makeSingleDistanceTableFromLengths(parsed.distance_lengths[0..parsed.header.hdist]);
         const distance_table_ = single_distance_table orelse
             try huffman.HuffmanTable(30).init(parsed.distance_lengths[0..parsed.header.hdist]);
-        var decoder: SemanticDynamicDecoder = undefined;
         if (distance_table_.len == 1) {
-            if (!decoder.initSingleDistance(&literal_table_, &distance_table_)) return error.UnsupportedDeflateFeature;
             const distance_entry = distance_table_.entries[0];
-            const used_linear_block = distance_entry.symbol == 0 and
-                distance_entry.bits == 1 and
-                try tryDecodePngFilter0LinearRleBlock(
+            const is_rle1 = distance_entry.symbol == 0 and distance_entry.bits == 1;
+            if (is_rle1) {
+                const used_linear_block = try decodePngFilter0DynamicRle1Block(
                     &reader,
                     &sink,
-                    &decoder,
+                    &literal_table_,
+                    &distance_table_,
                     &linear_block_scratch,
                     if (can_use_linear_adler) &linear_adler else null,
                 );
-            if (!used_linear_block) {
+                if (!used_linear_block) can_use_linear_adler = false;
+            } else {
                 can_use_linear_adler = false;
-                if (distance_entry.symbol == 0 and distance_entry.bits == 1)
-                    try decodeSemanticDynamicBlockIntoRle1Sink(&reader, &sink, &decoder)
-                else
-                    try decodeSemanticDynamicBlockIntoSingleDistanceSink(&reader, &sink, &decoder);
+                var decoder: SemanticDynamicDecoder = undefined;
+                if (!decoder.initSingleDistance(&literal_table_, &distance_table_)) return error.UnsupportedDeflateFeature;
+                try decodeSemanticDynamicBlockIntoSingleDistanceSink(&reader, &sink, &decoder);
             }
         } else {
             can_use_linear_adler = false;
+            var decoder: SemanticDynamicDecoder = undefined;
             if (!decoder.init(&literal_table_, &distance_table_)) return error.UnsupportedDeflateFeature;
             try decodeSemanticDynamicBlockIntoSink(&reader, &sink, &decoder);
         }
@@ -12868,8 +12954,13 @@ test "png filter0 linear RLE block matches compact fallback and restores reader"
     const success_distance_table = try huffman.HuffmanTable(30).init(&single_distance_lengths);
     try std.testing.expectEqual(@as(usize, 1), success_distance_table.len);
     try std.testing.expectEqual(@as(u16, 0), success_distance_table.entries[0].symbol);
-    var success_decoder: SemanticDynamicDecoder = undefined;
-    try std.testing.expect(success_decoder.initSingleDistance(
+    var success_reference_decoder: SemanticDynamicDecoder = undefined;
+    try std.testing.expect(success_reference_decoder.initSingleDistance(
+        &success_literal_table,
+        &success_distance_table,
+    ));
+    var success_decoder: SemanticRle1DynamicDecoder = undefined;
+    try std.testing.expect(success_decoder.init(
         &success_literal_table,
         &success_distance_table,
     ));
@@ -12881,7 +12972,7 @@ test "png filter0 linear RLE block matches compact fallback and restores reader"
     const reference_written = try decodeSemanticDynamicBlockIntoSingleDistanceBufferedReader(
         &reference_reader,
         &reference_block,
-        &success_decoder,
+        &success_reference_decoder,
     );
     const optimized_written = try decodeSemanticDynamicBlockIntoRle1BufferedReader(
         &optimized_reader,
@@ -12916,8 +13007,8 @@ test "png filter0 linear RLE block matches compact fallback and restores reader"
         fallback_parsed.literal_lengths[0..fallback_parsed.header.hlit],
     );
     const fallback_distance_table = try huffman.HuffmanTable(30).init(&single_distance_lengths);
-    var fallback_decoder: SemanticDynamicDecoder = undefined;
-    try std.testing.expect(fallback_decoder.initSingleDistance(
+    var fallback_decoder: SemanticRle1DynamicDecoder = undefined;
+    try std.testing.expect(fallback_decoder.init(
         &fallback_literal_table,
         &fallback_distance_table,
     ));
@@ -12938,13 +13029,70 @@ test "png filter0 linear RLE block matches compact fallback and restores reader"
     try std.testing.expectEqual(saved_reader.bit_count, fallback_reader.bit_count);
     try std.testing.expectEqual(saved_reader.consumed_bits, fallback_reader.consumed_bits);
 
-    try decodeSemanticDynamicBlockIntoSingleDistanceSink(
+    try decodeSemanticDynamicBlockIntoRle1Sink(
         &fallback_reader,
         &fallback_sink,
         &fallback_decoder,
     );
     try fallback_sink.finish();
     try std.testing.expectEqualSlices(u8, &success_output, &fallback_output);
+}
+
+test "semantic RLE1 primary table covers 12-bit literals" {
+    // This complete tree has one code at every width from 1 through 11 and
+    // two codes at width 12. It forces the general decoder through its
+    // secondary table while the RLE1 decoder resolves the same literal from
+    // the 12-bit primary table.
+    var literal_lengths: [286]u4 = @splat(0);
+    for (0..11) |symbol| literal_lengths[symbol] = @intCast(symbol + 1);
+    literal_lengths[11] = 12;
+    literal_lengths[256] = 12;
+    const literal_table_ = try huffman.HuffmanTable(286).init(&literal_lengths);
+    const literal_encoder = try huffman.HuffmanTable(286).Encoder.init(&literal_lengths);
+    const distance_lengths = [_]u4{1};
+    const distance_table_ = try huffman.HuffmanTable(30).init(&distance_lengths);
+
+    var reference_decoder: SemanticDynamicDecoder = undefined;
+    try std.testing.expect(reference_decoder.initSingleDistance(&literal_table_, &distance_table_));
+    var rle1_decoder: SemanticRle1DynamicDecoder = undefined;
+    try std.testing.expect(rle1_decoder.init(&literal_table_, &distance_table_));
+    try std.testing.expect(reference_decoder.literal_secondary_len != 0);
+    try std.testing.expectEqual(@as(usize, 0), rle1_decoder.literal_secondary_len);
+
+    var writer = bitstream.BitWriter{};
+    defer writer.deinit(std.testing.allocator);
+    try literal_encoder.writeSymbol(&writer, std.testing.allocator, 11);
+    try literal_encoder.writeSymbol(&writer, std.testing.allocator, 0);
+    try literal_encoder.writeSymbol(&writer, std.testing.allocator, 11);
+    try literal_encoder.writeSymbol(&writer, std.testing.allocator, 256);
+    // Padding is not logically consumed, but keeps the word-refill fast path.
+    try writer.writeBits(std.testing.allocator, 0, 56);
+    const encoded = try writer.toOwnedSlice(std.testing.allocator);
+    defer std.testing.allocator.free(encoded);
+
+    var reference_reader = bitstream.BufferedBitReader.init(encoded);
+    var rle1_reader = bitstream.BufferedBitReader.init(encoded);
+    var reference_output: [32]u8 = undefined;
+    var rle1_output: [reference_output.len]u8 = undefined;
+    const reference_written = try decodeSemanticDynamicBlockIntoSingleDistanceBufferedReader(
+        &reference_reader,
+        &reference_output,
+        &reference_decoder,
+    );
+    const rle1_written = try decodeSemanticDynamicBlockIntoRle1BufferedReader(
+        &rle1_reader,
+        &rle1_output,
+        &rle1_decoder,
+    );
+    try std.testing.expectEqual(@as(usize, 3), rle1_written);
+    try std.testing.expectEqual(reference_written, rle1_written);
+    try std.testing.expectEqualSlices(u8, &.{ 11, 0, 11 }, rle1_output[0..rle1_written]);
+    try std.testing.expectEqualSlices(
+        u8,
+        reference_output[0..reference_written],
+        rle1_output[0..rle1_written],
+    );
+    try std.testing.expectEqual(reference_reader, rle1_reader);
 }
 
 test "semantic decoder proves only exact one-bit RLE258 pair tables" {
