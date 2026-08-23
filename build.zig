@@ -2744,6 +2744,26 @@ pub fn build(b: *std.Build) void {
     const zstd_encode_bench_gate_step = b.step("run-zstd-encode-bench-gate", "Validate Zstd encode comparison CSV");
     zstd_encode_bench_gate_step.dependOn(&zstd_encode_bench_gate.step);
 
+    const zstd_native_encode_stage_bench_exe = b.addExecutable(.{
+        .name = "vort-zstd-native-encode-stage-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/native_encode_stage_bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const run_zstd_native_encode_stage_bench = b.addRunArtifact(zstd_native_encode_stage_bench_exe);
+    if (b.args) |args| run_zstd_native_encode_stage_bench.addArgs(args);
+    const zstd_native_encode_stage_bench_step = b.step("run-zstd-native-encode-stage-bench", "Measure native Zstd candidate-family stages");
+    zstd_native_encode_stage_bench_step.dependOn(&run_zstd_native_encode_stage_bench.step);
+    const run_zstd_native_encode_stage_bench_csv = b.addRunArtifact(zstd_native_encode_stage_bench_exe);
+    run_zstd_native_encode_stage_bench_csv.addArgs(&.{ "--level", "9", "--iterations", "1", "--rounds", "1", "--warmup", "1", "--csv", "zig-out/vort-zstd-native-encode-stage-bench.csv" });
+    const zstd_native_encode_stage_bench_gate = b.addSystemCommand(&.{ "python3", "tools/zstd/native_encode_stage_bench_gate.py", "--csv", "zig-out/vort-zstd-native-encode-stage-bench.csv" });
+    zstd_native_encode_stage_bench_gate.step.dependOn(&run_zstd_native_encode_stage_bench_csv.step);
+    const zstd_native_encode_stage_bench_gate_step = b.step("run-zstd-native-encode-stage-bench-gate", "Validate native Zstd stage benchmark coverage");
+    zstd_native_encode_stage_bench_gate_step.dependOn(&zstd_native_encode_stage_bench_gate.step);
+
     const zstd_dictionary_probe_exe = b.addExecutable(.{
         .name = "vort-zstd-dictionary-probe",
         .root_module = b.createModule(.{
@@ -3636,6 +3656,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&lz4_reference_bench_exe.step);
     check_step.dependOn(&zstd_reference_bench_exe.step);
     check_step.dependOn(&zstd_encode_bench_exe.step);
+    check_step.dependOn(&zstd_native_encode_stage_bench_exe.step);
     check_step.dependOn(&zstd_dictionary_probe_exe.step);
     check_step.dependOn(&zstd_full_dictionary_diff_exe.step);
     check_step.dependOn(&dictionary_deflate_report_exe.step);

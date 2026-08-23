@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""Validate native Zstd candidate-stage benchmark coverage."""
+
+import argparse
+import csv
+from pathlib import Path
+
+COLUMNS = [
+    "case", "level", "candidate", "block_size", "block_count",
+    "stage", "available_blocks", "encoded_bytes", "iterations",
+    "rounds", "warmup", "median_ns", "ns_per_block", "checksum",
+]
+CASES = {"text", "json", "binary"}
+CANDIDATES = {"primary", "adaptive_0", "adaptive_1"}
+STAGES = {
+    "duplicate_index", "mixed", "greedy", "lazy", "optimal",
+    "repeated", "multi_duplicate", "single_duplicate",
+}
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--csv", type=Path, required=True)
+    args = parser.parse_args()
+    with args.csv.open(newline="") as file:
+        reader = csv.DictReader(file)
+        assert reader.fieldnames == COLUMNS, reader.fieldnames
+        rows = list(reader)
+
+    expected = {
+        (case, candidate, stage)
+        for case in CASES
+        for candidate in CANDIDATES
+        for stage in STAGES
+    }
+    assert {(row["case"], row["candidate"], row["stage"]) for row in rows} == expected
+    assert len(rows) == len(expected)
+    for row in rows:
+        assert int(row["level"]) == 9, row
+        for key in ("block_size", "block_count", "iterations", "rounds", "warmup", "median_ns"):
+            assert int(row[key]) > 0, row
+        assert int(row["ns_per_block"]) >= 0, row
+        available_blocks = int(row["available_blocks"])
+        encoded_bytes = int(row["encoded_bytes"])
+        assert 0 <= available_blocks <= int(row["block_count"]), row
+        if row["stage"] == "duplicate_index":
+            assert encoded_bytes == 0, row
+        else:
+            assert (available_blocks == 0) == (encoded_bytes == 0), row
+
+    # The current level-9 policy is the subject of this benchmark. Pinning its
+    # candidate labels to 128 KiB/4 KiB/8 KiB makes policy drift visible instead
+    # of producing apparently comparable stage measurements.
+    sizes = {(row["candidate"], int(row["block_size"])) for row in rows}
+    assert sizes == {("primary", 128 * 1024), ("adaptive_0", 4 * 1024), ("adaptive_1", 8 * 1024)}, sizes
+    print(f"zstd_native_encode_stage_bench_gate=ok rows={len(rows)}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

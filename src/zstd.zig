@@ -3864,6 +3864,25 @@ fn adaptiveLevelBlockSizes(level: c_int) [2]usize {
     };
 }
 
+/// Snapshot of the native frame candidates evaluated by the one-shot level
+/// facade. This is an observability surface for benchmark tooling, not a
+/// promise that future levels will keep the same search budget or split ladder.
+pub const NativeEncodeLevelDiagnostics = struct {
+    primary_options: NativeFrameOptions,
+    adaptive_block_sizes: [2]usize,
+};
+
+/// Report the exact primary options and adaptive split sizes currently selected
+/// for `encodeFrameWithLevelAndOptionsAlloc`. Keeping this policy lookup beside
+/// the encoder prevents the stage benchmark from silently drifting when level
+/// mappings are tuned.
+pub fn nativeEncodeLevelDiagnostics(level: c_int, options: FrameOptions) Error!NativeEncodeLevelDiagnostics {
+    return .{
+        .primary_options = try nativeFrameOptionsForLevel(level, options),
+        .adaptive_block_sizes = adaptiveLevelBlockSizes(level),
+    };
+}
+
 /// Emit a valid Zstandard frame composed of raw and RLE blocks.
 ///
 /// This entrypoint is retained as an explicit subset alias; the general
@@ -7280,6 +7299,149 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     return true;
 }
 
+/// Candidate families evaluated by the native compressed-block selector.
+///
+/// These names intentionally mirror the selector order above so stage reports
+/// can be compared with profiles without exposing the internal emitters as a
+/// general encoding API.
+pub const NativeMatchStage = enum {
+    mixed,
+    greedy,
+    lazy,
+    optimal,
+    repeated,
+    multi_duplicate,
+    single_duplicate,
+};
+
+pub const NativeMatchStageResult = struct {
+    available: bool,
+    encoded_len: usize,
+};
+
+pub const NativeMatchStageScratch = struct {
+    candidate: std.ArrayList(u8) = .empty,
+    greedy_tokens: std.ArrayList(lz77.Token) = .empty,
+    lazy_tokens: std.ArrayList(lz77.Token) = .empty,
+    optimal: lz77.OptimalScratch = .{},
+    duplicate_index: ?*DuplicateMatchIndex = null,
+    duplicate_index_input_ptr: ?[*]const u8 = null,
+    duplicate_index_input_len: usize = 0,
+    duplicate_index_fingerprint: u64 = 0,
+
+    pub fn deinit(self: *NativeMatchStageScratch, allocator: std.mem.Allocator) void {
+        if (self.duplicate_index) |index| allocator.destroy(index);
+        self.optimal.deinit(allocator);
+        self.lazy_tokens.deinit(allocator);
+        self.greedy_tokens.deinit(allocator);
+        self.candidate.deinit(allocator);
+        self.* = undefined;
+    }
+};
+
+/// Prepare the predecessor index shared by duplicate-aware benchmark stages.
+/// Returns false for blocks that use the exact small matcher or the unindexed
+/// oversized fallback, neither of which has a distinct setup phase.
+pub fn benchmarkPrepareNativeMatchStageScratch(
+    allocator: std.mem.Allocator,
+    block: []const u8,
+    scratch: *NativeMatchStageScratch,
+) Error!bool {
+    scratch.duplicate_index_input_ptr = null;
+    scratch.duplicate_index_input_len = 0;
+    scratch.duplicate_index_fingerprint = 0;
+    if (block.len <= duplicate_exact_hash_input_max or block.len > duplicate_index_max_input_len) return false;
+    const index = scratch.duplicate_index orelse blk: {
+        const allocated = try allocator.create(DuplicateMatchIndex);
+        scratch.duplicate_index = allocated;
+        break :blk allocated;
+    };
+    index.build(block);
+    scratch.duplicate_index_input_ptr = block.ptr;
+    scratch.duplicate_index_input_len = block.len;
+    scratch.duplicate_index_fingerprint = duplicateIndexInputFingerprint(block);
+    return true;
+}
+
+/// Drop the prepared-index identity after a benchmark repetition. The index
+/// storage remains allocated so the next build measures only production setup
+/// work rather than allocator noise.
+pub fn benchmarkInvalidateNativeMatchStageScratch(scratch: *NativeMatchStageScratch) void {
+    scratch.duplicate_index_input_ptr = null;
+    scratch.duplicate_index_input_len = 0;
+    scratch.duplicate_index_fingerprint = 0;
+}
+
+fn duplicateIndexInputFingerprint(block: []const u8) u64 {
+    std.debug.assert(block.len > duplicate_exact_hash_input_max);
+    const first = std.mem.readInt(u64, block[0..8], .little);
+    const middle_start = block.len / 2 - 4;
+    const middle = std.mem.readInt(u64, block[middle_start..][0..8], .little);
+    const last = std.mem.readInt(u64, block[block.len - 8 ..][0..8], .little);
+    return first ^ std.math.rotl(u64, middle, 21) ^ std.math.rotl(u64, last, 42);
+}
+
+/// Evaluate one native match-family candidate for benchmark diagnostics.
+///
+/// The caller owns reusable scratch so repeated measurements exercise the same
+/// retained-buffer behavior as production. Large-block duplicate predecessors
+/// must be prepared once per block through the companion function, mirroring
+/// production's sharing across the three duplicate-aware families. This
+/// function is deliberately not re-exported from `root.zig`; normal callers
+/// should use the complete frame encoder, whose arbitration and fallback rules
+/// remain intact.
+pub fn benchmarkNativeMatchStage(
+    allocator: std.mem.Allocator,
+    block: []const u8,
+    last: bool,
+    match_search_budget: usize,
+    stage: NativeMatchStage,
+    scratch: *NativeMatchStageScratch,
+) Error!NativeMatchStageResult {
+    if (match_search_budget > mixed_match_path_search_budget) return error.InvalidBlockPlan;
+    scratch.candidate.clearRetainingCapacity();
+
+    const duplicate_index: ?*const DuplicateMatchIndex = if ((stage == .mixed or stage == .multi_duplicate or stage == .single_duplicate) and
+        block.len > duplicate_exact_hash_input_max and
+        block.len <= duplicate_index_max_input_len)
+    blk: {
+        if (scratch.duplicate_index_input_ptr == null or
+            scratch.duplicate_index_input_ptr.? != block.ptr or
+            scratch.duplicate_index_input_len != block.len or
+            scratch.duplicate_index_fingerprint != duplicateIndexInputFingerprint(block)) return error.InvalidBlockPlan;
+        break :blk scratch.duplicate_index.?;
+    } else null;
+
+    const available = switch (stage) {
+        .mixed => if (match_search_budget >= mixed_match_min_search_budget)
+            try emitMixedDuplicateRepeatedMatchCompressedBlock(allocator, &scratch.candidate, block, last, match_search_budget, duplicate_index)
+        else
+            false,
+        .greedy => if (block.len <= 32 * 1024)
+            try emitGreedyHashMatchCompressedBlockReuse(allocator, &scratch.candidate, block, last, &scratch.greedy_tokens)
+        else
+            try emitHashMatchCompressedBlock(allocator, &scratch.candidate, block, last, .greedy),
+        .lazy => if (match_search_budget >= lazy_match_min_search_budget)
+            if (block.len <= 32 * 1024)
+                try emitLazyHashMatchCompressedBlockReuse(allocator, &scratch.candidate, block, last, &scratch.lazy_tokens)
+            else
+                try emitHashMatchCompressedBlock(allocator, &scratch.candidate, block, last, .lazy)
+        else
+            false,
+        .optimal => try emitOptimalHashMatchCompressedBlockReuse(allocator, &scratch.candidate, block, last, &scratch.optimal),
+        .repeated => try emitRepeatedPatternCompressedBlock(allocator, &scratch.candidate, block, last),
+        .multi_duplicate => if (match_search_budget >= multi_duplicate_min_search_budget)
+            try emitMultiDuplicateMatchCompressedBlock(allocator, &scratch.candidate, block, last, duplicate_index)
+        else
+            false,
+        .single_duplicate => try emitSingleMatchCompressedBlock(allocator, &scratch.candidate, block, last, duplicate_index),
+    };
+    return .{
+        .available = available,
+        .encoded_len = if (available) scratch.candidate.items.len else 0,
+    };
+}
+
 fn retainShortestCandidate(allocator: std.mem.Allocator, ok: bool, candidate: []const u8, best: *std.ArrayList(u8)) Error!void {
     if (!ok or (best.items.len != 0 and candidate.len >= best.items.len)) return;
     best.clearRetainingCapacity();
@@ -7427,6 +7589,43 @@ test "zstd reusable optimal hash emitter matches allocating wire" {
     try std.testing.expect(try emitOptimalHashMatchCompressedBlockReuse(std.testing.allocator, &actual, payload, true, &scratch));
     try std.testing.expectEqual(capacities, .{ scratch.costs.capacity, scratch.steps.capacity, scratch.index.head.capacity, scratch.index.prev.capacity, scratch.tokens.capacity });
     try std.testing.expectEqualSlices(u8, expected.items, actual.items);
+}
+
+test "zstd native match stage benchmark mirrors production emitters" {
+    const payload = ("{\"service\":\"vort\",\"message\":\"native stage benchmark\"}\n" ** 96) ++ ("abcdefghijklmnop" ** 32);
+    var scratch: NativeMatchStageScratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    try std.testing.expect(try benchmarkPrepareNativeMatchStageScratch(std.testing.allocator, payload, &scratch));
+
+    inline for (std.meta.tags(NativeMatchStage)) |stage| {
+        var expected: std.ArrayList(u8) = .empty;
+        defer expected.deinit(std.testing.allocator);
+        const expected_ok = switch (stage) {
+            .mixed => try emitMixedDuplicateRepeatedMatchCompressedBlock(std.testing.allocator, &expected, payload, true, 192, scratch.duplicate_index),
+            .greedy => try emitGreedyHashMatchCompressedBlockReuse(std.testing.allocator, &expected, payload, true, &scratch.greedy_tokens),
+            .lazy => try emitLazyHashMatchCompressedBlockReuse(std.testing.allocator, &expected, payload, true, &scratch.lazy_tokens),
+            .optimal => try emitOptimalHashMatchCompressedBlockReuse(std.testing.allocator, &expected, payload, true, &scratch.optimal),
+            .repeated => try emitRepeatedPatternCompressedBlock(std.testing.allocator, &expected, payload, true),
+            .multi_duplicate => try emitMultiDuplicateMatchCompressedBlock(std.testing.allocator, &expected, payload, true, scratch.duplicate_index),
+            .single_duplicate => try emitSingleMatchCompressedBlock(std.testing.allocator, &expected, payload, true, scratch.duplicate_index),
+        };
+        const result = try benchmarkNativeMatchStage(std.testing.allocator, payload, true, 192, stage, &scratch);
+        try std.testing.expectEqual(expected_ok, result.available);
+        try std.testing.expectEqual(if (expected_ok) expected.items.len else 0, result.encoded_len);
+    }
+}
+
+test "zstd native match stage benchmark rejects stale duplicate index" {
+    var first: [4097]u8 = @splat('a');
+    var second = first;
+    second[second.len / 2] = 'b';
+    var scratch: NativeMatchStageScratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    try std.testing.expect(try benchmarkPrepareNativeMatchStageScratch(std.testing.allocator, &first, &scratch));
+    try std.testing.expectError(
+        error.InvalidBlockPlan,
+        benchmarkNativeMatchStage(std.testing.allocator, &second, true, 192, .single_duplicate, &scratch),
+    );
 }
 
 fn emitHashTokenSequenceBlock(

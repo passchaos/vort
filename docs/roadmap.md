@@ -2878,6 +2878,20 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   107.454 ms, a 77.39x cumulative speedup while retaining the 1058-byte JSON
   level-9 frame. This remains far behind libzstd's roughly 0.14-0.19 ms result
   on the same harness, so the evidence is a milestone rather than parity.
+  A dedicated ReleaseFast native encode stage benchmark is now available via
+  `run-zstd-native-encode-stage-bench{-gate}`. It derives the primary/4 KiB/
+  8 KiB candidate ladder from the production level policy, warms reusable
+  scratch, reports median time across configurable rounds, and separates the
+  shared large-block duplicate-index setup from mixed, greedy, lazy, optimal,
+  repeated, multi-duplicate, and single-duplicate candidate emission. The first
+  fixed-CPU-8..10 nine-round level-9 JSON baseline measured aggregate family
+  times of about 20.35/0.12/8.58/2.44/0.13/7.16/0.47 ms for the primary block,
+  59.31/0.30/0.38/2.57/0.60/13.27/1.86 ms across 4 KiB blocks, and
+  26.41/0.21/0.31/2.54/0.83/3.28/0.33 ms across 8 KiB blocks, respectively.
+  This localizes the next work to mixed search first and multi-duplicate second,
+  rather than continuing low-signal whole-frame micro-tuning. The CSV coverage
+  gate requires all 72 case/candidate/stage rows and pins the current level-9
+  split policy so future reports cannot silently compare different pipelines.
   Sequence-literal RLE detection now skips empty/already-disproved runs and uses
   the standard library's vectorized `allEqual` scan for each remaining run
   instead of branching once per byte. A focused reference oracle covers empty,
