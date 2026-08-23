@@ -3037,13 +3037,15 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   current level-9 primary JSON optimal block this records 809 bytes as a 3-byte
   block header, 318 literal bytes, and 488 sequence bytes, making the remaining
   libzstd ratio gap directly attributable and regression-testable.
-  Level 9+ now adds a two-state recent-offset beam parser over four hash matches
-  per position. It keeps a backpointer/token per state, charges repeat-distance
+  Level 9+ now adds a two-state recent-offset beam parser over the best hash
+  match at each position. It keeps a backpointer/token per state, charges repeat-distance
   matches cheaply, and leaves levels 1–8 plus advanced callers on the prior
   parser set. The locked JSON frame falls from 816 to 678 bytes (libzstd 677),
-  and binary from 8846 to 8619 (libzstd 8609), while text remains 93 bytes. A
+  and binary from 8846 to 8611 (libzstd 8609), while text remains 93 bytes. A
   wider eight-state/eight-match beam can reach 677 bytes but costs materially
-  more; the retained bounded shape is the measured speed/ratio compromise. The
+  more; a broader two-state/four-match search did not improve JSON and emitted
+  binary at 8619 bytes. The retained single-match shape is the measured speed/
+  ratio compromise. The
   beam hot path bypasses the generic accept-match calculation after its indexed
   candidates have already satisfied the minimum/window invariants and reads the
   precomputed length-cost table directly, reducing focused JSON/binary stage
@@ -3061,6 +3063,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   matching the established tiny parsers instead of reserving 32768 buckets.
   Sixteen fixed-CPU-8..10 stage pairs preserve the same block bytes and improve
   JSON/binary medians by about 19.1%/10.6%.
+  Reducing the per-position hash alternatives from four to one preserves the
+  678-byte JSON frame, improves binary from 8619 to 8611 bytes, and cuts the
+  focused JSON beam stage to about 1.28 ms. Twelve fixed-CPU-8..10 end-to-end
+  pairs against the four-match beam improved JSON/binary medians by roughly
+  1.6%/1.2%, with text unchanged.
   Adaptive 4/8 KiB candidates explicitly disable the beam: their lower-budget
   parsers remain the ratio fallback, while only the primary level-9 block pays
   the stateful search. Twelve fixed-CPU-8..10 end-to-end pairs versus the

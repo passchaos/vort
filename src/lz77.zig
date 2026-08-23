@@ -519,7 +519,7 @@ pub fn optimalPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options
 }
 
 const rep_beam_width = 2;
-const rep_beam_match_candidates = 4;
+const rep_beam_match_candidates = 1;
 const rep_beam_input_max = std.math.maxInt(u16);
 
 const RepBeamState = struct {
