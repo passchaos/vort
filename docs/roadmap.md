@@ -3113,6 +3113,14 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   fixed-CPU-8 stage pairs retain candidate bytes while reducing repetitive-text
   mixed time by about 56.6%; two end-to-end runs improve the 93-byte level-9
   text case by about 39–45%, while JSON and binary remain within roughly 1%.
+  The decisive-beam test now also accepts a relative margin: when the emitted
+  beam block is at least 1/32 smaller than every preceding linear candidate,
+  arbitration skips the ordinary optimal DP even if the compressed block is
+  not itself below 1/32 of the source. A focused mixed-binary oracle pins both
+  the new threshold and the beam win, while the 76-case generated/source corpus
+  remains byte-identical. Twelve fixed-CPU-8..10 end-to-end pairs keep the
+  81/644/8611-byte text/JSON/binary frames and improve binary by about 10.2%; a
+  24-pair binary rerun measures about 10.6%, with text/JSON within about 3%.
   The large-block duplicate index now also records the whole block's high-byte
   count and maximum byte frequency. If a single match cannot remove every byte
   above the native direct-Huffman alphabet and no symbol can fill the retained

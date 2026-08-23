@@ -7397,13 +7397,21 @@ fn emitNativeMatchCompressedBlockSerialWithBeam(allocator: std.mem.Allocator, ou
         }
     else
         null;
+    const pre_beam_best_len = best.items.len;
+    var rep_beam_len: ?usize = null;
     if (rep_beam_plan) |plan| {
         defer plan.deinit(allocator);
         const rep_beam_ok = try emitHashTokenSequenceBlock(allocator, &candidate, block, last, plan.tokens, plan.stats);
+        if (rep_beam_ok) rep_beam_len = candidate.items.len;
         try retainShortestCandidate(allocator, rep_beam_ok, candidate.items, &best);
     }
 
-    const beam_is_decisive = rep_beam_plan != null and best.items.len * 32 <= block.len;
+    // An absolute 32x reduction handles tiny final blocks. On larger blocks, a
+    // beam result that beats every already-emitted linear candidate by at least
+    // 1/32 has enough margin to skip the much slower ordinary optimal DP.
+    const beam_is_decisive = rep_beam_plan != null and
+        (best.items.len * 32 <= block.len or
+            (pre_beam_best_len != 0 and rep_beam_len != null and rep_beam_len.? * 32 <= pre_beam_best_len * 31));
     if (!beam_is_decisive) {
         candidate.clearRetainingCapacity();
         const optimal_ok = try emitOptimalHashMatchCompressedBlockReuse(allocator, &candidate, block, last, &optimal_scratch);
@@ -14579,6 +14587,33 @@ test "zstd decisive rep beam safely bypasses ordinary optimal parser" {
     defer all_families.deinit(std.testing.allocator);
     try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &all_families, payload.items, true, 95, false));
     try std.testing.expect(with_skip.items.len < all_families.items.len);
+}
+
+test "zstd relative beam win bypasses ordinary optimal parser" {
+    var payload: [32 * 1024]u8 = undefined;
+    var state: u32 = 0xfeed_beef;
+    for (&payload, 0..) |*byte, index| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (index % 64 < 48) @truncate(index * 17) else @truncate(state >> 16);
+    }
+
+    var without_beam: std.ArrayList(u8) = .empty;
+    defer without_beam.deinit(std.testing.allocator);
+    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &without_beam, &payload, true, 95, false));
+    var with_beam: std.ArrayList(u8) = .empty;
+    defer with_beam.deinit(std.testing.allocator);
+    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &with_beam, &payload, true, 95, true));
+    var greedy: std.ArrayList(u8) = .empty;
+    defer greedy.deinit(std.testing.allocator);
+    try std.testing.expect(try emitHashMatchCompressedBlock(std.testing.allocator, &greedy, &payload, true, .greedy));
+    var lazy: std.ArrayList(u8) = .empty;
+    defer lazy.deinit(std.testing.allocator);
+    try std.testing.expect(try emitHashMatchCompressedBlock(std.testing.allocator, &lazy, &payload, true, .lazy));
+    const pre_beam_len = @min(greedy.items.len, lazy.items.len);
+
+    try std.testing.expect(with_beam.items.len * 32 > payload.len);
+    try std.testing.expect(with_beam.items.len * 32 <= pre_beam_len * 31);
+    try std.testing.expect(with_beam.items.len < without_beam.items.len);
 }
 
 test "zstd adaptive candidates cap search at measured ratio plateau" {
