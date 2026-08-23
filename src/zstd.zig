@@ -9965,7 +9965,11 @@ fn absoluteOffsetSequenceCode(offset: usize) Error!u8 {
 fn planCompressedSequenceCodes(codes: []const u8) Error!?CompressedSequencePlan {
     if (codes.len < min_compressed_sequence_table_count or codes.len > max_native_sequence_count) return null;
 
-    var plan: CompressedSequencePlan = .{ .len = codes.len, .accuracy_log = 5 };
+    // Match FSE_optimalTableLog's source-size cap with the current compact u8
+    // state representation: 256+ symbols can amortize one extra state bit,
+    // while smaller plans retain the faster 32-state table.
+    const accuracy_log: u8 = if (codes.len >= 256) 6 else 5;
+    var plan: CompressedSequencePlan = .{ .len = codes.len, .accuracy_log = accuracy_log };
     var counts: [max_fse_compression_symbol + 1]u32 = .{0} ** (max_fse_compression_symbol + 1);
     var max_code: u8 = 0;
     for (codes, 0..) |code, i| {
@@ -15995,6 +15999,16 @@ test "zstd compressed sequence state scratch fits one byte" {
     for (plan.transition_values[0 .. plan.len - 1], plan.transition_bits[0 .. plan.len - 1]) |value, bits| {
         try std.testing.expect(value < (@as(usize, 1) << @intCast(bits)));
     }
+}
+
+test "zstd large sequence plans select a larger FSE table" {
+    var values: [256]usize = undefined;
+    for (&values, 0..) |*value, i| value.* = 1 + i % 8;
+    const plan = (try planCompressedSequenceValues(&values, .literal)) orelse return error.CorruptFrame;
+    try std.testing.expectEqual(@as(u8, 6), plan.accuracy_log);
+    const state_count = @as(usize, 1) << @as(u6, @intCast(plan.accuracy_log));
+    try std.testing.expect(plan.initial_state < state_count);
+    for (plan.next_states[0..plan.len]) |state| try std.testing.expect(state < state_count);
 }
 
 test "zstd reference FSE normalization preserves probability mass" {
