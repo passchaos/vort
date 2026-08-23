@@ -3130,6 +3130,15 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   fixed-CPU-8 stage pairs reduce JSON repeated/mixed measurement by about 5.9%;
   a 24-pair end-to-end JSON rerun retains 678 bytes and improves the median by
   about 0.7%, with the smaller cases within measurement noise.
+  Huffman tree emission now compares the legacy direct-weight header with the
+  existing FSE-compressed weight writer even when the alphabet fits the direct
+  format, retaining the shorter valid representation. A focused low-byte
+  alphabet oracle proves FSE wins and is selected; the expanded 76-case corpus
+  improves 40 frames with no regressions, including source prefixes by up to
+  631 bytes. Level-9 repetitive text drops from 93 to 81 bytes (libzstd 80),
+  numbered JSON from 678 to 644 bytes (libzstd 677), and binary remains 8611
+  bytes (libzstd 8609). Twenty-four fixed-CPU-8..10 A/B pairs improve text/JSON
+  medians by about 9.1%/2.4% while preserving external decoder compatibility.
   Adaptive 4/8 KiB candidates explicitly disable the beam: their lower-budget
   parsers remain the ratio fallback, while only the primary level-9 block pays
   the stateful search. Twelve fixed-CPU-8..10 end-to-end pairs versus the

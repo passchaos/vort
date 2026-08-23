@@ -10901,10 +10901,22 @@ fn validateSmallHuffmanLastWeight(plan: *const SmallHuffmanLiteralPlan) ?void {
 }
 
 fn emitSmallHuffmanTree(allocator: std.mem.Allocator, out: *std.ArrayList(u8), plan: *const SmallHuffmanLiteralPlan) Error!bool {
-    if (plan.max_symbol > native_max_direct_huffman_symbol) {
-        return try emitFseHuffmanTree(allocator, out, plan);
-    }
-    try out.append(allocator, 127 + plan.max_symbol); // direct Huffman weights for symbols 0..max_symbol-1.
+    var direct: std.ArrayList(u8) = .empty;
+    defer direct.deinit(allocator);
+    if (plan.max_symbol <= native_max_direct_huffman_symbol) try emitDirectHuffmanTree(allocator, &direct, plan);
+
+    var fse: std.ArrayList(u8) = .empty;
+    defer fse.deinit(allocator);
+    const fse_ok = try emitFseHuffmanTree(allocator, &fse, plan);
+    if (direct.items.len == 0 and !fse_ok) return false;
+    const selected = if (fse_ok and (direct.items.len == 0 or fse.items.len < direct.items.len)) fse.items else direct.items;
+    try out.appendSlice(allocator, selected);
+    return true;
+}
+
+fn emitDirectHuffmanTree(allocator: std.mem.Allocator, out: *std.ArrayList(u8), plan: *const SmallHuffmanLiteralPlan) Error!void {
+    if (plan.max_symbol > native_max_direct_huffman_symbol) return error.CorruptFrame;
+    try out.append(allocator, 127 + plan.max_symbol);
     const weights_byte_count: usize = (@as(usize, plan.max_symbol) + 1) / 2;
     for (0..weights_byte_count) |i| {
         const even_symbol: u8 = @intCast(i * 2);
@@ -10913,7 +10925,6 @@ fn emitSmallHuffmanTree(allocator: std.mem.Allocator, out: *std.ArrayList(u8), p
         const odd_weight: u8 = smallHuffmanExplicitWeight(plan, odd_symbol);
         try out.append(allocator, (even_weight << 4) | odd_weight);
     }
-    return true;
 }
 
 fn emitHuffmanLiteralsSectionWithPlan(
@@ -11020,8 +11031,6 @@ const ReverseBitstreamWriter = struct {
 };
 
 fn emitFseHuffmanTree(allocator: std.mem.Allocator, out: *std.ArrayList(u8), plan: *const SmallHuffmanLiteralPlan) Error!bool {
-    if (plan.max_symbol <= native_max_direct_huffman_symbol) return error.CorruptFrame;
-
     var weights: [255]u8 = undefined;
     // Zstandard does not serialize the final Huffman weight. The decoder
     // reconstructs it from the power sum so that the complete tree exactly
@@ -15661,6 +15670,25 @@ test "zstd raw literal header writer rejects compressed kinds as corrupt" {
     try std.testing.expectError(error.CorruptFrame, emitLiteralsHeader(std.testing.allocator, &out, .compressed, 1));
     try std.testing.expectError(error.CorruptFrame, emitLiteralsHeader(std.testing.allocator, &out, .treeless, 1));
     try std.testing.expectEqual(@as(usize, 0), out.items.len);
+}
+
+test "zstd Huffman tree chooses shorter FSE weights for low-byte alphabet" {
+    const payload = "Zstandard encode benchmark text with repeated structure and punctuation.\n";
+    const plan = smallHuffmanLiteralPlan(payload) orelse return error.CorruptFrame;
+    try std.testing.expect(plan.max_symbol <= native_max_direct_huffman_symbol);
+
+    var direct: std.ArrayList(u8) = .empty;
+    defer direct.deinit(std.testing.allocator);
+    try emitDirectHuffmanTree(std.testing.allocator, &direct, &plan);
+    var fse: std.ArrayList(u8) = .empty;
+    defer fse.deinit(std.testing.allocator);
+    try std.testing.expect(try emitFseHuffmanTree(std.testing.allocator, &fse, &plan));
+    try std.testing.expect(fse.items.len < direct.items.len);
+
+    var selected: std.ArrayList(u8) = .empty;
+    defer selected.deinit(std.testing.allocator);
+    try std.testing.expect(try emitSmallHuffmanTree(std.testing.allocator, &selected, &plan));
+    try std.testing.expectEqualSlices(u8, fse.items, selected.items);
 }
 
 test "zstd Huffman literal headers reject zero compressed size as corrupt" {
