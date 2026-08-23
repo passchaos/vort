@@ -3091,6 +3091,20 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   generated/source comparison remained byte-identical; twelve fixed-CPU-8..10
   pairs retained the 93/678/8611-byte text/JSON/binary frames and reduced their
   medians by about 3.4%/5.8%/1.5%, respectively.
+  Profile-guided mixed-planner work now builds candidate literal histograms in
+  four independent frequency lanes, then merges the 256 counters before the
+  unchanged Huffman construction. This removes the loop-carried dependency on
+  frequent JSON symbols while preserving the exact scalar plan. The shared
+  large-block duplicate index also links positions with non-empty predecessor
+  buckets, allowing each suffix query to skip positions that cannot contain a
+  match; Huffman stream sizing uses an unchecked internal accumulator only after
+  its freshly built histogram has proved that every referenced symbol is
+  present. Focused oracles cover the striped histogram, duplicate-index suffix
+  search, and Huffman stream boundaries. Two twelve-pair fixed-CPU-8 stage runs
+  retained candidate bytes and improved mixed JSON by about 13–14%, repetitive
+  text by about 5–6%, and binary by about 11%; twelve fixed-CPU-8..10 end-to-end
+  pairs retained 93/678/8611-byte frames and improved JSON/binary medians by
+  about 13.9%/3.6%, with text improving about 1.2%.
   Adaptive 4/8 KiB candidates explicitly disable the beam: their lower-budget
   parsers remain the ratio fallback, while only the primary level-9 block pays
   the stateful search. Twelve fixed-CPU-8..10 end-to-end pairs versus the

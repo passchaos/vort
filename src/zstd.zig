@@ -9391,30 +9391,51 @@ fn smallHuffmanLiteralPlanFromSequence(
 ) ?SmallHuffmanLiteralPlan {
     if (regenerated_len < 64 or regenerated_len > 0x3ffff) return null;
     if (literal_lens.len != literal_ends.len) return null;
-    var plan: SmallHuffmanLiteralPlan = .{};
+    // Four independent lanes break the loop-carried read/modify/write chain
+    // for common literal bytes. Mixed lookahead rebuilds this histogram for
+    // many candidate paths, where repeated JSON punctuation otherwise makes
+    // a single frequency slot serialize most of the scan.
+    var frequencies: SmallHuffmanFrequencies = @splat(@splat(0));
+    var literal_bytes: usize = 0;
     var literal_start: usize = 0;
     for (literal_lens, 0..) |literal_len, i| {
         if (literal_start > block.len or literal_len > block.len - literal_start) return null;
-        addBytesToSmallHuffmanLiteralPlan(&plan, block[literal_start..][0..literal_len]) orelse return null;
+        literal_bytes += literal_len;
+        addBytesToSmallHuffmanFrequencies(&frequencies, block[literal_start..][0..literal_len]);
         if (literal_ends[i] < literal_start + literal_len or literal_ends[i] > block.len) return null;
         literal_start = literal_ends[i];
     }
     if (tail_start > block.len) return null;
-    addBytesToSmallHuffmanLiteralPlan(&plan, block[tail_start..]) orelse return null;
+    literal_bytes += block.len - tail_start;
+    if (literal_bytes != regenerated_len) return null;
+    addBytesToSmallHuffmanFrequencies(&frequencies, block[tail_start..]);
+    var plan = smallHuffmanLiteralPlanFromFrequencies(&frequencies);
     finalizeSmallHuffmanLiteralPlan(&plan) orelse return null;
     return plan;
 }
 
-fn addBytesToSmallHuffmanLiteralPlan(plan: *SmallHuffmanLiteralPlan, bytes: []const u8) ?void {
-    for (bytes) |byte| {
-        if (plan.frequencies[byte] == 0) {
-            if (plan.len == plan.symbols.len) return null;
-            plan.symbols[plan.len] = byte;
-            plan.len += 1;
-            plan.max_symbol = @max(plan.max_symbol, byte);
-        }
-        plan.frequencies[byte] += 1;
+const small_huffman_frequency_lane_count = 4;
+const SmallHuffmanFrequencies = [small_huffman_frequency_lane_count][256]u32;
+
+fn addBytesToSmallHuffmanFrequencies(frequencies: *SmallHuffmanFrequencies, bytes: []const u8) void {
+    var cursor: usize = 0;
+    while (cursor + small_huffman_frequency_lane_count <= bytes.len) : (cursor += small_huffman_frequency_lane_count) {
+        inline for (0..small_huffman_frequency_lane_count) |lane| frequencies[lane][bytes[cursor + lane]] += 1;
     }
+    for (bytes[cursor..]) |byte| frequencies[0][byte] += 1;
+}
+
+fn smallHuffmanLiteralPlanFromFrequencies(frequencies: *const SmallHuffmanFrequencies) SmallHuffmanLiteralPlan {
+    var plan: SmallHuffmanLiteralPlan = .{};
+    for (0..256) |symbol| {
+        var frequency: u32 = 0;
+        inline for (0..small_huffman_frequency_lane_count) |lane| frequency += frequencies[lane][symbol];
+        if (frequency == 0) continue;
+        plan.frequencies[symbol] = frequency;
+        plan.symbols[plan.len] = @intCast(symbol);
+        plan.len += 1;
+    }
+    return plan;
 }
 
 fn finalizeSmallHuffmanLiteralPlan(plan: *SmallHuffmanLiteralPlan) ?void {
@@ -9464,12 +9485,12 @@ fn smallHuffmanLiteralStreamsSerializedLenFromSequence(
     var literal_start: usize = 0;
     for (literal_lens, 0..) |literal_len, i| {
         if (literal_start > block.len or literal_len > block.len - literal_start) return error.CorruptFrame;
-        try addSmallHuffmanStreamBits(block[literal_start..][0..literal_len], plan, regenerated_len, segment_len, &literal_index, &bit_counts);
+        try addSmallHuffmanStreamBitsKnown(block[literal_start..][0..literal_len], plan, regenerated_len, segment_len, &literal_index, &bit_counts);
         if (literal_ends[i] < literal_start + literal_len or literal_ends[i] > block.len) return error.CorruptFrame;
         literal_start = literal_ends[i];
     }
     if (tail_start > block.len) return error.CorruptFrame;
-    try addSmallHuffmanStreamBits(block[tail_start..], plan, regenerated_len, segment_len, &literal_index, &bit_counts);
+    try addSmallHuffmanStreamBitsKnown(block[tail_start..], plan, regenerated_len, segment_len, &literal_index, &bit_counts);
     if (literal_index != regenerated_len) return error.CorruptFrame;
 
     var len: usize = 6;
@@ -9517,6 +9538,40 @@ fn addSmallHuffmanStreamBits(
             if (bits == 0) return error.CorruptFrame;
             bit_counts[stream_index] += bits;
         }
+        cursor += run_len;
+        literal_index.* += run_len;
+    }
+}
+
+fn addSmallHuffmanStreamBitsKnown(
+    bytes: []const u8,
+    plan: *const SmallHuffmanLiteralPlan,
+    regenerated_len: usize,
+    segment_len: usize,
+    literal_index: *usize,
+    bit_counts: *[4]usize,
+) Error!void {
+    // This variant is called only with a plan built from this exact logical
+    // literal stream, so every indexed code width is non-zero. Keep all range
+    // and stream-boundary checks, but omit the redundant per-byte membership
+    // branch from the hot four-stream sizing pass.
+    var cursor: usize = 0;
+    while (cursor < bytes.len) {
+        if (literal_index.* >= regenerated_len) return error.CorruptFrame;
+        const stream_index: usize = @min(literal_index.* / segment_len, 3);
+        const stream_end = @min(regenerated_len, (stream_index + 1) * segment_len);
+        const run_len = @min(bytes.len - cursor, stream_end - literal_index.*);
+        if (run_len == 0) return error.CorruptFrame;
+        const run = bytes[cursor..][0..run_len];
+
+        var run_index: usize = 0;
+        while (run_index + 8 <= run.len) : (run_index += 8) {
+            const chunk = run[run_index..][0..8];
+            var chunk_bits: usize = 0;
+            inline for (0..8) |i| chunk_bits += plan.bit_counts[chunk[i]];
+            bit_counts[stream_index] += chunk_bits;
+        }
+        for (run[run_index..]) |byte| bit_counts[stream_index] += plan.bit_counts[byte];
         cursor += run_len;
         literal_index.* += run_len;
     }
@@ -10783,8 +10838,9 @@ fn smallHuffmanPlansEqual(a: *const SmallHuffmanLiteralPlan, b: *const SmallHuff
 
 fn smallHuffmanLiteralPlan(block: []const u8) ?SmallHuffmanLiteralPlan {
     if (block.len < 64 or block.len > 0x3ffff) return null;
-    var plan: SmallHuffmanLiteralPlan = .{};
-    addBytesToSmallHuffmanLiteralPlan(&plan, block) orelse return null;
+    var frequencies: SmallHuffmanFrequencies = @splat(@splat(0));
+    addBytesToSmallHuffmanFrequencies(&frequencies, block);
+    var plan = smallHuffmanLiteralPlanFromFrequencies(&frequencies);
     finalizeSmallHuffmanLiteralPlan(&plan) orelse return null;
     return plan;
 }
@@ -11576,6 +11632,10 @@ const DuplicateMatchIndex = struct {
     // therefore cannot reach the reserved 0xffff sentinel length.
     match_lengths: [duplicate_index_max_input_len][duplicate_hash_candidates]u16 = undefined,
     predecessor_counts: [duplicate_index_max_input_len]u8 = undefined,
+    // Each query needs only positions whose eight-byte hash has a predecessor.
+    // Link those positions once during construction so repeated mixed-plan
+    // suffix searches do not walk empty buckets byte by byte.
+    next_candidate_position: [duplicate_index_max_input_len]u16 = undefined,
     hash_predecessors: [duplicate_index_max_input_len]u16 = undefined,
 
     fn build(index: *DuplicateMatchIndex, block: []const u8) void {
@@ -11602,6 +11662,13 @@ const DuplicateMatchIndex = struct {
             const updated_len = @min(count + 1, duplicate_hash_candidates);
             const updated_next = (next_slot + 1) & (duplicate_hash_candidates - 1);
             states[hash] = @intCast((updated_len << 3) | updated_next);
+        }
+        var next_position: u16 = duplicate_index_invalid;
+        var position = block.len;
+        while (position != 0) {
+            position -= 1;
+            if (index.predecessor_counts[position] != 0) next_position = @intCast(position);
+            index.next_candidate_position[position] = next_position;
         }
     }
 };
@@ -11682,8 +11749,9 @@ fn findBestDuplicateMatchIndexed(block: []const u8, start_min: usize, index: *Du
     if (block.len < 24 or start_min + 16 > block.len) return null;
     var best: ?DuplicateMatch = null;
     var best_payload_len: usize = std.math.maxInt(usize);
-    var second = start_min;
-    while (second + 8 <= block.len) : (second += 1) {
+    var second: usize = index.next_candidate_position[start_min];
+    while (second != duplicate_index_invalid and second + 8 <= block.len) {
+        defer second = if (second + 1 < block.len) index.next_candidate_position[second + 1] else duplicate_index_invalid;
         if (best) |current| if (block.len - second < current.len) break;
         for (index.predecessors[second][0..index.predecessor_counts[second]], 0..) |candidate_index, age| {
             const first: usize = candidate_index;
@@ -15574,6 +15642,33 @@ test "zstd four-stream Huffman sizing matches scalar boundaries" {
         regenerated_len,
         &plan,
     )).?);
+}
+
+test "zstd striped Huffman histogram preserves scalar plan" {
+    var payload: [1031]u8 = undefined;
+    for (&payload, 0..) |*byte, i| byte.* = @intCast((i * 37 + i / 11) % 129);
+    var frequencies: SmallHuffmanFrequencies = @splat(@splat(0));
+    addBytesToSmallHuffmanFrequencies(&frequencies, &payload);
+    var plan = smallHuffmanLiteralPlanFromFrequencies(&frequencies);
+
+    var expected: SmallHuffmanLiteralPlan = .{};
+    for (payload) |byte| {
+        if (expected.frequencies[byte] == 0) {
+            expected.symbols[expected.len] = byte;
+            expected.len += 1;
+        }
+        expected.frequencies[byte] += 1;
+    }
+    _ = finalizeSmallHuffmanLiteralPlan(&expected) orelse return error.CorruptFrame;
+    _ = finalizeSmallHuffmanLiteralPlan(&plan) orelse return error.CorruptFrame;
+
+    try std.testing.expectEqualSlices(u32, &expected.frequencies, &plan.frequencies);
+    try std.testing.expectEqual(expected.len, plan.len);
+    try std.testing.expectEqual(expected.max_symbol, plan.max_symbol);
+    try std.testing.expectEqual(expected.max_bit_count, plan.max_bit_count);
+    try std.testing.expectEqualSlices(u8, expected.symbols[0..expected.len], plan.symbols[0..plan.len]);
+    try std.testing.expectEqualSlices(u4, expected.weights[0..expected.len], plan.weights[0..plan.len]);
+    try std.testing.expectEqualSlices(u8, &expected.bit_counts, &plan.bit_counts);
 }
 
 test "zstd FSE Huffman weight writer rejects invalid weights as corrupt" {
