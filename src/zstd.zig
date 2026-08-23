@@ -3611,6 +3611,39 @@ const LevelFrameCandidate = struct {
     }
 };
 
+// Ratio-oriented mixed lookahead is independent from the remaining match
+// families. Run it beside those families with a thread-safe temporary allocator
+// and copy only its completed block back after join, so callers may continue to
+// provide single-threaded allocators such as `std.testing.allocator`.
+const MixedBlockCandidate = struct {
+    block: []const u8,
+    last: bool,
+    match_search_budget: usize,
+    frame: ?[]u8 = null,
+    err: ?Error = null,
+
+    fn run(self: *MixedBlockCandidate) void {
+        var candidate: std.ArrayList(u8) = .empty;
+        defer candidate.deinit(std.heap.smp_allocator);
+        const ok = emitMixedDuplicateRepeatedMatchCompressedBlock(
+            std.heap.smp_allocator,
+            &candidate,
+            self.block,
+            self.last,
+            self.match_search_budget,
+            null,
+        ) catch |err| {
+            self.err = err;
+            return;
+        };
+        if (!ok) return;
+        self.frame = candidate.toOwnedSlice(std.heap.smp_allocator) catch |err| {
+            self.err = err;
+            return;
+        };
+    }
+};
+
 pub fn encodeFrameWithLevelAndOptionsAlloc(
     allocator: std.mem.Allocator,
     input: []const u8,
@@ -7268,6 +7301,40 @@ fn emitLiteralOnlyCompressedBlockWithHistory(
 
 fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, match_search_budget: usize) Error!bool {
     if (match_search_budget == 0) return false;
+    if (match_search_budget >= mixed_match_min_search_budget) {
+        var mixed_candidate: MixedBlockCandidate = .{
+            .block = block,
+            .last = last,
+            .match_search_budget = match_search_budget,
+        };
+        // Thread creation is an optimization only. If the platform refuses a
+        // worker, fall through to the byte-identical serial selector below.
+        if (std.Thread.spawn(.{}, MixedBlockCandidate.run, .{&mixed_candidate})) |thread| {
+            const non_mixed_budget = @min(match_search_budget, mixed_match_min_search_budget - 1);
+            const non_mixed_ok = emitNativeMatchCompressedBlock(allocator, out, block, last, non_mixed_budget) catch |err| {
+                thread.join();
+                if (mixed_candidate.frame) |frame| std.heap.smp_allocator.free(frame);
+                return err;
+            };
+            thread.join();
+            if (mixed_candidate.err) |err| return err;
+            if (mixed_candidate.frame) |mixed| {
+                defer std.heap.smp_allocator.free(mixed);
+                // Mixed historically ran first, so it retains an equal-length
+                // tie even though the other families complete on this thread.
+                if (!non_mixed_ok or mixed.len <= out.items.len) {
+                    out.clearRetainingCapacity();
+                    try out.appendSlice(allocator, mixed);
+                }
+            }
+            return out.items.len != 0;
+        } else |_| {}
+    }
+    return try emitNativeMatchCompressedBlockSerial(allocator, out, block, last, match_search_budget);
+}
+
+fn emitNativeMatchCompressedBlockSerial(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, match_search_budget: usize) Error!bool {
+    if (match_search_budget == 0) return false;
 
     // The bootstrap match emitters are intentionally independent heuristics.
     // Reuse one scratch buffer and retain only the current winner so a broad
@@ -7718,6 +7785,23 @@ test "zstd native match stage benchmark mirrors production emitters" {
         const result = try benchmarkNativeMatchStage(std.testing.allocator, payload, true, 192, stage, &scratch);
         try std.testing.expectEqual(expected_ok, result.available);
         try std.testing.expectEqual(if (expected_ok) expected.items.len else 0, result.encoded_len);
+    }
+}
+
+test "zstd parallel mixed match selection matches serial wire" {
+    const payloads = [_][]const u8{
+        "Zstandard parallel mixed candidate.\n" ** 1024,
+        ("abcdefgh" ** 2048) ++ ("bcdefgha" ** 2048),
+    };
+    for (payloads) |payload| {
+        var expected: std.ArrayList(u8) = .empty;
+        defer expected.deinit(std.testing.allocator);
+        const expected_ok = try emitNativeMatchCompressedBlockSerial(std.testing.allocator, &expected, payload, true, 96);
+        var actual: std.ArrayList(u8) = .empty;
+        defer actual.deinit(std.testing.allocator);
+        const actual_ok = try emitNativeMatchCompressedBlock(std.testing.allocator, &actual, payload, true, 96);
+        try std.testing.expectEqual(expected_ok, actual_ok);
+        try std.testing.expectEqualSlices(u8, expected.items, actual.items);
     }
 }
 

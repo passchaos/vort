@@ -3003,6 +3003,16 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   JSON block and reduced the stage median by about 15.1%; twelve end-to-end
   pairs retained 93/831/8850-byte frames, improving text by 28.2% and JSON by
   1.1% while binary stayed within 0.3% noise.
+  At budgets that enable ratio-oriented mixed lookahead, block arbitration now
+  evaluates mixed on a worker while the caller handles greedy/lazy/optimal,
+  repeated, and duplicate families. The worker uses Zig's thread-safe SMP
+  allocator for its isolated temporary block, so advanced callers can still
+  supply a single-threaded allocator; it owns an independent duplicate index
+  and falls back to the unchanged serial selector if thread
+  creation fails; mixed retains its historical equal-length tie priority. A
+  direct serial-wire oracle covers both repetitive shapes. Twelve fixed-CPU-
+  8..10 level-9 pairs retained 93/831/8850-byte frames and improved text/JSON
+  medians by about 14.8%/12.1%, with binary improving 1.7%.
   Large-block predecessor snapshots now carry a lazy `u16` match-length cache.
   The first mixed lookup still performs the exact existing extension and tie
   logic, while later mixed branches plus multi/single duplicate passes reuse the
