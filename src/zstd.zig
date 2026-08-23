@@ -9821,11 +9821,68 @@ fn buildFseDecodeTableFromNormalized(
 
 fn fillCompressedSequenceTransitions(plan: *CompressedSequencePlan, entries: []const FseTableEntry) Error!void {
     if (plan.len == 0) return error.CorruptFrame;
-    const last_state = findCompressedSequenceState(entries, plan.codes[plan.len - 1], null) orelse return error.CorruptFrame;
+    // Build compact per-symbol chains once. Walking only states whose symbol
+    // matches the current code preserves the old ascending-state tie rule while
+    // avoiding a full 32-entry table scan for every sequence position.
+    const invalid_state = std.math.maxInt(u8);
+    var symbol_heads: [max_fse_compression_symbol + 1]u8 = @splat(invalid_state);
+    var symbol_next: [max_sequence_fse_table_size]u8 = undefined;
+    var state = entries.len;
+    while (state > 0) {
+        state -= 1;
+        const symbol = entries[state].symbol;
+        if (symbol > max_fse_compression_symbol) return error.CorruptFrame;
+        symbol_next[state] = symbol_heads[symbol];
+        symbol_heads[symbol] = @intCast(state);
+    }
+
+    const last_state = symbol_heads[plan.codes[plan.len - 1]];
+    if (last_state == invalid_state) return error.CorruptFrame;
     var next_state = last_state;
     plan.next_states[plan.len - 1] = @intCast(entries[last_state].baseline);
     plan.state_bits[plan.len - 1] = entries[last_state].bits;
 
+    var i = plan.len - 1;
+    while (i > 0) {
+        i -= 1;
+        var candidate_state = symbol_heads[plan.codes[i]];
+        while (candidate_state != invalid_state) : (candidate_state = symbol_next[candidate_state]) {
+            const candidate = entries[candidate_state];
+            if (next_state >= candidate.baseline and
+                next_state - candidate.baseline < (@as(usize, 1) << @intCast(candidate.bits))) break;
+        }
+        if (candidate_state == invalid_state) return error.CorruptFrame;
+        const entry = entries[candidate_state];
+        if (next_state < entry.baseline) return error.CorruptFrame;
+        const transition = next_state - entry.baseline;
+        if (transition >= (@as(usize, 1) << @intCast(entry.bits))) return error.CorruptFrame;
+        plan.transition_values[i] = @intCast(transition);
+        plan.transition_bits[i] = entry.bits;
+        plan.next_states[i] = @intCast(entry.baseline);
+        plan.state_bits[i] = entry.bits;
+        next_state = candidate_state;
+    }
+    plan.initial_state = @intCast(next_state);
+}
+
+fn findCompressedSequenceState(entries: []const FseTableEntry, code: u8, maybe_next_state: ?usize) ?usize {
+    for (entries, 0..) |entry, state| {
+        if (entry.symbol != code) continue;
+        if (maybe_next_state) |next_state| {
+            if (next_state < entry.baseline) continue;
+            if (next_state - entry.baseline >= (@as(usize, 1) << @intCast(entry.bits))) continue;
+        }
+        return state;
+    }
+    return null;
+}
+
+fn fillCompressedSequenceTransitionsReference(plan: *CompressedSequencePlan, entries: []const FseTableEntry) Error!void {
+    if (plan.len == 0) return error.CorruptFrame;
+    const last_state = findCompressedSequenceState(entries, plan.codes[plan.len - 1], null) orelse return error.CorruptFrame;
+    var next_state = last_state;
+    plan.next_states[plan.len - 1] = @intCast(entries[last_state].baseline);
+    plan.state_bits[plan.len - 1] = entries[last_state].bits;
     var i = plan.len - 1;
     while (i > 0) {
         i -= 1;
@@ -9841,18 +9898,6 @@ fn fillCompressedSequenceTransitions(plan: *CompressedSequencePlan, entries: []c
         next_state = state;
     }
     plan.initial_state = @intCast(next_state);
-}
-
-fn findCompressedSequenceState(entries: []const FseTableEntry, code: u8, maybe_next_state: ?usize) ?usize {
-    for (entries, 0..) |entry, state| {
-        if (entry.symbol != code) continue;
-        if (maybe_next_state) |next_state| {
-            if (next_state < entry.baseline) continue;
-            if (next_state - entry.baseline >= (@as(usize, 1) << @intCast(entry.bits))) continue;
-        }
-        return state;
-    }
-    return null;
 }
 
 fn sequencePayloadLenWithTablePlans(
@@ -15574,6 +15619,38 @@ test "zstd compressed sequence state scratch fits one byte" {
     for (plan.next_states[0..plan.len]) |state| try std.testing.expect(state < max_predefined_sequence_states);
     for (plan.transition_values[0 .. plan.len - 1], plan.transition_bits[0 .. plan.len - 1]) |value, bits| {
         try std.testing.expect(value < (@as(usize, 1) << @intCast(bits)));
+    }
+}
+
+test "zstd compressed transition symbol index matches scan reference" {
+    var codes: [max_bootstrap_sequence_count]u8 = undefined;
+    var state: u32 = 0xa409_3822;
+    for (12..codes.len + 1) |len| {
+        for (codes[0..len]) |*code| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            code.* = @intCast((state >> 24) % 9);
+        }
+        var counts: [max_fse_compression_symbol + 1]u32 = .{0} ** (max_fse_compression_symbol + 1);
+        var max_code: u8 = 0;
+        for (codes[0..len]) |code| {
+            counts[code] += 1;
+            max_code = @max(max_code, code);
+        }
+        var normalized: [max_fse_compression_symbol + 1]i16 = .{0} ** (max_fse_compression_symbol + 1);
+        normalizeFseCounts(counts[0 .. @as(usize, max_code) + 1], len, 5, normalized[0 .. @as(usize, max_code) + 1]) orelse continue;
+        var entries: [max_sequence_fse_table_size]FseTableEntry = undefined;
+        const table_len = try buildFseDecodeTableFromNormalized(normalized[0 .. @as(usize, max_code) + 1], 5, &entries);
+        var expected: CompressedSequencePlan = .{ .len = len, .accuracy_log = 5 };
+        var actual: CompressedSequencePlan = .{ .len = len, .accuracy_log = 5 };
+        @memcpy(expected.codes[0..len], codes[0..len]);
+        @memcpy(actual.codes[0..len], codes[0..len]);
+        try fillCompressedSequenceTransitionsReference(&expected, entries[0..table_len]);
+        try fillCompressedSequenceTransitions(&actual, entries[0..table_len]);
+        try std.testing.expectEqual(expected.initial_state, actual.initial_state);
+        try std.testing.expectEqualSlices(u8, expected.next_states[0..len], actual.next_states[0..len]);
+        try std.testing.expectEqualSlices(u8, expected.state_bits[0..len], actual.state_bits[0..len]);
+        try std.testing.expectEqualSlices(u8, expected.transition_values[0 .. len - 1], actual.transition_values[0 .. len - 1]);
+        try std.testing.expectEqualSlices(u8, expected.transition_bits[0 .. len - 1], actual.transition_bits[0 .. len - 1]);
     }
 }
 

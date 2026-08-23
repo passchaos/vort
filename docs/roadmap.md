@@ -2916,6 +2916,14 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   retained the same candidate bytes while improving primary/4 KiB/8 KiB JSON
   mixed medians by about 4.8%/4.4%/5.4%; a twelve-pair 4 KiB run measured
   55.255 ms to 53.080 ms (1.041x).
+  Compressed-FSE transition planning now builds compact per-symbol state chains
+  once and walks only states matching the current code, rather than rescanning
+  all 32 table entries for every sequence. Reverse construction preserves the
+  former lowest-state tie order, and a randomized scan-reference oracle matches
+  initial states, baselines, state widths, transition values, and transition
+  widths for plans of 12 through 128 sequences. Ten fixed-CPU-8..10 pairs kept
+  all mixed candidate bytes while improving primary/4 KiB/8 KiB JSON medians
+  by about 5.4%/5.3%/6.8%; the 4 KiB median moved from 55.287 ms to 52.514 ms.
   Sequence-literal RLE detection now skips empty/already-disproved runs and uses
   the standard library's vectorized `allEqual` scan for each remaining run
   instead of branching once per byte. A focused reference oracle covers empty,
