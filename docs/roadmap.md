@@ -2940,6 +2940,16 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   and improve their level-9 medians from 66.839/83.803/26.387 ms to
   55.565/53.433/21.164 ms (1.203x/1.568x/1.247x). The stage CSV/gate now records
   the effective 192/64/64 budgets explicitly.
+  Large-block predecessor snapshots now carry a lazy `u16` match-length cache.
+  The first mixed lookup still performs the exact existing extension and tie
+  logic, while later mixed branches plus multi/single duplicate passes reuse the
+  result for the same `(second, predecessor-age)` pair. The cache adds 1 MiB to
+  the temporary index but needs no full clear: build marks only populated slots
+  with the reserved `0xffff` sentinel. Ten fixed-CPU-8..10 stage pairs retained
+  primary JSON candidate bytes while improving mixed from 19.033 to 17.497 ms
+  (1.083x) and multi-duplicate from 6.983 to 5.492 ms (1.271x); index setup rose
+  from 0.113 to 0.151 ms. Twelve end-to-end pairs kept the 1058-byte frame and
+  moved the median from 53.596 to 49.964 ms (1.073x).
   Sequence-literal RLE detection now skips empty/already-disproved runs and uses
   the standard library's vectorized `allEqual` scan for each remaining run
   instead of branching once per byte. A focused reference oracle covers empty,

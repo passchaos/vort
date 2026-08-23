@@ -7258,7 +7258,7 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     var optimal_scratch: lz77.OptimalScratch = .{};
     defer optimal_scratch.deinit(allocator);
     var duplicate_index: DuplicateMatchIndex = undefined;
-    const duplicate_index_ptr: ?*const DuplicateMatchIndex = if (block.len > duplicate_exact_hash_input_max and block.len <= duplicate_index_max_input_len) blk: {
+    const duplicate_index_ptr: ?*DuplicateMatchIndex = if (block.len > duplicate_exact_hash_input_max and block.len <= duplicate_index_max_input_len) blk: {
         duplicate_index.build(block);
         break :blk &duplicate_index;
     } else null;
@@ -7414,7 +7414,7 @@ pub fn benchmarkNativeMatchStage(
     if (match_search_budget > mixed_match_path_search_budget) return error.InvalidBlockPlan;
     scratch.candidate.clearRetainingCapacity();
 
-    const duplicate_index: ?*const DuplicateMatchIndex = if ((stage == .mixed or stage == .multi_duplicate or stage == .single_duplicate) and
+    const duplicate_index: ?*DuplicateMatchIndex = if ((stage == .mixed or stage == .multi_duplicate or stage == .single_duplicate) and
         block.len > duplicate_exact_hash_input_max and
         block.len <= duplicate_index_max_input_len)
     blk: {
@@ -7873,7 +7873,7 @@ fn emitMixedDuplicateRepeatedMatchCompressedBlock(
     block: []const u8,
     last: bool,
     match_search_budget: usize,
-    duplicate_index: ?*const DuplicateMatchIndex,
+    duplicate_index: ?*DuplicateMatchIndex,
 ) Error!bool {
     const plan = try bestMixedMatchLookaheadPlan(&.{}, block, 0, .{
         .dictionary = false,
@@ -7927,7 +7927,7 @@ fn dictionaryMixedMatchCandidate(
     };
 }
 
-fn duplicateMixedMatchCandidate(block: []const u8, literal_start: usize, duplicate_index: ?*const DuplicateMatchIndex) Error!?MixedMatchCandidate {
+fn duplicateMixedMatchCandidate(block: []const u8, literal_start: usize, duplicate_index: ?*DuplicateMatchIndex) Error!?MixedMatchCandidate {
     const best = if (duplicate_index) |index|
         try findBestDuplicateMatchIndexed(block, literal_start, index)
     else
@@ -8078,7 +8078,7 @@ fn bestMixedMatchLookaheadPlan(
     required_first: MixedMatchRequirement,
     required_second: MixedMatchRequirement,
     match_search_budget: usize,
-    duplicate_index: ?*const DuplicateMatchIndex,
+    duplicate_index: ?*DuplicateMatchIndex,
 ) Error!?MixedMatchLookaheadPlan {
     if (match_search_budget == 0) return null;
     var first_candidates: [mixed_candidates_per_position]MixedMatchCandidate = undefined;
@@ -8337,7 +8337,7 @@ fn mixedMatchCandidatesAtUncached(
     literal_start: usize,
     frame_offset: usize,
     allowed: MixedMatchKindSet,
-    duplicate_index: ?*const DuplicateMatchIndex,
+    duplicate_index: ?*DuplicateMatchIndex,
     out: []MixedMatchCandidate,
 ) Error!usize {
     if (out.len < mixed_candidates_per_position) return error.OutputTooSmall;
@@ -8374,7 +8374,7 @@ fn mixedMatchCandidatesAtUncached(
     return count;
 }
 
-fn duplicateMixedMatchCandidateAtCursor(block: []const u8, literal_start: usize, duplicate_index: ?*const DuplicateMatchIndex) Error!?MixedMatchCandidate {
+fn duplicateMixedMatchCandidateAtCursor(block: []const u8, literal_start: usize, duplicate_index: ?*DuplicateMatchIndex) Error!?MixedMatchCandidate {
     if (literal_start == 0 or literal_start + 8 > block.len) return null;
     var best: ?DuplicateMatch = null;
     if (duplicate_index) |index| {
@@ -8483,7 +8483,7 @@ fn emitMultiDictionaryMatchCompressedBlock(
     );
 }
 
-fn emitSingleMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*const DuplicateMatchIndex) Error!bool {
+fn emitSingleMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*DuplicateMatchIndex) Error!bool {
     if (rleByte(block) != null) return false;
     const match = if (duplicate_index) |index|
         try findBestDuplicateMatchIndexed(block, 0, index) orelse return false
@@ -8499,7 +8499,7 @@ fn emitSingleMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     return try emitBestSequenceCompressedBlock(allocator, out, block, last, &literal_lens, &offsets, &match_lens, &literal_ends, tail_start);
 }
 
-fn emitMultiDuplicateMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*const DuplicateMatchIndex) Error!bool {
+fn emitMultiDuplicateMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*DuplicateMatchIndex) Error!bool {
     if (rleByte(block) != null or block.len < 32) return false;
     var matches: [max_bootstrap_sequence_count]DuplicateMatch = undefined;
     var literal_lens: [max_bootstrap_sequence_count]usize = undefined;
@@ -11183,6 +11183,11 @@ const DuplicateMatch = struct {
 
 const DuplicateMatchIndex = struct {
     predecessors: [duplicate_index_max_input_len][duplicate_hash_candidates]u16 = undefined,
+    // Match lengths are computed only for predecessor pairs actually visited
+    // by a candidate search, then shared by mixed, multi, and single passes.
+    // u16 is sufficient because an indexed match starts after byte zero and
+    // therefore cannot reach the reserved 0xffff sentinel length.
+    match_lengths: [duplicate_index_max_input_len][duplicate_hash_candidates]u16 = undefined,
     predecessor_counts: [duplicate_index_max_input_len]u8 = undefined,
     hash_predecessors: [duplicate_index_max_input_len]u16 = undefined,
 
@@ -11204,6 +11209,7 @@ const DuplicateMatchIndex = struct {
             for (0..count) |age| {
                 const slot = (next_slot + duplicate_hash_candidates - 1 - age) & (duplicate_hash_candidates - 1);
                 index.predecessors[position][age] = table[hash][slot];
+                index.match_lengths[position][age] = duplicate_index_invalid;
             }
             table[hash][next_slot] = @intCast(position);
             const updated_len = @min(count + 1, duplicate_hash_candidates);
@@ -11285,18 +11291,25 @@ fn findBestDuplicateMatchIn(block: []const u8, start_min: usize) Error!?Duplicat
     return try findBestDuplicateMatchHashed(block, start_min);
 }
 
-fn findBestDuplicateMatchIndexed(block: []const u8, start_min: usize, index: *const DuplicateMatchIndex) Error!?DuplicateMatch {
+fn findBestDuplicateMatchIndexed(block: []const u8, start_min: usize, index: *DuplicateMatchIndex) Error!?DuplicateMatch {
     if (block.len < 24 or start_min + 16 > block.len) return null;
     var best: ?DuplicateMatch = null;
     var best_payload_len: usize = std.math.maxInt(usize);
     var second = start_min;
     while (second + 8 <= block.len) : (second += 1) {
         if (best) |current| if (block.len - second < current.len) break;
-        for (index.predecessors[second][0..index.predecessor_counts[second]]) |candidate_index| {
+        for (index.predecessors[second][0..index.predecessor_counts[second]], 0..) |candidate_index, age| {
             const first: usize = candidate_index;
             if (first < start_min) continue;
             if (best) |current| if (block.len - second <= current.len) continue;
-            const len = duplicateMatchLength(block, first, second);
+            const cached_len = index.match_lengths[second][age];
+            const len: usize = if (cached_len == duplicate_index_invalid) blk: {
+                const computed = duplicateMatchLength(block, first, second);
+                // `second >= 1`, so the maximum suffix length fits below the
+                // all-ones sentinel for every indexed block.
+                index.match_lengths[second][age] = @intCast(computed);
+                break :blk computed;
+            } else cached_len;
             if (len < 8) continue;
             const candidate: DuplicateMatch = .{ .first_start = first, .second_start = second, .len = len };
             if (duplicateMatchCannotBeat(candidate, best)) continue;
