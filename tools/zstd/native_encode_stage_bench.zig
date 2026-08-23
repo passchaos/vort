@@ -62,14 +62,18 @@ pub fn main(init: std.process.Init) !void {
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.writeAll("case,level,candidate,block_size,block_count,stage,available_blocks,encoded_bytes,iterations,rounds,warmup,median_ns,ns_per_block,checksum\n");
+    try csv.writer.writeAll("case,level,candidate,block_size,block_count,search_budget,stage,available_blocks,encoded_bytes,iterations,rounds,warmup,median_ns,ns_per_block,checksum\n");
     var selected_rows: usize = 0;
     for (cases) |case| {
         if (options.only_case) |wanted| if (!std.mem.eql(u8, wanted, case.name)) continue;
         for (candidates) |candidate| {
             if (options.only_candidate) |wanted| if (!std.mem.eql(u8, wanted, candidate.name)) continue;
             if (candidate.block_size >= case.payload.len and !std.mem.eql(u8, candidate.name, "primary")) continue;
-            selected_rows += try benchmarkCandidate(init.io, init.gpa, &csv.writer, case, candidate, policy.primary_options.match_search_budget, options);
+            const search_budget = if (std.mem.eql(u8, candidate.name, "primary"))
+                policy.primary_options.match_search_budget
+            else
+                policy.adaptive_match_search_budget;
+            selected_rows += try benchmarkCandidate(init.io, init.gpa, &csv.writer, case, candidate, search_budget, options);
         }
     }
     if (selected_rows == 0) return error.InvalidBlockPlan;
@@ -163,12 +167,13 @@ fn writeMeasuredRow(
     const median = samples[samples.len / 2];
     const blocks_per_sample = blockCount(case.payload.len, candidate.block_size) * options.iterations;
     const ns_per_block = if (blocks_per_sample == 0) 0 else median.ns / blocks_per_sample;
-    try csv.print("{s},{d},{s},{d},{d},{s},{d},{d},{d},{d},{d},{d},{d},{d}\n", .{
+    try csv.print("{s},{d},{s},{d},{d},{d},{s},{d},{d},{d},{d},{d},{d},{d},{d}\n", .{
         case.name,
         options.level,
         candidate.name,
         candidate.block_size,
         blockCount(case.payload.len, candidate.block_size),
+        search_budget,
         stage.name(),
         available_blocks,
         encoded_len,

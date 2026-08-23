@@ -2924,6 +2924,15 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   widths for plans of 12 through 128 sequences. Ten fixed-CPU-8..10 pairs kept
   all mixed candidate bytes while improving primary/4 KiB/8 KiB JSON medians
   by about 5.4%/5.3%/6.8%; the 4 KiB median moved from 55.287 ms to 52.514 ms.
+  The earlier budget sweep also showed both level-9 adaptive split candidates
+  had already reached their locked wire plateau at 96 mixed states. Adaptive
+  4/8 KiB candidates now cap only their own search at 96 while the primary
+  candidate retains the level's full 192-state fallback. The policy is shared by
+  serial selection, parallel selection, and stage diagnostics, whose CSV now
+  records and gates each candidate's effective budget. Ten fixed-CPU-8..10
+  end-to-end pairs retained 93/1058/9009-byte text/JSON/binary frames; median
+  text and JSON times improved from 77.619/99.391 ms to 66.943/84.028 ms
+  (1.159x/1.183x), while binary remained within noise at 0.996x.
   Sequence-literal RLE detection now skips empty/already-disproved runs and uses
   the standard library's vectorized `allEqual` scan for each remaining run
   instead of branching once per byte. A focused reference oracle covers empty,

@@ -6,7 +6,7 @@ import csv
 from pathlib import Path
 
 COLUMNS = [
-    "case", "level", "candidate", "block_size", "block_count",
+    "case", "level", "candidate", "block_size", "block_count", "search_budget",
     "stage", "available_blocks", "encoded_bytes", "iterations",
     "rounds", "warmup", "median_ns", "ns_per_block", "checksum",
 ]
@@ -37,6 +37,8 @@ def main() -> int:
     assert len(rows) == len(expected)
     for row in rows:
         assert int(row["level"]) == 9, row
+        expected_budget = 192 if row["candidate"] == "primary" else 96
+        assert int(row["search_budget"]) == expected_budget, row
         for key in ("block_size", "block_count", "iterations", "rounds", "warmup", "median_ns"):
             assert int(row[key]) > 0, row
         assert int(row["ns_per_block"]) >= 0, row

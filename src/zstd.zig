@@ -65,6 +65,10 @@ const lazy_match_min_search_budget = 32;
 // 1. Keep the legacy multi-duplicate scan for level 2+ ratio arbitration, but do
 // not rebuild its 1 MiB candidate table repeatedly for the fastest level.
 const multi_duplicate_min_search_budget = 32;
+// The adaptive 4/8 KiB candidates reach their measured ratio plateau at the
+// minimum mixed-planner budget. Keep the primary candidate at the full level
+// budget, so the high-level selector still has an unrestricted ratio fallback.
+const adaptive_split_match_search_budget_max = mixed_match_min_search_budget;
 const repeated_pattern_period_max = 64;
 const repeated_pattern_start_scan = 48;
 const max_direct_huffman_symbol = 128;
@@ -3615,8 +3619,7 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
         var candidate_count: usize = 0;
         for (block_sizes) |block_size| {
             if (block_size >= input.len or block_size == primary_options.block_size_max) continue;
-            var split_options = primary_options;
-            split_options.block_size_max = block_size;
+            const split_options = adaptiveLevelCandidateOptions(primary_options, block_size);
             candidates[candidate_count] = .{ .allocator = parallel_allocator, .input = input, .options = split_options };
             candidate_count += 1;
         }
@@ -3663,8 +3666,7 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
     // single fragile block size into a compression level.
     for (adaptiveLevelBlockSizes(level)) |block_size| {
         if (block_size >= input.len or block_size == primary_options.block_size_max) continue;
-        var split_options = primary_options;
-        split_options.block_size_max = block_size;
+        const split_options = adaptiveLevelCandidateOptions(primary_options, block_size);
         const candidate = try encodeNativeFrameWithOptionsAlloc(allocator, input, split_options);
         if (candidate.frame.len < best.frame.len) {
             allocator.free(best.frame);
@@ -3864,12 +3866,20 @@ fn adaptiveLevelBlockSizes(level: c_int) [2]usize {
     };
 }
 
+fn adaptiveLevelCandidateOptions(primary: NativeFrameOptions, block_size: usize) NativeFrameOptions {
+    var options = primary;
+    options.block_size_max = block_size;
+    options.match_search_budget = @min(options.match_search_budget, adaptive_split_match_search_budget_max);
+    return options;
+}
+
 /// Snapshot of the native frame candidates evaluated by the one-shot level
 /// facade. This is an observability surface for benchmark tooling, not a
 /// promise that future levels will keep the same search budget or split ladder.
 pub const NativeEncodeLevelDiagnostics = struct {
     primary_options: NativeFrameOptions,
     adaptive_block_sizes: [2]usize,
+    adaptive_match_search_budget: usize,
 };
 
 /// Report the exact primary options and adaptive split sizes currently selected
@@ -3877,9 +3887,11 @@ pub const NativeEncodeLevelDiagnostics = struct {
 /// the encoder prevents the stage benchmark from silently drifting when level
 /// mappings are tuned.
 pub fn nativeEncodeLevelDiagnostics(level: c_int, options: FrameOptions) Error!NativeEncodeLevelDiagnostics {
+    const primary_options = try nativeFrameOptionsForLevel(level, options);
     return .{
-        .primary_options = try nativeFrameOptionsForLevel(level, options),
+        .primary_options = primary_options,
         .adaptive_block_sizes = adaptiveLevelBlockSizes(level),
+        .adaptive_match_search_budget = @min(primary_options.match_search_budget, adaptive_split_match_search_budget_max),
     };
 }
 
@@ -13932,6 +13944,20 @@ test "zstd compression levels map to increasing search budgets" {
     try std.testing.expectError(error.InvalidBlockPlan, nativeFrameOptionsForLevel(max_compression_level + 1, options));
 }
 
+test "zstd adaptive candidates cap search at measured ratio plateau" {
+    const level3 = try nativeEncodeLevelDiagnostics(3, .{});
+    const level5 = try nativeEncodeLevelDiagnostics(5, .{});
+    const level9 = try nativeEncodeLevelDiagnostics(9, .{});
+    try std.testing.expectEqual(@as(usize, 64), level3.adaptive_match_search_budget);
+    try std.testing.expectEqual(@as(usize, 96), level5.adaptive_match_search_budget);
+    try std.testing.expectEqual(@as(usize, 96), level9.adaptive_match_search_budget);
+    try std.testing.expectEqual(@as(usize, 128), level5.primary_options.match_search_budget);
+    try std.testing.expectEqual(@as(usize, 192), level9.primary_options.match_search_budget);
+    const split = adaptiveLevelCandidateOptions(level9.primary_options, level9.adaptive_block_sizes[0]);
+    try std.testing.expectEqual(level9.adaptive_block_sizes[0], split.block_size_max);
+    try std.testing.expectEqual(level9.adaptive_match_search_budget, split.match_search_budget);
+}
+
 test "zstd low latency levels defer mixed-family match search" {
     const level1 = try nativeFrameOptionsForLevel(1, .{});
     const level2 = try nativeFrameOptionsForLevel(2, .{});
@@ -13985,8 +14011,7 @@ test "zstd parallel adaptive candidates match serial selection" {
     var expected = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, structured.items, primary_options);
     defer std.testing.allocator.free(expected.frame);
     for (adaptiveLevelBlockSizes(level)) |block_size| {
-        var split_options = primary_options;
-        split_options.block_size_max = block_size;
+        const split_options = adaptiveLevelCandidateOptions(primary_options, block_size);
         const candidate = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, structured.items, split_options);
         if (candidate.frame.len < expected.frame.len) {
             std.testing.allocator.free(expected.frame);
