@@ -8856,6 +8856,9 @@ fn emitMultiSequencePredefinedCompressedBlockWithLiterals(
         literal_plan,
         offset_plan,
         match_plan,
+        literal_lens,
+        offsets,
+        match_lens,
     );
 
     var sequence_bits: std.ArrayList(u8) = .empty;
@@ -10133,7 +10136,7 @@ fn multiSequencePayloadLenInternal(
     const match_plan = (try planPredefinedSequenceValues(match_lens, &sequence_predefined.match_symbols, 0)) orelse return error.CorruptFrame;
 
     const literals_section_len = try sequenceLiteralsPayloadSectionLen(block, literal_lens, literal_ends, tail_start);
-    return try predefinedSequencePayloadLenFromPlans(literal_plan, offset_plan, match_plan, literals_section_len);
+    return try predefinedSequencePayloadLenFromPlans(literal_plan, offset_plan, match_plan, literal_lens, offsets, match_lens, literals_section_len);
 }
 
 fn predefinedSequencePayloadLenWithLiteralsLen(
@@ -10147,16 +10150,20 @@ fn predefinedSequencePayloadLenWithLiteralsLen(
     const literal_plan = (try planPredefinedSequenceValues(literal_lens, &sequence_predefined.literal_symbols, 0)) orelse return error.CorruptFrame;
     const offset_plan = (try planPredefinedSequenceValues(offsets, &sequence_predefined.offset_symbols, 2)) orelse return error.CorruptFrame;
     const match_plan = (try planPredefinedSequenceValues(match_lens, &sequence_predefined.match_symbols, 0)) orelse return error.CorruptFrame;
-    return try predefinedSequencePayloadLenFromPlans(literal_plan, offset_plan, match_plan, literals_section_len);
+    return try predefinedSequencePayloadLenFromPlans(literal_plan, offset_plan, match_plan, literal_lens, offsets, match_lens, literals_section_len);
 }
 
 fn predefinedSequencePayloadLenFromPlans(
     literal_plan: PredefinedSequencePlan,
     offset_plan: PredefinedSequencePlan,
     match_plan: PredefinedSequencePlan,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
     literals_section_len: usize,
 ) Error!usize {
     if (literal_plan.len != offset_plan.len or literal_plan.len != match_plan.len) return error.CorruptFrame;
+    if (literal_lens.len != literal_plan.len or offsets.len != literal_plan.len or match_lens.len != literal_plan.len) return error.CorruptFrame;
     var len = literals_section_len;
     len = std.math.add(usize, len, try sequenceCountLen(literal_plan.len)) catch return error.IntegerOverflow;
     len = std.math.add(usize, len, 1) catch return error.IntegerOverflow; // sequence mode byte
@@ -10167,6 +10174,9 @@ fn predefinedSequencePayloadLenFromPlans(
         literal_plan,
         offset_plan,
         match_plan,
+        literal_lens,
+        offsets,
+        match_lens,
     );
     var bit_count: usize = 1; // Reverse bitstream end marker.
     for (read_fields[0..read_field_count]) |field| {
@@ -11802,8 +11812,10 @@ const BitField = struct {
 
 const PredefinedSequencePlan = struct {
     len: usize = 0,
+    // Source LL/OF/ML values stay in the caller-owned plan arrays. Keeping
+    // another 128-usize copy here made each alternative and combined-plan copy
+    // substantially larger during mixed lookahead without adding ownership.
     states: [max_bootstrap_sequence_count]usize = undefined,
-    values: [max_bootstrap_sequence_count]usize = undefined,
 };
 
 fn buildPredefinedStateMasks(
@@ -11895,7 +11907,6 @@ fn planPredefinedSequenceValues(values: []const usize, symbols: []const Sequence
     const initial_state: usize = @ctz(viable_next);
 
     var plan: PredefinedSequencePlan = .{ .len = values.len };
-    @memcpy(plan.values[0..values.len], values);
     plan.states[0] = initial_state;
     for (0..values.len - 1) |i| {
         plan.states[i + 1] = next_choice[i][plan.states[i]];
@@ -11940,7 +11951,6 @@ fn planPredefinedSequenceValuesReference(values: []const usize, symbols: []const
     };
     var plan: PredefinedSequencePlan = .{ .len = values.len };
     plan.states[0] = first_state orelse return null;
-    @memcpy(plan.values[0..values.len], values);
     for (0..values.len - 1) |i| plan.states[i + 1] = next_choice[i][plan.states[i]];
     return plan;
 }
@@ -11983,8 +11993,12 @@ fn predefinedSequenceReadFields(
     literal_plan: PredefinedSequencePlan,
     offset_plan: PredefinedSequencePlan,
     match_plan: PredefinedSequencePlan,
+    literal_lens: []const usize,
+    offsets: []const usize,
+    match_lens: []const usize,
 ) Error!usize {
     if (literal_plan.len != offset_plan.len or literal_plan.len != match_plan.len) return error.CorruptFrame;
+    if (literal_lens.len != literal_plan.len or offsets.len != literal_plan.len or match_lens.len != literal_plan.len) return error.CorruptFrame;
     const needed = 3 + literal_plan.len * 3 + if (literal_plan.len > 1) (literal_plan.len - 1) * 3 else 0;
     if (out.len < needed) return error.OutputTooSmall;
 
@@ -11998,9 +12012,9 @@ fn predefinedSequenceReadFields(
         const offset_symbol = sequence_predefined.offset_symbols[offset_plan.states[i]];
         const match_symbol = sequence_predefined.match_symbols[match_plan.states[i]];
 
-        try appendBitField(out, &count, offset_plan.values[i] - offset_symbol.base, offset_symbol.additional_bits);
-        try appendBitField(out, &count, match_plan.values[i] - match_symbol.base, match_symbol.additional_bits);
-        try appendBitField(out, &count, literal_plan.values[i] - literal_symbol.base, literal_symbol.additional_bits);
+        try appendBitField(out, &count, offsets[i] - offset_symbol.base, offset_symbol.additional_bits);
+        try appendBitField(out, &count, match_lens[i] - match_symbol.base, match_symbol.additional_bits);
+        try appendBitField(out, &count, literal_lens[i] - literal_symbol.base, literal_symbol.additional_bits);
 
         if (i + 1 < literal_plan.len) {
             try appendBitField(out, &count, literal_plan.states[i + 1] - literal_symbol.next_state, literal_symbol.state_bits);

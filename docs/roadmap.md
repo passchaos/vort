@@ -2902,6 +2902,14 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   60.031 ms (1.006x). Two broader structural trials—borrowing the large duplicate
   index in the candidate cache and pruning generic FSE planning with a proven
   lower bound—were neutral or slower and were fully reverted.
+  Predefined sequence plans no longer duplicate their caller-owned LL/OF/ML
+  values into three fixed 128-`usize` arrays. They now retain only the selected
+  FSE states, while scoring and emission explicitly borrow the original values;
+  this shrinks every alternative and combined-plan copy without changing state
+  selection or wire output. Fixed-CPU-8..10 interleaved stage checks improved
+  primary/4 KiB/8 KiB JSON mixed medians by about 1.8%/8.0%/7.8%; the focused
+  4 KiB twelve-pair run moved from 59.640 ms to 55.221 ms (1.080x), retaining
+  the 9823-byte aggregate candidate output.
   Sequence-literal RLE detection now skips empty/already-disproved runs and uses
   the standard library's vectorized `allEqual` scan for each remaining run
   instead of branching once per byte. A focused reference oracle covers empty,
