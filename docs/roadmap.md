@@ -3068,6 +3068,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   focused JSON beam stage to about 1.28 ms. Twelve fixed-CPU-8..10 end-to-end
   pairs against the four-match beam improved JSON/binary medians by roughly
   1.6%/1.2%, with text unchanged.
+  Match arbitration now evaluates the beam before the ordinary optimal parser
+  and skips that redundant DP when the beam block is at most 1/32 of source
+  size. An explicit structured oracle proves the beam beats the ordinary
+  families at this threshold, while the expanded generated/source corpus stays
+  byte-identical. Twelve fixed-CPU-8..10 pairs improve level-9 text/JSON by
+  about 21.2%/9.6%, with binary within 0.8% noise.
   Adaptive 4/8 KiB candidates explicitly disable the beam: their lower-budget
   parsers remain the ratio fallback, while only the primary level-9 block pays
   the stateful search. Twelve fixed-CPU-8..10 end-to-end pairs versus the

@@ -7390,10 +7390,6 @@ fn emitNativeMatchCompressedBlockSerialWithBeam(allocator: std.mem.Allocator, ou
     try retainShortestCandidate(allocator, lazy_ok, candidate.items, &best);
 
     candidate.clearRetainingCapacity();
-    const optimal_ok = try emitOptimalHashMatchCompressedBlockReuse(allocator, &candidate, block, last, &optimal_scratch);
-    try retainShortestCandidate(allocator, optimal_ok, candidate.items, &best);
-
-    candidate.clearRetainingCapacity();
     const rep_beam_plan = if (enable_rep_beam)
         lz77.optimalRepBeamPlanAlloc(allocator, block, zstdHashParserOptions(block.len)) catch |err| switch (err) {
             error.InvalidBlockPlan => null,
@@ -7405,6 +7401,13 @@ fn emitNativeMatchCompressedBlockSerialWithBeam(allocator: std.mem.Allocator, ou
         defer plan.deinit(allocator);
         const rep_beam_ok = try emitHashTokenSequenceBlock(allocator, &candidate, block, last, plan.tokens, plan.stats);
         try retainShortestCandidate(allocator, rep_beam_ok, candidate.items, &best);
+    }
+
+    const beam_is_decisive = rep_beam_plan != null and best.items.len * 32 <= block.len;
+    if (!beam_is_decisive) {
+        candidate.clearRetainingCapacity();
+        const optimal_ok = try emitOptimalHashMatchCompressedBlockReuse(allocator, &candidate, block, last, &optimal_scratch);
+        try retainShortestCandidate(allocator, optimal_ok, candidate.items, &best);
     }
 
     candidate.clearRetainingCapacity();
@@ -14333,6 +14336,24 @@ test "zstd rep beam parser closes structured level nine ratio gap" {
     const decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload.items, decoded);
+}
+
+test "zstd decisive rep beam safely bypasses ordinary optimal parser" {
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    while (payload.items.len < 32 * 1024) {
+        var line: [128]u8 = undefined;
+        const index = payload.items.len / 64;
+        const formatted = try std.fmt.bufPrint(&line, "{{\"id\":{d},\"service\":\"vort\",\"message\":\"structured zstd encode corpus\"}}\n", .{index});
+        try payload.appendSlice(std.testing.allocator, formatted);
+    }
+    var with_skip: std.ArrayList(u8) = .empty;
+    defer with_skip.deinit(std.testing.allocator);
+    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &with_skip, payload.items, true, 95, true));
+    var all_families: std.ArrayList(u8) = .empty;
+    defer all_families.deinit(std.testing.allocator);
+    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &all_families, payload.items, true, 95, false));
+    try std.testing.expect(with_skip.items.len < all_families.items.len);
 }
 
 test "zstd adaptive candidates cap search at measured ratio plateau" {
