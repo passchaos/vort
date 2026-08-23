@@ -55,11 +55,14 @@ def main() -> int:
     assert int(json_rows[9]["vort_bytes"]) <= 13_506, json_rows
     assert int(json_rows[1]["vort_bytes"]) <= 1_505, json_rows
     assert int(json_rows[3]["vort_bytes"]) <= 1_350, json_rows
-    assert int(json_rows[9]["vort_bytes"]) <= 1_058, json_rows
+    # The level-9 repeat-aware beam closes the structured JSON gap to one byte
+    # over libzstd 1.5.5 on this locked corpus. Keep lower-level ceilings
+    # independent because they intentionally omit that ratio-oriented parser.
+    assert int(json_rows[9]["vort_bytes"]) <= 678, json_rows
     binary_rows = {int(row["level"]): row for row in rows if row["case"] == "binary"}
     assert int(binary_rows[1]["vort_bytes"]) <= 9_274, binary_rows
     assert int(binary_rows[3]["vort_bytes"]) <= 9_116, binary_rows
-    assert int(binary_rows[9]["vort_bytes"]) <= 9_009, binary_rows
+    assert int(binary_rows[9]["vort_bytes"]) <= 8_611, binary_rows
     print(f"zstd_encode_bench_gate=ok rows={len(rows)} reference_version={rows[0]['reference_version']}")
     return 0
 
