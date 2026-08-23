@@ -2959,7 +2959,8 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   greedy, lazy, and optimal hash parsers even when the 128-sequence encoder
   ceiling rejects their block. On the locked 32 KiB JSON input, primary optimal
   currently produces 471 matches while every 4/8 KiB block stays within the
-  limit (476/473 total across all blocks). This explains why raising the fixed
+  limit (476/473 total across all blocks). Primary greedy, lazy, and optimal all
+  report 471 matches on this corpus. This explains why raising the fixed
   ceiling to 256 still did not admit the primary hash plan and identifies
   multi-block sequence-table emission or match coalescing as the next ratio
   feature, rather than another small capacity bump.
