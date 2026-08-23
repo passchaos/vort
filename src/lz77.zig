@@ -324,6 +324,7 @@ pub fn lazyGreedyPlanAllocWithDictionary(allocator: std.mem.Allocator, input: []
 }
 
 fn preferScanLazy(input: []const u8) bool {
+    const max_scan_trigram_buckets = 64;
     if (input.len < 1024) return true;
 
     var seen: [256]bool = @splat(false);
@@ -347,17 +348,19 @@ fn preferScanLazy(input: []const u8) bool {
             if (!trigrams[bucket]) {
                 trigrams[bucket] = true;
                 trigram_count += 1;
-                if (trigram_count > 96) return false;
+                if (trigram_count > max_scan_trigram_buckets) return false;
             }
         }
     }
     // The backwards scanner wins on tiny and low-entropy inputs because it has
     // no table allocation/clear cost and quickly finds long repeated runs.
     // Byte diversity alone is a weak proxy: Markdown/source often has fewer
-    // than 48 distinct bytes in the first KiB but hundreds of distinct 3-byte
-    // anchors, so a blind backward scan burns time on non-candidates. Use a
-    // small 256-bucket trigram sketch to keep RLE/repetitive text on the scan
-    // path while routing natural text/source blocks to the hash-chain parser.
+    // than 48 distinct bytes in the first KiB but many distinct 3-byte
+    // anchors, so a blind backward scan burns time on non-candidates. The
+    // 64-bucket cutoff routes numbered JSON (83 buckets in the first KiB) to
+    // hashing while keeping the repeated-text benchmark (61) on the cheaper
+    // scan path. Use this small sketch to distinguish structure without a full
+    // trial parse.
     return true;
 }
 
@@ -1210,6 +1213,15 @@ test "combined dictionary/input match length uses word and tail paths" {
 test "lazy parser scan preference separates repetitive from source-like blocks" {
     try std.testing.expect(preferScanLazy("abcabcabcabc" ** 128));
     try std.testing.expect(preferScanLazy("0123456789abcdef" ** 128));
+
+    var numbered_json: std.ArrayList(u8) = .empty;
+    defer numbered_json.deinit(std.testing.allocator);
+    while (numbered_json.items.len < 2048) {
+        var line: [96]u8 = undefined;
+        const formatted = try std.fmt.bufPrint(&line, "{{\"id\":{d},\"service\":\"vort\",\"message\":\"structured input\"}}\n", .{numbered_json.items.len / 64});
+        try numbered_json.appendSlice(std.testing.allocator, formatted);
+    }
+    try std.testing.expect(!preferScanLazy(numbered_json.items));
 
     const source_like =
         \\const std = @import("std");

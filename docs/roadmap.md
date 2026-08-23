@@ -2981,6 +2981,15 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   retained every serial three-candidate winner, while twelve fixed-CPU-8..10
   interleaved level-9 pairs retained 93/831/8850-byte text/JSON/binary frames
   and reduced median encode time by about 3.4%/1.3%/19.1%, respectively.
+  The lazy LZ77 dispatch sketch now routes inputs with more than 64 distinct
+  first-KiB trigram buckets to the hash-chain parser instead of waiting for 96.
+  This catches the numbered-JSON shape (83 buckets) while keeping the repeated
+  text benchmark (61) on its faster backward scan, and does not change either
+  parser's match semantics. Twelve fixed-CPU-8..10 interleaved level-9 pairs
+  retained 93/831/8850-byte outputs and reduced JSON median time by 23.4%; text
+  and binary remained within about 0.7%/0.3% noise. An attempted lazy candidate
+  depth reduction from eight to four produced no stable end-to-end gain and was
+  reverted.
   Large-block predecessor snapshots now carry a lazy `u16` match-length cache.
   The first mixed lookup still performs the exact existing extension and tie
   logic, while later mixed branches plus multi/single duplicate passes reuse the
