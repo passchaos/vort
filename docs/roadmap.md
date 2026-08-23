@@ -2947,6 +2947,14 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   fixed-CPU-8..10 pairs against the 192-state version retained 93/1058/9009-byte
   text/JSON/binary frames and improved medians from 56.485/49.946/21.154 ms to
   33.881/44.209/21.196 ms (1.643x/1.213x/1.001x).
+  Multi-duplicate planning now returns its first global-best match to the final
+  single-duplicate candidate, whose first lookup was identical. Reusing that
+  match removes one full matcher/score pass per block whenever multi planning
+  runs, while a focused oracle proves the direct and reused single-candidate
+  wires are byte-identical. Ten fixed-CPU-8..10 end-to-end pairs retained the
+  93/1058/9009-byte level-9 outputs; JSON improved from 44.241 to 42.474 ms
+  (1.042x), binary from 21.141 to 19.964 ms (1.059x), and text regressed about
+  1.1%, so the change is retained for its net structured/binary gain.
   Large-block predecessor snapshots now carry a lazy `u16` match-length cache.
   The first mixed lookup still performs the exact existing extension and tie
   logic, while later mixed branches plus multi/single duplicate passes reuse the

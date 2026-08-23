@@ -7297,14 +7297,22 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
     try retainShortestCandidate(allocator, repeated_ok, candidate.items, &best);
 
     candidate.clearRetainingCapacity();
+    var first_duplicate: ?DuplicateMatch = null;
     const multi_duplicate_ok = if (match_search_budget >= multi_duplicate_min_search_budget)
-        try emitMultiDuplicateMatchCompressedBlock(allocator, &candidate, block, last, duplicate_index_ptr)
+        try emitMultiDuplicateMatchCompressedBlockWithFirst(allocator, &candidate, block, last, duplicate_index_ptr, &first_duplicate)
     else
         false;
     try retainShortestCandidate(allocator, multi_duplicate_ok, candidate.items, &best);
 
     candidate.clearRetainingCapacity();
-    const single_duplicate_ok = try emitSingleMatchCompressedBlock(allocator, &candidate, block, last, duplicate_index_ptr);
+    // Multi-duplicate starts with the exact same global-best query as the
+    // single candidate. Reuse that result rather than walking/scoring the block
+    // again; if multi did not run or found no first match, preserve the direct
+    // fallback.
+    const single_duplicate_ok = if (first_duplicate) |match|
+        try emitSingleMatchCompressedBlockFromMatch(allocator, &candidate, block, last, match)
+    else
+        try emitSingleMatchCompressedBlock(allocator, &candidate, block, last, duplicate_index_ptr);
     try retainShortestCandidate(allocator, single_duplicate_ok, candidate.items, &best);
 
     if (best.items.len == 0) return false;
@@ -7639,6 +7647,25 @@ test "zstd native match stage benchmark rejects stale duplicate index" {
         error.InvalidBlockPlan,
         benchmarkNativeMatchStage(std.testing.allocator, &second, true, 192, .single_duplicate, &scratch),
     );
+}
+
+test "zstd single duplicate emitter reuses multi first match wire" {
+    const payload = ("{\"service\":\"vort\",\"message\":\"shared duplicate\"}\n" ** 128);
+    var index: DuplicateMatchIndex = undefined;
+    index.build(payload);
+    var multi: std.ArrayList(u8) = .empty;
+    defer multi.deinit(std.testing.allocator);
+    var first: ?DuplicateMatch = null;
+    _ = try emitMultiDuplicateMatchCompressedBlockWithFirst(std.testing.allocator, &multi, payload, true, &index, &first);
+    const match = first orelse return error.CorruptFrame;
+
+    var expected: std.ArrayList(u8) = .empty;
+    defer expected.deinit(std.testing.allocator);
+    try std.testing.expect(try emitSingleMatchCompressedBlock(std.testing.allocator, &expected, payload, true, &index));
+    var actual: std.ArrayList(u8) = .empty;
+    defer actual.deinit(std.testing.allocator);
+    try std.testing.expect(try emitSingleMatchCompressedBlockFromMatch(std.testing.allocator, &actual, payload, true, match));
+    try std.testing.expectEqualSlices(u8, expected.items, actual.items);
 }
 
 fn emitHashTokenSequenceBlock(
@@ -8489,6 +8516,10 @@ fn emitSingleMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
         try findBestDuplicateMatchIndexed(block, 0, index) orelse return false
     else
         try findBestDuplicateMatch(block) orelse return false;
+    return try emitSingleMatchCompressedBlockFromMatch(allocator, out, block, last, match);
+}
+
+fn emitSingleMatchCompressedBlockFromMatch(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, match: DuplicateMatch) Error!bool {
     const literal_len = match.second_start;
     const offset = match.second_start - match.first_start;
     const tail_start = match.second_start + match.len;
@@ -8500,6 +8531,12 @@ fn emitSingleMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
 }
 
 fn emitMultiDuplicateMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*DuplicateMatchIndex) Error!bool {
+    var first_match: ?DuplicateMatch = null;
+    return try emitMultiDuplicateMatchCompressedBlockWithFirst(allocator, out, block, last, duplicate_index, &first_match);
+}
+
+fn emitMultiDuplicateMatchCompressedBlockWithFirst(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, duplicate_index: ?*DuplicateMatchIndex, first_match: *?DuplicateMatch) Error!bool {
+    first_match.* = null;
     if (rleByte(block) != null or block.len < 32) return false;
     var matches: [max_bootstrap_sequence_count]DuplicateMatch = undefined;
     var literal_lens: [max_bootstrap_sequence_count]usize = undefined;
@@ -8511,6 +8548,7 @@ fn emitMultiDuplicateMatchCompressedBlock(allocator: std.mem.Allocator, out: *st
         else
             try findBestDuplicateMatchIn(block, literal_start) orelse break;
         const literal_len = match.second_start - literal_start;
+        if (count == 0) first_match.* = match;
         matches[count] = match;
         literal_lens[count] = literal_len;
         count += 1;
