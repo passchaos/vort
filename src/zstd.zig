@@ -65,10 +65,11 @@ const lazy_match_min_search_budget = 32;
 // 1. Keep the legacy multi-duplicate scan for level 2+ ratio arbitration, but do
 // not rebuild its 1 MiB candidate table repeatedly for the fastest level.
 const multi_duplicate_min_search_budget = 32;
-// The adaptive 4/8 KiB candidates reach their measured ratio plateau at the
-// minimum mixed-planner budget. Keep the primary candidate at the full level
-// budget, so the high-level selector still has an unrestricted ratio fallback.
-const adaptive_split_match_search_budget_max = mixed_match_min_search_budget;
+// The adaptive 4/8 KiB candidates preserve their locked output without mixed
+// recursion at the 64-state level-3 budget. Keep the primary candidate at the
+// full level budget, so the high-level selector still has an unrestricted ratio
+// fallback if a corpus benefits from the mixed family.
+const adaptive_split_match_search_budget_max: usize = 64;
 const repeated_pattern_period_max = 64;
 const repeated_pattern_start_scan = 48;
 const max_direct_huffman_symbol = 128;
@@ -13949,8 +13950,8 @@ test "zstd adaptive candidates cap search at measured ratio plateau" {
     const level5 = try nativeEncodeLevelDiagnostics(5, .{});
     const level9 = try nativeEncodeLevelDiagnostics(9, .{});
     try std.testing.expectEqual(@as(usize, 64), level3.adaptive_match_search_budget);
-    try std.testing.expectEqual(@as(usize, 96), level5.adaptive_match_search_budget);
-    try std.testing.expectEqual(@as(usize, 96), level9.adaptive_match_search_budget);
+    try std.testing.expectEqual(@as(usize, 64), level5.adaptive_match_search_budget);
+    try std.testing.expectEqual(@as(usize, 64), level9.adaptive_match_search_budget);
     try std.testing.expectEqual(@as(usize, 128), level5.primary_options.match_search_budget);
     try std.testing.expectEqual(@as(usize, 192), level9.primary_options.match_search_budget);
     const split = adaptiveLevelCandidateOptions(level9.primary_options, level9.adaptive_block_sizes[0]);

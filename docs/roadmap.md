@@ -2933,6 +2933,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   end-to-end pairs retained 93/1058/9009-byte text/JSON/binary frames; median
   text and JSON times improved from 77.619/99.391 ms to 66.943/84.028 ms
   (1.159x/1.183x), while binary remained within noise at 0.996x.
+  A follow-up 64-state cutoff disables mixed recursion in only the adaptive
+  candidates while retaining the 192-state primary safety net. The full nine-row
+  encode gate still preserves every locked wire. Ten fixed-CPU-8..10 pairs
+  against the 96-state version retain 93/1058/9009-byte text/JSON/binary frames
+  and improve their level-9 medians from 66.839/83.803/26.387 ms to
+  55.565/53.433/21.164 ms (1.203x/1.568x/1.247x). The stage CSV/gate now records
+  the effective 192/64/64 budgets explicitly.
   Sequence-literal RLE detection now skips empty/already-disproved runs and uses
   the standard library's vectorized `allEqual` scan for each remaining run
   instead of branching once per byte. A focused reference oracle covers empty,
