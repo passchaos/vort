@@ -517,7 +517,7 @@ const rep_beam_match_candidates = 4;
 const rep_beam_input_max = std.math.maxInt(u16);
 
 const RepBeamState = struct {
-    cost: usize = std.math.maxInt(usize),
+    cost: u32 = std.math.maxInt(u32),
     rep0: u16 = 1,
     previous_position: u16 = 0,
     previous_slot: u8 = 0,
@@ -547,9 +547,9 @@ pub fn optimalRepBeamPlanAlloc(allocator: std.mem.Allocator, input: []const u8, 
         const match_count = try index.matchesAt(input, position, options, &matches);
         const current = states[position * rep_beam_width ..][0..lengths[position]];
         for (current, 0..) |state, slot| {
-            if (state.cost == std.math.maxInt(usize)) continue;
+            if (state.cost == std.math.maxInt(u32)) continue;
             try insertRepBeamState(states, lengths, position + 1, .{
-                .cost = std.math.add(usize, state.cost, fixedLiteralCost(input[position])) catch continue,
+                .cost = std.math.add(u32, state.cost, @intCast(fixedLiteralCost(input[position]))) catch continue,
                 .rep0 = state.rep0,
                 .previous_position = @intCast(position),
                 .previous_slot = @intCast(slot),
@@ -571,7 +571,7 @@ pub fn optimalRepBeamPlanAlloc(allocator: std.mem.Allocator, input: []const u8, 
     const final_states = states[input.len * rep_beam_width ..][0..lengths[input.len]];
     var best_slot: ?usize = null;
     for (final_states, 0..) |state, slot| {
-        if (state.cost == std.math.maxInt(usize)) continue;
+        if (state.cost == std.math.maxInt(u32)) continue;
         if (best_slot == null or state.cost < final_states[best_slot.?].cost) best_slot = slot;
     }
     var reversed = try initTokenList(allocator, input.len);
@@ -599,8 +599,9 @@ pub fn optimalRepBeamPlanAlloc(allocator: std.mem.Allocator, input: []const u8, 
 
 fn extendRepBeamMatch(states: []RepBeamState, lengths: []u8, _: []const u8, options: GreedyOptions, position: usize, slot: usize, state: RepBeamState, match: Token.Match) !void {
     if (match.length < minMatch(options) or match.distance == 0 or match.distance > position) return;
-    const distance_cost: usize = if (match.distance == state.rep0) 1 else fixedDistanceSymbolCost(match.distance);
-    const cost = std.math.add(usize, state.cost, fixed_length_costs[match.length] + distance_cost) catch return;
+    const distance_cost: u32 = @intCast(if (match.distance == state.rep0) 1 else fixedDistanceSymbolCost(match.distance));
+    const match_cost: u32 = @as(u32, fixed_length_costs[match.length]) + distance_cost;
+    const cost = std.math.add(u32, state.cost, match_cost) catch return;
     try insertRepBeamState(states, lengths, position + match.length, .{
         .cost = cost,
         .rep0 = match.distance,

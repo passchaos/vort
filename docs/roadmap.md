@@ -3051,6 +3051,9 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Beam storage now keeps one byte of valid-slot counts per source position
   instead of clearing every full state object before parsing. Focused JSON and
   binary medians move further to about 2.22/2.26 ms with identical output.
+  Beam path costs are bounded well below 32 bits for the supported <=64 KiB
+  block, so storing them as `u32` shrinks each state and improves the focused
+  JSON/binary medians again to about 2.12/2.20 ms without changing tokens.
   Adaptive 4/8 KiB candidates explicitly disable the beam: their lower-budget
   parsers remain the ratio fallback, while only the primary level-9 block pays
   the stateful search. Twelve fixed-CPU-8..10 end-to-end pairs versus the
