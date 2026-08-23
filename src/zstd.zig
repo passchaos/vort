@@ -7309,6 +7309,18 @@ fn emitLiteralOnlyCompressedBlockWithHistory(
 
 fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, match_search_budget: usize, rep_beam_search: bool) Error!bool {
     if (match_search_budget == 0) return false;
+    if (rep_beam_search) {
+        if (findPrefixTailDuplicateMatch(block)) |match| {
+            var candidate: std.ArrayList(u8) = .empty;
+            defer candidate.deinit(allocator);
+            if (try emitSingleMatchCompressedBlockFromMatch(allocator, &candidate, block, last, match) and
+                candidate.items.len * 32 <= block.len)
+            {
+                try out.appendSlice(allocator, candidate.items);
+                return true;
+            }
+        }
+    }
     if (match_search_budget >= mixed_match_min_search_budget) {
         var mixed_candidate: MixedBlockCandidate = .{
             .block = block,
@@ -7339,6 +7351,20 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
         } else |_| {}
     }
     return try emitNativeMatchCompressedBlockSerialWithBeam(allocator, out, block, last, match_search_budget, rep_beam_search);
+}
+
+fn findPrefixTailDuplicateMatch(block: []const u8) ?DuplicateMatch {
+    if (block.len < 16) return null;
+    const scan_end = @min(block.len / 2, 1024);
+    var second: usize = 1;
+    while (second + 8 <= scan_end) : (second += 1) {
+        if (!std.mem.eql(u8, block[0..8], block[second..][0..8])) continue;
+        const len = duplicateMatchLengthAfterAnchor(block, 0, second);
+        if (len == block.len - second) {
+            return .{ .first_start = 0, .second_start = second, .len = len };
+        }
+    }
+    return null;
 }
 
 fn emitNativeMatchCompressedBlockSerialWithBeam(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, match_search_budget: usize, enable_rep_beam: bool) Error!bool {
@@ -7882,6 +7908,22 @@ test "zstd parallel mixed match selection matches serial wire" {
         try std.testing.expectEqual(expected_ok, actual_ok);
         try std.testing.expectEqualSlices(u8, expected.items, actual.items);
     }
+}
+
+test "zstd prefix-tail shortcut matches full native selection" {
+    const payload = "Zstandard encode benchmark text with repeated structure and punctuation.\n" ** 512;
+    const match = findPrefixTailDuplicateMatch(payload) orelse return error.CorruptFrame;
+    try std.testing.expectEqual(@as(usize, 0), match.first_start);
+    try std.testing.expectEqual(payload.len, match.second_start + match.len);
+
+    var expected: std.ArrayList(u8) = .empty;
+    defer expected.deinit(std.testing.allocator);
+    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &expected, payload, true, 96, true));
+    var actual: std.ArrayList(u8) = .empty;
+    defer actual.deinit(std.testing.allocator);
+    try std.testing.expect(try emitNativeMatchCompressedBlock(std.testing.allocator, &actual, payload, true, 96, true));
+    try std.testing.expect(actual.items.len * 32 <= payload.len);
+    try std.testing.expectEqualSlices(u8, expected.items, actual.items);
 }
 
 test "zstd native match stage benchmark rejects stale duplicate index" {

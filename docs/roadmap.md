@@ -3121,6 +3121,15 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   remains byte-identical. Twelve fixed-CPU-8..10 end-to-end pairs keep the
   81/644/8611-byte text/JSON/binary frames and improve binary by about 10.2%; a
   24-pair binary rerun measures about 10.6%, with text/JSON within about 3%.
+  Level-9 block selection now probes the first 1 KiB for a prefix duplicate
+  that reaches the block end before launching the full candidate race. When its
+  normal single-match encoding is already at most 1/32 of the source, the same
+  decisive threshold returns it immediately instead of running beam, optimal,
+  mixed, repeated, and duplicate searches. A focused oracle compares the fast
+  path with full serial arbitration. The 76-case generated/source comparison
+  has no regressions and shrinks four strongly periodic cases by four bytes; a
+  24-pair fixed-CPU-8..10 run retains the 81-byte text frame and improves its
+  median by about 5.2%, with JSON unchanged within 0.1%.
   The large-block duplicate index now also records the whole block's high-byte
   count and maximum byte frequency. If a single match cannot remove every byte
   above the native direct-Huffman alphabet and no symbol can fill the retained
