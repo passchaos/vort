@@ -2955,6 +2955,14 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   93/1058/9009-byte level-9 outputs; JSON improved from 44.241 to 42.474 ms
   (1.042x), binary from 21.141 to 19.964 ms (1.059x), and text regressed about
   1.1%, so the change is retained for its net structured/binary gain.
+  Native stage diagnostics now expose the aggregate sequence count produced by
+  greedy, lazy, and optimal hash parsers even when the 128-sequence encoder
+  ceiling rejects their block. On the locked 32 KiB JSON input, primary optimal
+  currently produces 471 matches while every 4/8 KiB block stays within the
+  limit (476/473 total across all blocks). This explains why raising the fixed
+  ceiling to 256 still did not admit the primary hash plan and identifies
+  multi-block sequence-table emission or match coalescing as the next ratio
+  feature, rather than another small capacity bump.
   Large-block predecessor snapshots now carry a lazy `u16` match-length cache.
   The first mixed lookup still performs the exact existing extension and tie
   logic, while later mixed branches plus multi/single duplicate passes reuse the

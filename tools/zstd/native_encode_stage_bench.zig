@@ -14,7 +14,7 @@ const Options = struct {
 };
 const Candidate = struct { name: []const u8, block_size: usize };
 const Sample = struct { ns: u64, mix: usize };
-const Aggregate = struct { available_blocks: usize, encoded_len: usize };
+const Aggregate = struct { available_blocks: usize, encoded_len: usize, sequence_count: usize };
 
 const stages = [_]vort.zstd.NativeMatchStage{
     .mixed,
@@ -62,7 +62,7 @@ pub fn main(init: std.process.Init) !void {
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.writeAll("case,level,candidate,block_size,block_count,search_budget,stage,available_blocks,encoded_bytes,iterations,rounds,warmup,median_ns,ns_per_block,checksum\n");
+    try csv.writer.writeAll("case,level,candidate,block_size,block_count,search_budget,stage,available_blocks,sequences,encoded_bytes,iterations,rounds,warmup,median_ns,ns_per_block,checksum\n");
     var selected_rows: usize = 0;
     for (cases) |case| {
         if (options.only_case) |wanted| if (!std.mem.eql(u8, wanted, case.name)) continue;
@@ -104,13 +104,13 @@ fn benchmarkCandidate(
     if (stageSelected(options.only_stage, "duplicate_index")) {
         const indexed_block_count = try prepareAllBlocks(allocator, case.payload, candidate.block_size, &scratch);
         vort.zstd.benchmarkInvalidateNativeMatchStageScratch(&scratch);
-        try writeMeasuredRow(io, allocator, csv, case, candidate, search_budget, options, .index, indexed_block_count, 0, &scratch);
+        try writeMeasuredRow(io, allocator, csv, case, candidate, search_budget, options, .index, indexed_block_count, 0, 0, &scratch);
         selected_rows += 1;
     }
     for (stages) |stage| {
         if (!stageSelected(options.only_stage, @tagName(stage))) continue;
         const probe = try evaluateAllBlocks(allocator, case.payload, candidate.block_size, search_budget, stage, &scratch);
-        try writeMeasuredRow(io, allocator, csv, case, candidate, search_budget, options, .{ .candidate = stage }, probe.available_blocks, probe.encoded_len, &scratch);
+        try writeMeasuredRow(io, allocator, csv, case, candidate, search_budget, options, .{ .candidate = stage }, probe.available_blocks, probe.sequence_count, probe.encoded_len, &scratch);
         selected_rows += 1;
     }
     return selected_rows;
@@ -143,6 +143,7 @@ fn writeMeasuredRow(
     options: Options,
     stage: MeasuredStage,
     available_blocks: usize,
+    sequence_count: usize,
     encoded_len: usize,
     scratch: *vort.zstd.NativeMatchStageScratch,
 ) !void {
@@ -167,7 +168,7 @@ fn writeMeasuredRow(
     const median = samples[samples.len / 2];
     const blocks_per_sample = blockCount(case.payload.len, candidate.block_size) * options.iterations;
     const ns_per_block = if (blocks_per_sample == 0) 0 else median.ns / blocks_per_sample;
-    try csv.print("{s},{d},{s},{d},{d},{d},{s},{d},{d},{d},{d},{d},{d},{d},{d}\n", .{
+    try csv.print("{s},{d},{s},{d},{d},{d},{s},{d},{d},{d},{d},{d},{d},{d},{d},{d}\n", .{
         case.name,
         options.level,
         candidate.name,
@@ -176,6 +177,7 @@ fn writeMeasuredRow(
         search_budget,
         stage.name(),
         available_blocks,
+        sequence_count,
         encoded_len,
         options.iterations,
         options.rounds,
@@ -216,7 +218,7 @@ fn measureStagePass(
                 const start = std.Io.Clock.awake.now(io);
                 const result = try vort.zstd.benchmarkNativeMatchStage(allocator, block, end == payload.len, search_budget, candidate_stage, scratch);
                 sample.ns +%= elapsed(start, io);
-                sample.mix +%= result.encoded_len;
+                sample.mix +%= result.encoded_len +% result.sequence_count;
             },
         }
         offset = end;
@@ -245,6 +247,7 @@ fn evaluateAllBlocks(
 ) !Aggregate {
     var available_blocks: usize = 0;
     var encoded_len: usize = 0;
+    var sequence_count: usize = 0;
     var offset: usize = 0;
     while (offset < payload.len) {
         const end = @min(payload.len, offset + block_size);
@@ -254,9 +257,10 @@ fn evaluateAllBlocks(
         const result = try vort.zstd.benchmarkNativeMatchStage(allocator, block, end == payload.len, search_budget, stage, scratch);
         available_blocks += @intFromBool(result.available);
         encoded_len +%= result.encoded_len;
+        sequence_count +%= result.sequence_count;
         offset = end;
     }
-    return .{ .available_blocks = available_blocks, .encoded_len = encoded_len };
+    return .{ .available_blocks = available_blocks, .encoded_len = encoded_len, .sequence_count = sequence_count };
 }
 
 fn blockCount(input_len: usize, block_size: usize) usize {

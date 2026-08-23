@@ -7338,6 +7338,7 @@ pub const NativeMatchStage = enum {
 pub const NativeMatchStageResult = struct {
     available: bool,
     encoded_len: usize,
+    sequence_count: usize = 0,
 };
 
 pub const NativeMatchStageScratch = struct {
@@ -7433,23 +7434,42 @@ pub fn benchmarkNativeMatchStage(
         break :blk scratch.duplicate_index.?;
     } else null;
 
+    var sequence_count: usize = 0;
     const available = switch (stage) {
         .mixed => if (match_search_budget >= mixed_match_min_search_budget)
             try emitMixedDuplicateRepeatedMatchCompressedBlock(allocator, &scratch.candidate, block, last, match_search_budget, duplicate_index)
         else
             false,
-        .greedy => if (block.len <= 32 * 1024)
-            try emitGreedyHashMatchCompressedBlockReuse(allocator, &scratch.candidate, block, last, &scratch.greedy_tokens)
-        else
-            try emitHashMatchCompressedBlock(allocator, &scratch.candidate, block, last, .greedy),
+        .greedy => if (block.len <= 32 * 1024) blk: {
+            const parser_options = zstdHashParserOptions(block.len);
+            const stats = try lz77.hashGreedyPlanAutoTinyReuse(&scratch.greedy_tokens, allocator, block, parser_options);
+            sequence_count = stats.matches;
+            break :blk try emitHashTokenSequenceBlock(allocator, &scratch.candidate, block, last, scratch.greedy_tokens.items, stats);
+        } else blk: {
+            const plan = try lz77.hashGreedyPlanAutoTinyAlloc(allocator, block, zstdHashParserOptions(block.len));
+            defer plan.deinit(allocator);
+            sequence_count = plan.stats.matches;
+            break :blk try emitHashTokenSequenceBlock(allocator, &scratch.candidate, block, last, plan.tokens, plan.stats);
+        },
         .lazy => if (match_search_budget >= lazy_match_min_search_budget)
-            if (block.len <= 32 * 1024)
-                try emitLazyHashMatchCompressedBlockReuse(allocator, &scratch.candidate, block, last, &scratch.lazy_tokens)
-            else
-                try emitHashMatchCompressedBlock(allocator, &scratch.candidate, block, last, .lazy)
+            if (block.len <= 32 * 1024) blk: {
+                const parser_options = zstdHashParserOptions(block.len);
+                const stats = try lz77.hashLazyGreedyPlanTinyReuse(&scratch.lazy_tokens, allocator, block, parser_options);
+                sequence_count = stats.matches;
+                break :blk try emitHashTokenSequenceBlock(allocator, &scratch.candidate, block, last, scratch.lazy_tokens.items, stats);
+            } else blk: {
+                const plan = try lz77.lazyGreedyPlanAlloc(allocator, block, zstdHashParserOptions(block.len));
+                defer plan.deinit(allocator);
+                sequence_count = plan.stats.matches;
+                break :blk try emitHashTokenSequenceBlock(allocator, &scratch.candidate, block, last, plan.tokens, plan.stats);
+            }
         else
             false,
-        .optimal => try emitOptimalHashMatchCompressedBlockReuse(allocator, &scratch.candidate, block, last, &scratch.optimal),
+        .optimal => blk: {
+            const stats = try lz77.optimalPlanReuse(&scratch.optimal, allocator, block, zstdHashParserOptions(block.len));
+            sequence_count = stats.matches;
+            break :blk try emitHashTokenSequenceBlock(allocator, &scratch.candidate, block, last, scratch.optimal.tokens.items, stats);
+        },
         .repeated => try emitRepeatedPatternCompressedBlock(allocator, &scratch.candidate, block, last),
         .multi_duplicate => if (match_search_budget >= multi_duplicate_min_search_budget)
             try emitMultiDuplicateMatchCompressedBlock(allocator, &scratch.candidate, block, last, duplicate_index)
@@ -7460,6 +7480,20 @@ pub fn benchmarkNativeMatchStage(
     return .{
         .available = available,
         .encoded_len = if (available) scratch.candidate.items.len else 0,
+        .sequence_count = sequence_count,
+    };
+}
+
+fn zstdHashParserOptions(block_len: usize) lz77.GreedyOptions {
+    return .{
+        .window_len = @min(block_len, lz77.default_window_len),
+        .max_chain = 128,
+        .nice_len = 258,
+        .max_candidates = 8,
+        .min_match = 4,
+        .max_match = lz77.max_match_len,
+        .min_savings_bits = 0,
+        .lazy_min_gain = 1,
     };
 }
 

@@ -7,7 +7,7 @@ from pathlib import Path
 
 COLUMNS = [
     "case", "level", "candidate", "block_size", "block_count", "search_budget",
-    "stage", "available_blocks", "encoded_bytes", "iterations",
+    "stage", "available_blocks", "sequences", "encoded_bytes", "iterations",
     "rounds", "warmup", "median_ns", "ns_per_block", "checksum",
 ]
 CASES = {"text", "json", "binary"}
@@ -43,12 +43,17 @@ def main() -> int:
             assert int(row[key]) > 0, row
         assert int(row["ns_per_block"]) >= 0, row
         available_blocks = int(row["available_blocks"])
+        sequences = int(row["sequences"])
         encoded_bytes = int(row["encoded_bytes"])
         assert 0 <= available_blocks <= int(row["block_count"]), row
         if row["stage"] == "duplicate_index":
+            assert sequences == 0, row
             assert encoded_bytes == 0, row
         else:
+            assert sequences >= 0, row
             assert (available_blocks == 0) == (encoded_bytes == 0), row
+        if row["stage"] in {"greedy", "lazy", "optimal"}:
+            assert sequences > 0, row
 
     # The current level-9 policy is the subject of this benchmark. Pinning its
     # candidate labels to 128 KiB/4 KiB/8 KiB makes policy drift visible instead
