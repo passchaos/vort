@@ -3105,6 +3105,14 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   text by about 5–6%, and binary by about 11%; twelve fixed-CPU-8..10 end-to-end
   pairs retained 93/678/8611-byte frames and improved JSON/binary medians by
   about 13.9%/3.6%, with text improving about 1.2%.
+  Indexed cursor-match search now stops at the first match that reaches the end
+  of the block. The hash chain is newest-first, so this match has both the
+  maximum possible length and the smallest offset among every remaining
+  equal-length candidate. A focused scan-reference oracle pins that tie rule,
+  and the 76-case generated/source comparison remains byte-identical. Twelve
+  fixed-CPU-8 stage pairs retain candidate bytes while reducing repetitive-text
+  mixed time by about 56.6%; two end-to-end runs improve the 93-byte level-9
+  text case by about 39–45%, while JSON and binary remain within roughly 1%.
   Adaptive 4/8 KiB candidates explicitly disable the beam: their lower-budget
   parsers remain the ratio fallback, while only the primary level-9 block pays
   the stateful search. Twelve fixed-CPU-8..10 end-to-end pairs versus the

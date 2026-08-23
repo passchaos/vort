@@ -8663,6 +8663,10 @@ fn duplicateMixedMatchCandidateAtCursor(block: []const u8, literal_start: usize,
         var candidate_index = index.hash_predecessors[literal_start];
         while (candidate_index != duplicate_index_invalid) {
             considerCursorDuplicateMatch(block, literal_start, candidate_index, &best);
+            // The chain is newest first. A match reaching the block end has
+            // the maximum possible length, and later nodes can only offer the
+            // same length at a larger offset, which loses the tie-break.
+            if (best) |match| if (match.len == block.len - literal_start) break;
             candidate_index = index.hash_predecessors[candidate_index];
         }
     } else if (block.len > 4096) {
@@ -12137,6 +12141,10 @@ test "zstd reusable duplicate index matches rebuilt search" {
             );
         }
     }
+    const full_tail_match = (try duplicateMixedMatchCandidateAtCursor(repeated, 17, &repeated_index)) orelse return error.CorruptFrame;
+    try std.testing.expectEqual(repeated.len - 17, full_tail_match.match_len);
+    try std.testing.expectEqual(@as(usize, 8), full_tail_match.offset);
+    try std.testing.expectEqual(try duplicateMixedMatchCandidateAtCursorScan(repeated, 17), full_tail_match);
 }
 
 test "zstd duplicate match retains its selected payload score" {
