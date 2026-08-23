@@ -614,25 +614,25 @@ fn extendRepBeamMatch(states: []RepBeamState, lengths: []u8, _: []const u8, opti
 fn insertRepBeamState(states: []RepBeamState, lengths: []u8, position: usize, candidate: RepBeamState) !void {
     const slots = states[position * rep_beam_width ..][0..rep_beam_width];
     const len = lengths[position];
-    if (len < rep_beam_width) {
-        for (slots[0..len], 0..) |state, slot| {
-            if (state.rep0 == candidate.rep0) {
-                if (candidate.cost < state.cost) slots[slot] = candidate;
-                return;
-            }
-        }
-        slots[len] = candidate;
-        lengths[position] += 1;
+    if (len == 0) {
+        slots[0] = candidate;
+        lengths[position] = 1;
         return;
     }
-    var replacement: usize = 0;
-    for (slots, 0..) |state, slot| {
-        if (state.rep0 == candidate.rep0) {
-            if (candidate.cost < state.cost) slots[slot] = candidate;
-            return;
-        }
-        if (state.cost > slots[replacement].cost) replacement = slot;
+    if (slots[0].rep0 == candidate.rep0) {
+        if (candidate.cost < slots[0].cost) slots[0] = candidate;
+        return;
     }
+    if (len == 1) {
+        slots[1] = candidate;
+        lengths[position] = 2;
+        return;
+    }
+    if (slots[1].rep0 == candidate.rep0) {
+        if (candidate.cost < slots[1].cost) slots[1] = candidate;
+        return;
+    }
+    const replacement: usize = @intFromBool(slots[1].cost > slots[0].cost);
     if (candidate.cost < slots[replacement].cost) slots[replacement] = candidate;
 }
 

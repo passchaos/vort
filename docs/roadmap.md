@@ -3054,6 +3054,9 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Beam path costs are bounded well below 32 bits for the supported <=64 KiB
   block, so storing them as `u32` shrinks each state and improves the focused
   JSON/binary medians again to about 2.12/2.20 ms without changing tokens.
+  The fixed two-slot beam insertion is specialized to direct duplicate/update/
+  replacement comparisons instead of a generic loop; focused medians reach
+  about 2.09/2.17 ms for JSON/binary with identical 671/8612-byte blocks.
   Adaptive 4/8 KiB candidates explicitly disable the beam: their lower-budget
   parsers remain the ratio fallback, while only the primary level-9 block pays
   the stateful search. Twelve fixed-CPU-8..10 end-to-end pairs versus the
