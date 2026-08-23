@@ -3113,6 +3113,15 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   fixed-CPU-8 stage pairs retain candidate bytes while reducing repetitive-text
   mixed time by about 56.6%; two end-to-end runs improve the 93-byte level-9
   text case by about 39–45%, while JSON and binary remain within roughly 1%.
+  The large-block duplicate index now also records the whole block's high-byte
+  count and maximum byte frequency. If a single match cannot remove every byte
+  above the native direct-Huffman alphabet and no symbol can fill the retained
+  literal stream, its literal section is provably raw; indexed scoring skips
+  both Huffman passes in that case. A focused non-zero-suffix oracle compares
+  the shortcut with the complete scorer, and the 76-case generated/source set
+  remains byte-identical. Twelve fixed-CPU-8 stage pairs reduce binary mixed
+  time by about 24.8%; two end-to-end binary runs retain the 8611-byte frame and
+  improve medians by about 3.8–10.1%, while text/JSON remain scheduler-noisy.
   Adaptive 4/8 KiB candidates explicitly disable the beam: their lower-budget
   parsers remain the ratio fallback, while only the primary level-9 block pays
   the stateful search. Twelve fixed-CPU-8..10 end-to-end pairs versus the

@@ -11641,13 +11641,22 @@ const DuplicateMatchIndex = struct {
     // suffix searches do not walk empty buckets byte by byte.
     next_candidate_position: [duplicate_index_max_input_len]u16 = undefined,
     hash_predecessors: [duplicate_index_max_input_len]u16 = undefined,
+    high_byte_count: u16 = 0,
+    max_byte_frequency: u16 = 0,
 
     fn build(index: *DuplicateMatchIndex, block: []const u8) void {
         std.debug.assert(block.len <= duplicate_index_max_input_len);
+        index.high_byte_count = 0;
+        index.max_byte_frequency = 0;
+        var byte_frequencies: [256]u16 = @splat(0);
         var table: [duplicate_hash_table_len][duplicate_hash_candidates]u16 = undefined;
         var latest: [duplicate_hash_table_len]u16 = @splat(duplicate_index_invalid);
         var states: [duplicate_hash_table_len]u8 = @splat(0);
         for (0..block.len) |position| {
+            const byte = block[position];
+            byte_frequencies[byte] += 1;
+            index.max_byte_frequency = @max(index.max_byte_frequency, byte_frequencies[byte]);
+            index.high_byte_count += @intFromBool(byte > native_max_direct_huffman_symbol);
             index.predecessor_counts[position] = 0;
             if (position + 8 > block.len) continue;
             const hash = duplicateHash8(block[position..][0..8]);
@@ -11772,7 +11781,7 @@ fn findBestDuplicateMatchIndexed(block: []const u8, start_min: usize, index: *Du
             if (len < 8) continue;
             const candidate: DuplicateMatch = .{ .first_start = first, .second_start = second, .len = len };
             if (duplicateMatchCannotBeat(candidate, best)) continue;
-            const candidate_payload_len = singleMatchPayloadLenFrom(block, candidate, start_min) catch continue;
+            const candidate_payload_len = singleMatchPayloadLenFromIndex(block, candidate, start_min, index) catch continue;
             if (candidate_payload_len < best_payload_len or (candidate_payload_len == best_payload_len and len > (best orelse candidate).len)) {
                 var scored = candidate;
                 scored.payload_len = candidate_payload_len;
@@ -12160,6 +12169,27 @@ test "zstd duplicate match retains its selected payload score" {
     }
 }
 
+test "zstd indexed raw literal shortcut preserves single-match score" {
+    var payload: [8192]u8 = undefined;
+    var state: u32 = 0x243f_6a88;
+    for (&payload) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(payload[4096..4352], payload[1024..1280]);
+    var index: DuplicateMatchIndex = undefined;
+    index.build(&payload);
+    for ([_]usize{ 0, 17, 257, 2048 }) |start_min| {
+        const match = try findBestDuplicateMatchIndexed(&payload, start_min, &index) orelse continue;
+        try std.testing.expect(index.high_byte_count > start_min + match.len);
+        try std.testing.expect(index.max_byte_frequency < payload.len - start_min - match.len);
+        try std.testing.expectEqual(
+            try singleMatchPayloadLenFrom(&payload, match, start_min),
+            try singleMatchPayloadLenFromIndex(&payload, match, start_min, &index),
+        );
+    }
+}
+
 fn duplicateMatchCannotBeat(candidate: DuplicateMatch, current: ?DuplicateMatch) bool {
     const existing = current orelse return false;
     if (candidate.len < existing.len) return true;
@@ -12223,6 +12253,37 @@ fn singleMatchPayloadLenFrom(block: []const u8, match: DuplicateMatch, literal_s
     const literal_len = match.second_start - literal_start;
     const offset = match.second_start - match.first_start;
     return try singleBestSequencePayloadLen(block, literal_len, offset, match.len, match.second_start + match.len);
+}
+
+fn singleMatchPayloadLenFromIndex(block: []const u8, match: DuplicateMatch, literal_start: usize, index: *const DuplicateMatchIndex) Error!usize {
+    const literal_len = match.second_start - literal_start;
+    const offset = match.second_start - match.first_start;
+    const tail_start = match.second_start + match.len;
+    const regenerated_len = literal_len + block.len - tail_start;
+    // Native Huffman literals currently require every symbol <= 128. Removing
+    // A suffix score's logical stream also omits the `start_min` prefix, so at
+    // most `start_min + match.len` high bytes can disappear. An RLE literal
+    // section is impossible when no symbol occurs often enough to fill the
+    // retained stream. Under both conditions the literal section is provably
+    // raw, so avoid two scans plus Huffman construction.
+    const removed_len = std.math.add(usize, literal_start, match.len) catch return error.IntegerOverflow;
+    const literals_section_len = if (index.high_byte_count > removed_len and index.max_byte_frequency < regenerated_len)
+        std.math.add(usize, try literalsHeaderLen(regenerated_len), regenerated_len) catch return error.IntegerOverflow
+    else
+        return try singleMatchPayloadLenFrom(block, match, literal_start);
+    const literal_lens = [_]usize{literal_len};
+    const offsets = [_]usize{offset};
+    const match_lens = [_]usize{match.len};
+    var best: ?usize = null;
+    if (rleSequencePayloadLenForValuesWithLiteralsLen(&literal_lens, &offsets, &match_lens, literals_section_len)) |len| chooseShortestPayloadLen(len, &best) else |err| switch (err) {
+        error.CorruptFrame => {},
+        else => return err,
+    }
+    if (predefinedSequencePayloadLenWithLiteralsLen(&literal_lens, &offsets, &match_lens, literals_section_len)) |len| chooseShortestPayloadLen(len, &best) else |err| switch (err) {
+        error.CorruptFrame => {},
+        else => return err,
+    }
+    return best orelse error.CorruptFrame;
 }
 
 fn repeatedPatternPayloadLenFrom(block: []const u8, segment: RepeatedPatternSegment, literal_start: usize) ?usize {
