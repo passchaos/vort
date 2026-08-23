@@ -10798,6 +10798,9 @@ const SmallHuffmanLiteralPlan = struct {
     symbols: [256]u8 = undefined,
     weights: [256]u4 = undefined,
     frequencies: [256]u32 = .{0} ** 256,
+    // The format caps literal codes at 11 bits; u16 keeps the dense lookup
+    // compact while avoiding repeated canonical-code reconstruction.
+    codes: [256]u16 = [_]u16{0} ** 256,
     // Sequence-plan scoring visits every literal for every explored branch.
     // Keep the finalized code lengths addressable by byte value so that pass
     // is O(literals), rather than searching the sorted symbol list per byte.
@@ -10872,8 +10875,17 @@ fn fillSmallHuffmanWeights(plan: *SmallHuffmanLiteralPlan) ?void {
     plan.max_bit_count = max_bit_count;
 
     std.mem.sort(u8, plan.symbols[0..plan.len], &lengths, smallHuffmanSymbolLess);
+    var prefix: usize = 0;
+    var previous_weight = plan.max_bit_count + 1 - lengths[plan.symbols[0]];
     for (plan.symbols[0..plan.len], 0..) |symbol, i| {
-        plan.weights[i] = plan.max_bit_count + 1 - lengths[symbol];
+        const weight = plan.max_bit_count + 1 - lengths[symbol];
+        if (i != 0) {
+            prefix += 1;
+            if (weight != previous_weight) prefix = ((prefix - 1) >> @intCast(weight - previous_weight)) + 1;
+        }
+        plan.weights[i] = weight;
+        plan.codes[symbol] = @intCast(prefix);
+        previous_weight = weight;
     }
     validateSmallHuffmanLastWeight(plan) orelse return null;
 }
@@ -11621,10 +11633,7 @@ const SmallHuffmanLiteralLookup = struct {
 fn smallHuffmanLiteralLookup(plan: *const SmallHuffmanLiteralPlan) Error!SmallHuffmanLiteralLookup {
     var lookup: SmallHuffmanLiteralLookup = .{};
     for (plan.symbols[0..plan.len]) |symbol| {
-        // Encoding walks literals in reverse and consults the code for every
-        // byte. Precomputing a dense byte lookup once per block avoids scanning
-        // the sorted symbol list for each literal on 4-stream probe payloads.
-        lookup.codes[symbol] = smallHuffmanCode(plan, symbol) orelse return error.CorruptFrame;
+        lookup.codes[symbol] = plan.codes[symbol];
         lookup.bit_counts[symbol] = smallHuffmanBitCount(plan, symbol) orelse return error.CorruptFrame;
     }
     return lookup;
@@ -15601,6 +15610,10 @@ test "zstd finalized Huffman plan indexes bit counts by symbol" {
             0;
         try std.testing.expectEqual(expected, plan.bit_counts[symbol]);
         try std.testing.expectEqual(present[symbol], plan.bit_counts[symbol] != 0);
+        if (present[symbol]) try std.testing.expectEqual(
+            smallHuffmanCode(&plan, @intCast(symbol)) orelse return error.CorruptFrame,
+            plan.codes[symbol],
+        );
     }
 }
 

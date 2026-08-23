@@ -3139,6 +3139,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   numbered JSON from 678 to 644 bytes (libzstd 677), and binary remains 8611
   bytes (libzstd 8609). Twenty-four fixed-CPU-8..10 A/B pairs improve text/JSON
   medians by about 9.1%/2.4% while preserving external decoder compatibility.
+  Finalized literal Huffman plans now cache each symbol's canonical code beside
+  its already-dense bit count. Emission copies those tables directly instead of
+  rebuilding every code through repeated sorted-symbol scans for each candidate
+  block. A focused oracle compares every cached code with the prior derivation,
+  and the 76-case generated/source corpus remains byte-identical. Two fixed-CPU
+  end-to-end binary runs retain 8611 bytes and improve medians by about 22%,
+  while text/JSON remain within roughly 2% noise.
   Adaptive 4/8 KiB candidates explicitly disable the beam: their lower-budget
   parsers remain the ratio fallback, while only the primary level-9 block pays
   the stateful search. Twelve fixed-CPU-8..10 end-to-end pairs versus the
