@@ -2961,9 +2961,16 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   currently produces 471 matches while every 4/8 KiB block stays within the
   limit (476/473 total across all blocks). Primary greedy, lazy, and optimal all
   report 471 matches on this corpus. This explains why raising the fixed
-  ceiling to 256 still did not admit the primary hash plan and identifies
-  multi-block sequence-table emission or match coalescing as the next ratio
-  feature, rather than another small capacity bump.
+  ceiling to 256 still did not admit the primary hash plan. The native sequence
+  representation now has a separate 512-entry capacity while recursive mixed,
+  multi-duplicate, and repeated planners retain their measured 128-entry bound.
+  This admits the complete 471-match optimal block without expanding recursive
+  search state: locked level-9 JSON improves from 1058 to 831 bytes (the
+  libzstd 1.5.5 row is 677), and binary from 9009 to 8850 bytes (reference
+  8609), while text remains 93 bytes. Ten fixed-CPU-8..10 pairs measured about
+  2.6%/3.5% encode-time regressions for JSON/binary and 1.3% for text, accepted
+  for the substantial ratio improvement. A focused round-trip test covers a
+  real block whose optimal plan exceeds the 128-entry bootstrap capacity.
   Large-block predecessor snapshots now carry a lazy `u16` match-length cache.
   The first mixed lookup still performs the exact existing extension and tie
   logic, while later mixed branches plus multi/single duplicate passes reuse the

@@ -47,6 +47,11 @@ const mixed_candidates_per_position = 4;
 // sequence decisions on measured structured blocks. Larger fixed plans add
 // stack/code footprint without improving the emitted wire.
 const max_bootstrap_sequence_count = 128;
+// Hash parsers can cheaply produce substantially more sequences than the
+// recursive bootstrap planner can search. Keep their wire representation
+// capacity separate so a complete linear/DP plan is not discarded solely due
+// to the recursion-oriented stack bound.
+const max_native_sequence_count = 512;
 const min_compressed_sequence_table_count = 12;
 const max_predefined_sequence_states = 64;
 const mixed_match_path_search_budget = 512;
@@ -7646,6 +7651,31 @@ test "zstd reusable optimal hash emitter matches allocating wire" {
     try std.testing.expectEqualSlices(u8, expected.items, actual.items);
 }
 
+test "zstd hash emitter supports more than bootstrap sequence capacity" {
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    while (payload.items.len < 32 * 1024) {
+        var line: [128]u8 = undefined;
+        const index = payload.items.len / 64;
+        const formatted = try std.fmt.bufPrint(&line, "{{\"id\":{d},\"service\":\"vort\",\"message\":\"structured zstd encode corpus\"}}\n", .{index});
+        try payload.appendSlice(std.testing.allocator, formatted);
+    }
+    const parser_options = zstdHashParserOptions(payload.items.len);
+    var scratch: lz77.OptimalScratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    const stats = try lz77.optimalPlanReuse(&scratch, std.testing.allocator, payload.items, parser_options);
+    try std.testing.expect(stats.matches > max_bootstrap_sequence_count);
+    try std.testing.expect(stats.matches <= max_native_sequence_count);
+
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, payload.items.len, .{ .content_checksum = false });
+    try std.testing.expect(try emitHashTokenSequenceBlock(std.testing.allocator, &frame, payload.items, true, scratch.tokens.items, stats));
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload.items, decoded);
+}
+
 test "zstd native match stage benchmark mirrors production emitters" {
     const payload = ("{\"service\":\"vort\",\"message\":\"native stage benchmark\"}\n" ** 96) ++ ("abcdefghijklmnop" ** 32);
     var scratch: NativeMatchStageScratch = .{};
@@ -7710,18 +7740,18 @@ fn emitHashTokenSequenceBlock(
     tokens: []const lz77.Token,
     stats: lz77.PlanStats,
 ) Error!bool {
-    if (stats.matches < 2 or stats.matches > max_bootstrap_sequence_count) return false;
-    var literal_lens: [max_bootstrap_sequence_count]usize = undefined;
-    var offsets: [max_bootstrap_sequence_count]usize = undefined;
-    var match_lens: [max_bootstrap_sequence_count]usize = undefined;
-    var literal_ends: [max_bootstrap_sequence_count]usize = undefined;
+    if (stats.matches < 2 or stats.matches > max_native_sequence_count) return false;
+    var literal_lens: [max_native_sequence_count]usize = undefined;
+    var offsets: [max_native_sequence_count]usize = undefined;
+    var match_lens: [max_native_sequence_count]usize = undefined;
+    var literal_ends: [max_native_sequence_count]usize = undefined;
     var position: usize = 0;
     var literal_start: usize = 0;
     var count: usize = 0;
     for (tokens) |token| switch (token) {
         .literal => position += 1,
         .match => |match| {
-            if (count == max_bootstrap_sequence_count) return false;
+            if (count == max_native_sequence_count) return false;
             literal_lens[count] = position - literal_start;
             offsets[count] = match.distance;
             match_lens[count] = match.length;
@@ -8747,7 +8777,7 @@ fn emitRleSequenceCompressedBlockWithLiterals(
     match_lens: []const usize,
 ) Error!bool {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return false;
-    if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return false;
+    if (literal_lens.len == 0 or literal_lens.len > max_native_sequence_count) return false;
 
     const literal_code = try sequenceCodeForValue(literal_lens[0], &ll_base, &ll_bits);
     const offset_code = try sequenceCodeForValue(offsets[0], &of_base, &of_bits);
@@ -8767,7 +8797,7 @@ fn emitRleSequenceCompressedBlockWithLiterals(
     try payload.append(allocator, offset_code);
     try payload.append(allocator, match_code);
 
-    var fields: [max_bootstrap_sequence_count * 3]BitField = undefined;
+    var fields: [max_native_sequence_count * 3]BitField = undefined;
     var field_count: usize = 0;
     var i = literal_lens.len;
     while (i > 0) {
@@ -8871,7 +8901,7 @@ fn emitSequenceCompressedBlockWithTablePlans(
     try appendSequenceTablePayload(allocator, &payload, plan.offset);
     try appendSequenceTablePayload(allocator, &payload, plan.match);
 
-    var read_fields: [max_bootstrap_sequence_count * 6]BitField = undefined;
+    var read_fields: [max_native_sequence_count * 6]BitField = undefined;
     const selected_read_fields = if (prebuilt_read_fields) |fields| fields else blk: {
         const read_field_count = try sequenceReadFieldsWithTablePlans(
             read_fields[0..],
@@ -8923,7 +8953,7 @@ fn emitMultiSequencePredefinedCompressedBlockWithLiterals(
     match_lens: []const usize,
 ) Error!bool {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return false;
-    if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return false;
+    if (literal_lens.len == 0 or literal_lens.len > max_native_sequence_count) return false;
 
     const literal_plan = (try planPredefinedSequenceValues(literal_lens, &sequence_predefined.literal_symbols, 0)) orelse return false;
     const offset_plan = (try planPredefinedSequenceValues(offsets, &sequence_predefined.offset_symbols, 2)) orelse return false;
@@ -8935,7 +8965,7 @@ fn emitMultiSequencePredefinedCompressedBlockWithLiterals(
     try emitSequenceCount(allocator, &payload, literal_lens.len);
     try payload.append(allocator, 0x00); // LL, OF, and ML all use Predefined_Mode.
 
-    var read_fields: [max_bootstrap_sequence_count * 6]BitField = undefined;
+    var read_fields: [max_native_sequence_count * 6]BitField = undefined;
     const read_field_count = try predefinedSequenceReadFields(
         read_fields[0..],
         literal_plan,
@@ -9376,7 +9406,7 @@ fn bestSequencePayloadLenWithLiteralEnds(
     // discarded before emitBestSequenceCompressedBlock has a chance to choose
     // the smaller wire representation.
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len or literal_lens.len != literal_ends.len) return error.CorruptFrame;
-    if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
+    if (literal_lens.len == 0 or literal_lens.len > max_native_sequence_count) return error.CorruptFrame;
     // All three sequence-table families serialize the same literal section.
     // Mixed lookahead calls this scorer hundreds of times, so build the
     // histogram/Huffman estimate once per candidate rather than once per
@@ -9417,7 +9447,7 @@ fn bestSequencePayloadLenWithLiteralEndsAndHistogram(
     histogram: *const MixedLiteralHistogram,
 ) Error!usize {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len or literal_lens.len != literal_ends.len) return error.CorruptFrame;
-    if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count or tail_start > block.len) return error.CorruptFrame;
+    if (literal_lens.len == 0 or literal_lens.len > max_native_sequence_count or tail_start > block.len) return error.CorruptFrame;
     var expected_literals = block.len - tail_start;
     for (literal_lens) |literal_len| expected_literals += literal_len;
     if (expected_literals != histogram.regenerated_len) return error.CorruptFrame;
@@ -9456,12 +9486,12 @@ const SequenceTableEmitPlan = union(enum) {
 const CompressedSequencePlan = struct {
     len: usize = 0,
     accuracy_log: u8 = 0,
-    codes: [max_bootstrap_sequence_count]u8 = undefined,
+    codes: [max_native_sequence_count]u8 = undefined,
     initial_state: u8 = 0,
-    next_states: [max_bootstrap_sequence_count]u8 = undefined,
-    state_bits: [max_bootstrap_sequence_count]u8 = undefined,
-    transition_values: [max_bootstrap_sequence_count]u8 = undefined,
-    transition_bits: [max_bootstrap_sequence_count]u8 = undefined,
+    next_states: [max_native_sequence_count]u8 = undefined,
+    state_bits: [max_native_sequence_count]u8 = undefined,
+    transition_values: [max_native_sequence_count]u8 = undefined,
+    transition_bits: [max_native_sequence_count]u8 = undefined,
     table_payload: [64]u8 = undefined,
     table_payload_len: usize = 0,
 };
@@ -9503,7 +9533,7 @@ fn bestTablePlanSequence(
 ) Error!?SequenceCombinedPlanCandidate {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
     if (literal_lens.len != literal_ends.len) return error.CorruptFrame;
-    if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
+    if (literal_lens.len == 0 or literal_lens.len > max_native_sequence_count) return error.CorruptFrame;
 
     const literals_section_len = try sequenceLiteralsPayloadSectionLen(block, literal_lens, literal_ends, tail_start);
     return try bestTablePlanSequenceWithLiteralsLen(literal_lens, offsets, match_lens, literals_section_len);
@@ -9536,7 +9566,7 @@ fn bestTablePlanSequenceWithLiteralsLenInternal(
     comptime retain_plan: bool,
 ) Error!?SequenceCombinedPlanCandidate {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
-    if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
+    if (literal_lens.len == 0 or literal_lens.len > max_native_sequence_count) return error.CorruptFrame;
 
     const literal_alternatives = try sequenceTablePlanAlternatives(literal_lens, .literal);
     const offset_alternatives = try offsetSequenceTablePlanAlternatives(literal_lens, offsets);
@@ -9763,11 +9793,11 @@ fn rleSequenceCodeForValues(values: []const usize, bases: []const usize, bits: [
 }
 
 fn planCompressedSequenceValues(values: []const usize, kind: SequenceTableKind) Error!?CompressedSequencePlan {
-    if (values.len < min_compressed_sequence_table_count or values.len > max_bootstrap_sequence_count) return null;
+    if (values.len < min_compressed_sequence_table_count or values.len > max_native_sequence_count) return null;
     const bases = sequenceTableBases(kind);
     const bits = sequenceTableBits(kind);
 
-    var codes: [max_bootstrap_sequence_count]u8 = undefined;
+    var codes: [max_native_sequence_count]u8 = undefined;
     for (values, 0..) |value, i| {
         const code = sequenceCodeForValue(value, bases, bits) catch |err| switch (err) {
             error.CorruptFrame => return null,
@@ -9782,9 +9812,9 @@ fn planCompressedSequenceValues(values: []const usize, kind: SequenceTableKind) 
 
 fn planCompressedOffsetSequenceValues(literal_lens: []const usize, offsets: []const usize) Error!?CompressedSequencePlan {
     if (literal_lens.len != offsets.len) return error.CorruptFrame;
-    if (offsets.len < min_compressed_sequence_table_count or offsets.len > max_bootstrap_sequence_count) return null;
+    if (offsets.len < min_compressed_sequence_table_count or offsets.len > max_native_sequence_count) return null;
 
-    var codes: [max_bootstrap_sequence_count]u8 = undefined;
+    var codes: [max_native_sequence_count]u8 = undefined;
     var repeated_offsets = initial_repeated_offsets;
     for (offsets, 0..) |offset, i| {
         codes[i] = try chooseOffsetSequenceCode(literal_lens[i], offset, &repeated_offsets);
@@ -9828,7 +9858,7 @@ fn absoluteOffsetSequenceCode(offset: usize) Error!u8 {
 }
 
 fn planCompressedSequenceCodes(codes: []const u8) Error!?CompressedSequencePlan {
-    if (codes.len < min_compressed_sequence_table_count or codes.len > max_bootstrap_sequence_count) return null;
+    if (codes.len < min_compressed_sequence_table_count or codes.len > max_native_sequence_count) return null;
 
     var plan: CompressedSequencePlan = .{ .len = codes.len, .accuracy_log = 5 };
     var counts: [max_fse_compression_symbol + 1]u32 = .{0} ** (max_fse_compression_symbol + 1);
@@ -9995,7 +10025,7 @@ fn sequencePayloadLenWithTablePlans(
     plan: SequenceCombinedEmitPlan,
 ) Error!usize {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
-    if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
+    if (literal_lens.len == 0 or literal_lens.len > max_native_sequence_count) return error.CorruptFrame;
     if (literal_ends) |ends| {
         if (ends.len != literal_lens.len) return error.CorruptFrame;
     }
@@ -10012,7 +10042,7 @@ fn sequencePayloadLenWithTablePlansAndLiteralsLen(
     plan: SequenceCombinedEmitPlan,
 ) Error!usize {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
-    if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
+    if (literal_lens.len == 0 or literal_lens.len > max_native_sequence_count) return error.CorruptFrame;
 
     var len = literals_section_len;
     len = std.math.add(usize, len, try sequenceCountLen(literal_lens.len)) catch return error.IntegerOverflow;
@@ -10021,7 +10051,7 @@ fn sequencePayloadLenWithTablePlansAndLiteralsLen(
     len = std.math.add(usize, len, sequenceTablePayloadLen(plan.offset)) catch return error.IntegerOverflow;
     len = std.math.add(usize, len, sequenceTablePayloadLen(plan.match)) catch return error.IntegerOverflow;
 
-    var read_fields: [max_bootstrap_sequence_count * 6]BitField = undefined;
+    var read_fields: [max_native_sequence_count * 6]BitField = undefined;
     const read_field_count = try sequenceReadFieldsWithTablePlans(
         read_fields[0..],
         literal_lens,
@@ -10044,7 +10074,7 @@ fn sequenceReadFieldsWithTablePlans(
     plan: SequenceCombinedEmitPlan,
 ) Error!usize {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
-    if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
+    if (literal_lens.len == 0 or literal_lens.len > max_native_sequence_count) return error.CorruptFrame;
     try validateSequenceTablePlanLen(plan.literal, literal_lens.len);
     try validateSequenceTablePlanLen(plan.offset, offsets.len);
     try validateSequenceTablePlanLen(plan.match, match_lens.len);
@@ -10257,7 +10287,7 @@ fn multiSequencePayloadLenInternal(
     tail_start: usize,
 ) Error!usize {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
-    if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
+    if (literal_lens.len == 0 or literal_lens.len > max_native_sequence_count) return error.CorruptFrame;
     if (literal_ends) |ends| {
         if (ends.len != literal_lens.len) return error.CorruptFrame;
     }
@@ -10276,7 +10306,7 @@ fn predefinedSequencePayloadLenWithLiteralsLen(
     literals_section_len: usize,
 ) Error!usize {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
-    if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
+    if (literal_lens.len == 0 or literal_lens.len > max_native_sequence_count) return error.CorruptFrame;
     const literal_plan = (try planPredefinedSequenceValues(literal_lens, &sequence_predefined.literal_symbols, 0)) orelse return error.CorruptFrame;
     const offset_plan = (try planPredefinedSequenceValues(offsets, &sequence_predefined.offset_symbols, 2)) orelse return error.CorruptFrame;
     const match_plan = (try planPredefinedSequenceValues(match_lens, &sequence_predefined.match_symbols, 0)) orelse return error.CorruptFrame;
@@ -10298,7 +10328,7 @@ fn predefinedSequencePayloadLenFromPlans(
     len = std.math.add(usize, len, try sequenceCountLen(literal_plan.len)) catch return error.IntegerOverflow;
     len = std.math.add(usize, len, 1) catch return error.IntegerOverflow; // sequence mode byte
 
-    var read_fields: [max_bootstrap_sequence_count * 6]BitField = undefined;
+    var read_fields: [max_native_sequence_count * 6]BitField = undefined;
     const read_field_count = try predefinedSequenceReadFields(
         read_fields[0..],
         literal_plan,
@@ -10433,7 +10463,7 @@ fn rleSequencePayloadLenWithLiteralsLen(
     match_code: u8,
 ) Error!usize {
     if (literal_lens.len == 0 or literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
-    if (literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
+    if (literal_lens.len > max_native_sequence_count) return error.CorruptFrame;
 
     var bit_count: usize = 1;
     for (literal_lens, 0..) |literal_len, i| {
@@ -10477,7 +10507,7 @@ fn rleSequencePayloadLenInternal(
     match_code: u8,
 ) Error!usize {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len) return error.CorruptFrame;
-    if (literal_lens.len == 0 or literal_lens.len > max_bootstrap_sequence_count) return error.CorruptFrame;
+    if (literal_lens.len == 0 or literal_lens.len > max_native_sequence_count) return error.CorruptFrame;
     if (literal_ends) |ends| {
         if (ends.len != literal_lens.len) return error.CorruptFrame;
     }
@@ -11958,7 +11988,7 @@ const PredefinedSequencePlan = struct {
     // Source LL/OF/ML values stay in the caller-owned plan arrays. States are
     // bounded by max_predefined_sequence_states, so u8 retains every valid
     // state while keeping frequently copied alternatives compact.
-    states: [max_bootstrap_sequence_count]u8 = undefined,
+    states: [max_native_sequence_count]u8 = undefined,
 };
 
 fn buildPredefinedStateMasks(
@@ -12007,10 +12037,10 @@ fn predefinedEncodableStateMask(value: usize, symbols: []const SequenceSymbol, m
 }
 
 fn planPredefinedSequenceValues(values: []const usize, symbols: []const SequenceSymbol, min_additional_bits: u8) Error!?PredefinedSequencePlan {
-    if (values.len == 0 or values.len > max_bootstrap_sequence_count) return null;
+    if (values.len == 0 or values.len > max_native_sequence_count) return null;
     if (symbols.len > max_predefined_sequence_states) return null;
 
-    var next_choice: [max_bootstrap_sequence_count][max_predefined_sequence_states]u8 = undefined;
+    var next_choice: [max_native_sequence_count][max_predefined_sequence_states]u8 = undefined;
 
     var viable_next: u64 = 0;
 
@@ -12059,10 +12089,10 @@ fn planPredefinedSequenceValues(values: []const usize, symbols: []const Sequence
 }
 
 fn planPredefinedSequenceValuesReference(values: []const usize, symbols: []const SequenceSymbol, min_additional_bits: u8) Error!?PredefinedSequencePlan {
-    if (values.len == 0 or values.len > max_bootstrap_sequence_count) return null;
+    if (values.len == 0 or values.len > max_native_sequence_count) return null;
     if (symbols.len > max_predefined_sequence_states) return null;
 
-    var next_choice: [max_bootstrap_sequence_count][max_predefined_sequence_states]usize = undefined;
+    var next_choice: [max_native_sequence_count][max_predefined_sequence_states]usize = undefined;
     for (&next_choice) |*row| @memset(row[0..], max_predefined_sequence_states);
     var viable_next: [max_predefined_sequence_states]bool = @splat(false);
     var pos = values.len;
@@ -12177,7 +12207,7 @@ fn appendBitField(out: []BitField, count: *usize, value: usize, bits: u8) Error!
 }
 
 fn emitReverseBitstreamFromReadOrder(allocator: std.mem.Allocator, out: *std.ArrayList(u8), read_fields: []const BitField) Error!void {
-    var reversed: [max_bootstrap_sequence_count * 6]BitField = undefined;
+    var reversed: [max_native_sequence_count * 6]BitField = undefined;
     if (read_fields.len > reversed.len) return error.OutputTooSmall;
     for (read_fields, 0..) |field, i| {
         reversed[read_fields.len - 1 - i] = field;
