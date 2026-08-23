@@ -3057,6 +3057,10 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   The fixed two-slot beam insertion is specialized to direct duplicate/update/
   replacement comparisons instead of a generic loop; focused medians reach
   about 2.09/2.17 ms for JSON/binary with identical 671/8612-byte blocks.
+  The beam's complete-position match index now uses a 4096-entry hash head,
+  matching the established tiny parsers instead of reserving 32768 buckets.
+  Sixteen fixed-CPU-8..10 stage pairs preserve the same block bytes and improve
+  JSON/binary medians by about 19.1%/10.6%.
   Adaptive 4/8 KiB candidates explicitly disable the beam: their lower-budget
   parsers remain the ratio fallback, while only the primary level-9 block pays
   the stateful search. Twelve fixed-CPU-8..10 end-to-end pairs versus the

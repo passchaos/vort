@@ -88,7 +88,13 @@ pub const HashIndex = struct {
     }
 
     pub fn build(self: *HashIndex, allocator: std.mem.Allocator, input: []const u8) !void {
-        try self.head.resize(allocator, hash_head_table_size);
+        return self.buildWithHeadLen(allocator, input, hash_head_table_size);
+    }
+
+    fn buildWithHeadLen(self: *HashIndex, allocator: std.mem.Allocator, input: []const u8, head_len: usize) !void {
+        std.debug.assert(std.math.isPowerOfTwo(head_len));
+        std.debug.assert(head_len <= hash_head_table_size);
+        try self.head.resize(allocator, head_len);
         try self.prev.resize(allocator, input.len);
         @memset(&self.head_initialized, 0);
         self.input_len = input.len;
@@ -531,7 +537,7 @@ pub fn optimalRepBeamPlanAlloc(allocator: std.mem.Allocator, input: []const u8, 
     if (input.len == 0 or input.len > rep_beam_input_max) return error.InvalidBlockPlan;
     var index: HashIndex = .{};
     defer index.deinit(allocator);
-    try index.build(allocator, input);
+    try index.buildWithHeadLen(allocator, input, 4096);
 
     const state_count = std.math.mul(usize, input.len + 1, rep_beam_width) catch return error.IntegerOverflow;
     const states = try allocator.alloc(RepBeamState, state_count);
