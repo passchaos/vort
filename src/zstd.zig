@@ -10226,9 +10226,10 @@ fn smallHuffmanLiteralPlan(block: []const u8) ?SmallHuffmanLiteralPlan {
 }
 
 fn fillSmallHuffmanWeights(plan: *SmallHuffmanLiteralPlan) ?void {
-    @memset(plan.weights[0..], 0);
-    @memset(plan.bit_counts[0..], 0);
-
+    // Every production caller constructs a fresh zero-initialized plan. Keep
+    // absent-symbol bit counts at that initialized zero and overwrite the
+    // complete active weight prefix below instead of clearing both 256-entry
+    // arrays again for every candidate tree.
     const lengths = if (plan.max_symbol < 64) blk: {
         var compact: [64]u32 = @splat(0);
         @memcpy(compact[0 .. @as(usize, plan.max_symbol) + 1], plan.frequencies[0 .. @as(usize, plan.max_symbol) + 1]);

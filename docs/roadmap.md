@@ -2867,6 +2867,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   exactly `(code length descending, symbol ascending)` under the compact/full
   length oracles; fixed-core eight-pair checks retained 1058 bytes and reduced
   the median from 107.982 ms to 107.126 ms (1.008x).
+  Small-Huffman finalization no longer clears its dense bit-count and weight
+  arrays a second time: every caller supplies a fresh zero-initialized plan, and
+  finalization overwrites the complete active weight prefix while leaving absent
+  symbols at zero. Existing compact/full length and dense-lookup oracles pass;
+  fixed-core eight-pair checks retained 1058 bytes and reduced the median from
+  106.613 ms to 106.166 ms (1.004x).
   A final fixed-CPU-8..10 six-pair comparison from the pre-Huffman-hotspot
   baseline (`36518f8`) through the completed batch measured 8.316 s versus
   107.454 ms, a 77.39x cumulative speedup while retaining the 1058-byte JSON
