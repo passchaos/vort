@@ -3934,6 +3934,7 @@ fn adaptiveLevelCandidateOptions(primary: NativeFrameOptions, block_size: usize)
     var options = primary;
     options.block_size_max = block_size;
     options.match_search_budget = @min(options.match_search_budget, adaptive_split_match_search_budget_max);
+    options.rep_beam_search = false;
     return options;
 }
 

@@ -3048,6 +3048,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   candidates have already satisfied the minimum/window invariants and reads the
   precomputed length-cost table directly, reducing focused JSON/binary stage
   medians from roughly 2.46/2.55 ms to 2.26/2.28 ms without wire changes.
+  Adaptive 4/8 KiB candidates explicitly disable the beam: their lower-budget
+  parsers remain the ratio fallback, while only the primary level-9 block pays
+  the stateful search. Twelve fixed-CPU-8..10 end-to-end pairs versus the
+  pre-beam encoder retained the improved 678/8619-byte JSON/binary wires; text
+  and JSON timing stayed within 0.2%, while binary paid about 8.0% for its
+  227-byte ratio gain.
   Large-block predecessor snapshots now carry a lazy `u16` match-length cache.
   The first mixed lookup still performs the exact existing extension and tie
   logic, while later mixed branches plus multi/single duplicate passes reuse the
