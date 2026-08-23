@@ -3023,12 +3023,14 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Twelve fixed-CPU-8..10 pairs kept text/binary within 0.5% and measured JSON
   about 1.2% slower, accepted for the deterministic ratio improvement.
   Sequence streams with at least 256 symbols now use one upstream-style
-  source-size-selected 64-state FSE table instead of always forcing 32 states.
+  source-size-selected 128-state FSE table instead of always forcing 32 states.
   This avoids the much slower four-table-log exhaustive experiment while still
-  reducing the locked JSON frame from 821 to 818 bytes; binary stays at 8846
-  and text at 93. Twelve fixed-CPU-8..10 pairs measured JSON about 1.0% faster,
-  with text/binary within roughly 1.8%/0.8% noise. A focused oracle pins the
-  large-plan tableLog and the compact u8 state bound.
+  reducing the locked JSON frame from 821 to 816 bytes; binary stays at 8846
+  and text at 93. Twelve fixed-CPU-8..10 pairs against the 64-state version
+  measured only 0.5–0.6% differences across all three cases. A focused oracle
+  pins the large-plan tableLog and the compact u8 state bound; 256 states were
+  rejected because one measured distribution could not construct a valid state
+  chain with the current compact planner.
   Large-block predecessor snapshots now carry a lazy `u16` match-length cache.
   The first mixed lookup still performs the exact existing extension and tie
   logic, while later mixed branches plus multi/single duplicate passes reuse the
