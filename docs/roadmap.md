@@ -3174,6 +3174,14 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   five improved cases totaling 147 bytes. Strict same-source A/B keeps stage
   and end-to-end throughput within about 1%, while longer noisy runs show no
   systematic regression.
+  Huffman weight compression now evaluates both tableLog 5 and 6 and retains
+  the shorter serialized FSE stream, rather than forcing one global table size.
+  A focused low-byte tree oracle proves tableLog 5 wins and is selected for the
+  repetitive text alphabet. The original 76-case corpus improves 39 frames by
+  308 bytes total with no regressions; the broader 128-case generated corpus
+  exposed three one-byte losses from globally forcing tableLog 5, which the
+  per-tree arbitration avoids. Level-9 text now matches libzstd at 80 bytes,
+  JSON improves from 641 to 640 bytes, and binary remains 8607 bytes.
   Adaptive 4/8 KiB candidates explicitly disable the beam: their lower-budget
   parsers remain the ratio fallback, while only the primary level-9 block pays
   the stateful search. Twelve fixed-CPU-8..10 end-to-end pairs versus the

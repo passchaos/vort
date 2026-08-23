@@ -11046,7 +11046,7 @@ fn emitHuffmanLiteralsSectionWithPlan(
     }
 }
 
-const huffman_weight_fse_table_log = 6;
+const huffman_weight_fse_table_logs = [_]u8{ 5, 6 };
 const huffman_weight_symbol_max = 15;
 const max_fse_compression_table_log = 9;
 const max_fse_compression_table_size = 1 << max_fse_compression_table_log;
@@ -11109,7 +11109,16 @@ fn emitFseHuffmanTree(allocator: std.mem.Allocator, out: *std.ArrayList(u8), pla
 
     var compressed: std.ArrayList(u8) = .empty;
     defer compressed.deinit(allocator);
-    if (!try emitFseCompressedHuffmanWeights(allocator, &compressed, weights[0..weight_count])) return false;
+    var candidate: std.ArrayList(u8) = .empty;
+    defer candidate.deinit(allocator);
+    for (huffman_weight_fse_table_logs) |table_log| {
+        candidate.clearRetainingCapacity();
+        if (!try emitFseCompressedHuffmanWeightsWithTableLog(allocator, &candidate, weights[0..weight_count], table_log)) continue;
+        if (compressed.items.len == 0 or candidate.items.len < compressed.items.len) {
+            compressed.clearRetainingCapacity();
+            try compressed.appendSlice(allocator, candidate.items);
+        }
+    }
     if (compressed.items.len == 0 or compressed.items.len > 127) return false;
 
     try out.append(allocator, @intCast(compressed.items.len));
@@ -11118,6 +11127,10 @@ fn emitFseHuffmanTree(allocator: std.mem.Allocator, out: *std.ArrayList(u8), pla
 }
 
 fn emitFseCompressedHuffmanWeights(allocator: std.mem.Allocator, out: *std.ArrayList(u8), weights: []const u8) Error!bool {
+    return try emitFseCompressedHuffmanWeightsWithTableLog(allocator, out, weights, huffman_weight_fse_table_logs[huffman_weight_fse_table_logs.len - 1]);
+}
+
+fn emitFseCompressedHuffmanWeightsWithTableLog(allocator: std.mem.Allocator, out: *std.ArrayList(u8), weights: []const u8, table_log: u8) Error!bool {
     if (weights.len <= 2) return false;
 
     var counts: [huffman_weight_symbol_max + 1]u32 = .{0} ** (huffman_weight_symbol_max + 1);
@@ -11140,7 +11153,7 @@ fn emitFseCompressedHuffmanWeights(allocator: std.mem.Allocator, out: *std.Array
     normalizeFseCounts(
         counts[0 .. @as(usize, max_symbol) + 1],
         weights.len,
-        huffman_weight_fse_table_log,
+        table_log,
         normalized[0 .. @as(usize, max_symbol) + 1],
     ) orelse return false;
 
@@ -11149,13 +11162,13 @@ fn emitFseCompressedHuffmanWeights(allocator: std.mem.Allocator, out: *std.Array
         out,
         normalized[0 .. @as(usize, max_symbol) + 1],
         max_symbol,
-        huffman_weight_fse_table_log,
+        table_log,
     );
 
     const table = try buildFseCompressionTable(
         normalized[0 .. @as(usize, max_symbol) + 1],
         max_symbol,
-        huffman_weight_fse_table_log,
+        table_log,
     );
     const bitstream_start = out.items.len;
     try emitFseCompressedSymbols(allocator, out, weights, table);
@@ -15783,6 +15796,61 @@ test "zstd Huffman tree chooses shorter FSE weights for low-byte alphabet" {
     defer selected.deinit(std.testing.allocator);
     try std.testing.expect(try emitSmallHuffmanTree(std.testing.allocator, &selected, &plan));
     try std.testing.expectEqualSlices(u8, fse.items, selected.items);
+}
+
+test "zstd Huffman weight FSE chooses the shorter table log" {
+    const payload = "Zstandard encode benchmark text with repeated structure and punctuation.\n";
+    const plan = smallHuffmanLiteralPlan(payload) orelse return error.CorruptFrame;
+    var weights: [255]u8 = undefined;
+    for (weights[0..plan.max_symbol], 0..) |*weight, symbol| {
+        weight.* = smallHuffmanExplicitWeight(&plan, @intCast(symbol));
+    }
+    var log5: std.ArrayList(u8) = .empty;
+    defer log5.deinit(std.testing.allocator);
+    try std.testing.expect(try emitFseCompressedHuffmanWeightsWithTableLog(std.testing.allocator, &log5, weights[0..plan.max_symbol], 5));
+    var log6: std.ArrayList(u8) = .empty;
+    defer log6.deinit(std.testing.allocator);
+    try std.testing.expect(try emitFseCompressedHuffmanWeightsWithTableLog(std.testing.allocator, &log6, weights[0..plan.max_symbol], 6));
+    try std.testing.expect(log5.items.len < log6.items.len);
+
+    var selected: std.ArrayList(u8) = .empty;
+    defer selected.deinit(std.testing.allocator);
+    try std.testing.expect(try emitFseHuffmanTree(std.testing.allocator, &selected, &plan));
+    try std.testing.expectEqual(@as(usize, log5.items.len + 1), selected.items.len);
+    try std.testing.expectEqualSlices(u8, log5.items, selected.items[1..]);
+}
+
+test "zstd Huffman weight FSE retains table log six winner" {
+    var frequencies: [256]u32 = @splat(0);
+    const active = [_]u32{
+        4,  6,  8,  17, 17, 20, 23, 23, 34, 43, 36, 48, 59, 50, 69, 62, 65, 60, 69, 60, 66, 58, 58, 63, 44, 59, 87,
+        54, 58, 79, 70, 71, 75, 57, 70, 59, 69, 60, 69, 56, 32, 50, 36, 51, 49, 35, 36, 36, 24, 16, 20, 12, 4,  2,
+    };
+    @memcpy(frequencies[89 .. 89 + active.len], &active);
+    var plan: SmallHuffmanLiteralPlan = .{ .frequencies = frequencies };
+    for (frequencies, 0..) |frequency, symbol| {
+        if (frequency == 0) continue;
+        plan.symbols[plan.len] = @intCast(symbol);
+        plan.len += 1;
+    }
+    _ = finalizeSmallHuffmanLiteralPlan(&plan) orelse return error.CorruptFrame;
+
+    var weights: [255]u8 = undefined;
+    for (weights[0..plan.max_symbol], 0..) |*weight, symbol| {
+        weight.* = smallHuffmanExplicitWeight(&plan, @intCast(symbol));
+    }
+    var log5: std.ArrayList(u8) = .empty;
+    defer log5.deinit(std.testing.allocator);
+    try std.testing.expect(try emitFseCompressedHuffmanWeightsWithTableLog(std.testing.allocator, &log5, weights[0..plan.max_symbol], 5));
+    var log6: std.ArrayList(u8) = .empty;
+    defer log6.deinit(std.testing.allocator);
+    try std.testing.expect(try emitFseCompressedHuffmanWeightsWithTableLog(std.testing.allocator, &log6, weights[0..plan.max_symbol], 6));
+    try std.testing.expect(log6.items.len < log5.items.len);
+
+    var selected: std.ArrayList(u8) = .empty;
+    defer selected.deinit(std.testing.allocator);
+    try std.testing.expect(try emitFseHuffmanTree(std.testing.allocator, &selected, &plan));
+    try std.testing.expectEqualSlices(u8, log6.items, selected.items[1..]);
 }
 
 test "zstd Huffman literal headers reject zero compressed size as corrupt" {
