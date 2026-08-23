@@ -75,6 +75,7 @@ const multi_duplicate_min_search_budget = 32;
 // full level budget, so the high-level selector still has an unrestricted ratio
 // fallback if a corpus benefits from the mixed family.
 const adaptive_split_match_search_budget_max: usize = 64;
+const deferred_adaptive_candidate_input_min = 24 * 1024;
 const repeated_pattern_period_max = 64;
 const repeated_pattern_start_scan = 48;
 const max_direct_huffman_symbol = 128;
@@ -3621,10 +3622,17 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
         var locked_allocator = LockedAllocator{ .child = allocator };
         const parallel_allocator = locked_allocator.allocator();
         const block_sizes = adaptiveLevelBlockSizes(level);
+        // At ratio-oriented levels the 8 KiB frame is a useful conservative
+        // screen for the more expensive 4 KiB frame. Beyond small inputs, the
+        // latter is only evaluated when the 8 KiB split can at least tie the
+        // primary frame. Small inputs retain the complete parallel ladder: a
+        // split immediately after 8 KiB can uniquely favor 4 KiB blocks.
+        const defer_smallest_candidate = level >= 6 and input.len > deferred_adaptive_candidate_input_min;
         var candidates: [2]LevelFrameCandidate = undefined;
         var candidate_count: usize = 0;
-        for (block_sizes) |block_size| {
+        for (block_sizes, 0..) |block_size, i| {
             if (block_size >= input.len or block_size == primary_options.block_size_max) continue;
+            if (defer_smallest_candidate and i == 0) continue;
             const split_options = adaptiveLevelCandidateOptions(primary_options, block_size);
             candidates[candidate_count] = .{ .allocator = parallel_allocator, .input = input, .options = split_options };
             candidate_count += 1;
@@ -3646,6 +3654,7 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
                 return err;
             };
             for (threads[0..spawned]) |thread| thread.join();
+            var adaptive_competitive = false;
             for (candidates[0..candidate_count]) |*candidate| {
                 if (candidate.err) |err| {
                     parallel_allocator.free(best.frame);
@@ -3653,11 +3662,23 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
                     return err;
                 }
                 const result = candidate.result.?;
+                adaptive_competitive = adaptive_competitive or result.frame.len <= best.frame.len;
                 if (result.frame.len < best.frame.len) {
                     parallel_allocator.free(best.frame);
                     best = result;
                 } else parallel_allocator.free(result.frame);
                 candidate.result = null;
+            }
+            if (defer_smallest_candidate and adaptive_competitive and block_sizes[0] < input.len and block_sizes[0] != primary_options.block_size_max) {
+                const split_options = adaptiveLevelCandidateOptions(primary_options, block_sizes[0]);
+                const candidate = encodeNativeFrameWithOptionsAlloc(parallel_allocator, input, split_options) catch |err| {
+                    parallel_allocator.free(best.frame);
+                    return err;
+                };
+                if (candidate.frame.len < best.frame.len) {
+                    parallel_allocator.free(best.frame);
+                    best = candidate;
+                } else parallel_allocator.free(candidate.frame);
             }
             return best.frame;
         }
@@ -14138,6 +14159,45 @@ test "zstd parallel adaptive candidates match serial selection" {
     const actual = try encodeFrameWithLevelAlloc(std.testing.allocator, structured.items, level);
     defer std.testing.allocator.free(actual);
     try std.testing.expectEqualSlices(u8, expected.frame, actual);
+}
+
+test "zstd deferred adaptive candidate preserves primary and split winners" {
+    const level: c_int = 9;
+    const primary_options = try nativeFrameOptionsForLevel(level, .{});
+
+    const primary_payload = "Zstandard deferred adaptive primary winner.\n" ** 768;
+    const primary_expected = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, primary_payload, primary_options);
+    defer std.testing.allocator.free(primary_expected.frame);
+    for (adaptiveLevelBlockSizes(level)) |block_size| {
+        const candidate = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, primary_payload, adaptiveLevelCandidateOptions(primary_options, block_size));
+        defer std.testing.allocator.free(candidate.frame);
+        try std.testing.expect(primary_expected.frame.len < candidate.frame.len);
+    }
+    const primary_actual = try encodeFrameWithLevelAlloc(std.testing.allocator, primary_payload, level);
+    defer std.testing.allocator.free(primary_actual);
+    try std.testing.expectEqualSlices(u8, primary_expected.frame, primary_actual);
+
+    var split_payload: [32 * 1024]u8 = undefined;
+    var random_state: u32 = 0x9e37_79b9;
+    for (&split_payload, 0..) |*byte, i| {
+        random_state = random_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate((i / 31) + (random_state >> 29));
+    }
+    @memcpy(split_payload[split_payload.len / 2 ..][0 .. split_payload.len / 4], split_payload[split_payload.len / 8 ..][0 .. split_payload.len / 4]);
+    var split_expected = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &split_payload, primary_options);
+    defer std.testing.allocator.free(split_expected.frame);
+    const split_primary_len = split_expected.frame.len;
+    for (adaptiveLevelBlockSizes(level)) |block_size| {
+        const candidate = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &split_payload, adaptiveLevelCandidateOptions(primary_options, block_size));
+        if (candidate.frame.len < split_expected.frame.len) {
+            std.testing.allocator.free(split_expected.frame);
+            split_expected = candidate;
+        } else std.testing.allocator.free(candidate.frame);
+    }
+    try std.testing.expect(split_expected.frame.len < split_primary_len);
+    const split_actual = try encodeFrameWithLevelAlloc(std.testing.allocator, &split_payload, level);
+    defer std.testing.allocator.free(split_actual);
+    try std.testing.expectEqualSlices(u8, split_expected.frame, split_actual);
 }
 
 test "zstd native decoder rejects malformed FSE compressed sequence tables" {

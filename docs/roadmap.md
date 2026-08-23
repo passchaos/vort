@@ -2971,6 +2971,16 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   2.6%/3.5% encode-time regressions for JSON/binary and 1.3% for text, accepted
   for the substantial ratio improvement. A focused round-trip test covers a
   real block whose optimal plan exceeds the 128-entry bootstrap capacity.
+  Re-evaluating whole-frame selection after the 512-sequence change showed that
+  adaptive splitting remains essential: across 73 generated/source prefixes,
+  28 frames were smaller at 4/8 KiB, including source-sized reductions of tens
+  of KiB when a primary block still exceeded the sequence ceiling. Removing the
+  split ladder was therefore rejected. For level 6+ inputs above 24 KiB, the
+  encoder now races the primary and 8 KiB candidates first and evaluates the
+  costlier 4 KiB frame only when 8 KiB can tie or beat primary. The same corpus
+  retained every serial three-candidate winner, while twelve fixed-CPU-8..10
+  interleaved level-9 pairs retained 93/831/8850-byte text/JSON/binary frames
+  and reduced median encode time by about 3.4%/1.3%/19.1%, respectively.
   Large-block predecessor snapshots now carry a lazy `u16` match-length cache.
   The first mixed lookup still performs the exact existing extension and tie
   logic, while later mixed branches plus multi/single duplicate passes reuse the
