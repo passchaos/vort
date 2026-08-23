@@ -3654,6 +3654,15 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
     options: FrameOptions,
 ) Error![]u8 {
     const primary_options = try nativeFrameOptionsForLevel(level, options);
+    // Extremely small single-block results cannot be beaten meaningfully by
+    // splitting: each additional adaptive block costs a three-byte header.
+    // Probe the same bounded prefix-tail shape used by block arbitration, then
+    // return only when the complete primary frame is below 1/256 of the input.
+    if (level >= 9 and input.len > 8 * 1024 and input.len <= primary_options.block_size_max and findPrefixTailDuplicateMatch(input) != null) {
+        const primary = try encodeNativeFrameWithOptionsAlloc(allocator, input, primary_options);
+        if (primary.frame.len * 256 <= input.len) return primary.frame;
+        allocator.free(primary.frame);
+    }
     if (level > 0 and input.len > 8 * 1024) {
         var locked_allocator = LockedAllocator{ .child = allocator };
         const parallel_allocator = locked_allocator.allocator();
@@ -7928,6 +7937,18 @@ test "zstd prefix-tail shortcut matches full native selection" {
     try std.testing.expect(try emitNativeMatchCompressedBlock(std.testing.allocator, &actual, payload, true, 96, true));
     try std.testing.expect(actual.items.len * 32 <= payload.len);
     try std.testing.expectEqualSlices(u8, expected.items, actual.items);
+}
+
+test "zstd decisive primary frame bypasses adaptive candidates" {
+    const payload = "Zstandard encode benchmark text with repeated structure and punctuation.\n" ** 512;
+    const options = try nativeFrameOptionsForLevel(9, .{});
+    const primary = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, options);
+    defer std.testing.allocator.free(primary.frame);
+    try std.testing.expect(primary.frame.len * 256 <= payload.len);
+
+    const selected = try encodeFrameWithLevelAlloc(std.testing.allocator, payload, 9);
+    defer std.testing.allocator.free(selected);
+    try std.testing.expectEqualSlices(u8, primary.frame, selected);
 }
 
 test "zstd native match stage benchmark rejects stale duplicate index" {

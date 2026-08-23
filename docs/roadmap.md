@@ -3182,6 +3182,15 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   exposed three one-byte losses from globally forcing tableLog 5, which the
   per-tree arbitration avoids. Level-9 text now matches libzstd at 80 bytes,
   JSON improves from 641 to 640 bytes, and binary remains 8607 bytes.
+  Before spawning adaptive frame candidates, level 9 now probes the same bounded
+  prefix-tail shape as block arbitration. If the complete single-block frame is
+  below 1/256 of the source, it returns immediately instead of waiting for split
+  encoders whose additional block headers cannot be competitive on the measured
+  shape. A focused primary-wire oracle covers the cutoff. The 76-case corpus has
+  no regressions and 13 improvements, while the independent 128-case generated
+  corpus is byte-identical. Twelve fixed-CPU-8..10 pairs retain 80-byte text and
+  reduce its level-9 median from about 7.54 ms to 0.56 ms (13.4x); JSON/binary
+  remain within 1%.
   Adaptive 4/8 KiB candidates explicitly disable the beam: their lower-budget
   parsers remain the ratio fallback, while only the primary level-9 block pays
   the stateful search. Twelve fixed-CPU-8..10 end-to-end pairs versus the
