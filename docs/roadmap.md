@@ -3082,6 +3082,15 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   families at this threshold, while the expanded generated/source corpus stays
   byte-identical. Twelve fixed-CPU-8..10 pairs improve level-9 text/JSON by
   about 21.2%/9.6%, with binary within 0.8% noise.
+  Decisive beam blocks now run only the first global duplicate query needed by
+  the single-duplicate fallback and skip multi-duplicate's iterative follow-up
+  searches. This preserves the 93-byte repetitive-text winner without paying
+  for a complete multi plan after the beam has already compressed the source
+  below 1/32. A focused indexed-path oracle proves that this direct query equals
+  multi's first match and emits the same single-candidate wire. The 76-case
+  generated/source comparison remained byte-identical; twelve fixed-CPU-8..10
+  pairs retained the 93/678/8611-byte text/JSON/binary frames and reduced their
+  medians by about 3.4%/5.8%/1.5%, respectively.
   Adaptive 4/8 KiB candidates explicitly disable the beam: their lower-budget
   parsers remain the ratio fallback, while only the primary level-9 block pays
   the stateful search. Twelve fixed-CPU-8..10 end-to-end pairs versus the

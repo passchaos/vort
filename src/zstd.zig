@@ -7416,7 +7416,17 @@ fn emitNativeMatchCompressedBlockSerialWithBeam(allocator: std.mem.Allocator, ou
 
     candidate.clearRetainingCapacity();
     var first_duplicate: ?DuplicateMatch = null;
-    const multi_duplicate_ok = if (match_search_budget >= multi_duplicate_min_search_budget)
+    if (beam_is_decisive and rleByte(block) == null) {
+        // The decisive-beam policy omits multi's iterative follow-up searches,
+        // but the single-duplicate candidate still wins on some repetitive
+        // text. Run only the first query shared by both duplicate planners and
+        // pass its result to the single emitter below.
+        first_duplicate = if (duplicate_index_ptr) |index|
+            try findBestDuplicateMatchIndexed(block, 0, index)
+        else
+            try findBestDuplicateMatch(block);
+    }
+    const multi_duplicate_ok = if (!beam_is_decisive and match_search_budget >= multi_duplicate_min_search_budget)
         try emitMultiDuplicateMatchCompressedBlockWithFirst(allocator, &candidate, block, last, duplicate_index_ptr, &first_duplicate)
     else
         false;
@@ -7425,10 +7435,12 @@ fn emitNativeMatchCompressedBlockSerialWithBeam(allocator: std.mem.Allocator, ou
     candidate.clearRetainingCapacity();
     // Multi-duplicate starts with the exact same global-best query as the
     // single candidate. Reuse that result rather than walking/scoring the block
-    // again; if multi did not run or found no first match, preserve the direct
-    // fallback.
+    // again. A decisive beam has already completed that query even when no
+    // match exists; only paths that skipped both searches need the fallback.
     const single_duplicate_ok = if (first_duplicate) |match|
         try emitSingleMatchCompressedBlockFromMatch(allocator, &candidate, block, last, match)
+    else if (beam_is_decisive)
+        false
     else
         try emitSingleMatchCompressedBlock(allocator, &candidate, block, last, duplicate_index_ptr);
     try retainShortestCandidate(allocator, single_duplicate_ok, candidate.items, &best);
@@ -7877,22 +7889,37 @@ test "zstd native match stage benchmark rejects stale duplicate index" {
     );
 }
 
-test "zstd single duplicate emitter reuses multi first match wire" {
-    const payload = ("{\"service\":\"vort\",\"message\":\"shared duplicate\"}\n" ** 128);
+test "zstd decisive rep beam reuses multi first duplicate match wire" {
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    while (payload.items.len < 32 * 1024) {
+        var line: [128]u8 = undefined;
+        const index = payload.items.len / 64;
+        const formatted = try std.fmt.bufPrint(&line, "{{\"id\":{d},\"service\":\"vort\",\"message\":\"structured zstd encode corpus\"}}\n", .{index});
+        try payload.appendSlice(std.testing.allocator, formatted);
+    }
+    const plan = try lz77.optimalRepBeamPlanAlloc(std.testing.allocator, payload.items, zstdHashParserOptions(payload.items.len));
+    defer plan.deinit(std.testing.allocator);
+    var beam: std.ArrayList(u8) = .empty;
+    defer beam.deinit(std.testing.allocator);
+    try std.testing.expect(try emitHashTokenSequenceBlock(std.testing.allocator, &beam, payload.items, true, plan.tokens, plan.stats));
+    try std.testing.expect(beam.items.len * 32 <= payload.items.len);
+
     var index: DuplicateMatchIndex = undefined;
-    index.build(payload);
+    index.build(payload.items);
+    const decisive_first = try findBestDuplicateMatchIndexed(payload.items, 0, &index) orelse return error.CorruptFrame;
     var multi: std.ArrayList(u8) = .empty;
     defer multi.deinit(std.testing.allocator);
     var first: ?DuplicateMatch = null;
-    _ = try emitMultiDuplicateMatchCompressedBlockWithFirst(std.testing.allocator, &multi, payload, true, &index, &first);
-    const match = first orelse return error.CorruptFrame;
+    try std.testing.expect(try emitMultiDuplicateMatchCompressedBlockWithFirst(std.testing.allocator, &multi, payload.items, true, &index, &first));
+    try std.testing.expectEqual(decisive_first, first orelse return error.CorruptFrame);
 
     var expected: std.ArrayList(u8) = .empty;
     defer expected.deinit(std.testing.allocator);
-    try std.testing.expect(try emitSingleMatchCompressedBlock(std.testing.allocator, &expected, payload, true, &index));
+    try std.testing.expect(try emitSingleMatchCompressedBlock(std.testing.allocator, &expected, payload.items, true, &index));
     var actual: std.ArrayList(u8) = .empty;
     defer actual.deinit(std.testing.allocator);
-    try std.testing.expect(try emitSingleMatchCompressedBlockFromMatch(std.testing.allocator, &actual, payload, true, match));
+    try std.testing.expect(try emitSingleMatchCompressedBlockFromMatch(std.testing.allocator, &actual, payload.items, true, decisive_first));
     try std.testing.expectEqualSlices(u8, expected.items, actual.items);
 }
 
