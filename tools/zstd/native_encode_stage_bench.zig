@@ -8,6 +8,8 @@ const Options = struct {
     warmup: usize = 1,
     level: c_int = 9,
     only_case: ?[]const u8 = null,
+    only_candidate: ?[]const u8 = null,
+    only_stage: ?[]const u8 = null,
     csv_path: ?[]const u8 = null,
 };
 const Candidate = struct { name: []const u8, block_size: usize };
@@ -61,16 +63,16 @@ pub fn main(init: std.process.Init) !void {
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
     try csv.writer.writeAll("case,level,candidate,block_size,block_count,stage,available_blocks,encoded_bytes,iterations,rounds,warmup,median_ns,ns_per_block,checksum\n");
-    var selected_cases: usize = 0;
+    var selected_rows: usize = 0;
     for (cases) |case| {
         if (options.only_case) |wanted| if (!std.mem.eql(u8, wanted, case.name)) continue;
-        selected_cases += 1;
         for (candidates) |candidate| {
+            if (options.only_candidate) |wanted| if (!std.mem.eql(u8, wanted, candidate.name)) continue;
             if (candidate.block_size >= case.payload.len and !std.mem.eql(u8, candidate.name, "primary")) continue;
-            try benchmarkCandidate(init.io, init.gpa, &csv.writer, case, candidate, policy.primary_options.match_search_budget, options);
+            selected_rows += try benchmarkCandidate(init.io, init.gpa, &csv.writer, case, candidate, policy.primary_options.match_search_budget, options);
         }
     }
-    if (selected_cases == 0) return error.InvalidBlockPlan;
+    if (selected_rows == 0) return error.InvalidBlockPlan;
 
     if (options.csv_path) |path| {
         try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = path, .data = csv.written() });
@@ -90,17 +92,29 @@ fn benchmarkCandidate(
     candidate: Candidate,
     search_budget: usize,
     options: Options,
-) !void {
+) !usize {
     var scratch: vort.zstd.NativeMatchStageScratch = .{};
     defer scratch.deinit(allocator);
+    var selected_rows: usize = 0;
 
-    const indexed_block_count = try prepareAllBlocks(allocator, case.payload, candidate.block_size, &scratch);
-    vort.zstd.benchmarkInvalidateNativeMatchStageScratch(&scratch);
-    try writeMeasuredRow(io, allocator, csv, case, candidate, search_budget, options, .index, indexed_block_count, 0, &scratch);
+    if (stageSelected(options.only_stage, "duplicate_index")) {
+        const indexed_block_count = try prepareAllBlocks(allocator, case.payload, candidate.block_size, &scratch);
+        vort.zstd.benchmarkInvalidateNativeMatchStageScratch(&scratch);
+        try writeMeasuredRow(io, allocator, csv, case, candidate, search_budget, options, .index, indexed_block_count, 0, &scratch);
+        selected_rows += 1;
+    }
     for (stages) |stage| {
+        if (!stageSelected(options.only_stage, @tagName(stage))) continue;
         const probe = try evaluateAllBlocks(allocator, case.payload, candidate.block_size, search_budget, stage, &scratch);
         try writeMeasuredRow(io, allocator, csv, case, candidate, search_budget, options, .{ .candidate = stage }, probe.available_blocks, probe.encoded_len, &scratch);
+        selected_rows += 1;
     }
+    return selected_rows;
+}
+
+fn stageSelected(only_stage: ?[]const u8, name: []const u8) bool {
+    const wanted = only_stage orelse return true;
+    return std.mem.eql(u8, wanted, name);
 }
 
 const MeasuredStage = union(enum) {
@@ -263,6 +277,10 @@ fn parseOptions(args: *std.process.Args.Iterator) !Options {
             options.level = try std.fmt.parseInt(c_int, args.next() orelse return error.MissingLimit, 10)
         else if (std.mem.eql(u8, arg, "--case"))
             options.only_case = args.next() orelse return error.MissingCorpusPath
+        else if (std.mem.eql(u8, arg, "--candidate"))
+            options.only_candidate = args.next() orelse return error.MissingLimit
+        else if (std.mem.eql(u8, arg, "--stage"))
+            options.only_stage = args.next() orelse return error.MissingLimit
         else if (std.mem.eql(u8, arg, "--csv"))
             options.csv_path = args.next() orelse return error.MissingCorpusPath
         else
