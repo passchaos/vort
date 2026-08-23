@@ -7,7 +7,8 @@ from pathlib import Path
 
 COLUMNS = [
     "case", "level", "candidate", "block_size", "block_count", "search_budget",
-    "stage", "available_blocks", "sequences", "encoded_bytes", "iterations",
+    "stage", "available_blocks", "sequences", "encoded_bytes",
+    "literals_bytes", "sequence_bytes", "iterations",
     "rounds", "warmup", "median_ns", "ns_per_block", "checksum",
 ]
 CASES = {"text", "json", "binary"}
@@ -45,13 +46,20 @@ def main() -> int:
         available_blocks = int(row["available_blocks"])
         sequences = int(row["sequences"])
         encoded_bytes = int(row["encoded_bytes"])
+        literals_bytes = int(row["literals_bytes"])
+        sequence_bytes = int(row["sequence_bytes"])
         assert 0 <= available_blocks <= int(row["block_count"]), row
         if row["stage"] == "duplicate_index":
             assert sequences == 0, row
             assert encoded_bytes == 0, row
+            assert literals_bytes == 0 and sequence_bytes == 0, row
         else:
             assert sequences >= 0, row
             assert (available_blocks == 0) == (encoded_bytes == 0), row
+            if available_blocks:
+                assert encoded_bytes == 3 * available_blocks + literals_bytes + sequence_bytes, row
+            else:
+                assert literals_bytes == 0 and sequence_bytes == 0, row
         if row["stage"] in {"greedy", "lazy", "optimal"}:
             assert sequences > 0, row
 

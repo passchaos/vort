@@ -7432,6 +7432,8 @@ pub const NativeMatchStageResult = struct {
     available: bool,
     encoded_len: usize,
     sequence_count: usize = 0,
+    literals_bytes: usize = 0,
+    sequence_bytes: usize = 0,
 };
 
 pub const NativeMatchStageScratch = struct {
@@ -7570,10 +7572,21 @@ pub fn benchmarkNativeMatchStage(
             false,
         .single_duplicate => try emitSingleMatchCompressedBlock(allocator, &scratch.candidate, block, last, duplicate_index),
     };
+    var literals_bytes: usize = 0;
+    var sequence_bytes: usize = 0;
+    if (available) {
+        if (scratch.candidate.items.len < 3) return error.CorruptFrame;
+        var frame_state: SequenceFrameState = .{};
+        const section = try parseLiteralsSection(scratch.candidate.items[3..], &frame_state);
+        literals_bytes = section.sequence_payload_offset;
+        sequence_bytes = scratch.candidate.items.len - 3 - literals_bytes;
+    }
     return .{
         .available = available,
         .encoded_len = if (available) scratch.candidate.items.len else 0,
         .sequence_count = sequence_count,
+        .literals_bytes = literals_bytes,
+        .sequence_bytes = sequence_bytes,
     };
 }
 
@@ -7785,6 +7798,12 @@ test "zstd native match stage benchmark mirrors production emitters" {
         const result = try benchmarkNativeMatchStage(std.testing.allocator, payload, true, 192, stage, &scratch);
         try std.testing.expectEqual(expected_ok, result.available);
         try std.testing.expectEqual(if (expected_ok) expected.items.len else 0, result.encoded_len);
+        if (result.available) {
+            try std.testing.expectEqual(result.encoded_len, 3 + result.literals_bytes + result.sequence_bytes);
+        } else {
+            try std.testing.expectEqual(@as(usize, 0), result.literals_bytes);
+            try std.testing.expectEqual(@as(usize, 0), result.sequence_bytes);
+        }
     }
 }
 

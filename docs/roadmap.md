@@ -3031,6 +3031,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   pins the large-plan tableLog and the compact u8 state bound; 256 states were
   rejected because one measured distribution could not construct a valid state
   chain with the current compact planner.
+  Native encode stage diagnostics now split each available candidate's encoded
+  bytes into block header, literals section, and sequence section. The 72-row
+  CSV gate enforces exact accounting for every case/candidate/family. On the
+  current level-9 primary JSON optimal block this records 809 bytes as a 3-byte
+  block header, 318 literal bytes, and 488 sequence bytes, making the remaining
+  libzstd ratio gap directly attributable and regression-testable.
   Large-block predecessor snapshots now carry a lazy `u16` match-length cache.
   The first mixed lookup still performs the exact existing extension and tie
   logic, while later mixed branches plus multi/single duplicate passes reuse the
