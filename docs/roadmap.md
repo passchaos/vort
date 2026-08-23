@@ -3043,7 +3043,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   parser set. The locked JSON frame falls from 816 to 678 bytes (libzstd 677),
   and binary from 8846 to 8619 (libzstd 8609), while text remains 93 bytes. A
   wider eight-state/eight-match beam can reach 677 bytes but costs materially
-  more; the retained bounded shape is the measured speed/ratio compromise.
+  more; the retained bounded shape is the measured speed/ratio compromise. The
+  beam hot path bypasses the generic accept-match calculation after its indexed
+  candidates have already satisfied the minimum/window invariants and reads the
+  precomputed length-cost table directly, reducing focused JSON/binary stage
+  medians from roughly 2.46/2.55 ms to 2.26/2.28 ms without wire changes.
   Large-block predecessor snapshots now carry a lazy `u16` match-length cache.
   The first mixed lookup still performs the exact existing extension and tie
   logic, while later mixed branches plus multi/single duplicate passes reuse the

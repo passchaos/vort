@@ -594,10 +594,10 @@ pub fn optimalRepBeamPlanAlloc(allocator: std.mem.Allocator, input: []const u8, 
     return .{ .tokens = try reversed.toOwnedSlice(allocator), .stats = stats };
 }
 
-fn extendRepBeamMatch(states: []RepBeamState, input: []const u8, options: GreedyOptions, position: usize, slot: usize, state: RepBeamState, match: Token.Match) !void {
-    if (!acceptMatch(input, position, match.length, match.distance, options)) return;
+fn extendRepBeamMatch(states: []RepBeamState, _: []const u8, options: GreedyOptions, position: usize, slot: usize, state: RepBeamState, match: Token.Match) !void {
+    if (match.length < minMatch(options) or match.distance == 0 or match.distance > position) return;
     const distance_cost: usize = if (match.distance == state.rep0) 1 else fixedDistanceSymbolCost(match.distance);
-    const cost = std.math.add(usize, state.cost, fixedLengthSymbolCost(match.length) + distance_cost) catch return;
+    const cost = std.math.add(usize, state.cost, fixed_length_costs[match.length] + distance_cost) catch return;
     try insertRepBeamState(states, position + match.length, .{
         .cost = cost,
         .rep0 = match.distance,
