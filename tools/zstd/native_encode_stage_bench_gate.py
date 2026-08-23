@@ -37,7 +37,7 @@ def main() -> int:
     assert len(rows) == len(expected)
     for row in rows:
         assert int(row["level"]) == 9, row
-        expected_budget = 192 if row["candidate"] == "primary" else 64
+        expected_budget = 96 if row["candidate"] == "primary" else 64
         assert int(row["search_budget"]) == expected_budget, row
         for key in ("block_size", "block_count", "iterations", "rounds", "warmup", "median_ns"):
             assert int(row[key]) > 0, row

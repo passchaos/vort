@@ -3853,7 +3853,7 @@ fn nativeFrameOptionsForLevel(level: c_int, options: FrameOptions) Error!NativeF
             3 => 64,
             4 => 96,
             5 => 128,
-            else => 192,
+            else => 96,
         };
     }
     return native_options;
@@ -13949,7 +13949,7 @@ test "zstd compression levels map to increasing search budgets" {
     try std.testing.expectEqual(@as(usize, 0), level0.match_search_budget);
     try std.testing.expectEqual(@as(usize, 16), level1.match_search_budget);
     try std.testing.expectEqual(@as(usize, 64), level3.match_search_budget);
-    try std.testing.expectEqual(@as(usize, 192), level9.match_search_budget);
+    try std.testing.expectEqual(@as(usize, 96), level9.match_search_budget);
     try std.testing.expect(level3.match_search_budget > level1.match_search_budget);
     try std.testing.expect(level9.match_search_budget > level3.match_search_budget);
     try std.testing.expect(!level3.include_content_size);
@@ -13966,7 +13966,7 @@ test "zstd adaptive candidates cap search at measured ratio plateau" {
     try std.testing.expectEqual(@as(usize, 64), level5.adaptive_match_search_budget);
     try std.testing.expectEqual(@as(usize, 64), level9.adaptive_match_search_budget);
     try std.testing.expectEqual(@as(usize, 128), level5.primary_options.match_search_budget);
-    try std.testing.expectEqual(@as(usize, 192), level9.primary_options.match_search_budget);
+    try std.testing.expectEqual(@as(usize, 96), level9.primary_options.match_search_budget);
     const split = adaptiveLevelCandidateOptions(level9.primary_options, level9.adaptive_block_sizes[0]);
     try std.testing.expectEqual(level9.adaptive_block_sizes[0], split.block_size_max);
     try std.testing.expectEqual(level9.adaptive_match_search_budget, split.match_search_budget);

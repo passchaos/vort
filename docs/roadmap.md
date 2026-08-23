@@ -2940,6 +2940,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   and improve their level-9 medians from 66.839/83.803/26.387 ms to
   55.565/53.433/21.164 ms (1.203x/1.568x/1.247x). The stage CSV/gate now records
   the effective 192/64/64 budgets explicitly.
+  Broader primary-candidate ablation found a generated 32 KiB repeated corpus
+  where budgets below 96 expand the selected frame from 51 to 94 bytes, while
+  96 and 128 preserve all 20 generated/source cases against 192. Levels 6+ now
+  stop at that measured 96-state floor for their primary candidate as well. Ten
+  fixed-CPU-8..10 pairs against the 192-state version retained 93/1058/9009-byte
+  text/JSON/binary frames and improved medians from 56.485/49.946/21.154 ms to
+  33.881/44.209/21.196 ms (1.643x/1.213x/1.001x).
   Large-block predecessor snapshots now carry a lazy `u16` match-length cache.
   The first mixed lookup still performs the exact existing extension and tie
   logic, while later mixed branches plus multi/single duplicate passes reuse the
