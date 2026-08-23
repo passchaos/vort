@@ -12664,6 +12664,24 @@ fn findRepeatedPatternSegment(block: []const u8) ?RepeatedPatternSegment {
     return findRepeatedPatternSegmentIn(block, 0, block.len);
 }
 
+fn findRepeatedPatternSegmentReference(block: []const u8, start_min: usize, end: usize) ?RepeatedPatternSegment {
+    if (block.len < 8 or start_min >= end or end - start_min < 8) return null;
+    const max_start = @min(start_min + repeated_pattern_start_scan, end - 4);
+    var best: ?RepeatedPatternSegment = null;
+    for (start_min..max_start + 1) |start| {
+        if (end - start < 8) break;
+        for (2..@min((end - start) / 2, repeated_pattern_period_max) + 1) |period| {
+            var i = start + period;
+            while (i < end and block[i] == block[start + ((i - start) % period)]) : (i += 1) {}
+            const match_len = i - start - period;
+            if (match_len < 3) continue;
+            const candidate: RepeatedPatternSegment = .{ .start = start, .period = period, .match_len = match_len, .tail_len = end - i };
+            if (best == null or candidate.match_len > best.?.match_len) best = candidate;
+        }
+    }
+    return best;
+}
+
 fn findRepeatedPatternSegmentIn(block: []const u8, start_min: usize, end: usize) ?RepeatedPatternSegment {
     if (block.len < 8) return null;
     if (start_min >= end or end - start_min < 8) return null;
@@ -12672,6 +12690,10 @@ fn findRepeatedPatternSegmentIn(block: []const u8, start_min: usize, end: usize)
     for (start_min..max_start + 1) |start| {
         if (end - start < 8) break;
         for (2..@min((end - start) / 2, repeated_pattern_period_max) + 1) |period| {
+            // A usable Zstd match needs at least three bytes. Reject the
+            // overwhelmingly common non-periods before entering the dependent
+            // extension loop.
+            if (!std.mem.eql(u8, block[start..][0..3], block[start + period ..][0..3])) continue;
             var i = start + period;
             while (i < end and block[i] == block[start + ((i - start) % period)]) : (i += 1) {}
             const repeated_len = i - start;
@@ -12683,6 +12705,27 @@ fn findRepeatedPatternSegmentIn(block: []const u8, start_min: usize, end: usize)
         }
     }
     return best;
+}
+
+test "zstd repeated pattern anchor filter matches reference" {
+    var payload: [512]u8 = undefined;
+    for (0..32) |seed| {
+        var state: u32 = @intCast(0x9e37_79b9 + seed * 97);
+        for (&payload) |*byte| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = @truncate(state >> 24);
+        }
+        if (seed % 3 == 0) {
+            const repeated = payload[321..345].*;
+            @memcpy(payload[333..357], &repeated);
+        }
+        for ([_]usize{ 0, 1, 17, 129, 400 }) |start_min| {
+            try std.testing.expectEqual(
+                findRepeatedPatternSegmentReference(&payload, start_min, payload.len),
+                findRepeatedPatternSegmentIn(&payload, start_min, payload.len),
+            );
+        }
+    }
 }
 
 fn sequenceCodeForValue(value: usize, bases: []const usize, bits: []const u8) Error!u8 {

@@ -3122,6 +3122,14 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   remains byte-identical. Twelve fixed-CPU-8 stage pairs reduce binary mixed
   time by about 24.8%; two end-to-end binary runs retain the 8611-byte frame and
   improve medians by about 3.8–10.1%, while text/JSON remain scheduler-noisy.
+  Repeated-pattern discovery now checks the three-byte minimum-match anchor
+  before entering its dependent extension loop for each candidate period. This
+  is an exact rejection because every emitted Zstd match requires at least three
+  bytes. A randomized scan-reference oracle covers multiple suffix starts, and
+  the 76-case generated/source comparison stays byte-identical. Twelve
+  fixed-CPU-8 stage pairs reduce JSON repeated/mixed measurement by about 5.9%;
+  a 24-pair end-to-end JSON rerun retains 678 bytes and improves the median by
+  about 0.7%, with the smaller cases within measurement noise.
   Adaptive 4/8 KiB candidates explicitly disable the beam: their lower-budget
   parsers remain the ratio fallback, while only the primary level-9 block pays
   the stateful search. Twelve fixed-CPU-8..10 end-to-end pairs versus the
