@@ -4948,7 +4948,9 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
             ];
 
             const advance1: usize = @intCast((entry >> 8) & 0xf);
-            if (comptime rle1_distance) {
+            if (comptime rle1_distance or
+                (inline_non_overlap and pause_at_output_boundary))
+            {
                 writeSemanticLiteralPair(output, out_pos, entry);
             } else {
                 output[out_pos] = @truncate(entry >> 16);
@@ -4958,7 +4960,9 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
 
             if ((entry2 & SemanticDynamicDecoder.literal_flag) != 0) {
                 const advance2: usize = @intCast((entry2 >> 8) & 0xf);
-                if (comptime rle1_distance) {
+                if (comptime rle1_distance or
+                    (inline_non_overlap and pause_at_output_boundary))
+                {
                     writeSemanticLiteralPair(output, out_pos, entry2);
                 } else {
                     output[out_pos] = @truncate(entry2 >> 16);
@@ -4968,7 +4972,9 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
 
                 if ((entry3 & SemanticDynamicDecoder.literal_flag) != 0) {
                     const advance3: usize = @intCast((entry3 >> 8) & 0xf);
-                    if (comptime rle1_distance) {
+                    if (comptime rle1_distance or
+                        (inline_non_overlap and pause_at_output_boundary))
+                    {
                         writeSemanticLiteralPair(output, out_pos, entry3);
                     } else {
                         output[out_pos] = @truncate(entry3 >> 16);
@@ -5073,9 +5079,24 @@ inline fn decodeSemanticDynamicBlockIntoLinearMode(
         }
 
         var bits = bit_buffer >> @intCast(entry_bits);
-        const length_mask = (@as(u64, 1) << @intCast(length_extra_bits)) - 1;
-        const length = length_base + @as(usize, @intCast(bits & length_mask));
-        bits >>= @intCast(length_extra_bits);
+        const length = if (comptime inline_non_overlap and pause_at_output_boundary) blk: {
+            // Kodak-style deep-distance blocks overwhelmingly use length codes
+            // 257..264, which have no extra bits. Avoid two variable shifts and
+            // a mask for that dominant case while leaving generic loops alone.
+            if (length_extra_bits == 0) {
+                @branchHint(.likely);
+                break :blk length_base;
+            }
+            const length_mask = (@as(u64, 1) << @intCast(length_extra_bits)) - 1;
+            const decoded = length_base + @as(usize, @intCast(bits & length_mask));
+            bits >>= @intCast(length_extra_bits);
+            break :blk decoded;
+        } else blk: {
+            const length_mask = (@as(u64, 1) << @intCast(length_extra_bits)) - 1;
+            const decoded = length_base + @as(usize, @intCast(bits & length_mask));
+            bits >>= @intCast(length_extra_bits);
+            break :blk decoded;
+        };
 
         if (comptime rle1_distance) {
             // The only distance symbol is zero with canonical code 0 and one
@@ -13267,6 +13288,8 @@ const semantic_non_overlap_mixed_tokens = [_]lz77.Token{
     .{ .literal = 'A' },
     .{ .match = .{ .length = 258, .distance = 1 } },
     .{ .literal = 'B' },
+    .{ .literal = 'C' },
+    .{ .literal = 'D' },
     .{ .match = .{ .length = 3, .distance = 2 } },
     .{ .match = .{ .length = 5, .distance = 8 } },
     .{ .match = .{ .length = 8, .distance = 16 } },
@@ -13342,7 +13365,7 @@ test "semantic non-overlap window matches generic mixed-match state" {
     );
     try std.testing.expectEqual(reference_first, active_first);
     try std.testing.expectEqual(SemanticLinearStatus.need_output, active_first.status);
-    try std.testing.expectEqual(@as(usize, 302), active_first.output_written);
+    try std.testing.expectEqual(@as(usize, 304), active_first.output_written);
     try std.testing.expectEqualSlices(
         u8,
         expected[0..active_first.output_written],

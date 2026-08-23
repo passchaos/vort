@@ -4603,3 +4603,20 @@ architecture blindly.
   `kodim17` remains about `0.992x`, so PNG-wide per-fixture leadership is not
   claimed. Fifty-one-round non-RLE controls are noise-bound rather than a
   claimed benefit.
+- Reused the proven packed little-endian semantic literal store only in the
+  resumable deep-distance non-overlap loop, and bypassed dynamic mask/shift work
+  for its dominant zero-extra-bit length symbols. The mixed-match oracle now
+  includes three consecutive literals and compares exact output plus complete
+  reader state at pause and EOB against the generic loop. The isolated x86-64
+  body shrinks from `0x683` to `0x633`; ordinary semantic/reconstruction/commit
+  symbols remain byte-identical at the same addresses.
+- On fixed P-core 14, 101 alternating rounds against `534e7e4` improve
+  `kodim17` `1.0094x/1.0105x` strict/no-Adler. The final repeat-9 image-png
+  `4ab5484` gate has all 15 rows above parity: aggregate/geomean/median are
+  `1.280x/1.288x/1.297x` strict and `1.311x/1.327x/1.317x` no-Adler, with
+  `kodim17` the minimum at `1.0017x/1.0116x`. This is locked-corpus decode-into
+  parity, not a claim that the complete PNG or image-rs surface is surpassed.
+- Rejected three nearby alternatives: row-span Adler updates regressed both
+  strict and no-Adler by about 1%; a global 12-bit semantic literal table only
+  gained about `1.004x/1.002x` on `kodim17` while risking broader cache cost;
+  and 16-byte speculative non-overlap match copies were neutral.

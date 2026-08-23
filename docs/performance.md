@@ -854,3 +854,39 @@ strict/no-Adler decode. `kodim02/07/17/23` improve
 `1.093/1.046/1.014/1.079x` strict and
 `1.078/1.049/1.017/1.079x` no-Adler; four non-selected controls remain within
 `0.9945x..1.0054x` and `0.9966x..1.0026x`.
+
+## Deep-distance PNG literal and zero-extra specialization (2026-08-24)
+
+The bounded-history deep-distance semantic loop now uses the same packed
+little-endian speculative literal stores already proven by the filter-0 RLE1
+path. The change is restricted to the resumable non-overlap specialization;
+the ordinary full-output and generic window loops retain their existing store
+shape. The same specialization also bypasses a dynamic mask and two variable
+shifts for length symbols 257 through 264, whose extra-bit width is zero. On
+`kodim17.png`, those short lengths account for roughly 83% of match tokens.
+
+The mixed-match oracle now places three adjacent literals before its RLE,
+small-distance, short/long non-overlap, and overlapping cases. It compares exact
+output and the entire buffered-reader state with the generic window loop at both
+a forced output boundary and EOB. Existing tail and public-decode comparisons
+continue to cover nonzero length-extra widths. The x86-64 specialized body
+shrinks from `0x683` to `0x633` bytes. The ordinary semantic full-output loop,
+generic window loop, Sub reconstruction, and row-commit functions remain
+byte-identical at the same addresses; `.text` and `.rodata` sizes are unchanged.
+
+On fixed P-core 14, 101 alternating process rounds against Vort `534e7e4`
+move `kodim17` median throughput from `379.23` to `382.78` MiB/s strict
+(`1.0094x`) and from `381.99` to `386.00` MiB/s no-Adler (`1.0105x`). A final
+repeat-9 full comparison against image-png `4ab5484` reports:
+
+| policy | aggregate | geomean | median | weakest fixture |
+| --- | ---: | ---: | ---: | ---: |
+| strict decode-into | `1.280x` | `1.288x` | `1.297x` | `kodim17`, `1.0017x` |
+| decode-into no-Adler | `1.311x` | `1.327x` | `1.317x` | `kodim17`, `1.0116x` |
+
+All 15 locked fixtures exceed image-png in this snapshot. This establishes
+per-row parity for the locked decode-into corpus on this machine, not PNG-wide
+or cross-platform leadership. A broader per-row Adler batching attempt regressed
+both checksum policies by about 1%, a global 12-bit semantic table produced only
+about `1.004x/1.002x`, and extending speculative match copies through 16 bytes
+was neutral; all three experiments were reverted.
