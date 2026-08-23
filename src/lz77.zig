@@ -599,7 +599,7 @@ fn extendOptimalLengthChoices(
     }
     var length = @max(minimum, built_through + 1);
     while (length <= maximum) : (length += 1) {
-        const cost = fixedLengthSymbolCost(length) + costs[position + length];
+        const cost = fixed_length_costs[length] + costs[position + length];
         // The reference scans from longest to shortest and updates only on a
         // strict improvement, so equal costs select the longest length.
         if (cost < best_cost or (cost == best_cost and length > best_length)) {
@@ -718,6 +718,22 @@ fn fixedLengthSymbolCost(length: usize) usize {
     if (length <= 130) return 11;
     if (length <= 257) return 12;
     return 8; // 258 is the fixed-Huffman code 285 with no extra bits.
+}
+
+fn fixedLengthCostTable() [max_match_len + 1]u8 {
+    var table: [max_match_len + 1]u8 = @splat(0);
+    for (min_match_len..max_match_len + 1) |length| {
+        table[length] = @intCast(fixedLengthSymbolCost(length));
+    }
+    return table;
+}
+
+const fixed_length_costs = fixedLengthCostTable();
+
+test "compile-time fixed length costs match scalar range" {
+    for (min_match_len..max_match_len + 1) |length| {
+        try std.testing.expectEqual(@as(u8, @intCast(fixedLengthSymbolCost(length))), fixed_length_costs[length]);
+    }
 }
 
 fn fixedDistanceSymbolCost(distance: usize) usize {

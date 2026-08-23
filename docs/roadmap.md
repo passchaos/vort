@@ -2996,6 +2996,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   made the old ordering assertion flaky. Broad latency ceilings remain, and the
   dedicated 72-row stage gate continues to pin each level/candidate search
   budget directly.
+  The optimal LZ77 dynamic program now indexes a compile-time 259-entry fixed
+  match-length cost table instead of re-running the length-code branch ladder
+  for every candidate length. An exhaustive scalar oracle covers every legal
+  length. Twenty fixed-CPU-8..10 primary-optimal pairs retained the 824-byte
+  JSON block and reduced the stage median by about 15.1%; twelve end-to-end
+  pairs retained 93/831/8850-byte frames, improving text by 28.2% and JSON by
+  1.1% while binary stayed within 0.3% noise.
   Large-block predecessor snapshots now carry a lazy `u16` match-length cache.
   The first mixed lookup still performs the exact existing extension and tie
   logic, while later mixed branches plus multi/single duplicate passes reuse the
