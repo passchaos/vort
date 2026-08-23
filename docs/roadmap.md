@@ -3048,6 +3048,9 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   candidates have already satisfied the minimum/window invariants and reads the
   precomputed length-cost table directly, reducing focused JSON/binary stage
   medians from roughly 2.46/2.55 ms to 2.26/2.28 ms without wire changes.
+  Beam storage now keeps one byte of valid-slot counts per source position
+  instead of clearing every full state object before parsing. Focused JSON and
+  binary medians move further to about 2.22/2.26 ms with identical output.
   Adaptive 4/8 KiB candidates explicitly disable the beam: their lower-budget
   parsers remain the ratio fallback, while only the primary level-9 block pays
   the stateful search. Twelve fixed-CPU-8..10 end-to-end pairs versus the

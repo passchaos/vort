@@ -536,16 +536,19 @@ pub fn optimalRepBeamPlanAlloc(allocator: std.mem.Allocator, input: []const u8, 
     const state_count = std.math.mul(usize, input.len + 1, rep_beam_width) catch return error.IntegerOverflow;
     const states = try allocator.alloc(RepBeamState, state_count);
     defer allocator.free(states);
-    @memset(states, .{});
+    const lengths = try allocator.alloc(u8, input.len + 1);
+    defer allocator.free(lengths);
+    @memset(lengths, 0);
     states[0].cost = 0;
+    lengths[0] = 1;
 
     var matches: [rep_beam_match_candidates]Token.Match = undefined;
     for (0..input.len) |position| {
         const match_count = try index.matchesAt(input, position, options, &matches);
-        const current = states[position * rep_beam_width ..][0..rep_beam_width];
+        const current = states[position * rep_beam_width ..][0..lengths[position]];
         for (current, 0..) |state, slot| {
             if (state.cost == std.math.maxInt(usize)) continue;
-            try insertRepBeamState(states, position + 1, .{
+            try insertRepBeamState(states, lengths, position + 1, .{
                 .cost = std.math.add(usize, state.cost, fixedLiteralCost(input[position])) catch continue,
                 .rep0 = state.rep0,
                 .previous_position = @intCast(position),
@@ -554,18 +557,18 @@ pub fn optimalRepBeamPlanAlloc(allocator: std.mem.Allocator, input: []const u8, 
             });
 
             for (matches[0..match_count]) |match| {
-                try extendRepBeamMatch(states, input, options, position, slot, state, match);
+                try extendRepBeamMatch(states, lengths, input, options, position, slot, state, match);
             }
             if (state.rep0 <= position and position + minMatch(options) <= input.len) {
                 const length = matchLength(input, position - state.rep0, position, @min(maxMatch(options), input.len - position));
                 if (length >= minMatch(options)) {
-                    try extendRepBeamMatch(states, input, options, position, slot, state, .{ .length = @intCast(length), .distance = state.rep0 });
+                    try extendRepBeamMatch(states, lengths, input, options, position, slot, state, .{ .length = @intCast(length), .distance = state.rep0 });
                 }
             }
         }
     }
 
-    const final_states = states[input.len * rep_beam_width ..][0..rep_beam_width];
+    const final_states = states[input.len * rep_beam_width ..][0..lengths[input.len]];
     var best_slot: ?usize = null;
     for (final_states, 0..) |state, slot| {
         if (state.cost == std.math.maxInt(usize)) continue;
@@ -594,11 +597,11 @@ pub fn optimalRepBeamPlanAlloc(allocator: std.mem.Allocator, input: []const u8, 
     return .{ .tokens = try reversed.toOwnedSlice(allocator), .stats = stats };
 }
 
-fn extendRepBeamMatch(states: []RepBeamState, _: []const u8, options: GreedyOptions, position: usize, slot: usize, state: RepBeamState, match: Token.Match) !void {
+fn extendRepBeamMatch(states: []RepBeamState, lengths: []u8, _: []const u8, options: GreedyOptions, position: usize, slot: usize, state: RepBeamState, match: Token.Match) !void {
     if (match.length < minMatch(options) or match.distance == 0 or match.distance > position) return;
     const distance_cost: usize = if (match.distance == state.rep0) 1 else fixedDistanceSymbolCost(match.distance);
     const cost = std.math.add(usize, state.cost, fixed_length_costs[match.length] + distance_cost) catch return;
-    try insertRepBeamState(states, position + match.length, .{
+    try insertRepBeamState(states, lengths, position + match.length, .{
         .cost = cost,
         .rep0 = match.distance,
         .previous_position = @intCast(position),
@@ -607,8 +610,20 @@ fn extendRepBeamMatch(states: []RepBeamState, _: []const u8, options: GreedyOpti
     });
 }
 
-fn insertRepBeamState(states: []RepBeamState, position: usize, candidate: RepBeamState) !void {
+fn insertRepBeamState(states: []RepBeamState, lengths: []u8, position: usize, candidate: RepBeamState) !void {
     const slots = states[position * rep_beam_width ..][0..rep_beam_width];
+    const len = lengths[position];
+    if (len < rep_beam_width) {
+        for (slots[0..len], 0..) |state, slot| {
+            if (state.rep0 == candidate.rep0) {
+                if (candidate.cost < state.cost) slots[slot] = candidate;
+                return;
+            }
+        }
+        slots[len] = candidate;
+        lengths[position] += 1;
+        return;
+    }
     var replacement: usize = 0;
     for (slots, 0..) |state, slot| {
         if (state.rep0 == candidate.rep0) {
