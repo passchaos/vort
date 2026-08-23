@@ -2910,6 +2910,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   primary/4 KiB/8 KiB JSON mixed medians by about 1.8%/8.0%/7.8%; the focused
   4 KiB twelve-pair run moved from 59.640 ms to 55.221 ms (1.080x), retaining
   the 9823-byte aggregate candidate output.
+  The remaining predefined state paths are bounded to 64 states, so their plan
+  arrays now use `u8` rather than `usize`. The independent usize-matrix oracle
+  still proves every chosen state across LL/OF/ML. Eight fixed-CPU-8..10 pairs
+  retained the same candidate bytes while improving primary/4 KiB/8 KiB JSON
+  mixed medians by about 4.8%/4.4%/5.4%; a twelve-pair 4 KiB run measured
+  55.255 ms to 53.080 ms (1.041x).
   Sequence-literal RLE detection now skips empty/already-disproved runs and uses
   the standard library's vectorized `allEqual` scan for each remaining run
   instead of branching once per byte. A focused reference oracle covers empty,

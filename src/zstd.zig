@@ -11812,10 +11812,10 @@ const BitField = struct {
 
 const PredefinedSequencePlan = struct {
     len: usize = 0,
-    // Source LL/OF/ML values stay in the caller-owned plan arrays. Keeping
-    // another 128-usize copy here made each alternative and combined-plan copy
-    // substantially larger during mixed lookahead without adding ownership.
-    states: [max_bootstrap_sequence_count]usize = undefined,
+    // Source LL/OF/ML values stay in the caller-owned plan arrays. States are
+    // bounded by max_predefined_sequence_states, so u8 retains every valid
+    // state while keeping frequently copied alternatives compact.
+    states: [max_bootstrap_sequence_count]u8 = undefined,
 };
 
 fn buildPredefinedStateMasks(
@@ -11907,7 +11907,7 @@ fn planPredefinedSequenceValues(values: []const usize, symbols: []const Sequence
     const initial_state: usize = @ctz(viable_next);
 
     var plan: PredefinedSequencePlan = .{ .len = values.len };
-    plan.states[0] = initial_state;
+    plan.states[0] = @intCast(initial_state);
     for (0..values.len - 1) |i| {
         plan.states[i + 1] = next_choice[i][plan.states[i]];
         if (plan.states[i + 1] >= symbols.len) return null;
@@ -11950,8 +11950,8 @@ fn planPredefinedSequenceValuesReference(values: []const usize, symbols: []const
         break;
     };
     var plan: PredefinedSequencePlan = .{ .len = values.len };
-    plan.states[0] = first_state orelse return null;
-    for (0..values.len - 1) |i| plan.states[i + 1] = next_choice[i][plan.states[i]];
+    plan.states[0] = @intCast(first_state orelse return null);
+    for (0..values.len - 1) |i| plan.states[i + 1] = @intCast(next_choice[i][plan.states[i]]);
     return plan;
 }
 
@@ -11975,7 +11975,9 @@ test "zstd compact predefined planner matches usize reference" {
             if (expected) |expected_plan| {
                 const actual_plan = actual.?;
                 try std.testing.expectEqual(expected_plan.len, actual_plan.len);
-                try std.testing.expectEqualSlices(usize, expected_plan.states[0..len], actual_plan.states[0..len]);
+                for (expected_plan.states[0..len], actual_plan.states[0..len]) |expected_state, actual_state| {
+                    try std.testing.expectEqual(expected_state, actual_state);
+                }
             }
         }
     }
