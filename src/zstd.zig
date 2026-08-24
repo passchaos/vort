@@ -7436,6 +7436,31 @@ fn emitNativeMatchCompressedBlockSerialWithBeam(allocator: std.mem.Allocator, ou
         duplicate_index.build(block);
         break :blk &duplicate_index;
     } else null;
+    // Level 1 skips multi-duplicate search, so its final single candidate has
+    // no earlier query to reuse. Evaluate that candidate up front for large
+    // blocks; an extreme 256x win can safely bypass the much slower optimal
+    // and repeated passes. Non-decisive results stay in scratch and enter the
+    // original final arbitration position, preserving tie behavior.
+    var early_single: std.ArrayList(u8) = .empty;
+    defer early_single.deinit(allocator);
+    var early_single_tested = false;
+    var early_single_available = false;
+    if (match_search_budget < multi_duplicate_min_search_budget and block.len > duplicate_exact_hash_input_max) {
+        early_single_tested = true;
+        const early_single_match = if (duplicate_index_ptr) |index|
+            try findBestDuplicateMatchIndexed(block, 0, index)
+        else
+            try findBestDuplicateMatch(block);
+        if (early_single_match) |match| {
+            early_single_available = try emitSingleMatchCompressedBlockFromMatch(allocator, &early_single, block, last, match);
+            if (early_single_available) {
+                if (early_single.items.len <= block.len / 256) {
+                    try out.appendSlice(allocator, early_single.items);
+                    return true;
+                }
+            }
+        }
+    }
     const mixed_ok = if (match_search_budget >= mixed_match_min_search_budget)
         try emitMixedDuplicateRepeatedMatchCompressedBlock(allocator, &candidate, block, last, match_search_budget, duplicate_index_ptr)
     else
@@ -7518,13 +7543,17 @@ fn emitNativeMatchCompressedBlockSerialWithBeam(allocator: std.mem.Allocator, ou
     // single candidate. Reuse that result rather than walking/scoring the block
     // again. A decisive beam has already completed that query even when no
     // match exists; only paths that skipped both searches need the fallback.
-    const single_duplicate_ok = if (first_duplicate) |match|
-        try emitSingleMatchCompressedBlockFromMatch(allocator, &candidate, block, last, match)
-    else if (beam_is_decisive)
-        false
-    else
-        try emitSingleMatchCompressedBlock(allocator, &candidate, block, last, duplicate_index_ptr);
-    try retainShortestCandidate(allocator, single_duplicate_ok, candidate.items, &best);
+    if (early_single_tested) {
+        try retainShortestCandidate(allocator, early_single_available, early_single.items, &best);
+    } else {
+        const single_duplicate_ok = if (first_duplicate) |match|
+            try emitSingleMatchCompressedBlockFromMatch(allocator, &candidate, block, last, match)
+        else if (beam_is_decisive)
+            false
+        else
+            try emitSingleMatchCompressedBlock(allocator, &candidate, block, last, duplicate_index_ptr);
+        try retainShortestCandidate(allocator, single_duplicate_ok, candidate.items, &best);
+    }
 
     if (best.items.len == 0) return false;
     try out.appendSlice(allocator, best.items);
@@ -7982,6 +8011,21 @@ test "zstd prefix-tail shortcut matches full native selection across levels" {
         try std.testing.expect(actual.items.len <= payload.len / decisive_ratio);
         try std.testing.expectEqualSlices(u8, expected.items, actual.items);
     }
+}
+
+test "zstd decisive level one single match returns its exact candidate" {
+    var payload: [32 * 1024]u8 = @splat('a');
+    @memcpy(payload[0..16], "unique-prefix-01");
+    try std.testing.expect(findPrefixTailDuplicateMatch(&payload) == null);
+
+    var expected: std.ArrayList(u8) = .empty;
+    defer expected.deinit(std.testing.allocator);
+    try std.testing.expect(try emitSingleMatchCompressedBlock(std.testing.allocator, &expected, &payload, true, null));
+    var actual: std.ArrayList(u8) = .empty;
+    defer actual.deinit(std.testing.allocator);
+    try std.testing.expect(try emitNativeMatchCompressedBlock(std.testing.allocator, &actual, &payload, true, 16, false));
+    try std.testing.expect(actual.items.len <= payload.len / 256);
+    try std.testing.expectEqualSlices(u8, expected.items, actual.items);
 }
 
 test "zstd decisive primary frame bypasses adaptive candidates across levels" {

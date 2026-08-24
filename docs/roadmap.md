@@ -3227,6 +3227,17 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   1.6% noise and the prefix-tail text case was already handled by its stricter
   structural shortcut. Level 3 again keeps full arbitration because the matrix
   contains highly compressible counterexamples where a split still wins.
+  Level-1 block arbitration now evaluates its required single-duplicate fallback
+  before the optimal/repeated passes on blocks above 4 KiB. If that complete
+  one-sequence block is at most 1/256 of the source, it returns immediately;
+  otherwise the encoded candidate is retained until its original final
+  arbitration position, preserving tie order without recomputation. A 512-input
+  candidate matrix found seventeen decisive cases and no optimal/repeated winner
+  among them, while an end-to-end 512-case comparison remained byte-identical.
+  Twenty fixed-CPU-8..10 pairs on a non-prefix 32 KiB run fixture retained the
+  30-byte frame and reduced median level-1 encode time to about 33.0% of
+  baseline. The locked JSON row improved about 10.6%; text and binary controls
+  stayed within roughly 0.9% noise.
   Exact-cache profiling of the remaining level-9 JSON mixed search found 95
   scored prefixes at depths 2...96, with 95 distinct full score keys, literal
   histograms, and LL/OF/ML vectors, so no speculative memoization was retained.
