@@ -6320,6 +6320,17 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   fit the existing 64-symbol compact package-merge path, and neither a 96-symbol
   specialization nor an unconstrained-Huffman fast path produced a pinned
   source win; none remains in production.
+- Rolling DEFLATE history/block match extension now compares 32-byte vectors
+  before its existing 8-byte and scalar tails. The first differing-lane mask
+  preserves exact byte offsets and removes three dependent word comparisons on
+  long source-like matches. A focused oracle covers every mismatch position
+  and every maximum length through 321 bytes with different slice offsets. In
+  nine fixed-CPU-8, 4096-iteration A/B pairs, matcher-only medians improved by
+  about 16% on JSON logs and 18% on source; stable end-to-end samples improved
+  by roughly 10%, repetitive input by about 4%, and compressed bytes/checksum
+  mixes remained identical. A whole-run source profile measured 2779.93 MiB/s
+  versus local zlib-ng 2.3.90 at 2812.29 MiB/s, narrowing the remaining gap to
+  about 1.2%.
 - Added a byte-progressive raw-DEFLATE stored-block decoder under
   `src/deflate/incremental/decoder/`. It preserves split header state, streams
   payload directly caller-to-caller through tiny output, enforces exact/maximum

@@ -291,6 +291,15 @@ fn sliceMatchLength(input: []const u8, left_pos: usize, right_pos: usize, maximu
 
 fn crossSliceMatchLength(left: []const u8, left_pos: usize, right: []const u8, right_pos: usize, maximum: usize) usize {
     var length: usize = 0;
+    // Long source/history matches dominate the persistent parser. Compare four
+    // words at once, then use the lane mask to retain the exact first-mismatch
+    // result before falling through to the existing word and byte tails.
+    while (length + 32 <= maximum) : (length += 32) {
+        const a: @Vector(32, u8) = left[left_pos + length ..][0..32].*;
+        const b: @Vector(32, u8) = right[right_pos + length ..][0..32].*;
+        const differing: u32 = ~@as(u32, @bitCast(a == b));
+        if (differing != 0) return length + @ctz(differing);
+    }
     while (length + 8 <= maximum) : (length += 8) {
         const a = std.mem.readInt(u64, left[left_pos + length ..][0..8], .little);
         const b = std.mem.readInt(u64, right[right_pos + length ..][0..8], .little);
@@ -298,6 +307,22 @@ fn crossSliceMatchLength(left: []const u8, left_pos: usize, right: []const u8, r
     }
     while (length < maximum and left[left_pos + length] == right[right_pos + length]) : (length += 1) {}
     return length;
+}
+
+test "rolling match length vector path matches byte reference" {
+    var left: [337]u8 = undefined;
+    var right: [345]u8 = undefined;
+    for (&left, 0..) |*byte, i| byte.* = @truncate(i * 37 + i / 11);
+    for (&right, 0..) |*byte, i| byte.* = @truncate((i -| 8) * 37 + (i -| 8) / 11);
+    const maximum: usize = 321;
+    for (0..maximum) |mismatch| {
+        right[8 + mismatch] +%= 1;
+        try std.testing.expectEqual(mismatch, crossSliceMatchLength(&left, 0, &right, 8, maximum));
+        right[8 + mismatch] = left[mismatch];
+    }
+    // Exercise every boundary around both the vector and scalar tail widths.
+    for (0..maximum + 1) |limit|
+        try std.testing.expectEqual(limit, crossSliceMatchLength(&left, 0, &right, 8, limit));
 }
 
 fn hashAt(history: []const u8, block: []const u8, block_absolute: usize, absolute: usize, anchor_len: usize) usize {
