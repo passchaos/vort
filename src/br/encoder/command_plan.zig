@@ -302,11 +302,20 @@ pub fn buildReuse(commands: *std.ArrayList(Command), allocator: std.mem.Allocato
 }
 
 pub fn withoutCopyInto(output: []Command, input_len: usize, commands: []const Command, drop: usize) ![]Command {
+    return withoutCopiesInto(output, input_len, commands, &.{drop});
+}
+
+pub fn withoutCopiesInto(output: []Command, input_len: usize, commands: []const Command, drops: []const usize) ![]Command {
     // Converting one short copy back to literals can reduce the total stream:
     // besides payload bits it may remove a command/distance alphabet symbol.
     // Rebuild positions explicitly so the resulting plan keeps the same
     // decoded bytes and every following match retains its original distance.
-    if (drop >= commands.len or !commands[drop].has_copy) return error.InvalidBlockPlan;
+    if (drops.len == 0) return error.InvalidBlockPlan;
+    var previous_drop: ?usize = null;
+    for (drops) |drop| {
+        if (drop >= commands.len or !commands[drop].has_copy or (previous_drop != null and drop <= previous_drop.?)) return error.InvalidBlockPlan;
+        previous_drop = drop;
+    }
     if (output.len < commands.len) return error.OutOfMemory;
     var command_count: usize = 0;
     var cursor: usize = 0;
@@ -318,7 +327,7 @@ pub fn withoutCopyInto(output: []Command, input_len: usize, commands: []const Co
         insert_len += command.insert_len;
         if (!command.has_copy) continue;
         const copy_output_len = if (command.dictionary_output_len == 0) command.copy_len else command.dictionary_output_len;
-        if (i == drop) {
+        if (std.mem.indexOfScalar(usize, drops, i) != null) {
             cursor += copy_output_len;
             insert_len += copy_output_len;
             continue;
@@ -427,6 +436,19 @@ test "rejects invalid short-copy replacement requests" {
     var storage: [1]Command = undefined;
     try std.testing.expectError(error.InvalidBlockPlan, withoutCopyInto(&storage, 4, &command, 0));
     try std.testing.expectError(error.InvalidBlockPlan, withoutCopyInto(&storage, 4, &command, 1));
+}
+
+test "replaces multiple short copies using original indexes" {
+    const commands = [_]Command{
+        .{ .insert_start = 0, .insert_len = 4, .copy_len = 3, .distance = 4, .has_copy = true },
+        .{ .insert_start = 7, .insert_len = 1, .copy_len = 3, .distance = 5, .has_copy = true },
+        .{ .insert_start = 11, .insert_len = 1, .copy_len = 4, .distance = 6, .has_copy = true },
+    };
+    var storage: [commands.len]Command = undefined;
+    const alternative = try withoutCopiesInto(&storage, 16, &commands, &.{ 0, 1 });
+    try std.testing.expectEqual(@as(usize, 1), alternative.len);
+    try std.testing.expectEqual(Command{ .insert_start = 0, .insert_len = 12, .copy_len = 4, .distance = 6, .has_copy = true }, alternative[0]);
+    try std.testing.expectError(error.InvalidBlockPlan, withoutCopiesInto(&storage, 16, &commands, &.{ 1, 0 }));
 }
 
 test "static dictionary plan preserves transformed and copy lengths" {

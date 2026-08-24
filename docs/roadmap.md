@@ -6630,6 +6630,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   overhead that the fixed-bit LZ77 profitability model cannot see; it reduces
   the locked log stream once more from 83 to 82 bytes while JSON/source stay at
   62/91. The size gate now pins 62/91/82, respectively.
+  For small plans with up to four three-byte matches, balanced mode now also
+  enumerates every non-empty subset to literalize and keeps only a strictly
+  smaller complete stream. This catches interactions between command, distance,
+  and literal trees that no per-match estimate can prove: removing the first
+  two isolated source matches reduces 91 to 88 bytes, leaving only two bytes
+  over libbrotli q3. The transformation uses original command indexes, preserves
+  later absolute insert positions/distances, and has focused multi-removal tests.
   Stable public planner options now expose `.fast` and `.balanced` compression
   levels through `encodePlannedStreamWithOptionsAlloc`; `.balanced` maps to the
   proven lazy parser and is tested to round-trip with size no worse than fast.

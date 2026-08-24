@@ -578,6 +578,37 @@ pub fn encodePlannedStreamLazyWithOptionsAlloc(allocator: std.mem.Allocator, inp
         allocator.free(candidate);
         return baseline;
     }
+    var short_matches: [4]usize = undefined;
+    var short_count: usize = 0;
+    for (plan.commands, 0..) |command, index| {
+        if (command.has_copy and command.dictionary_output_len == 0 and command.copy_len == 3) {
+            if (short_count == short_matches.len) return encodeCommandPlanAlloc(allocator, input, plan.commands, null, &stats);
+            short_matches[short_count] = index;
+            short_count += 1;
+        }
+    }
+    if (short_count >= 2 and plan.commands.len <= 16) {
+        var baseline = try encodeCommandPlanAlloc(allocator, input, plan.commands, null, &stats);
+        errdefer allocator.free(baseline);
+        var drop_storage: [16]usize = undefined;
+        var command_storage: [16]command_plan.Command = undefined;
+        const subset_count = (@as(usize, 1) << @intCast(short_count)) - 1;
+        for (1..subset_count + 1) |subset| {
+            var drop_count: usize = 0;
+            for (short_matches[0..short_count], 0..) |command_index, bit| {
+                if (subset & (@as(usize, 1) << @intCast(bit)) == 0) continue;
+                drop_storage[drop_count] = command_index;
+                drop_count += 1;
+            }
+            const alternative = try command_plan.withoutCopiesInto(&command_storage, input.len, plan.commands, drop_storage[0..drop_count]);
+            const candidate = try encodeCommandPlanAlloc(allocator, input, alternative, null, &stats);
+            if (candidate.len < baseline.len) {
+                allocator.free(baseline);
+                baseline = candidate;
+            } else allocator.free(candidate);
+        }
+        return baseline;
+    }
     return encodeCommandPlanAlloc(allocator, input, plan.commands, null, &stats);
 }
 
