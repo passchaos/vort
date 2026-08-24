@@ -12932,6 +12932,20 @@ test "br zero context map reader accepts plain and RLE all-zero maps" {
     try std.testing.expectError(error.UnsupportedBrotliFeature, readZeroContextMap(&nonzero_reader, 64, 2));
 }
 
+test "br UTF8 text context map uses compact zero-run coding" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeUtf8TextContextMap(std.testing.allocator, &writer);
+
+    var reader = bitstream.BitReader.init(encoded.items);
+    var context_map: [64]u8 = undefined;
+    try readContextMap(&reader, &context_map, 2);
+    for (context_map, 0..) |tree, context|
+        try std.testing.expectEqual(literal_context.utf8TextTree(context), tree);
+    try std.testing.expect(encoded.items.len <= 4);
+}
+
 test "br distance context map reader preserves nonzero tree indexes" {
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(std.testing.allocator);
@@ -13488,19 +13502,25 @@ fn writePlannedCompressedHeaderTwoLiteralContexts(
     try writer.writeBits(allocator, 15, 4); // NDIRECT
     try writer.writeBits(allocator, literal_context.mode_utf8, 2);
     try writeBlockTypeCount(allocator, writer, 2);
-    // The two-symbol map assigns its one-bit code directly. Keeping contexts
-    // 56...63 contiguous avoids an RLE prefix and makes the extra tree cheap.
-    try writer.writeBits(allocator, 0, 1); // RLEMAX = 0
-    try writer.writeBits(allocator, 1, 2); // simple prefix
-    try writer.writeBits(allocator, 1, 2); // NSYM = 2
-    try writer.writeBits(allocator, 0, 1);
-    try writer.writeBits(allocator, 1, 1);
-    for (0..64) |context| try writer.writeBits(allocator, literal_context.utf8TextTree(context), 1);
-    try writer.writeBits(allocator, 0, 1); // IMTF = false
+    try writeUtf8TextContextMap(allocator, writer);
     try writeBlockTypeCount(allocator, writer, 1);
     inline for (0..2) |tree| try writePrefixSymbolsWithLengths(allocator, writer, 256, &literal_alphabets[tree], &literal_lengths[tree]);
     try writePrefixSymbolsWithLengths(allocator, writer, 704, command_alphabet, command_lengths);
     try writePrefixSymbolsWithLengths(allocator, writer, distance_alphabet_size, distance_alphabet, distance_lengths);
+}
+
+fn writeUtf8TextContextMap(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    try writer.writeBits(allocator, 1, 1); // Use zero-run RLE.
+    try writer.writeBits(allocator, 5, 4); // RLEMAX = 6.
+    try writer.writeBits(allocator, 1, 2); // Simple prefix.
+    try writer.writeBits(allocator, 1, 2); // NSYM = 2.
+    // Symbol 5 encodes a 32...63 zero run; symbol 7 selects literal tree 1.
+    try writer.writeBits(allocator, 5, alphabetBits(8));
+    try writer.writeBits(allocator, 7, alphabetBits(8));
+    try writer.writeBits(allocator, 0, 1); // Symbol 5.
+    try writer.writeBits(allocator, 56 - 32, 5);
+    for (0..8) |_| try writer.writeBits(allocator, 1, 1); // Symbol 7.
+    try writer.writeBits(allocator, 0, 1); // IMTF = false.
 }
 
 fn plannedDistanceAlphabetSize(alphabet: *const command_plan.PrefixAlphabet) usize {
