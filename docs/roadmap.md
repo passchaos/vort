@@ -6871,3 +6871,9 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   entry points retain their precise `InvalidBlockPlan` behavior. Deterministic
   random inputs at 8/64/256/4096 bytes cover all levels, and Node decodes the
   fast/balanced incompressible fixtures.
+  `PlannedStreamEncoder` now exposes matching `encodeWithOptionsAlloc`. Its fast
+  level retains reusable token/command capacity while applying the same stored
+  fallback and ceiling; balanced/ratio delegate to their stable one-shot paths
+  until their larger parser state is reusable. Tests require byte parity with
+  the one-shot API for all levels, capacity retention for fast, and successful
+  incompressible round trips bounded by stored size.

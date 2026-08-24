@@ -861,6 +861,17 @@ pub const PlannedStreamEncoder = struct {
     }
 
     pub fn encodeAlloc(self: *PlannedStreamEncoder, allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+        return self.encodeWithOptionsAlloc(allocator, input, .{});
+    }
+
+    /// Encode through the stable level API while retaining the fast level's
+    /// token and command capacity. Balanced and ratio currently delegate to
+    /// their production one-shot planners so behavior stays identical until
+    /// their larger parser scratch is made reusable as well.
+    pub fn encodeWithOptionsAlloc(self: *PlannedStreamEncoder, allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
+        if (options.level != .fast) {
+            return encodePlannedStreamWithOptionsAlloc(allocator, input, options);
+        }
         if (input.len < 5 or input.len > 32 * 1024) return error.InvalidBlockPlan;
         const stats = try lz77.hashGreedyPlanAutoTinyReuse(&self.tokens, self.allocator, input, .{
             .window_len = input.len,
@@ -870,10 +881,11 @@ pub const PlannedStreamEncoder = struct {
             .min_match = 3,
             .max_match = lz77.max_match_len,
         });
-        if (stats.matches == 0) return error.InvalidBlockPlan;
+        if (stats.matches == 0) return encodeStoredStreamAlloc(allocator, input);
         _ = try command_plan.buildReuse(&self.commands, self.allocator, input, self.tokens.items);
         var stats_out: encoder_stats.PlannedEncodeStats = .{};
-        return encodeCommandPlanAlloc(allocator, input, self.commands.items, null, &stats_out);
+        const compressed = try encodeCommandPlanAlloc(allocator, input, self.commands.items, null, &stats_out);
+        return chooseStoredIfSmaller(allocator, input, compressed);
     }
 
     pub fn retainedCapacity(self: *const PlannedStreamEncoder) usize {
@@ -6506,6 +6518,27 @@ test "br planner-backed encoder retains reusable arena capacity" {
     defer std.testing.allocator.free(second);
     try std.testing.expectEqualSlices(u8, first, second);
     try std.testing.expect(encoder.retainedCapacity() >= capacity);
+}
+
+test "br reusable planner exposes stable levels and stored fallback" {
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const repetitive = "abcabcXabcabcXabcabcX";
+    const incompressible = "qzxwvbnm1234567890QZXWVBNM!@#$%^&*";
+    for ([_]PlannedCompressionLevel{ .fast, .balanced, .ratio }) |level| {
+        const expected = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, repetitive, .{ .level = level });
+        defer std.testing.allocator.free(expected);
+        const actual = try encoder.encodeWithOptionsAlloc(std.testing.allocator, repetitive, .{ .level = level });
+        defer std.testing.allocator.free(actual);
+        try std.testing.expectEqualSlices(u8, expected, actual);
+
+        const stored = try encoder.encodeWithOptionsAlloc(std.testing.allocator, incompressible, .{ .level = level });
+        defer std.testing.allocator.free(stored);
+        try std.testing.expect(stored.len <= try encodedStoredStreamBound(incompressible.len));
+        const decoded = try decodeStreamAlloc(std.testing.allocator, stored);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, incompressible, decoded);
+    }
 }
 
 test "br simple encoder selects RLE or stored streams" {
