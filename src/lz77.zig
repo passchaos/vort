@@ -1373,6 +1373,15 @@ fn findBestCombinedHashMatch(dict: []const u8, input: []const u8, current: usize
 
 fn matchLength(input: []const u8, a: usize, b: usize, max_len: usize) usize {
     var len: usize = 0;
+    // Long matches dominate the optimal and repeat-aware Zstd parsers. Compare
+    // four words at once, then use the equality mask to preserve the exact
+    // first-mismatch offset before falling through to the word/scalar tails.
+    while (len + 32 <= max_len) : (len += 32) {
+        const left: @Vector(32, u8) = input[a + len ..][0..32].*;
+        const right: @Vector(32, u8) = input[b + len ..][0..32].*;
+        const differing: u32 = ~@as(u32, @bitCast(left == right));
+        if (differing != 0) return len + @ctz(differing);
+    }
     while (len + 8 <= max_len) : (len += 8) {
         const left = std.mem.readInt(u64, input[a + len ..][0..8], .little);
         const right = std.mem.readInt(u64, input[b + len ..][0..8], .little);
@@ -1382,6 +1391,21 @@ fn matchLength(input: []const u8, a: usize, b: usize, max_len: usize) usize {
     }
     while (len < max_len and input[a + len] == input[b + len]) len += 1;
     return len;
+}
+
+test "shared match length vector path matches byte reference" {
+    var input: [674]u8 = undefined;
+    for (input[0..337], 0..) |*byte, i| byte.* = @truncate(i * 37 + i / 11);
+    @memcpy(input[337..674], input[0..337]);
+    const maximum: usize = 321;
+
+    for (0..maximum) |mismatch| {
+        input[337 + mismatch] +%= 1;
+        try std.testing.expectEqual(mismatch, matchLength(&input, 0, 337, maximum));
+        input[337 + mismatch] = input[mismatch];
+    }
+    for (0..maximum + 1) |limit|
+        try std.testing.expectEqual(limit, matchLength(&input, 0, 337, limit));
 }
 
 fn combinedMatchLength(dict: []const u8, input: []const u8, candidate: usize, current: usize, max_len: usize) usize {

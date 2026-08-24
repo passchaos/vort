@@ -3200,6 +3200,14 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   pairs retained the locked 80-byte text frame while reducing level-1/3 median
   encode time to about 2.3%/2.2% of baseline; JSON and binary controls remained
   within roughly 2.6% noise.
+  Shared LZ77 match extension now compares 32-byte vectors before its existing
+  eight-byte and scalar tails. An exhaustive oracle covers every mismatch and
+  maximum length through 321 bytes at an unaligned second offset. Sixteen
+  fixed-CPU-8 stage pairs retained every candidate byte while improving primary/
+  4 KiB/8 KiB optimal JSON medians by about 15.5%/14.3%/16.1%; primary binary
+  improved about 8.6%. Twenty fixed-CPU-8..10 end-to-end pairs retained every
+  locked frame, improved level-1 JSON/binary by about 2.4%/2.3%, and kept
+  levels 3/9 within roughly 1.2% noise.
   Exact-cache profiling of the remaining level-9 JSON mixed search found 95
   scored prefixes at depths 2...96, with 95 distinct full score keys, literal
   histograms, and LL/OF/ML vectors, so no speculative memoization was retained.
