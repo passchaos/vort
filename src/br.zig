@@ -942,15 +942,19 @@ fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, comma
 /// changes can occasionally outweigh saved distance bits, so ratio mode keeps
 /// the candidate only when the final byte length is smaller.
 fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions) Error![]u8 {
-    const baseline = try encodeCommandPlanAlloc(allocator, input, commands, io, stats);
     // A second full wire encode is worthwhile on ratio-sized plans with many
     // reusable distances, but would dominate latency for small inputs.
-    if (!options.try_recent_distances or countReusableRecentDistances(commands) < min_recent_distance_candidate_count) return baseline;
-    errdefer allocator.free(baseline);
+    if (!options.try_recent_distances or countReusableRecentDistances(commands) < min_recent_distance_candidate_count) return encodeCommandPlanAlloc(allocator, input, commands, io, stats);
     const context_candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, io, stats, .{
         .use_recent_distances = true,
         .use_utf8_text_contexts = true,
     });
+    // A result below this conservative ratio already wins by far more than the
+    // few-byte regressions observed when switching command/literal alphabets.
+    // Avoid materializing the explicit baseline in that common ratio-mode case.
+    if (byteRatioAtMost(context_candidate.len, input.len, 80)) return context_candidate;
+    const baseline = try encodeCommandPlanAlloc(allocator, input, commands, io, stats);
+    errdefer allocator.free(baseline);
     if (context_candidate.len < baseline.len) {
         allocator.free(baseline);
         return context_candidate;
@@ -1114,6 +1118,12 @@ fn encodeCommandPlanWithOptionsAlloc(allocator: std.mem.Allocator, input: []cons
     if (io) |active| stats.payload_ns = elapsedNs(payload_start.?, active);
     if (writer.bit_index != 0) writer.alignToByte();
     return out.toOwnedSlice(allocator);
+}
+
+fn byteRatioAtMost(numerator: usize, denominator: usize, percent: usize) bool {
+    const scaled_numerator = std.math.mul(usize, numerator, 100) catch return false;
+    const scaled_denominator = std.math.mul(usize, denominator, percent) catch return false;
+    return scaled_numerator <= scaled_denominator;
 }
 
 fn allZeroFrequencies(comptime len: usize, frequencies: *const [len]u32) bool {
@@ -6037,6 +6047,12 @@ test "br recent-distance candidate tracks the RFC distance ring" {
     try std.testing.expectEqual(@as(?u4, 4), recentDistanceSymbol(3, &initial));
     try std.testing.expectEqual(@as(?u4, 15), recentDistanceSymbol(14, &initial));
     try std.testing.expectEqual(@as(?u4, null), recentDistanceSymbol(32, &initial));
+}
+
+test "br ratio threshold comparison rejects integer overflow" {
+    try std.testing.expect(byteRatioAtMost(80, 100, 80));
+    try std.testing.expect(!byteRatioAtMost(81, 100, 80));
+    try std.testing.expect(!byteRatioAtMost(std.math.maxInt(usize), std.math.maxInt(usize), 80));
 }
 
 test "br direct length-code mapping matches reference scan" {

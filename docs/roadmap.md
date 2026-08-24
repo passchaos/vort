@@ -6667,6 +6667,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   It also subsumes the weaker recent-distance-only candidate on the measured
   corpus, so ratio mode now encodes only the explicit baseline and the combined
   recent-distance/context alternative rather than materializing three streams.
+  When that combined candidate is already at most 80% of input, ratio mode
+  returns it directly: its margin exceeds every measured tree-interaction loss,
+  avoiding the baseline wire pass on the compressible Silesia rows. Fixed-CPU
+  A/B improved `mozilla`/`nci`/`xml` by about 14.7%/10.3%/11.7% with identical
+  output.
   This level is intentionally separate because four
   representative fixed-CPU samples traded roughly 1.6–2.4x encode time for the
   additional 0.8–4.2% size reduction.
