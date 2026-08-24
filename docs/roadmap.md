@@ -3201,6 +3201,15 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   retained the 640-byte frame and reduced the median from about 53.78 ms to
   39.37 ms (1.37x); an additional eight-pair run measured 1.44x, while binary
   remained at 8607 bytes and showed about 1.06x in the corresponding sample.
+  Mixed Huffman sizing now caches cumulative physical-input bit costs keyed by
+  the exact 256-entry code-width table. Adjacent JSON prefixes changed their
+  literal histogram every time but reused the same code widths on 86 of 95
+  scoring calls; those calls now price each retained literal run with two
+  prefix lookups while preserving the four logical stream boundaries. A
+  focused scalar oracle covers offset slices, every mismatch boundary, and the
+  cache reuse path. Twelve fixed-CPU-8 pairs retained the 14619-byte stage
+  candidate and improved its median by about 4.3%; both 76- and 128-case frame
+  probes remained byte-identical, including the locked 80/640/8607-byte frames.
   Adaptive 4/8 KiB candidates explicitly disable the beam: their lower-budget
   parsers remain the ratio fallback, while only the primary level-9 block pays
   the stateful search. Twelve fixed-CPU-8..10 end-to-end pairs versus the

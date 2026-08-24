@@ -8216,6 +8216,32 @@ const MixedLiteralHistogram = struct {
     }
 };
 
+const MixedHuffmanBitPrefix = struct {
+    bit_counts: [256]u8 = @splat(0),
+    prefix: [std.compress.zstd.block_size_max + 1]u32 = undefined,
+    block_len: usize = 0,
+    valid: bool = false,
+
+    fn prepare(self: *MixedHuffmanBitPrefix, block: []const u8, plan: *const SmallHuffmanLiteralPlan) Error!void {
+        if (block.len > std.compress.zstd.block_size_max) return error.CorruptFrame;
+        if (self.valid and self.block_len == block.len and std.mem.eql(u8, &self.bit_counts, &plan.bit_counts)) return;
+        self.prefix[0] = 0;
+        var total: u32 = 0;
+        for (block, 0..) |byte, i| {
+            total += plan.bit_counts[byte];
+            self.prefix[i + 1] = total;
+        }
+        self.bit_counts = plan.bit_counts;
+        self.block_len = block.len;
+        self.valid = true;
+    }
+
+    fn range(self: *const MixedHuffmanBitPrefix, start: usize, len: usize) Error!usize {
+        if (!self.valid or start > self.block_len or len > self.block_len - start) return error.CorruptFrame;
+        return self.prefix[start + len] - self.prefix[start];
+    }
+};
+
 fn emitMixedDictionaryDuplicateMatchCompressedBlock(
     allocator: std.mem.Allocator,
     out: *std.ArrayList(u8),
@@ -8470,6 +8496,7 @@ fn bestMixedMatchLookaheadPlan(
     var best: MixedMatchLookaheadPlan = .{};
     var have_best = false;
     var literal_histogram = MixedLiteralHistogram.init(block);
+    var huffman_bit_prefix: MixedHuffmanBitPrefix = .{};
     for (first_candidates[0..first_count]) |candidate| {
         // Preserve the historical contract: each top-level alternative gets
         // the caller's complete bounded search budget.
@@ -8490,6 +8517,7 @@ fn bestMixedMatchLookaheadPlan(
             &best,
             &have_best,
             &literal_histogram,
+            &huffman_bit_prefix,
         );
     }
     return if (have_best) best else null;
@@ -8534,6 +8562,7 @@ fn bestMixedCandidateLookaheadPlanFromFirstWithCache(
     var search_budget: usize = match_search_budget;
     var seen: MixedMatchKindSet = .{};
     var literal_histogram = MixedLiteralHistogram.init(block);
+    var huffman_bit_prefix: MixedHuffmanBitPrefix = .{};
     try searchMixedCandidateLookaheadPlans(
         dictionary,
         block,
@@ -8549,6 +8578,7 @@ fn bestMixedCandidateLookaheadPlanFromFirstWithCache(
         &best,
         &have_best,
         &literal_histogram,
+        &huffman_bit_prefix,
     );
     if (!have_best or best.count < 2) return null;
     return best;
@@ -8569,6 +8599,7 @@ fn searchMixedCandidateLookaheadPlans(
     best: *MixedMatchLookaheadPlan,
     have_best: *bool,
     literal_histogram: *MixedLiteralHistogram,
+    huffman_bit_prefix: *MixedHuffmanBitPrefix,
 ) Error!void {
     if (search_budget.* == 0 or depth >= max_bootstrap_sequence_count) return;
     search_budget.* -= 1;
@@ -8596,7 +8627,7 @@ fn searchMixedCandidateLookaheadPlans(
     // extra bits can outweigh the literals they remove. Keeping this prefix
     // candidate also makes the bounded search degrade safely if dense
     // candidate graphs exhaust the small bootstrap budget.
-    try considerMixedMatchLookaheadPlan(block, plan, count, candidate.literal_end, seen.*, requirements, best, have_best, literal_histogram);
+    try considerMixedMatchLookaheadPlan(block, plan, count, candidate.literal_end, seen.*, requirements, best, have_best, literal_histogram, huffman_bit_prefix);
     if (candidate.literal_end < block.len and count < max_bootstrap_sequence_count) {
         var next_candidates: [mixed_candidates_per_position]MixedMatchCandidate = undefined;
         const next_count = try candidate_cache.candidatesAt(dictionary, block, candidate.literal_end, frame_offset, allowed, next_candidates[0..]);
@@ -8616,6 +8647,7 @@ fn searchMixedCandidateLookaheadPlans(
                 best,
                 have_best,
                 literal_histogram,
+                huffman_bit_prefix,
             );
             if (search_budget.* == 0) break;
         }
@@ -8635,6 +8667,7 @@ fn considerMixedMatchLookaheadPlan(
     best: *MixedMatchLookaheadPlan,
     have_best: *bool,
     literal_histogram: *const MixedLiteralHistogram,
+    huffman_bit_prefix: *MixedHuffmanBitPrefix,
 ) Error!void {
     if (count < 2) return;
     if (requirements) |required| {
@@ -8649,6 +8682,7 @@ fn considerMixedMatchLookaheadPlan(
         plan.literal_ends[0..count],
         tail_start,
         literal_histogram,
+        huffman_bit_prefix,
     );
     if (!mixedMatchLookaheadPlanMetadataBetter(payload_len, count, plan.literal_ends[count - 1], best, have_best.*)) return;
 
@@ -9415,6 +9449,7 @@ fn sequenceLiteralsPayloadSectionLenFromHistogram(
     literal_ends: []const usize,
     tail_start: usize,
     histogram: *const MixedLiteralHistogram,
+    huffman_bit_prefix: *MixedHuffmanBitPrefix,
 ) Error!usize {
     const raw_payload_len = if (histogram.unique_count == 1) 1 else histogram.regenerated_len;
     var best = std.math.add(usize, try literalsHeaderLen(histogram.regenerated_len), raw_payload_len) catch return error.IntegerOverflow;
@@ -9430,7 +9465,8 @@ fn sequenceLiteralsPayloadSectionLenFromHistogram(
     }
     finalizeSmallHuffmanLiteralPlan(&plan) orelse return best;
     const tree_len = 1 + ((@as(usize, plan.max_symbol) + 1) / 2);
-    const streams_len = try smallHuffmanLiteralStreamsSerializedLenFromSequence(block, literal_lens, literal_ends, tail_start, histogram.regenerated_len, &plan) orelse return best;
+    try huffman_bit_prefix.prepare(block, &plan);
+    const streams_len = try smallHuffmanLiteralStreamsSerializedLenFromPrefix(block, literal_lens, literal_ends, tail_start, histogram.regenerated_len, huffman_bit_prefix) orelse return best;
     const compressed_size = std.math.add(usize, tree_len, streams_len) catch return error.IntegerOverflow;
     const header_len = huffmanLiteralsHeaderLen(histogram.regenerated_len, compressed_size) catch |err| switch (err) {
         error.UnsupportedZstdFeature => return best,
@@ -9594,6 +9630,62 @@ fn smallHuffmanLiteralStreamsSerializedLenFromSequence(
         len = std.math.add(usize, len, stream_len) catch return error.IntegerOverflow;
     }
     return len;
+}
+
+fn smallHuffmanLiteralStreamsSerializedLenFromPrefix(
+    block: []const u8,
+    literal_lens: []const usize,
+    literal_ends: []const usize,
+    tail_start: usize,
+    regenerated_len: usize,
+    prefix: *const MixedHuffmanBitPrefix,
+) Error!?usize {
+    if (literal_lens.len != literal_ends.len or tail_start > block.len or prefix.block_len != block.len) return error.CorruptFrame;
+    var bit_counts: [4]usize = @splat(0);
+    var literal_index: usize = 0;
+    const segment_len = if (regenerated_len <= 1023) regenerated_len else (regenerated_len + 3) / 4;
+    var literal_start: usize = 0;
+    for (literal_lens, literal_ends) |literal_len, literal_end| {
+        if (literal_start > block.len or literal_len > block.len - literal_start) return error.CorruptFrame;
+        try addSmallHuffmanStreamBitsFromPrefix(prefix, literal_start, literal_len, regenerated_len, segment_len, &literal_index, &bit_counts);
+        if (literal_end < literal_start + literal_len or literal_end > block.len) return error.CorruptFrame;
+        literal_start = literal_end;
+    }
+    try addSmallHuffmanStreamBitsFromPrefix(prefix, tail_start, block.len - tail_start, regenerated_len, segment_len, &literal_index, &bit_counts);
+    if (literal_index != regenerated_len) return error.CorruptFrame;
+
+    if (regenerated_len <= 1023) return (bit_counts[0] + 1 + 7) / 8;
+    var len: usize = 6;
+    for (bit_counts) |bits| {
+        const stream_len = (bits + 1 + 7) / 8;
+        if (stream_len > std.math.maxInt(u16)) return null;
+        len = std.math.add(usize, len, stream_len) catch return error.IntegerOverflow;
+    }
+    return len;
+}
+
+fn addSmallHuffmanStreamBitsFromPrefix(
+    prefix: *const MixedHuffmanBitPrefix,
+    physical_start: usize,
+    len: usize,
+    regenerated_len: usize,
+    segment_len: usize,
+    literal_index: *usize,
+    bit_counts: *[4]usize,
+) Error!void {
+    var physical = physical_start;
+    var remaining = len;
+    while (remaining != 0) {
+        if (literal_index.* >= regenerated_len) return error.CorruptFrame;
+        const stream_index = if (regenerated_len <= 1023) 0 else @min(literal_index.* / segment_len, 3);
+        const stream_end = if (regenerated_len <= 1023 or stream_index == 3) regenerated_len else (stream_index + 1) * segment_len;
+        const run_len = @min(remaining, stream_end - literal_index.*);
+        if (run_len == 0) return error.CorruptFrame;
+        bit_counts[stream_index] += try prefix.range(physical, run_len);
+        physical += run_len;
+        remaining -= run_len;
+        literal_index.* += run_len;
+    }
 }
 
 fn addSmallHuffmanStreamBits(
@@ -9785,13 +9877,14 @@ fn bestSequencePayloadLenWithLiteralEndsAndHistogram(
     literal_ends: []const usize,
     tail_start: usize,
     histogram: *const MixedLiteralHistogram,
+    huffman_bit_prefix: *MixedHuffmanBitPrefix,
 ) Error!usize {
     if (literal_lens.len != offsets.len or literal_lens.len != match_lens.len or literal_lens.len != literal_ends.len) return error.CorruptFrame;
     if (literal_lens.len == 0 or literal_lens.len > max_native_sequence_count or tail_start > block.len) return error.CorruptFrame;
     var expected_literals = block.len - tail_start;
     for (literal_lens) |literal_len| expected_literals += literal_len;
     if (expected_literals != histogram.regenerated_len) return error.CorruptFrame;
-    const literals_section_len = try sequenceLiteralsPayloadSectionLenFromHistogram(block, literal_lens, literal_ends, tail_start, histogram);
+    const literals_section_len = try sequenceLiteralsPayloadSectionLenFromHistogram(block, literal_lens, literal_ends, tail_start, histogram, huffman_bit_prefix);
     var best: ?usize = null;
     if (rleSequencePayloadLenForValuesWithLiteralsLen(literal_lens, offsets, match_lens, literals_section_len)) |len| chooseShortestPayloadLen(len, &best) else |err| switch (err) {
         error.CorruptFrame => {},
@@ -15982,6 +16075,25 @@ test "zstd four-stream Huffman sizing matches scalar boundaries" {
     )).?);
 }
 
+test "zstd mixed Huffman bit prefix matches scalar sizing" {
+    var payload: [8192]u8 = undefined;
+    for (&payload, 0..) |*byte, i| byte.* = @intCast('a' + (i * 7 + i / 31) % 17);
+    const literal_lens = [_]usize{ 391, 557, 313 };
+    const literal_ends = [_]usize{ 1243, 3171, 5079 };
+    const tail_start: usize = 7000;
+    const regenerated_len = payload.len - tail_start + 391 + 557 + 313;
+    const plan = smallHuffmanLiteralPlanFromSequence(&payload, &literal_lens, &literal_ends, tail_start, regenerated_len) orelse return error.CorruptFrame;
+    const expected = try smallHuffmanLiteralStreamsSerializedLenFromSequence(&payload, &literal_lens, &literal_ends, tail_start, regenerated_len, &plan);
+
+    var prefix: MixedHuffmanBitPrefix = .{};
+    try prefix.prepare(&payload, &plan);
+    const actual = try smallHuffmanLiteralStreamsSerializedLenFromPrefix(&payload, &literal_lens, &literal_ends, tail_start, regenerated_len, &prefix);
+    try std.testing.expectEqual(expected, actual);
+    const complete_bits = prefix.prefix[payload.len];
+    try prefix.prepare(&payload, &plan);
+    try std.testing.expectEqual(complete_bits, prefix.prefix[payload.len]);
+}
+
 test "zstd striped Huffman histogram preserves scalar plan" {
     var payload: [1031]u8 = undefined;
     for (&payload, 0..) |*byte, i| byte.* = @intCast((i * 37 + i / 11) % 129);
@@ -17117,9 +17229,10 @@ test "zstd mixed literal histogram matches full prefix scoring" {
         previous_end = literal_end;
     }
 
+    var huffman_bit_prefix: MixedHuffmanBitPrefix = .{};
     try std.testing.expectEqual(
         try bestSequencePayloadLenWithLiteralEnds(payload, &literal_lens, &offsets, &match_lens, &literal_ends, payload.len),
-        try bestSequencePayloadLenWithLiteralEndsAndHistogram(payload, &literal_lens, &offsets, &match_lens, &literal_ends, payload.len, &histogram),
+        try bestSequencePayloadLenWithLiteralEndsAndHistogram(payload, &literal_lens, &offsets, &match_lens, &literal_ends, payload.len, &histogram, &huffman_bit_prefix),
     );
 }
 
