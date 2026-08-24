@@ -6843,3 +6843,10 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   An exhaustive sampled-word oracle covers all word lengths and 121 transforms.
   Fixed-CPU 1000-run A/B improved mixed/English/JSON/source short-ratio rows by
   roughly 2%/3%/5%/3%, with the no-match row about 2.5% faster.
+  The compile-time transform prefix groups now carry an explicit active length,
+  so the matcher iterates a bounded slice rather than testing a sentinel on
+  every transform. Fixed-CPU 1000-run A/B improved mixed/English/JSON/source
+  short-ratio rows by roughly 4%/10%/8%/6%, with the no-match row about 3%
+  faster and identical output. A per-position shared match-cache prototype was
+  also tested and rejected because eager full-input scanning made representative
+  rows 4–56% slower despite eliminating some duplicate lookups.

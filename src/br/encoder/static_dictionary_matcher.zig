@@ -7,17 +7,20 @@ const no_entry = std.math.maxInt(u16);
 const word_index_bits = 11;
 const word_index_mask = (@as(u32, 1) << word_index_bits) - 1;
 const BaseWord = struct { word_index: usize, copy_len: usize };
+const PrefixGroup = struct {
+    transforms: [static_dictionary.transform_count]u8 = @splat(std.math.maxInt(u8)),
+    len: u8 = 0,
+};
 
 const transforms_by_prefix = blk: {
     // findLongest probes the only prefix widths present in RFC 7932. Grouping
     // once at compile time avoids running transforms whose prefix can never
     // match the current input position.
-    var result: [6][static_dictionary.transform_count]u8 = @splat(@splat(std.math.maxInt(u8)));
-    var counts: [6]usize = @splat(0);
+    var result: [6]PrefixGroup = @splat(.{});
     for (0..static_dictionary.transform_count) |transform_index| {
         const prefix_len = static_dictionary.transformPrefixLength(transform_index).?;
-        result[prefix_len][counts[prefix_len]] = transform_index;
-        counts[prefix_len] += 1;
+        result[prefix_len].transforms[result[prefix_len].len] = transform_index;
+        result[prefix_len].len += 1;
     }
     break :blk result;
 };
@@ -99,8 +102,8 @@ pub const Index = struct {
             const base = unpackBaseWord(self.words[entry]);
             const bits = static_dictionary.sizeBits(base.copy_len).?;
             const word = static_dictionary.baseWord(base.copy_len, base.word_index).?;
-            for (transforms_by_prefix[prefix_len]) |transform_index| {
-                if (transform_index == std.math.maxInt(u8)) break;
+            const group = &transforms_by_prefix[prefix_len];
+            for (group.transforms[0..group.len]) |transform_index| {
                 const address = (@as(usize, transform_index) << bits) | base.word_index;
                 // Most transforms differ only by suffix. When the complete
                 // base word fits in the remaining input, reject an incompatible
