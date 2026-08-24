@@ -561,6 +561,23 @@ pub fn encodePlannedStreamLazyWithOptionsAlloc(allocator: std.mem.Allocator, inp
     const plan = try command_plan.buildAlloc(allocator, input, lz_plan.tokens);
     defer plan.deinit(allocator);
     var stats: encoder_stats.PlannedEncodeStats = .{};
+    // A leading three-byte match followed by exactly one remaining command is
+    // often a net loss after its unique command/distance symbols are included.
+    // Evaluate the one exact alternative instead of relying on DEFLATE's local
+    // fixed-bit profitability model, which cannot see Brotli tree overhead.
+    if (plan.commands.len == 2 and plan.commands[0].has_copy and plan.commands[0].dictionary_output_len == 0 and plan.commands[0].copy_len == 3) {
+        const baseline = try encodeCommandPlanAlloc(allocator, input, plan.commands, null, &stats);
+        errdefer allocator.free(baseline);
+        var candidate_storage: [2]command_plan.Command = undefined;
+        const candidate_commands = try command_plan.withoutCopyInto(&candidate_storage, input.len, plan.commands, 0);
+        const candidate = try encodeCommandPlanAlloc(allocator, input, candidate_commands, null, &stats);
+        if (candidate.len < baseline.len) {
+            allocator.free(baseline);
+            return candidate;
+        }
+        allocator.free(candidate);
+        return baseline;
+    }
     return encodeCommandPlanAlloc(allocator, input, plan.commands, null, &stats);
 }
 

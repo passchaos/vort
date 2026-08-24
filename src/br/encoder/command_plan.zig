@@ -301,6 +301,50 @@ pub fn buildReuse(commands: *std.ArrayList(Command), allocator: std.mem.Allocato
     return match_count;
 }
 
+pub fn withoutCopyInto(output: []Command, input_len: usize, commands: []const Command, drop: usize) ![]Command {
+    // Converting one short copy back to literals can reduce the total stream:
+    // besides payload bits it may remove a command/distance alphabet symbol.
+    // Rebuild positions explicitly so the resulting plan keeps the same
+    // decoded bytes and every following match retains its original distance.
+    if (drop >= commands.len or !commands[drop].has_copy) return error.InvalidBlockPlan;
+    if (output.len < commands.len) return error.OutOfMemory;
+    var command_count: usize = 0;
+    var cursor: usize = 0;
+    var insert_start: usize = 0;
+    var insert_len: usize = 0;
+    for (commands, 0..) |command, i| {
+        if (command.insert_start != cursor) return error.InvalidBlockPlan;
+        cursor += command.insert_len;
+        insert_len += command.insert_len;
+        if (!command.has_copy) continue;
+        const copy_output_len = if (command.dictionary_output_len == 0) command.copy_len else command.dictionary_output_len;
+        if (i == drop) {
+            cursor += copy_output_len;
+            insert_len += copy_output_len;
+            continue;
+        }
+        output[command_count] = .{
+            .insert_start = insert_start,
+            .insert_len = insert_len,
+            .copy_len = command.copy_len,
+            .distance = command.distance,
+            .has_copy = true,
+            .dictionary_output_len = command.dictionary_output_len,
+            .dictionary_address = command.dictionary_address,
+        };
+        command_count += 1;
+        cursor += copy_output_len;
+        insert_start = cursor;
+        insert_len = 0;
+    }
+    if (cursor != input_len) return error.InvalidBlockPlan;
+    if (insert_len != 0) {
+        output[command_count] = .{ .insert_start = insert_start, .insert_len = insert_len };
+        command_count += 1;
+    }
+    return output[0..command_count];
+}
+
 fn appendCopyCommand(
     commands: *std.ArrayList(Command),
     allocator: std.mem.Allocator,
@@ -364,6 +408,25 @@ test "coalesces adjacent copies at the same distance" {
     defer reused.deinit(std.testing.allocator);
     try std.testing.expectEqual(plan.match_count, try buildReuse(&reused, std.testing.allocator, input, &tokens));
     try std.testing.expectEqualSlices(Command, plan.commands, reused.items);
+}
+
+test "replaces one short copy with literals without shifting later commands" {
+    const commands = [_]Command{
+        .{ .insert_start = 0, .insert_len = 4, .copy_len = 3, .distance = 4, .has_copy = true },
+        .{ .insert_start = 7, .insert_len = 1, .copy_len = 4, .distance = 5, .has_copy = true },
+    };
+    var storage: [commands.len]Command = undefined;
+    const alternative = try withoutCopyInto(&storage, 12, &commands, 0);
+    try std.testing.expectEqual(@as(usize, 1), alternative.len);
+    try std.testing.expectEqual(Command{ .insert_start = 0, .insert_len = 8, .copy_len = 4, .distance = 5, .has_copy = true }, alternative[0]);
+    try std.testing.expectError(error.InvalidBlockPlan, withoutCopyInto(&storage, 12, &commands, commands.len));
+}
+
+test "rejects invalid short-copy replacement requests" {
+    const command = [_]Command{.{ .insert_start = 0, .insert_len = 4 }};
+    var storage: [1]Command = undefined;
+    try std.testing.expectError(error.InvalidBlockPlan, withoutCopyInto(&storage, 4, &command, 0));
+    try std.testing.expectError(error.InvalidBlockPlan, withoutCopyInto(&storage, 4, &command, 1));
 }
 
 test "static dictionary plan preserves transformed and copy lengths" {

@@ -5,7 +5,7 @@ from pathlib import Path
 
 COLUMNS = ["case", "reference_version", "quality", "input_bytes", "vort_bytes", "lazy_bytes", "reference_bytes", "iterations", "vort_ns", "lazy_ns", "reference_ns", "vort_mib_s", "lazy_mib_s", "reference_mib_s", "vort_over_reference", "lazy_over_reference", "vort_size_over_reference", "lazy_size_over_reference", "checksum"]
 CASES = {"json", "source", "log"}
-MAX_LAZY_BYTES = {"json": 62, "source": 91, "log": 83}
+MAX_LAZY_BYTES = {"json": 62, "source": 91, "log": 82}
 
 def main():
     p=argparse.ArgumentParser(); p.add_argument("--csv", type=Path, required=True); a=p.parse_args()

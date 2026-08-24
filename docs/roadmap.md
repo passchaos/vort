@@ -6625,6 +6625,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   interleaved 1000-iteration runs also improved balanced JSON/source/log
   throughput by about 5.5%/6.4%/3.8%, because fewer commands shrink both
   planning and wire-emission work.
+  The balanced planner additionally evaluates replacing each isolated
+  three-byte copy with literals. This exact, bounded local search captures tree
+  overhead that the fixed-bit LZ77 profitability model cannot see; it reduces
+  the locked log stream once more from 83 to 82 bytes while JSON/source stay at
+  62/91. The size gate now pins 62/91/82, respectively.
   Stable public planner options now expose `.fast` and `.balanced` compression
   levels through `encodePlannedStreamWithOptionsAlloc`; `.balanced` maps to the
   proven lazy parser and is tested to round-trip with size no worse than fast.
