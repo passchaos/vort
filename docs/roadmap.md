@@ -6678,6 +6678,10 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   This level is intentionally separate because four
   representative fixed-CPU samples traded roughly 1.6–2.4x encode time for the
   additional 0.8–4.2% size reduction.
+  `run-br-planned-encode-bench` now accepts repeatable `--path` inputs with a
+  bounded `--limit`, validates every Vort level through libbrotli before timing,
+  and has a checked-in file-path gate. This makes wider real-corpus ratio and
+  throughput experiments reproducible without embedding large corpora.
   Ratio mode now also uses the full distance range allowed by its 16-bit Brotli
   stream window (65,520 bytes), rather than inheriting DEFLATE's 32 KiB search
   ceiling. The shared LZ77 token distance remains `u16`, so DEFLATE's ABI and

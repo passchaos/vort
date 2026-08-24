@@ -5,26 +5,70 @@ const libbrotli = @import("libbrotli_runtime.zig");
 const json_payload = "{\"kind\":\"event\",\"active\":true,\"values\":[1,2,3,5,8,13]}\n" ** 48;
 const source_payload = "pub fn update(state: *State, value: u32) void { state.total += value; state.count += 1; }\n" ** 40;
 const log_payload = "2026-08-21T02:00:00Z level=info service=vort request=compress status=ok bytes=4096\n" ** 40;
-const Case = struct { name: []const u8, payload: []const u8 };
-const Options = struct { iterations: usize = 1000, csv_path: ?[]const u8 = null, quality: c_int = 3 };
+const Case = struct {
+    name: []const u8,
+    payload: []const u8,
+    owned: bool = false,
+
+    fn deinit(case: Case, allocator: std.mem.Allocator) void {
+        if (case.owned) {
+            allocator.free(case.name);
+            allocator.free(case.payload);
+        }
+    }
+};
+const Options = struct {
+    iterations: usize = 1000,
+    csv_path: ?[]const u8 = null,
+    quality: c_int = 3,
+    path_limit: usize = 128 * 1024,
+    paths: std.ArrayList([]const u8) = .empty,
+
+    fn deinit(options: *Options, allocator: std.mem.Allocator) void {
+        for (options.paths.items) |path| allocator.free(path);
+        options.paths.deinit(allocator);
+    }
+};
 const Sample = struct { ns: u64, mix: usize };
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
     defer args.deinit();
     _ = args.next();
-    const options = try parseOptions(&args);
+    var options = try parseOptions(init.gpa, &args);
+    defer options.deinit(init.gpa);
     var reference = try libbrotli.Runtime.open();
     defer reference.deinit();
-    const cases = [_]Case{
-        .{ .name = "json", .payload = json_payload },
-        .{ .name = "source", .payload = source_payload },
-        .{ .name = "log", .payload = log_payload },
-    };
+    var cases: std.ArrayList(Case) = .empty;
+    defer {
+        for (cases.items) |case| case.deinit(init.gpa);
+        cases.deinit(init.gpa);
+    }
+    if (options.paths.items.len == 0) {
+        try cases.append(init.gpa, .{ .name = "json", .payload = json_payload });
+        try cases.append(init.gpa, .{ .name = "source", .payload = source_payload });
+        try cases.append(init.gpa, .{ .name = "log", .payload = log_payload });
+    } else {
+        for (options.paths.items, 0..) |path, index| {
+            const file = try std.Io.Dir.cwd().openFile(init.io, path, .{});
+            defer file.close(init.io);
+            const stat = try file.stat(init.io);
+            const read_len: usize = @intCast(@min(stat.size, options.path_limit));
+            if (read_len == 0) continue;
+            const payload = try init.gpa.alloc(u8, read_len);
+            errdefer init.gpa.free(payload);
+            var reader_buffer: [4096]u8 = undefined;
+            var reader = file.reader(init.io, &reader_buffer);
+            if (try reader.interface.readSliceShort(payload) != read_len) return error.InputTooSmall;
+            const name = try caseNameForPath(init.gpa, path, index);
+            errdefer init.gpa.free(name);
+            try cases.append(init.gpa, .{ .name = name, .payload = payload, .owned = true });
+        }
+    }
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
     try csv.writer.writeAll("case,reference_version,quality,input_bytes,vort_bytes,lazy_bytes,ratio_bytes,reference_bytes,iterations,vort_ns,lazy_ns,ratio_ns,reference_ns,vort_mib_s,lazy_mib_s,ratio_mib_s,reference_mib_s,vort_over_reference,lazy_over_reference,ratio_over_reference,vort_size_over_reference,lazy_size_over_reference,ratio_size_over_reference,checksum\n");
-    for (cases) |case| {
+    for (cases.items) |case| {
         const vort_encoded = try vort.brEncodePlannedStreamAlloc(init.gpa, case.payload);
         defer init.gpa.free(vort_encoded);
         const reference_encoded = try reference.encodeAlloc(init.gpa, case.payload, options.quality);
@@ -33,6 +77,12 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(lazy_encoded);
         const ratio_encoded = try vort.brEncodePlannedStreamRatioAlloc(init.gpa, case.payload);
         defer init.gpa.free(ratio_encoded);
+        const decoded = try init.gpa.alloc(u8, case.payload.len);
+        defer init.gpa.free(decoded);
+        for ([_][]const u8{ vort_encoded, lazy_encoded, ratio_encoded }) |encoded| {
+            try reference.decode(encoded, decoded);
+            if (!std.mem.eql(u8, case.payload, decoded)) return error.SizeMismatch;
+        }
         const samples = try measureInterleaved(init.io, init.gpa, reference, case.payload, options);
         const lazy_sample = try measurePlanned(init.io, init.gpa, case.payload, options.iterations, .balanced);
         const ratio_sample = try measurePlanned(init.io, init.gpa, case.payload, options.iterations, .ratio);
@@ -124,11 +174,21 @@ fn mibPerSecond(bytes: usize, ns: u64) f64 {
     return (@as(f64, @floatFromInt(bytes)) / (1024 * 1024)) / (@as(f64, @floatFromInt(ns)) / 1_000_000_000);
 }
 
-fn parseOptions(args: *std.process.Args.Iterator) !Options {
+fn caseNameForPath(allocator: std.mem.Allocator, path: []const u8, index: usize) ![]u8 {
+    var out: std.Io.Writer.Allocating = .init(allocator);
+    errdefer out.deinit();
+    try out.writer.print("file{d}_", .{index});
+    for (std.fs.path.basename(path)) |byte|
+        try out.writer.writeByte(if (std.ascii.isAlphanumeric(byte)) byte else '_');
+    return try out.toOwnedSlice();
+}
+
+fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) !Options {
     var options = Options{};
+    errdefer options.deinit(allocator);
     while (args.next()) |arg| {
-        if (std.mem.eql(u8, arg, "--iterations")) options.iterations = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--quality")) options.quality = try std.fmt.parseInt(c_int, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--csv")) options.csv_path = args.next() orelse return error.MissingCorpusPath else return error.UnknownArgument;
+        if (std.mem.eql(u8, arg, "--iterations")) options.iterations = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--quality")) options.quality = try std.fmt.parseInt(c_int, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--csv")) options.csv_path = args.next() orelse return error.MissingCorpusPath else if (std.mem.eql(u8, arg, "--limit")) options.path_limit = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--path")) try options.paths.append(allocator, try allocator.dupe(u8, args.next() orelse return error.MissingCorpusPath)) else return error.UnknownArgument;
     }
-    if (options.iterations == 0 or options.quality < 0 or options.quality > 11) return error.InvalidBlockPlan;
+    if (options.iterations == 0 or options.path_limit == 0 or options.quality < 0 or options.quality > 11) return error.InvalidBlockPlan;
     return options;
 }

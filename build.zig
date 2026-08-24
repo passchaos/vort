@@ -945,6 +945,20 @@ pub fn build(b: *std.Build) void {
     br_planned_encode_bench_gate.step.dependOn(&run_br_planned_encode_bench_csv.step);
     const br_planned_encode_bench_gate_step = b.step("run-br-planned-encode-bench-gate", "Validate planner-backed Brotli encode A/B CSV");
     br_planned_encode_bench_gate_step.dependOn(&br_planned_encode_bench_gate.step);
+    const run_br_planned_encode_path_csv = b.addRunArtifact(br_planned_encode_bench_exe);
+    run_br_planned_encode_path_csv.addArgs(&.{
+        "--iterations", "10",
+        "--path",       "corpus/native-library-bench-small.txt",
+        "--limit",      "32768",
+        "--csv",        "zig-out/vort-br-planned-encode-path.csv",
+    });
+    const br_planned_encode_path_gate = b.addSystemCommand(&.{
+        "python3", "tools/br/planned_encode_path_gate.py",
+        "--csv",   "zig-out/vort-br-planned-encode-path.csv",
+    });
+    br_planned_encode_path_gate.step.dependOn(&run_br_planned_encode_path_csv.step);
+    const br_planned_encode_path_gate_step = b.step("run-br-planned-encode-path-gate", "Validate file-backed Brotli encode A/B CSV");
+    br_planned_encode_path_gate_step.dependOn(&br_planned_encode_path_gate.step);
     const br_planned_stage_profile_exe = b.addExecutable(.{
         .name = "vort-br-planned-stage-profile",
         .root_module = b.createModule(.{
