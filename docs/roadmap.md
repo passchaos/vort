@@ -6925,3 +6925,8 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   behavior. A 1,024-shape oracle requires exact length-vector equality with the
   retained heap reference. Fixed-CPU 10,000-run fast-encoder A/B improved JSON,
   source, and log by roughly 2%/3%/2%, respectively, with identical wire sizes.
+  Leaf depths in that two-queue tree are now recovered by one reverse node pass.
+  Parent nodes are always appended after their children, so parent depths are
+  available before child assignment and repeated leaf-to-root walks disappear.
+  The same exact heap oracle passes; fixed-CPU 10,000-run A/B adds roughly
+  0.8%/0.9%/1.9% on JSON/source/log with unchanged streams.

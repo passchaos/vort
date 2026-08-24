@@ -47,15 +47,20 @@ pub fn build(comptime capacity: usize, frequencies: []const usize, lengths: *[ca
         node_len += 1;
         remaining -= 1;
     }
+    // Parents are appended after both children. Walking nodes backwards makes
+    // every parent depth available before its children, so all leaf depths are
+    // recovered in O(nodes) instead of following each leaf-to-root chain.
+    var depths: [2 * capacity - 1]u5 = @splat(0);
+    var index = node_len - 1;
+    while (index != 0) {
+        index -= 1;
+        const parent = nodes[index].parent;
+        if (parent < 0) continue;
+        depths[index] = depths[@intCast(parent)] + 1;
+    }
     for (frequencies, 0..) |_, symbol| {
-        var depth: u4 = 0;
-        var node: i16 = @intCast(symbol);
-        while (nodes[@intCast(node)].parent >= 0) {
-            depth += 1;
-            if (depth > 15) return false;
-            node = nodes[@intCast(node)].parent;
-        }
-        lengths[symbol] = depth;
+        if (depths[symbol] > 15) return false;
+        lengths[symbol] = @intCast(depths[symbol]);
     }
     return true;
 }
