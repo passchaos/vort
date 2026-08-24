@@ -225,13 +225,12 @@ pub fn buildAlloc(allocator: std.mem.Allocator, input: []const u8, tokens: []con
     return .{ .commands = try commands.toOwnedSlice(allocator), .match_count = match_count };
 }
 
-/// Reference dictionary planner for functionality and differential tests. It
-/// prefers the longest transformed dictionary word at each position and emits
-/// the remaining bytes as literal inserts. The matcher is intentionally
-/// exhaustive; production levels can adopt an indexed matcher independently.
+/// Dictionary planner that prefers the longest transformed word at each
+/// position and emits remaining bytes as literal inserts. The immutable
+/// process-wide index is reused across calls; candidate transforms still pass
+/// through the independent RFC transform implementation before selection.
 pub fn buildStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8) !Plan {
-    var matcher = try static_dictionary_matcher.Index.init(allocator);
-    defer matcher.deinit();
+    const matcher = try static_dictionary_matcher.Index.sharedIndex();
     var commands: std.ArrayList(Command) = .empty;
     errdefer commands.deinit(allocator);
     var position: usize = 0;

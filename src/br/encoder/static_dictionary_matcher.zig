@@ -17,6 +17,9 @@ pub const Index = struct {
     next: []u16,
     words: []u32,
 
+    var shared: ?Index = null;
+    var shared_lock: std.atomic.Mutex = .unlocked;
+
     pub fn init(allocator: std.mem.Allocator) !Index {
         const heads = try allocator.alloc(u16, bucket_count);
         errdefer allocator.free(heads);
@@ -48,6 +51,17 @@ pub const Index = struct {
         self.allocator.free(self.next);
         self.allocator.free(self.words);
         self.* = undefined;
+    }
+
+    pub fn sharedIndex() !*const Index {
+        // The RFC dictionary is immutable, so one process-wide index avoids a
+        // 146 KiB rebuild on every short ratio encode. Initialization remains
+        // serialized; the lock also makes publication safe, and matching after
+        // return only reads the index.
+        while (!shared_lock.tryLock()) std.atomic.spinLoopHint();
+        defer shared_lock.unlock();
+        if (shared == null) shared = try Index.init(std.heap.smp_allocator);
+        return &shared.?;
     }
 
     pub fn findLongest(self: *const Index, input: []const u8) ?static_dictionary.Match {

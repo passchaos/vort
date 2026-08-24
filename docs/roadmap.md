@@ -6801,3 +6801,8 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   12–40x the LZ path below 154 bytes and becomes sharply less attractive above
   256 bytes, which is why the production gate remains deliberately narrow.
   The selected ratio stream is decoded through Node in the external gate.
+  The immutable 146,560-byte base-word index is now initialized once with the
+  thread-safe allocator and reused across independent encodes. Fixed-CPU
+  1000-iteration samples reduced short ratio encode time by roughly 30% for
+  dictionary-heavy English/JSON/source inputs and by about 78% when the static
+  candidate finds no match, with byte-identical output.
