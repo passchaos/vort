@@ -101,6 +101,16 @@ pub const Index = struct {
             for (transforms_by_prefix[prefix_len]) |transform_index| {
                 if (transform_index == std.math.maxInt(u8)) break;
                 const address = (@as(usize, transform_index) << bits) | base.word_index;
+                // Most transforms differ only by suffix. When the complete
+                // base word fits in the remaining input, reject an incompatible
+                // first suffix byte before copying the transformed candidate.
+                const suffix = static_dictionary.transformFirstSuffixByte(transform_index).?;
+                const suffix_offset = prefix_len + base.copy_len;
+                if (static_dictionary.transformKeepsWholeWord(transform_index)) {
+                    const suffix_len = static_dictionary.transformSuffixLength(transform_index).?;
+                    if (suffix_offset + suffix_len > input.len) continue;
+                    if (suffix != 0 and input[suffix_offset] != suffix) continue;
+                }
                 const transformed = static_dictionary.transform(address, base.copy_len, &scratch) orelse continue;
                 // RFC transforms may omit the complete base word. Those zero-
                 // length results cannot advance the planner and would otherwise

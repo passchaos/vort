@@ -6812,3 +6812,9 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   1000-iteration A/B reduced representative 65-byte English, 57-byte JSON, and
   59-byte source ratio encodes by about 32%, 40%, and 52%, respectively; the
   no-dictionary-match case improved by roughly 10%, with unchanged wire output.
+  Whole-word transforms are now rejected from their immutable suffix metadata
+  when the remaining input is too short or the first suffix byte differs,
+  before materializing a candidate in scratch. A fixed-CPU follow-up reduced
+  those same short ratio rows by a further roughly 38%, 44%, and 39%, and the
+  no-match row by about 31%; exhaustive transform metadata tests cover all 121
+  transforms across every dictionary word length.

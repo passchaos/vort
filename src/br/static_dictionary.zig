@@ -173,6 +173,23 @@ pub fn transformPrefixLength(transform_index: usize) ?usize {
     return cStringLength(transforms[transform_index].prefix);
 }
 
+pub fn transformFirstSuffixByte(transform_index: usize) ?u8 {
+    if (transform_index >= transforms.len) return null;
+    return prefix_suffix[transforms[transform_index].suffix];
+}
+
+pub fn transformKeepsWholeWord(transform_index: usize) bool {
+    if (transform_index >= transforms.len) return false;
+    return transforms[transform_index].kind == 0 or
+        transforms[transform_index].kind == 10 or
+        transforms[transform_index].kind == 11;
+}
+
+pub fn transformSuffixLength(transform_index: usize) ?usize {
+    if (transform_index >= transforms.len) return null;
+    return cStringLength(transforms[transform_index].suffix);
+}
+
 /// Find the longest built-in static-dictionary word beginning at `input[0]`.
 /// This reference matcher deliberately enumerates dictionary addresses rather
 /// than importing upstream's generated encoder LUT: it keeps the wire model
@@ -281,4 +298,19 @@ test "static dictionary reference matcher returns copy length and address" {
     const transformed = transform(match.address, match.copy_len, &out).?;
     try std.testing.expectEqualSlices(u8, " information", transformed);
     try std.testing.expectEqual(@as(usize, transformed.len), match.output_len);
+}
+
+test "static dictionary transform metadata agrees with materialization" {
+    var transformed: [64]u8 = undefined;
+    for (4..25) |word_len| {
+        const bits = sizeBits(word_len).?;
+        for (0..transform_count) |transform_index| {
+            const output = transform(transform_index << bits, word_len, &transformed).?;
+            const prefix_len = transformPrefixLength(transform_index).?;
+            const suffix_len = transformSuffixLength(transform_index).?;
+            try std.testing.expect(prefix_len + suffix_len <= output.len);
+            if (suffix_len != 0) try std.testing.expectEqual(transformFirstSuffixByte(transform_index).?, output[output.len - suffix_len]);
+            if (transformKeepsWholeWord(transform_index)) try std.testing.expectEqual(prefix_len + word_len + suffix_len, output.len);
+        }
+    }
 }
