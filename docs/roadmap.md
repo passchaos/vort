@@ -6658,6 +6658,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   22,472/10,699/9,909 to 21,478/10,065/9,545 bytes. `mozilla` remains the only
   measured loss at 0.97%, while every other row is protected by exact
   full-stream arbitration and every selected stream passes libbrotli decoding.
+  Ratio mode additionally evaluates one UTF-8 literal-context split that maps
+  contexts 56...63 (lowercase-letter history) to a second Huffman tree. Its
+  compact contiguous map and complete-stream arbitration reduce the same
+  Silesia aggregate again to 549,018 bytes, 7.33% below libbrotli q3, and turn
+  `mozilla` into a nine-byte win (21,262 versus 21,271 bytes). This is a single
+  bounded entropy candidate rather than an input-specific multi-threshold scan.
   This level is intentionally separate because four
   representative fixed-CPU samples traded roughly 1.6–2.4x encode time for the
   additional 0.8–4.2% size reduction.
