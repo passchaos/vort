@@ -550,7 +550,7 @@ pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []cons
     return encodePlannedStreamLazyWithWireOptionsAlloc(allocator, input, .{
         .max_chain = 512,
         .nice_len = lz77.max_match_len,
-    }, .{ .try_last_distance = true });
+    }, .{ .try_recent_distances = true });
 }
 
 /// Experimental entry point for measuring lazy-parser search budgets without
@@ -560,9 +560,9 @@ pub fn encodePlannedStreamLazyWithOptionsAlloc(allocator: std.mem.Allocator, inp
     return encodePlannedStreamLazyWithWireOptionsAlloc(allocator, input, options, .{});
 }
 
-const CommandPlanEncodeOptions = struct { use_last_distance: bool = false };
-const min_last_distance_candidate_count: usize = 64;
-const LazyWireOptions = struct { try_last_distance: bool = false };
+const CommandPlanEncodeOptions = struct { use_recent_distances: bool = false };
+const min_recent_distance_candidate_count: usize = 64;
+const LazyWireOptions = struct { try_recent_distances: bool = false };
 
 fn encodePlannedStreamLazyWithWireOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: PlannedParserOptions, wire_options: LazyWireOptions) Error![]u8 {
     if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
@@ -930,16 +930,16 @@ fn encodeCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, comma
     return encodeCommandPlanWithOptionsAlloc(allocator, input, commands, io, stats, .{});
 }
 
-/// Try the implicit last-distance command representation as a complete stream
-/// alternative. Command-tree changes can occasionally outweigh saved distance
-/// symbols, so ratio mode keeps it only when the final byte length is smaller.
+/// Try Brotli's recent-distance symbols as a complete stream alternative. Tree
+/// changes can occasionally outweigh saved distance bits, so ratio mode keeps
+/// the candidate only when the final byte length is smaller.
 fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: LazyWireOptions) Error![]u8 {
     const baseline = try encodeCommandPlanAlloc(allocator, input, commands, io, stats);
     // A second full wire encode is worthwhile on ratio-sized plans with many
     // reusable distances, but would dominate latency for small inputs.
-    if (!options.try_last_distance or countReusableLastDistances(commands) < min_last_distance_candidate_count) return baseline;
+    if (!options.try_recent_distances or countReusableRecentDistances(commands) < min_recent_distance_candidate_count) return baseline;
     errdefer allocator.free(baseline);
-    const candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, io, stats, .{ .use_last_distance = true });
+    const candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, io, stats, .{ .use_recent_distances = true });
     if (candidate.len < baseline.len) {
         allocator.free(baseline);
         return candidate;
@@ -948,15 +948,33 @@ fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const 
     return baseline;
 }
 
-fn countReusableLastDistances(commands: []const command_plan.Command) usize {
-    var last_distance: usize = initial_last_distances[3];
+fn countReusableRecentDistances(commands: []const command_plan.Command) usize {
+    var last_distances = initial_last_distances;
     var count: usize = 0;
     for (commands) |command| {
         if (!command.has_copy or command.dictionary_output_len != 0) continue;
-        if (command.distance == last_distance and commandEntryForLengthsAndDistance(command.insert_len, command.copy_len, true) != null) count += 1;
-        last_distance = command.distance;
+        const symbol = recentDistanceSymbol(command.distance, &last_distances);
+        if (symbol != null) count += 1;
+        // Code zero reuses the newest distance without changing ring order;
+        // every other short or regular distance becomes the new front.
+        if (symbol != 0) pushLastDistance(&last_distances, command.distance);
     }
     return count;
+}
+
+fn recentDistanceSymbol(distance: usize, last_distances: *const [4]usize) ?u4 {
+    const deltas = [_]i8{ -1, 1, -2, 2, -3, 3 };
+    if (distance == last_distances[3]) return 0;
+    if (distance == last_distances[2]) return 1;
+    if (distance == last_distances[1]) return 2;
+    if (distance == last_distances[0]) return 3;
+    for (deltas, 4..) |delta, symbol| {
+        if (distanceWithDelta(last_distances[3], delta) catch null == distance) return @intCast(symbol);
+    }
+    for (deltas, 10..) |delta, symbol| {
+        if (distanceWithDelta(last_distances[2], delta) catch null == distance) return @intCast(symbol);
+    }
+    return null;
 }
 
 fn encodeCommandPlanWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error![]u8 {
@@ -965,19 +983,20 @@ fn encodeCommandPlanWithOptionsAlloc(allocator: std.mem.Allocator, input: []cons
     var command_frequencies: [704]u32 = @splat(0);
     var distance_frequencies: [max_distance_alphabet_size]u32 = @splat(0);
     const frequency_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
-    var last_distance: usize = initial_last_distances[3];
+    var last_distances = initial_last_distances;
     for (commands) |command| {
-        const use_last_distance = options.use_last_distance and command.has_copy and command.dictionary_output_len == 0 and command.distance == last_distance;
+        const recent_symbol = if (options.use_recent_distances and command.has_copy and command.dictionary_output_len == 0) recentDistanceSymbol(command.distance, &last_distances) else null;
+        const use_last_distance = recent_symbol == 0;
         const encoding = commandEntryForLengthsAndDistance(command.insert_len, command.copy_len, use_last_distance) orelse
             commandEntryForLengths(command.insert_len, command.copy_len) orelse return error.InvalidBlockPlan;
         command_frequencies[encoding.symbol] += 1;
         for (input[command.insert_start..][0..command.insert_len]) |literal| literal_frequencies[literal] += 1;
         if (!command.has_copy) continue;
         if (encoding.command.distance_code == -1) {
-            const distance = encoder_distance.encode(commandWireDistance(command), 15) orelse return error.InvalidBlockPlan;
+            const distance = if (recent_symbol) |symbol| encoder_distance.Encoding{ .symbol = symbol } else encoder_distance.encode(commandWireDistance(command), 15) orelse return error.InvalidBlockPlan;
             distance_frequencies[distance.symbol] += 1;
         }
-        if (command.dictionary_output_len == 0) last_distance = command.distance;
+        if (command.dictionary_output_len == 0 and recent_symbol != 0) pushLastDistance(&last_distances, command.distance);
     }
     // Brotli still carries a literal tree when dictionary commands cover the
     // entire meta-block. A deterministic unused symbol keeps that tree legal
@@ -1021,9 +1040,10 @@ fn encodeCommandPlanWithOptionsAlloc(allocator: std.mem.Allocator, input: []cons
     const distance_encoder = if (distance_alphabet.len <= 4) huffman.HuffmanTable(max_distance_alphabet_size).Encoder{} else try huffman.HuffmanTable(max_distance_alphabet_size).Encoder.init(&distance_lengths);
     if (io) |active| stats.encoder_ns = elapsedNs(encoder_start.?, active);
     const payload_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
-    last_distance = initial_last_distances[3];
+    last_distances = initial_last_distances;
     for (commands) |command| {
-        const use_last_distance = options.use_last_distance and command.has_copy and command.dictionary_output_len == 0 and command.distance == last_distance;
+        const recent_symbol = if (options.use_recent_distances and command.has_copy and command.dictionary_output_len == 0) recentDistanceSymbol(command.distance, &last_distances) else null;
+        const use_last_distance = recent_symbol == 0;
         const encoding = commandEntryForLengthsAndDistance(command.insert_len, command.copy_len, use_last_distance) orelse
             commandEntryForLengths(command.insert_len, command.copy_len) orelse unreachable;
         if (command_alphabet.len > 1) {
@@ -1036,7 +1056,7 @@ fn encodeCommandPlanWithOptionsAlloc(allocator: std.mem.Allocator, input: []cons
         for (input[command.insert_start..][0..command.insert_len]) |literal|
             if (literal_alphabet.len > 1) try writer.writeBits(allocator, literal_encoder.codes[literal], literal_encoder.bits[literal]);
         if (command.has_copy and encoding.command.distance_code == -1) {
-            const distance = encoder_distance.encode(commandWireDistance(command), 15) orelse unreachable;
+            const distance = if (recent_symbol) |symbol| encoder_distance.Encoding{ .symbol = symbol } else encoder_distance.encode(commandWireDistance(command), 15) orelse unreachable;
             if (distance_alphabet.len > 1) {
                 if (distance_alphabet.len <= 4) {
                     const code = distance_alphabet.simpleCode(distance.symbol).?;
@@ -1046,7 +1066,7 @@ fn encodeCommandPlanWithOptionsAlloc(allocator: std.mem.Allocator, input: []cons
             if (distance.extra_bits != 0)
                 try writer.writeBits(allocator, distance.extra, distance.extra_bits);
         }
-        if (command.has_copy and command.dictionary_output_len == 0) last_distance = command.distance;
+        if (command.has_copy and command.dictionary_output_len == 0 and recent_symbol != 0) pushLastDistance(&last_distances, command.distance);
     }
     if (io) |active| stats.payload_ns = elapsedNs(payload_start.?, active);
     if (writer.bit_index != 0) writer.alignToByte();
@@ -5960,14 +5980,20 @@ test "br command index exposes implicit last-distance forms when legal" {
     try std.testing.expect(commandEntryForLengthsAndDistance(66, 3, true) == null);
 }
 
-test "br repeated-distance candidate requires enough eligible commands" {
+test "br recent-distance candidate tracks the RFC distance ring" {
     const commands = [_]command_plan.Command{
         .{ .insert_start = 0, .insert_len = 4, .copy_len = 3, .distance = 4, .has_copy = true },
         .{ .insert_start = 7, .insert_len = 1, .copy_len = 4, .distance = 4, .has_copy = true },
         .{ .insert_start = 12, .insert_len = 1, .copy_len = 5, .distance = 4, .has_copy = true },
         .{ .insert_start = 18, .insert_len = 0, .copy_len = 2, .distance = 9, .has_copy = true },
     };
-    try std.testing.expectEqual(@as(usize, 3), countReusableLastDistances(&commands));
+    try std.testing.expectEqual(@as(usize, 4), countReusableRecentDistances(&commands));
+    const initial = initial_last_distances;
+    try std.testing.expectEqual(@as(?u4, 0), recentDistanceSymbol(4, &initial));
+    try std.testing.expectEqual(@as(?u4, 1), recentDistanceSymbol(11, &initial));
+    try std.testing.expectEqual(@as(?u4, 4), recentDistanceSymbol(3, &initial));
+    try std.testing.expectEqual(@as(?u4, 15), recentDistanceSymbol(14, &initial));
+    try std.testing.expectEqual(@as(?u4, null), recentDistanceSymbol(32, &initial));
 }
 
 test "br direct length-code mapping matches reference scan" {
