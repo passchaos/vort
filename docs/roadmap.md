@@ -6864,3 +6864,10 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   compressed stream is larger; deterministic random inputs at 8/64/256/4096
   bytes round-trip with ratio size no greater than stored, and a 34-byte
   incompressible fixture is externally decoded by Node from its 38-byte stream.
+  The stable `encodePlannedStreamWithOptionsAlloc` facade now applies the same
+  stored fallback and exact size ceiling to `.fast` and `.balanced`. All three
+  public levels therefore accept arbitrary 5-byte-to-one-meta-block inputs and
+  never return a frame larger than stored, while direct experimental planner
+  entry points retain their precise `InvalidBlockPlan` behavior. Deterministic
+  random inputs at 8/64/256/4096 bytes cover all levels, and Node decodes the
+  fast/balanced incompressible fixtures.

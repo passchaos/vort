@@ -9,6 +9,8 @@ pub fn main(init: std.process.Init) !void {
     const lazy = std.mem.startsWith(u8, mode, "lazy-");
     const ratio = std.mem.startsWith(u8, mode, "ratio-");
     const static_dictionary = std.mem.startsWith(u8, mode, "dictionary-");
+    const stable_fast = std.mem.startsWith(u8, mode, "stable-fast-");
+    const stable_balanced = std.mem.startsWith(u8, mode, "stable-balanced-");
     const dictionary_index_bytes = std.mem.eql(u8, mode, "dictionary-index-bytes");
     if (dictionary_index_bytes) {
         var text: [32]u8 = undefined;
@@ -16,7 +18,7 @@ pub fn main(init: std.process.Init) !void {
         try std.Io.File.stdout().writeStreamingAll(init.io, written);
         return;
     }
-    const name = if (lazy) mode["lazy-".len..] else if (ratio) mode["ratio-".len..] else if (static_dictionary) mode["dictionary-".len..] else mode;
+    const name = if (lazy) mode["lazy-".len..] else if (ratio) mode["ratio-".len..] else if (static_dictionary) mode["dictionary-".len..] else if (stable_fast) mode["stable-fast-".len..] else if (stable_balanced) mode["stable-balanced-".len..] else mode;
     const payload = if (std.mem.eql(u8, name, "json"))
         "{\"kind\":\"event\",\"active\":true,\"values\":[1,2,3,5,8,13]}\n" ** 48
     else if (std.mem.eql(u8, name, "source"))
@@ -35,9 +37,15 @@ pub fn main(init: std.process.Init) !void {
         "qzxwvbnm"
     else if (std.mem.eql(u8, name, "ratio-incompressible"))
         "qzxwvbnm1234567890QZXWVBNM!@#$%^&*"
+    else if (std.mem.eql(u8, name, "incompressible"))
+        "qzxwvbnm1234567890QZXWVBNM!@#$%^&*"
     else
         return error.InvalidBlockPlan;
-    const encoded = if (lazy)
+    const encoded = if (stable_fast)
+        try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, payload, .{ .level = .fast })
+    else if (stable_balanced)
+        try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, payload, .{ .level = .balanced })
+    else if (lazy)
         try vort.brEncodePlannedStreamLazyAlloc(init.gpa, payload)
     else if (ratio)
         try vort.brEncodePlannedStreamRatioAlloc(init.gpa, payload)

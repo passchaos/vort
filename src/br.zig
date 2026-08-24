@@ -537,10 +537,23 @@ pub fn encodePlannedStreamAlloc(allocator: std.mem.Allocator, input: []const u8)
 
 pub fn encodePlannedStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
     return switch (options.level) {
-        .fast => encodePlannedStreamAlloc(allocator, input),
-        .balanced => encodePlannedStreamLazyAlloc(allocator, input),
+        .fast => encodePlannedStreamOrStoredAlloc(allocator, input, .fast),
+        .balanced => encodePlannedStreamOrStoredAlloc(allocator, input, .balanced),
         .ratio => encodePlannedStreamRatioAlloc(allocator, input),
     };
+}
+
+fn encodePlannedStreamOrStoredAlloc(allocator: std.mem.Allocator, input: []const u8, level: PlannedCompressionLevel) Error![]u8 {
+    const compressed = switch (level) {
+        .fast => encodePlannedStreamAlloc(allocator, input),
+        .balanced => encodePlannedStreamLazyAlloc(allocator, input),
+        .ratio => unreachable,
+    };
+    const encoded = compressed catch |err| switch (err) {
+        error.InvalidBlockPlan => return encodeStoredStreamAlloc(allocator, input),
+        else => return err,
+    };
+    return chooseStoredIfSmaller(allocator, input, encoded);
 }
 
 /// Ratio-oriented planner variant using the shared lazy LZ77 parser. The wire
@@ -6220,6 +6233,25 @@ test "br planner compression levels select fast and balanced streams" {
     try std.testing.expectEqualSlices(u8, payload, fast_decoded);
     try std.testing.expectEqualSlices(u8, payload, balanced_decoded);
     try std.testing.expect(balanced.len <= fast.len);
+}
+
+test "br stable planner levels accept incompressible inputs within stored size" {
+    var input: [4096]u8 = undefined;
+    var state: u32 = 0x89ab_cdef;
+    for (&input) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    for ([_]PlannedCompressionLevel{ .fast, .balanced, .ratio }) |level| {
+        for ([_]usize{ 8, 64, 256, input.len }) |len| {
+            const encoded = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, input[0..len], .{ .level = level });
+            defer std.testing.allocator.free(encoded);
+            try std.testing.expect(encoded.len <= try encodedStoredStreamBound(len));
+            const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+            defer std.testing.allocator.free(decoded);
+            try std.testing.expectEqualSlices(u8, input[0..len], decoded);
+        }
+    }
 }
 
 test "br ratio planner spends more search budget without regressing size" {
