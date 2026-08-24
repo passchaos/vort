@@ -3208,6 +3208,16 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   improved about 8.6%. Twenty fixed-CPU-8..10 end-to-end pairs retained every
   locked frame, improved level-1 JSON/binary by about 2.4%/2.3%, and kept
   levels 3/9 within roughly 1.2% noise.
+  Level 1 now applies the high-level scheduler's existing deferred-smallest
+  policy above 24 KiB: it races the primary and 2 KiB frames first and only
+  evaluates the 1 KiB split when the larger split can tie or beat primary. A
+  512-input generated matrix proved this implication for the level-1 policy,
+  and a separate 512-input end-to-end comparison was byte-identical. Twenty-four
+  alternating fixed-CPU-8..10 pairs retained the locked frames while improving
+  level-1 JSON by about 16.0% and binary by about 30.1%; the decisive text
+  control stayed within 0.3% noise. Level 3 deliberately keeps the full ladder:
+  the same matrix contains twelve cases where 2 KiB uniquely beats both primary
+  and a losing 4 KiB screen.
   Exact-cache profiling of the remaining level-9 JSON mixed search found 95
   scored prefixes at depths 2...96, with 95 distinct full score keys, literal
   histograms, and LL/OF/ML vectors, so no speculative memoization was retained.

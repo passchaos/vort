@@ -3672,7 +3672,7 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
         // latter is only evaluated when the 8 KiB split can at least tie the
         // primary frame. Small inputs retain the complete parallel ladder: a
         // split immediately after 8 KiB can uniquely favor 4 KiB blocks.
-        const defer_smallest_candidate = level >= 6 and input.len > deferred_adaptive_candidate_input_min;
+        const defer_smallest_candidate = (level == 1 or level >= 6) and input.len > deferred_adaptive_candidate_input_min;
         // The primary and split encoders are independent full-frame jobs. Put
         // the primary in the same worker set instead of running it on the
         // coordinator after starting the split workers. This lets the
@@ -14935,6 +14935,27 @@ test "zstd deferred adaptive candidate preserves primary and split winners" {
     const split_actual = try encodeFrameWithLevelAlloc(std.testing.allocator, &split_payload, level);
     defer std.testing.allocator.free(split_actual);
     try std.testing.expectEqualSlices(u8, split_expected.frame, split_actual);
+}
+
+test "zstd level one defers dominated smallest adaptive candidate" {
+    var payload: [32 * 1024]u8 = undefined;
+    var state: u32 = 0x9e37_79b9;
+    for (&payload) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+
+    const level: c_int = 1;
+    const primary_options = try nativeFrameOptionsForLevel(level, .{});
+    const expected = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &payload, primary_options);
+    defer std.testing.allocator.free(expected.frame);
+    const larger_split = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &payload, adaptiveLevelCandidateOptions(primary_options, adaptiveLevelBlockSizes(level)[1]));
+    defer std.testing.allocator.free(larger_split.frame);
+    try std.testing.expect(larger_split.frame.len > expected.frame.len);
+
+    const actual = try encodeFrameWithLevelAlloc(std.testing.allocator, &payload, level);
+    defer std.testing.allocator.free(actual);
+    try std.testing.expectEqualSlices(u8, expected.frame, actual);
 }
 
 test "zstd native decoder rejects malformed FSE compressed sequence tables" {
