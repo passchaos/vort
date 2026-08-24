@@ -5,7 +5,7 @@ const json_payload = "{\"kind\":\"event\",\"active\":true,\"values\":[1,2,3,5,8,
 const source_payload = "pub fn update(state: *State, value: u32) void { state.total += value; state.count += 1; }\n" ** 40;
 const log_payload = "2026-08-21T02:00:00Z level=info service=vort request=compress status=ok bytes=4096\n" ** 40;
 const Case = struct { name: []const u8, payload: []const u8 };
-const expected_sizes = [3]usize{ 62, 88, 82 };
+const expected_sizes = [3]usize{ 62, 84, 82 };
 
 pub fn main(init: std.process.Init) !void {
     const cases = [_]Case{ .{ .name = "json", .payload = json_payload }, .{ .name = "source", .payload = source_payload }, .{ .name = "log", .payload = log_payload } };

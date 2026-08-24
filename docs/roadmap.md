@@ -6634,9 +6634,14 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   enumerates every non-empty subset to literalize and keeps only a strictly
   smaller complete stream. This catches interactions between command, distance,
   and literal trees that no per-match estimate can prove: removing the first
-  two isolated source matches reduces 91 to 88 bytes, leaving only two bytes
-  over libbrotli q3. The transformation uses original command indexes, preserves
-  later absolute insert positions/distances, and has focused multi-removal tests.
+  two isolated source matches reduces 91 to 88 bytes. A second bounded candidate
+  now literalizes one dense leading run of at least three copies no longer than
+  five bytes; removing the source plan's first four copies reaches 84 bytes, two
+  bytes below libbrotli q3. This stronger structural candidate supersedes the
+  three-byte subset enumeration for matching plans, so source needs only one
+  alternative full-stream encode instead of four. The transformation uses
+  original command indexes, preserves later absolute insert positions/distances,
+  and has focused candidate-selection and multi-removal tests.
   Stable public planner options now expose `.fast` and `.balanced` compression
   levels through `encodePlannedStreamWithOptionsAlloc`; `.balanced` maps to the
   proven lazy parser and is tested to round-trip with size no worse than fast.

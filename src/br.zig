@@ -8,6 +8,7 @@ const static_dictionary = @import("br/static_dictionary.zig");
 const command_lut = @import("br/command_lut.zig");
 const pattern = @import("br/pattern.zig");
 const command_plan = @import("br/encoder/command_plan.zig");
+const short_match_candidates = @import("br/encoder/short_match_candidates.zig");
 const encoder_distance = @import("br/encoder/distance.zig");
 const complex_prefix = @import("br/encoder/complex_prefix.zig");
 const encoder_stats = @import("br/encoder/stats.zig");
@@ -82,6 +83,7 @@ test {
     _ = incremental_stored_tests;
     _ = pattern;
     _ = command_plan;
+    _ = short_match_candidates;
     _ = encoder_distance;
     _ = complex_prefix;
     _ = encoder_stats;
@@ -578,25 +580,16 @@ pub fn encodePlannedStreamLazyWithOptionsAlloc(allocator: std.mem.Allocator, inp
         allocator.free(candidate);
         return baseline;
     }
-    var short_matches: [4]usize = undefined;
-    var short_count: usize = 0;
-    for (plan.commands, 0..) |command, index| {
-        if (command.has_copy and command.dictionary_output_len == 0 and command.copy_len == 3) {
-            if (short_count == short_matches.len) return encodeCommandPlanAlloc(allocator, input, plan.commands, null, &stats);
-            short_matches[short_count] = index;
-            short_count += 1;
-        }
-    }
-    if (short_count >= 2 and plan.commands.len <= 16) {
+    const short_match_alternatives = short_match_candidates.collect(plan.commands);
+    if (short_match_alternatives.len != 0) {
         var baseline = try encodeCommandPlanAlloc(allocator, input, plan.commands, null, &stats);
         errdefer allocator.free(baseline);
-        var drop_storage: [16]usize = undefined;
+        var drop_storage: [4]usize = undefined;
         var command_storage: [16]command_plan.Command = undefined;
-        const subset_count = (@as(usize, 1) << @intCast(short_count)) - 1;
-        for (1..subset_count + 1) |subset| {
+        for (short_match_alternatives.slice()) |drop_mask| {
             var drop_count: usize = 0;
-            for (short_matches[0..short_count], 0..) |command_index, bit| {
-                if (subset & (@as(usize, 1) << @intCast(bit)) == 0) continue;
+            for (plan.commands, 0..) |_, command_index| {
+                if (drop_mask & (@as(u16, 1) << @intCast(command_index)) == 0) continue;
                 drop_storage[drop_count] = command_index;
                 drop_count += 1;
             }
@@ -5929,6 +5922,16 @@ test "br planner compression levels select fast and balanced streams" {
     try std.testing.expectEqualSlices(u8, payload, fast_decoded);
     try std.testing.expectEqualSlices(u8, payload, balanced_decoded);
     try std.testing.expect(balanced.len <= fast.len);
+}
+
+test "br balanced planner prunes a dense tiny-copy prefix" {
+    const payload = "pub fn update(state: *State, value: u32) void { state.total += value; state.count += 1; }\n" ** 40;
+    const encoded = try encodePlannedStreamLazyAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expectEqual(@as(usize, 84), encoded.len);
 }
 
 test "br lazy planner accepts bounded search options" {
