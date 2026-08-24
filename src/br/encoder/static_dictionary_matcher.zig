@@ -37,6 +37,7 @@ pub const Index = struct {
 
     var shared: ?Index = null;
     var shared_lock: std.atomic.Mutex = .unlocked;
+    var shared_ready: std.atomic.Value(bool) = .init(false);
 
     pub fn init(allocator: std.mem.Allocator) !Index {
         const heads = try allocator.alloc(u16, bucket_count);
@@ -72,13 +73,17 @@ pub const Index = struct {
     }
 
     pub fn sharedIndex() !*const Index {
+        if (shared_ready.load(.acquire)) return &shared.?;
         // The RFC dictionary is immutable, so one process-wide index avoids a
-        // 146 KiB rebuild on every short ratio encode. Initialization remains
-        // serialized; the lock also makes publication safe, and matching after
-        // return only reads the index.
+        // 146 KiB rebuild on every short ratio encode. Only the first caller
+        // takes the lock; release/acquire publication makes steady-state access
+        // lock-free while allowing a failed allocation to be retried.
         while (!shared_lock.tryLock()) std.atomic.spinLoopHint();
         defer shared_lock.unlock();
-        if (shared == null) shared = try Index.init(std.heap.smp_allocator);
+        if (!shared_ready.load(.monotonic)) {
+            shared = try Index.init(std.heap.smp_allocator);
+            shared_ready.store(true, .release);
+        }
         return &shared.?;
     }
 
@@ -217,4 +222,22 @@ test "indexed static dictionary matcher finds uppercase transforms without a sec
         try std.testing.expectEqual(expected, actual);
         try std.testing.expect(actual != null);
     }
+}
+
+test "shared static dictionary index is safe under concurrent first access" {
+    const Worker = struct {
+        ok: bool = false,
+
+        fn run(self: *@This()) void {
+            const index = Index.sharedIndex() catch return;
+            const match = index.findLongest("Information") orelse return;
+            self.ok = match.output_len == "Information".len;
+        }
+    };
+    var workers: [8]Worker = @splat(.{});
+    var threads: [workers.len]std.Thread = undefined;
+    for (&threads, &workers) |*thread, *worker|
+        thread.* = try std.Thread.spawn(.{}, Worker.run, .{worker});
+    for (threads) |thread| thread.join();
+    for (workers) |worker| try std.testing.expect(worker.ok);
 }

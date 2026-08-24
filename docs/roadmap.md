@@ -6903,6 +6903,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   the 146,560-byte index. `INFORMATION` now compresses as an 11-byte dictionary
   stream instead of falling back, and fixed-CPU 1000-run short-ratio A/B improves
   representative mixed/English/JSON/source rows by roughly 10%/15%/16%/14%.
+  Shared-index lookup now uses an acquire/release ready flag, so only first
+  initialization takes the mutex and steady-state short encodes avoid locking.
+  A fixed-CPU 1000-run A/B improved mixed/English/JSON/source rows by roughly
+  3%/4%/4%/2% and the no-match row by about 2%; an eight-thread test covers
+  concurrent first access and matching after publication.
   Public `encodedPlannedStreamBound*` and `encodePlannedStream*Into` helpers now
   expose that stored ceiling to one-shot callers. The reusable encoder's
   `encodeIntoWithOptions` supports all stable levels: fast writes directly in
