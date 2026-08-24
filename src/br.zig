@@ -2330,7 +2330,8 @@ fn processMinimalCompressedMetaBlock(
         if (written.* == meta_block_end) {
             return;
         }
-        const distance = try readMinimalDistance(&header, reader, lengths, last_distances);
+        const decoded_distance = try readMinimalDistance(&header, reader, lengths, last_distances);
+        const distance = decoded_distance.distance;
         if (distance == 0) return error.InvalidMatch;
         if (distance > written.*) {
             const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, written.*, &transformed_dictionary_word);
@@ -2339,7 +2340,7 @@ fn processMinimalCompressedMetaBlock(
             written.* += word.len;
             continue;
         }
-        pushLastDistance(last_distances, distance);
+        if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
         if (lengths.copy_len > meta_block_end - written.*) return error.CorruptFrame;
         match_copy.append(output, written, distance, lengths.copy_len);
     }
@@ -2377,7 +2378,8 @@ fn skipMinimalCompressedMetaBlock(
         if (written == meta_block_end) {
             return;
         }
-        const distance = try readMinimalDistance(&header, reader, lengths, last_distances);
+        const decoded_distance = try readMinimalDistance(&header, reader, lengths, last_distances);
+        const distance = decoded_distance.distance;
         if (distance == 0) return error.InvalidMatch;
         if (distance > written) {
             const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, written, &transformed_dictionary_word);
@@ -2390,7 +2392,7 @@ fn skipMinimalCompressedMetaBlock(
             written += word.len;
             continue;
         }
-        pushLastDistance(last_distances, distance);
+        if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
         if (lengths.copy_len > meta_block_end - written) return error.CorruptFrame;
         literal_history.copy(distance, lengths.copy_len);
         written += lengths.copy_len;
@@ -5265,7 +5267,7 @@ fn readMinimalDistance(
     reader: *bitstream.BitReader,
     lengths: InsertCopyLengths,
     last_distances: *[4]usize,
-) Error!usize {
+) Error!struct { distance: usize, update_ring: bool } {
     const symbol = if (lengths.distance_symbol_zero) 0 else blk: {
         try ensureDistanceBlock(header, reader);
         const context = distanceContext(lengths.copy_len);
@@ -5276,14 +5278,17 @@ fn readMinimalDistance(
         if (header.distance_block.remaining != 0) header.distance_block.remaining -= 1;
         break :blk decoded;
     };
-    if (symbol < 16) {
-        return try resolveShortDistance(symbol, last_distances);
-    }
+    if (symbol < 16) return .{
+        .distance = try resolveShortDistance(symbol, last_distances),
+        // RFC 7932 code zero reuses the newest distance without advancing the
+        // ring; all other short codes are installed as a newly used distance.
+        .update_ring = symbol != 0,
+    };
     const direct_index = symbol - 16;
-    return if (direct_index < header.ndirect)
+    return .{ .distance = if (direct_index < header.ndirect)
         @as(usize, direct_index) + 1
     else
-        try readRegularDistance(header, reader, symbol);
+        try readRegularDistance(header, reader, symbol), .update_ring = true };
 }
 
 fn ensureDistanceBlock(header: *MinimalCompressedHeader, reader: *bitstream.BitReader) Error!void {
@@ -6103,6 +6108,15 @@ test "br ratio planner spends more search budget without regressing size" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
     try std.testing.expect(ratio.len < balanced.len);
+}
+
+test "br ratio UTF8 context split round trips beyond summary history" {
+    const payload = @embedFile("br.zig");
+    const encoded = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
 test "br balanced planner prunes a dense tiny-copy prefix" {
