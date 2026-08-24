@@ -6661,7 +6661,7 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Ratio mode additionally evaluates one UTF-8 literal-context split that maps
   contexts 56...63 (lowercase-letter history) to a second Huffman tree. Its
   compact contiguous map and complete-stream arbitration reduce the same
-  Silesia aggregate again to 549,018 bytes, 7.33% below libbrotli q3, and turn
+  Silesia aggregate again to 549,017 bytes, 7.33% below libbrotli q3, and turn
   `mozilla` into a nine-byte win (21,262 versus 21,271 bytes). This is a single
   bounded entropy candidate rather than an input-specific multi-threshold scan.
   This level is intentionally separate because four
