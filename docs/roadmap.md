@@ -6818,3 +6818,8 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   those same short ratio rows by a further roughly 38%, 44%, and 39%, and the
   no-match row by about 31%; exhaustive transform metadata tests cover all 121
   transforms across every dictionary word length.
+  Those immutable prefix/suffix properties are now stored in one compile-time
+  `TransformMetadata` table and shared by the matcher helpers, replacing repeated
+  NUL-terminated prefix/suffix scans in the candidate loop. Fixed-CPU 1000-run
+  A/B reduced the same short ratio rows by another roughly 19–24% and the
+  no-match case by about 17%, with unchanged output and metadata-oracle results.

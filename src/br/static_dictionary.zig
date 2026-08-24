@@ -154,6 +154,26 @@ const transforms = [_]Transform{
     .{ .prefix = 1, .kind = 10, .suffix = 143 },
 };
 
+pub const TransformMetadata = struct {
+    prefix_len: u3,
+    suffix_len: u4,
+    first_suffix_byte: u8,
+    keeps_whole_word: bool,
+};
+
+const transform_metadata = blk: {
+    var result: [transforms.len]TransformMetadata = undefined;
+    for (transforms, 0..) |spec, index| {
+        result[index] = .{
+            .prefix_len = @intCast(cStringLength(spec.prefix)),
+            .suffix_len = @intCast(cStringLength(spec.suffix)),
+            .first_suffix_byte = prefix_suffix[spec.suffix],
+            .keeps_whole_word = spec.kind == 0 or spec.kind == 10 or spec.kind == 11,
+        };
+    }
+    break :blk result;
+};
+
 pub const max_transformed_word_len: usize = 37;
 pub const transform_count: usize = transforms.len;
 pub const base_word_count: usize = blk: {
@@ -169,25 +189,24 @@ pub const Match = struct {
 };
 
 pub fn transformPrefixLength(transform_index: usize) ?usize {
-    if (transform_index >= transforms.len) return null;
-    return cStringLength(transforms[transform_index].prefix);
+    return (transformMetadata(transform_index) orelse return null).prefix_len;
 }
 
 pub fn transformFirstSuffixByte(transform_index: usize) ?u8 {
-    if (transform_index >= transforms.len) return null;
-    return prefix_suffix[transforms[transform_index].suffix];
+    return (transformMetadata(transform_index) orelse return null).first_suffix_byte;
 }
 
 pub fn transformKeepsWholeWord(transform_index: usize) bool {
-    if (transform_index >= transforms.len) return false;
-    return transforms[transform_index].kind == 0 or
-        transforms[transform_index].kind == 10 or
-        transforms[transform_index].kind == 11;
+    return (transformMetadata(transform_index) orelse return false).keeps_whole_word;
 }
 
 pub fn transformSuffixLength(transform_index: usize) ?usize {
-    if (transform_index >= transforms.len) return null;
-    return cStringLength(transforms[transform_index].suffix);
+    return (transformMetadata(transform_index) orelse return null).suffix_len;
+}
+
+pub fn transformMetadata(transform_index: usize) ?TransformMetadata {
+    if (transform_index >= transform_metadata.len) return null;
+    return transform_metadata[transform_index];
 }
 
 /// Find the longest built-in static-dictionary word beginning at `input[0]`.
