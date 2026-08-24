@@ -3218,6 +3218,15 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   control stayed within 0.3% noise. Level 3 deliberately keeps the full ladder:
   the same matrix contains twelve cases where 2 KiB uniquely beats both primary
   and a losing 4 KiB screen.
+  Level 1 now also returns a completed primary frame immediately when it is at
+  most 1/32 of the source, regardless of whether the repetition starts at byte
+  zero. The same 128-input block-size matrix had no split winner beyond this
+  threshold, and the 512-input end-to-end comparison remained byte-identical.
+  Twenty-four alternating fixed-CPU-8..10 pairs improved the locked JSON row by
+  about 66.2% versus the already deferred-split baseline; binary remained within
+  1.6% noise and the prefix-tail text case was already handled by its stricter
+  structural shortcut. Level 3 again keeps full arbitration because the matrix
+  contains highly compressible counterexamples where a split still wins.
   Exact-cache profiling of the remaining level-9 JSON mixed search found 95
   scored prefixes at depths 2...96, with 95 distinct full score keys, literal
   histograms, and LL/OF/ML vectors, so no speculative memoization was retained.

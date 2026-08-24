@@ -3654,14 +3654,26 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
     options: FrameOptions,
 ) Error![]u8 {
     const primary_options = try nativeFrameOptionsForLevel(level, options);
+    var precomputed_primary: ?NativeFrameEncodeResult = null;
+    errdefer if (precomputed_primary) |result| allocator.free(result.frame);
     // Extremely small single-block results cannot be beaten meaningfully by
     // splitting: each additional adaptive block costs a three-byte header.
-    // Probe the same bounded prefix-tail shape used by block arbitration, then
-    // return only when the complete primary frame is below 1/256 of the input.
-    if (level > 0 and input.len > 8 * 1024 and input.len <= primary_options.block_size_max and findPrefixTailDuplicateMatch(input) != null) {
+    // Level 1 also computes primary first because its generated-corpus split
+    // ladder has no winner once the complete primary frame is below 1/32 of
+    // source size. Higher levels keep the stricter structural prefix check:
+    // level 3 has real counterexamples to the general ratio-only rule.
+    if (level > 0 and
+        input.len > 8 * 1024 and
+        input.len <= primary_options.block_size_max and
+        (level == 1 or findPrefixTailDuplicateMatch(input) != null))
+    {
         const primary = try encodeNativeFrameWithOptionsAlloc(allocator, input, primary_options);
-        if (primary.frame.len <= input.len / 256) return primary.frame;
-        allocator.free(primary.frame);
+        const decisive_ratio: usize = if (level == 1) 32 else 256;
+        if (primary.frame.len <= input.len / decisive_ratio) return primary.frame;
+        if (level == 1)
+            precomputed_primary = primary
+        else
+            allocator.free(primary.frame);
     }
     if (level > 0 and input.len > 8 * 1024) {
         var locked_allocator = LockedAllocator{ .child = allocator };
@@ -3710,6 +3722,9 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
                 const result = candidates[0].result.?;
                 candidates[0].result = null;
                 break :blk result;
+            } else if (precomputed_primary) |primary| blk: {
+                precomputed_primary = null;
+                break :blk primary;
             } else encodeNativeFrameWithOptionsAlloc(parallel_allocator, input, primary_options) catch |err| {
                 for (candidates[0..candidate_count]) |candidate| if (candidate.result) |result| parallel_allocator.free(result.frame);
                 return err;
@@ -3743,7 +3758,10 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
             return best.frame;
         }
     }
-    var best = try encodeNativeFrameWithOptionsAlloc(allocator, input, primary_options);
+    var best = if (precomputed_primary) |primary| blk: {
+        precomputed_primary = null;
+        break :blk primary;
+    } else try encodeNativeFrameWithOptionsAlloc(allocator, input, primary_options);
     if (level <= 0 or input.len <= 8 * 1024) return best.frame;
     errdefer allocator.free(best.frame);
 
@@ -14956,6 +14974,22 @@ test "zstd level one defers dominated smallest adaptive candidate" {
     const actual = try encodeFrameWithLevelAlloc(std.testing.allocator, &payload, level);
     defer std.testing.allocator.free(actual);
     try std.testing.expectEqualSlices(u8, expected.frame, actual);
+}
+
+test "zstd level one returns a decisive non-prefix primary frame" {
+    var payload: [32 * 1024]u8 = @splat('a');
+    @memcpy(payload[0..16], "unique-prefix-01");
+    try std.testing.expect(findPrefixTailDuplicateMatch(&payload) == null);
+
+    const level: c_int = 1;
+    const primary_options = try nativeFrameOptionsForLevel(level, .{});
+    const primary = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &payload, primary_options);
+    defer std.testing.allocator.free(primary.frame);
+    try std.testing.expect(primary.frame.len <= payload.len / 32);
+
+    const selected = try encodeFrameWithLevelAlloc(std.testing.allocator, &payload, level);
+    defer std.testing.allocator.free(selected);
+    try std.testing.expectEqualSlices(u8, primary.frame, selected);
 }
 
 test "zstd native decoder rejects malformed FSE compressed sequence tables" {
