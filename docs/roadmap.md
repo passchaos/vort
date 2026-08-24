@@ -6684,6 +6684,16 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   default window are unchanged. A deterministic 60 KiB long-distance fixture
   with a 48 KiB offset shrinks from 61,502 balanced bytes to 49,213 ratio bytes
   and round-trips through the exact-size decoder.
+  A Brotli-specific second pass now searches the literal runs left by that
+  shared parser for 65,521...131,056-byte distances, allowing ratio mode to use
+  a 17-bit stream window without doubling the six-byte shared LZ77 token used by
+  DEFLATE and Zstd. A deterministic 92 KiB fixture with a repeated 12 KiB prefix
+  at distance 80 KiB shrinks from 94,282 balanced bytes to 82,192 bytes and is
+  externally decodable with Node/libbrotli. The augmented command plan is still
+  compared against the original complete stream before selection.
+  Across twelve 128 KiB Silesia prefixes, that post-pass lowers ratio mode from
+  548,964 to 544,150 bytes overall (8.15% below libbrotli q3). Ten files improve;
+  the two regressions are discarded by the same complete-stream arbitration.
   The lazy planner also exposes an explicit search-budget options API and a
   reproducible `run-br-lazy-sweep` target. All 24 combinations across chain
   budgets 64–512, nice lengths 64–258, and lazy gains 1–2 retained the same

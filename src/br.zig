@@ -9,6 +9,7 @@ const command_lut = @import("br/command_lut.zig");
 const pattern = @import("br/pattern.zig");
 const command_plan = @import("br/encoder/command_plan.zig");
 const literal_context = @import("br/encoder/literal_context.zig");
+const long_distance = @import("br/encoder/long_distance.zig");
 const short_match_candidates = @import("br/encoder/short_match_candidates.zig");
 const encoder_distance = @import("br/encoder/distance.zig");
 const complex_prefix = @import("br/encoder/complex_prefix.zig");
@@ -86,6 +87,7 @@ test {
     _ = pattern;
     _ = command_plan;
     _ = literal_context;
+    _ = long_distance;
     _ = short_match_candidates;
     _ = encoder_distance;
     _ = complex_prefix;
@@ -553,11 +555,40 @@ pub fn encodePlannedStreamLazyAlloc(allocator: std.mem.Allocator, input: []const
 /// makes the substantial encode-time cost explicit rather than silently
 /// slowing latency-sensitive users.
 pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
-    return encodePlannedStreamLazyWithWireOptionsAlloc(allocator, input, .{
+    const baseline = try encodePlannedStreamLazyWithWireOptionsAlloc(allocator, input, .{
         .window_len = @min(input.len, (@as(usize, 1) << default_window_bits) - 16),
         .max_chain = 512,
         .nice_len = lz77.max_match_len,
     }, .{ .try_recent_distances = true });
+    if (input.len <= long_distance.min_distance) return baseline;
+    errdefer allocator.free(baseline);
+
+    const lz_plan = try lz77.lazyGreedyPlanAlloc(allocator, input, .{
+        .window_len = @min(input.len, (@as(usize, 1) << default_window_bits) - 16),
+        .max_chain = 512,
+        .nice_len = lz77.max_match_len,
+        .max_candidates = 1,
+        .lazy_min_gain = 1,
+        .min_match = 3,
+        .max_match = lz77.max_match_len,
+    });
+    defer lz_plan.deinit(allocator);
+    const plan = try command_plan.buildAlloc(allocator, input, lz_plan.tokens);
+    defer plan.deinit(allocator);
+    const commands = try long_distance.augmentAlloc(allocator, input, plan.commands) orelse return baseline;
+    defer allocator.free(commands);
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, null, &stats, .{
+        .use_recent_distances = true,
+        .use_utf8_text_contexts = true,
+        .window_bits = 17,
+    });
+    if (candidate.len < baseline.len) {
+        allocator.free(baseline);
+        return candidate;
+    }
+    allocator.free(candidate);
+    return baseline;
 }
 
 /// Experimental entry point for measuring lazy-parser search budgets without
@@ -570,6 +601,7 @@ pub fn encodePlannedStreamLazyWithOptionsAlloc(allocator: std.mem.Allocator, inp
 const CommandPlanEncodeOptions = struct {
     use_recent_distances: bool = false,
     use_utf8_text_contexts: bool = false,
+    window_bits: u5 = default_window_bits,
 };
 const min_recent_distance_candidate_count: usize = 64;
 const LazyWireOptions = struct { try_recent_distances: bool = false };
@@ -1053,7 +1085,7 @@ fn encodeCommandPlanWithOptionsAlloc(allocator: std.mem.Allocator, input: []cons
     var out = try std.ArrayList(u8).initCapacity(allocator, @min(@max(input.len / 8, 64), 4096));
     errdefer out.deinit(allocator);
     var writer = BitWriter{ .out = &out };
-    try writeWindowBits(allocator, &writer, default_window_bits);
+    try writeWindowBits(allocator, &writer, options.window_bits);
     try writeLastCompressedMetaBlockHeader(allocator, &writer, input.len);
     const distance_alphabet_size = plannedDistanceAlphabetSize(&distance_alphabet);
     const lengths_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
@@ -6133,6 +6165,28 @@ test "br ratio UTF8 context split round trips beyond summary history" {
 
 test "br ratio planner uses the full 16-bit stream window" {
     const gap = 48 * 1024;
+    const repeated_len = 12 * 1024;
+    const payload = try std.testing.allocator.alloc(u8, gap + repeated_len);
+    defer std.testing.allocator.free(payload);
+    var state: u32 = 0x1234_5678;
+    for (payload[0..gap]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(payload[gap..], payload[0..repeated_len]);
+
+    const balanced = try encodePlannedStreamLazyAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(balanced);
+    const ratio = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(ratio);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, ratio, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(ratio.len + repeated_len / 2 < balanced.len);
+}
+
+test "br ratio planner adds matches beyond the 16-bit stream window" {
+    const gap = 80 * 1024;
     const repeated_len = 12 * 1024;
     const payload = try std.testing.allocator.alloc(u8, gap + repeated_len);
     defer std.testing.allocator.free(payload);
