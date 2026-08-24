@@ -21,7 +21,7 @@ def main() -> int:
         "process.stdin.on('end',()=>process.stdout.write(z.brotliDecompressSync(Buffer.concat(b))));"
     )
     for name, expected in cases:
-        for mode in (name, f"lazy-{name}"):
+        for mode in (name, f"lazy-{name}", f"ratio-{name}"):
             encoded = subprocess.check_output([sys.argv[1], mode])
             actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
             if actual != expected:

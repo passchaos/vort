@@ -6648,10 +6648,17 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   The same API now exposes an explicit `.ratio` level (and direct
   `encodePlannedStreamRatioAlloc` helper) with a 512-chain, 258-byte nice-match
   budget. On twelve 128 KiB Silesia prefixes it improves the aggregate balanced
-  size from 560,528 to 555,446 bytes; Vort ratio output is smaller than
-  libbrotli 1.1.0 quality 3 on eleven of twelve files and by 6.24% in aggregate.
-  The remaining `mozilla` gap is 5.65%, making broader entropy/context modeling
-  the next ratio target. This level is intentionally separate because four
+  size from 560,528 to 555,446 bytes before command coding. Ratio mode also
+  evaluates a second complete stream that maps immediately repeated copy
+  distances to Brotli's implicit command form when at least 64 commands qualify,
+  keeping it only when smaller. The threshold avoids doubling tiny-input wire
+  work while retaining every measured material win. On
+  the same corpus this reduces aggregate output again to 552,847 bytes, 6.68%
+  below libbrotli quality 3; representative `mozilla`/`nci`/`xml` rows fall from
+  22,472/10,699/9,909 to 21,883/10,433/9,802 bytes. `mozilla` remains the only
+  measured loss at 2.88%, while every other row is protected by exact
+  full-stream arbitration and every selected stream passes libbrotli decoding.
+  This level is intentionally separate because four
   representative fixed-CPU samples traded roughly 1.6–2.4x encode time for the
   additional 0.8–4.2% size reduction.
   The lazy planner also exposes an explicit search-budget options API and a
