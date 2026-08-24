@@ -850,6 +850,7 @@ pub const PlannedStreamEncoder = struct {
     allocator: std.mem.Allocator,
     tokens: std.ArrayList(lz77.Token) = .empty,
     commands: std.ArrayList(command_plan.Command) = .empty,
+    output: std.ArrayList(u8) = .empty,
 
     pub fn init(allocator: std.mem.Allocator) PlannedStreamEncoder {
         return .{ .allocator = allocator };
@@ -858,6 +859,7 @@ pub const PlannedStreamEncoder = struct {
     pub fn deinit(self: *PlannedStreamEncoder) void {
         self.tokens.deinit(self.allocator);
         self.commands.deinit(self.allocator);
+        self.output.deinit(self.allocator);
         self.* = undefined;
     }
 
@@ -891,7 +893,42 @@ pub const PlannedStreamEncoder = struct {
     }
 
     pub fn retainedCapacity(self: *const PlannedStreamEncoder) usize {
-        return self.tokens.capacity * @sizeOf(lz77.Token) + self.commands.capacity * @sizeOf(command_plan.Command);
+        return self.tokens.capacity * @sizeOf(lz77.Token) +
+            self.commands.capacity * @sizeOf(command_plan.Command) +
+            self.output.capacity;
+    }
+
+    /// Encode a fast-level stream into retained encoder-owned output. The
+    /// returned slice is invalidated by the next call or by `deinit`. This path
+    /// avoids allocating an owned result once input/output capacities stabilize.
+    pub fn encodeScratch(self: *PlannedStreamEncoder, input: []const u8) Error![]const u8 {
+        if (input.len > 32 * 1024) return error.InvalidBlockPlan;
+        self.output.clearRetainingCapacity();
+        if (input.len < 5) {
+            try encodeStoredStreamAppend(self.allocator, &self.output, input);
+            return self.output.items;
+        }
+        const stats = try lz77.hashGreedyPlanAutoTinyReuse(&self.tokens, self.allocator, input, .{
+            .window_len = input.len,
+            .max_chain = 64,
+            .nice_len = 64,
+            .max_candidates = 8,
+            .min_match = 3,
+            .max_match = lz77.max_match_len,
+        });
+        if (stats.matches == 0) {
+            try encodeStoredStreamAppend(self.allocator, &self.output, input);
+            return self.output.items;
+        }
+        _ = try command_plan.buildReuse(&self.commands, self.allocator, input, self.tokens.items);
+        var stats_out: encoder_stats.PlannedEncodeStats = .{};
+        try encodeCommandPlanWithOptionsAppend(self.allocator, &self.output, input, self.commands.items, null, &stats_out, .{});
+        const stored_len = try encodedStoredStreamBound(input.len);
+        if (self.output.items.len > stored_len) {
+            self.output.clearRetainingCapacity();
+            try encodeStoredStreamAppend(self.allocator, &self.output, input);
+        }
+        return self.output.items;
     }
 };
 
@@ -1134,6 +1171,13 @@ fn recentDistanceSymbol(distance: usize, last_distances: *const [4]usize) ?u4 {
 }
 
 fn encodeCommandPlanWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error![]u8 {
+    var out = try std.ArrayList(u8).initCapacity(allocator, commandPlanInitialCapacity(input.len));
+    errdefer out.deinit(allocator);
+    try encodeCommandPlanWithOptionsAppend(allocator, &out, input, commands, io, stats, options);
+    return out.toOwnedSlice(allocator);
+}
+
+fn encodeCommandPlanWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error!void {
     if (commands.len == 0) return error.InvalidBlockPlan;
     var literal_frequencies: [256]u32 = @splat(0);
     var literal_context_frequencies: [2][256]u32 = @splat(@splat(0));
@@ -1189,9 +1233,8 @@ fn encodeCommandPlanWithOptionsAlloc(allocator: std.mem.Allocator, input: []cons
     // Useful planner streams are usually a small fraction of input. Reserving
     // a capped fraction removes ArrayList's early growth ladder without scaling
     // scratch memory with multi-megabyte inputs.
-    var out = try std.ArrayList(u8).initCapacity(allocator, @min(@max(input.len / 8, 64), 4096));
-    errdefer out.deinit(allocator);
-    var writer = BitWriter{ .out = &out };
+    try out.ensureUnusedCapacity(allocator, commandPlanInitialCapacity(input.len));
+    var writer = BitWriter{ .out = out };
     try writeWindowBits(allocator, &writer, options.window_bits);
     try writeLastCompressedMetaBlockHeader(allocator, &writer, input.len);
     const distance_alphabet_size = plannedDistanceAlphabetSize(&distance_alphabet);
@@ -1258,7 +1301,10 @@ fn encodeCommandPlanWithOptionsAlloc(allocator: std.mem.Allocator, input: []cons
     }
     if (io) |active| stats.payload_ns = elapsedNs(payload_start.?, active);
     if (writer.bit_index != 0) writer.alignToByte();
-    return out.toOwnedSlice(allocator);
+}
+
+fn commandPlanInitialCapacity(input_len: usize) usize {
+    return @min(@max(input_len / 8, 64), 4096);
 }
 
 fn byteRatioAtMost(numerator: usize, denominator: usize, percent: usize) bool {
@@ -6532,6 +6578,27 @@ test "br planner-backed encoder retains reusable arena capacity" {
     defer std.testing.allocator.free(second);
     try std.testing.expectEqualSlices(u8, first, second);
     try std.testing.expect(encoder.retainedCapacity() >= capacity);
+}
+
+test "br reusable planner retains encoded output scratch" {
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const payload = "abcabcXabcabcXabcabcX";
+    const expected = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .level = .fast });
+    defer std.testing.allocator.free(expected);
+    const first = try encoder.encodeScratch(payload);
+    try std.testing.expectEqualSlices(u8, expected, first);
+    const capacity = encoder.retainedCapacity();
+    const second = try encoder.encodeScratch(payload);
+    try std.testing.expectEqualSlices(u8, expected, second);
+    try std.testing.expectEqual(capacity, encoder.retainedCapacity());
+
+    const incompressible = "qzxwvbnm1234567890QZXWVBNM!@#$%^&*";
+    const stored = try encoder.encodeScratch(incompressible);
+    try std.testing.expect(stored.len <= try encodedStoredStreamBound(incompressible.len));
+    const decoded = try decodeStreamAlloc(std.testing.allocator, stored);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, incompressible, decoded);
 }
 
 test "br reusable planner exposes stable levels and stored fallback" {

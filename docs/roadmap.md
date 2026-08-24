@@ -6882,3 +6882,10 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   scratch range to the stable one-shot fast path instead of rejecting them, so
   it remains byte-identical at both tiny and large boundaries; Node decodes the
   new four-byte fixtures for all three levels.
+  The command-plan wire encoder now has an append core, and
+  `PlannedStreamEncoder.encodeScratch` writes fast-level output directly into
+  retained encoder-owned storage. After warmup, repeated similarly sized calls
+  reuse token, command, and output capacities and avoid an owned output
+  allocation; returned bytes remain valid until the next call or `deinit`. A
+  fixed-CPU 10,000-run JSON sample improved from roughly 15.4 µs per allocating
+  reusable encode to 14.4 µs, with byte-identical output.
