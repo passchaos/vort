@@ -21,7 +21,7 @@ const incremental_stored_tests = @import("br/incremental/stored/tests.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 pub const PlannedEncodeStats = encoder_stats.PlannedEncodeStats;
-pub const PlannedCompressionLevel = enum { fast, balanced };
+pub const PlannedCompressionLevel = enum { fast, balanced, ratio };
 pub const PlannedEncodeOptions = struct { level: PlannedCompressionLevel = .fast };
 /// Search budget for the ratio-oriented planner. These knobs affect token
 /// selection only; the resulting stream still uses the same Brotli command
@@ -531,6 +531,7 @@ pub fn encodePlannedStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: 
     return switch (options.level) {
         .fast => encodePlannedStreamAlloc(allocator, input),
         .balanced => encodePlannedStreamLazyAlloc(allocator, input),
+        .ratio => encodePlannedStreamRatioAlloc(allocator, input),
     };
 }
 
@@ -539,6 +540,17 @@ pub fn encodePlannedStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: 
 /// token choice differs.
 pub fn encodePlannedStreamLazyAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
     return encodePlannedStreamLazyWithOptionsAlloc(allocator, input, .{});
+}
+
+/// Ratio-oriented level for callers willing to trade additional match-chain
+/// search for smaller Brotli streams. Keeping this distinct from `.balanced`
+/// makes the substantial encode-time cost explicit rather than silently
+/// slowing latency-sensitive users.
+pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    return encodePlannedStreamLazyWithOptionsAlloc(allocator, input, .{
+        .max_chain = 512,
+        .nice_len = lz77.max_match_len,
+    });
 }
 
 /// Experimental entry point for measuring lazy-parser search budgets without
@@ -5922,6 +5934,18 @@ test "br planner compression levels select fast and balanced streams" {
     try std.testing.expectEqualSlices(u8, payload, fast_decoded);
     try std.testing.expectEqualSlices(u8, payload, balanced_decoded);
     try std.testing.expect(balanced.len <= fast.len);
+}
+
+test "br ratio planner spends more search budget without regressing size" {
+    const payload = @embedFile("br/encoder/command_plan.zig");
+    const balanced = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .level = .balanced });
+    defer std.testing.allocator.free(balanced);
+    const ratio = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .level = .ratio });
+    defer std.testing.allocator.free(ratio);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, ratio);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(ratio.len < balanced.len);
 }
 
 test "br balanced planner prunes a dense tiny-copy prefix" {

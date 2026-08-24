@@ -6645,6 +6645,15 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Stable public planner options now expose `.fast` and `.balanced` compression
   levels through `encodePlannedStreamWithOptionsAlloc`; `.balanced` maps to the
   proven lazy parser and is tested to round-trip with size no worse than fast.
+  The same API now exposes an explicit `.ratio` level (and direct
+  `encodePlannedStreamRatioAlloc` helper) with a 512-chain, 258-byte nice-match
+  budget. On twelve 128 KiB Silesia prefixes it improves the aggregate balanced
+  size from 560,528 to 555,446 bytes; Vort ratio output is smaller than
+  libbrotli 1.1.0 quality 3 on eleven of twelve files and by 6.24% in aggregate.
+  The remaining `mozilla` gap is 5.65%, making broader entropy/context modeling
+  the next ratio target. This level is intentionally separate because four
+  representative fixed-CPU samples traded roughly 1.6–2.4x encode time for the
+  additional 0.8–4.2% size reduction.
   The lazy planner also exposes an explicit search-budget options API and a
   reproducible `run-br-lazy-sweep` target. All 24 combinations across chain
   budgets 64–512, nice lengths 64–258, and lazy gains 1–2 retained the same

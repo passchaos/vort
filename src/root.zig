@@ -62,6 +62,7 @@ pub const brEncodeAlternatingStreamAlloc = br.encodeAlternatingStreamAlloc;
 pub const brEncodeRepeatedPrefixStreamAlloc = br.encodeRepeatedPrefixStreamAlloc;
 pub const brEncodePlannedStreamAlloc = br.encodePlannedStreamAlloc;
 pub const brEncodePlannedStreamLazyAlloc = br.encodePlannedStreamLazyAlloc;
+pub const brEncodePlannedStreamRatioAlloc = br.encodePlannedStreamRatioAlloc;
 pub const brEncodePlannedStreamAllocWithStats = br.encodePlannedStreamAllocWithStats;
 pub const brEncodePlannedStreamAllocWithStatsTimed = br.encodePlannedStreamAllocWithStatsTimed;
 pub const BrotliPlannedEncodeStats = br.PlannedEncodeStats;
