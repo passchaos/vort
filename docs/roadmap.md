@@ -6894,7 +6894,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   runs in bounded mode without output allocation, and a compressed result that
   crosses the ceiling is overwritten by the stored representation. Tests lock
   byte parity with stable fast output, undersized-buffer `OutOfMemory`, and an
-  incompressible caller-buffer round trip.
+  incompressible caller-buffer round trip. Bounded fast encoding now also treats
+  command-writer `OutOfMemory` as a compressed-candidate overflow and rewrites
+  the exact-size caller buffer with stored output. An eight-byte payload with a
+  four-byte repeated suffix reproduces this boundary: its compressed attempt
+  exceeds the 12-byte stored bound, while `encodeInto` now succeeds at exactly
+  12 bytes; a deterministic 100,000-case search finds no remaining false OOM.
   Static-dictionary lookup now recovers ASCII uppercase-first and uppercase-all
   transforms without adding a second dictionary index: it lowercases the four-
   byte hash prefix, probes the existing base-word buckets, and visits only the

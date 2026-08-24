@@ -989,8 +989,13 @@ pub const PlannedStreamEncoder = struct {
         var stats_out: encoder_stats.PlannedEncodeStats = .{};
         // Bounded mode maps any unexpected underestimation to OutOfMemory
         // rather than allowing the writer to allocate behind the caller's back.
+        // A compressed candidate may legitimately exceed the stored ceiling;
+        // in that case discard the partial candidate and emit stored instead.
         var writer = BitWriter{ .out = &out, .bounded = true };
-        try encodeCommandPlanWithOptionsWrite(self.allocator, &writer, input, self.commands.items, null, &stats_out, .{});
+        encodeCommandPlanWithOptionsWrite(self.allocator, &writer, input, self.commands.items, null, &stats_out, .{}) catch |err| switch (err) {
+            error.OutOfMemory => return encodeStoredStreamInto(input, output),
+            else => return err,
+        };
         if (out.items.len > needed) return encodeStoredStreamInto(input, output);
         return out.items.len;
     }
@@ -6685,6 +6690,16 @@ test "br reusable planner encodes fast streams into caller storage" {
     const decoded = try decodeStreamAlloc(std.testing.allocator, output[0..stored_written]);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, incompressible, decoded);
+
+    const expanding_match = [_]u8{ 0x99, 0x54, 0x73, 0x76, 0x99, 0x54, 0x73, 0x76 };
+    const bound = try encodedPlannedStreamBound(expanding_match.len);
+    var exact_output: [12]u8 = undefined;
+    try std.testing.expectEqual(exact_output.len, bound);
+    const exact_written = try encoder.encodeInto(&expanding_match, &exact_output);
+    try std.testing.expectEqual(bound, exact_written);
+    const exact_decoded = try decodeStreamAlloc(std.testing.allocator, exact_output[0..exact_written]);
+    defer std.testing.allocator.free(exact_decoded);
+    try std.testing.expectEqualSlices(u8, &expanding_match, exact_decoded);
 }
 
 test "br planned levels encode into caller storage" {
