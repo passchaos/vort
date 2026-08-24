@@ -576,6 +576,7 @@ pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []cons
     defer plan.deinit(allocator);
     var stats: encoder_stats.PlannedEncodeStats = .{};
     const baseline = try encodeLazyCommandPlanAlloc(allocator, input, plan.commands, &stats, .{ .try_recent_distances = true });
+    if (input.len <= ratio_static_dictionary_max_input_len) return selectRatioStaticDictionaryAlloc(allocator, input, baseline);
     if (input.len <= long_distance.min_distance) return baseline;
     errdefer allocator.free(baseline);
 
@@ -586,6 +587,26 @@ pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []cons
         .use_utf8_text_contexts = true,
         .window_bits = 17,
     });
+    if (candidate.len < baseline.len) {
+        allocator.free(baseline);
+        return candidate;
+    }
+    allocator.free(candidate);
+    return baseline;
+}
+
+// The indexed static-dictionary planner is still substantially more expensive
+// than LZ77, so ratio mode only evaluates it for short payloads where RFC 7932
+// words can dominate the complete stream. Exact final-byte arbitration keeps
+// ordinary short JSON/source data from regressing in size.
+const ratio_static_dictionary_max_input_len: usize = 256;
+
+fn selectRatioStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, baseline: []u8) Error![]u8 {
+    errdefer allocator.free(baseline);
+    const candidate = encodePlannedStreamStaticDictionaryAlloc(allocator, input) catch |err| switch (err) {
+        error.InvalidBlockPlan => return baseline,
+        else => return err,
+    };
     if (candidate.len < baseline.len) {
         allocator.free(baseline);
         return candidate;
@@ -6246,6 +6267,41 @@ test "br planner emits built-in static dictionary commands" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
     try std.testing.expect(encoded.len < payload.len);
+}
+
+test "br ratio planner selects short static dictionary streams by final size" {
+    const dictionary_payload = "Information about compression performance and dictionary support.";
+    const dictionary = try encodePlannedStreamStaticDictionaryAlloc(std.testing.allocator, dictionary_payload);
+    defer std.testing.allocator.free(dictionary);
+    const selected = try encodePlannedStreamRatioAlloc(std.testing.allocator, dictionary_payload);
+    defer std.testing.allocator.free(selected);
+    try std.testing.expectEqualSlices(u8, dictionary, selected);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, selected);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, dictionary_payload, decoded);
+
+    const repeated_payload = "abcdefghabcdefghabcdefghabcdefgh";
+    const repeated_baseline = try encodePlannedStreamLazyWithWireOptionsAlloc(std.testing.allocator, repeated_payload, .{
+        .window_len = (@as(usize, 1) << default_window_bits) - 16,
+        .max_chain = 512,
+        .nice_len = lz77.max_match_len,
+    }, .{ .try_recent_distances = true });
+    defer std.testing.allocator.free(repeated_baseline);
+    const repeated_selected = try encodePlannedStreamRatioAlloc(std.testing.allocator, repeated_payload);
+    defer std.testing.allocator.free(repeated_selected);
+    try std.testing.expectEqualSlices(u8, repeated_baseline, repeated_selected);
+
+    const outside_gate_payload = dictionary_payload ** 5;
+    try std.testing.expect(outside_gate_payload.len > ratio_static_dictionary_max_input_len);
+    const outside_gate_baseline = try encodePlannedStreamLazyWithWireOptionsAlloc(std.testing.allocator, outside_gate_payload, .{
+        .window_len = (@as(usize, 1) << default_window_bits) - 16,
+        .max_chain = 512,
+        .nice_len = lz77.max_match_len,
+    }, .{ .try_recent_distances = true });
+    defer std.testing.allocator.free(outside_gate_baseline);
+    const outside_gate_selected = try encodePlannedStreamRatioAlloc(std.testing.allocator, outside_gate_payload);
+    defer std.testing.allocator.free(outside_gate_selected);
+    try std.testing.expectEqualSlices(u8, outside_gate_baseline, outside_gate_selected);
 }
 
 test "br planner-backed encoder emits regular distances" {

@@ -73,6 +73,10 @@ pub const Index = struct {
             for (0..static_dictionary.transform_count) |transform_index| {
                 const address = (transform_index << bits) | base.word_index;
                 const transformed = static_dictionary.transform(address, base.copy_len, &scratch) orelse continue;
+                // RFC transforms may omit the complete base word. Those zero-
+                // length results cannot advance the planner and would otherwise
+                // create an infinite sequence of dictionary commands.
+                if (transformed.len < 4) continue;
                 if (transformed.len > input.len or !std.mem.eql(u8, transformed, input[0..transformed.len])) continue;
                 if (best.* == null or transformed.len > best.*.?.output_len or
                     (transformed.len == best.*.?.output_len and address < best.*.?.address))
@@ -122,4 +126,12 @@ test "indexed static dictionary matcher agrees with exhaustive reference" {
         const actual = index.findLongest(input);
         try std.testing.expectEqual(expected, actual);
     }
+}
+
+test "indexed static dictionary matcher ignores non-advancing omit transforms" {
+    var index = try Index.init(std.testing.allocator);
+    defer index.deinit();
+
+    const match = index.findLongest("on\",");
+    try std.testing.expect(match == null or match.?.output_len >= 4);
 }

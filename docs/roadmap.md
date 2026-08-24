@@ -6791,3 +6791,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   out-parameter instead of returning/copying ~11 KiB values. Focused alphabet
   time is about 7–8 µs; short A/B reached 117/133/134 MiB/s while source/log
   100-iteration samples reached 123/169 MiB/s (JSON remained scheduler-noisy).
+  The indexed matcher now rejects RFC transforms whose complete-word omission
+  produces fewer than four output bytes; those non-advancing candidates could
+  previously trap the dictionary planner on ordinary JSON punctuation. Ratio
+  mode now evaluates the static-dictionary stream for inputs up to 256 bytes
+  and keeps it only when the complete frame is strictly smaller. A focused
+  short-payload matrix reduced representative 36/57/59/65/83-byte English,
+  JSON, and source inputs by 4–33 bytes; the dictionary pass cost roughly
+  12–40x the LZ path below 154 bytes and becomes sharply less attractive above
+  256 bytes, which is why the production gate remains deliberately narrow.
+  The selected ratio stream is decoded through Node in the external gate.

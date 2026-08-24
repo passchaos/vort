@@ -35,6 +35,15 @@ def main() -> int:
     if len(encoded) >= len(expected):
         raise SystemExit("dictionary-words: expected a smaller encoded stream")
     print(f"brotli planned dictionary-words node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = b"Information about compression performance and dictionary support."
+    ratio_encoded = subprocess.check_output([sys.argv[1], "ratio-dictionary-short"])
+    dictionary_encoded = subprocess.check_output([sys.argv[1], "dictionary-dictionary-short"])
+    if ratio_encoded != dictionary_encoded:
+        raise SystemExit("ratio-dictionary-short: expected ratio mode to select dictionary stream")
+    actual = subprocess.run(["node", "-e", script], input=ratio_encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("ratio-dictionary-short: node output mismatch")
+    print(f"brotli planned ratio-dictionary-short node diff: encoded={len(ratio_encoded)} decoded={len(actual)}")
     index_bytes = int(subprocess.check_output([sys.argv[1], "dictionary-index-bytes"]))
     if index_bytes > 150_000:
         raise SystemExit(f"dictionary index exceeds memory budget: {index_bytes}")

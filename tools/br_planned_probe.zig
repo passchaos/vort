@@ -25,6 +25,8 @@ pub fn main(init: std.process.Init) !void {
         "2026-08-21T02:00:00Z level=info service=vort request=compress status=ok bytes=4096\n" ** 40
     else if (std.mem.eql(u8, name, "words"))
         " information follows the information"
+    else if (std.mem.eql(u8, name, "dictionary-short"))
+        "Information about compression performance and dictionary support."
     else
         return error.InvalidBlockPlan;
     const encoded = if (lazy)
