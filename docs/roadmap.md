@@ -6895,3 +6895,9 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   crosses the ceiling is overwritten by the stored representation. Tests lock
   byte parity with stable fast output, undersized-buffer `OutOfMemory`, and an
   incompressible caller-buffer round trip.
+  Public `encodedPlannedStreamBound*` and `encodePlannedStream*Into` helpers now
+  expose that stored ceiling to one-shot callers. The reusable encoder's
+  `encodeIntoWithOptions` supports all stable levels: fast writes directly in
+  bounded mode, while balanced/ratio retain exact one-shot selection before
+  copying into caller storage. Tests cover empty, repetitive, dictionary-heavy,
+  and incompressible inputs, all levels, exact parity, and undersized buffers.

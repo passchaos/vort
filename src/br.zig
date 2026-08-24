@@ -543,6 +543,27 @@ pub fn encodePlannedStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: 
     };
 }
 
+/// Conservative bound for every stable planned level. Stable selection always
+/// falls back to the stored representation before returning a larger stream.
+pub fn encodedPlannedStreamBound(input_len: usize) Error!usize {
+    return encodedPlannedStreamBoundWithOptions(input_len, .{});
+}
+
+pub fn encodedPlannedStreamBoundWithOptions(input_len: usize, options: PlannedEncodeOptions) Error!usize {
+    _ = options;
+    return encodedStoredStreamBound(input_len);
+}
+
+pub fn encodePlannedStreamInto(input: []const u8, output: []u8) Error!usize {
+    return encodePlannedStreamWithOptionsInto(input, output, .{});
+}
+
+pub fn encodePlannedStreamWithOptionsInto(input: []const u8, output: []u8, options: PlannedEncodeOptions) Error!usize {
+    var encoder = PlannedStreamEncoder.init(std.heap.smp_allocator);
+    defer encoder.deinit();
+    return encoder.encodeIntoWithOptions(input, output, options);
+}
+
 fn encodePlannedStreamOrStoredAlloc(allocator: std.mem.Allocator, input: []const u8, level: PlannedCompressionLevel) Error![]u8 {
     const compressed = switch (level) {
         .fast => encodePlannedStreamAlloc(allocator, input),
@@ -935,10 +956,20 @@ pub const PlannedStreamEncoder = struct {
     /// is the exact stored-stream size because stable fast encoding never
     /// returns a larger compressed candidate.
     pub fn encodeInto(self: *PlannedStreamEncoder, input: []const u8, output: []u8) Error!usize {
-        const needed = try encodedStoredStreamBound(input.len);
+        return self.encodeIntoWithOptions(input, output, .{});
+    }
+
+    pub fn encodeIntoWithOptions(self: *PlannedStreamEncoder, input: []const u8, output: []u8, options: PlannedEncodeOptions) Error!usize {
+        const needed = try encodedPlannedStreamBoundWithOptions(input.len, options);
         if (output.len < needed) return error.OutOfMemory;
+        if (options.level != .fast) {
+            const encoded = try encodePlannedStreamWithOptionsAlloc(self.allocator, input, options);
+            defer self.allocator.free(encoded);
+            @memcpy(output[0..encoded.len], encoded);
+            return encoded.len;
+        }
         if (input.len > 32 * 1024) {
-            const encoded = try encodePlannedStreamWithOptionsAlloc(self.allocator, input, .{ .level = .fast });
+            const encoded = try encodePlannedStreamWithOptionsAlloc(self.allocator, input, options);
             defer self.allocator.free(encoded);
             @memcpy(output[0..encoded.len], encoded);
             return encoded.len;
@@ -6654,6 +6685,31 @@ test "br reusable planner encodes fast streams into caller storage" {
     const decoded = try decodeStreamAlloc(std.testing.allocator, output[0..stored_written]);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, incompressible, decoded);
+}
+
+test "br planned levels encode into caller storage" {
+    const inputs = [_][]const u8{
+        "",
+        "abcabcXabcabcXabcabcX",
+        "Information about compression performance and dictionary support.",
+        "qzxwvbnm1234567890QZXWVBNM!@#$%^&*",
+    };
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    for ([_]PlannedCompressionLevel{ .fast, .balanced, .ratio }) |level| {
+        for (inputs) |input| {
+            const options = PlannedEncodeOptions{ .level = level };
+            const expected = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, input, options);
+            defer std.testing.allocator.free(expected);
+            const bound = try encodedPlannedStreamBoundWithOptions(input.len, options);
+            try std.testing.expectEqual(try encodedStoredStreamBound(input.len), bound);
+            const output = try std.testing.allocator.alloc(u8, bound);
+            defer std.testing.allocator.free(output);
+            const written = try encoder.encodeIntoWithOptions(input, output, options);
+            try std.testing.expectEqualSlices(u8, expected, output[0..written]);
+            if (bound != 0) try std.testing.expectError(error.OutOfMemory, encoder.encodeIntoWithOptions(input, output[0 .. bound - 1], options));
+        }
+    }
 }
 
 test "br reusable planner exposes stable levels and stored fallback" {
