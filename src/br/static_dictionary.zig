@@ -264,14 +264,21 @@ pub fn transform(address: usize, word_len: usize, out: []u8) ?[]const u8 {
     if (transform_index >= transforms.len) return null;
     const start = offsets[word_len] + word_index * word_len;
     if (start > data.len or data.len - start < word_len) return null;
+    return transformWord(transform_index, data[start..][0..word_len], out);
+}
+
+/// Apply an RFC transform to an already resolved dictionary word. Indexed
+/// encoder search uses this form to avoid decoding the address and locating the
+/// same base word again for every transform candidate in a bucket.
+pub fn transformWord(transform_index: usize, word: []const u8, out: []u8) ?[]const u8 {
+    if (transform_index >= transforms.len or word.len < 4 or word.len > 24 or out.len < 64) return null;
     const spec = transforms[transform_index];
     var written: usize = 0;
     written += copyCString(out[written..], spec.prefix);
-    var skip: usize = if (spec.kind >= 12) spec.kind - 11 else 0;
-    skip = @min(skip, word_len);
-    var kept = word_len - skip;
+    const skip = @min(if (spec.kind >= 12) @as(usize, spec.kind - 11) else 0, word.len);
+    var kept = word.len - skip;
     if (spec.kind <= 9) kept -|= spec.kind;
-    @memcpy(out[written..][0..kept], data[start + skip ..][0..kept]);
+    @memcpy(out[written..][0..kept], word[skip..][0..kept]);
     if (spec.kind == 10 and kept != 0) uppercase(out[written..][0..kept], false);
     if (spec.kind == 11 and kept != 0) uppercase(out[written..][0..kept], true);
     written += kept;
@@ -350,6 +357,23 @@ test "static dictionary transform metadata agrees with materialization" {
             if (suffix_len != 0) try std.testing.expectEqual(transformFirstSuffixByte(transform_index).?, output[output.len - suffix_len]);
             try std.testing.expect(transformSuffixMatches(metadata, output[output.len - suffix_len ..]));
             if (transformKeepsWholeWord(transform_index)) try std.testing.expectEqual(prefix_len + word_len + suffix_len, output.len);
+        }
+    }
+}
+
+test "static dictionary resolved-word transform agrees with address transform" {
+    var address_output: [64]u8 = undefined;
+    var word_output: [64]u8 = undefined;
+    for (4..25) |word_len| {
+        const bits = sizeBits(word_len).?;
+        const word_count = @as(usize, 1) << bits;
+        for (0..transform_count) |transform_index| {
+            for ([_]usize{ 0, word_count / 2, word_count - 1 }) |word_index| {
+                const address = (transform_index << bits) | word_index;
+                const expected = transform(address, word_len, &address_output).?;
+                const actual = transformWord(transform_index, baseWord(word_len, word_index).?, &word_output).?;
+                try std.testing.expectEqualSlices(u8, expected, actual);
+            }
         }
     }
 }

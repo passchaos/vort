@@ -98,6 +98,7 @@ pub const Index = struct {
         while (entry != no_entry) : (entry = self.next[entry]) {
             const base = unpackBaseWord(self.words[entry]);
             const bits = static_dictionary.sizeBits(base.copy_len).?;
+            const word = static_dictionary.baseWord(base.copy_len, base.word_index).?;
             for (transforms_by_prefix[prefix_len]) |transform_index| {
                 if (transform_index == std.math.maxInt(u8)) break;
                 const address = (@as(usize, transform_index) << bits) | base.word_index;
@@ -110,7 +111,7 @@ pub const Index = struct {
                     if (suffix_offset + metadata.suffix_len > input.len) continue;
                     if (!static_dictionary.transformSuffixMatches(metadata, input[suffix_offset..])) continue;
                 }
-                const transformed = static_dictionary.transform(address, base.copy_len, &scratch) orelse continue;
+                const transformed = static_dictionary.transformWord(transform_index, word, &scratch) orelse continue;
                 // RFC transforms may omit the complete base word. Those zero-
                 // length results cannot advance the planner and would otherwise
                 // create an infinite sequence of dictionary commands.

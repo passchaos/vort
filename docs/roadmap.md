@@ -6837,3 +6837,9 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   encoding and from the previous ratio path's 33 to 29 bytes; Node decodes the
   selected stream. The extra candidate costs roughly 42% on that fixture and is
   currently limited to the existing <=256-byte ratio dictionary gate.
+  Indexed matching now resolves each bucket's base-word slice once and passes
+  it directly to a shared `transformWord` helper, instead of decoding the same
+  address and recomputing the dictionary offset for every compatible transform.
+  An exhaustive sampled-word oracle covers all word lengths and 121 transforms.
+  Fixed-CPU 1000-run A/B improved mixed/English/JSON/source short-ratio rows by
+  roughly 2%/3%/5%/3%, with the no-match row about 2.5% faster.
