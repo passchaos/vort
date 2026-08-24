@@ -203,13 +203,13 @@ pub fn buildAlloc(allocator: std.mem.Allocator, input: []const u8, tokens: []con
             // different input. The bytewise recurrence also handles overlap.
             for (0..copy_len) |i|
                 if (input[position + i] != input[position + i - distance]) return error.InvalidBlockPlan;
-            try commands.append(allocator, .{
-                .insert_start = insert_start,
-                .insert_len = insert_len,
-                .copy_len = copy_len,
-                .distance = distance,
-                .has_copy = true,
-            });
+            // The shared LZ77 parser caps individual matches at 258 bytes,
+            // while Brotli copy lengths can span the complete meta-block. Two
+            // adjacent copies at the same distance are exactly one longer copy
+            // (including overlapping copies), so coalesce them before building
+            // the command alphabet. This removes repeated long-run command and
+            // distance symbols without changing any decoded byte.
+            try appendCopyCommand(&commands, allocator, insert_start, insert_len, copy_len, distance);
             position += copy_len;
             insert_start = position;
             insert_len = 0;
@@ -289,7 +289,7 @@ pub fn buildReuse(commands: *std.ArrayList(Command), allocator: std.mem.Allocato
             const distance: usize = match.distance;
             if (copy_len == 0 or distance == 0 or distance > position or copy_len > input.len - position) return error.InvalidBlockPlan;
             for (0..copy_len) |i| if (input[position + i] != input[position + i - distance]) return error.InvalidBlockPlan;
-            try commands.append(allocator, .{ .insert_start = insert_start, .insert_len = insert_len, .copy_len = copy_len, .distance = distance, .has_copy = true });
+            try appendCopyCommand(commands, allocator, insert_start, insert_len, copy_len, distance);
             position += copy_len;
             insert_start = position;
             insert_len = 0;
@@ -299,6 +299,30 @@ pub fn buildReuse(commands: *std.ArrayList(Command), allocator: std.mem.Allocato
     if (position != input.len) return error.InvalidBlockPlan;
     if (insert_len != 0) try commands.append(allocator, .{ .insert_start = insert_start, .insert_len = insert_len });
     return match_count;
+}
+
+fn appendCopyCommand(
+    commands: *std.ArrayList(Command),
+    allocator: std.mem.Allocator,
+    insert_start: usize,
+    insert_len: usize,
+    copy_len: usize,
+    distance: usize,
+) !void {
+    if (insert_len == 0 and commands.items.len != 0) {
+        const previous = &commands.items[commands.items.len - 1];
+        if (previous.has_copy and previous.dictionary_output_len == 0 and previous.distance == distance) {
+            previous.copy_len = std.math.add(usize, previous.copy_len, copy_len) catch return error.IntegerOverflow;
+            return;
+        }
+    }
+    try commands.append(allocator, .{
+        .insert_start = insert_start,
+        .insert_len = insert_len,
+        .copy_len = copy_len,
+        .distance = distance,
+        .has_copy = true,
+    });
 }
 
 test "coalesces literals around LZ77 matches" {
@@ -315,6 +339,31 @@ test "coalesces literals around LZ77 matches" {
     try std.testing.expectEqual(@as(usize, 2), plan.commands.len);
     try std.testing.expectEqual(Command{ .insert_start = 0, .insert_len = 3, .copy_len = 3, .distance = 3, .has_copy = true }, plan.commands[0]);
     try std.testing.expectEqual(Command{ .insert_start = 6, .insert_len = 1 }, plan.commands[1]);
+}
+
+test "coalesces adjacent copies at the same distance" {
+    const input = "abcdabcdabcd!abcd";
+    const tokens = [_]lz77.Token{
+        .{ .literal = 'a' },
+        .{ .literal = 'b' },
+        .{ .literal = 'c' },
+        .{ .literal = 'd' },
+        .{ .match = .{ .length = 4, .distance = 4 } },
+        .{ .match = .{ .length = 4, .distance = 4 } },
+        .{ .literal = '!' },
+        .{ .match = .{ .length = 4, .distance = 5 } },
+    };
+    const plan = try buildAlloc(std.testing.allocator, input, &tokens);
+    defer plan.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 3), plan.match_count);
+    try std.testing.expectEqual(@as(usize, 2), plan.commands.len);
+    try std.testing.expectEqual(Command{ .insert_start = 0, .insert_len = 4, .copy_len = 8, .distance = 4, .has_copy = true }, plan.commands[0]);
+    try std.testing.expectEqual(Command{ .insert_start = 12, .insert_len = 1, .copy_len = 4, .distance = 5, .has_copy = true }, plan.commands[1]);
+
+    var reused: std.ArrayList(Command) = .empty;
+    defer reused.deinit(std.testing.allocator);
+    try std.testing.expectEqual(plan.match_count, try buildReuse(&reused, std.testing.allocator, input, &tokens));
+    try std.testing.expectEqualSlices(Command, plan.commands, reused.items);
 }
 
 test "static dictionary plan preserves transformed and copy lengths" {

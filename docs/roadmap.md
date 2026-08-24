@@ -6613,10 +6613,18 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   sample measured 139/155/166 MiB/s versus libbrotli q3 at 231/234/283 MiB/s,
   with unchanged 92/130/122-byte streams.
   A ratio-oriented `encodePlannedStreamLazyAlloc` now shares the same wire path
-  with the lazy LZ77 parser. On JSON/source/log it emits 77/116/106 bytes versus
+  with the lazy LZ77 parser. Adjacent copy tokens with zero intervening
+  literals and the same distance are now coalesced into one Brotli command;
+  this is exact even for overlapping matches and removes the artificial
+  258-byte limit inherited from the shared DEFLATE-oriented LZ77 tokens. On
+  JSON/source/log it now emits 62/91/83 bytes versus
   the fast planner's 92/130/122 and libbrotli q3's 62/86/87. The persisted
-  100-iteration run measured 155/143/153 MiB/s, roughly matching the fast path
-  while cutting the size gap to about 22–35%; both modes are Node-gated.
+  size gate locks these results: JSON matches libbrotli, log is four bytes
+  smaller, and source is within six percent. A focused command-plan test covers
+  both allocating and reusable builders; both modes remain Node-gated. Ten
+  interleaved 1000-iteration runs also improved balanced JSON/source/log
+  throughput by about 5.5%/6.4%/3.8%, because fewer commands shrink both
+  planning and wire-emission work.
   Stable public planner options now expose `.fast` and `.balanced` compression
   levels through `encodePlannedStreamWithOptionsAlloc`; `.balanced` maps to the
   proven lazy parser and is tested to round-trip with size no worse than fast.
