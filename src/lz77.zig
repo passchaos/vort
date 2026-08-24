@@ -647,6 +647,16 @@ fn insertRepBeamState(states: []RepBeamState, lengths: []u8, position: usize, ca
 }
 
 pub fn optimalPlanReuse(scratch: *OptimalScratch, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
+    return optimalPlanReuseInternal(scratch, allocator, input, options, true);
+}
+
+fn optimalPlanReuseInternal(
+    scratch: *OptimalScratch,
+    allocator: std.mem.Allocator,
+    input: []const u8,
+    options: GreedyOptions,
+    comptime enable_prefix_bound: bool,
+) !PlanStats {
     const n = input.len;
     try scratch.costs.resize(allocator, n + 1);
     try scratch.steps.resize(allocator, n);
@@ -685,10 +695,30 @@ pub fn optimalPlanReuse(scratch: *OptimalScratch, allocator: std.mem.Allocator, 
             std.debug.assert(candidate < rev_i);
             const distance = rev_i - candidate;
             if (distance == 0 or distance > options.window_len) break;
-            // The optimal chain uses a three-byte anchor while Zstd requests
-            // min_match=4. Reject the common fourth-byte mismatch before the
-            // wider matchLength loop without dropping valid 4-byte matches.
-            if (minimum >= 4 and input[candidate + 3] != input[rev_i + 3]) {
+            // The hash is truncated, so verify the full required four-byte
+            // anchor before relying on any prefix-length bound.
+            if (minimum >= 4 and
+                std.mem.readInt(u32, input[candidate..][0..4], .little) !=
+                    std.mem.readInt(u32, input[rev_i..][0..4], .little))
+            {
+                chain_i = prev[candidate];
+                continue;
+            }
+
+            const distance_cost = distance_costs[distance];
+            if (enable_prefix_bound and
+                minimum == 4 and
+                choices_built_through >= minimum and
+                choices_built_through < max_len and
+                input[candidate + choices_built_through] != input[rev_i + choices_built_through] and
+                scratch.index.best_length_costs[choices_built_through] + distance_cost >= costs[rev_i])
+            {
+                // The mismatch proves this candidate cannot extend the range
+                // of reachable lengths. The cached prefix minimum is an
+                // optimistic lower bound for every length it can have, so a
+                // non-improving bound makes exact extension unnecessary.
+                candidates_seen += 1;
+                if (candidates_seen >= candidate_limit) break;
                 chain_i = prev[candidate];
                 continue;
             }
@@ -705,7 +735,6 @@ pub fn optimalPlanReuse(scratch: *OptimalScratch, allocator: std.mem.Allocator, 
                     &scratch.index.best_lengths,
                 );
                 choices_built_through = @max(choices_built_through, length);
-                const distance_cost = distance_costs[distance];
                 const cost = scratch.index.best_length_costs[length] + distance_cost;
                 if (cost < costs[rev_i]) {
                     costs[rev_i] = cost;
@@ -1801,6 +1830,38 @@ test "reusable optimal parser preserves tokens and capacities" {
     const capacities = .{ scratch.costs.capacity, scratch.steps.capacity, scratch.index.head.capacity, scratch.index.prev.capacity, scratch.tokens.capacity };
     _ = try optimalPlanReuse(&scratch, std.testing.allocator, input, options);
     try std.testing.expectEqual(capacities, .{ scratch.costs.capacity, scratch.steps.capacity, scratch.index.head.capacity, scratch.index.prev.capacity, scratch.tokens.capacity });
+}
+
+test "optimal prefix bound preserves reference tokens" {
+    var input: [4096]u8 = undefined;
+    var state: u32 = 0x243f_6a88;
+    for (0..32) |seed| {
+        for (&input, 0..) |*byte, i| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = switch (seed % 4) {
+                0 => @truncate(state >> 24),
+                1 => @truncate(i * 17 + seed),
+                2 => @truncate((i / (3 + seed)) % 23 + 'a'),
+                else => @truncate((i / 31) + (state >> 29)),
+            };
+        }
+        const options: GreedyOptions = .{
+            .window_len = input.len,
+            .max_chain = 128,
+            .nice_len = max_match_len,
+            .max_candidates = 8,
+            .min_match = 4,
+            .max_match = max_match_len,
+        };
+        var reference: OptimalScratch = .{};
+        defer reference.deinit(std.testing.allocator);
+        const reference_stats = try optimalPlanReuseInternal(&reference, std.testing.allocator, &input, options, false);
+        var bounded: OptimalScratch = .{};
+        defer bounded.deinit(std.testing.allocator);
+        const bounded_stats = try optimalPlanReuseInternal(&bounded, std.testing.allocator, &input, options, true);
+        try std.testing.expectEqual(reference_stats, bounded_stats);
+        try std.testing.expectEqualSlices(Token, reference.tokens.items, bounded.tokens.items);
+    }
 }
 
 test "optimal fourth-byte rejection preserves exact four-byte matches" {

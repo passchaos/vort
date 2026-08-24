@@ -3238,6 +3238,17 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   30-byte frame and reduced median level-1 encode time to about 33.0% of
   baseline. The locked JSON row improved about 10.6%; text and binary controls
   stayed within roughly 0.9% noise.
+  The shared optimal LZ77 parser now applies an exact prefix-cost lower bound
+  after validating a four-byte anchor. When a candidate fails before extending
+  the already-built length range and even that range's cached minimum plus the
+  candidate distance cannot improve the current path, it skips full match
+  extension while preserving the candidate budget and tie order. A 32-shape
+  generic-vs-bounded token oracle and a 512-input Zstd frame corpus are
+  byte-identical. Twenty-four fixed-CPU-8 stage pairs improved primary/4 KiB/
+  8 KiB optimal JSON by about 28.9%/24.4%/25.7% and primary binary by about
+  20.7%. Thirty-two fixed-CPU-8 end-to-end pairs retained every locked frame
+  while improving level-1/3/9 JSON by about 13.3%/4.7%/3.0% and binary by about
+  4.9%/2.6%/2.6%; the very short text rows remained within roughly 2% noise.
   Exact-cache profiling of the remaining level-9 JSON mixed search found 95
   scored prefixes at depths 2...96, with 95 distinct full score keys, literal
   histograms, and LL/OF/ML vectors, so no speculative memoization was retained.
