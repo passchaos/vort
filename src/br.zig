@@ -930,6 +930,39 @@ pub const PlannedStreamEncoder = struct {
         }
         return self.output.items;
     }
+
+    /// Encode fast-level output directly into caller-owned storage. The bound
+    /// is the exact stored-stream size because stable fast encoding never
+    /// returns a larger compressed candidate.
+    pub fn encodeInto(self: *PlannedStreamEncoder, input: []const u8, output: []u8) Error!usize {
+        const needed = try encodedStoredStreamBound(input.len);
+        if (output.len < needed) return error.OutOfMemory;
+        if (input.len > 32 * 1024) {
+            const encoded = try encodePlannedStreamWithOptionsAlloc(self.allocator, input, .{ .level = .fast });
+            defer self.allocator.free(encoded);
+            @memcpy(output[0..encoded.len], encoded);
+            return encoded.len;
+        }
+        if (input.len < 5) return encodeStoredStreamInto(input, output);
+        const stats = try lz77.hashGreedyPlanAutoTinyReuse(&self.tokens, self.allocator, input, .{
+            .window_len = input.len,
+            .max_chain = 64,
+            .nice_len = 64,
+            .max_candidates = 8,
+            .min_match = 3,
+            .max_match = lz77.max_match_len,
+        });
+        if (stats.matches == 0) return encodeStoredStreamInto(input, output);
+        _ = try command_plan.buildReuse(&self.commands, self.allocator, input, self.tokens.items);
+        var out: std.ArrayList(u8) = .{ .items = output[0..0], .capacity = output.len };
+        var stats_out: encoder_stats.PlannedEncodeStats = .{};
+        // Bounded mode maps any unexpected underestimation to OutOfMemory
+        // rather than allowing the writer to allocate behind the caller's back.
+        var writer = BitWriter{ .out = &out, .bounded = true };
+        try encodeCommandPlanWithOptionsWrite(self.allocator, &writer, input, self.commands.items, null, &stats_out, .{});
+        if (out.items.len > needed) return encodeStoredStreamInto(input, output);
+        return out.items.len;
+    }
 };
 
 pub fn encodeRleStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) Error!void {
@@ -1178,6 +1211,11 @@ fn encodeCommandPlanWithOptionsAlloc(allocator: std.mem.Allocator, input: []cons
 }
 
 fn encodeCommandPlanWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error!void {
+    var writer = BitWriter{ .out = out };
+    try encodeCommandPlanWithOptionsWrite(allocator, &writer, input, commands, io, stats, options);
+}
+
+fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error!void {
     if (commands.len == 0) return error.InvalidBlockPlan;
     var literal_frequencies: [256]u32 = @splat(0);
     var literal_context_frequencies: [2][256]u32 = @splat(@splat(0));
@@ -1233,10 +1271,9 @@ fn encodeCommandPlanWithOptionsAppend(allocator: std.mem.Allocator, out: *std.Ar
     // Useful planner streams are usually a small fraction of input. Reserving
     // a capped fraction removes ArrayList's early growth ladder without scaling
     // scratch memory with multi-megabyte inputs.
-    try out.ensureUnusedCapacity(allocator, commandPlanInitialCapacity(input.len));
-    var writer = BitWriter{ .out = out };
-    try writeWindowBits(allocator, &writer, options.window_bits);
-    try writeLastCompressedMetaBlockHeader(allocator, &writer, input.len);
+    if (!writer.bounded) try writer.out.ensureUnusedCapacity(allocator, commandPlanInitialCapacity(input.len));
+    try writeWindowBits(allocator, writer, options.window_bits);
+    try writeLastCompressedMetaBlockHeader(allocator, writer, input.len);
     const distance_alphabet_size = plannedDistanceAlphabetSize(&distance_alphabet);
     const lengths_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     const literal_lengths = try literal_alphabet.codeLengths(256);
@@ -1250,8 +1287,8 @@ fn encodeCommandPlanWithOptionsAppend(allocator: std.mem.Allocator, out: *std.Ar
     if (io) |active| stats.lengths_ns = elapsedNs(lengths_start.?, active);
     const header_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     if (options.use_utf8_text_contexts) {
-        try writePlannedCompressedHeaderTwoLiteralContexts(allocator, &writer, &literal_context_alphabets, &literal_context_lengths, &command_alphabet, &distance_alphabet, distance_alphabet_size, &command_lengths, &distance_lengths);
-    } else try writePlannedCompressedHeader(allocator, &writer, &literal_alphabet, &command_alphabet, &distance_alphabet, distance_alphabet_size, &literal_lengths, &command_lengths, &distance_lengths);
+        try writePlannedCompressedHeaderTwoLiteralContexts(allocator, writer, &literal_context_alphabets, &literal_context_lengths, &command_alphabet, &distance_alphabet, distance_alphabet_size, &command_lengths, &distance_lengths);
+    } else try writePlannedCompressedHeader(allocator, writer, &literal_alphabet, &command_alphabet, &distance_alphabet, distance_alphabet_size, &literal_lengths, &command_lengths, &distance_lengths);
     if (io) |active| stats.header_ns = elapsedNs(header_start.?, active);
 
     const encoder_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
@@ -1276,7 +1313,7 @@ fn encodeCommandPlanWithOptionsAppend(allocator: std.mem.Allocator, out: *std.Ar
                 try writer.writeBits(allocator, code.code, code.bits);
             } else try writer.writeBits(allocator, command_encoder.codes[encoding.symbol], command_encoder.bits[encoding.symbol]);
         }
-        try writeCommandLengthExtras(allocator, &writer, encoding, command.insert_len, command.copy_len);
+        try writeCommandLengthExtras(allocator, writer, encoding, command.insert_len, command.copy_len);
         for (input[command.insert_start..][0..command.insert_len], command.insert_start..) |literal, position| {
             if (options.use_utf8_text_contexts) {
                 const previous = if (position == 0) 0 else input[position - 1];
@@ -6597,6 +6634,24 @@ test "br reusable planner retains encoded output scratch" {
     const stored = try encoder.encodeScratch(incompressible);
     try std.testing.expect(stored.len <= try encodedStoredStreamBound(incompressible.len));
     const decoded = try decodeStreamAlloc(std.testing.allocator, stored);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, incompressible, decoded);
+}
+
+test "br reusable planner encodes fast streams into caller storage" {
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const payload = "abcabcXabcabcXabcabcX";
+    const expected = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .level = .fast });
+    defer std.testing.allocator.free(expected);
+    var output: [128]u8 = undefined;
+    const written = try encoder.encodeInto(payload, &output);
+    try std.testing.expectEqualSlices(u8, expected, output[0..written]);
+    try std.testing.expectError(error.OutOfMemory, encoder.encodeInto(payload, output[0 .. expected.len - 1]));
+
+    const incompressible = "qzxwvbnm1234567890QZXWVBNM!@#$%^&*";
+    const stored_written = try encoder.encodeInto(incompressible, &output);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, output[0..stored_written]);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, incompressible, decoded);
 }

@@ -6889,3 +6889,9 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   allocation; returned bytes remain valid until the next call or `deinit`. A
   fixed-CPU 10,000-run JSON sample improved from roughly 15.4 µs per allocating
   reusable encode to 14.4 µs, with byte-identical output.
+  The reusable facade also exposes `encodeInto` for fast-level streams. Its
+  caller buffer is sized by the exact stored-stream bound, the command writer
+  runs in bounded mode without output allocation, and a compressed result that
+  crosses the ceiling is overwritten by the stored representation. Tests lock
+  byte parity with stable fast output, undersized-buffer `OutOfMemory`, and an
+  incompressible caller-buffer round trip.
