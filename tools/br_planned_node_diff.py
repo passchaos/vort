@@ -82,6 +82,13 @@ def main() -> int:
         if len(encoded) > len(expected) + 4:
             raise SystemExit(f"{mode}: output exceeds stored framing ceiling")
         print(f"brotli planned {mode} node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = b"abcd"
+    for mode in ("stable-fast-tiny", "stable-balanced-tiny", "ratio-tiny"):
+        encoded = subprocess.check_output([sys.argv[1], mode])
+        actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+        if actual != expected:
+            raise SystemExit(f"{mode}: node output mismatch")
+        print(f"brotli planned {mode} node diff: encoded={len(encoded)} decoded={len(actual)}")
     index_bytes = int(subprocess.check_output([sys.argv[1], "dictionary-index-bytes"]))
     if index_bytes > 150_000:
         raise SystemExit(f"dictionary index exceeds memory budget: {index_bytes}")

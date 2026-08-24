@@ -39,6 +39,8 @@ pub fn main(init: std.process.Init) !void {
         "qzxwvbnm1234567890QZXWVBNM!@#$%^&*"
     else if (std.mem.eql(u8, name, "incompressible"))
         "qzxwvbnm1234567890QZXWVBNM!@#$%^&*"
+    else if (std.mem.eql(u8, name, "tiny"))
+        "abcd"
     else
         return error.InvalidBlockPlan;
     const encoded = if (stable_fast)

@@ -570,7 +570,8 @@ pub fn encodePlannedStreamLazyAlloc(allocator: std.mem.Allocator, input: []const
 /// static-dictionary/stored arbitration so this stable level still accepts
 /// arbitrary payloads inside its documented one-meta-block size range.
 pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
-    if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
+    if (input.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
+    if (input.len < 5) return encodeStoredStreamAlloc(allocator, input);
     const parser_options = PlannedParserOptions{
         .window_len = (@as(usize, 1) << default_window_bits) - 16,
         .max_chain = 512,
@@ -872,7 +873,8 @@ pub const PlannedStreamEncoder = struct {
         if (options.level != .fast) {
             return encodePlannedStreamWithOptionsAlloc(allocator, input, options);
         }
-        if (input.len < 5 or input.len > 32 * 1024) return error.InvalidBlockPlan;
+        if (input.len > 32 * 1024) return encodePlannedStreamWithOptionsAlloc(allocator, input, options);
+        if (input.len < 5) return encodeStoredStreamAlloc(allocator, input);
         const stats = try lz77.hashGreedyPlanAutoTinyReuse(&self.tokens, self.allocator, input, .{
             .window_len = input.len,
             .max_chain = 64,
@@ -6266,6 +6268,18 @@ test "br stable planner levels accept incompressible inputs within stored size" 
     }
 }
 
+test "br stable planner levels accept tiny inputs" {
+    for ([_]PlannedCompressionLevel{ .fast, .balanced, .ratio }) |level| {
+        for ([_][]const u8{ "", "a", "abcd" }) |input| {
+            const encoded = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, input, .{ .level = level });
+            defer std.testing.allocator.free(encoded);
+            const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+            defer std.testing.allocator.free(decoded);
+            try std.testing.expectEqualSlices(u8, input, decoded);
+        }
+    }
+}
+
 test "br ratio planner spends more search budget without regressing size" {
     const payload = @embedFile("br/encoder/command_plan.zig");
     const balanced = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .level = .balanced });
@@ -6538,6 +6552,21 @@ test "br reusable planner exposes stable levels and stored fallback" {
         const decoded = try decodeStreamAlloc(std.testing.allocator, stored);
         defer std.testing.allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, incompressible, decoded);
+    }
+}
+
+test "br reusable planner matches stable API at size boundaries" {
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const large = "abcdefgh" ** 4097;
+    for ([_]PlannedCompressionLevel{ .fast, .balanced, .ratio }) |level| {
+        for ([_][]const u8{ "", "abcd", large }) |input| {
+            const expected = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, input, .{ .level = level });
+            defer std.testing.allocator.free(expected);
+            const actual = try encoder.encodeWithOptionsAlloc(std.testing.allocator, input, .{ .level = level });
+            defer std.testing.allocator.free(actual);
+            try std.testing.expectEqualSlices(u8, expected, actual);
+        }
     }
 }
 

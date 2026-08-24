@@ -6877,3 +6877,8 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   until their larger parser state is reusable. Tests require byte parity with
   the one-shot API for all levels, capacity retention for fast, and successful
   incompressible round trips bounded by stored size.
+  Stable levels now also cover empty through four-byte inputs with stored
+  streams. The reusable fast encoder delegates inputs above its 32 KiB retained-
+  scratch range to the stable one-shot fast path instead of rejecting them, so
+  it remains byte-identical at both tiny and large boundaries; Node decodes the
+  new four-byte fixtures for all three levels.
