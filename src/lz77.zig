@@ -6,6 +6,7 @@ pub const Error = core.Error;
 pub const min_match_len: usize = 3;
 pub const max_match_len: usize = 258;
 pub const default_window_len: usize = 32 * 1024;
+pub const max_window_len: usize = std.math.maxInt(u16);
 const hash_head_table_size: usize = 1 << 15;
 const hash_head_init_words: usize = hash_head_table_size / 64;
 const HashAnchor = enum { three, four };
@@ -926,7 +927,7 @@ test "compile-time fixed length costs match scalar range" {
 }
 
 fn fixedDistanceSymbolCost(distance: usize) usize {
-    std.debug.assert(distance >= 1 and distance <= default_window_len);
+    std.debug.assert(distance >= 1 and distance <= max_window_len);
     return 5 + fixedDistanceExtraBitsFast(distance);
 }
 

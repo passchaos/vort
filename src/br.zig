@@ -28,6 +28,7 @@ pub const PlannedEncodeOptions = struct { level: PlannedCompressionLevel = .fast
 /// selection only; the resulting stream still uses the same Brotli command
 /// and prefix-code writer as the stable `.balanced` level.
 pub const PlannedParserOptions = struct {
+    window_len: usize = lz77.default_window_len,
     max_chain: usize = 64,
     nice_len: usize = 64,
     lazy_min_gain: usize = 1,
@@ -553,6 +554,7 @@ pub fn encodePlannedStreamLazyAlloc(allocator: std.mem.Allocator, input: []const
 /// slowing latency-sensitive users.
 pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
     return encodePlannedStreamLazyWithWireOptionsAlloc(allocator, input, .{
+        .window_len = @min(input.len, (@as(usize, 1) << default_window_bits) - 16),
         .max_chain = 512,
         .nice_len = lz77.max_match_len,
     }, .{ .try_recent_distances = true });
@@ -574,9 +576,9 @@ const LazyWireOptions = struct { try_recent_distances: bool = false };
 
 fn encodePlannedStreamLazyWithWireOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: PlannedParserOptions, wire_options: LazyWireOptions) Error![]u8 {
     if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
-    if (options.max_chain == 0 or options.nice_len == 0 or options.lazy_min_gain == 0) return error.InvalidBlockPlan;
+    if (options.window_len == 0 or options.window_len > lz77.max_window_len or options.max_chain == 0 or options.nice_len == 0 or options.lazy_min_gain == 0) return error.InvalidBlockPlan;
     const lz_plan = try lz77.lazyGreedyPlanAlloc(allocator, input, .{
-        .window_len = @min(input.len, 32 * 1024),
+        .window_len = @min(input.len, options.window_len),
         .max_chain = options.max_chain,
         .nice_len = options.nice_len,
         // The lazy parser chooses one best match per position; unlike the
@@ -6127,6 +6129,28 @@ test "br ratio UTF8 context split round trips beyond summary history" {
     const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "br ratio planner uses the full 16-bit stream window" {
+    const gap = 48 * 1024;
+    const repeated_len = 12 * 1024;
+    const payload = try std.testing.allocator.alloc(u8, gap + repeated_len);
+    defer std.testing.allocator.free(payload);
+    var state: u32 = 0x1234_5678;
+    for (payload[0..gap]) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    @memcpy(payload[gap..], payload[0..repeated_len]);
+
+    const balanced = try encodePlannedStreamLazyAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(balanced);
+    const ratio = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(ratio);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, ratio, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expect(ratio.len + repeated_len / 2 < balanced.len);
 }
 
 test "br balanced planner prunes a dense tiny-copy prefix" {

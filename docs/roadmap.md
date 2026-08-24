@@ -6678,6 +6678,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   This level is intentionally separate because four
   representative fixed-CPU samples traded roughly 1.6–2.4x encode time for the
   additional 0.8–4.2% size reduction.
+  Ratio mode now also uses the full distance range allowed by its 16-bit Brotli
+  stream window (65,520 bytes), rather than inheriting DEFLATE's 32 KiB search
+  ceiling. The shared LZ77 token distance remains `u16`, so DEFLATE's ABI and
+  default window are unchanged. A deterministic 60 KiB long-distance fixture
+  with a 48 KiB offset shrinks from 61,502 balanced bytes to 49,213 ratio bytes
+  and round-trips through the exact-size decoder.
   The lazy planner also exposes an explicit search-budget options API and a
   reproducible `run-br-lazy-sweep` target. All 24 combinations across chain
   budgets 64–512, nice lengths 64–258, and lazy gains 1–2 retained the same
