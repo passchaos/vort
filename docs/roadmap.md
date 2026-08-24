@@ -6664,6 +6664,9 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Silesia aggregate again to 549,017 bytes, 7.33% below libbrotli q3, and turn
   `mozilla` into a nine-byte win (21,262 versus 21,271 bytes). This is a single
   bounded entropy candidate rather than an input-specific multi-threshold scan.
+  It also subsumes the weaker recent-distance-only candidate on the measured
+  corpus, so ratio mode now encodes only the explicit baseline and the combined
+  recent-distance/context alternative rather than materializing three streams.
   This level is intentionally separate because four
   representative fixed-CPU samples traded roughly 1.6–2.4x encode time for the
   additional 0.8–4.2% size reduction.

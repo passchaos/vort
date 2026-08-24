@@ -947,21 +947,15 @@ fn encodePreferredCommandPlanAlloc(allocator: std.mem.Allocator, input: []const 
     // reusable distances, but would dominate latency for small inputs.
     if (!options.try_recent_distances or countReusableRecentDistances(commands) < min_recent_distance_candidate_count) return baseline;
     errdefer allocator.free(baseline);
-    var candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, io, stats, .{ .use_recent_distances = true });
-    errdefer allocator.free(candidate);
     const context_candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, io, stats, .{
         .use_recent_distances = true,
         .use_utf8_text_contexts = true,
     });
-    if (context_candidate.len < candidate.len) {
-        allocator.free(candidate);
-        candidate = context_candidate;
-    } else allocator.free(context_candidate);
-    if (candidate.len < baseline.len) {
+    if (context_candidate.len < baseline.len) {
         allocator.free(baseline);
-        return candidate;
+        return context_candidate;
     }
-    allocator.free(candidate);
+    allocator.free(context_candidate);
     return baseline;
 }
 
