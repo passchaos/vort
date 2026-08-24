@@ -157,7 +157,7 @@ const transforms = [_]Transform{
 pub const TransformMetadata = struct {
     prefix_len: u3,
     suffix_len: u4,
-    first_suffix_byte: u8,
+    suffix_bytes: u64,
     keeps_whole_word: bool,
 };
 
@@ -167,7 +167,7 @@ const transform_metadata = blk: {
         result[index] = .{
             .prefix_len = @intCast(cStringLength(spec.prefix)),
             .suffix_len = @intCast(cStringLength(spec.suffix)),
-            .first_suffix_byte = prefix_suffix[spec.suffix],
+            .suffix_bytes = cStringBits(spec.suffix),
             .keeps_whole_word = spec.kind == 0 or spec.kind == 10 or spec.kind == 11,
         };
     }
@@ -193,7 +193,7 @@ pub fn transformPrefixLength(transform_index: usize) ?usize {
 }
 
 pub fn transformFirstSuffixByte(transform_index: usize) ?u8 {
-    return (transformMetadata(transform_index) orelse return null).first_suffix_byte;
+    return @truncate((transformMetadata(transform_index) orelse return null).suffix_bytes);
 }
 
 pub fn transformKeepsWholeWord(transform_index: usize) bool {
@@ -207,6 +207,16 @@ pub fn transformSuffixLength(transform_index: usize) ?usize {
 pub fn transformMetadata(transform_index: usize) ?TransformMetadata {
     if (transform_index >= transform_metadata.len) return null;
     return transform_metadata[transform_index];
+}
+
+pub fn transformSuffixMatches(metadata: TransformMetadata, input: []const u8) bool {
+    if (metadata.suffix_len > input.len) return false;
+    var expected = metadata.suffix_bytes;
+    for (input[0..metadata.suffix_len]) |byte| {
+        if (byte != @as(u8, @truncate(expected))) return false;
+        expected >>= 8;
+    }
+    return true;
 }
 
 /// Find the longest built-in static-dictionary word beginning at `input[0]`.
@@ -286,6 +296,14 @@ fn cStringLength(offset: usize) usize {
     return len;
 }
 
+fn cStringBits(offset: usize) u64 {
+    var value: u64 = 0;
+    var shift: usize = 0;
+    while (prefix_suffix[offset + shift / 8] != 0) : (shift += 8)
+        value |= @as(u64, prefix_suffix[offset + shift / 8]) << @intCast(shift);
+    return value;
+}
+
 fn uppercase(bytes: []u8, all: bool) void {
     var offset: usize = 0;
     while (offset < bytes.len) {
@@ -327,8 +345,10 @@ test "static dictionary transform metadata agrees with materialization" {
             const output = transform(transform_index << bits, word_len, &transformed).?;
             const prefix_len = transformPrefixLength(transform_index).?;
             const suffix_len = transformSuffixLength(transform_index).?;
+            const metadata = transformMetadata(transform_index).?;
             try std.testing.expect(prefix_len + suffix_len <= output.len);
             if (suffix_len != 0) try std.testing.expectEqual(transformFirstSuffixByte(transform_index).?, output[output.len - suffix_len]);
+            try std.testing.expect(transformSuffixMatches(metadata, output[output.len - suffix_len ..]));
             if (transformKeepsWholeWord(transform_index)) try std.testing.expectEqual(prefix_len + word_len + suffix_len, output.len);
         }
     }

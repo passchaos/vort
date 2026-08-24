@@ -6823,3 +6823,9 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   NUL-terminated prefix/suffix scans in the candidate loop. Fixed-CPU 1000-run
   A/B reduced the same short ratio rows by another roughly 19–24% and the
   no-match case by about 17%, with unchanged output and metadata-oracle results.
+  Transform metadata now packs each complete suffix (up to eight bytes) into a
+  little-endian `u64`, allowing the matcher to validate the whole suffix before
+  materializing a candidate instead of checking only its first byte. Fixed-CPU
+  1000-run A/B improved the 65-byte English, 57-byte JSON, and 59-byte source
+  rows by a further roughly 8%, 6%, and 7%; the already-cheap no-match row was
+  neutral to about 2% faster.

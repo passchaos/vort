@@ -108,7 +108,7 @@ pub const Index = struct {
                 if (metadata.keeps_whole_word) {
                     const suffix_offset = prefix_len + base.copy_len;
                     if (suffix_offset + metadata.suffix_len > input.len) continue;
-                    if (metadata.first_suffix_byte != 0 and input[suffix_offset] != metadata.first_suffix_byte) continue;
+                    if (!static_dictionary.transformSuffixMatches(metadata, input[suffix_offset..])) continue;
                 }
                 const transformed = static_dictionary.transform(address, base.copy_len, &scratch) orelse continue;
                 // RFC transforms may omit the complete base word. Those zero-
