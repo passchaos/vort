@@ -6829,3 +6829,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   1000-run A/B improved the 65-byte English, 57-byte JSON, and 59-byte source
   rows by a further roughly 8%, 6%, and 7%; the already-cheap no-match row was
   neutral to about 2% faster.
+  Ratio mode now also builds a mixed command plan for short inputs by replacing
+  only literal runs in the existing LZ77 plan with verified static-dictionary
+  commands. Existing backward copies keep their exact positions and distances,
+  and full-stream arbitration still rejects any size loss. A 53-byte mixed
+  repetition/dictionary fixture falls from 33 to 29 bytes versus dictionary-only
+  encoding and from the previous ratio path's 33 to 29 bytes; Node decodes the
+  selected stream. The extra candidate costs roughly 42% on that fixture and is
+  currently limited to the existing <=256-byte ratio dictionary gate.

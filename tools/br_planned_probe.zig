@@ -27,6 +27,8 @@ pub fn main(init: std.process.Init) !void {
         " information follows the information"
     else if (std.mem.eql(u8, name, "dictionary-short"))
         "Information about compression performance and dictionary support."
+    else if (std.mem.eql(u8, name, "dictionary-mixed"))
+        "abcdefghabcdefgh information follows abcdefghabcdefgh"
     else
         return error.InvalidBlockPlan;
     const encoded = if (lazy)

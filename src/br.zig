@@ -576,7 +576,7 @@ pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []cons
     defer plan.deinit(allocator);
     var stats: encoder_stats.PlannedEncodeStats = .{};
     const baseline = try encodeLazyCommandPlanAlloc(allocator, input, plan.commands, &stats, .{ .try_recent_distances = true });
-    if (input.len <= ratio_static_dictionary_max_input_len) return selectRatioStaticDictionaryAlloc(allocator, input, baseline);
+    if (input.len <= ratio_static_dictionary_max_input_len) return selectRatioStaticDictionaryAlloc(allocator, input, plan.commands, baseline);
     if (input.len <= long_distance.min_distance) return baseline;
     errdefer allocator.free(baseline);
 
@@ -601,18 +601,43 @@ pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []cons
 // ordinary short JSON/source data from regressing in size.
 const ratio_static_dictionary_max_input_len: usize = 256;
 
-fn selectRatioStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, baseline: []u8) Error![]u8 {
+fn selectRatioStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, lz_commands: []const command_plan.Command, baseline: []u8) Error![]u8 {
     errdefer allocator.free(baseline);
+    var best = baseline;
+    // The mixed planner is useful only when a backward copy survives alongside
+    // dictionary copies. Otherwise its command stream is equivalent in shape
+    // to the dictionary-only candidate encoded below, so skip a redundant full
+    // wire encode.
+    const mixed_plan = try command_plan.mixStaticDictionaryAlloc(allocator, input, lz_commands);
+    defer mixed_plan.deinit(allocator);
+    if (mixed_plan.match_count != 0 and !allCopiesAreDictionary(mixed_plan.commands)) {
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const mixed = try encodeCommandPlanAlloc(allocator, input, mixed_plan.commands, null, &stats);
+        if (mixed.len < best.len) {
+            allocator.free(best);
+            best = mixed;
+        } else allocator.free(mixed);
+    }
     const candidate = encodePlannedStreamStaticDictionaryAlloc(allocator, input) catch |err| switch (err) {
-        error.InvalidBlockPlan => return baseline,
+        error.InvalidBlockPlan => return best,
         else => return err,
     };
-    if (candidate.len < baseline.len) {
-        allocator.free(baseline);
+    if (candidate.len < best.len) {
+        allocator.free(best);
         return candidate;
     }
     allocator.free(candidate);
-    return baseline;
+    return best;
+}
+
+fn allCopiesAreDictionary(commands: []const command_plan.Command) bool {
+    var has_copy = false;
+    for (commands) |command| {
+        if (!command.has_copy) continue;
+        has_copy = true;
+        if (command.dictionary_output_len == 0) return false;
+    }
+    return has_copy;
 }
 
 /// Experimental entry point for measuring lazy-parser search budgets without
@@ -6302,6 +6327,20 @@ test "br ratio planner selects short static dictionary streams by final size" {
     const outside_gate_selected = try encodePlannedStreamRatioAlloc(std.testing.allocator, outside_gate_payload);
     defer std.testing.allocator.free(outside_gate_selected);
     try std.testing.expectEqualSlices(u8, outside_gate_baseline, outside_gate_selected);
+}
+
+test "br ratio planner mixes LZ77 and static dictionary commands" {
+    const payload = "abcdefghabcdefgh information follows abcdefghabcdefgh";
+    const dictionary = try encodePlannedStreamStaticDictionaryAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(dictionary);
+    const selected = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(selected);
+    try std.testing.expect(selected.len < dictionary.len);
+    const summary = try summarizeStream(selected);
+    try std.testing.expect(summary.static_dictionary_copy_count > 0);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, selected);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
 test "br planner-backed encoder emits regular distances" {

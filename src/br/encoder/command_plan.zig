@@ -265,6 +265,62 @@ pub fn buildStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u
     return .{ .commands = try commands.toOwnedSlice(allocator), .match_count = match_count };
 }
 
+/// Replace portions of an existing plan's literal inserts with static-
+/// dictionary commands while preserving every LZ77 copy. Dictionary matching
+/// is deliberately confined to literal runs: it cannot overlap or invalidate a
+/// previously selected backward reference, so the resulting mixed plan has the
+/// same decoded positions and distances as the baseline.
+pub fn mixStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, baseline: []const Command) !Plan {
+    const matcher = try static_dictionary_matcher.Index.sharedIndex();
+    var commands: std.ArrayList(Command) = .empty;
+    errdefer commands.deinit(allocator);
+    var cursor: usize = 0;
+    var pending_start: usize = 0;
+    var pending_len: usize = 0;
+    var match_count: usize = 0;
+
+    for (baseline) |command| {
+        if (command.insert_start != cursor or command.insert_len > input.len - cursor) return error.InvalidBlockPlan;
+        const literal_end = cursor + command.insert_len;
+        var position = cursor;
+        while (position < literal_end) {
+            const remaining = literal_end - position;
+            const match = if (remaining >= 4) matcher.findLongest(input[position..literal_end]) else null;
+            if (match == null) {
+                position += 1;
+                pending_len += 1;
+                continue;
+            }
+            try commands.append(allocator, .{
+                .insert_start = pending_start,
+                .insert_len = pending_len,
+                .copy_len = match.?.copy_len,
+                .has_copy = true,
+                .dictionary_output_len = match.?.output_len,
+                .dictionary_address = match.?.address,
+            });
+            position += match.?.output_len;
+            pending_start = position;
+            pending_len = 0;
+            match_count += 1;
+        }
+        cursor = literal_end;
+        if (!command.has_copy) continue;
+        const copy_output_len = if (command.dictionary_output_len == 0) command.copy_len else command.dictionary_output_len;
+        if (copy_output_len == 0 or copy_output_len > input.len - cursor) return error.InvalidBlockPlan;
+        var copied = command;
+        copied.insert_start = pending_start;
+        copied.insert_len = pending_len;
+        try commands.append(allocator, copied);
+        cursor += copy_output_len;
+        pending_start = cursor;
+        pending_len = 0;
+    }
+    if (cursor != input.len) return error.InvalidBlockPlan;
+    if (pending_len != 0) try commands.append(allocator, .{ .insert_start = pending_start, .insert_len = pending_len });
+    return .{ .commands = try commands.toOwnedSlice(allocator), .match_count = match_count };
+}
+
 pub fn staticDictionaryIndexBytes() usize {
     return static_dictionary_matcher.max_index_bytes;
 }
@@ -459,6 +515,20 @@ test "static dictionary plan preserves transformed and copy lengths" {
     try std.testing.expect(command.has_copy);
     try std.testing.expect(command.dictionary_output_len > 0);
     try std.testing.expect(command.copy_len != command.dictionary_output_len);
+}
+
+test "static dictionary mixes only inside literal runs" {
+    const input = "information:informationinformation";
+    const baseline = [_]Command{
+        .{ .insert_start = 0, .insert_len = 12, .copy_len = 11, .distance = 12, .has_copy = true },
+        .{ .insert_start = 23, .insert_len = 0, .copy_len = 11, .distance = 11, .has_copy = true },
+    };
+    const mixed = try mixStaticDictionaryAlloc(std.testing.allocator, input, &baseline);
+    defer mixed.deinit(std.testing.allocator);
+    try std.testing.expect(mixed.match_count > 0);
+    try std.testing.expect(mixed.commands.len >= baseline.len);
+    try std.testing.expect(mixed.commands[0].dictionary_output_len > 0);
+    try std.testing.expectEqual(@as(usize, 11), mixed.commands[mixed.commands.len - 1].distance);
 }
 
 test "simple alphabet orders hot symbols first" {
