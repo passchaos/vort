@@ -168,6 +168,11 @@ pub const Match = struct {
     address: usize,
 };
 
+pub fn transformPrefixLength(transform_index: usize) ?usize {
+    if (transform_index >= transforms.len) return null;
+    return cStringLength(transforms[transform_index].prefix);
+}
+
 /// Find the longest built-in static-dictionary word beginning at `input[0]`.
 /// This reference matcher deliberately enumerates dictionary addresses rather
 /// than importing upstream's generated encoder LUT: it keeps the wire model
@@ -236,6 +241,12 @@ pub fn sizeBits(word_len: usize) ?u5 {
 fn copyCString(out: []u8, offset: usize) usize {
     var len: usize = 0;
     while (prefix_suffix[offset + len] != 0) : (len += 1) out[len] = prefix_suffix[offset + len];
+    return len;
+}
+
+fn cStringLength(offset: usize) usize {
+    var len: usize = 0;
+    while (prefix_suffix[offset + len] != 0) : (len += 1) {}
     return len;
 }
 

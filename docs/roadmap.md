@@ -6806,3 +6806,9 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   1000-iteration samples reduced short ratio encode time by roughly 30% for
   dictionary-heavy English/JSON/source inputs and by about 78% when the static
   candidate finds no match, with byte-identical output.
+  Static-dictionary matching now groups the 121 RFC transforms by their 0/1/2/5
+  byte prefix length at compile time. Each indexed bucket candidate evaluates
+  only the group compatible with the already-selected input prefix. Fixed-CPU
+  1000-iteration A/B reduced representative 65-byte English, 57-byte JSON, and
+  59-byte source ratio encodes by about 32%, 40%, and 52%, respectively; the
+  no-dictionary-match case improved by roughly 10%, with unchanged wire output.

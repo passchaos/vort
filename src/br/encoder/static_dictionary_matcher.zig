@@ -8,6 +8,20 @@ const word_index_bits = 11;
 const word_index_mask = (@as(u32, 1) << word_index_bits) - 1;
 const BaseWord = struct { word_index: usize, copy_len: usize };
 
+const transforms_by_prefix = blk: {
+    // findLongest probes the only prefix widths present in RFC 7932. Grouping
+    // once at compile time avoids running transforms whose prefix can never
+    // match the current input position.
+    var result: [6][static_dictionary.transform_count]u8 = @splat(@splat(std.math.maxInt(u8)));
+    var counts: [6]usize = @splat(0);
+    for (0..static_dictionary.transform_count) |transform_index| {
+        const prefix_len = static_dictionary.transformPrefixLength(transform_index).?;
+        result[prefix_len][counts[prefix_len]] = transform_index;
+        counts[prefix_len] += 1;
+    }
+    break :blk result;
+};
+
 /// Compact index over the 13,504 untransformed dictionary words. Matches are
 /// verified by the independent transform implementation, so all 121 standard
 /// transforms remain supported without materializing ~1.6 million entries.
@@ -84,8 +98,9 @@ pub const Index = struct {
         while (entry != no_entry) : (entry = self.next[entry]) {
             const base = unpackBaseWord(self.words[entry]);
             const bits = static_dictionary.sizeBits(base.copy_len).?;
-            for (0..static_dictionary.transform_count) |transform_index| {
-                const address = (transform_index << bits) | base.word_index;
+            for (transforms_by_prefix[prefix_len]) |transform_index| {
+                if (transform_index == std.math.maxInt(u8)) break;
+                const address = (@as(usize, transform_index) << bits) | base.word_index;
                 const transformed = static_dictionary.transform(address, base.copy_len, &scratch) orelse continue;
                 // RFC transforms may omit the complete base word. Those zero-
                 // length results cannot advance the planner and would otherwise
