@@ -6919,3 +6919,9 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   bounded mode, while balanced/ratio retain exact one-shot selection before
   copying into caller storage. Tests cover empty, repetitive, dictionary-heavy,
   and incompressible inputs, all levels, exact parity, and undersized buffers.
+  The <=64-symbol Brotli Huffman builder now uses a stable two-queue merge over
+  the already frequency-ordered `PrefixAlphabet`, replacing binary heap pop/push
+  operations with linear construction while preserving `(weight, serial)` tie
+  behavior. A 1,024-shape oracle requires exact length-vector equality with the
+  retained heap reference. Fixed-CPU 10,000-run fast-encoder A/B improved JSON,
+  source, and log by roughly 2%/3%/2%, respectively, with identical wire sizes.

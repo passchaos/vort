@@ -14,23 +14,38 @@ pub fn build(comptime capacity: usize, frequencies: []const usize, lengths: *[ca
     }
     const Node = struct { weight: u64, parent: i16 = -1, serial: u8 };
     var nodes: [2 * capacity - 1]Node = undefined;
-    var heap: [2 * capacity - 1]u8 = undefined;
+    var leaves: [capacity]u8 = undefined;
     var node_len = frequencies.len;
-    var heap_len = frequencies.len;
     for (frequencies, 0..) |frequency, i| {
         nodes[i] = .{ .weight = frequency, .serial = @intCast(i) };
-        heap[i] = @intCast(i);
+        leaves[i] = @intCast(i);
     }
-    heapify(Node, nodes[0..node_len], &heap, heap_len);
-    while (heap_len > 1) {
-        const first = heapPop(Node, nodes[0..node_len], &heap, &heap_len);
-        const second = heapPop(Node, nodes[0..node_len], &heap, &heap_len);
+    // PrefixAlphabet supplies descending weight with ascending-symbol ties.
+    // Visit equal-weight groups from lightest to heaviest while preserving each
+    // group's order, matching the heap's `(weight, serial)` tie behavior.
+    var write_i: usize = 0;
+    var group_end = frequencies.len;
+    while (group_end != 0) {
+        var group_start = group_end - 1;
+        while (group_start != 0 and frequencies[group_start - 1] == frequencies[group_end - 1]) group_start -= 1;
+        for (group_start..group_end) |index| {
+            leaves[write_i] = @intCast(index);
+            write_i += 1;
+        }
+        group_end = group_start;
+    }
+    var leaf_i: usize = 0;
+    var parent_i = frequencies.len;
+    var remaining = frequencies.len;
+    while (remaining > 1) {
+        const first = queuePop(Node, nodes[0..node_len], leaves[0..frequencies.len], &leaf_i, &parent_i, node_len);
+        const second = queuePop(Node, nodes[0..node_len], leaves[0..frequencies.len], &leaf_i, &parent_i, node_len);
         const parent: u8 = @intCast(node_len);
         nodes[node_len] = .{ .weight = nodes[first].weight + nodes[second].weight, .serial = parent };
         nodes[first].parent = parent;
         nodes[second].parent = parent;
         node_len += 1;
-        heapPush(Node, nodes[0..node_len], &heap, &heap_len, parent);
+        remaining -= 1;
     }
     for (frequencies, 0..) |_, symbol| {
         var depth: u4 = 0;
@@ -49,6 +64,22 @@ fn less(comptime Node: type, nodes: []const Node, left_index: u8, right_index: u
     const left = nodes[left_index];
     const right = nodes[right_index];
     return left.weight < right.weight or (left.weight == right.weight and left.serial < right.serial);
+}
+
+fn queuePop(comptime Node: type, nodes: []const Node, leaves: []const u8, leaf_i: *usize, parent_i: *usize, parent_end: usize) u8 {
+    if (leaf_i.* >= leaves.len) {
+        const result: u8 = @intCast(parent_i.*);
+        parent_i.* += 1;
+        return result;
+    }
+    if (parent_i.* >= parent_end or less(Node, nodes, leaves[leaf_i.*], @intCast(parent_i.*))) {
+        const result = leaves[leaf_i.*];
+        leaf_i.* += 1;
+        return result;
+    }
+    const result: u8 = @intCast(parent_i.*);
+    parent_i.* += 1;
+    return result;
 }
 
 fn heapify(comptime Node: type, nodes: []const Node, heap: anytype, len: usize) void {
@@ -123,4 +154,58 @@ test "small Huffman matches package merge weighted cost" {
         }
         try std.testing.expectEqual(reference_cost, small_cost);
     }
+}
+
+test "small Huffman two-queue builder matches heap reference lengths" {
+    var state: u32 = 0x9e37_79b9;
+    for (0..1024) |_| {
+        var frequencies: [64]usize = @splat(0);
+        const active: usize = 2 + state % 63;
+        for (frequencies[0..active]) |*frequency| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            frequency.* = 1 + (state >> 20);
+        }
+        std.mem.sort(usize, frequencies[0..active], {}, std.sort.desc(usize));
+        var actual: [64]u4 = undefined;
+        var expected: [64]u4 = undefined;
+        const actual_ok = build(64, frequencies[0..active], &actual);
+        const expected_ok = buildHeapReference(64, frequencies[0..active], &expected);
+        try std.testing.expectEqual(expected_ok, actual_ok);
+        if (actual_ok) try std.testing.expectEqualSlices(u4, expected[0..active], actual[0..active]);
+    }
+}
+
+fn buildHeapReference(comptime capacity: usize, frequencies: []const usize, lengths: *[capacity]u4) bool {
+    lengths.* = @splat(0);
+    const Node = struct { weight: u64, parent: i16 = -1, serial: u8 };
+    var nodes: [2 * capacity - 1]Node = undefined;
+    var heap: [2 * capacity - 1]u8 = undefined;
+    var node_len = frequencies.len;
+    var heap_len = frequencies.len;
+    for (frequencies, 0..) |frequency, i| {
+        nodes[i] = .{ .weight = frequency, .serial = @intCast(i) };
+        heap[i] = @intCast(i);
+    }
+    heapify(Node, nodes[0..node_len], &heap, heap_len);
+    while (heap_len > 1) {
+        const first = heapPop(Node, nodes[0..node_len], &heap, &heap_len);
+        const second = heapPop(Node, nodes[0..node_len], &heap, &heap_len);
+        const parent: u8 = @intCast(node_len);
+        nodes[node_len] = .{ .weight = nodes[first].weight + nodes[second].weight, .serial = parent };
+        nodes[first].parent = parent;
+        nodes[second].parent = parent;
+        node_len += 1;
+        heapPush(Node, nodes[0..node_len], &heap, &heap_len, parent);
+    }
+    for (frequencies, 0..) |_, symbol| {
+        var depth: u4 = 0;
+        var node: i16 = @intCast(symbol);
+        while (nodes[@intCast(node)].parent >= 0) {
+            depth += 1;
+            if (depth > 15) return false;
+            node = nodes[@intCast(node)].parent;
+        }
+        lengths[symbol] = depth;
+    }
+    return true;
 }
