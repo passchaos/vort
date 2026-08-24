@@ -6858,3 +6858,9 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   falls back to stored when the dictionary expands or finds no match, so ratio
   mode also handles arbitrary 5–256-byte incompressible inputs instead of
   exposing the planner's internal `InvalidBlockPlan` limitation.
+  The stored ceiling now applies to every ratio path across the complete
+  one-meta-block input range, including LZ77 and 17-bit long-distance plans. The
+  exact stored bound avoids materializing the fallback unless the selected
+  compressed stream is larger; deterministic random inputs at 8/64/256/4096
+  bytes round-trip with ratio size no greater than stored, and a 34-byte
+  incompressible fixture is externally decoded by Node from its 38-byte stream.

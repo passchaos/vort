@@ -65,6 +65,14 @@ def main() -> int:
     if actual != expected:
         raise SystemExit("ratio-dictionary-unmatched: node output mismatch")
     print(f"brotli planned ratio-dictionary-unmatched node diff: encoded={len(ratio_encoded)} decoded={len(actual)}")
+    expected = b"qzxwvbnm1234567890QZXWVBNM!@#$%^&*"
+    ratio_encoded = subprocess.check_output([sys.argv[1], "ratio-ratio-incompressible"])
+    actual = subprocess.run(["node", "-e", script], input=ratio_encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("ratio-incompressible: node output mismatch")
+    if len(ratio_encoded) > len(expected) + 4:
+        raise SystemExit("ratio-incompressible: output exceeds stored framing ceiling")
+    print(f"brotli planned ratio-incompressible node diff: encoded={len(ratio_encoded)} decoded={len(actual)}")
     index_bytes = int(subprocess.check_output([sys.argv[1], "dictionary-index-bytes"]))
     if index_bytes > 150_000:
         raise SystemExit(f"dictionary index exceeds memory budget: {index_bytes}")

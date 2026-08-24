@@ -588,17 +588,17 @@ pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []cons
                 else => return err,
             }
         }
-        return error.InvalidBlockPlan;
+        return encodeStoredStreamAlloc(allocator, input);
     }
     const plan = try command_plan.buildAlloc(allocator, input, lz_plan.tokens);
     defer plan.deinit(allocator);
     var stats: encoder_stats.PlannedEncodeStats = .{};
     const baseline = try encodeLazyCommandPlanAlloc(allocator, input, plan.commands, &stats, .{ .try_recent_distances = true });
     if (input.len <= ratio_static_dictionary_max_input_len) return selectRatioStaticDictionaryAlloc(allocator, input, plan.commands, baseline);
-    if (input.len <= long_distance.min_distance) return baseline;
+    if (input.len <= long_distance.min_distance) return chooseStoredIfSmaller(allocator, input, baseline);
     errdefer allocator.free(baseline);
 
-    const commands = try long_distance.augmentAlloc(allocator, input, plan.commands) orelse return baseline;
+    const commands = try long_distance.augmentAlloc(allocator, input, plan.commands) orelse return chooseStoredIfSmaller(allocator, input, baseline);
     defer allocator.free(commands);
     const candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, null, &stats, .{
         .use_recent_distances = true,
@@ -607,10 +607,19 @@ pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []cons
     });
     if (candidate.len < baseline.len) {
         allocator.free(baseline);
-        return candidate;
+        return chooseStoredIfSmaller(allocator, input, candidate);
     }
     allocator.free(candidate);
-    return baseline;
+    return chooseStoredIfSmaller(allocator, input, baseline);
+}
+
+fn chooseStoredIfSmaller(allocator: std.mem.Allocator, input: []const u8, compressed: []u8) Error![]u8 {
+    errdefer allocator.free(compressed);
+    const stored_len = try encodedStoredStreamBound(input.len);
+    if (compressed.len <= stored_len) return compressed;
+    const stored = try encodeStoredStreamAlloc(allocator, input);
+    allocator.free(compressed);
+    return stored;
 }
 
 // The indexed static-dictionary planner is still substantially more expensive
@@ -637,15 +646,15 @@ fn selectRatioStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const
         } else allocator.free(mixed);
     }
     const candidate = encodePlannedStreamStaticDictionaryAlloc(allocator, input) catch |err| switch (err) {
-        error.InvalidBlockPlan => return best,
+        error.InvalidBlockPlan => return chooseStoredIfSmaller(allocator, input, best),
         else => return err,
     };
     if (candidate.len < best.len) {
         allocator.free(best);
-        return candidate;
+        return chooseStoredIfSmaller(allocator, input, candidate);
     }
     allocator.free(candidate);
-    return best;
+    return chooseStoredIfSmaller(allocator, input, best);
 }
 
 fn allCopiesAreDictionary(commands: []const command_plan.Command) bool {
@@ -6362,6 +6371,26 @@ test "br ratio planner encodes a dictionary word without LZ77 matches" {
     const unmatched_decoded = try decodeStreamAlloc(std.testing.allocator, unmatched_encoded);
     defer std.testing.allocator.free(unmatched_decoded);
     try std.testing.expectEqualSlices(u8, unmatched, unmatched_decoded);
+}
+
+test "br ratio planner never exceeds the stored stream" {
+    var incompressible: [4096]u8 = undefined;
+    var state: u32 = 0x1234_5678;
+    for (&incompressible) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    for ([_]usize{ 8, 64, 256, 4096 }) |len| {
+        const input = incompressible[0..len];
+        const ratio = try encodePlannedStreamRatioAlloc(std.testing.allocator, input);
+        defer std.testing.allocator.free(ratio);
+        const stored = try encodeStoredStreamAlloc(std.testing.allocator, input);
+        defer std.testing.allocator.free(stored);
+        try std.testing.expect(ratio.len <= stored.len);
+        const decoded = try decodeStreamAlloc(std.testing.allocator, ratio);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, input, decoded);
+    }
 }
 
 test "br ratio planner mixes LZ77 and static dictionary commands" {

@@ -33,6 +33,8 @@ pub fn main(init: std.process.Init) !void {
         "information"
     else if (std.mem.eql(u8, name, "dictionary-unmatched"))
         "qzxwvbnm"
+    else if (std.mem.eql(u8, name, "ratio-incompressible"))
+        "qzxwvbnm1234567890QZXWVBNM!@#$%^&*"
     else
         return error.InvalidBlockPlan;
     const encoded = if (lazy)
