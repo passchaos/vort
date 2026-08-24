@@ -53,6 +53,12 @@ def main() -> int:
     if actual != expected:
         raise SystemExit("ratio-dictionary-mixed: node output mismatch")
     print(f"brotli planned ratio-dictionary-mixed node diff: encoded={len(ratio_encoded)} dictionary={len(dictionary_encoded)} decoded={len(actual)}")
+    expected = b"information"
+    ratio_encoded = subprocess.check_output([sys.argv[1], "ratio-dictionary-word"])
+    actual = subprocess.run(["node", "-e", script], input=ratio_encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("ratio-dictionary-word: node output mismatch")
+    print(f"brotli planned ratio-dictionary-word node diff: encoded={len(ratio_encoded)} decoded={len(actual)}")
     index_bytes = int(subprocess.check_output([sys.argv[1], "dictionary-index-bytes"]))
     if index_bytes > 150_000:
         raise SystemExit(f"dictionary index exceeds memory budget: {index_bytes}")

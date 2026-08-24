@@ -6850,3 +6850,8 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   faster and identical output. A per-position shared match-cache prototype was
   also tested and rejected because eager full-input scanning made representative
   rows 4–56% slower despite eliminating some duplicate lookups.
+  Ratio mode now falls through to its RFC static-dictionary encoder when the
+  LZ77 parser finds no backward match, instead of rejecting dictionary-only
+  short inputs before dictionary planning. The standalone 11-byte word
+  `information` now produces a 9-byte Brotli stream and is decoded through Node;
+  non-dictionary inputs retain the existing `InvalidBlockPlan` result.

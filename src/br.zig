@@ -571,7 +571,11 @@ pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []cons
         .max_match = lz77.max_match_len,
     });
     defer lz_plan.deinit(allocator);
-    if (lz_plan.stats.matches == 0) return error.InvalidBlockPlan;
+    if (lz_plan.stats.matches == 0) {
+        if (input.len <= ratio_static_dictionary_max_input_len)
+            return encodePlannedStreamStaticDictionaryAlloc(allocator, input);
+        return error.InvalidBlockPlan;
+    }
     const plan = try command_plan.buildAlloc(allocator, input, lz_plan.tokens);
     defer plan.deinit(allocator);
     var stats: encoder_stats.PlannedEncodeStats = .{};
@@ -6327,6 +6331,18 @@ test "br ratio planner selects short static dictionary streams by final size" {
     const outside_gate_selected = try encodePlannedStreamRatioAlloc(std.testing.allocator, outside_gate_payload);
     defer std.testing.allocator.free(outside_gate_selected);
     try std.testing.expectEqualSlices(u8, outside_gate_baseline, outside_gate_selected);
+}
+
+test "br ratio planner encodes a dictionary word without LZ77 matches" {
+    const payload = "information";
+    const encoded = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    const summary = try summarizeStream(encoded);
+    try std.testing.expect(summary.static_dictionary_copy_count > 0);
+    const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamRatioAlloc(std.testing.allocator, "qzxwvbnm"));
 }
 
 test "br ratio planner mixes LZ77 and static dictionary commands" {
