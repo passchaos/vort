@@ -6853,5 +6853,8 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Ratio mode now falls through to its RFC static-dictionary encoder when the
   LZ77 parser finds no backward match, instead of rejecting dictionary-only
   short inputs before dictionary planning. The standalone 11-byte word
-  `information` now produces a 9-byte Brotli stream and is decoded through Node;
-  non-dictionary inputs retain the existing `InvalidBlockPlan` result.
+  `information` now produces a 9-byte Brotli stream and is decoded through Node.
+  The same branch now compares dictionary output against a stored stream and
+  falls back to stored when the dictionary expands or finds no match, so ratio
+  mode also handles arbitrary 5–256-byte incompressible inputs instead of
+  exposing the planner's internal `InvalidBlockPlan` limitation.

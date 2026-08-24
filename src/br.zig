@@ -553,7 +553,9 @@ pub fn encodePlannedStreamLazyAlloc(allocator: std.mem.Allocator, input: []const
 /// Ratio-oriented level for callers willing to trade additional match-chain
 /// search for smaller Brotli streams. Keeping this distinct from `.balanced`
 /// makes the substantial encode-time cost explicit rather than silently
-/// slowing latency-sensitive users.
+/// slowing latency-sensitive users. Short inputs without a backward match use
+/// static-dictionary/stored arbitration so this stable level still accepts
+/// arbitrary payloads inside its documented one-meta-block size range.
 pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
     if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
     const parser_options = PlannedParserOptions{
@@ -572,8 +574,20 @@ pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []cons
     });
     defer lz_plan.deinit(allocator);
     if (lz_plan.stats.matches == 0) {
-        if (input.len <= ratio_static_dictionary_max_input_len)
-            return encodePlannedStreamStaticDictionaryAlloc(allocator, input);
+        if (input.len <= ratio_static_dictionary_max_input_len) {
+            if (encodePlannedStreamStaticDictionaryAlloc(allocator, input)) |candidate| {
+                const stored = try encodeStoredStreamAlloc(allocator, input);
+                if (candidate.len < stored.len) {
+                    allocator.free(stored);
+                    return candidate;
+                }
+                allocator.free(candidate);
+                return stored;
+            } else |err| switch (err) {
+                error.InvalidBlockPlan => return encodeStoredStreamAlloc(allocator, input),
+                else => return err,
+            }
+        }
         return error.InvalidBlockPlan;
     }
     const plan = try command_plan.buildAlloc(allocator, input, lz_plan.tokens);
@@ -6342,7 +6356,12 @@ test "br ratio planner encodes a dictionary word without LZ77 matches" {
     const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
-    try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamRatioAlloc(std.testing.allocator, "qzxwvbnm"));
+    const unmatched = "qzxwvbnm";
+    const unmatched_encoded = try encodePlannedStreamRatioAlloc(std.testing.allocator, unmatched);
+    defer std.testing.allocator.free(unmatched_encoded);
+    const unmatched_decoded = try decodeStreamAlloc(std.testing.allocator, unmatched_encoded);
+    defer std.testing.allocator.free(unmatched_decoded);
+    try std.testing.expectEqualSlices(u8, unmatched, unmatched_decoded);
 }
 
 test "br ratio planner mixes LZ77 and static dictionary commands" {
