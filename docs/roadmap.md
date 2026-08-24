@@ -6703,6 +6703,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   `mozilla`/`nci`/`xml` prefixes reduced ratio encode time to roughly
   58.4%/53.8%/55.2% of the duplicated-plan implementation with byte-identical
   output.
+  Its hash chain now delays insertion until a position enters the eligible
+  65,521...131,056-byte distance band. This halves predecessor scratch to
+  256 KiB and prevents recent same-hash positions from consuming the 512-entry
+  search budget. Twelve fixed-CPU A/B pairs improved representative 128 KiB
+  `dickens`/`mozilla`/`nci`/`xml` rows by about 0.7%/1.5%/0.8%/1.3% with
+  byte-identical output.
   The lazy planner also exposes an explicit search-budget options API and a
   reproducible `run-br-lazy-sweep` target. All 24 combinations across chain
   budgets 64–512, nice lengths 64–258, and lazy gains 1–2 retained the same
