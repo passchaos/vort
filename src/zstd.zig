@@ -3658,9 +3658,9 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
     // splitting: each additional adaptive block costs a three-byte header.
     // Probe the same bounded prefix-tail shape used by block arbitration, then
     // return only when the complete primary frame is below 1/256 of the input.
-    if (level >= 9 and input.len > 8 * 1024 and input.len <= primary_options.block_size_max and findPrefixTailDuplicateMatch(input) != null) {
+    if (level > 0 and input.len > 8 * 1024 and input.len <= primary_options.block_size_max and findPrefixTailDuplicateMatch(input) != null) {
         const primary = try encodeNativeFrameWithOptionsAlloc(allocator, input, primary_options);
-        if (primary.frame.len * 256 <= input.len) return primary.frame;
+        if (primary.frame.len <= input.len / 256) return primary.frame;
         allocator.free(primary.frame);
     }
     if (level > 0 and input.len > 8 * 1024) {
@@ -7333,12 +7333,17 @@ fn emitLiteralOnlyCompressedBlockWithHistory(
 
 fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, match_search_budget: usize, rep_beam_search: bool) Error!bool {
     if (match_search_budget == 0) return false;
-    if (rep_beam_search) {
+    // A prefix repeated through the end is already represented by one
+    // sequence. Ratio levels retain the measured 32x cutoff; lower levels use
+    // a deliberately stricter 256x cutoff so only overwhelmingly decisive
+    // large-block results bypass their normal candidate arbitration.
+    if (rep_beam_search or block.len > 8 * 1024) {
         if (findPrefixTailDuplicateMatch(block)) |match| {
             var candidate: std.ArrayList(u8) = .empty;
             defer candidate.deinit(allocator);
+            const decisive_ratio: usize = if (rep_beam_search) 32 else 256;
             if (try emitSingleMatchCompressedBlockFromMatch(allocator, &candidate, block, last, match) and
-                candidate.items.len * 32 <= block.len)
+                candidate.items.len <= block.len / decisive_ratio)
             {
                 try out.appendSlice(allocator, candidate.items);
                 return true;
@@ -7938,32 +7943,41 @@ test "zstd parallel mixed match selection matches serial wire" {
     }
 }
 
-test "zstd prefix-tail shortcut matches full native selection" {
+test "zstd prefix-tail shortcut matches full native selection across levels" {
     const payload = "Zstandard encode benchmark text with repeated structure and punctuation.\n" ** 512;
     const match = findPrefixTailDuplicateMatch(payload) orelse return error.CorruptFrame;
     try std.testing.expectEqual(@as(usize, 0), match.first_start);
     try std.testing.expectEqual(payload.len, match.second_start + match.len);
 
-    var expected: std.ArrayList(u8) = .empty;
-    defer expected.deinit(std.testing.allocator);
-    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &expected, payload, true, 96, true));
-    var actual: std.ArrayList(u8) = .empty;
-    defer actual.deinit(std.testing.allocator);
-    try std.testing.expect(try emitNativeMatchCompressedBlock(std.testing.allocator, &actual, payload, true, 96, true));
-    try std.testing.expect(actual.items.len * 32 <= payload.len);
-    try std.testing.expectEqualSlices(u8, expected.items, actual.items);
+    for ([_]struct { budget: usize, rep_beam: bool }{
+        .{ .budget = 16, .rep_beam = false },
+        .{ .budget = 64, .rep_beam = false },
+        .{ .budget = 96, .rep_beam = true },
+    }) |policy| {
+        var expected: std.ArrayList(u8) = .empty;
+        defer expected.deinit(std.testing.allocator);
+        try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &expected, payload, true, policy.budget, policy.rep_beam));
+        var actual: std.ArrayList(u8) = .empty;
+        defer actual.deinit(std.testing.allocator);
+        try std.testing.expect(try emitNativeMatchCompressedBlock(std.testing.allocator, &actual, payload, true, policy.budget, policy.rep_beam));
+        const decisive_ratio: usize = if (policy.rep_beam) 32 else 256;
+        try std.testing.expect(actual.items.len <= payload.len / decisive_ratio);
+        try std.testing.expectEqualSlices(u8, expected.items, actual.items);
+    }
 }
 
-test "zstd decisive primary frame bypasses adaptive candidates" {
+test "zstd decisive primary frame bypasses adaptive candidates across levels" {
     const payload = "Zstandard encode benchmark text with repeated structure and punctuation.\n" ** 512;
-    const options = try nativeFrameOptionsForLevel(9, .{});
-    const primary = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, options);
-    defer std.testing.allocator.free(primary.frame);
-    try std.testing.expect(primary.frame.len * 256 <= payload.len);
+    for ([_]c_int{ 1, 3, 9 }) |level| {
+        const options = try nativeFrameOptionsForLevel(level, .{});
+        const primary = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload, options);
+        defer std.testing.allocator.free(primary.frame);
+        try std.testing.expect(primary.frame.len <= payload.len / 256);
 
-    const selected = try encodeFrameWithLevelAlloc(std.testing.allocator, payload, 9);
-    defer std.testing.allocator.free(selected);
-    try std.testing.expectEqualSlices(u8, primary.frame, selected);
+        const selected = try encodeFrameWithLevelAlloc(std.testing.allocator, payload, level);
+        defer std.testing.allocator.free(selected);
+        try std.testing.expectEqualSlices(u8, primary.frame, selected);
+    }
 }
 
 test "zstd native match stage benchmark rejects stale duplicate index" {

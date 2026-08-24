@@ -3191,6 +3191,15 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   corpus is byte-identical. Twelve fixed-CPU-8..10 pairs retain 80-byte text and
   reduce its level-9 median from about 7.54 ms to 0.56 ms (13.4x); JSON/binary
   remain within 1%.
+  The same structural shortcut now covers latency-oriented levels 1-3 with a
+  deliberately strict 1/256 admission threshold. Their primary block encoder
+  and top-level adaptive selector both return the single prefix-to-tail match
+  before running optimal, repeated, and duplicate-family searches. Across 512
+  independently generated inputs at both levels, no frame grew and fourteen
+  inputs improved by 47 bytes per level. Twenty-four alternating fixed-CPU-8..10
+  pairs retained the locked 80-byte text frame while reducing level-1/3 median
+  encode time to about 2.3%/2.2% of baseline; JSON and binary controls remained
+  within roughly 2.6% noise.
   Exact-cache profiling of the remaining level-9 JSON mixed search found 95
   scored prefixes at depths 2...96, with 95 distinct full score keys, literal
   histograms, and LL/OF/ML vectors, so no speculative memoization was retained.
