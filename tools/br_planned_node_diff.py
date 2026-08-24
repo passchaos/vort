@@ -59,6 +59,14 @@ def main() -> int:
     if actual != expected:
         raise SystemExit("ratio-dictionary-word: node output mismatch")
     print(f"brotli planned ratio-dictionary-word node diff: encoded={len(ratio_encoded)} decoded={len(actual)}")
+    expected = b"INFORMATION"
+    ratio_encoded = subprocess.check_output([sys.argv[1], "ratio-dictionary-uppercase"])
+    actual = subprocess.run(["node", "-e", script], input=ratio_encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("ratio-dictionary-uppercase: node output mismatch")
+    if len(ratio_encoded) >= len(expected) + 4:
+        raise SystemExit("ratio-dictionary-uppercase: expected dictionary compression")
+    print(f"brotli planned ratio-dictionary-uppercase node diff: encoded={len(ratio_encoded)} decoded={len(actual)}")
     expected = b"qzxwvbnm"
     ratio_encoded = subprocess.check_output([sys.argv[1], "ratio-dictionary-unmatched"])
     actual = subprocess.run(["node", "-e", script], input=ratio_encoded, check=True, capture_output=True).stdout

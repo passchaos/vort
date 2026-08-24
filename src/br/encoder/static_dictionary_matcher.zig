@@ -8,8 +8,8 @@ const word_index_bits = 11;
 const word_index_mask = (@as(u32, 1) << word_index_bits) - 1;
 const BaseWord = struct { word_index: usize, copy_len: usize };
 const PrefixGroup = struct {
-    transforms: [static_dictionary.transform_count]u8 = @splat(std.math.maxInt(u8)),
-    len: u8 = 0,
+    transforms: [3][static_dictionary.transform_count]u8 = @splat(@splat(std.math.maxInt(u8))),
+    lengths: [3]u8 = @splat(0),
 };
 
 const transforms_by_prefix = blk: {
@@ -19,8 +19,9 @@ const transforms_by_prefix = blk: {
     var result: [6]PrefixGroup = @splat(.{});
     for (0..static_dictionary.transform_count) |transform_index| {
         const prefix_len = static_dictionary.transformPrefixLength(transform_index).?;
-        result[prefix_len].transforms[result[prefix_len].len] = transform_index;
-        result[prefix_len].len += 1;
+        const case_index = @intFromEnum(static_dictionary.transformMetadata(transform_index).?.case_kind);
+        result[prefix_len].transforms[case_index][result[prefix_len].lengths[case_index]] = transform_index;
+        result[prefix_len].lengths[case_index] += 1;
     }
     break :blk result;
 };
@@ -96,14 +97,25 @@ pub const Index = struct {
 
     fn findCandidates(self: *const Index, input: []const u8, prefix_len: usize, best: *?static_dictionary.Match) void {
         if (input.len - prefix_len < 4) return;
+        self.findCandidatesForCase(input, prefix_len, .none, input[prefix_len..], best);
+        var normalized: [4]u8 = input[prefix_len..][0..4].*;
+        if (normalizeUppercasePrefix(&normalized, false))
+            self.findCandidatesForCase(input, prefix_len, .first, &normalized, best);
+        normalized = input[prefix_len..][0..4].*;
+        if (normalizeUppercasePrefix(&normalized, true))
+            self.findCandidatesForCase(input, prefix_len, .all, &normalized, best);
+    }
+
+    fn findCandidatesForCase(self: *const Index, input: []const u8, prefix_len: usize, case_kind: static_dictionary.TransformCaseKind, hash_bytes: []const u8, best: *?static_dictionary.Match) void {
         var scratch: [64]u8 = undefined;
-        var entry = self.heads[hashPrefix(input[prefix_len..])];
+        var entry = self.heads[hashPrefix(hash_bytes)];
         while (entry != no_entry) : (entry = self.next[entry]) {
             const base = unpackBaseWord(self.words[entry]);
             const bits = static_dictionary.sizeBits(base.copy_len).?;
             const word = static_dictionary.baseWord(base.copy_len, base.word_index).?;
             const group = &transforms_by_prefix[prefix_len];
-            for (group.transforms[0..group.len]) |transform_index| {
+            const case_index = @intFromEnum(case_kind);
+            for (group.transforms[case_index][0..group.lengths[case_index]]) |transform_index| {
                 const address = (@as(usize, transform_index) << bits) | base.word_index;
                 // Most transforms differ only by suffix. When the complete
                 // base word fits in the remaining input, reject an incompatible
@@ -133,6 +145,18 @@ pub const Index = struct {
         return self.words.len;
     }
 };
+
+fn normalizeUppercasePrefix(bytes: *[4]u8, all: bool) bool {
+    var changed = false;
+    for (bytes, 0..) |*byte, index| {
+        if (byte.* >= 'A' and byte.* <= 'Z') {
+            byte.* |= 32;
+            changed = true;
+        }
+        if (!all and index == 0) break;
+    }
+    return changed;
+}
 
 pub const max_index_bytes = bucket_count * @sizeOf(u16) +
     static_dictionary.base_word_count * (@sizeOf(u16) + @sizeOf(u32));
@@ -176,4 +200,21 @@ test "indexed static dictionary matcher ignores non-advancing omit transforms" {
 
     const match = index.findLongest("on\",");
     try std.testing.expect(match == null or match.?.output_len >= 4);
+}
+
+test "indexed static dictionary matcher finds uppercase transforms without a second index" {
+    var index = try Index.init(std.testing.allocator);
+    defer index.deinit();
+    const cases = [_][]const u8{
+        "Information",
+        "INFORMATION",
+        " DICTIONARY",
+        "COMPRESSION",
+    };
+    for (cases) |input| {
+        const expected = static_dictionary.findLongestMatch(input);
+        const actual = index.findLongest(input);
+        try std.testing.expectEqual(expected, actual);
+        try std.testing.expect(actual != null);
+    }
 }

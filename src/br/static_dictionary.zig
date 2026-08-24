@@ -154,11 +154,14 @@ const transforms = [_]Transform{
     .{ .prefix = 1, .kind = 10, .suffix = 143 },
 };
 
+pub const TransformCaseKind = enum(u2) { none, first, all };
+
 pub const TransformMetadata = struct {
     prefix_len: u3,
     suffix_len: u4,
     suffix_bytes: u64,
     keeps_whole_word: bool,
+    case_kind: TransformCaseKind,
 };
 
 const transform_metadata = blk: {
@@ -169,6 +172,11 @@ const transform_metadata = blk: {
             .suffix_len = @intCast(cStringLength(spec.suffix)),
             .suffix_bytes = cStringBits(spec.suffix),
             .keeps_whole_word = spec.kind == 0 or spec.kind == 10 or spec.kind == 11,
+            .case_kind = switch (spec.kind) {
+                10 => .first,
+                11 => .all,
+                else => .none,
+            },
         };
     }
     break :blk result;

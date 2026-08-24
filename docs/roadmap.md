@@ -6895,6 +6895,14 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   crosses the ceiling is overwritten by the stored representation. Tests lock
   byte parity with stable fast output, undersized-buffer `OutOfMemory`, and an
   incompressible caller-buffer round trip.
+  Static-dictionary lookup now recovers ASCII uppercase-first and uppercase-all
+  transforms without adding a second dictionary index: it lowercases the four-
+  byte hash prefix, probes the existing base-word buckets, and visits only the
+  matching case transform group. The sampled 121-transform coverage matrix
+  improves from 6,751/9,836 to 8,656/9,836 full-length matches while retaining
+  the 146,560-byte index. `INFORMATION` now compresses as an 11-byte dictionary
+  stream instead of falling back, and fixed-CPU 1000-run short-ratio A/B improves
+  representative mixed/English/JSON/source rows by roughly 10%/15%/16%/14%.
   Public `encodedPlannedStreamBound*` and `encodePlannedStream*Into` helpers now
   expose that stored ceiling to one-shot callers. The reusable encoder's
   `encodeIntoWithOptions` supports all stable levels: fast writes directly in

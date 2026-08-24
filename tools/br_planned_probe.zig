@@ -33,6 +33,8 @@ pub fn main(init: std.process.Init) !void {
         "abcdefghabcdefgh information follows abcdefghabcdefgh"
     else if (std.mem.eql(u8, name, "dictionary-word"))
         "information"
+    else if (std.mem.eql(u8, name, "dictionary-uppercase"))
+        "INFORMATION"
     else if (std.mem.eql(u8, name, "dictionary-unmatched"))
         "qzxwvbnm"
     else if (std.mem.eql(u8, name, "ratio-incompressible"))
