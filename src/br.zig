@@ -555,29 +555,32 @@ pub fn encodePlannedStreamLazyAlloc(allocator: std.mem.Allocator, input: []const
 /// makes the substantial encode-time cost explicit rather than silently
 /// slowing latency-sensitive users.
 pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
-    const baseline = try encodePlannedStreamLazyWithWireOptionsAlloc(allocator, input, .{
-        .window_len = @min(input.len, (@as(usize, 1) << default_window_bits) - 16),
+    if (input.len < 5 or input.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
+    const parser_options = PlannedParserOptions{
+        .window_len = (@as(usize, 1) << default_window_bits) - 16,
         .max_chain = 512,
         .nice_len = lz77.max_match_len,
-    }, .{ .try_recent_distances = true });
-    if (input.len <= long_distance.min_distance) return baseline;
-    errdefer allocator.free(baseline);
-
+    };
     const lz_plan = try lz77.lazyGreedyPlanAlloc(allocator, input, .{
-        .window_len = @min(input.len, (@as(usize, 1) << default_window_bits) - 16),
-        .max_chain = 512,
-        .nice_len = lz77.max_match_len,
+        .window_len = @min(input.len, parser_options.window_len),
+        .max_chain = parser_options.max_chain,
+        .nice_len = parser_options.nice_len,
         .max_candidates = 1,
-        .lazy_min_gain = 1,
+        .lazy_min_gain = parser_options.lazy_min_gain,
         .min_match = 3,
         .max_match = lz77.max_match_len,
     });
     defer lz_plan.deinit(allocator);
+    if (lz_plan.stats.matches == 0) return error.InvalidBlockPlan;
     const plan = try command_plan.buildAlloc(allocator, input, lz_plan.tokens);
     defer plan.deinit(allocator);
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const baseline = try encodeLazyCommandPlanAlloc(allocator, input, plan.commands, &stats, .{ .try_recent_distances = true });
+    if (input.len <= long_distance.min_distance) return baseline;
+    errdefer allocator.free(baseline);
+
     const commands = try long_distance.augmentAlloc(allocator, input, plan.commands) orelse return baseline;
     defer allocator.free(commands);
-    var stats: encoder_stats.PlannedEncodeStats = .{};
     const candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, commands, null, &stats, .{
         .use_recent_distances = true,
         .use_utf8_text_contexts = true,
@@ -625,16 +628,20 @@ fn encodePlannedStreamLazyWithWireOptionsAlloc(allocator: std.mem.Allocator, inp
     const plan = try command_plan.buildAlloc(allocator, input, lz_plan.tokens);
     defer plan.deinit(allocator);
     var stats: encoder_stats.PlannedEncodeStats = .{};
+    return encodeLazyCommandPlanAlloc(allocator, input, plan.commands, &stats, wire_options);
+}
+
+fn encodeLazyCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, wire_options: LazyWireOptions) Error![]u8 {
     // A leading three-byte match followed by exactly one remaining command is
     // often a net loss after its unique command/distance symbols are included.
     // Evaluate the one exact alternative instead of relying on DEFLATE's local
     // fixed-bit profitability model, which cannot see Brotli tree overhead.
-    if (plan.commands.len == 2 and plan.commands[0].has_copy and plan.commands[0].dictionary_output_len == 0 and plan.commands[0].copy_len == 3) {
-        const baseline = try encodePreferredCommandPlanAlloc(allocator, input, plan.commands, null, &stats, wire_options);
+    if (commands.len == 2 and commands[0].has_copy and commands[0].dictionary_output_len == 0 and commands[0].copy_len == 3) {
+        const baseline = try encodePreferredCommandPlanAlloc(allocator, input, commands, null, stats, wire_options);
         errdefer allocator.free(baseline);
         var candidate_storage: [2]command_plan.Command = undefined;
-        const candidate_commands = try command_plan.withoutCopyInto(&candidate_storage, input.len, plan.commands, 0);
-        const candidate = try encodePreferredCommandPlanAlloc(allocator, input, candidate_commands, null, &stats, wire_options);
+        const candidate_commands = try command_plan.withoutCopyInto(&candidate_storage, input.len, commands, 0);
+        const candidate = try encodePreferredCommandPlanAlloc(allocator, input, candidate_commands, null, stats, wire_options);
         if (candidate.len < baseline.len) {
             allocator.free(baseline);
             return candidate;
@@ -642,21 +649,21 @@ fn encodePlannedStreamLazyWithWireOptionsAlloc(allocator: std.mem.Allocator, inp
         allocator.free(candidate);
         return baseline;
     }
-    const short_match_alternatives = short_match_candidates.collect(plan.commands);
+    const short_match_alternatives = short_match_candidates.collect(commands);
     if (short_match_alternatives.len != 0) {
-        var baseline = try encodePreferredCommandPlanAlloc(allocator, input, plan.commands, null, &stats, wire_options);
+        var baseline = try encodePreferredCommandPlanAlloc(allocator, input, commands, null, stats, wire_options);
         errdefer allocator.free(baseline);
         var drop_storage: [4]usize = undefined;
         var command_storage: [16]command_plan.Command = undefined;
         for (short_match_alternatives.slice()) |drop_mask| {
             var drop_count: usize = 0;
-            for (plan.commands, 0..) |_, command_index| {
+            for (commands, 0..) |_, command_index| {
                 if (drop_mask & (@as(u16, 1) << @intCast(command_index)) == 0) continue;
                 drop_storage[drop_count] = command_index;
                 drop_count += 1;
             }
-            const alternative = try command_plan.withoutCopiesInto(&command_storage, input.len, plan.commands, drop_storage[0..drop_count]);
-            const candidate = try encodePreferredCommandPlanAlloc(allocator, input, alternative, null, &stats, wire_options);
+            const alternative = try command_plan.withoutCopiesInto(&command_storage, input.len, commands, drop_storage[0..drop_count]);
+            const candidate = try encodePreferredCommandPlanAlloc(allocator, input, alternative, null, stats, wire_options);
             if (candidate.len < baseline.len) {
                 allocator.free(baseline);
                 baseline = candidate;
@@ -664,7 +671,7 @@ fn encodePlannedStreamLazyWithWireOptionsAlloc(allocator: std.mem.Allocator, inp
         }
         return baseline;
     }
-    return encodePreferredCommandPlanAlloc(allocator, input, plan.commands, null, &stats, wire_options);
+    return encodePreferredCommandPlanAlloc(allocator, input, commands, null, stats, wire_options);
 }
 
 /// Experimental planner-backed encoder for the built-in RFC 7932 static

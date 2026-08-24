@@ -6694,6 +6694,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Across twelve 128 KiB Silesia prefixes, that post-pass lowers ratio mode from
   548,964 to 544,150 bytes overall (8.15% below libbrotli q3). Ten files improve;
   the two regressions are discarded by the same complete-stream arbitration.
+  The long-distance path now reuses the original lazy token and command plan
+  instead of parsing/building it twice. A fixed-CPU 10-pair A/B on 128 KiB
+  `mozilla`/`nci`/`xml` prefixes reduced ratio encode time to roughly
+  58.4%/53.8%/55.2% of the duplicated-plan implementation with byte-identical
+  output.
   The lazy planner also exposes an explicit search-budget options API and a
   reproducible `run-br-lazy-sweep` target. All 24 combinations across chain
   budgets 64–512, nice lengths 64–258, and lazy gains 1–2 retained the same
