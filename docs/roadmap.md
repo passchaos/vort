@@ -6938,3 +6938,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   2,000-iteration A/B pairs improved the 65-byte dictionary and 53-byte mixed
   ratio cases by median 4.8% and 2.3%, respectively; uppercase was neutral and
   selected stream sizes remained byte-for-byte unchanged.
+  Short ratio arbitration now shares an on-demand per-position dictionary-match
+  cache between its mixed and dictionary-only planners. Unlike the rejected
+  eager cache, it scans only positions reached by a planner and performs a
+  bounded re-probe when the cached full-input match crosses an LZ literal-run
+  boundary. Seven alternating fixed-CPU-8, 2,000-iteration A/B pairs improved
+  the affected mixed case by median 7.8%; dictionary-only, uppercase, and
+  no-match controls were not meaningfully affected, and all output metrics were
+  equal.

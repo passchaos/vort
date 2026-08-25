@@ -666,11 +666,14 @@ const ratio_static_dictionary_max_input_len: usize = 256;
 fn selectRatioStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, lz_commands: []const command_plan.Command, baseline: []u8) Error![]u8 {
     errdefer allocator.free(baseline);
     var best = baseline;
+    var cached_matches: [ratio_static_dictionary_max_input_len]static_dictionary.Match = undefined;
+    var cache_known: [ratio_static_dictionary_max_input_len]bool = undefined;
+    var match_cache = command_plan.StaticDictionaryMatchCache.init(cached_matches[0..input.len], cache_known[0..input.len]);
     // The mixed planner is useful only when a backward copy survives alongside
     // dictionary copies. Otherwise its command stream is equivalent in shape
     // to the dictionary-only candidate encoded below, so skip a redundant full
     // wire encode.
-    const mixed_plan = try command_plan.mixStaticDictionaryAlloc(allocator, input, lz_commands);
+    const mixed_plan = try command_plan.mixStaticDictionaryWithCacheAlloc(allocator, input, lz_commands, &match_cache);
     defer mixed_plan.deinit(allocator);
     if (mixed_plan.match_count != 0 and !allCopiesAreDictionary(mixed_plan.commands)) {
         var stats: encoder_stats.PlannedEncodeStats = .{};
@@ -680,7 +683,7 @@ fn selectRatioStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const
             best = mixed;
         } else allocator.free(mixed);
     }
-    const candidate = encodePlannedStreamStaticDictionaryAlloc(allocator, input) catch |err| switch (err) {
+    const candidate = encodePlannedStreamStaticDictionaryWithCacheAlloc(allocator, input, &match_cache) catch |err| switch (err) {
         error.InvalidBlockPlan => return chooseStoredIfSmaller(allocator, input, best),
         else => return err,
     };
@@ -786,9 +789,13 @@ fn encodeLazyCommandPlanAlloc(allocator: std.mem.Allocator, input: []const u8, c
 /// dictionary. It establishes complete command/wire support with an exhaustive
 /// reference matcher; stable compression levels remain on the faster LZ path.
 pub fn encodePlannedStreamStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    return encodePlannedStreamStaticDictionaryWithCacheAlloc(allocator, input, null);
+}
+
+fn encodePlannedStreamStaticDictionaryWithCacheAlloc(allocator: std.mem.Allocator, input: []const u8, cache: ?*command_plan.StaticDictionaryMatchCache) Error![]u8 {
     const max_backward_distance = (@as(usize, 1) << default_window_bits) - 16;
     if (input.len < 5 or input.len > max_backward_distance) return error.InvalidBlockPlan;
-    const plan = try command_plan.buildStaticDictionaryAlloc(allocator, input);
+    const plan = try command_plan.buildStaticDictionaryWithCacheAlloc(allocator, input, cache);
     defer plan.deinit(allocator);
     if (plan.match_count == 0) return error.InvalidBlockPlan;
     var stats: encoder_stats.PlannedEncodeStats = .{};

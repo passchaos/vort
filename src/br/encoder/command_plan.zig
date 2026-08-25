@@ -30,6 +30,36 @@ pub const Plan = struct {
     }
 };
 
+/// Sparse, caller-owned cache for full-suffix dictionary probes. Ratio mode
+/// runs a mixed planner and then a dictionary-only planner over the same short
+/// input; caching only positions actually queried by either planner avoids the
+/// cost of the previously rejected eager full-input scan. A zero output length
+/// is safe as the cached "no match" sentinel because usable dictionary
+/// commands must advance by at least four bytes.
+pub const StaticDictionaryMatchCache = struct {
+    matches: []static_dictionary.Match,
+    known: []bool,
+
+    pub fn init(matches: []static_dictionary.Match, known: []bool) StaticDictionaryMatchCache {
+        std.debug.assert(matches.len == known.len);
+        @memset(known, false);
+        return .{ .matches = matches, .known = known };
+    }
+
+    fn findLongest(self: *StaticDictionaryMatchCache, matcher: *const static_dictionary_matcher.Index, input: []const u8, position: usize) ?static_dictionary.Match {
+        std.debug.assert(position < input.len and input.len <= self.matches.len);
+        if (!self.known[position]) {
+            self.matches[position] = matcher.findLongest(input[position..]) orelse .{
+                .output_len = 0,
+                .copy_len = 0,
+                .address = 0,
+            };
+            self.known[position] = true;
+        }
+        return if (self.matches[position].output_len == 0) null else self.matches[position];
+    }
+};
+
 pub const max_prefix_symbols = 704;
 
 /// A compact Brotli prefix alphabet, ordered by descending frequency so shorter
@@ -230,6 +260,10 @@ pub fn buildAlloc(allocator: std.mem.Allocator, input: []const u8, tokens: []con
 /// process-wide index is reused across calls; candidate transforms still pass
 /// through the independent RFC transform implementation before selection.
 pub fn buildStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8) !Plan {
+    return buildStaticDictionaryWithCacheAlloc(allocator, input, null);
+}
+
+pub fn buildStaticDictionaryWithCacheAlloc(allocator: std.mem.Allocator, input: []const u8, cache: ?*StaticDictionaryMatchCache) !Plan {
     const matcher = try static_dictionary_matcher.Index.sharedIndex();
     var commands: std.ArrayList(Command) = .empty;
     errdefer commands.deinit(allocator);
@@ -239,7 +273,8 @@ pub fn buildStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u
     var match_count: usize = 0;
 
     while (position < input.len) {
-        const match = matcher.findLongest(input[position..]) orelse {
+        const match = if (cache) |active| active.findLongest(matcher, input, position) else matcher.findLongest(input[position..]);
+        const selected = match orelse {
             position += 1;
             insert_len += 1;
             continue;
@@ -247,12 +282,12 @@ pub fn buildStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u
         try commands.append(allocator, .{
             .insert_start = insert_start,
             .insert_len = insert_len,
-            .copy_len = match.copy_len,
+            .copy_len = selected.copy_len,
             .has_copy = true,
-            .dictionary_output_len = match.output_len,
-            .dictionary_address = match.address,
+            .dictionary_output_len = selected.output_len,
+            .dictionary_address = selected.address,
         });
-        position += match.output_len;
+        position += selected.output_len;
         insert_start = position;
         insert_len = 0;
         match_count += 1;
@@ -271,6 +306,10 @@ pub fn buildStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u
 /// previously selected backward reference, so the resulting mixed plan has the
 /// same decoded positions and distances as the baseline.
 pub fn mixStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, baseline: []const Command) !Plan {
+    return mixStaticDictionaryWithCacheAlloc(allocator, input, baseline, null);
+}
+
+pub fn mixStaticDictionaryWithCacheAlloc(allocator: std.mem.Allocator, input: []const u8, baseline: []const Command, cache: ?*StaticDictionaryMatchCache) !Plan {
     const matcher = try static_dictionary_matcher.Index.sharedIndex();
     var commands: std.ArrayList(Command) = .empty;
     errdefer commands.deinit(allocator);
@@ -285,7 +324,13 @@ pub fn mixStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8,
         var position = cursor;
         while (position < literal_end) {
             const remaining = literal_end - position;
-            const match = if (remaining >= 4) matcher.findLongest(input[position..literal_end]) else null;
+            const match = if (remaining < 4) null else if (cache) |active| blk: {
+                const full_match = active.findLongest(matcher, input, position);
+                if (full_match == null or full_match.?.output_len <= remaining) break :blk full_match;
+                // The longest full-input word crosses the preserved LZ copy. A
+                // shorter dictionary word may still fit this literal run.
+                break :blk matcher.findLongest(input[position..literal_end]);
+            } else matcher.findLongest(input[position..literal_end]);
             if (match == null) {
                 position += 1;
                 pending_len += 1;
@@ -529,6 +574,44 @@ test "static dictionary mixes only inside literal runs" {
     try std.testing.expect(mixed.commands.len >= baseline.len);
     try std.testing.expect(mixed.commands[0].dictionary_output_len > 0);
     try std.testing.expectEqual(@as(usize, 11), mixed.commands[mixed.commands.len - 1].distance);
+}
+
+test "static dictionary cache preserves mixed and dictionary-only plans" {
+    const input = "abcdefghabcdefgh information follows abcdefghabcdefgh";
+    const baseline = [_]Command{
+        .{ .insert_start = 0, .insert_len = 8, .copy_len = 8, .distance = 8, .has_copy = true },
+        .{ .insert_start = 16, .insert_len = 21, .copy_len = 16, .distance = 37, .has_copy = true },
+    };
+    const expected_mixed = try mixStaticDictionaryAlloc(std.testing.allocator, input, &baseline);
+    defer expected_mixed.deinit(std.testing.allocator);
+    const expected_dictionary = try buildStaticDictionaryAlloc(std.testing.allocator, input);
+    defer expected_dictionary.deinit(std.testing.allocator);
+
+    var matches: [input.len]static_dictionary.Match = undefined;
+    var known: [input.len]bool = undefined;
+    var cache = StaticDictionaryMatchCache.init(&matches, &known);
+    const actual_mixed = try mixStaticDictionaryWithCacheAlloc(std.testing.allocator, input, &baseline, &cache);
+    defer actual_mixed.deinit(std.testing.allocator);
+    const actual_dictionary = try buildStaticDictionaryWithCacheAlloc(std.testing.allocator, input, &cache);
+    defer actual_dictionary.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(expected_mixed.match_count, actual_mixed.match_count);
+    try std.testing.expectEqualSlices(Command, expected_mixed.commands, actual_mixed.commands);
+    try std.testing.expectEqual(expected_dictionary.match_count, actual_dictionary.match_count);
+    try std.testing.expectEqualSlices(Command, expected_dictionary.commands, actual_dictionary.commands);
+
+    const boundary_input = " information follows";
+    const boundary_baseline = [_]Command{
+        .{ .insert_start = 0, .insert_len = 12, .copy_len = boundary_input.len - 12, .distance = 1, .has_copy = true },
+    };
+    const expected_boundary = try mixStaticDictionaryAlloc(std.testing.allocator, boundary_input, &boundary_baseline);
+    defer expected_boundary.deinit(std.testing.allocator);
+    var boundary_matches: [boundary_input.len]static_dictionary.Match = undefined;
+    var boundary_known: [boundary_input.len]bool = undefined;
+    var boundary_cache = StaticDictionaryMatchCache.init(&boundary_matches, &boundary_known);
+    const actual_boundary = try mixStaticDictionaryWithCacheAlloc(std.testing.allocator, boundary_input, &boundary_baseline, &boundary_cache);
+    defer actual_boundary.deinit(std.testing.allocator);
+    try std.testing.expectEqualSlices(Command, expected_boundary.commands, actual_boundary.commands);
 }
 
 test "simple alphabet orders hot symbols first" {
