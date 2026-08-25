@@ -103,6 +103,22 @@ pub fn planReuse(
                 best = current_rep;
             }
         }
+        if (repeatRank(best.distance, reps, position - anchor) == 3) {
+            // A direct hash match changes the recent-offset queue and can make
+            // a long structured run expensive. Only on that path, check the
+            // two other existing repcodes and tolerate at most a one-byte
+            // length deficit. This is narrower than probing all three offsets
+            // at every position and mirrors upstream's preference for
+            // repcodes around hash hits.
+            for (reps[1..]) |distance| {
+                if (distance > position) continue;
+                const recent = matchAtDistance(input, position, distance, options);
+                if (recent.length + 1 >= best.length) {
+                    best = recent;
+                    break;
+                }
+            }
+        }
 
         // Complete a match backwards through pending literals. Apart from
         // improving length this also preserves upstream's invariant that a

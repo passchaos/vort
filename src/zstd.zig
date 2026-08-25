@@ -8035,6 +8035,22 @@ test "zstd double-fast parser replays varied input" {
     }
 }
 
+test "zstd double-fast preserves alternate recent offsets on structured input" {
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    while (payload.items.len < 32 * 1024) {
+        var line: [128]u8 = undefined;
+        const index = payload.items.len / 64;
+        const formatted = try std.fmt.bufPrint(&line, "{{\"id\":{d},\"service\":\"vort\",\"message\":\"structured zstd encode corpus\"}}\n", .{index});
+        try payload.appendSlice(std.testing.allocator, formatted);
+    }
+    var scratch: NativeMatchStageScratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    const result = try benchmarkNativeMatchStage(std.testing.allocator, payload.items, true, 16, .double_fast, &scratch);
+    try std.testing.expect(result.available);
+    try std.testing.expectEqual(@as(usize, 687), result.encoded_len);
+}
+
 test "zstd parallel mixed match selection matches serial wire" {
     const payloads = [_][]const u8{
         "Zstandard parallel mixed candidate.\n" ** 1024,

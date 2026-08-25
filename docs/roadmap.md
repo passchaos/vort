@@ -6998,3 +6998,10 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   binary stage sizes while reducing the 8 KiB adaptive JSON candidate from
   2,157 to 2,156 bytes. An explicit state-insertion test and per-stage size
   ceilings make both the intended beam diversity and the wire result stable.
+  The diagnostic double-fast parser now probes rep1/rep2 only when its selected
+  hash match would otherwise introduce a direct distance, accepting no more
+  than a one-byte match-length deficit. This narrow upstream-style safeguard
+  reduces the locked primary JSON block from 695 to 687 bytes while preserving
+  all text/binary and adaptive candidate sizes. Eleven-round fixed-CPU-8 A/B
+  measured unchanged primary throughput within noise (about 0.995x elapsed),
+  and a focused structured-input test pins the selected 687-byte wire size.

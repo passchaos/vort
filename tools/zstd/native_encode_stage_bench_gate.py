@@ -21,7 +21,7 @@ DOUBLE_FAST_MAX_BYTES = {
     ("text", "primary"): 210,
     ("text", "adaptive_0"): 2919,
     ("text", "adaptive_1"): 1659,
-    ("json", "primary"): 695,
+    ("json", "primary"): 687,
     ("json", "adaptive_0"): 3678,
     ("json", "adaptive_1"): 2164,
     ("binary", "primary"): 8600,
