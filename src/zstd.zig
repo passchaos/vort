@@ -17871,6 +17871,23 @@ test "zstd native frame writer chooses smallest fallback mode" {
     const reusable_encoded = try reusable_encoder.encodeScratch(duplicate_payload, .{});
     try std.testing.expectEqual(duplicate_result.mode, reusable_encoded.mode);
     try std.testing.expectEqualSlices(u8, duplicate_result.frame, reusable_encoded.frame);
+    var structured: std.ArrayList(u8) = .empty;
+    defer structured.deinit(std.testing.allocator);
+    while (structured.items.len < 32 * 1024) {
+        var line: [96]u8 = undefined;
+        const formatted = try std.fmt.bufPrint(&line, "{{\"id\":{d},\"service\":\"vort\",\"message\":\"encoder scratch\"}}\n", .{structured.items.len / 64});
+        try structured.appendSlice(std.testing.allocator, formatted);
+    }
+    const level_one_options = try nativeFrameOptionsForLevel(1, .{});
+    const first_reused = try reusable_encoder.encodeScratch(structured.items, level_one_options);
+    const first_states_capacity = reusable_encoder.rep_beam_scratch.states.capacity;
+    const first_index_capacity = reusable_encoder.rep_beam_scratch.index.prev.capacity;
+    const first_tokens_capacity = reusable_encoder.rep_beam_scratch.reversed.capacity;
+    const second_reused = try reusable_encoder.encodeScratch(structured.items, level_one_options);
+    try std.testing.expectEqualSlices(u8, first_reused.frame, second_reused.frame);
+    try std.testing.expectEqual(first_states_capacity, reusable_encoder.rep_beam_scratch.states.capacity);
+    try std.testing.expectEqual(first_index_capacity, reusable_encoder.rep_beam_scratch.index.prev.capacity);
+    try std.testing.expectEqual(first_tokens_capacity, reusable_encoder.rep_beam_scratch.reversed.capacity);
     const reusable_forced_raw = try reusable_encoder.encodeScratch(duplicate_payload, .{ .selection = .raw_or_rle });
     try std.testing.expectEqual(NativeFrameMode.raw_or_rle, reusable_forced_raw.mode);
     const reusable_forced_raw_decoded = try decodeNativeFrameAlloc(std.testing.allocator, reusable_forced_raw.frame);
