@@ -80,7 +80,7 @@ pub const OptimalScratch = struct {
 pub const RepBeamScratch = struct {
     states: std.ArrayList(RepBeamState) = .empty,
     lengths: std.ArrayList(u8) = .empty,
-    index: HashIndex = .{},
+    index: RepBeamIndex = .{},
     reversed: std.ArrayList(Token) = .empty,
 
     pub fn deinit(self: *RepBeamScratch, allocator: std.mem.Allocator) void {
@@ -89,6 +89,54 @@ pub const RepBeamScratch = struct {
         self.lengths.deinit(allocator);
         self.states.deinit(allocator);
         self.* = .{};
+    }
+};
+
+const rep_beam_index_empty = std.math.maxInt(u16);
+
+const RepBeamIndex = struct {
+    head: [4096]u16 = @splat(rep_beam_index_empty),
+    prev: std.ArrayList(u16) = .empty,
+    input_len: usize = 0,
+
+    fn deinit(self: *RepBeamIndex, allocator: std.mem.Allocator) void {
+        self.prev.deinit(allocator);
+        self.* = .{};
+    }
+
+    fn build(self: *RepBeamIndex, allocator: std.mem.Allocator, input: []const u8) !void {
+        if (input.len > rep_beam_input_max) return error.InvalidBlockPlan;
+        try self.prev.resize(allocator, input.len);
+        @memset(&self.head, rep_beam_index_empty);
+        self.input_len = input.len;
+        for (0..input.len) |position| {
+            const hash = hashAtInput(input, position, self.head.len, .three) orelse continue;
+            self.prev.items[position] = self.head[hash];
+            self.head[hash] = @intCast(position);
+        }
+    }
+
+    fn matchesAt(self: *const RepBeamIndex, input: []const u8, position: usize, options: GreedyOptions, out: []Token.Match) Error!usize {
+        if (input.len != self.input_len or position > input.len) return error.InvalidBlockPlan;
+        if (position + minMatch(options) > input.len or out.len == 0) return 0;
+        var candidate_i = self.prev.items[position];
+        var checked: usize = 0;
+        var count: usize = 0;
+        const maximum = @min(maxMatch(options), input.len - position);
+        while (candidate_i != rep_beam_index_empty and checked < options.max_chain and count < out.len) : (checked += 1) {
+            const candidate: usize = candidate_i;
+            const distance = position - candidate;
+            if (distance == 0 or distance > options.window_len) break;
+            if (input[candidate + 3] == input[position + 3]) {
+                const length = matchLength(input, candidate, position, maximum);
+                if (length >= minMatch(options)) {
+                    out[count] = .{ .length = @intCast(length), .distance = @intCast(distance) };
+                    count += 1;
+                }
+            }
+            candidate_i = self.prev.items[candidate];
+        }
+        return count;
     }
 };
 
@@ -561,7 +609,7 @@ pub fn optimalRepBeamPlanAlloc(allocator: std.mem.Allocator, input: []const u8, 
 
 pub fn optimalRepBeamPlanReuse(scratch: *RepBeamScratch, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
     if (input.len == 0 or input.len > rep_beam_input_max) return error.InvalidBlockPlan;
-    try scratch.index.buildWithHeadLen(allocator, input, 4096);
+    try scratch.index.build(allocator, input);
 
     const state_count = std.math.mul(usize, input.len + 1, rep_beam_width) catch return error.IntegerOverflow;
     try scratch.states.resize(allocator, state_count);
@@ -1012,6 +1060,26 @@ test "rep beam reusable scratch preserves tokens and capacity" {
     try std.testing.expectEqual(states_capacity, scratch.states.capacity);
     try std.testing.expectEqual(lengths_capacity, scratch.lengths.capacity);
     try std.testing.expectEqual(tokens_capacity, scratch.reversed.capacity);
+}
+
+test "rep beam compact index matches reference beyond u16 positions" {
+    var input: [rep_beam_input_max]u8 = undefined;
+    for (&input, 0..) |*byte, i| byte.* = @truncate(i * 37 + i / 251);
+    const options: GreedyOptions = .{ .window_len = default_window_len, .min_match = 4 };
+    var reference: HashIndex = .{};
+    defer reference.deinit(std.testing.allocator);
+    try reference.buildWithHeadLen(std.testing.allocator, &input, 4096);
+    var compact: RepBeamIndex = .{};
+    defer compact.deinit(std.testing.allocator);
+    try compact.build(std.testing.allocator, &input);
+    var expected: [rep_beam_match_candidates]Token.Match = undefined;
+    var actual: [rep_beam_match_candidates]Token.Match = undefined;
+    for ([_]usize{ 1, 1024, 32 * 1024, input.len - 4 }) |position| {
+        const expected_len = try reference.matchesAt(&input, position, options, &expected);
+        const actual_len = try compact.matchesAt(&input, position, options, &actual);
+        try std.testing.expectEqual(expected_len, actual_len);
+        try std.testing.expectEqualSlices(Token.Match, expected[0..expected_len], actual[0..actual_len]);
+    }
 }
 
 fn fixedDistanceSymbolCost(distance: usize) usize {

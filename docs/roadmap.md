@@ -7025,6 +7025,14 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   primary text/JSON/binary beam time by about 22.0%/25.4%/21.6%; adaptive rows
   improved by roughly 10.7%–25.4%. The allocating API remains as a convenience
   wrapper and an exact token/capacity test protects scratch reuse behavior.
+  Repeat-beam's dedicated 4 KiB index now stores predecessor positions as
+  `u16` rather than machine-width signed integers. Its input is already bounded
+  to 65,535 bytes, so the compact sentinel representation is exact and reduces
+  predecessor storage from eight bytes to two bytes per input position. Eleven
+  alternating fixed-CPU-8 A/B pairs preserved every stage size while improving
+  primary text/JSON/binary beam time by about 22.8%/26.0%/25.6%; adaptive rows
+  improved by about 14.5%–25.3%. A focused oracle compares compact and generic
+  index matches at positions up to the u16 input boundary.
   A second hash-width sweep reduced the same tables further to 8/11 bits. The
   complete locked size matrix remains unchanged. Eleven alternating fixed-CPU-8
   A/B pairs against the 10/12-bit version improved median primary text/JSON/
