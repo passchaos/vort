@@ -62,6 +62,21 @@ pub const GreedyPlan = struct {
     }
 };
 
+pub const TinyGreedyScratch = struct {
+    head: [4096]isize = undefined,
+    head_initialized: [hash_head_init_words]u64 = @splat(0),
+    prev: std.ArrayList(isize) = .empty,
+
+    pub fn retainedCapacity(self: *const TinyGreedyScratch) usize {
+        return self.prev.capacity * @sizeOf(isize);
+    }
+
+    pub fn deinit(self: *TinyGreedyScratch, allocator: std.mem.Allocator) void {
+        self.prev.deinit(allocator);
+        self.* = .{};
+    }
+};
+
 pub const OptimalScratch = struct {
     costs: std.ArrayList(usize) = .empty,
     steps: std.ArrayList(Token) = .empty,
@@ -1244,8 +1259,26 @@ pub fn hashGreedyPlanAutoTinyReuse(tokens: *std.ArrayList(Token), allocator: std
     var head: [4096]isize = @splat(-1);
     var prev_stack: [32 * 1024]isize = undefined;
     return switch (anchor) {
-        .three => hashGreedyPlanWithTablesReuse(tokens, allocator, input, options, &head, prev_stack[0..input.len], .three),
-        .four => hashGreedyPlanWithTablesReuse(tokens, allocator, input, options, &head, prev_stack[0..input.len], .four),
+        .three => hashGreedyPlanWithTablesReuse(tokens, allocator, input, options, &head, prev_stack[0..input.len], false, {}, .three),
+        .four => hashGreedyPlanWithTablesReuse(tokens, allocator, input, options, &head, prev_stack[0..input.len], false, {}, .four),
+    };
+}
+
+/// Reusable-table counterpart for callers that repeatedly encode small blocks.
+/// The head array stays allocated and uninitialized; a compact bitmap marks
+/// buckets written during the current plan, avoiding a 32 KiB clear per call.
+pub fn hashGreedyPlanAutoTinyScratchReuse(tokens: *std.ArrayList(Token), scratch: *TinyGreedyScratch, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
+    const anchor: HashAnchor = if (minMatch(options) >= 4) .four else .three;
+    if (input.len > 32 * 1024) return error.InvalidBlockPlan;
+    tokens.clearRetainingCapacity();
+    try scratch.prev.resize(allocator, input.len);
+    // Only the first 4K buckets are addressable by this tiny table. Reusing
+    // the shared lazy-head storage type keeps one parser body without paying
+    // to clear its unused 28K-bucket suffix.
+    @memset(scratch.head_initialized[0 .. scratch.head.len / 64], 0);
+    return switch (anchor) {
+        .three => hashGreedyPlanWithTablesReuse(tokens, allocator, input, options, &scratch.head, scratch.prev.items, true, &scratch.head_initialized, .three),
+        .four => hashGreedyPlanWithTablesReuse(tokens, allocator, input, options, &scratch.head, scratch.prev.items, true, &scratch.head_initialized, .four),
     };
 }
 
@@ -1256,13 +1289,15 @@ fn hashGreedyPlanWithTablesReuse(
     options: GreedyOptions,
     head: []isize,
     prev: []isize,
+    comptime lazy_head: bool,
+    initialized: HashHeadInit(lazy_head),
     comptime anchor: HashAnchor,
 ) !PlanStats {
     var stats = PlanStats{};
     const accept_all_matches = acceptsEveryHashMatch(options);
     var pos: usize = 0;
     while (pos < input.len) {
-        const search = findBestHashMatchWithLayoutAndHash(input, pos, options, head, prev, false, false, {}, anchor);
+        const search = findBestHashMatchWithLayoutAndHash(input, pos, options, head, prev, false, lazy_head, initialized, anchor);
         const best = search.best;
         const accepted = if (accept_all_matches) best.length != 0 else acceptMatch(input, pos, best.length, best.distance, options);
         if (accepted) {
@@ -1270,15 +1305,15 @@ fn hashGreedyPlanWithTablesReuse(
             stats.matches += 1;
             stats.matched_bytes += best.length;
             const end = @min(input.len, pos + best.length);
-            insertKnownHashWithLayout(pos, search.hash.?, head, prev, false, false, {});
+            insertKnownHashWithLayout(pos, search.hash.?, head, prev, false, lazy_head, initialized);
             const tail_start = if (end > pos + 4) end - 4 else pos + 1;
             pos += 1;
             if (pos < tail_start) pos = tail_start;
-            while (pos < end) : (pos += 1) insertHashWithLayout(input, pos, head, prev, false, false, {}, anchor);
+            while (pos < end) : (pos += 1) insertHashWithLayout(input, pos, head, prev, false, lazy_head, initialized, anchor);
         } else {
             try appendToken(tokens, allocator, .{ .literal = input[pos] });
             stats.literals += 1;
-            if (search.hash) |hash| insertKnownHashWithLayout(pos, hash, head, prev, false, false, {});
+            if (search.hash) |hash| insertKnownHashWithLayout(pos, hash, head, prev, false, lazy_head, initialized);
             pos += 1;
         }
     }
@@ -2174,6 +2209,32 @@ test "reusable tiny hash planner preserves tokens and capacity" {
     const capacity = tokens.capacity;
     _ = try hashGreedyPlanAutoTinyReuse(&tokens, std.testing.allocator, input, options);
     try std.testing.expectEqual(capacity, tokens.capacity);
+}
+
+test "reusable tiny hash scratch preserves tokens across inputs" {
+    const options = GreedyOptions{ .window_len = 32 * 1024, .max_chain = 64, .nice_len = 64, .max_candidates = 8 };
+    const inputs = [_][]const u8{
+        "abcabcXabcabcXabcabcX",
+        "different-different-different",
+        "qzxwvbnm1234567890QZXWVBNM",
+        "abcabcXabcabcXabcabcX",
+    };
+    var tokens: std.ArrayList(Token) = .empty;
+    defer tokens.deinit(std.testing.allocator);
+    var scratch: TinyGreedyScratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    var retained_capacity: ?usize = null;
+    for (inputs) |input| {
+        const reference = try hashGreedyPlanAutoTinyAlloc(std.testing.allocator, input, options);
+        defer reference.deinit(std.testing.allocator);
+        const stats = try hashGreedyPlanAutoTinyScratchReuse(&tokens, &scratch, std.testing.allocator, input, options);
+        try expectEqualTokenSlices(reference.tokens, tokens.items);
+        try std.testing.expectEqual(reference.stats, stats);
+        if (retained_capacity) |capacity|
+            try std.testing.expect(scratch.retainedCapacity() >= capacity)
+        else
+            retained_capacity = scratch.retainedCapacity();
+    }
 }
 
 test "reusable tiny lazy hash planner preserves tokens and capacity" {

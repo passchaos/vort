@@ -7129,3 +7129,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Eleven alternating fixed-CPU-8 A/B pairs preserve every locked wire size and
   improve the main fast/balanced/ratio corpus paths by roughly 0.5%–1.6%, with
   the clearest gains on source and log data.
+  The reusable Brotli fast encoder now owns a tiny-greedy hash scratch whose
+  4K head array and predecessor storage survive across calls. A per-plan 512-byte
+  initialization bitmap replaces clearing the 32 KiB head table, while the
+  one-shot and Zstd callers keep their existing paths. A multi-input oracle
+  verifies exact tokens and statistics after scratch reuse, and retained-capacity
+  reporting includes the predecessor buffer. Eleven alternating fixed-CPU-8
+  full-encoder A/B pairs preserve every fast output size while improving JSON/
+  source/log by about 62%/48%/56%; short dictionary/mixed inputs improve by
+  about 1.8x/2.0x and no-match inputs by about 4.4x.

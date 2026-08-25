@@ -899,12 +899,14 @@ pub const PlannedStreamEncoder = struct {
     tokens: std.ArrayList(lz77.Token) = .empty,
     commands: std.ArrayList(command_plan.Command) = .empty,
     output: std.ArrayList(u8) = .empty,
+    greedy_scratch: lz77.TinyGreedyScratch = .{},
 
     pub fn init(allocator: std.mem.Allocator) PlannedStreamEncoder {
         return .{ .allocator = allocator };
     }
 
     pub fn deinit(self: *PlannedStreamEncoder) void {
+        self.greedy_scratch.deinit(self.allocator);
         self.tokens.deinit(self.allocator);
         self.commands.deinit(self.allocator);
         self.output.deinit(self.allocator);
@@ -925,7 +927,7 @@ pub const PlannedStreamEncoder = struct {
         }
         if (input.len > 32 * 1024) return encodePlannedStreamWithOptionsAlloc(allocator, input, options);
         if (input.len < 5) return encodeStoredStreamAlloc(allocator, input);
-        const stats = try lz77.hashGreedyPlanAutoTinyReuse(&self.tokens, self.allocator, input, .{
+        const stats = try lz77.hashGreedyPlanAutoTinyScratchReuse(&self.tokens, &self.greedy_scratch, self.allocator, input, .{
             .window_len = input.len,
             .max_chain = 64,
             .nice_len = 64,
@@ -943,7 +945,8 @@ pub const PlannedStreamEncoder = struct {
     pub fn retainedCapacity(self: *const PlannedStreamEncoder) usize {
         return self.tokens.capacity * @sizeOf(lz77.Token) +
             self.commands.capacity * @sizeOf(command_plan.Command) +
-            self.output.capacity;
+            self.output.capacity +
+            self.greedy_scratch.retainedCapacity();
     }
 
     /// Encode a fast-level stream into retained encoder-owned output. The
@@ -956,7 +959,7 @@ pub const PlannedStreamEncoder = struct {
             try encodeStoredStreamAppend(self.allocator, &self.output, input);
             return self.output.items;
         }
-        const stats = try lz77.hashGreedyPlanAutoTinyReuse(&self.tokens, self.allocator, input, .{
+        const stats = try lz77.hashGreedyPlanAutoTinyScratchReuse(&self.tokens, &self.greedy_scratch, self.allocator, input, .{
             .window_len = input.len,
             .max_chain = 64,
             .nice_len = 64,
@@ -1002,7 +1005,7 @@ pub const PlannedStreamEncoder = struct {
             return encoded.len;
         }
         if (input.len < 5) return encodeStoredStreamInto(input, output);
-        const stats = try lz77.hashGreedyPlanAutoTinyReuse(&self.tokens, self.allocator, input, .{
+        const stats = try lz77.hashGreedyPlanAutoTinyScratchReuse(&self.tokens, &self.greedy_scratch, self.allocator, input, .{
             .window_len = input.len,
             .max_chain = 64,
             .nice_len = 64,
