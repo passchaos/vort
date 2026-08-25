@@ -4845,7 +4845,7 @@ const SequenceFseTable = struct {
     len: usize = 0,
     accuracy_log: u8 = 0,
 
-    fn symbol(self: SequenceFseTable, state: usize) Error!SequenceSymbol {
+    fn symbol(self: *const SequenceFseTable, state: usize) Error!SequenceSymbol {
         if (state >= self.len) return error.CorruptFrame;
         return self.entries[state];
     }
