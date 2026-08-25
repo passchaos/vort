@@ -597,6 +597,13 @@ const RepBeamState = struct {
     token: Token = .{ .literal = 0 },
 };
 
+comptime {
+    // `lengths[position]` is the sole initialized-slot count. Keeping this
+    // invariant explicit lets the hot parser iterate that slice without a
+    // redundant sentinel-cost branch on every state.
+    std.debug.assert(rep_beam_width <= std.math.maxInt(u8));
+}
+
 /// Bounded forward parser that keeps several recent-offset histories at each
 /// byte position. This lets Zstd callers pay once for a farther match when it
 /// enables a long run of cheap repeat-offset sequences.
@@ -625,7 +632,6 @@ pub fn optimalRepBeamPlanReuse(scratch: *RepBeamScratch, allocator: std.mem.Allo
         const match_count = try scratch.index.matchesAt(input, position, options, &matches);
         const current = states[position * rep_beam_width ..][0..lengths[position]];
         for (current, 0..) |state, slot| {
-            if (state.cost == std.math.maxInt(u32)) continue;
             try insertRepBeamState(states, lengths, position + 1, .{
                 .cost = state.cost + @as(u32, @intCast(fixedLiteralCost(input[position]))),
                 .rep0 = state.rep0,
@@ -649,7 +655,6 @@ pub fn optimalRepBeamPlanReuse(scratch: *RepBeamScratch, allocator: std.mem.Allo
     const final_states = states[input.len * rep_beam_width ..][0..lengths[input.len]];
     var best_slot: ?usize = null;
     for (final_states, 0..) |state, slot| {
-        if (state.cost == std.math.maxInt(u32)) continue;
         if (best_slot == null or state.cost < final_states[best_slot.?].cost) best_slot = slot;
     }
     scratch.reversed.clearRetainingCapacity();

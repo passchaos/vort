@@ -7033,6 +7033,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   primary text/JSON/binary beam time by about 22.8%/26.0%/25.6%; adaptive rows
   improved by about 14.5%–25.3%. A focused oracle compares compact and generic
   index matches at positions up to the u16 input boundary.
+  The beam hot loop now trusts the per-position active-slot count maintained by
+  `insertRepBeamState` instead of rechecking every yielded state against the
+  unreachable max-cost sentinel; final-state selection uses the same invariant.
+  Eleven alternating fixed-CPU-8 A/B pairs preserved every wire size and
+  improved median primary text/JSON/binary beam time by about 6.2%/2.9%/1.8%;
+  most adaptive rows also improved, while the smallest binary row was neutral.
   A second hash-width sweep reduced the same tables further to 8/11 bits. The
   complete locked size matrix remains unchanged. Eleven alternating fixed-CPU-8
   A/B pairs against the 10/12-bit version improved median primary text/JSON/
