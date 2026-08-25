@@ -6930,3 +6930,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   available before child assignment and repeated leaf-to-root walks disappear.
   The same exact heap oracle passes; fixed-CPU 10,000-run A/B adds roughly
   0.8%/0.9%/1.9% on JSON/source/log with unchanged streams.
+  Static-dictionary candidate verification now compares RFC prefix, transformed
+  base-word bytes, and suffix directly against the input instead of materializing
+  every candidate into a 64-byte scratch buffer before comparison. An exhaustive
+  oracle checks all 13,504 base words through all 121 transforms against the
+  existing materializing implementation. Seven alternating fixed-CPU-8,
+  2,000-iteration A/B pairs improved the 65-byte dictionary and 53-byte mixed
+  ratio cases by median 4.8% and 2.3%, respectively; uppercase was neutral and
+  selected stream sizes remained byte-for-byte unchanged.

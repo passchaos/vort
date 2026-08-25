@@ -294,6 +294,37 @@ pub fn transformWord(transform_index: usize, word: []const u8, out: []u8) ?[]con
     return out[0..written];
 }
 
+/// Compare a transformed dictionary word directly against input without first
+/// materializing the transformed bytes. Encoder lookup calls this for every
+/// base word sharing a four-byte hash bucket, so avoiding the 64-byte scratch
+/// copy makes rejected candidates substantially cheaper while retaining the
+/// exact byte-oriented RFC uppercase behavior used by `transformWord`.
+pub fn transformedWordMatches(transform_index: usize, word: []const u8, input: []const u8) ?usize {
+    if (transform_index >= transforms.len or word.len < 4 or word.len > 24) return null;
+    const spec = transforms[transform_index];
+    const metadata = transform_metadata[transform_index];
+    const skip = @min(if (spec.kind >= 12) @as(usize, spec.kind - 11) else 0, word.len);
+    var kept = word.len - skip;
+    if (spec.kind <= 9) kept -|= spec.kind;
+    const output_len = @as(usize, metadata.prefix_len) + kept + metadata.suffix_len;
+    if (output_len > input.len) return null;
+
+    const prefix = prefix_suffix[spec.prefix..][0..metadata.prefix_len];
+    if (!std.mem.eql(u8, prefix, input[0..prefix.len])) return null;
+    const source_word = word[skip..][0..kept];
+    const transformed_word = input[prefix.len..][0..kept];
+    const word_matches = switch (spec.kind) {
+        10 => firstUppercaseMatches(source_word, transformed_word),
+        11 => allUppercaseMatches(source_word, transformed_word),
+        else => std.mem.eql(u8, source_word, transformed_word),
+    };
+    if (!word_matches) return null;
+
+    const suffix = prefix_suffix[spec.suffix..][0..metadata.suffix_len];
+    if (!std.mem.eql(u8, suffix, input[prefix.len + kept .. output_len])) return null;
+    return output_len;
+}
+
 pub fn sizeBits(word_len: usize) ?u5 {
     if (word_len >= size_bits.len or size_bits[word_len] == 0) return null;
     return size_bits[word_len];
@@ -336,6 +367,52 @@ fn uppercase(bytes: []u8, all: bool) void {
         if (!all) return;
         offset += step;
     }
+}
+
+fn firstUppercaseMatches(source: []const u8, expected: []const u8) bool {
+    std.debug.assert(source.len == expected.len);
+    if (source.len == 0) return true;
+    const first = source[0];
+    const scalar_len: usize = if (first < 0xc0) 1 else if (first < 0xe0) 2 else 3;
+    const step = @min(scalar_len, source.len);
+    for (0..step) |i| {
+        var byte = source[i];
+        if (first < 0xc0) {
+            if (i == 0 and byte >= 'a' and byte <= 'z') byte ^= 32;
+        } else if (first < 0xe0) {
+            if (i == 1) byte ^= 32;
+        } else if (i == 2) byte ^= 5;
+        if (byte != expected[i]) return false;
+    }
+    return std.mem.eql(u8, source[step..], expected[step..]);
+}
+
+fn allUppercaseMatches(source: []const u8, expected: []const u8) bool {
+    std.debug.assert(source.len == expected.len);
+    var offset: usize = 0;
+    // Dictionary words are overwhelmingly ASCII. Keep that path branch-light,
+    // then preserve Brotli's byte-level UTF-8 transform for non-ASCII words.
+    while (offset < source.len and source[offset] < 0x80) : (offset += 1) {
+        const source_byte = source[offset];
+        const upper = if (source_byte >= 'a' and source_byte <= 'z') source_byte ^ 32 else source_byte;
+        if (upper != expected[offset]) return false;
+    }
+    while (offset < source.len) {
+        const first = source[offset];
+        const scalar_len: usize = if (first < 0xc0) 1 else if (first < 0xe0) 2 else 3;
+        const step = @min(scalar_len, source.len - offset);
+        for (0..step) |i| {
+            var byte = source[offset + i];
+            if (first < 0xc0) {
+                if (i == 0 and byte >= 'a' and byte <= 'z') byte ^= 32;
+            } else if (first < 0xe0) {
+                if (i == 1) byte ^= 32;
+            } else if (i == 2) byte ^= 5;
+            if (byte != expected[offset + i]) return false;
+        }
+        offset += step;
+    }
+    return true;
 }
 
 test "full Brotli dictionary resolves quality-four omit transforms" {
@@ -384,4 +461,30 @@ test "static dictionary resolved-word transform agrees with address transform" {
             }
         }
     }
+}
+
+pub fn testDirectTransformedComparison() !void {
+    var transformed: [64]u8 = undefined;
+    var mismatched: [64]u8 = undefined;
+    for (4..25) |word_len| {
+        const bits = sizeBits(word_len).?;
+        const word_count = @as(usize, 1) << bits;
+        for (0..transform_count) |transform_index| {
+            // Walk every base word here, not just representative addresses:
+            // the direct comparator is now the encoder's acceptance oracle.
+            for (0..word_count) |word_index| {
+                const word = baseWord(word_len, word_index).?;
+                const output = transformWord(transform_index, word, &transformed).?;
+                try std.testing.expectEqual(output.len, transformedWordMatches(transform_index, word, output).?);
+                if (output.len == 0) continue;
+                @memcpy(mismatched[0..output.len], output);
+                mismatched[output.len - 1] +%= 1;
+                try std.testing.expect(transformedWordMatches(transform_index, word, mismatched[0..output.len]) == null);
+            }
+        }
+    }
+}
+
+test "static dictionary direct transformed comparison agrees with materialization" {
+    try testDirectTransformedComparison();
 }

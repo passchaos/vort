@@ -6584,6 +6584,10 @@ test "br ratio planner mixes LZ77 and static dictionary commands" {
     try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
+test "br static dictionary direct transformed comparison is exhaustive over transform shapes" {
+    try static_dictionary.testDirectTransformedComparison();
+}
+
 test "br planner-backed encoder emits regular distances" {
     const prefix = "abcd" ** 10;
     const payload = prefix ++ "aa" ++ prefix;

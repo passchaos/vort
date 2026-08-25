@@ -112,7 +112,6 @@ pub const Index = struct {
     }
 
     fn findCandidatesForCase(self: *const Index, input: []const u8, prefix_len: usize, case_kind: static_dictionary.TransformCaseKind, hash_bytes: []const u8, best: *?static_dictionary.Match) void {
-        var scratch: [64]u8 = undefined;
         var entry = self.heads[hashPrefix(hash_bytes)];
         while (entry != no_entry) : (entry = self.next[entry]) {
             const base = unpackBaseWord(self.words[entry]);
@@ -131,16 +130,15 @@ pub const Index = struct {
                     if (suffix_offset + metadata.suffix_len > input.len) continue;
                     if (!static_dictionary.transformSuffixMatches(metadata, input[suffix_offset..])) continue;
                 }
-                const transformed = static_dictionary.transformWord(transform_index, word, &scratch) orelse continue;
+                const output_len = static_dictionary.transformedWordMatches(transform_index, word, input) orelse continue;
                 // RFC transforms may omit the complete base word. Those zero-
                 // length results cannot advance the planner and would otherwise
                 // create an infinite sequence of dictionary commands.
-                if (transformed.len < 4) continue;
-                if (transformed.len > input.len or !std.mem.eql(u8, transformed, input[0..transformed.len])) continue;
-                if (best.* == null or transformed.len > best.*.?.output_len or
-                    (transformed.len == best.*.?.output_len and address < best.*.?.address))
+                if (output_len < 4) continue;
+                if (best.* == null or output_len > best.*.?.output_len or
+                    (output_len == best.*.?.output_len and address < best.*.?.address))
                 {
-                    best.* = .{ .output_len = @intCast(transformed.len), .copy_len = @intCast(base.copy_len), .address = address };
+                    best.* = .{ .output_len = @intCast(output_len), .copy_len = @intCast(base.copy_len), .address = address };
                 }
             }
         }
