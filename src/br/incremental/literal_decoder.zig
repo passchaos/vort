@@ -1,0 +1,224 @@
+const std = @import("std");
+const core = @import("../../core.zig");
+
+/// Byte-progressive decoder for final Brotli compressed meta-blocks containing
+/// one insert-only command. The bounded prefix buffer is discarded logically
+/// once parsed; subsequent Huffman bits are held in a fixed 64-bit reservoir
+/// and decoded bytes are written directly to caller-owned output.
+pub fn Decoder(comptime Codec: type) type {
+    return struct {
+        options: Options,
+        phase: Phase = .header,
+        header_bytes: [Codec.max_stream_header_bytes]u8 = undefined,
+        header_len: usize = 0,
+        header: Codec.Header = undefined,
+        staged_bits: u64 = 0,
+        staged_bit_count: u7 = 0,
+        stream_bits: usize = 0,
+        output_remaining: usize = 0,
+        total_input: usize = 0,
+        total_output: usize = 0,
+        finished: bool = false,
+        last_error_name: []const u8 = "",
+        last_error_phase: Phase = .header,
+
+        const Self = @This();
+        pub const Error = Codec.Error;
+        pub const Options = struct {
+            max_output_len: usize = std.math.maxInt(usize),
+            expected_output_len: ?usize = null,
+        };
+        pub const Phase = enum { header, literals, padding, done };
+        pub const Snapshot = struct {
+            phase: Phase,
+            input_read: usize,
+            output_written: usize,
+            payload_remaining: usize,
+            retained_input_bytes: usize,
+            staged_bits: usize,
+            expected_output_len: ?usize,
+            last_error_name: []const u8,
+            last_error_phase: Phase,
+        };
+
+        const StepBitReader = struct {
+            input: []const u8,
+            input_read: *usize,
+            staged_bits: *u64,
+            staged_bit_count: *u7,
+            stream_bits: *usize,
+
+            pub fn readBits(self: *@This(), comptime T: type, count: u6) core.Error!T {
+                if (count > @bitSizeOf(T)) return error.CorruptFrame;
+                while (self.staged_bit_count.* < count) {
+                    if (self.input_read.* == self.input.len) return error.TruncatedFrame;
+                    if (self.staged_bit_count.* > 56) return error.CorruptFrame;
+                    self.staged_bits.* |= @as(u64, self.input[self.input_read.*]) << @intCast(self.staged_bit_count.*);
+                    self.staged_bit_count.* += 8;
+                    self.input_read.* += 1;
+                }
+                if (count == 0) return 0;
+                const mask = (@as(u64, 1) << @intCast(count)) - 1;
+                const value: T = @intCast(self.staged_bits.* & mask);
+                self.staged_bits.* >>= @intCast(count);
+                self.staged_bit_count.* -= count;
+                self.stream_bits.* += count;
+                return value;
+            }
+        };
+
+        pub fn init() Self {
+            return initWithOptions(.{});
+        }
+        pub fn initWithOptions(options: Options) Self {
+            return .{ .options = options };
+        }
+        pub fn reset(self: *Self) void {
+            self.* = .{ .options = self.options };
+        }
+        pub fn snapshot(self: *const Self) Snapshot {
+            return .{
+                .phase = self.phase,
+                .input_read = self.total_input,
+                .output_written = self.total_output,
+                .payload_remaining = self.output_remaining,
+                .retained_input_bytes = self.header_len,
+                .staged_bits = self.staged_bit_count,
+                .expected_output_len = self.options.expected_output_len,
+                .last_error_name = self.last_error_name,
+                .last_error_phase = self.last_error_phase,
+            };
+        }
+        pub fn diagnostics(self: *const Self) core.StreamingDiagnostics {
+            const snap = self.snapshot();
+            return .{
+                .phase_name = @tagName(snap.phase),
+                .frame_input_read = snap.input_read,
+                .output_written = snap.output_written,
+                .expected_output_len = snap.expected_output_len,
+                .payload_remaining = snap.payload_remaining,
+                .last_error_name = snap.last_error_name,
+                .last_error_phase_name = if (snap.last_error_name.len == 0) "" else @tagName(snap.last_error_phase),
+                .recoverability_hint_name = if (std.mem.eql(u8, snap.last_error_name, @errorName(error.TruncatedFrame))) "truncated_input" else if (std.mem.eql(u8, snap.last_error_name, @errorName(error.UnsupportedBrotliFeature))) "unsupported_feature" else if (snap.last_error_name.len == 0) "none" else "payload_corrupt",
+            };
+        }
+        pub fn finish(self: *Self) Error!void {
+            if (self.phase != .done) return self.fail(self.phase, error.TruncatedFrame);
+            self.finished = true;
+        }
+
+        pub fn step(self: *Self, input: []const u8, output: []u8) Error!core.StepResult {
+            if (self.finished) {
+                if (input.len != 0) return self.fail(.done, error.TrailingData);
+                return result(0, 0, .done);
+            }
+            var input_read: usize = 0;
+            var output_written: usize = 0;
+            // Count only bytes the caller may drop. Incomplete Huffman symbols
+            // restore `input_read`, so their tentative bytes remain uncounted
+            // and can be presented again on the next call.
+            defer self.total_input += input_read;
+            while (true) switch (self.phase) {
+                .header => {
+                    while (input_read < input.len) {
+                        if (self.header_len == self.header_bytes.len)
+                            return self.fail(.header, error.UnsupportedBrotliFeature);
+                        self.header_bytes[self.header_len] = input[input_read];
+                        self.header_len += 1;
+                        input_read += 1;
+                        const parsed = Codec.parseHeader(self.header_bytes[0..self.header_len]) catch |err| switch (err) {
+                            error.TruncatedFrame => continue,
+                            else => return self.fail(.header, err),
+                        };
+                        if (parsed.header.decoded_len > self.options.max_output_len)
+                            return self.fail(.header, error.OutputLimitExceeded);
+                        if (self.options.expected_output_len) |expected|
+                            if (parsed.header.decoded_len != expected) return self.fail(.header, error.SizeMismatch);
+
+                        const byte_index = parsed.bits_read / 8;
+                        const bit_index: u3 = @intCast(parsed.bits_read % 8);
+                        const available_bits = self.header_len * 8 - parsed.bits_read;
+                        if (available_bits > 63) return self.fail(.header, error.CorruptFrame);
+                        self.staged_bits = if (available_bits == 0) 0 else @as(u64, self.header_bytes[byte_index]) >> bit_index;
+                        self.staged_bit_count = @intCast(available_bits);
+                        self.stream_bits = parsed.bits_read;
+                        self.header = parsed.header;
+                        self.output_remaining = parsed.header.decoded_len;
+                        self.phase = .literals;
+                        break;
+                    }
+                    if (self.phase == .header) return result(input_read, output_written, .need_input);
+                },
+                .literals => {
+                    while (self.output_remaining != 0 and output_written < output.len) {
+                        const saved_input_read = input_read;
+                        const saved_staged_bits = self.staged_bits;
+                        const saved_staged_bit_count = self.staged_bit_count;
+                        const saved_stream_bits = self.stream_bits;
+                        var reader = StepBitReader{
+                            .input = input,
+                            .input_read = &input_read,
+                            .staged_bits = &self.staged_bits,
+                            .staged_bit_count = &self.staged_bit_count,
+                            .stream_bits = &self.stream_bits,
+                        };
+                        const literal = Codec.readLiteral(&self.header, &reader) catch |err| switch (err) {
+                            error.TruncatedFrame => {
+                                // A Huffman symbol is atomic: bytes tentatively
+                                // staged for an incomplete code are left to the
+                                // caller so they can be supplied again.
+                                input_read = saved_input_read;
+                                self.staged_bits = saved_staged_bits;
+                                self.staged_bit_count = saved_staged_bit_count;
+                                self.stream_bits = saved_stream_bits;
+                                return result(input_read, output_written, .need_input);
+                            },
+                            else => return self.fail(.literals, err),
+                        };
+                        output[output_written] = literal;
+                        output_written += 1;
+                        self.total_output += 1;
+                        self.output_remaining -= 1;
+                    }
+                    if (self.output_remaining != 0) {
+                        return result(input_read, output_written, .need_output);
+                    }
+                    self.phase = .padding;
+                },
+                .padding => {
+                    const padding_bits: u7 = @intCast((8 - self.stream_bits % 8) % 8);
+                    while (self.staged_bit_count < padding_bits and input_read < input.len) {
+                        self.staged_bits |= @as(u64, input[input_read]) << @intCast(self.staged_bit_count);
+                        self.staged_bit_count += 8;
+                        input_read += 1;
+                    }
+                    if (self.staged_bit_count < padding_bits) {
+                        return result(input_read, output_written, .need_input);
+                    }
+                    if (padding_bits != 0) {
+                        const mask = (@as(u64, 1) << @intCast(padding_bits)) - 1;
+                        if ((self.staged_bits & mask) != 0) return self.fail(.padding, error.CorruptFrame);
+                        self.staged_bits >>= @intCast(padding_bits);
+                        self.staged_bit_count -= padding_bits;
+                    }
+                    if (self.staged_bit_count != 0 or input_read != input.len)
+                        return self.fail(.padding, error.TrailingData);
+                    self.phase = .done;
+                },
+                .done => {
+                    if (input_read != input.len) return self.fail(.done, error.TrailingData);
+                    return result(input_read, output_written, .done);
+                },
+            };
+        }
+
+        fn fail(self: *Self, phase: Phase, err: Error) Error {
+            self.last_error_name = @errorName(err);
+            self.last_error_phase = phase;
+            return err;
+        }
+        fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
+            return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = status };
+        }
+    };
+}

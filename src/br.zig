@@ -17,6 +17,8 @@ const encoder_stats = @import("br/encoder/stats.zig");
 const static_dictionary_matcher = @import("br/encoder/static_dictionary_matcher.zig");
 const incremental = @import("br/incremental/stream_decoder.zig");
 const incremental_tests = @import("br/incremental/tests.zig");
+const incremental_literal = @import("br/incremental/literal_decoder.zig");
+const incremental_literal_tests = @import("br/incremental/literal_tests.zig");
 const incremental_rle = @import("br/incremental/rle_decoder.zig");
 const incremental_rle_tests = @import("br/incremental/rle_tests.zig");
 const incremental_stored = @import("br/incremental/stored/decoder.zig");
@@ -49,8 +51,58 @@ const IncrementalCodec = struct {
 
 const br = @This();
 pub const IncrementalStreamDecoder = incremental.Decoder(IncrementalCodec);
+pub const IncrementalLiteralStreamDecoder = incremental_literal.Decoder(IncrementalLiteralCodec);
 pub const IncrementalRleStreamDecoder = incremental_rle.Decoder(IncrementalRleCodec);
 pub const IncrementalStoredStreamDecoder = incremental_stored.Decoder;
+
+const IncrementalLiteralCodec = struct {
+    pub const Error = br.Error;
+    pub const max_stream_header_bytes: usize = 4096;
+    pub const Header = struct {
+        decoded_len: usize,
+        literal_tree: PrefixCode(256),
+    };
+    pub const ParsedHeader = struct { header: Header, bits_read: usize };
+
+    /// Parse a final compressed meta-block whose only command inserts MLEN
+    /// literals. The complete compressed header is bounded independently of
+    /// the literal payload, which lets the incremental engine discard input as
+    /// soon as the header and each following literal have been consumed.
+    pub fn parseHeader(prefix: []const u8) IncrementalLiteralCodec.Error!ParsedHeader {
+        var reader = bitstream.BitReader.init(prefix);
+        try readWindowBits(&reader);
+        if (try reader.readBits(u1, 1) != 1 or try reader.readBits(u1, 1) != 0)
+            return error.UnsupportedBrotliFeature;
+        const mnibbles_code = try reader.readBits(u2, 2);
+        const mnibbles: usize = 4 + @as(usize, mnibbles_code);
+        if (mnibbles > 6) return error.UnsupportedBrotliFeature;
+        const len_minus_one = try reader.readBits(u32, @intCast(mnibbles * 4));
+        if (mnibbles > 4 and ((len_minus_one >> @intCast((mnibbles - 1) * 4)) & 0xf) == 0)
+            return error.CorruptFrame;
+        const decoded_len = std.math.add(usize, len_minus_one, 1) catch return error.IntegerOverflow;
+
+        var header = try readMinimalCompressedHeader(&reader);
+        if (header.literal_block.block_type_count != 1 or
+            header.command_block.block_type_count != 1 or
+            header.distance_block.block_type_count != 1) return error.UnsupportedBrotliFeature;
+        for (header.literal_context_map[0..64]) |tree_index|
+            if (tree_index != 0) return error.UnsupportedBrotliFeature;
+
+        const command_symbol = try readCommandSymbol(&header, &reader);
+        const lengths = try readInsertCopyLengths(command_symbol, &reader);
+        if (lengths.insert_len != decoded_len) return error.UnsupportedBrotliFeature;
+        return .{
+            .header = .{ .decoded_len = decoded_len, .literal_tree = header.literal_trees[0] },
+            .bits_read = reader.bitPosition(),
+        };
+    }
+
+    pub fn readLiteral(header: *const Header, reader: anytype) IncrementalLiteralCodec.Error!u8 {
+        const symbol = try header.literal_tree.decode(reader);
+        if (symbol > 0xff) return error.InvalidHuffmanCode;
+        return @intCast(symbol);
+    }
+};
 
 const IncrementalRleCodec = struct {
     pub const Error = br.Error;
@@ -154,6 +206,7 @@ pub const IncrementalStoredStreamEncoder = incremental_stored_encoder.Encoder(In
 
 test {
     _ = incremental_tests;
+    _ = incremental_literal_tests;
     _ = incremental_rle_tests;
     _ = incremental_stored_tests;
     _ = pattern;
@@ -191,6 +244,36 @@ pub const IncrementalTestSupport = struct {
         try writer.writeBits(allocator, 1, 2); // l
         try writer.writeBits(allocator, 1, 2); // l
         try writer.writeBits(allocator, 3, 2); // o
+        return try encoded.toOwnedSlice(allocator);
+    }
+
+    /// Build a final compressed block whose sole command inserts every byte.
+    /// The four-symbol literal tree keeps this fixture compact while exercising
+    /// incremental Huffman decoding rather than the single-symbol RLE path.
+    pub fn encodeCompressedLiteralCycle(allocator: std.mem.Allocator, len: usize) Error![]u8 {
+        if (len == 0 or len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
+        const command = commandEntryForLengths(len, 2) orelse return error.InvalidBlockPlan;
+        var encoded: std.ArrayList(u8) = .empty;
+        errdefer encoded.deinit(allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeWindowBits(allocator, &writer, default_window_bits);
+        try writeLastCompressedMetaBlockHeader(allocator, &writer, len);
+        try writeBlockTypeCount(allocator, &writer, 1);
+        try writeBlockTypeCount(allocator, &writer, 1);
+        try writeBlockTypeCount(allocator, &writer, 1);
+        try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+        try writer.writeBits(allocator, 0, 4); // NDIRECT
+        try writer.writeBits(allocator, 0, 2); // LSB6 literal context
+        try writeBlockTypeCount(allocator, &writer, 1);
+        try writeBlockTypeCount(allocator, &writer, 1);
+        try writeSimplePrefixRuntime(allocator, &writer, 256, "abcd", false);
+        try writeSimpleSingleSymbolPrefix(allocator, &writer, 704, command.symbol);
+        try writeSimpleSingleSymbolPrefix(allocator, &writer, 64, 0);
+        try writeCommandLengthExtras(allocator, &writer, command, len, 2);
+        const literal_codes = [_]u2{ 0, 2, 1, 3 };
+        var i: usize = 0;
+        while (i < len) : (i += 1) try writer.writeBits(allocator, literal_codes[i & 3], 2);
+        if (writer.bit_index != 0) writer.alignToByte();
         return try encoded.toOwnedSlice(allocator);
     }
 };
@@ -344,7 +427,7 @@ pub fn PrefixCode(comptime alphabet_size: usize) type {
 
         const Self = @This();
 
-        pub fn decode(self: *const Self, reader: *bitstream.BitReader) Error!u16 {
+        pub fn decode(self: *const Self, reader: anytype) Error!u16 {
             if (self.single_symbol) |symbol| return symbol;
             return try self.table.decodeValue(reader);
         }

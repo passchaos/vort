@@ -103,6 +103,7 @@ pub const BrotliPrefixCode = br.PrefixCode;
 pub const BrotliStoredStreamEncoder = br.StoredStreamEncoder;
 pub const BrotliStreamDecoder = br.StreamDecoder;
 pub const BrotliIncrementalStreamDecoder = br.IncrementalStreamDecoder;
+pub const BrotliIncrementalLiteralStreamDecoder = br.IncrementalLiteralStreamDecoder;
 pub const BrotliIncrementalRleStreamDecoder = br.IncrementalRleStreamDecoder;
 pub const BrotliIncrementalStoredStreamDecoder = br.IncrementalStoredStreamDecoder;
 pub const BrotliIncrementalStoredStreamEncoder = br.IncrementalStoredStreamEncoder;
@@ -139,6 +140,23 @@ test "root Brotli incremental RLE decoder streams compressed output" {
     }
     try decoder.finish();
     try std.testing.expectEqualSlices(u8, payload, &output);
+}
+
+test "root Brotli incremental literal decoder streams Huffman output" {
+    const encoded = try br.IncrementalTestSupport.encodeCompressedLiteralCycle(std.testing.allocator, 64);
+    defer std.testing.allocator.free(encoded);
+    var decoder = BrotliIncrementalLiteralStreamDecoder.initWithOptions(.{ .expected_output_len = 64 });
+    var output: [64]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(encoded.len, input_offset + 2);
+        const result = try decoder.step(encoded[input_offset..input_end], output[output_offset..][0..@min(5, output.len - output_offset)]);
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+    }
+    try decoder.finish();
+    for (output, 0..) |byte, i| try std.testing.expectEqual("abcd"[i & 3], byte);
 }
 
 test "root Brotli incremental stored encoder continues streams" {

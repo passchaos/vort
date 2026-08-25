@@ -13,9 +13,9 @@ major gaps before Vort can claim broad industry-best parity:
   currently covers stored streams, single-byte RLE, and externally gated short
   alternating patterns only.
 - True byte-progressive Brotli compressed-meta-block decoding remains future
-  work for general command streams; the stored subset and Vort's compressed
-  single-command RLE shape now stream directly, while the general incremental
-  facade still buffers a bounded complete payload.
+  work for general copy-command streams; the stored subset, insert-only Huffman
+  literals, and Vort's compressed single-command RLE shape now stream directly,
+  while the general incremental facade still buffers a bounded complete payload.
 - Incremental DEFLATE source throughput remains behind the local zlib-ng level-6
   comparison on stable runs, despite leading several binary/history shapes.
 - Zstd-compatible dictionary training, seekable/indexed framing, and broader
@@ -7173,3 +7173,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   through 65,536 bytes; limit, exact-size, truncation, trailing-data, and
   unsupported-shape tests pin the new API, while the existing Node differential
   gate continues to validate its production encoder wire format.
+  Extended true byte-progressive compressed decoding to final insert-only
+  meta-blocks. A bounded header parse retains the decoded literal Huffman tree,
+  then a fixed 64-bit reservoir consumes split payload bytes and emits literals
+  directly into caller output. Atomic symbol rollback preserves progress when a
+  Huffman code crosses an input boundary. Tests cover one-byte input, three-byte
+  output backpressure, insert/meta-block length boundaries through 65,536 bytes,
+  output limits, exact sizes, truncation, trailing data, and copy-command
+  rejection. General compressed streams with copy commands remain on the
+  existing bounded whole-frame facade.
