@@ -643,7 +643,12 @@ fn insertRepBeamState(states: []RepBeamState, lengths: []u8, position: usize, ca
         return;
     }
     const replacement: usize = @intFromBool(slots[1].cost > slots[0].cost);
-    if (candidate.cost < slots[replacement].cost) slots[replacement] = candidate;
+    // Preserve a distinct recent-offset history when its modeled cost is
+    // within two bits of the current beam boundary. Zstd's actual offset FSE
+    // coding can recover that tiny proxy deficit across later repcode runs.
+    const replacement_cost = slots[replacement].cost;
+    if (candidate.cost <= replacement_cost or candidate.cost - replacement_cost <= 2)
+        slots[replacement] = candidate;
 }
 
 pub fn optimalPlanReuse(scratch: *OptimalScratch, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
@@ -953,6 +958,17 @@ test "compile-time fixed length costs match scalar range" {
     for (min_match_len..max_match_len + 1) |length| {
         try std.testing.expectEqual(@as(u8, @intCast(fixedLengthSymbolCost(length))), fixed_length_costs[length]);
     }
+}
+
+test "rep beam keeps near-cost alternate recent-offset state" {
+    var states: [6]RepBeamState = undefined;
+    var lengths: [3]u8 = @splat(0);
+    try insertRepBeamState(&states, &lengths, 1, .{ .cost = 10, .rep0 = 4 });
+    try insertRepBeamState(&states, &lengths, 1, .{ .cost = 11, .rep0 = 8 });
+    try insertRepBeamState(&states, &lengths, 1, .{ .cost = 12, .rep0 = 16 });
+    try std.testing.expectEqual(@as(u8, 2), lengths[1]);
+    try std.testing.expectEqual(@as(u16, 16), states[rep_beam_width + 1].rep0);
+    try std.testing.expectEqual(@as(u32, 12), states[rep_beam_width + 1].cost);
 }
 
 fn fixedDistanceSymbolCost(distance: usize) usize {

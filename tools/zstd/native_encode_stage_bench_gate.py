@@ -28,6 +28,17 @@ DOUBLE_FAST_MAX_BYTES = {
     ("binary", "adaptive_0"): 15138,
     ("binary", "adaptive_1"): 11776,
 }
+REP_BEAM_MAX_BYTES = {
+    ("text", "primary"): 210,
+    ("text", "adaptive_0"): 2919,
+    ("text", "adaptive_1"): 1659,
+    ("json", "primary"): 633,
+    ("json", "adaptive_0"): 3672,
+    ("json", "adaptive_1"): 2156,
+    ("binary", "primary"): 8600,
+    ("binary", "adaptive_0"): 15138,
+    ("binary", "adaptive_1"): 11776,
+}
 
 
 def main() -> int:
@@ -75,6 +86,8 @@ def main() -> int:
             assert sequences > 0, row
         if row["stage"] == "double_fast":
             assert encoded_bytes <= DOUBLE_FAST_MAX_BYTES[(row["case"], row["candidate"])], row
+        if row["stage"] == "rep_beam":
+            assert encoded_bytes <= REP_BEAM_MAX_BYTES[(row["case"], row["candidate"])], row
 
     # The current level-9 policy is the subject of this benchmark. Pinning its
     # candidate labels to 128 KiB/4 KiB/8 KiB makes policy drift visible instead

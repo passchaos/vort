@@ -6991,3 +6991,10 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   most seven bytes larger per complete corpus. The stage benchmark and coverage
   gate expose the parser explicitly so later policy work can require measured
   parity instead of replacing the beam on an unverified speed result.
+  The two-state repeat beam now keeps a different recent-offset history when
+  its fixed-cost estimate is at most two bits above the current replacement
+  boundary. That small tolerance reflects the offset FSE savings that the
+  parser's fixed-bit proxy cannot see. It preserves all locked primary and
+  binary stage sizes while reducing the 8 KiB adaptive JSON candidate from
+  2,157 to 2,156 bytes. An explicit state-insertion test and per-stage size
+  ceilings make both the intended beam diversity and the wire result stable.
