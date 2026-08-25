@@ -7039,6 +7039,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Eleven alternating fixed-CPU-8 A/B pairs preserved every wire size and
   improved median primary text/JSON/binary beam time by about 6.2%/2.9%/1.8%;
   most adaptive rows also improved, while the smallest binary row was neutral.
+  The beam transition helpers are now explicitly inline and return `void`: both
+  mutate only bounded caller-owned arrays and have no error path, so the former
+  error-union calls added avoidable control-flow overhead on every literal and
+  match edge. Eleven alternating fixed-CPU-8 A/B pairs preserved every wire
+  size while improving median primary text/JSON/binary beam time by about
+  6.1%/2.6%/5.7%; adaptive text/JSON improved by roughly 1.6%–3.7%, with binary
+  adaptive rows neutral.
   When repeat-beam's sole indexed match already uses a state's current rep0,
   the explicit rep0 probe now reuses that work instead of repeating the same
   vectorized match-length scan and identical state insertion. Eleven alternating

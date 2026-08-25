@@ -633,7 +633,7 @@ pub fn optimalRepBeamPlanReuse(scratch: *RepBeamScratch, allocator: std.mem.Allo
         const match_count = if (can_match) try scratch.index.matchesAt(input, position, options, &matches) else 0;
         const current = states[position * rep_beam_width ..][0..lengths[position]];
         for (current, 0..) |state, slot| {
-            try insertRepBeamState(states, lengths, position + 1, .{
+            insertRepBeamState(states, lengths, position + 1, .{
                 .cost = state.cost + @as(u32, @intCast(fixedLiteralCost(input[position]))),
                 .rep0 = state.rep0,
                 .previous_position = @intCast(position),
@@ -642,13 +642,13 @@ pub fn optimalRepBeamPlanReuse(scratch: *RepBeamScratch, allocator: std.mem.Allo
             });
 
             for (matches[0..match_count]) |match| {
-                try extendRepBeamMatch(states, lengths, input, options, position, slot, state, match);
+                extendRepBeamMatch(states, lengths, input, options, position, slot, state, match);
             }
             const indexed_rep0 = match_count != 0 and matches[0].distance == state.rep0;
             if (can_match and state.rep0 <= position and !indexed_rep0) {
                 const length = matchLength(input, position - state.rep0, position, @min(maxMatch(options), input.len - position));
                 if (length >= minMatch(options)) {
-                    try extendRepBeamMatch(states, lengths, input, options, position, slot, state, .{ .length = @intCast(length), .distance = state.rep0 });
+                    extendRepBeamMatch(states, lengths, input, options, position, slot, state, .{ .length = @intCast(length), .distance = state.rep0 });
                 }
             }
         }
@@ -682,12 +682,12 @@ pub fn optimalRepBeamPlanReuse(scratch: *RepBeamScratch, allocator: std.mem.Allo
     return stats;
 }
 
-fn extendRepBeamMatch(states: []RepBeamState, lengths: []u8, _: []const u8, options: GreedyOptions, position: usize, slot: usize, state: RepBeamState, match: Token.Match) !void {
+inline fn extendRepBeamMatch(states: []RepBeamState, lengths: []u8, _: []const u8, options: GreedyOptions, position: usize, slot: usize, state: RepBeamState, match: Token.Match) void {
     if (match.length < minMatch(options) or match.distance == 0 or match.distance > position) return;
     const distance_cost: u32 = @intCast(if (match.distance == state.rep0) 1 else fixedDistanceSymbolCost(match.distance) + options.new_distance_penalty_bits);
     const match_cost: u32 = @as(u32, fixed_length_costs[match.length]) + distance_cost;
     const cost = state.cost + match_cost;
-    try insertRepBeamState(states, lengths, position + match.length, .{
+    insertRepBeamState(states, lengths, position + match.length, .{
         .cost = cost,
         .rep0 = match.distance,
         .previous_position = @intCast(position),
@@ -696,7 +696,7 @@ fn extendRepBeamMatch(states: []RepBeamState, lengths: []u8, _: []const u8, opti
     });
 }
 
-fn insertRepBeamState(states: []RepBeamState, lengths: []u8, position: usize, candidate: RepBeamState) !void {
+inline fn insertRepBeamState(states: []RepBeamState, lengths: []u8, position: usize, candidate: RepBeamState) void {
     const slots = states[position * rep_beam_width ..][0..rep_beam_width];
     const len = lengths[position];
     if (len == 0) {
@@ -1038,9 +1038,9 @@ test "compile-time fixed length costs match scalar range" {
 test "rep beam keeps near-cost alternate recent-offset state" {
     var states: [6]RepBeamState = undefined;
     var lengths: [3]u8 = @splat(0);
-    try insertRepBeamState(&states, &lengths, 1, .{ .cost = 10, .rep0 = 4 });
-    try insertRepBeamState(&states, &lengths, 1, .{ .cost = 11, .rep0 = 8 });
-    try insertRepBeamState(&states, &lengths, 1, .{ .cost = 12, .rep0 = 16 });
+    insertRepBeamState(&states, &lengths, 1, .{ .cost = 10, .rep0 = 4 });
+    insertRepBeamState(&states, &lengths, 1, .{ .cost = 11, .rep0 = 8 });
+    insertRepBeamState(&states, &lengths, 1, .{ .cost = 12, .rep0 = 16 });
     try std.testing.expectEqual(@as(u8, 2), lengths[1]);
     try std.testing.expectEqual(@as(u16, 16), states[rep_beam_width + 1].rep0);
     try std.testing.expectEqual(@as(u32, 12), states[rep_beam_width + 1].cost);
