@@ -7017,6 +7017,14 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   3,673/2,158 bytes. Eleven alternating fixed-CPU-8 A/B pairs improved median
   primary text/JSON/binary stage time by about 20.9%/5.8%/1.7%, and adaptive
   rows by roughly 14.5% to 44.0%.
+  The repeat-offset beam parser now exposes caller-owned reusable scratch for
+  its states, per-position occupancy, 4 KiB match index, and reconstructed token
+  stream. The stage benchmark exercises that reuse across repetitions rather
+  than paying four allocator lifecycles per block. Eleven alternating
+  fixed-CPU-8 A/B pairs preserved every locked wire size while improving
+  primary text/JSON/binary beam time by about 22.0%/25.4%/21.6%; adaptive rows
+  improved by roughly 10.7%–25.4%. The allocating API remains as a convenience
+  wrapper and an exact token/capacity test protects scratch reuse behavior.
   A second hash-width sweep reduced the same tables further to 8/11 bits. The
   complete locked size matrix remains unchanged. Eleven alternating fixed-CPU-8
   A/B pairs against the 10/12-bit version improved median primary text/JSON/

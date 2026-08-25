@@ -77,6 +77,21 @@ pub const OptimalScratch = struct {
     }
 };
 
+pub const RepBeamScratch = struct {
+    states: std.ArrayList(RepBeamState) = .empty,
+    lengths: std.ArrayList(u8) = .empty,
+    index: HashIndex = .{},
+    reversed: std.ArrayList(Token) = .empty,
+
+    pub fn deinit(self: *RepBeamScratch, allocator: std.mem.Allocator) void {
+        self.reversed.deinit(allocator);
+        self.index.deinit(allocator);
+        self.lengths.deinit(allocator);
+        self.states.deinit(allocator);
+        self.* = .{};
+    }
+};
+
 pub const HashIndex = struct {
     head: std.ArrayList(isize) = .empty,
     prev: std.ArrayList(isize) = .empty,
@@ -538,23 +553,28 @@ const RepBeamState = struct {
 /// byte position. This lets Zstd callers pay once for a farther match when it
 /// enables a long run of cheap repeat-offset sequences.
 pub fn optimalRepBeamPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
+    var scratch: RepBeamScratch = .{};
+    defer scratch.deinit(allocator);
+    const stats = try optimalRepBeamPlanReuse(&scratch, allocator, input, options);
+    return .{ .tokens = try allocator.dupe(Token, scratch.reversed.items), .stats = stats };
+}
+
+pub fn optimalRepBeamPlanReuse(scratch: *RepBeamScratch, allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
     if (input.len == 0 or input.len > rep_beam_input_max) return error.InvalidBlockPlan;
-    var index: HashIndex = .{};
-    defer index.deinit(allocator);
-    try index.buildWithHeadLen(allocator, input, 4096);
+    try scratch.index.buildWithHeadLen(allocator, input, 4096);
 
     const state_count = std.math.mul(usize, input.len + 1, rep_beam_width) catch return error.IntegerOverflow;
-    const states = try allocator.alloc(RepBeamState, state_count);
-    defer allocator.free(states);
-    const lengths = try allocator.alloc(u8, input.len + 1);
-    defer allocator.free(lengths);
+    try scratch.states.resize(allocator, state_count);
+    try scratch.lengths.resize(allocator, input.len + 1);
+    const states = scratch.states.items;
+    const lengths = scratch.lengths.items;
     @memset(lengths, 0);
     states[0].cost = 0;
     lengths[0] = 1;
 
     var matches: [rep_beam_match_candidates]Token.Match = undefined;
     for (0..input.len) |position| {
-        const match_count = try index.matchesAt(input, position, options, &matches);
+        const match_count = try scratch.index.matchesAt(input, position, options, &matches);
         const current = states[position * rep_beam_width ..][0..lengths[position]];
         for (current, 0..) |state, slot| {
             if (state.cost == std.math.maxInt(u32)) continue;
@@ -584,27 +604,27 @@ pub fn optimalRepBeamPlanAlloc(allocator: std.mem.Allocator, input: []const u8, 
         if (state.cost == std.math.maxInt(u32)) continue;
         if (best_slot == null or state.cost < final_states[best_slot.?].cost) best_slot = slot;
     }
-    var reversed = try initTokenList(allocator, input.len);
-    defer reversed.deinit(allocator);
+    scratch.reversed.clearRetainingCapacity();
+    try scratch.reversed.ensureTotalCapacity(allocator, @min(input.len, 4096));
     var position = input.len;
     var slot = best_slot orelse return error.InvalidBlockPlan;
     while (position != 0) {
         const state = states[position * rep_beam_width + slot];
-        try appendToken(&reversed, allocator, state.token);
+        try appendToken(&scratch.reversed, allocator, state.token);
         position = state.previous_position;
         slot = state.previous_slot;
     }
-    std.mem.reverse(Token, reversed.items);
+    std.mem.reverse(Token, scratch.reversed.items);
 
     var stats: PlanStats = .{};
-    for (reversed.items) |token| switch (token) {
+    for (scratch.reversed.items) |token| switch (token) {
         .literal => stats.literals += 1,
         .match => |match| {
             stats.matches += 1;
             stats.matched_bytes += match.length;
         },
     };
-    return .{ .tokens = try reversed.toOwnedSlice(allocator), .stats = stats };
+    return stats;
 }
 
 fn extendRepBeamMatch(states: []RepBeamState, lengths: []u8, _: []const u8, options: GreedyOptions, position: usize, slot: usize, state: RepBeamState, match: Token.Match) !void {
@@ -969,6 +989,29 @@ test "rep beam keeps near-cost alternate recent-offset state" {
     try std.testing.expectEqual(@as(u8, 2), lengths[1]);
     try std.testing.expectEqual(@as(u16, 16), states[rep_beam_width + 1].rep0);
     try std.testing.expectEqual(@as(u32, 12), states[rep_beam_width + 1].cost);
+}
+
+test "rep beam reusable scratch preserves tokens and capacity" {
+    const input = ("abcdefgh-abcdefgh-" ** 64) ++ ("0123456789abcdef" ** 32);
+    const options: GreedyOptions = .{ .min_match = 4, .new_distance_penalty_bits = 4 };
+    const reference = try optimalRepBeamPlanAlloc(std.testing.allocator, input, options);
+    defer reference.deinit(std.testing.allocator);
+
+    var scratch: RepBeamScratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    const first_stats = try optimalRepBeamPlanReuse(&scratch, std.testing.allocator, input, options);
+    try std.testing.expectEqual(reference.stats, first_stats);
+    try std.testing.expectEqualSlices(Token, reference.tokens, scratch.reversed.items);
+    const states_capacity = scratch.states.capacity;
+    const lengths_capacity = scratch.lengths.capacity;
+    const tokens_capacity = scratch.reversed.capacity;
+
+    const second_stats = try optimalRepBeamPlanReuse(&scratch, std.testing.allocator, input, options);
+    try std.testing.expectEqual(first_stats, second_stats);
+    try std.testing.expectEqualSlices(Token, reference.tokens, scratch.reversed.items);
+    try std.testing.expectEqual(states_capacity, scratch.states.capacity);
+    try std.testing.expectEqual(lengths_capacity, scratch.lengths.capacity);
+    try std.testing.expectEqual(tokens_capacity, scratch.reversed.capacity);
 }
 
 fn fixedDistanceSymbolCost(distance: usize) usize {
