@@ -53,6 +53,7 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
         pub const Encoder = struct {
             codes: [max_symbols]u16 = @splat(0),
             bits: [max_symbols]u4 = @splat(0),
+            const max_sparse_symbols = 64;
 
             pub fn init(lengths: []const u4) Error!Encoder {
                 @setEvalBranchQuota(20_000);
@@ -87,6 +88,52 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
                 var encoder = Encoder{};
                 for (lengths, 0..) |code_bits, symbol| {
                     if (code_bits == 0) continue;
+                    encoder.codes[symbol] = reverseBits(next_code[code_bits], code_bits);
+                    encoder.bits[symbol] = code_bits;
+                    next_code[code_bits] += 1;
+                }
+                return encoder;
+            }
+
+            /// Build canonical codes for a trusted sparse symbol set. Entries
+            /// outside `active_symbols` remain undefined and must never be
+            /// queried; this avoids clearing and scanning a 256+ entry dense
+            /// encoder when a format planner already owns the exact alphabet.
+            pub fn initSparseTrusted(lengths: []const u4, active_symbols: []const u16) Error!Encoder {
+                if (lengths.len > max_symbols or active_symbols.len > max_sparse_symbols) return error.CorruptFrame;
+                if (active_symbols.len == 0) return .{};
+
+                var symbols: [max_sparse_symbols]u16 = undefined;
+                @memcpy(symbols[0..active_symbols.len], active_symbols);
+                // Canonical codes are assigned by increasing symbol value,
+                // while Brotli's planner alphabet is frequency-ordered.
+                for (symbols[1..active_symbols.len], 1..) |symbol, i| {
+                    var j = i;
+                    while (j != 0 and symbol < symbols[j - 1]) : (j -= 1) symbols[j] = symbols[j - 1];
+                    symbols[j] = symbol;
+                }
+
+                var counts: [max_code_bits + 1]u16 = @splat(0);
+                for (symbols[0..active_symbols.len], 0..) |symbol, i| {
+                    if (symbol >= lengths.len or (i != 0 and symbol == symbols[i - 1])) return error.CorruptFrame;
+                    const code_bits = lengths[symbol];
+                    if (code_bits == 0 or code_bits > max_code_bits) return error.CorruptFrame;
+                    counts[code_bits] += 1;
+                }
+
+                var available: i32 = 1;
+                var code: u16 = 0;
+                var next_code: [max_code_bits + 1]u16 = @splat(0);
+                for (1..max_code_bits + 1) |code_bits| {
+                    available = (available << 1) - @as(i32, counts[code_bits]);
+                    if (available < 0) return error.InvalidHuffmanCode;
+                    code = (code + counts[code_bits - 1]) << 1;
+                    next_code[code_bits] = code;
+                }
+
+                var encoder: Encoder = undefined;
+                for (symbols[0..active_symbols.len]) |symbol| {
+                    const code_bits = lengths[symbol];
                     encoder.codes[symbol] = reverseBits(next_code[code_bits], code_bits);
                     encoder.bits[symbol] = code_bits;
                     next_code[code_bits] += 1;
@@ -202,6 +249,49 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
             return error.InvalidHuffmanCode;
         }
     };
+}
+
+test "sparse trusted encoder matches dense canonical codes" {
+    var lengths: [704]u4 = @splat(0);
+    const active = [_]u16{ 500, 3, 241, 17, 700, 99 };
+    for (active) |symbol| lengths[symbol] = if (symbol == 3 or symbol == 17) 2 else 3;
+
+    const dense = try HuffmanTable(704).Encoder.init(&lengths);
+    const sparse = try HuffmanTable(704).Encoder.initSparseTrusted(&lengths, &active);
+    for (active) |symbol| {
+        try std.testing.expectEqual(dense.bits[symbol], sparse.bits[symbol]);
+        try std.testing.expectEqual(dense.codes[symbol], sparse.codes[symbol]);
+    }
+}
+
+test "sparse trusted encoder matches dense randomized alphabets" {
+    var state: u32 = 0x6a09_e667;
+    for (0..64) |round| {
+        var frequencies: [704]u32 = @splat(0);
+        var active: [64]u16 = undefined;
+        const active_len: usize = 5 + state % 60;
+        for (active[0..active_len], 0..) |*symbol, i| {
+            // 37 is coprime to 704, so every symbol in one round is unique.
+            symbol.* = @intCast((round * 53 + i * 37) % frequencies.len);
+            state = state *% 1_664_525 +% 1_013_904_223;
+            frequencies[symbol.*] = 1 + (state >> 20);
+        }
+        const lengths = treeCodeLengths(704, &frequencies, max_code_bits);
+        const dense = try HuffmanTable(704).Encoder.init(&lengths);
+        const sparse = try HuffmanTable(704).Encoder.initSparseTrusted(&lengths, active[0..active_len]);
+        for (active[0..active_len]) |symbol| {
+            try std.testing.expectEqual(dense.bits[symbol], sparse.bits[symbol]);
+            try std.testing.expectEqual(dense.codes[symbol], sparse.codes[symbol]);
+        }
+    }
+}
+
+test "sparse trusted encoder rejects invalid active sets" {
+    var lengths: [8]u4 = @splat(0);
+    lengths[1] = 1;
+    try std.testing.expectError(error.CorruptFrame, HuffmanTable(8).Encoder.initSparseTrusted(&lengths, &.{ 1, 1 }));
+    try std.testing.expectError(error.CorruptFrame, HuffmanTable(8).Encoder.initSparseTrusted(&lengths, &.{2}));
+    try std.testing.expectError(error.CorruptFrame, HuffmanTable(8).Encoder.initSparseTrusted(&lengths, &.{8}));
 }
 
 pub fn FastDecoder(comptime max_symbols: usize, comptime lookup_bits: u4) type {

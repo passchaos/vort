@@ -7089,3 +7089,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   0.6%/2.0%/0.8%, respectively. The public generic writer keeps its validating
   scan, while the new precomputed-stop entry point validates the supplied
   boundary before encoding.
+  Canonical Huffman encoder construction now has a trusted sparse path for
+  planners that already own at most 64 active symbols. Brotli uses it for
+  literal, command, distance, and UTF-8 context trees, avoiding repeated dense
+  scans and zero-fills across 256- and 704-entry encoder tables while retaining
+  the generic constructor for larger alphabets. Randomized sparse-versus-dense
+  oracle tests pin identical canonical codes. Eleven alternating fixed-CPU-8
+  A/B pairs preserve all fast/balanced/ratio wire sizes and improve fast JSON/
+  source/log throughput by about 4.8%/8.0%/3.4%; balanced improves about
+  3.1%/8.0%/1.0%, and ratio improves about 3.6%/9.2%/0.3%.

@@ -1285,6 +1285,12 @@ fn encodeCommandPlanWithOptionsAppend(allocator: std.mem.Allocator, out: *std.Ar
     try encodeCommandPlanWithOptionsWrite(allocator, &writer, input, commands, io, stats, options);
 }
 
+fn initPlannedLiteralEncoder(lengths: *const [256]u4, alphabet: *const command_plan.PrefixAlphabet) Error!huffman.HuffmanTable(256).Encoder {
+    if (alphabet.len <= 1) return .{};
+    if (alphabet.len <= 64) return huffman.HuffmanTable(256).Encoder.initSparseTrusted(lengths, alphabet.symbols[0..alphabet.len]);
+    return huffman.HuffmanTable(256).Encoder.init(lengths);
+}
+
 fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error!void {
     if (commands.len == 0) return error.InvalidBlockPlan;
     var literal_frequencies: [256]u32 = @splat(0);
@@ -1362,13 +1368,23 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     if (io) |active| stats.header_ns = elapsedNs(header_start.?, active);
 
     const encoder_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
-    const literal_encoder = try huffman.HuffmanTable(256).Encoder.init(&literal_lengths);
+    const literal_encoder = try initPlannedLiteralEncoder(&literal_lengths, &literal_alphabet);
     const literal_context_encoders = if (options.use_utf8_text_contexts) [2]huffman.HuffmanTable(256).Encoder{
-        try huffman.HuffmanTable(256).Encoder.init(&literal_context_lengths[0]),
-        try huffman.HuffmanTable(256).Encoder.init(&literal_context_lengths[1]),
+        try initPlannedLiteralEncoder(&literal_context_lengths[0], &literal_context_alphabets[0]),
+        try initPlannedLiteralEncoder(&literal_context_lengths[1], &literal_context_alphabets[1]),
     } else undefined;
-    const command_encoder = if (command_alphabet.len <= 4) huffman.HuffmanTable(704).Encoder{} else try huffman.HuffmanTable(704).Encoder.init(&command_lengths);
-    const distance_encoder = if (distance_alphabet.len <= 4) huffman.HuffmanTable(max_distance_alphabet_size).Encoder{} else try huffman.HuffmanTable(max_distance_alphabet_size).Encoder.init(&distance_lengths);
+    const command_encoder = if (command_alphabet.len <= 4)
+        huffman.HuffmanTable(704).Encoder{}
+    else if (command_alphabet.len <= 64)
+        try huffman.HuffmanTable(704).Encoder.initSparseTrusted(&command_lengths, command_alphabet.symbols[0..command_alphabet.len])
+    else
+        try huffman.HuffmanTable(704).Encoder.init(&command_lengths);
+    const distance_encoder = if (distance_alphabet.len <= 4)
+        huffman.HuffmanTable(max_distance_alphabet_size).Encoder{}
+    else if (distance_alphabet.len <= 64)
+        try huffman.HuffmanTable(max_distance_alphabet_size).Encoder.initSparseTrusted(&distance_lengths, distance_alphabet.symbols[0..distance_alphabet.len])
+    else
+        try huffman.HuffmanTable(max_distance_alphabet_size).Encoder.init(&distance_lengths);
     if (io) |active| stats.encoder_ns = elapsedNs(encoder_start.?, active);
     const payload_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     last_distances = initial_last_distances;
