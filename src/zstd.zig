@@ -5575,9 +5575,11 @@ fn readInitialSequenceState(reader: *ReverseBitReader, mode: SymbolMode, fse_acc
 fn readModeSequence(state: *SequenceDecodeState) Error!DecodedSequence {
     if (state.remaining == 0) return error.CorruptFrame;
 
-    const ll_symbol = try currentLiteralSymbol(state.*);
-    const of_symbol = try currentOffsetSymbol(state.*);
-    const ml_symbol = try currentMatchSymbol(state.*);
+    // SequenceDecodeState embeds three FSE decode tables. Passing it by value
+    // here made every symbol lookup copy the complete tables on hot paths.
+    const ll_symbol = try currentLiteralSymbol(state);
+    const of_symbol = try currentOffsetSymbol(state);
+    const ml_symbol = try currentMatchSymbol(state);
 
     // Zstandard stores the offset extra bits before match/literal extra bits,
     // but repeat-offset selection depends on the *fully decoded* literal
@@ -5601,7 +5603,7 @@ fn readModeSequence(state: *SequenceDecodeState) Error!DecodedSequence {
     return .{ .literal_len = literal_len, .match_len = match_len, .match_offset = match_offset };
 }
 
-fn currentLiteralSymbol(state: SequenceDecodeState) Error!SequenceSymbol {
+fn currentLiteralSymbol(state: *const SequenceDecodeState) Error!SequenceSymbol {
     return switch (state.spec.ll_mode) {
         .predefined => try defaultLiteralLengthSymbol(state.ll_state),
         .rle => state.spec.literal_rle orelse error.CorruptFrame,
@@ -5610,7 +5612,7 @@ fn currentLiteralSymbol(state: SequenceDecodeState) Error!SequenceSymbol {
     };
 }
 
-fn currentOffsetSymbol(state: SequenceDecodeState) Error!SequenceSymbol {
+fn currentOffsetSymbol(state: *const SequenceDecodeState) Error!SequenceSymbol {
     return switch (state.spec.of_mode) {
         .predefined => try defaultOffsetSymbol(state.of_state),
         .rle => state.spec.offset_rle orelse error.CorruptFrame,
@@ -5619,7 +5621,7 @@ fn currentOffsetSymbol(state: SequenceDecodeState) Error!SequenceSymbol {
     };
 }
 
-fn currentMatchSymbol(state: SequenceDecodeState) Error!SequenceSymbol {
+fn currentMatchSymbol(state: *const SequenceDecodeState) Error!SequenceSymbol {
     return switch (state.spec.ml_mode) {
         .predefined => try defaultMatchLengthSymbol(state.ml_state),
         .rle => state.spec.match_rle orelse error.CorruptFrame,
