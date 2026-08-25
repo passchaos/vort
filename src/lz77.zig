@@ -644,7 +644,8 @@ pub fn optimalRepBeamPlanReuse(scratch: *RepBeamScratch, allocator: std.mem.Allo
             for (matches[0..match_count]) |match| {
                 try extendRepBeamMatch(states, lengths, input, options, position, slot, state, match);
             }
-            if (can_match and state.rep0 <= position) {
+            const indexed_rep0 = match_count != 0 and matches[0].distance == state.rep0;
+            if (can_match and state.rep0 <= position and !indexed_rep0) {
                 const length = matchLength(input, position - state.rep0, position, @min(maxMatch(options), input.len - position));
                 if (length >= minMatch(options)) {
                     try extendRepBeamMatch(states, lengths, input, options, position, slot, state, .{ .length = @intCast(length), .distance = state.rep0 });
@@ -1097,6 +1098,18 @@ test "rep beam emits literal tail shorter than minimum match" {
     try std.testing.expectEqualSlices(u8, input, replayed);
     try std.testing.expectEqual(@as(usize, 7), plan.stats.literals);
     try std.testing.expectEqual(@as(usize, 1), plan.stats.matches);
+}
+
+test "rep beam deduplicates indexed recent offset matches" {
+    const input = "abcdefghabcdefghabcdefgh";
+    var scratch: RepBeamScratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    const stats = try optimalRepBeamPlanReuse(&scratch, std.testing.allocator, input, .{ .min_match = 4 });
+    try std.testing.expect(stats.matches >= 1);
+    try std.testing.expect(stats.matched_bytes >= 8);
+    const replayed = try replayAlloc(std.testing.allocator, scratch.reversed.items);
+    defer std.testing.allocator.free(replayed);
+    try std.testing.expectEqualSlices(u8, input, replayed);
 }
 
 fn fixedDistanceSymbolCost(distance: usize) usize {
