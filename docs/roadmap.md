@@ -6962,3 +6962,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   pairs improved level-9 primary mixed search by median 4.4% on text, 3.7% on
   JSON, and 33% on the no-mixed-candidate binary control; complete level-9
   encoding improved by 0.3%/1.7%/2.8%, with byte-identical output sizes.
+  A review of local upstream zstd (`v1.4.7-3025-g5233c58e`) confirmed that its
+  fastest strategy checks recent offsets in the main hash-match loop. Vort
+  level 1 now enables its bounded two-state repeat-offset beam as the equivalent
+  independent candidate, with exact block/frame arbitration retaining the old
+  winner whenever repcodes do not help. On the locked 32 KiB benchmark, level-1
+  JSON falls from 781 to 640 bytes and binary from 8,846 to 8,607 bytes while
+  text stays at 80 bytes. Eleven alternating fixed-CPU-8 runs improved complete
+  encode medians by roughly 23.8% for JSON, 3.1% for binary, and 1.1% for text;
+  decisive beam results also bypass the slower generic optimal pass.

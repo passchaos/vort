@@ -53,7 +53,10 @@ def main() -> int:
     assert int(json_rows[1]["vort_bytes"]) <= 13_688, json_rows
     assert int(json_rows[3]["vort_bytes"]) <= 13_688, json_rows
     assert int(json_rows[9]["vort_bytes"]) <= 13_506, json_rows
-    assert int(json_rows[1]["vort_bytes"]) <= 1_505, json_rows
+    # Level 1 mirrors upstream's fast-strategy repeat-offset probing through a
+    # bounded two-state candidate and now reaches the same locked JSON result
+    # as the ratio-oriented Vort level.
+    assert int(json_rows[1]["vort_bytes"]) <= 640, json_rows
     assert int(json_rows[3]["vort_bytes"]) <= 1_350, json_rows
     # The level-9 repeat-aware beam closes the structured JSON gap to one byte
     # over libzstd 1.5.5 on this locked corpus. Keep lower-level ceilings
@@ -64,7 +67,7 @@ def main() -> int:
     # but one byte of the repetitive-text gap to the locked libzstd row.
     assert int(text_rows[9]["vort_bytes"]) <= 80, text_rows
     binary_rows = {int(row["level"]): row for row in rows if row["case"] == "binary"}
-    assert int(binary_rows[1]["vort_bytes"]) <= 9_274, binary_rows
+    assert int(binary_rows[1]["vort_bytes"]) <= 8_607, binary_rows
     assert int(binary_rows[3]["vort_bytes"]) <= 9_116, binary_rows
     assert int(binary_rows[9]["vort_bytes"]) <= 8_607, binary_rows
     print(f"zstd_encode_bench_gate=ok rows={len(rows)} reference_version={rows[0]['reference_version']}")

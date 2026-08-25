@@ -3959,7 +3959,11 @@ fn nativeFrameOptionsForLevel(level: c_int, options: FrameOptions) Error!NativeF
             5 => 128,
             else => 96,
         };
-        native_options.rep_beam_search = level >= 9;
+        // Upstream zstd's fast strategy checks recent offsets directly in its
+        // match loop. Enable Vort's bounded two-state equivalent at level 1 as
+        // well as ratio levels; complete block/frame arbitration still rejects
+        // it whenever the repeat-aware stream is not smaller.
+        native_options.rep_beam_search = level == 1 or level >= 9;
     }
     return native_options;
 }
@@ -14815,7 +14819,7 @@ test "zstd compression levels map to increasing search budgets" {
     try std.testing.expectEqual(@as(usize, 16), level1.match_search_budget);
     try std.testing.expectEqual(@as(usize, 64), level3.match_search_budget);
     try std.testing.expectEqual(@as(usize, 96), level9.match_search_budget);
-    try std.testing.expect(!level1.rep_beam_search);
+    try std.testing.expect(level1.rep_beam_search);
     try std.testing.expect(!level3.rep_beam_search);
     try std.testing.expect(level9.rep_beam_search);
     try std.testing.expect(level3.match_search_budget > level1.match_search_budget);
@@ -14839,6 +14843,29 @@ test "zstd rep beam parser closes structured level nine ratio gap" {
     defer std.testing.allocator.free(encoded);
     try std.testing.expect(encoded.len <= 678);
     const decoded = try decodeFrameAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload.items, decoded);
+}
+
+test "zstd level one uses repeat-offset search on structured input" {
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    while (payload.items.len < 32 * 1024) {
+        var line: [128]u8 = undefined;
+        const index = payload.items.len / 64;
+        const formatted = try std.fmt.bufPrint(&line, "{{\"id\":{d},\"service\":\"vort\",\"message\":\"structured zstd encode corpus\"}}\n", .{index});
+        try payload.appendSlice(std.testing.allocator, formatted);
+    }
+
+    const with_repcodes = try encodeFrameWithLevelAlloc(std.testing.allocator, payload.items, 1);
+    defer std.testing.allocator.free(with_repcodes);
+    var without_options = try nativeFrameOptionsForLevel(1, .{});
+    without_options.rep_beam_search = false;
+    const without_repcodes = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, payload.items, without_options);
+    defer std.testing.allocator.free(without_repcodes.frame);
+    try std.testing.expect(with_repcodes.len < without_repcodes.frame.len);
+
+    const decoded = try decodeFrameAlloc(std.testing.allocator, with_repcodes);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload.items, decoded);
 }
