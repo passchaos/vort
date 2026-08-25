@@ -7050,6 +7050,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   A/B pairs against the 10/12-bit version improved median primary text/JSON/
   binary stage time by about 4.2%/1.0%/3.2%, with adaptive rows another
   1.1%–7.0% faster and the parser's stack tables reduced from 20 KiB to 9 KiB.
+  Repeat-beam's compact predecessor index now hashes the parser's actual
+  four-byte minimum-match prefix instead of the generic three-byte anchor. This
+  avoids walking false-collision chains that can never pass the fourth-byte
+  guard. Eleven alternating fixed-CPU-8 A/B pairs preserved every wire size and
+  improved median primary text/JSON/binary beam time by about 3.7%/5.1%/13.8%;
+  adaptive rows improved by roughly 2.9%–7.3%.
   Double-fast's zero-literal rep2 transition now snapshots old rep0/rep1 before
   replacing the queue. Zig aggregate assignment observes earlier element writes,
   so the previous expression could collapse `{rep0, rep1, rep2}` into three

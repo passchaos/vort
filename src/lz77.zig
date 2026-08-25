@@ -110,7 +110,7 @@ const RepBeamIndex = struct {
         @memset(&self.head, rep_beam_index_empty);
         self.input_len = input.len;
         for (0..input.len) |position| {
-            const hash = hashAtInput(input, position, self.head.len, .three) orelse continue;
+            const hash = hashAtInput(input, position, self.head.len, .four) orelse continue;
             self.prev.items[position] = self.head[hash];
             self.head[hash] = @intCast(position);
         }
