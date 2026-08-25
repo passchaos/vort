@@ -63,12 +63,15 @@ pub const GreedyPlan = struct {
 };
 
 pub const TinyGreedyScratch = struct {
-    head: [4096]i32 = undefined,
+    // Only positions with a complete 3-byte hash anchor are stored. At the
+    // 32 KiB input limit the largest stored position is 32765, so signed 16-bit
+    // entries preserve the `-1` sentinel and every reachable predecessor.
+    head: [4096]i16 = undefined,
     head_initialized: [hash_head_init_words]u64 = @splat(0),
-    prev: std.ArrayList(i32) = .empty,
+    prev: std.ArrayList(i16) = .empty,
 
     pub fn retainedCapacity(self: *const TinyGreedyScratch) usize {
-        return self.prev.capacity * @sizeOf(i32);
+        return self.prev.capacity * @sizeOf(i16);
     }
 
     pub fn deinit(self: *TinyGreedyScratch, allocator: std.mem.Allocator) void {
@@ -2212,7 +2215,7 @@ test "reusable tiny hash planner preserves tokens and capacity" {
 }
 
 test "reusable tiny hash scratch preserves tokens across inputs" {
-    try std.testing.expectEqual(@as(usize, 16 * 1024), @sizeOf(@FieldType(TinyGreedyScratch, "head")));
+    try std.testing.expectEqual(@as(usize, 8 * 1024), @sizeOf(@FieldType(TinyGreedyScratch, "head")));
     const options = GreedyOptions{ .window_len = 32 * 1024, .max_chain = 64, .nice_len = 64, .max_candidates = 8 };
     const inputs = [_][]const u8{
         "abcabcXabcabcXabcabcX",
@@ -2236,6 +2239,21 @@ test "reusable tiny hash scratch preserves tokens across inputs" {
         else
             retained_capacity = scratch.retainedCapacity();
     }
+}
+
+test "reusable tiny hash scratch covers maximum input position" {
+    var input: [32 * 1024]u8 = undefined;
+    for (&input, 0..) |*byte, i| byte.* = @truncate(i * 37 + i / 11);
+    const options = GreedyOptions{ .window_len = input.len, .max_chain = 64, .nice_len = 64, .max_candidates = 8 };
+    const reference = try hashGreedyPlanAutoTinyAlloc(std.testing.allocator, &input, options);
+    defer reference.deinit(std.testing.allocator);
+    var tokens: std.ArrayList(Token) = .empty;
+    defer tokens.deinit(std.testing.allocator);
+    var scratch: TinyGreedyScratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    const stats = try hashGreedyPlanAutoTinyScratchReuse(&tokens, &scratch, std.testing.allocator, &input, options);
+    try expectEqualTokenSlices(reference.tokens, tokens.items);
+    try std.testing.expectEqual(reference.stats, stats);
 }
 
 test "reusable tiny lazy hash planner preserves tokens and capacity" {
