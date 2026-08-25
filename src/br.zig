@@ -17,6 +17,8 @@ const encoder_stats = @import("br/encoder/stats.zig");
 const static_dictionary_matcher = @import("br/encoder/static_dictionary_matcher.zig");
 const incremental = @import("br/incremental/stream_decoder.zig");
 const incremental_tests = @import("br/incremental/tests.zig");
+const incremental_rle = @import("br/incremental/rle_decoder.zig");
+const incremental_rle_tests = @import("br/incremental/rle_tests.zig");
 const incremental_stored = @import("br/incremental/stored/decoder.zig");
 const incremental_stored_encoder = @import("br/incremental/stored/encoder.zig");
 const incremental_stored_tests = @import("br/incremental/stored/tests.zig");
@@ -47,7 +49,76 @@ const IncrementalCodec = struct {
 
 const br = @This();
 pub const IncrementalStreamDecoder = incremental.Decoder(IncrementalCodec);
+pub const IncrementalRleStreamDecoder = incremental_rle.Decoder(IncrementalRleCodec);
 pub const IncrementalStoredStreamDecoder = incremental_stored.Decoder;
+
+const IncrementalRleCodec = struct {
+    pub const Error = br.Error;
+    pub const max_stream_header_bytes: usize = 64;
+
+    pub const ParsedHeader = struct {
+        decoded_len: usize,
+        repeated_byte: u8,
+    };
+
+    /// Recognize the exact single-command compressed shape emitted by
+    /// `encodeRleStream*`. The progressive wrapper owns input splitting and
+    /// backpressure; this parser keeps wire-format knowledge next to the normal
+    /// Brotli reader and rejects broader compressed streams explicitly.
+    pub fn parseHeader(prefix: []const u8) IncrementalRleCodec.Error!struct { header: ParsedHeader, bits_read: usize } {
+        var reader = bitstream.BitReader.init(prefix);
+        try readWindowBits(&reader);
+        if (try reader.readBits(u1, 1) != 1 or try reader.readBits(u1, 1) != 0)
+            return error.UnsupportedBrotliFeature;
+        const mnibbles_code = try reader.readBits(u2, 2);
+        const mnibbles: usize = 4 + @as(usize, mnibbles_code);
+        if (mnibbles > 6) return error.UnsupportedBrotliFeature;
+        const len_minus_one = try reader.readBits(u32, @intCast(mnibbles * 4));
+        if (mnibbles > 4 and ((len_minus_one >> @intCast((mnibbles - 1) * 4)) & 0xf) == 0)
+            return error.CorruptFrame;
+        const decoded_len = std.math.add(usize, len_minus_one, 1) catch return error.IntegerOverflow;
+        if (decoded_len < 5) return error.UnsupportedBrotliFeature;
+
+        if (try readBlockTypeCount(&reader) != 1 or
+            try readBlockTypeCount(&reader) != 1 or
+            try readBlockTypeCount(&reader) != 1) return error.UnsupportedBrotliFeature;
+        if (try reader.readBits(u2, 2) != 0 or try reader.readBits(u4, 4) != 1)
+            return error.UnsupportedBrotliFeature;
+        if (try reader.readBits(u2, 2) != 0 or
+            try readBlockTypeCount(&reader) != 1 or
+            try readBlockTypeCount(&reader) != 1) return error.UnsupportedBrotliFeature;
+
+        const literal = try readSingleSymbolPrefixForIncremental(256, &reader);
+        const command_symbol = try readSingleSymbolPrefixForIncremental(704, &reader);
+        if (command_symbol >= command_lut.entries.len) return error.InvalidHuffmanCode;
+        const command = command_lut.entries[command_symbol];
+        if (command.insert_base != 1 or command.insert_extra_bits != 0 or command.distance_code != -1)
+            return error.UnsupportedBrotliFeature;
+        if (try readSingleSymbolPrefixForIncremental(65, &reader) != 16)
+            return error.UnsupportedBrotliFeature;
+        if (command.copy_base > decoded_len - 1) return error.CorruptFrame;
+        const copy_extra = if (command.copy_extra_bits == 0)
+            0
+        else
+            try reader.readBits(usize, command.copy_extra_bits);
+        if (command.copy_base + copy_extra != decoded_len - 1) return error.CorruptFrame;
+        return .{
+            .header = .{
+                .decoded_len = decoded_len,
+                .repeated_byte = @intCast(literal),
+            },
+            .bits_read = reader.bitPosition(),
+        };
+    }
+};
+
+fn readSingleSymbolPrefixForIncremental(comptime alphabet_size: usize, reader: *bitstream.BitReader) Error!u16 {
+    if (try reader.readBits(u2, 2) != 1) return error.UnsupportedBrotliFeature;
+    if (try reader.readBits(u2, 2) != 0) return error.UnsupportedBrotliFeature;
+    const symbol = try reader.readBits(u16, alphabetBits(alphabet_size));
+    if (symbol >= alphabet_size) return error.InvalidHuffmanCode;
+    return symbol;
+}
 
 const IncrementalStoredEncoderCodec = struct {
     pub const Error = br.Error;
@@ -83,6 +154,7 @@ pub const IncrementalStoredStreamEncoder = incremental_stored_encoder.Encoder(In
 
 test {
     _ = incremental_tests;
+    _ = incremental_rle_tests;
     _ = incremental_stored_tests;
     _ = pattern;
     _ = command_plan;

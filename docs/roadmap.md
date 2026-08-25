@@ -13,7 +13,9 @@ major gaps before Vort can claim broad industry-best parity:
   currently covers stored streams, single-byte RLE, and externally gated short
   alternating patterns only.
 - True byte-progressive Brotli compressed-meta-block decoding remains future
-  work; the general incremental facade buffers a bounded complete payload.
+  work for general command streams; the stored subset and Vort's compressed
+  single-command RLE shape now stream directly, while the general incremental
+  facade still buffers a bounded complete payload.
 - Incremental DEFLATE source throughput remains behind the local zlib-ng level-6
   comparison on stable runs, despite leading several binary/history shapes.
 - Zstd-compatible dictionary training, seekable/indexed framing, and broader
@@ -7162,3 +7164,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   every Brotli byte identical while making the standalone parser about 3.3x–
   3.6x faster and complete JSON/source/log encoding about 63%/48%/55% faster.
   A 32 KiB boundary oracle and the Zstd stage gate protect both specializations.
+  Added the first true byte-progressive compressed Brotli decode slice for the
+  single-command RLE streams emitted by `encodeRleStream*`. The decoder retains
+  at most a 64-byte encoded header, validates the exact command/literal/distance
+  shape and copy-extra length, and expands directly into caller output under
+  backpressure rather than buffering either the complete compressed frame or
+  decoded run. One- and two-byte input splits cover copy-length boundaries up
+  through 65,536 bytes; limit, exact-size, truncation, trailing-data, and
+  unsupported-shape tests pin the new API, while the existing Node differential
+  gate continues to validate its production encoder wire format.

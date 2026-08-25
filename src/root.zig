@@ -103,6 +103,7 @@ pub const BrotliPrefixCode = br.PrefixCode;
 pub const BrotliStoredStreamEncoder = br.StoredStreamEncoder;
 pub const BrotliStreamDecoder = br.StreamDecoder;
 pub const BrotliIncrementalStreamDecoder = br.IncrementalStreamDecoder;
+pub const BrotliIncrementalRleStreamDecoder = br.IncrementalRleStreamDecoder;
 pub const BrotliIncrementalStoredStreamDecoder = br.IncrementalStoredStreamDecoder;
 pub const BrotliIncrementalStoredStreamEncoder = br.IncrementalStoredStreamEncoder;
 
@@ -120,6 +121,24 @@ test "root Brotli incremental decoder continues framed payloads" {
     _ = try decoder.step(second, &.{});
     _ = try decoder.step("", &output);
     try std.testing.expectEqual(@as(usize, 2), decoder.snapshot().frame_count);
+}
+
+test "root Brotli incremental RLE decoder streams compressed output" {
+    const payload = "r" ** 128;
+    const encoded = try br.encodeRleStreamAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    var decoder = BrotliIncrementalRleStreamDecoder.initWithOptions(.{ .expected_output_len = payload.len });
+    var output: [payload.len]u8 = undefined;
+    var written: usize = 0;
+    var input_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(encoded.len, input_offset + 1);
+        const result = try decoder.step(encoded[input_offset..input_end], output[written..][0..@min(7, output.len - written)]);
+        input_offset += result.progress.input_read;
+        written += result.progress.output_written;
+    }
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, payload, &output);
 }
 
 test "root Brotli incremental stored encoder continues streams" {
