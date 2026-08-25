@@ -13,8 +13,9 @@ major gaps before Vort can claim broad industry-best parity:
   currently covers stored streams, single-byte RLE, and externally gated short
   alternating patterns only.
 - True byte-progressive Brotli compressed-meta-block decoding remains future
-  work for general copy-command streams; the stored subset, insert-only Huffman
-  literals, and Vort's compressed single-command RLE shape now stream directly,
+  work for arbitrary context/block-switch/dictionary/recent-distance streams;
+  the stored subset, insert-only Huffman literals, compressed single-command
+  RLE, and single-block-type explicit-distance copy streams now stream directly,
   while the general incremental facade still buffers a bounded complete payload.
 - Incremental DEFLATE source throughput remains behind the local zlib-ng level-6
   comparison on stable runs, despite leading several binary/history shapes.
@@ -7180,5 +7181,13 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Huffman code crosses an input boundary. Tests cover one-byte input, three-byte
   output backpressure, insert/meta-block length boundaries through 65,536 bytes,
   output limits, exact sizes, truncation, trailing data, and copy-command
-  rejection. General compressed streams with copy commands remain on the
-  existing bounded whole-frame facade.
+  rejection. Copy-command streams outside the explicit-distance subset below
+  remain on the existing bounded whole-frame facade.
+  Added the first byte-progressive Brotli copy-command decoder. It accepts final
+  compressed streams with one literal/command/distance block type and a
+  single-symbol explicit direct distance, retaining only a bounded entropy header plus a
+  caller-owned history ring, and resumes overlapping match copies across tiny
+  output buffers. A shared fixed-size reservoir bit reader now gives literal and copy
+  decoders atomic rollback at input boundaries. Tests cover alternating runs up
+  to 65,536 bytes, multi-command repeated prefixes, history-ring wrap, missing or
+  undersized history, output limits, truncation, and trailing input.

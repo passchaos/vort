@@ -1,5 +1,6 @@
 const std = @import("std");
 const core = @import("../../core.zig");
+const progressive_bits = @import("bit_reader.zig");
 
 /// Byte-progressive decoder for final Brotli compressed meta-blocks containing
 /// one insert-only command. The bounded prefix buffer is discarded logically
@@ -12,8 +13,8 @@ pub fn Decoder(comptime Codec: type) type {
         header_bytes: [Codec.max_stream_header_bytes]u8 = undefined,
         header_len: usize = 0,
         header: Codec.Header = undefined,
-        staged_bits: u64 = 0,
-        staged_bit_count: u7 = 0,
+        staged_bits: u128 = 0,
+        staged_bit_count: u8 = 0,
         stream_bits: usize = 0,
         output_remaining: usize = 0,
         total_input: usize = 0,
@@ -39,32 +40,6 @@ pub fn Decoder(comptime Codec: type) type {
             expected_output_len: ?usize,
             last_error_name: []const u8,
             last_error_phase: Phase,
-        };
-
-        const StepBitReader = struct {
-            input: []const u8,
-            input_read: *usize,
-            staged_bits: *u64,
-            staged_bit_count: *u7,
-            stream_bits: *usize,
-
-            pub fn readBits(self: *@This(), comptime T: type, count: u6) core.Error!T {
-                if (count > @bitSizeOf(T)) return error.CorruptFrame;
-                while (self.staged_bit_count.* < count) {
-                    if (self.input_read.* == self.input.len) return error.TruncatedFrame;
-                    if (self.staged_bit_count.* > 56) return error.CorruptFrame;
-                    self.staged_bits.* |= @as(u64, self.input[self.input_read.*]) << @intCast(self.staged_bit_count.*);
-                    self.staged_bit_count.* += 8;
-                    self.input_read.* += 1;
-                }
-                if (count == 0) return 0;
-                const mask = (@as(u64, 1) << @intCast(count)) - 1;
-                const value: T = @intCast(self.staged_bits.* & mask);
-                self.staged_bits.* >>= @intCast(count);
-                self.staged_bit_count.* -= count;
-                self.stream_bits.* += count;
-                return value;
-            }
         };
 
         pub fn init() Self {
@@ -138,8 +113,8 @@ pub fn Decoder(comptime Codec: type) type {
                         const byte_index = parsed.bits_read / 8;
                         const bit_index: u3 = @intCast(parsed.bits_read % 8);
                         const available_bits = self.header_len * 8 - parsed.bits_read;
-                        if (available_bits > 63) return self.fail(.header, error.CorruptFrame);
-                        self.staged_bits = if (available_bits == 0) 0 else @as(u64, self.header_bytes[byte_index]) >> bit_index;
+                        if (available_bits > 127) return self.fail(.header, error.CorruptFrame);
+                        self.staged_bits = if (available_bits == 0) 0 else @as(u128, self.header_bytes[byte_index]) >> bit_index;
                         self.staged_bit_count = @intCast(available_bits);
                         self.stream_bits = parsed.bits_read;
                         self.header = parsed.header;
@@ -151,26 +126,14 @@ pub fn Decoder(comptime Codec: type) type {
                 },
                 .literals => {
                     while (self.output_remaining != 0 and output_written < output.len) {
-                        const saved_input_read = input_read;
-                        const saved_staged_bits = self.staged_bits;
-                        const saved_staged_bit_count = self.staged_bit_count;
-                        const saved_stream_bits = self.stream_bits;
-                        var reader = StepBitReader{
-                            .input = input,
-                            .input_read = &input_read,
-                            .staged_bits = &self.staged_bits,
-                            .staged_bit_count = &self.staged_bit_count,
-                            .stream_bits = &self.stream_bits,
-                        };
+                        var reader = progressive_bits.Reader.init(input, &input_read, &self.staged_bits, &self.staged_bit_count, &self.stream_bits);
+                        const saved = reader.checkpoint();
                         const literal = Codec.readLiteral(&self.header, &reader) catch |err| switch (err) {
                             error.TruncatedFrame => {
-                                // A Huffman symbol is atomic: bytes tentatively
-                                // staged for an incomplete code are left to the
-                                // caller so they can be supplied again.
-                                input_read = saved_input_read;
-                                self.staged_bits = saved_staged_bits;
-                                self.staged_bit_count = saved_staged_bit_count;
-                                self.stream_bits = saved_stream_bits;
+                                // A Huffman symbol is atomic while input bytes
+                                // already supplied by the caller are retained
+                                // in the bounded reservoir for the next retry.
+                                try reader.restoreKeepingInput(saved);
                                 return result(input_read, output_written, .need_input);
                             },
                             else => return self.fail(.literals, err),
@@ -186,9 +149,9 @@ pub fn Decoder(comptime Codec: type) type {
                     self.phase = .padding;
                 },
                 .padding => {
-                    const padding_bits: u7 = @intCast((8 - self.stream_bits % 8) % 8);
+                    const padding_bits: u8 = @intCast((8 - self.stream_bits % 8) % 8);
                     while (self.staged_bit_count < padding_bits and input_read < input.len) {
-                        self.staged_bits |= @as(u64, input[input_read]) << @intCast(self.staged_bit_count);
+                        self.staged_bits |= @as(u128, input[input_read]) << @intCast(self.staged_bit_count);
                         self.staged_bit_count += 8;
                         input_read += 1;
                     }
@@ -196,7 +159,7 @@ pub fn Decoder(comptime Codec: type) type {
                         return result(input_read, output_written, .need_input);
                     }
                     if (padding_bits != 0) {
-                        const mask = (@as(u64, 1) << @intCast(padding_bits)) - 1;
+                        const mask = (@as(u128, 1) << @intCast(padding_bits)) - 1;
                         if ((self.staged_bits & mask) != 0) return self.fail(.padding, error.CorruptFrame);
                         self.staged_bits >>= @intCast(padding_bits);
                         self.staged_bit_count -= padding_bits;

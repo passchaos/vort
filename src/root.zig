@@ -104,6 +104,7 @@ pub const BrotliStoredStreamEncoder = br.StoredStreamEncoder;
 pub const BrotliStreamDecoder = br.StreamDecoder;
 pub const BrotliIncrementalStreamDecoder = br.IncrementalStreamDecoder;
 pub const BrotliIncrementalLiteralStreamDecoder = br.IncrementalLiteralStreamDecoder;
+pub const BrotliIncrementalCopyStreamDecoder = br.IncrementalCopyStreamDecoder;
 pub const BrotliIncrementalRleStreamDecoder = br.IncrementalRleStreamDecoder;
 pub const BrotliIncrementalStoredStreamDecoder = br.IncrementalStoredStreamDecoder;
 pub const BrotliIncrementalStoredStreamEncoder = br.IncrementalStoredStreamEncoder;
@@ -157,6 +158,25 @@ test "root Brotli incremental literal decoder streams Huffman output" {
     }
     try decoder.finish();
     for (output, 0..) |byte, i| try std.testing.expectEqual("abcd"[i & 3], byte);
+}
+
+test "root Brotli incremental copy decoder streams across output buffers" {
+    const expected = "xy" ** 64;
+    const encoded = try br.encodeAlternatingStreamAlloc(std.testing.allocator, 'x', 'y', expected.len);
+    defer std.testing.allocator.free(encoded);
+    var history: [2]u8 = undefined;
+    var decoder = BrotliIncrementalCopyStreamDecoder.initWithOptions(&history, .{ .expected_output_len = expected.len });
+    var output: [expected.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(encoded.len, input_offset + 1);
+        const result = try decoder.step(encoded[input_offset..input_end], output[output_offset..][0..@min(3, output.len - output_offset)]);
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+    }
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, expected, &output);
 }
 
 test "root Brotli incremental stored encoder continues streams" {

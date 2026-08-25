@@ -19,6 +19,8 @@ const incremental = @import("br/incremental/stream_decoder.zig");
 const incremental_tests = @import("br/incremental/tests.zig");
 const incremental_literal = @import("br/incremental/literal_decoder.zig");
 const incremental_literal_tests = @import("br/incremental/literal_tests.zig");
+const incremental_copy = @import("br/incremental/copy_decoder.zig");
+const incremental_copy_tests = @import("br/incremental/copy_tests.zig");
 const incremental_rle = @import("br/incremental/rle_decoder.zig");
 const incremental_rle_tests = @import("br/incremental/rle_tests.zig");
 const incremental_stored = @import("br/incremental/stored/decoder.zig");
@@ -52,6 +54,7 @@ const IncrementalCodec = struct {
 const br = @This();
 pub const IncrementalStreamDecoder = incremental.Decoder(IncrementalCodec);
 pub const IncrementalLiteralStreamDecoder = incremental_literal.Decoder(IncrementalLiteralCodec);
+pub const IncrementalCopyStreamDecoder = incremental_copy.Decoder(IncrementalCopyCodec);
 pub const IncrementalRleStreamDecoder = incremental_rle.Decoder(IncrementalRleCodec);
 pub const IncrementalStoredStreamDecoder = incremental_stored.Decoder;
 
@@ -101,6 +104,68 @@ const IncrementalLiteralCodec = struct {
         const symbol = try header.literal_tree.decode(reader);
         if (symbol > 0xff) return error.InvalidHuffmanCode;
         return @intCast(symbol);
+    }
+};
+
+const IncrementalCopyCodec = struct {
+    pub const Error = br.Error;
+    pub const max_stream_header_bytes: usize = 4096;
+    pub const Header = struct {
+        decoded_len: usize,
+        literal_tree: PrefixCode(256),
+        command_tree: PrefixCode(704),
+        distance: usize,
+    };
+    pub const ParsedHeader = struct { header: Header, bits_read: usize };
+    pub const Command = struct { insert_len: usize, copy_len: usize, distance: usize };
+
+    pub fn parseHeader(prefix: []const u8) IncrementalCopyCodec.Error!ParsedHeader {
+        var reader = bitstream.BitReader.init(prefix);
+        try readWindowBits(&reader);
+        if (try reader.readBits(u1, 1) != 1 or try reader.readBits(u1, 1) != 0)
+            return error.UnsupportedBrotliFeature;
+        const mnibbles_code = try reader.readBits(u2, 2);
+        const mnibbles: usize = 4 + @as(usize, mnibbles_code);
+        if (mnibbles > 6) return error.UnsupportedBrotliFeature;
+        const len_minus_one = try reader.readBits(u32, @intCast(mnibbles * 4));
+        if (mnibbles > 4 and ((len_minus_one >> @intCast((mnibbles - 1) * 4)) & 0xf) == 0) return error.CorruptFrame;
+        const decoded_len = std.math.add(usize, len_minus_one, 1) catch return error.IntegerOverflow;
+        var header = try readMinimalCompressedHeader(&reader);
+        if (header.literal_block.block_type_count != 1 or header.command_block.block_type_count != 1 or header.distance_block.block_type_count != 1)
+            return error.UnsupportedBrotliFeature;
+        for (header.literal_context_map[0..64]) |tree_index| if (tree_index != 0) return error.UnsupportedBrotliFeature;
+        for (header.distance_context_map[0..4]) |tree_index| if (tree_index != 0) return error.UnsupportedBrotliFeature;
+        const distance_symbol = header.distance_trees[0].single_symbol orelse return error.UnsupportedBrotliFeature;
+        if (distance_symbol < 16 or distance_symbol - 16 >= header.ndirect) return error.UnsupportedBrotliFeature;
+        return .{
+            .header = .{
+                .decoded_len = decoded_len,
+                .literal_tree = header.literal_trees[0],
+                .command_tree = header.insert_copy_trees[0],
+                .distance = @as(usize, distance_symbol - 16) + 1,
+            },
+            .bits_read = reader.bitPosition(),
+        };
+    }
+
+    pub fn readLiteral(header: *const Header, reader: anytype) IncrementalCopyCodec.Error!u8 {
+        const symbol = try header.literal_tree.decode(reader);
+        if (symbol > 0xff) return error.InvalidHuffmanCode;
+        return @intCast(symbol);
+    }
+
+    pub fn readCommand(header: *const Header, reader: anytype) IncrementalCopyCodec.Error!Command {
+        const symbol = try header.command_tree.decode(reader);
+        if (symbol >= command_lut.entries.len) return error.InvalidHuffmanCode;
+        const entry = command_lut.entries[symbol];
+        const insert_extra = if (entry.insert_extra_bits == 0) 0 else try reader.readBits(usize, entry.insert_extra_bits);
+        const copy_extra = if (entry.copy_extra_bits == 0) 0 else try reader.readBits(usize, entry.copy_extra_bits);
+        if (entry.distance_code == 0) return error.UnsupportedBrotliFeature;
+        return .{
+            .insert_len = entry.insert_base + insert_extra,
+            .copy_len = entry.copy_base + copy_extra,
+            .distance = header.distance,
+        };
     }
 };
 
@@ -207,6 +272,7 @@ pub const IncrementalStoredStreamEncoder = incremental_stored_encoder.Encoder(In
 test {
     _ = incremental_tests;
     _ = incremental_literal_tests;
+    _ = incremental_copy_tests;
     _ = incremental_rle_tests;
     _ = incremental_stored_tests;
     _ = pattern;
