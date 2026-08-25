@@ -7038,3 +7038,9 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   A/B pairs against the 10/12-bit version improved median primary text/JSON/
   binary stage time by about 4.2%/1.0%/3.2%, with adaptive rows another
   1.1%–7.0% faster and the parser's stack tables reduced from 20 KiB to 9 KiB.
+  Double-fast's zero-literal rep2 transition now snapshots old rep0/rep1 before
+  replacing the queue. Zig aggregate assignment observes earlier element writes,
+  so the previous expression could collapse `{rep0, rep1, rep2}` into three
+  copies of rep2 even though the resulting token distances still formed a valid
+  stream. A focused state test now pins the required `{rep2, rep0, rep1}`
+  rotation; all locked stage sizes remain unchanged.

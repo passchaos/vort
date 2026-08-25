@@ -227,7 +227,12 @@ fn updateReps(reps: *[3]usize, distance: usize, literal_len: usize) void {
             return;
         }
         if (distance == reps[2]) {
-            reps.* = .{ reps[2], reps[0], reps[1] };
+            // Capture the old queue before assigning. Aggregate assignment is
+            // not a parallel swap in Zig: reading `reps` again after writing
+            // element zero would otherwise collapse all entries to old rep2.
+            const old0 = reps[0];
+            const old1 = reps[1];
+            reps.* = .{ reps[2], old0, old1 };
             return;
         }
         if (reps[0] > 1 and distance == reps[0] - 1) {
@@ -240,6 +245,12 @@ fn updateReps(reps: *[3]usize, distance: usize, literal_len: usize) void {
     const old0 = reps[0];
     const old1 = reps[1];
     reps.* = .{ distance, old0, old1 };
+}
+
+test "double-fast zero-literal rep2 rotates the previous offset queue" {
+    var reps = [3]usize{ 1, 4, 8 };
+    updateReps(&reps, 8, 0);
+    try std.testing.expectEqual([3]usize{ 8, 1, 4 }, reps);
 }
 
 fn preferMatch(candidate: Match, current: Match, reps: [3]usize, literal_len: usize) bool {
