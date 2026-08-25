@@ -18,6 +18,7 @@ const incremental_block_emitter = @import("zstd/incremental/encoder/block_emitte
 const incremental_history_match = @import("zstd/incremental/encoder/history_match.zig");
 const incremental_history = @import("zstd/incremental/encoder/history.zig");
 const incremental_history_index = @import("zstd/incremental/encoder/history_index.zig");
+const double_fast_match = @import("zstd/match/double_fast.zig");
 const incremental_tests = @import("zstd/incremental/tests.zig");
 const huffman = @import("huffman.zig");
 
@@ -7572,6 +7573,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeam(allocator: std.mem.Allocator, ou
 /// general encoding API.
 pub const NativeMatchStage = enum {
     mixed,
+    double_fast,
     greedy,
     lazy,
     optimal,
@@ -7592,6 +7594,7 @@ pub const NativeMatchStageResult = struct {
 pub const NativeMatchStageScratch = struct {
     candidate: std.ArrayList(u8) = .empty,
     greedy_tokens: std.ArrayList(lz77.Token) = .empty,
+    double_fast_tokens: std.ArrayList(lz77.Token) = .empty,
     lazy_tokens: std.ArrayList(lz77.Token) = .empty,
     optimal: lz77.OptimalScratch = .{},
     duplicate_index: ?*DuplicateMatchIndex = null,
@@ -7603,6 +7606,7 @@ pub const NativeMatchStageScratch = struct {
         if (self.duplicate_index) |index| allocator.destroy(index);
         self.optimal.deinit(allocator);
         self.lazy_tokens.deinit(allocator);
+        self.double_fast_tokens.deinit(allocator);
         self.greedy_tokens.deinit(allocator);
         self.candidate.deinit(allocator);
         self.* = undefined;
@@ -7688,6 +7692,12 @@ pub fn benchmarkNativeMatchStage(
             try emitMixedDuplicateRepeatedMatchCompressedBlock(allocator, &scratch.candidate, block, last, match_search_budget, duplicate_index)
         else
             false,
+        .double_fast => if (block.len <= double_fast_match.max_input_len) blk: {
+            const parser_options = zstdHashParserOptions(block.len);
+            const stats = try double_fast_match.planReuse(&scratch.double_fast_tokens, allocator, block, parser_options);
+            sequence_count = stats.matches;
+            break :blk try emitHashTokenSequenceBlock(allocator, &scratch.candidate, block, last, scratch.double_fast_tokens.items, stats);
+        } else false,
         .greedy => if (block.len <= 32 * 1024) blk: {
             const parser_options = zstdHashParserOptions(block.len);
             const stats = try lz77.hashGreedyPlanAutoTinyReuse(&scratch.greedy_tokens, allocator, block, parser_options);
@@ -7954,6 +7964,10 @@ test "zstd native match stage benchmark mirrors production emitters" {
         defer expected.deinit(std.testing.allocator);
         const expected_ok = switch (stage) {
             .mixed => try emitMixedDuplicateRepeatedMatchCompressedBlock(std.testing.allocator, &expected, payload, true, 192, scratch.duplicate_index),
+            .double_fast => blk: {
+                const stats = try double_fast_match.planReuse(&scratch.double_fast_tokens, std.testing.allocator, payload, zstdHashParserOptions(payload.len));
+                break :blk try emitHashTokenSequenceBlock(std.testing.allocator, &expected, payload, true, scratch.double_fast_tokens.items, stats);
+            },
             .greedy => try emitGreedyHashMatchCompressedBlockReuse(std.testing.allocator, &expected, payload, true, &scratch.greedy_tokens),
             .lazy => try emitLazyHashMatchCompressedBlockReuse(std.testing.allocator, &expected, payload, true, &scratch.lazy_tokens),
             .optimal => try emitOptimalHashMatchCompressedBlockReuse(std.testing.allocator, &expected, payload, true, &scratch.optimal),
@@ -7975,6 +7989,49 @@ test "zstd native match stage benchmark mirrors production emitters" {
             try std.testing.expectEqual(@as(usize, 0), result.literals_bytes);
             try std.testing.expectEqual(@as(usize, 0), result.sequence_bytes);
         }
+    }
+}
+
+test "zstd double-fast diagnostic stage round trips structured input" {
+    const payload = ("abcdefgh-abcdefgh-" ** 64) ++ ("0123456789abcdef" ** 32);
+    var scratch: NativeMatchStageScratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    const result = try benchmarkNativeMatchStage(std.testing.allocator, payload, true, 16, .double_fast, &scratch);
+    try std.testing.expect(result.available);
+    try std.testing.expect(result.sequence_count > 1);
+
+    var frame: std.ArrayList(u8) = .empty;
+    defer frame.deinit(std.testing.allocator);
+    try emitFrameHeader(std.testing.allocator, &frame, payload.len, .{ .content_checksum = false });
+    try frame.appendSlice(std.testing.allocator, scratch.candidate.items);
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, frame.items);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "zstd double-fast parser replays varied input" {
+    var random: [8192]u8 = undefined;
+    var state: u32 = 0x9e37_79b9;
+    for (&random, 0..) |*byte, i| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (i % 64 < 48) @truncate(i * 17) else @truncate(state >> 16);
+    }
+    const payloads = [_][]const u8{
+        "",
+        "tiny",
+        "abcdefgh" ** 256,
+        "{\"service\":\"vort\",\"message\":\"double fast\"}\n" ** 128,
+        &random,
+    };
+    var tokens: std.ArrayList(lz77.Token) = .empty;
+    defer tokens.deinit(std.testing.allocator);
+    for (payloads) |payload| {
+        const stats = try double_fast_match.planReuse(&tokens, std.testing.allocator, payload, zstdHashParserOptions(payload.len));
+        try std.testing.expectEqual(stats.tokenCount(), tokens.items.len);
+        try std.testing.expectEqual(payload.len, stats.literals + stats.matched_bytes);
+        const replayed = try lz77.replayAlloc(std.testing.allocator, tokens.items);
+        defer std.testing.allocator.free(replayed);
+        try std.testing.expectEqualSlices(u8, payload, replayed);
     }
 }
 

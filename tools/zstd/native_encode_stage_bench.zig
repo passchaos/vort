@@ -18,6 +18,7 @@ const Aggregate = struct { available_blocks: usize, encoded_len: usize, sequence
 
 const stages = [_]vort.zstd.NativeMatchStage{
     .mixed,
+    .double_fast,
     .greedy,
     .lazy,
     .optimal,

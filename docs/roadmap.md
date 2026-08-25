@@ -6979,3 +6979,15 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   to 8,607 while text remains 80 bytes. Nine alternating fixed-CPU-8 runs
   improved complete level-3 JSON and binary medians by about 11.1% and 1.9%;
   text was within 0.6% noise. Final-wire arbitration remains authoritative.
+  A dedicated diagnostic `double_fast` stage now mirrors the important shape
+  of upstream `zstd_double_fast.c`: independent 4-byte and 8-byte hash tables,
+  the one-byte-ahead rep0 probe, immediate zero-literal rep1 continuation,
+  complementary insertion around consumed matches, and exact Zstd repcode
+  history updates. It remains outside production selection until it closes the
+  remaining structured-data ratio gap. On the locked 32 KiB stage corpus it
+  produces 210/695/8,600-byte text/JSON/binary blocks versus the repeat beam's
+  210/633/8,600, while fixed-CPU-8 medians are about 13.4x, 3.6x, and 3.6x
+  faster on the corresponding primary blocks. Adaptive 1/2 KiB output is at
+  most seven bytes larger per complete corpus. The stage benchmark and coverage
+  gate expose the parser explicitly so later policy work can require measured
+  parity instead of replacing the beam on an unverified speed result.

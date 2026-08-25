@@ -14,8 +14,19 @@ COLUMNS = [
 CASES = {"text", "json", "binary"}
 CANDIDATES = {"primary", "adaptive_0", "adaptive_1"}
 STAGES = {
-    "duplicate_index", "mixed", "greedy", "lazy", "optimal",
+    "duplicate_index", "mixed", "double_fast", "greedy", "lazy", "optimal",
     "rep_beam", "repeated", "multi_duplicate", "single_duplicate",
+}
+DOUBLE_FAST_MAX_BYTES = {
+    ("text", "primary"): 210,
+    ("text", "adaptive_0"): 2919,
+    ("text", "adaptive_1"): 1659,
+    ("json", "primary"): 695,
+    ("json", "adaptive_0"): 3678,
+    ("json", "adaptive_1"): 2164,
+    ("binary", "primary"): 8600,
+    ("binary", "adaptive_0"): 15138,
+    ("binary", "adaptive_1"): 11776,
 }
 
 
@@ -60,8 +71,10 @@ def main() -> int:
                 assert encoded_bytes == 3 * available_blocks + literals_bytes + sequence_bytes, row
             else:
                 assert literals_bytes == 0 and sequence_bytes == 0, row
-        if row["stage"] in {"greedy", "lazy", "optimal", "rep_beam"}:
+        if row["stage"] in {"double_fast", "greedy", "lazy", "optimal", "rep_beam"}:
             assert sequences > 0, row
+        if row["stage"] == "double_fast":
+            assert encoded_bytes <= DOUBLE_FAST_MAX_BYTES[(row["case"], row["candidate"])], row
 
     # The current level-9 policy is the subject of this benchmark. Pinning its
     # candidate labels to 128 KiB/4 KiB/8 KiB makes policy drift visible instead
