@@ -6954,3 +6954,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   2,000-iteration A/B pairs improved dictionary, mixed, uppercase, and
   incompressible short cases by median 1.9%, 1.5%, 1.9%, and 9.7%, respectively,
   with unchanged sizes and dictionary-use metrics.
+  Zstd mixed-lookahead candidate caches now borrow the duplicate index already
+  prepared by the enclosing selector instead of copying its multi-megabyte
+  predecessor and lazy match-length tables into the recursive search frame. An
+  explicit initializer also leaves the owned fallback index untouched until a
+  standalone search actually needs it. Eleven alternating fixed-CPU-8 stage A/B
+  pairs improved level-9 primary mixed search by median 4.4% on text, 3.7% on
+  JSON, and 33% on the no-mixed-candidate binary control; complete level-9
+  encoding improved by 0.3%/1.7%/2.8%, with byte-identical output sizes.
