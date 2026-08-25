@@ -7098,3 +7098,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   A/B pairs preserve all fast/balanced/ratio wire sizes and improve fast JSON/
   source/log throughput by about 4.8%/8.0%/3.4%; balanced improves about
   3.1%/8.0%/1.0%, and ratio improves about 3.6%/9.2%/0.3%.
+  Brotli's compact `PrefixAlphabet` now stores frequencies as `u32`, matching
+  the wire planner's source counters and the 2^24-byte meta-block bound instead
+  of widening every entry to `usize`. This reduces each temporary alphabet
+  from about 7.0 KiB to 4.2 KiB on 64-bit targets and removes conversion before
+  package-merge fallback. Eleven alternating fixed-CPU-8 A/B pairs preserve all
+  fast/balanced/ratio wire sizes and improve full JSON/source/log fast encoding
+  by about 10.8%/9.4%/10.5%; balanced improves about 9.1%/11.6%/12.2%, and ratio
+  improves about 7.9%/3.4%/12.6%. Overflow remains explicitly rejected by the
+  incremental alphabet API.

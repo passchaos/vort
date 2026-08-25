@@ -4,7 +4,7 @@ const std = @import("std");
 /// current text/source/log corpora are <=33 symbols, so depth is comfortably
 /// below Brotli's 15-bit limit. Returns false if an adversarial distribution
 /// exceeds that limit, allowing the caller to retain package-merge fallback.
-pub fn build(comptime capacity: usize, frequencies: []const usize, lengths: *[capacity]u4) bool {
+pub fn build(comptime capacity: usize, frequencies: []const u32, lengths: *[capacity]u4) bool {
     std.debug.assert(capacity <= 64 and frequencies.len <= capacity);
     lengths.* = @splat(0);
     if (frequencies.len == 0) return false;
@@ -140,7 +140,7 @@ test "small Huffman matches package merge weighted cost" {
     const huffman = @import("../../huffman.zig");
     var state: u32 = 0x1234_5678;
     for (0..64) |_| {
-        var frequencies: [64]usize = @splat(0);
+        var frequencies: [64]u32 = @splat(0);
         const active = 5 + state % 60;
         for (frequencies[0..active]) |*frequency| {
             state = state *% 1_664_525 +% 1_013_904_223;
@@ -148,9 +148,7 @@ test "small Huffman matches package merge weighted cost" {
         }
         var small: [64]u4 = undefined;
         if (!build(64, frequencies[0..active], &small)) continue;
-        var reference_frequencies: [64]u32 = @splat(0);
-        for (frequencies, 0..) |frequency, i| reference_frequencies[i] = @intCast(frequency);
-        const reference = huffman.treeCodeLengths(64, &reference_frequencies, 15);
+        const reference = huffman.treeCodeLengths(64, &frequencies, 15);
         var small_cost: u64 = 0;
         var reference_cost: u64 = 0;
         for (frequencies[0..active], 0..) |frequency, i| {
@@ -164,13 +162,13 @@ test "small Huffman matches package merge weighted cost" {
 test "small Huffman two-queue builder matches heap reference lengths" {
     var state: u32 = 0x9e37_79b9;
     for (0..1024) |_| {
-        var frequencies: [64]usize = @splat(0);
+        var frequencies: [64]u32 = @splat(0);
         const active: usize = 2 + state % 63;
         for (frequencies[0..active]) |*frequency| {
             state = state *% 1_664_525 +% 1_013_904_223;
             frequency.* = 1 + (state >> 20);
         }
-        std.mem.sort(usize, frequencies[0..active], {}, std.sort.desc(usize));
+        std.mem.sort(u32, frequencies[0..active], {}, std.sort.desc(u32));
         var actual: [64]u4 = undefined;
         var expected: [64]u4 = undefined;
         const actual_ok = build(64, frequencies[0..active], &actual);
@@ -180,7 +178,7 @@ test "small Huffman two-queue builder matches heap reference lengths" {
     }
 }
 
-fn buildHeapReference(comptime capacity: usize, frequencies: []const usize, lengths: *[capacity]u4) bool {
+fn buildHeapReference(comptime capacity: usize, frequencies: []const u32, lengths: *[capacity]u4) bool {
     lengths.* = @splat(0);
     const Node = struct { weight: u64, parent: i16 = -1, serial: u8 };
     var nodes: [2 * capacity - 1]Node = undefined;

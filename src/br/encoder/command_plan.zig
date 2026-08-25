@@ -68,13 +68,16 @@ pub const max_prefix_symbols = 704;
 /// deterministic by symbol.
 pub const PrefixAlphabet = struct {
     symbols: [max_prefix_symbols]u16 = @splat(0),
-    frequencies: [max_prefix_symbols]usize = @splat(0),
+    // A Brotli meta-block contains at most 2^24 bytes, so u32 exactly covers
+    // every possible symbol count while halving this hot scratch array on
+    // 64-bit targets.
+    frequencies: [max_prefix_symbols]u32 = @splat(0),
     len: usize = 0,
 
     pub fn add(self: *PrefixAlphabet, symbol: u16) !void {
         for (self.symbols[0..self.len], 0..) |known, i| {
             if (known == symbol) {
-                self.frequencies[i] += 1;
+                self.frequencies[i] = std.math.add(u32, self.frequencies[i], 1) catch return error.IntegerOverflow;
                 return;
             }
         }
@@ -170,7 +173,7 @@ pub const PrefixAlphabet = struct {
         return .{ .code = @bitReverse(canonical) >> @intCast(16 - @as(usize, bits)), .bits = bits };
     }
 
-    fn lessValue(left_symbol: u16, left_frequency: usize, right_symbol: u16, right_frequency: usize) bool {
+    fn lessValue(left_symbol: u16, left_frequency: u32, right_symbol: u16, right_frequency: u32) bool {
         return left_frequency > right_frequency or
             (left_frequency == right_frequency and left_symbol < right_symbol);
     }
@@ -178,8 +181,7 @@ pub const PrefixAlphabet = struct {
     fn fillTreeLengths(self: *const PrefixAlphabet, comptime alphabet_size: usize, comptime compact_size: usize, lengths: *[alphabet_size]u4) void {
         std.debug.assert(self.len <= compact_size);
         var frequencies: [compact_size]u32 = @splat(0);
-        for (self.frequencies[0..self.len], 0..) |frequency, i|
-            frequencies[i] = @intCast(@min(frequency, std.math.maxInt(u32)));
+        for (self.frequencies[0..self.len], 0..) |frequency, i| frequencies[i] = frequency;
         const compact_lengths = @import("../../huffman.zig").treeCodeLengths(compact_size, &frequencies, 15);
         for (self.symbols[0..self.len], compact_lengths[0..self.len]) |symbol, bits| lengths[symbol] = bits;
     }
@@ -655,13 +657,21 @@ test "simple alphabet orders hot symbols first" {
     try std.testing.expectEqual(@as(u4, 2), lengths[7]);
 }
 
+test "prefix alphabet frequency rejects u32 overflow" {
+    var alphabet = PrefixAlphabet{};
+    alphabet.symbols[0] = 7;
+    alphabet.frequencies[0] = std.math.maxInt(u32);
+    alphabet.len = 1;
+    try std.testing.expectError(error.IntegerOverflow, alphabet.add(7));
+}
+
 test "simple alphabet direct codes match canonical encoder" {
     const huffman = @import("../../huffman.zig");
     inline for (2..5) |count| {
         var alphabet = PrefixAlphabet{};
         for (0..count) |i| {
             alphabet.symbols[i] = @intCast(9 - i * 2);
-            alphabet.frequencies[i] = count - i;
+            alphabet.frequencies[i] = @intCast(count - i);
         }
         alphabet.len = count;
         const lengths = try alphabet.codeLengths(32);
