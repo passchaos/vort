@@ -5,6 +5,10 @@ const libbrotli = @import("libbrotli_runtime.zig");
 const json_payload = "{\"kind\":\"event\",\"active\":true,\"values\":[1,2,3,5,8,13]}\n" ** 48;
 const source_payload = "pub fn update(state: *State, value: u32) void { state.total += value; state.count += 1; }\n" ** 40;
 const log_payload = "2026-08-21T02:00:00Z level=info service=vort request=compress status=ok bytes=4096\n" ** 40;
+const dictionary_payload = "Information about compression performance and dictionary support.";
+const mixed_payload = "abcdefghabcdefgh information follows abcdefghabcdefgh";
+const uppercase_payload = "INFORMATION";
+const incompressible_payload = "qzxwvbnm1234567890QZXWVBNM!@#$%^&*";
 const Case = struct {
     name: []const u8,
     payload: []const u8,
@@ -48,6 +52,10 @@ pub fn main(init: std.process.Init) !void {
         try cases.append(init.gpa, .{ .name = "json", .payload = json_payload });
         try cases.append(init.gpa, .{ .name = "source", .payload = source_payload });
         try cases.append(init.gpa, .{ .name = "log", .payload = log_payload });
+        try cases.append(init.gpa, .{ .name = "dictionary", .payload = dictionary_payload });
+        try cases.append(init.gpa, .{ .name = "mixed", .payload = mixed_payload });
+        try cases.append(init.gpa, .{ .name = "uppercase", .payload = uppercase_payload });
+        try cases.append(init.gpa, .{ .name = "incompressible", .payload = incompressible_payload });
     } else {
         for (options.paths.items, 0..) |path, index| {
             const file = try std.Io.Dir.cwd().openFile(init.io, path, .{});
@@ -67,16 +75,19 @@ pub fn main(init: std.process.Init) !void {
     }
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.writeAll("case,reference_version,quality,input_bytes,vort_bytes,lazy_bytes,ratio_bytes,reference_bytes,iterations,vort_ns,lazy_ns,ratio_ns,reference_ns,vort_mib_s,lazy_mib_s,ratio_mib_s,reference_mib_s,vort_over_reference,lazy_over_reference,ratio_over_reference,vort_size_over_reference,lazy_size_over_reference,ratio_size_over_reference,checksum\n");
+    try csv.writer.writeAll("case,reference_version,quality,input_bytes,vort_bytes,lazy_bytes,ratio_bytes,ratio_dictionary_copies,ratio_dictionary_bytes,reference_bytes,iterations,vort_ns,lazy_ns,ratio_ns,reference_ns,vort_mib_s,lazy_mib_s,ratio_mib_s,reference_mib_s,vort_over_reference,lazy_over_reference,ratio_over_reference,vort_size_over_reference,lazy_size_over_reference,ratio_size_over_reference,checksum\n");
     for (cases.items) |case| {
-        const vort_encoded = try vort.brEncodePlannedStreamAlloc(init.gpa, case.payload);
+        const vort_encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, case.payload, .{ .level = .fast });
         defer init.gpa.free(vort_encoded);
         const reference_encoded = try reference.encodeAlloc(init.gpa, case.payload, options.quality);
         defer init.gpa.free(reference_encoded);
-        const lazy_encoded = try vort.brEncodePlannedStreamLazyAlloc(init.gpa, case.payload);
+        const lazy_encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, case.payload, .{ .level = .balanced });
         defer init.gpa.free(lazy_encoded);
         const ratio_encoded = try vort.brEncodePlannedStreamRatioAlloc(init.gpa, case.payload);
         defer init.gpa.free(ratio_encoded);
+        // Record semantic dictionary use in addition to the encoded size so the
+        // benchmark gate catches regressions that silently fall back to literals.
+        const ratio_summary = try vort.brSummarizeStream(ratio_encoded);
         const decoded = try init.gpa.alloc(u8, case.payload.len);
         defer init.gpa.free(decoded);
         for ([_][]const u8{ vort_encoded, lazy_encoded, ratio_encoded }) |encoded| {
@@ -91,10 +102,33 @@ pub fn main(init: std.process.Init) !void {
         const reference_rate = mibPerSecond(total_bytes, samples.reference.ns);
         const lazy_rate = mibPerSecond(total_bytes, lazy_sample.ns);
         const ratio_rate = mibPerSecond(total_bytes, ratio_sample.ns);
-        try csv.writer.print("{s},{x},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.2},{d:.2},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d}\n", .{
-            case.name,          reference.version(),        options.quality,            case.payload.len,            vort_encoded.len,                                                                           lazy_encoded.len,                                                                           ratio_encoded.len,                                                                           reference_encoded.len,
-            options.iterations, samples.vort.ns,            lazy_sample.ns,             ratio_sample.ns,             samples.reference.ns,                                                                       vort_rate,                                                                                  lazy_rate,                                                                                   ratio_rate,
-            reference_rate,     vort_rate / reference_rate, lazy_rate / reference_rate, ratio_rate / reference_rate, @as(f64, @floatFromInt(vort_encoded.len)) / @as(f64, @floatFromInt(reference_encoded.len)), @as(f64, @floatFromInt(lazy_encoded.len)) / @as(f64, @floatFromInt(reference_encoded.len)), @as(f64, @floatFromInt(ratio_encoded.len)) / @as(f64, @floatFromInt(reference_encoded.len)), samples.vort.mix +% lazy_sample.mix +% ratio_sample.mix +% samples.reference.mix,
+        try csv.writer.print("{s},{x},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.2},{d:.2},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d}\n", .{
+            case.name,
+            reference.version(),
+            options.quality,
+            case.payload.len,
+            vort_encoded.len,
+            lazy_encoded.len,
+            ratio_encoded.len,
+            ratio_summary.static_dictionary_copy_count,
+            ratio_summary.static_dictionary_bytes,
+            reference_encoded.len,
+            options.iterations,
+            samples.vort.ns,
+            lazy_sample.ns,
+            ratio_sample.ns,
+            samples.reference.ns,
+            vort_rate,
+            lazy_rate,
+            ratio_rate,
+            reference_rate,
+            vort_rate / reference_rate,
+            lazy_rate / reference_rate,
+            ratio_rate / reference_rate,
+            @as(f64, @floatFromInt(vort_encoded.len)) / @as(f64, @floatFromInt(reference_encoded.len)),
+            @as(f64, @floatFromInt(lazy_encoded.len)) / @as(f64, @floatFromInt(reference_encoded.len)),
+            @as(f64, @floatFromInt(ratio_encoded.len)) / @as(f64, @floatFromInt(reference_encoded.len)),
+            samples.vort.mix +% lazy_sample.mix +% ratio_sample.mix +% samples.reference.mix,
         });
     }
     if (options.csv_path) |path| {
