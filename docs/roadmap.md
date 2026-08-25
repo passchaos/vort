@@ -7005,3 +7005,8 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   all text/binary and adaptive candidate sizes. Eleven-round fixed-CPU-8 A/B
   measured unchanged primary throughput within noise (about 0.995x elapsed),
   and a focused structured-input test pins the selected 687-byte wire size.
+  Double-fast complementary insertion now also records the match-start `+2`
+  position in the long hash table, matching upstream's `curr + 2` anchor while
+  leaving the short table untouched. All nine locked stage sizes remain
+  identical. Eleven alternating fixed-CPU-8 A/B pairs improved median primary
+  text/JSON/binary stage time by about 0.9%/1.7%/1.6%, respectively.

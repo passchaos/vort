@@ -133,11 +133,13 @@ pub fn planReuse(
         try storeMatch(tokens, allocator, input, &stats, &reps, anchor, best);
         anchor = best.position + best.length;
 
-        // Populate only the beginning and the final two positions of a match.
-        // This is the same complementary-insertion idea used by upstream: it
-        // keeps future anchors useful without turning a fast parser into a
-        // full match-span indexing pass.
+        // Populate only the first two and final two positions of a match. The
+        // second long-hash anchor mirrors upstream's `curr + 2` insertion and
+        // protects useful eight-byte candidates from the skipped match body,
+        // without turning a fast parser into a full-span indexing pass.
         if (best.position + 1 < anchor) insertPosition(input, best.position + 1, &short_table, &long_table);
+        if (best.position + 2 < anchor and best.position + 10 <= input.len)
+            long_table[longHash(input, best.position + 2)] = @intCast(best.position + 2);
         if (anchor >= 2) insertPosition(input, anchor - 2, &short_table, &long_table);
         if (anchor >= 1) insertPosition(input, anchor - 1, &short_table, &long_table);
         position = anchor;
