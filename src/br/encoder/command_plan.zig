@@ -373,6 +373,18 @@ pub fn staticDictionaryIndexBytes() usize {
 /// Rebuild into caller-owned typed storage, preserving command capacity across
 /// independent inputs. The returned match count is diagnostic only.
 pub fn buildReuse(commands: *std.ArrayList(Command), allocator: std.mem.Allocator, input: []const u8, tokens: []const lz77.Token) !usize {
+    return buildReuseInternal(commands, allocator, input, tokens, true);
+}
+
+/// Internal fast path for token streams produced by Vort's LZ77 parsers. Those
+/// parsers have already verified every copy against `input`, so replaying every
+/// matched byte here only duplicates work. Structural bounds and literal bytes
+/// remain checked because they protect command-position accounting.
+pub fn buildTrustedReuse(commands: *std.ArrayList(Command), allocator: std.mem.Allocator, input: []const u8, tokens: []const lz77.Token) !usize {
+    return buildReuseInternal(commands, allocator, input, tokens, false);
+}
+
+fn buildReuseInternal(commands: *std.ArrayList(Command), allocator: std.mem.Allocator, input: []const u8, tokens: []const lz77.Token, comptime validate_copies: bool) !usize {
     commands.clearRetainingCapacity();
     var position: usize = 0;
     var insert_start: usize = 0;
@@ -388,7 +400,7 @@ pub fn buildReuse(commands: *std.ArrayList(Command), allocator: std.mem.Allocato
             const copy_len: usize = match.length;
             const distance: usize = match.distance;
             if (copy_len == 0 or distance == 0 or distance > position or copy_len > input.len - position) return error.InvalidBlockPlan;
-            for (0..copy_len) |i| if (input[position + i] != input[position + i - distance]) return error.InvalidBlockPlan;
+            if (validate_copies) for (0..copy_len) |i| if (input[position + i] != input[position + i - distance]) return error.InvalidBlockPlan;
             try appendCopyCommand(commands, allocator, insert_start, insert_len, copy_len, distance);
             position += copy_len;
             insert_start = position;
@@ -517,6 +529,24 @@ test "coalesces adjacent copies at the same distance" {
     defer reused.deinit(std.testing.allocator);
     try std.testing.expectEqual(plan.match_count, try buildReuse(&reused, std.testing.allocator, input, &tokens));
     try std.testing.expectEqualSlices(Command, plan.commands, reused.items);
+
+    var trusted: std.ArrayList(Command) = .empty;
+    defer trusted.deinit(std.testing.allocator);
+    try std.testing.expectEqual(plan.match_count, try buildTrustedReuse(&trusted, std.testing.allocator, input, &tokens));
+    try std.testing.expectEqualSlices(Command, plan.commands, trusted.items);
+}
+
+test "validated command builder rejects corrupt parser matches" {
+    const input = "abcabc";
+    const tokens = [_]lz77.Token{
+        .{ .literal = 'a' },
+        .{ .literal = 'b' },
+        .{ .literal = 'c' },
+        .{ .match = .{ .length = 3, .distance = 2 } },
+    };
+    var commands: std.ArrayList(Command) = .empty;
+    defer commands.deinit(std.testing.allocator);
+    try std.testing.expectError(error.InvalidBlockPlan, buildReuse(&commands, std.testing.allocator, input, &tokens));
 }
 
 test "replaces one short copy with literals without shifting later commands" {

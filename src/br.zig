@@ -934,7 +934,7 @@ pub const PlannedStreamEncoder = struct {
             .max_match = lz77.max_match_len,
         });
         if (stats.matches == 0) return encodeStoredStreamAlloc(allocator, input);
-        _ = try command_plan.buildReuse(&self.commands, self.allocator, input, self.tokens.items);
+        _ = try command_plan.buildTrustedReuse(&self.commands, self.allocator, input, self.tokens.items);
         var stats_out: encoder_stats.PlannedEncodeStats = .{};
         const compressed = try encodeCommandPlanAlloc(allocator, input, self.commands.items, null, &stats_out);
         return chooseStoredIfSmaller(allocator, input, compressed);
@@ -968,7 +968,7 @@ pub const PlannedStreamEncoder = struct {
             try encodeStoredStreamAppend(self.allocator, &self.output, input);
             return self.output.items;
         }
-        _ = try command_plan.buildReuse(&self.commands, self.allocator, input, self.tokens.items);
+        _ = try command_plan.buildTrustedReuse(&self.commands, self.allocator, input, self.tokens.items);
         var stats_out: encoder_stats.PlannedEncodeStats = .{};
         try encodeCommandPlanWithOptionsAppend(self.allocator, &self.output, input, self.commands.items, null, &stats_out, .{});
         const stored_len = try encodedStoredStreamBound(input.len);
@@ -1011,7 +1011,7 @@ pub const PlannedStreamEncoder = struct {
             .max_match = lz77.max_match_len,
         });
         if (stats.matches == 0) return encodeStoredStreamInto(input, output);
-        _ = try command_plan.buildReuse(&self.commands, self.allocator, input, self.tokens.items);
+        _ = try command_plan.buildTrustedReuse(&self.commands, self.allocator, input, self.tokens.items);
         var out: std.ArrayList(u8) = .{ .items = output[0..0], .capacity = output.len };
         var stats_out: encoder_stats.PlannedEncodeStats = .{};
         // Bounded mode maps any unexpected underestimation to OutOfMemory
