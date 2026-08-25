@@ -7039,6 +7039,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Eleven alternating fixed-CPU-8 A/B pairs preserved every wire size and
   improved median primary text/JSON/binary beam time by about 6.2%/2.9%/1.8%;
   most adaptive rows also improved, while the smallest binary row was neutral.
+  The beam loop now computes whether a minimum-length match can fit once per
+  position and skips both hash-index and recent-offset probes for the final
+  literal-only tail. Eleven alternating fixed-CPU-8 A/B pairs preserved every
+  wire size while improving primary text/JSON/binary beam time by about
+  0.8%/4.3%/2.8%; the two larger adaptive JSON/binary rows improved by roughly
+  0.9%–2.7%. A focused replay test covers a three-byte tail.
   A second hash-width sweep reduced the same tables further to 8/11 bits. The
   complete locked size matrix remains unchanged. Eleven alternating fixed-CPU-8
   A/B pairs against the 10/12-bit version improved median primary text/JSON/

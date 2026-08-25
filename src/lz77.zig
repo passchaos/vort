@@ -629,7 +629,8 @@ pub fn optimalRepBeamPlanReuse(scratch: *RepBeamScratch, allocator: std.mem.Allo
 
     var matches: [rep_beam_match_candidates]Token.Match = undefined;
     for (0..input.len) |position| {
-        const match_count = try scratch.index.matchesAt(input, position, options, &matches);
+        const can_match = position + minMatch(options) <= input.len;
+        const match_count = if (can_match) try scratch.index.matchesAt(input, position, options, &matches) else 0;
         const current = states[position * rep_beam_width ..][0..lengths[position]];
         for (current, 0..) |state, slot| {
             try insertRepBeamState(states, lengths, position + 1, .{
@@ -643,7 +644,7 @@ pub fn optimalRepBeamPlanReuse(scratch: *RepBeamScratch, allocator: std.mem.Allo
             for (matches[0..match_count]) |match| {
                 try extendRepBeamMatch(states, lengths, input, options, position, slot, state, match);
             }
-            if (state.rep0 <= position and position + minMatch(options) <= input.len) {
+            if (can_match and state.rep0 <= position) {
                 const length = matchLength(input, position - state.rep0, position, @min(maxMatch(options), input.len - position));
                 if (length >= minMatch(options)) {
                     try extendRepBeamMatch(states, lengths, input, options, position, slot, state, .{ .length = @intCast(length), .distance = state.rep0 });
@@ -1085,6 +1086,17 @@ test "rep beam compact index matches reference beyond u16 positions" {
         try std.testing.expectEqual(expected_len, actual_len);
         try std.testing.expectEqualSlices(Token.Match, expected[0..expected_len], actual[0..actual_len]);
     }
+}
+
+test "rep beam emits literal tail shorter than minimum match" {
+    const input = "abcdabcdxyz";
+    const plan = try optimalRepBeamPlanAlloc(std.testing.allocator, input, .{ .min_match = 4 });
+    defer plan.deinit(std.testing.allocator);
+    const replayed = try replayAlloc(std.testing.allocator, plan.tokens);
+    defer std.testing.allocator.free(replayed);
+    try std.testing.expectEqualSlices(u8, input, replayed);
+    try std.testing.expectEqual(@as(usize, 7), plan.stats.literals);
+    try std.testing.expectEqual(@as(usize, 1), plan.stats.matches);
 }
 
 fn fixedDistanceSymbolCost(distance: usize) usize {
