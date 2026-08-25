@@ -74,19 +74,6 @@ pub fn PrefixAlphabetFor(comptime capacity: usize) type {
         symbols: [capacity]u16 = @splat(0),
         len: usize = 0,
 
-        pub fn finish(self: *Self, frequencies: *const [capacity]u32) void {
-            var i: usize = 1;
-            while (i < self.len) : (i += 1) {
-                var j = i;
-                const symbol = self.symbols[j];
-                const frequency = frequencies[symbol];
-                while (j != 0 and lessValue(symbol, frequency, self.symbols[j - 1], frequencies[self.symbols[j - 1]])) : (j -= 1) {
-                    self.symbols[j] = self.symbols[j - 1];
-                }
-                self.symbols[j] = symbol;
-            }
-        }
-
         pub fn codeLengths(self: *const Self, frequencies: *const [capacity]u32) ![capacity]u4 {
             if (self.len == 0) return error.InvalidBlockPlan;
             var lengths: [capacity]u4 = @splat(0);
@@ -196,11 +183,17 @@ pub fn alphabetFromFrequenciesInto(comptime alphabet_size: usize, alphabet: *Pre
     for (frequencies, 0..) |frequency, symbol| {
         if (frequency == 0) continue;
         if (alphabet.len == alphabet.symbols.len) return error.InvalidBlockPlan;
-        alphabet.symbols[alphabet.len] = @intCast(symbol);
+        // Insert while scanning the dense table. This fuses collection with
+        // sorting and avoids a second pass over the active symbol buffer. The
+        // dense scan is ascending, so equal-frequency symbols naturally remain
+        // in their deterministic ascending-symbol order.
+        var index = alphabet.len;
+        while (index != 0 and frequency > frequencies[alphabet.symbols[index - 1]]) : (index -= 1)
+            alphabet.symbols[index] = alphabet.symbols[index - 1];
+        alphabet.symbols[index] = @intCast(symbol);
         alphabet.len += 1;
     }
     if (alphabet.len == 0) return error.InvalidBlockPlan;
-    alphabet.finish(frequencies);
 }
 
 /// Coalesce consecutive literal tokens into the insert portion of the next
@@ -650,6 +643,22 @@ test "simple alphabet orders hot symbols first" {
     try std.testing.expectEqual(@as(u4, 1), lengths[9]);
     try std.testing.expectEqual(@as(u4, 2), lengths[4]);
     try std.testing.expectEqual(@as(u4, 2), lengths[7]);
+}
+
+test "fused alphabet collection preserves frequency and symbol ordering" {
+    var state: u32 = 0xa54f_f53a;
+    for (0..256) |_| {
+        var frequencies: [256]u32 = @splat(0);
+        for (&frequencies) |*frequency| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            frequency.* = if (state & 3 == 0) 0 else 1 + (state >> 27);
+        }
+        const alphabet = try alphabetFromFrequencies(256, &frequencies);
+        for (alphabet.symbols[1..alphabet.len], alphabet.symbols[0 .. alphabet.len - 1]) |current, previous| {
+            try std.testing.expect(frequencies[previous] > frequencies[current] or
+                (frequencies[previous] == frequencies[current] and previous < current));
+        }
+    }
 }
 
 test "simple alphabet direct codes match canonical encoder" {

@@ -7122,3 +7122,10 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   bytes. Eleven alternating fixed-CPU-8 A/B pairs preserve all locked streams
   and improve fast JSON/source/log encoding by about 7.0%/5.7%/7.1%; balanced
   improves about 6.6%/8.2%/8.4%, and ratio about 6.0%/7.2%/8.9%.
+  Dense-frequency collection and sparse-alphabet ordering now happen in one
+  pass: each non-zero symbol is inserted directly into frequency order while
+  the dense table is scanned. Because symbol IDs arrive in ascending order,
+  equal-frequency stability is preserved without a separate active-array sort.
+  Eleven alternating fixed-CPU-8 A/B pairs preserve every locked wire size and
+  improve the main fast/balanced/ratio corpus paths by roughly 0.5%–1.6%, with
+  the clearest gains on source and log data.
