@@ -7138,3 +7138,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   full-encoder A/B pairs preserve every fast output size while improving JSON/
   source/log by about 62%/48%/56%; short dictionary/mixed inputs improve by
   about 1.8x/2.0x and no-match inputs by about 4.4x.
+  The reusable tiny-greedy scratch now stores its 32 KiB-bounded head and
+  predecessor positions as `i32` rather than machine-width `isize`. This halves
+  both retained index buffers without changing the generic one-shot parser.
+  Eleven alternating fixed-CPU-8 full-encoder A/B pairs preserve every fast
+  stream and improve JSON/source/log by about 3.9%/2.9%/4.7%; dictionary and
+  mixed inputs improve by roughly 5.3%/4.4%, and the no-match control by about
+  36%. A focused multi-input oracle pins exact tokens, statistics, and the
+  16 KiB head-table footprint.

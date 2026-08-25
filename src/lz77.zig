@@ -63,12 +63,12 @@ pub const GreedyPlan = struct {
 };
 
 pub const TinyGreedyScratch = struct {
-    head: [4096]isize = undefined,
+    head: [4096]i32 = undefined,
     head_initialized: [hash_head_init_words]u64 = @splat(0),
-    prev: std.ArrayList(isize) = .empty,
+    prev: std.ArrayList(i32) = .empty,
 
     pub fn retainedCapacity(self: *const TinyGreedyScratch) usize {
-        return self.prev.capacity * @sizeOf(isize);
+        return self.prev.capacity * @sizeOf(i32);
     }
 
     pub fn deinit(self: *TinyGreedyScratch, allocator: std.mem.Allocator) void {
@@ -1287,8 +1287,8 @@ fn hashGreedyPlanWithTablesReuse(
     allocator: std.mem.Allocator,
     input: []const u8,
     options: GreedyOptions,
-    head: []isize,
-    prev: []isize,
+    head: anytype,
+    prev: anytype,
     comptime lazy_head: bool,
     initialized: HashHeadInit(lazy_head),
     comptime anchor: HashAnchor,
@@ -1361,7 +1361,7 @@ fn hashPrevTableLen(input_len: usize, window_len: usize) usize {
     return input_len;
 }
 
-fn hashPrevIndex(position: usize, prev: []const isize, comptime ring: bool) usize {
+fn hashPrevIndex(position: usize, prev: anytype, comptime ring: bool) usize {
     return if (ring) position & (prev.len - 1) else position;
 }
 
@@ -1491,8 +1491,8 @@ fn findBestHashMatchWithLayout(
     input: []const u8,
     pos: usize,
     options: GreedyOptions,
-    head: []const isize,
-    prev: []const isize,
+    head: anytype,
+    prev: anytype,
     comptime ring: bool,
     comptime lazy_head: bool,
     initialized: HashHeadInit(lazy_head),
@@ -1515,8 +1515,8 @@ fn findBestHashMatchWithLayoutAndHash(
     input: []const u8,
     pos: usize,
     options: GreedyOptions,
-    head: []const isize,
-    prev: []const isize,
+    head: anytype,
+    prev: anytype,
     comptime ring: bool,
     comptime lazy_head: bool,
     initialized: HashHeadInit(lazy_head),
@@ -1712,11 +1712,11 @@ fn insertHash(input: []const u8, pos: usize, head: []isize, prev: []isize) void 
 }
 
 fn hashHeadGet(
-    head: []const isize,
+    head: anytype,
     hash: usize,
     comptime lazy_head: bool,
     initialized: HashHeadInit(lazy_head),
-) isize {
+) @TypeOf(head[0]) {
     if (lazy_head) {
         const mask = @as(u64, 1) << @intCast(hash & 63);
         if (initialized[hash / 64] & mask == 0) return -1;
@@ -1727,8 +1727,8 @@ fn hashHeadGet(
 fn insertHashWithLayout(
     input: []const u8,
     pos: usize,
-    head: []isize,
-    prev: []isize,
+    head: anytype,
+    prev: anytype,
     comptime ring: bool,
     comptime lazy_head: bool,
     initialized: HashHeadInit(lazy_head),
@@ -1749,8 +1749,8 @@ fn insertHashWithLayout(
 fn insertKnownHashWithLayout(
     pos: usize,
     h: usize,
-    head: []isize,
-    prev: []isize,
+    head: anytype,
+    prev: anytype,
     comptime ring: bool,
     comptime lazy_head: bool,
     initialized: HashHeadInit(lazy_head),
@@ -2212,6 +2212,7 @@ test "reusable tiny hash planner preserves tokens and capacity" {
 }
 
 test "reusable tiny hash scratch preserves tokens across inputs" {
+    try std.testing.expectEqual(@as(usize, 16 * 1024), @sizeOf(@FieldType(TinyGreedyScratch, "head")));
     const options = GreedyOptions{ .window_len = 32 * 1024, .max_chain = 64, .nice_len = 64, .max_candidates = 8 };
     const inputs = [_][]const u8{
         "abcabcXabcabcXabcabcX",
