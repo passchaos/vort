@@ -17391,6 +17391,22 @@ test "zstd mixed match cache borrows a prepared duplicate index" {
     try std.testing.expectEqualSlices(MixedMatchCandidate, expected[0..expected_count], cached[0..cached_count]);
 }
 
+test "zstd mixed match cache builds its fallback duplicate index lazily" {
+    const payload = ("abcdefghijklmnop" ** 384) ++ ("xy" ** 64);
+    var cache: MixedMatchCandidateCache = .{};
+    try std.testing.expect(cache.duplicate_index == null);
+
+    var first: [mixed_candidates_per_position]MixedMatchCandidate = undefined;
+    var second: [mixed_candidates_per_position]MixedMatchCandidate = undefined;
+    const allowed: MixedMatchKindSet = .{ .duplicate = true, .repeated = true };
+    const start: usize = 4097;
+    const first_count = try cache.candidatesAt(&.{}, payload, start, 0, allowed, &first);
+    try std.testing.expect(cache.duplicate_index.? == &cache.owned_duplicate_index);
+    const second_count = try cache.candidatesAt(&.{}, payload, start, 0, allowed, &second);
+    try std.testing.expectEqual(first_count, second_count);
+    try std.testing.expectEqualSlices(MixedMatchCandidate, first[0..first_count], second[0..second_count]);
+}
+
 test "zstd literal-only writer emits two repeated-pattern sequences" {
     const payload = ("ab" ** 12) ++ ("cd" ** 12);
     const encoded = try encodeLiteralOnlyFrameAlloc(std.testing.allocator, payload);
