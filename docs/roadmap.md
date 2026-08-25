@@ -6946,3 +6946,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   the affected mixed case by median 7.8%; dictionary-only, uppercase, and
   no-match controls were not meaningfully affected, and all output metrics were
   equal.
+  Short ratio dictionary candidates are now encoded into a stack-backed buffer
+  bounded by the exact stored-stream size. Candidate overflow proves it cannot
+  win the strict size comparison; only the selected compressed result is copied
+  to caller-owned allocation. This covers both dictionary-only and mixed/LZ
+  arbitration without changing public ownership. Seven alternating fixed-CPU-8,
+  2,000-iteration A/B pairs improved dictionary, mixed, uppercase, and
+  incompressible short cases by median 1.9%, 1.5%, 1.9%, and 9.7%, respectively,
+  with unchanged sizes and dictionary-use metrics.

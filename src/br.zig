@@ -610,18 +610,7 @@ pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []cons
     defer lz_plan.deinit(allocator);
     if (lz_plan.stats.matches == 0) {
         if (input.len <= ratio_static_dictionary_max_input_len) {
-            if (encodePlannedStreamStaticDictionaryAlloc(allocator, input)) |candidate| {
-                const stored = try encodeStoredStreamAlloc(allocator, input);
-                if (candidate.len < stored.len) {
-                    allocator.free(stored);
-                    return candidate;
-                }
-                allocator.free(candidate);
-                return stored;
-            } else |err| switch (err) {
-                error.InvalidBlockPlan => return encodeStoredStreamAlloc(allocator, input),
-                else => return err,
-            }
+            return encodeRatioStaticDictionaryOrStoredAlloc(allocator, input);
         }
         return encodeStoredStreamAlloc(allocator, input);
     }
@@ -662,6 +651,23 @@ fn chooseStoredIfSmaller(allocator: std.mem.Allocator, input: []const u8, compre
 // words can dominate the complete stream. Exact final-byte arbitration keeps
 // ordinary short JSON/source data from regressing in size.
 const ratio_static_dictionary_max_input_len: usize = 256;
+const ratio_static_dictionary_candidate_capacity: usize = encodedStoredStreamBound(ratio_static_dictionary_max_input_len) catch unreachable;
+
+fn encodeRatioStaticDictionaryOrStoredAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
+    const plan = try command_plan.buildStaticDictionaryAlloc(allocator, input);
+    defer plan.deinit(allocator);
+    if (plan.match_count == 0) return encodeStoredStreamAlloc(allocator, input);
+
+    const stored_len = try encodedStoredStreamBound(input.len);
+    var candidate_storage: [ratio_static_dictionary_candidate_capacity]u8 = undefined;
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const candidate_len = encodeCommandPlanWithOptionsInto(allocator, candidate_storage[0..stored_len], input, plan.commands, &stats, .{}) catch |err| switch (err) {
+        error.OutOfMemory => return encodeStoredStreamAlloc(allocator, input),
+        else => return err,
+    };
+    if (candidate_len >= stored_len) return encodeStoredStreamAlloc(allocator, input);
+    return allocator.dupe(u8, candidate_storage[0..candidate_len]);
+}
 
 fn selectRatioStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, lz_commands: []const command_plan.Command, baseline: []u8) Error![]u8 {
     errdefer allocator.free(baseline);
@@ -669,6 +675,10 @@ fn selectRatioStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const
     var cached_matches: [ratio_static_dictionary_max_input_len]static_dictionary.Match = undefined;
     var cache_known: [ratio_static_dictionary_max_input_len]bool = undefined;
     var match_cache = command_plan.StaticDictionaryMatchCache.init(cached_matches[0..input.len], cache_known[0..input.len]);
+    var candidate_storage: [ratio_static_dictionary_candidate_capacity]u8 = undefined;
+    // Anything reaching the stored ceiling cannot beat final arbitration, so
+    // the exact stored bound is also a complete candidate-search budget.
+    const candidate_limit = @min(best.len, try encodedStoredStreamBound(input.len));
     // The mixed planner is useful only when a backward copy survives alongside
     // dictionary copies. Otherwise its command stream is equivalent in shape
     // to the dictionary-only candidate encoded below, so skip a redundant full
@@ -677,21 +687,31 @@ fn selectRatioStaticDictionaryAlloc(allocator: std.mem.Allocator, input: []const
     defer mixed_plan.deinit(allocator);
     if (mixed_plan.match_count != 0 and !allCopiesAreDictionary(mixed_plan.commands)) {
         var stats: encoder_stats.PlannedEncodeStats = .{};
-        const mixed = try encodeCommandPlanAlloc(allocator, input, mixed_plan.commands, null, &stats);
-        if (mixed.len < best.len) {
+        const mixed_len = encodeCommandPlanWithOptionsInto(allocator, candidate_storage[0..candidate_limit], input, mixed_plan.commands, &stats, .{}) catch |err| switch (err) {
+            // A candidate that exhausts the current winner's byte budget cannot
+            // win the strict final-size comparison, so no retry is needed.
+            error.OutOfMemory => null,
+            else => return err,
+        };
+        if (mixed_len) |len| if (len < best.len) {
+            const mixed = try allocator.dupe(u8, candidate_storage[0..len]);
             allocator.free(best);
             best = mixed;
-        } else allocator.free(mixed);
+        };
     }
-    const candidate = encodePlannedStreamStaticDictionaryWithCacheAlloc(allocator, input, &match_cache) catch |err| switch (err) {
-        error.InvalidBlockPlan => return chooseStoredIfSmaller(allocator, input, best),
+    const dictionary_plan = try command_plan.buildStaticDictionaryWithCacheAlloc(allocator, input, &match_cache);
+    defer dictionary_plan.deinit(allocator);
+    if (dictionary_plan.match_count == 0) return chooseStoredIfSmaller(allocator, input, best);
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    const candidate_len = encodeCommandPlanWithOptionsInto(allocator, candidate_storage[0..@min(candidate_limit, best.len)], input, dictionary_plan.commands, &stats, .{}) catch |err| switch (err) {
+        error.OutOfMemory => return chooseStoredIfSmaller(allocator, input, best),
         else => return err,
     };
-    if (candidate.len < best.len) {
+    if (candidate_len < best.len) {
+        const candidate = try allocator.dupe(u8, candidate_storage[0..candidate_len]);
         allocator.free(best);
         return chooseStoredIfSmaller(allocator, input, candidate);
     }
-    allocator.free(candidate);
     return chooseStoredIfSmaller(allocator, input, best);
 }
 
@@ -1251,6 +1271,13 @@ fn encodeCommandPlanWithOptionsAlloc(allocator: std.mem.Allocator, input: []cons
     errdefer out.deinit(allocator);
     try encodeCommandPlanWithOptionsAppend(allocator, &out, input, commands, io, stats, options);
     return out.toOwnedSlice(allocator);
+}
+
+fn encodeCommandPlanWithOptionsInto(allocator: std.mem.Allocator, output: []u8, input: []const u8, commands: []const command_plan.Command, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error!usize {
+    var out: std.ArrayList(u8) = .{ .items = output[0..0], .capacity = output.len };
+    var writer = BitWriter{ .out = &out, .bounded = true };
+    try encodeCommandPlanWithOptionsWrite(allocator, &writer, input, commands, null, stats, options);
+    return out.items.len;
 }
 
 fn encodeCommandPlanWithOptionsAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error!void {
@@ -6575,6 +6602,21 @@ test "br ratio planner never exceeds the stored stream" {
         defer std.testing.allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, input, decoded);
     }
+}
+
+test "br bounded command candidate reports overflow at a strict byte budget" {
+    const payload = "informationX";
+    const plan = try command_plan.buildStaticDictionaryAlloc(std.testing.allocator, payload);
+    defer plan.deinit(std.testing.allocator);
+    try std.testing.expect(plan.match_count > 0);
+
+    const encoded = try encodePlannedStreamStaticDictionaryAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    var output: [64]u8 = undefined;
+    var stats: encoder_stats.PlannedEncodeStats = .{};
+    try std.testing.expectError(error.OutOfMemory, encodeCommandPlanWithOptionsInto(std.testing.allocator, output[0 .. encoded.len - 1], payload, plan.commands, &stats, .{}));
+    try std.testing.expectEqual(encoded.len, try encodeCommandPlanWithOptionsInto(std.testing.allocator, output[0..encoded.len], payload, plan.commands, &stats, .{}));
+    try std.testing.expectEqualSlices(u8, encoded, output[0..encoded.len]);
 }
 
 test "br ratio planner mixes LZ77 and static dictionary commands" {
