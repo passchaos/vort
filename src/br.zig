@@ -1352,14 +1352,14 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     try writeLastCompressedMetaBlockHeader(allocator, writer, input.len);
     const distance_alphabet_size = plannedDistanceAlphabetSize(&distance_alphabet);
     const lengths_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
-    const literal_lengths = try literal_alphabet.codeLengths(256);
+    const literal_lengths = try literal_alphabet.codeLengths(&literal_frequencies);
     const literal_context_lengths = if (options.use_utf8_text_contexts) blk: {
         var lengths: [2][256]u4 = undefined;
-        for (&lengths, &literal_context_alphabets) |*tree_lengths, *alphabet| tree_lengths.* = try alphabet.codeLengths(256);
+        for (&lengths, &literal_context_alphabets, &literal_context_frequencies) |*tree_lengths, *alphabet, *frequencies| tree_lengths.* = try alphabet.codeLengths(frequencies);
         break :blk lengths;
     } else undefined;
-    const command_lengths = if (command_alphabet.len <= 4) @as([704]u4, @splat(0)) else try command_alphabet.codeLengths(704);
-    const distance_lengths = if (distance_alphabet.len <= 4) @as([max_distance_alphabet_size]u4, @splat(0)) else try distance_alphabet.codeLengths(max_distance_alphabet_size);
+    const command_lengths = if (command_alphabet.len <= 4) @as([704]u4, @splat(0)) else try command_alphabet.codeLengths(&command_frequencies);
+    const distance_lengths = if (distance_alphabet.len <= 4) @as([max_distance_alphabet_size]u4, @splat(0)) else try distance_alphabet.codeLengths(&distance_frequencies);
     if (io) |active| stats.lengths_ns = elapsedNs(lengths_start.?, active);
     const header_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     if (options.use_utf8_text_contexts) {

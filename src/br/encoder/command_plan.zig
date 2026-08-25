@@ -72,42 +72,24 @@ pub fn PrefixAlphabetFor(comptime capacity: usize) type {
         const Self = @This();
 
         symbols: [capacity]u16 = @splat(0),
-        // A Brotli meta-block contains at most 2^24 bytes, so u32 exactly
-        // covers every possible symbol count.
-        frequencies: [capacity]u32 = @splat(0),
         len: usize = 0,
 
-        pub fn add(self: *Self, symbol: u16) !void {
-            for (self.symbols[0..self.len], 0..) |known, i| {
-                if (known == symbol) {
-                    self.frequencies[i] = std.math.add(u32, self.frequencies[i], 1) catch return error.IntegerOverflow;
-                    return;
-                }
-            }
-            if (self.len == self.symbols.len) return error.InvalidBlockPlan;
-            self.symbols[self.len] = symbol;
-            self.frequencies[self.len] = 1;
-            self.len += 1;
-        }
-
-        pub fn finish(self: *Self) void {
+        pub fn finish(self: *Self, frequencies: *const [capacity]u32) void {
             var i: usize = 1;
             while (i < self.len) : (i += 1) {
                 var j = i;
                 const symbol = self.symbols[j];
-                const frequency = self.frequencies[j];
-                while (j != 0 and lessValue(symbol, frequency, self.symbols[j - 1], self.frequencies[j - 1])) : (j -= 1) {
+                const frequency = frequencies[symbol];
+                while (j != 0 and lessValue(symbol, frequency, self.symbols[j - 1], frequencies[self.symbols[j - 1]])) : (j -= 1) {
                     self.symbols[j] = self.symbols[j - 1];
-                    self.frequencies[j] = self.frequencies[j - 1];
                 }
                 self.symbols[j] = symbol;
-                self.frequencies[j] = frequency;
             }
         }
 
-        pub fn codeLengths(self: *const Self, comptime alphabet_size: usize) ![alphabet_size]u4 {
+        pub fn codeLengths(self: *const Self, frequencies: *const [capacity]u32) ![capacity]u4 {
             if (self.len == 0) return error.InvalidBlockPlan;
-            var lengths: [alphabet_size]u4 = @splat(0);
+            var lengths: [capacity]u4 = @splat(0);
             switch (self.len) {
                 1 => {}, // Single-symbol trees consume no payload bits.
                 2 => {
@@ -124,15 +106,17 @@ pub fn PrefixAlphabetFor(comptime capacity: usize) type {
                 5...max_prefix_symbols => {
                     if (self.len <= 64) {
                         var compact_lengths: [64]u4 = undefined;
-                        if (small_huffman.build(64, self.frequencies[0..self.len], &compact_lengths)) {
+                        var compact_frequencies: [64]u32 = undefined;
+                        for (self.symbols[0..self.len], 0..) |symbol, i| compact_frequencies[i] = frequencies[symbol];
+                        if (small_huffman.build(64, compact_frequencies[0..self.len], &compact_lengths)) {
                             for (self.symbols[0..self.len], compact_lengths[0..self.len]) |symbol, bits| lengths[symbol] = bits;
                         } else {
-                            self.fillTreeLengths(alphabet_size, 64, &lengths);
+                            self.fillTreeLengths(frequencies, 64, &lengths);
                         }
                     } else if (self.len <= 256)
-                        self.fillTreeLengths(alphabet_size, 256, &lengths)
+                        self.fillTreeLengths(frequencies, 256, &lengths)
                     else
-                        self.fillTreeLengths(alphabet_size, max_prefix_symbols, &lengths);
+                        self.fillTreeLengths(frequencies, max_prefix_symbols, &lengths);
                 },
                 else => unreachable,
             }
@@ -181,11 +165,11 @@ pub fn PrefixAlphabetFor(comptime capacity: usize) type {
                 (left_frequency == right_frequency and left_symbol < right_symbol);
         }
 
-        fn fillTreeLengths(self: *const Self, comptime alphabet_size: usize, comptime compact_size: usize, lengths: *[alphabet_size]u4) void {
+        fn fillTreeLengths(self: *const Self, frequencies: *const [capacity]u32, comptime compact_size: usize, lengths: *[capacity]u4) void {
             std.debug.assert(self.len <= compact_size);
-            var frequencies: [compact_size]u32 = @splat(0);
-            for (self.frequencies[0..self.len], 0..) |frequency, i| frequencies[i] = frequency;
-            const compact_lengths = @import("../../huffman.zig").treeCodeLengths(compact_size, &frequencies, 15);
+            var compact_frequencies: [compact_size]u32 = @splat(0);
+            for (self.symbols[0..self.len], 0..) |symbol, i| compact_frequencies[i] = frequencies[symbol];
+            const compact_lengths = @import("../../huffman.zig").treeCodeLengths(compact_size, &compact_frequencies, 15);
             for (self.symbols[0..self.len], compact_lengths[0..self.len]) |symbol, bits| lengths[symbol] = bits;
         }
     };
@@ -194,8 +178,8 @@ pub fn PrefixAlphabetFor(comptime capacity: usize) type {
 pub const PrefixAlphabet = PrefixAlphabetFor(max_prefix_symbols);
 
 test "prefix alphabet capacity controls scratch footprint" {
-    try std.testing.expectEqual(@as(usize, 1544), @sizeOf(PrefixAlphabetFor(256)));
-    try std.testing.expectEqual(@as(usize, 4232), @sizeOf(PrefixAlphabet));
+    try std.testing.expectEqual(@as(usize, 520), @sizeOf(PrefixAlphabetFor(256)));
+    try std.testing.expectEqual(@as(usize, 1416), @sizeOf(PrefixAlphabet));
 }
 
 /// O(1) frequency collection used by the planner hot path. Converting to the
@@ -213,11 +197,10 @@ pub fn alphabetFromFrequenciesInto(comptime alphabet_size: usize, alphabet: *Pre
         if (frequency == 0) continue;
         if (alphabet.len == alphabet.symbols.len) return error.InvalidBlockPlan;
         alphabet.symbols[alphabet.len] = @intCast(symbol);
-        alphabet.frequencies[alphabet.len] = frequency;
         alphabet.len += 1;
     }
     if (alphabet.len == 0) return error.InvalidBlockPlan;
-    alphabet.finish();
+    alphabet.finish(frequencies);
 }
 
 /// Coalesce consecutive literal tokens into the insert portion of the next
@@ -658,34 +641,28 @@ test "static dictionary cache preserves mixed and dictionary-only plans" {
 }
 
 test "simple alphabet orders hot symbols first" {
+    var frequencies: [max_prefix_symbols]u32 = @splat(0);
     var alphabet = PrefixAlphabet{};
-    for ([_]u16{ 9, 4, 9, 7, 9, 4 }) |symbol| try alphabet.add(symbol);
-    alphabet.finish();
+    for ([_]u16{ 9, 4, 9, 7, 9, 4 }) |symbol| frequencies[symbol] += 1;
+    try alphabetFromFrequenciesInto(max_prefix_symbols, &alphabet, &frequencies);
     try std.testing.expectEqualSlices(u16, &.{ 9, 4, 7 }, alphabet.symbols[0..alphabet.len]);
-    const lengths = try alphabet.codeLengths(16);
+    const lengths = try alphabet.codeLengths(&frequencies);
     try std.testing.expectEqual(@as(u4, 1), lengths[9]);
     try std.testing.expectEqual(@as(u4, 2), lengths[4]);
     try std.testing.expectEqual(@as(u4, 2), lengths[7]);
 }
 
-test "prefix alphabet frequency rejects u32 overflow" {
-    var alphabet = PrefixAlphabet{};
-    alphabet.symbols[0] = 7;
-    alphabet.frequencies[0] = std.math.maxInt(u32);
-    alphabet.len = 1;
-    try std.testing.expectError(error.IntegerOverflow, alphabet.add(7));
-}
-
 test "simple alphabet direct codes match canonical encoder" {
     const huffman = @import("../../huffman.zig");
     inline for (2..5) |count| {
-        var alphabet = PrefixAlphabet{};
+        var alphabet = PrefixAlphabetFor(32){};
+        var frequencies: [32]u32 = @splat(0);
         for (0..count) |i| {
             alphabet.symbols[i] = @intCast(9 - i * 2);
-            alphabet.frequencies[i] = @intCast(count - i);
+            frequencies[alphabet.symbols[i]] = @intCast(count - i);
         }
         alphabet.len = count;
-        const lengths = try alphabet.codeLengths(32);
+        const lengths = try alphabet.codeLengths(&frequencies);
         const generic = try huffman.HuffmanTable(32).Encoder.init(&lengths);
         for (alphabet.symbols[0..count]) |symbol| {
             const direct = alphabet.simpleCode(symbol).?;
@@ -696,10 +673,11 @@ test "simple alphabet direct codes match canonical encoder" {
 }
 
 test "complex alphabet produces a complete balanced tree" {
-    var alphabet = PrefixAlphabet{};
-    for ([_]u16{ 9, 8, 7, 6, 5 }) |symbol| try alphabet.add(symbol);
-    alphabet.finish();
-    const lengths = try alphabet.codeLengths(16);
+    var frequencies: [16]u32 = @splat(0);
+    var alphabet = PrefixAlphabetFor(16){};
+    for ([_]u16{ 9, 8, 7, 6, 5 }) |symbol| frequencies[symbol] = 1;
+    try alphabetFromFrequenciesInto(16, &alphabet, &frequencies);
+    const lengths = try alphabet.codeLengths(&frequencies);
     for ([_]u16{ 5, 6, 7, 8, 9 }) |symbol| try std.testing.expect(lengths[symbol] != 0);
     _ = try @import("../../huffman.zig").HuffmanTable(16).init(&lengths);
 }

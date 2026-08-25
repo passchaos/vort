@@ -7105,8 +7105,8 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   package-merge fallback. Eleven alternating fixed-CPU-8 A/B pairs preserve all
   fast/balanced/ratio wire sizes and improve full JSON/source/log fast encoding
   by about 10.8%/9.4%/10.5%; balanced improves about 9.1%/11.6%/12.2%, and ratio
-  improves about 7.9%/3.4%/12.6%. Overflow remains explicitly rejected by the
-  incremental alphabet API.
+  improves about 7.9%/3.4%/12.6%. The 2^24-byte meta-block bound also proves
+  that every frequency increment fits the compact representation.
   `PrefixAlphabet` is now capacity-parameterized instead of always reserving
   the 704-symbol command maximum. Literal and UTF-8-context trees use 256-entry
   instances, while command and distance trees retain their exact wire bounds;
@@ -7115,3 +7115,10 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   preserve all locked output sizes and improve fast JSON/source/log encoding by
   about 5.2%/3.9%/4.7%; balanced improves about 8.9%/8.4%/6.9%, and ratio about
   8.1%/12.7%/6.6%.
+  The compact Brotli alphabet now stores only its active symbol ordering and
+  borrows the wire planner's existing dense `u32` frequency tables for sorting
+  and code-length construction. This removes the second frequency copy entirely:
+  a 256-symbol alphabet is now 520 bytes and the full 704-symbol form is 1,416
+  bytes. Eleven alternating fixed-CPU-8 A/B pairs preserve all locked streams
+  and improve fast JSON/source/log encoding by about 7.0%/5.7%/7.1%; balanced
+  improves about 6.6%/8.2%/8.4%, and ratio about 6.0%/7.2%/8.9%.
