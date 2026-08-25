@@ -1331,19 +1331,30 @@ fn hashGreedyPlanTinyAllocWithAnchor(
 ) !GreedyPlan {
     if (input.len > 32 * 1024) return hashGreedyPlanAllocWithAnchor(allocator, input, options, anchor);
 
+    if (comptime anchor == .three) {
+        // Brotli's three-byte tiny path shares the reusable parser's exact
+        // 32 KiB position bound. Compact signed indices retain the -1 sentinel,
+        // while lazy initialization avoids clearing the full head table. Keep
+        // the four-byte Zstd path unchanged: its primary blocks were neutral
+        // to slightly slower with the extra bitmap checks.
+        var head: [4096]i16 = undefined;
+        var initialized: [hash_head_init_words]u64 = @splat(0);
+        var prev_stack: [32 * 1024]i16 = undefined;
+        return hashGreedyPlanWithTables(
+            allocator,
+            input,
+            options,
+            &head,
+            prev_stack[0..input.len],
+            false,
+            true,
+            &initialized,
+            anchor,
+        );
+    }
     var head: [4096]isize = @splat(-1);
     var prev_stack: [32 * 1024]isize = undefined;
-    return hashGreedyPlanWithTables(
-        allocator,
-        input,
-        options,
-        &head,
-        prev_stack[0..input.len],
-        false,
-        false,
-        {},
-        anchor,
-    );
+    return hashGreedyPlanWithTables(allocator, input, options, &head, prev_stack[0..input.len], false, false, {}, anchor);
 }
 
 fn hashPrevTableLen(input_len: usize, window_len: usize) usize {
@@ -1382,8 +1393,8 @@ fn hashGreedyPlanWithTables(
     allocator: std.mem.Allocator,
     input: []const u8,
     options: GreedyOptions,
-    head: []isize,
-    prev: []isize,
+    head: anytype,
+    prev: anytype,
     comptime ring: bool,
     comptime lazy_head: bool,
     initialized: HashHeadInit(lazy_head),
@@ -2254,6 +2265,18 @@ test "reusable tiny hash scratch covers maximum input position" {
     const stats = try hashGreedyPlanAutoTinyScratchReuse(&tokens, &scratch, std.testing.allocator, &input, options);
     try expectEqualTokenSlices(reference.tokens, tokens.items);
     try std.testing.expectEqual(reference.stats, stats);
+}
+
+test "one-shot tiny hash planner covers maximum three-byte position" {
+    var input: [32 * 1024]u8 = undefined;
+    for (&input, 0..) |*byte, i| byte.* = @truncate(i * 43 + i / 13);
+    const options = GreedyOptions{ .window_len = input.len, .max_chain = 64, .nice_len = 64, .max_candidates = 8 };
+    const reference = try hashGreedyPlanAlloc(std.testing.allocator, &input, options);
+    defer reference.deinit(std.testing.allocator);
+    const tiny = try hashGreedyPlanAutoTinyAlloc(std.testing.allocator, &input, options);
+    defer tiny.deinit(std.testing.allocator);
+    try expectEqualTokenSlices(reference.tokens, tiny.tokens);
+    try std.testing.expectEqual(reference.stats, tiny.stats);
 }
 
 test "reusable tiny lazy hash planner preserves tokens and capacity" {

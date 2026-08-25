@@ -7154,3 +7154,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   mixed inputs improve by roughly 5.3%/4.4%, and the no-match control by about
   36%. A focused multi-input oracle pins exact tokens, statistics, and the
   16 KiB head-table footprint.
+  The one-shot three-byte tiny-greedy parser now uses the same bounded `i16`
+  position representation and lazy head initialization as the reusable Brotli
+  path. The four-byte Zstd specialization deliberately retains its former
+  tables because fixed-core measurements found its primary rows neutral to
+  slightly slower with bitmap checks. Eleven alternating CPU-8 A/B pairs keep
+  every Brotli byte identical while making the standalone parser about 3.3x–
+  3.6x faster and complete JSON/source/log encoding about 63%/48%/55% faster.
+  A 32 KiB boundary oracle and the Zstd stage gate protect both specializations.
