@@ -7017,3 +7017,8 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   3,673/2,158 bytes. Eleven alternating fixed-CPU-8 A/B pairs improved median
   primary text/JSON/binary stage time by about 20.9%/5.8%/1.7%, and adaptive
   rows by roughly 14.5% to 44.0%.
+  A second hash-width sweep reduced the same tables further to 8/11 bits. The
+  complete locked size matrix remains unchanged. Eleven alternating fixed-CPU-8
+  A/B pairs against the 10/12-bit version improved median primary text/JSON/
+  binary stage time by about 4.2%/1.0%/3.2%, with adaptive rows another
+  1.1%–7.0% faster and the parser's stack tables reduced from 20 KiB to 9 KiB.

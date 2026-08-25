@@ -4,8 +4,8 @@ const lz77 = @import("../../lz77.zig");
 // Upstream dfast gives both tables enough index bits to avoid letting common
 // four-byte JSON/source prefixes continuously evict useful candidates. These
 // bounds still fit comfortably in caller stack space for Vort's 128 KiB block.
-const short_hash_bits = 10;
-const long_hash_bits = 12;
+const short_hash_bits = 8;
+const long_hash_bits = 11;
 const short_hash_size = 1 << short_hash_bits;
 const long_hash_size = 1 << long_hash_bits;
 const invalid_position = std.math.maxInt(u32);
