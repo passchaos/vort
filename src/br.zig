@@ -1285,7 +1285,7 @@ fn encodeCommandPlanWithOptionsAppend(allocator: std.mem.Allocator, out: *std.Ar
     try encodeCommandPlanWithOptionsWrite(allocator, &writer, input, commands, io, stats, options);
 }
 
-fn initPlannedLiteralEncoder(lengths: *const [256]u4, alphabet: *const command_plan.PrefixAlphabet) Error!huffman.HuffmanTable(256).Encoder {
+fn initPlannedLiteralEncoder(lengths: *const [256]u4, alphabet: *const command_plan.PrefixAlphabetFor(256)) Error!huffman.HuffmanTable(256).Encoder {
     if (alphabet.len <= 1) return .{};
     if (alphabet.len <= 64) return huffman.HuffmanTable(256).Encoder.initSparseTrusted(lengths, alphabet.symbols[0..alphabet.len]);
     return huffman.HuffmanTable(256).Encoder.init(lengths);
@@ -1328,10 +1328,10 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     if (allZeroFrequencies(max_distance_alphabet_size, &distance_frequencies)) distance_frequencies[0] = 1;
     if (io) |active| stats.frequency_ns = elapsedNs(frequency_start.?, active);
     const alphabet_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
-    var literal_alphabet = command_plan.PrefixAlphabet{};
-    var literal_context_alphabets: [2]command_plan.PrefixAlphabet = undefined;
+    var literal_alphabet = command_plan.PrefixAlphabetFor(256){};
+    var literal_context_alphabets: [2]command_plan.PrefixAlphabetFor(256) = undefined;
     var command_alphabet = command_plan.PrefixAlphabet{};
-    var distance_alphabet = command_plan.PrefixAlphabet{};
+    var distance_alphabet = command_plan.PrefixAlphabetFor(max_distance_alphabet_size){};
     try command_plan.alphabetFromFrequenciesInto(256, &literal_alphabet, &literal_frequencies);
     if (options.use_utf8_text_contexts) for (&literal_context_alphabets, &literal_context_frequencies) |*alphabet, *frequencies| {
         if (allZeroFrequencies(256, frequencies)) frequencies[0] = 1;
@@ -14063,9 +14063,9 @@ fn writeRepeatedPrefixCompressedHeader(allocator: std.mem.Allocator, writer: *Bi
 fn writePlannedCompressedHeader(
     allocator: std.mem.Allocator,
     writer: *BitWriter,
-    literal_alphabet: *const command_plan.PrefixAlphabet,
+    literal_alphabet: *const command_plan.PrefixAlphabetFor(256),
     command_alphabet: *const command_plan.PrefixAlphabet,
-    distance_alphabet: *const command_plan.PrefixAlphabet,
+    distance_alphabet: *const command_plan.PrefixAlphabetFor(max_distance_alphabet_size),
     distance_alphabet_size: usize,
     literal_lengths: *const [256]u4,
     command_lengths: *const [704]u4,
@@ -14087,10 +14087,10 @@ fn writePlannedCompressedHeader(
 fn writePlannedCompressedHeaderTwoLiteralContexts(
     allocator: std.mem.Allocator,
     writer: *BitWriter,
-    literal_alphabets: *const [2]command_plan.PrefixAlphabet,
+    literal_alphabets: *const [2]command_plan.PrefixAlphabetFor(256),
     literal_lengths: *const [2][256]u4,
     command_alphabet: *const command_plan.PrefixAlphabet,
-    distance_alphabet: *const command_plan.PrefixAlphabet,
+    distance_alphabet: *const command_plan.PrefixAlphabetFor(max_distance_alphabet_size),
     distance_alphabet_size: usize,
     command_lengths: *const [704]u4,
     distance_lengths: *const [max_distance_alphabet_size]u4,
@@ -14123,13 +14123,13 @@ fn writeUtf8TextContextMap(allocator: std.mem.Allocator, writer: *BitWriter) Err
     try writer.writeBits(allocator, 0, 1); // IMTF = false.
 }
 
-fn plannedDistanceAlphabetSize(alphabet: *const command_plan.PrefixAlphabet) usize {
+fn plannedDistanceAlphabetSize(alphabet: *const command_plan.PrefixAlphabetFor(max_distance_alphabet_size)) usize {
     var highest: usize = 0;
     for (alphabet.symbols[0..alphabet.len]) |symbol| highest = @max(highest, symbol);
     return @max(@as(usize, 16 + 15 + 48), highest + 1);
 }
 
-fn writePrefixSymbolsWithLengths(allocator: std.mem.Allocator, writer: *BitWriter, alphabet_size: usize, alphabet: *const command_plan.PrefixAlphabet, lengths: []const u4) Error!void {
+fn writePrefixSymbolsWithLengths(allocator: std.mem.Allocator, writer: *BitWriter, alphabet_size: usize, alphabet: anytype, lengths: []const u4) Error!void {
     if (alphabet.len == 0) return error.InvalidBlockPlan;
     if (alphabet.len > 4) {
         var highest: usize = 0;

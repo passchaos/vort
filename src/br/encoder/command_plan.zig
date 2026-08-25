@@ -66,137 +66,148 @@ pub const max_prefix_symbols = 704;
 /// codes go to hotter symbols. Up to four entries use Brotli's simple prefix;
 /// larger sets use the complex-tree writer. Equal-frequency ordering is
 /// deterministic by symbol.
-pub const PrefixAlphabet = struct {
-    symbols: [max_prefix_symbols]u16 = @splat(0),
-    // A Brotli meta-block contains at most 2^24 bytes, so u32 exactly covers
-    // every possible symbol count while halving this hot scratch array on
-    // 64-bit targets.
-    frequencies: [max_prefix_symbols]u32 = @splat(0),
-    len: usize = 0,
+pub fn PrefixAlphabetFor(comptime capacity: usize) type {
+    comptime std.debug.assert(capacity <= max_prefix_symbols);
+    return struct {
+        const Self = @This();
 
-    pub fn add(self: *PrefixAlphabet, symbol: u16) !void {
-        for (self.symbols[0..self.len], 0..) |known, i| {
-            if (known == symbol) {
-                self.frequencies[i] = std.math.add(u32, self.frequencies[i], 1) catch return error.IntegerOverflow;
-                return;
+        symbols: [capacity]u16 = @splat(0),
+        // A Brotli meta-block contains at most 2^24 bytes, so u32 exactly
+        // covers every possible symbol count.
+        frequencies: [capacity]u32 = @splat(0),
+        len: usize = 0,
+
+        pub fn add(self: *Self, symbol: u16) !void {
+            for (self.symbols[0..self.len], 0..) |known, i| {
+                if (known == symbol) {
+                    self.frequencies[i] = std.math.add(u32, self.frequencies[i], 1) catch return error.IntegerOverflow;
+                    return;
+                }
+            }
+            if (self.len == self.symbols.len) return error.InvalidBlockPlan;
+            self.symbols[self.len] = symbol;
+            self.frequencies[self.len] = 1;
+            self.len += 1;
+        }
+
+        pub fn finish(self: *Self) void {
+            var i: usize = 1;
+            while (i < self.len) : (i += 1) {
+                var j = i;
+                const symbol = self.symbols[j];
+                const frequency = self.frequencies[j];
+                while (j != 0 and lessValue(symbol, frequency, self.symbols[j - 1], self.frequencies[j - 1])) : (j -= 1) {
+                    self.symbols[j] = self.symbols[j - 1];
+                    self.frequencies[j] = self.frequencies[j - 1];
+                }
+                self.symbols[j] = symbol;
+                self.frequencies[j] = frequency;
             }
         }
-        if (self.len == self.symbols.len) return error.InvalidBlockPlan;
-        self.symbols[self.len] = symbol;
-        self.frequencies[self.len] = 1;
-        self.len += 1;
-    }
 
-    pub fn finish(self: *PrefixAlphabet) void {
-        var i: usize = 1;
-        while (i < self.len) : (i += 1) {
-            var j = i;
-            const symbol = self.symbols[j];
-            const frequency = self.frequencies[j];
-            while (j != 0 and lessValue(symbol, frequency, self.symbols[j - 1], self.frequencies[j - 1])) : (j -= 1) {
-                self.symbols[j] = self.symbols[j - 1];
-                self.frequencies[j] = self.frequencies[j - 1];
-            }
-            self.symbols[j] = symbol;
-            self.frequencies[j] = frequency;
-        }
-    }
-
-    pub fn codeLengths(self: *const PrefixAlphabet, comptime alphabet_size: usize) ![alphabet_size]u4 {
-        if (self.len == 0) return error.InvalidBlockPlan;
-        var lengths: [alphabet_size]u4 = @splat(0);
-        switch (self.len) {
-            1 => {}, // Single-symbol trees consume no payload bits.
-            2 => {
-                for (self.symbols[0..2]) |symbol| lengths[symbol] = 1;
-            },
-            3 => {
-                lengths[self.symbols[0]] = 1;
-                lengths[self.symbols[1]] = 2;
-                lengths[self.symbols[2]] = 2;
-            },
-            4 => {
-                for (self.symbols[0..4]) |symbol| lengths[symbol] = 2;
-            },
-            5...max_prefix_symbols => {
-                if (self.len <= 64) {
-                    var compact_lengths: [64]u4 = undefined;
-                    if (small_huffman.build(64, self.frequencies[0..self.len], &compact_lengths)) {
-                        for (self.symbols[0..self.len], compact_lengths[0..self.len]) |symbol, bits| lengths[symbol] = bits;
-                    } else {
-                        self.fillTreeLengths(alphabet_size, 64, &lengths);
-                    }
-                } else if (self.len <= 256)
-                    self.fillTreeLengths(alphabet_size, 256, &lengths)
-                else
-                    self.fillTreeLengths(alphabet_size, max_prefix_symbols, &lengths);
-            },
-            else => unreachable,
-        }
-        return lengths;
-    }
-
-    pub fn simpleCode(self: *const PrefixAlphabet, symbol: u16) ?struct { code: u16, bits: u4 } {
-        if (self.len == 0 or self.len > 4) return null;
-        var index: usize = 0;
-        while (index < self.len and self.symbols[index] != symbol) : (index += 1) {}
-        if (index == self.len) return null;
-        if (self.len == 1) return .{ .code = 0, .bits = 0 };
-        const bits: u4 = switch (self.len) {
-            2 => 1,
-            3 => if (index == 0) 1 else 2,
-            4 => 2,
-            else => unreachable,
-        };
-        var counts: [3]u16 = @splat(0);
-        for (0..self.len) |i| counts[
+        pub fn codeLengths(self: *const Self, comptime alphabet_size: usize) ![alphabet_size]u4 {
+            if (self.len == 0) return error.InvalidBlockPlan;
+            var lengths: [alphabet_size]u4 = @splat(0);
             switch (self.len) {
-                2 => 1,
-                3 => if (i == 0) 1 else 2,
-                4 => 2,
+                1 => {}, // Single-symbol trees consume no payload bits.
+                2 => {
+                    for (self.symbols[0..2]) |symbol| lengths[symbol] = 1;
+                },
+                3 => {
+                    lengths[self.symbols[0]] = 1;
+                    lengths[self.symbols[1]] = 2;
+                    lengths[self.symbols[2]] = 2;
+                },
+                4 => {
+                    for (self.symbols[0..4]) |symbol| lengths[symbol] = 2;
+                },
+                5...max_prefix_symbols => {
+                    if (self.len <= 64) {
+                        var compact_lengths: [64]u4 = undefined;
+                        if (small_huffman.build(64, self.frequencies[0..self.len], &compact_lengths)) {
+                            for (self.symbols[0..self.len], compact_lengths[0..self.len]) |symbol, bits| lengths[symbol] = bits;
+                        } else {
+                            self.fillTreeLengths(alphabet_size, 64, &lengths);
+                        }
+                    } else if (self.len <= 256)
+                        self.fillTreeLengths(alphabet_size, 256, &lengths)
+                    else
+                        self.fillTreeLengths(alphabet_size, max_prefix_symbols, &lengths);
+                },
                 else => unreachable,
             }
-        ] += 1;
-        var next: [3]u16 = @splat(0);
-        next[2] = counts[1] << 1;
-        var rank: u16 = 0;
-        for (0..self.len) |i| {
-            const other_bits: u4 = switch (self.len) {
+            return lengths;
+        }
+
+        pub fn simpleCode(self: *const Self, symbol: u16) ?struct { code: u16, bits: u4 } {
+            if (self.len == 0 or self.len > 4) return null;
+            var index: usize = 0;
+            while (index < self.len and self.symbols[index] != symbol) : (index += 1) {}
+            if (index == self.len) return null;
+            if (self.len == 1) return .{ .code = 0, .bits = 0 };
+            const bits: u4 = switch (self.len) {
                 2 => 1,
-                3 => if (i == 0) 1 else 2,
+                3 => if (index == 0) 1 else 2,
                 4 => 2,
                 else => unreachable,
             };
-            if (other_bits == bits and self.symbols[i] < symbol) rank += 1;
+            var counts: [3]u16 = @splat(0);
+            for (0..self.len) |i| counts[
+                switch (self.len) {
+                    2 => 1,
+                    3 => if (i == 0) 1 else 2,
+                    4 => 2,
+                    else => unreachable,
+                }
+            ] += 1;
+            var next: [3]u16 = @splat(0);
+            next[2] = counts[1] << 1;
+            var rank: u16 = 0;
+            for (0..self.len) |i| {
+                const other_bits: u4 = switch (self.len) {
+                    2 => 1,
+                    3 => if (i == 0) 1 else 2,
+                    4 => 2,
+                    else => unreachable,
+                };
+                if (other_bits == bits and self.symbols[i] < symbol) rank += 1;
+            }
+            const canonical = next[bits] + rank;
+            return .{ .code = @bitReverse(canonical) >> @intCast(16 - @as(usize, bits)), .bits = bits };
         }
-        const canonical = next[bits] + rank;
-        return .{ .code = @bitReverse(canonical) >> @intCast(16 - @as(usize, bits)), .bits = bits };
-    }
 
-    fn lessValue(left_symbol: u16, left_frequency: u32, right_symbol: u16, right_frequency: u32) bool {
-        return left_frequency > right_frequency or
-            (left_frequency == right_frequency and left_symbol < right_symbol);
-    }
+        fn lessValue(left_symbol: u16, left_frequency: u32, right_symbol: u16, right_frequency: u32) bool {
+            return left_frequency > right_frequency or
+                (left_frequency == right_frequency and left_symbol < right_symbol);
+        }
 
-    fn fillTreeLengths(self: *const PrefixAlphabet, comptime alphabet_size: usize, comptime compact_size: usize, lengths: *[alphabet_size]u4) void {
-        std.debug.assert(self.len <= compact_size);
-        var frequencies: [compact_size]u32 = @splat(0);
-        for (self.frequencies[0..self.len], 0..) |frequency, i| frequencies[i] = frequency;
-        const compact_lengths = @import("../../huffman.zig").treeCodeLengths(compact_size, &frequencies, 15);
-        for (self.symbols[0..self.len], compact_lengths[0..self.len]) |symbol, bits| lengths[symbol] = bits;
-    }
-};
+        fn fillTreeLengths(self: *const Self, comptime alphabet_size: usize, comptime compact_size: usize, lengths: *[alphabet_size]u4) void {
+            std.debug.assert(self.len <= compact_size);
+            var frequencies: [compact_size]u32 = @splat(0);
+            for (self.frequencies[0..self.len], 0..) |frequency, i| frequencies[i] = frequency;
+            const compact_lengths = @import("../../huffman.zig").treeCodeLengths(compact_size, &frequencies, 15);
+            for (self.symbols[0..self.len], compact_lengths[0..self.len]) |symbol, bits| lengths[symbol] = bits;
+        }
+    };
+}
+
+pub const PrefixAlphabet = PrefixAlphabetFor(max_prefix_symbols);
+
+test "prefix alphabet capacity controls scratch footprint" {
+    try std.testing.expectEqual(@as(usize, 1544), @sizeOf(PrefixAlphabetFor(256)));
+    try std.testing.expectEqual(@as(usize, 4232), @sizeOf(PrefixAlphabet));
+}
 
 /// O(1) frequency collection used by the planner hot path. Converting to the
 /// compact ordered alphabet happens once after all commands are scanned, rather
 /// than linearly searching up to 704 symbols for every literal/command/distance.
-pub fn alphabetFromFrequencies(comptime alphabet_size: usize, frequencies: *const [alphabet_size]u32) !PrefixAlphabet {
-    var alphabet = PrefixAlphabet{};
+pub fn alphabetFromFrequencies(comptime alphabet_size: usize, frequencies: *const [alphabet_size]u32) !PrefixAlphabetFor(alphabet_size) {
+    var alphabet = PrefixAlphabetFor(alphabet_size){};
     try alphabetFromFrequenciesInto(alphabet_size, &alphabet, frequencies);
     return alphabet;
 }
 
-pub fn alphabetFromFrequenciesInto(comptime alphabet_size: usize, alphabet: *PrefixAlphabet, frequencies: *const [alphabet_size]u32) !void {
+pub fn alphabetFromFrequenciesInto(comptime alphabet_size: usize, alphabet: *PrefixAlphabetFor(alphabet_size), frequencies: *const [alphabet_size]u32) !void {
     alphabet.len = 0;
     for (frequencies, 0..) |frequency, symbol| {
         if (frequency == 0) continue;

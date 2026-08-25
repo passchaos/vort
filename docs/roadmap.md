@@ -7107,3 +7107,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   by about 10.8%/9.4%/10.5%; balanced improves about 9.1%/11.6%/12.2%, and ratio
   improves about 7.9%/3.4%/12.6%. Overflow remains explicitly rejected by the
   incremental alphabet API.
+  `PrefixAlphabet` is now capacity-parameterized instead of always reserving
+  the 704-symbol command maximum. Literal and UTF-8-context trees use 256-entry
+  instances, while command and distance trees retain their exact wire bounds;
+  a layout test pins the resulting 1,544-byte literal scratch versus 4,232
+  bytes for the full command alphabet. Eleven alternating fixed-CPU-8 A/B pairs
+  preserve all locked output sizes and improve fast JSON/source/log encoding by
+  about 5.2%/3.9%/4.7%; balanced improves about 8.9%/8.4%/6.9%, and ratio about
+  8.1%/12.7%/6.6%.
