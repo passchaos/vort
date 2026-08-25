@@ -7081,3 +7081,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   alternating fixed-CPU-8 A/B pairs improved median primary text/JSON/binary
   stage time by about 3.1%/6.9%/2.0%; adaptive text and 8 KiB JSON improved by
   roughly 6.4%–7.1%, while the remaining adaptive rows were neutral.
+  Brotli complex-prefix emission now receives the highest active symbol from
+  the already-built sparse alphabet instead of rescanning the complete dense
+  256/704-entry code-length array to rediscover its stop index. Eleven
+  alternating fixed-CPU-8 A/B pairs preserved every fast/balanced/ratio wire
+  size and improved median full encode time for JSON/source/log by about
+  0.6%/2.0%/0.8%, respectively. The public generic writer keeps its validating
+  scan, while the new precomputed-stop entry point validates the supplied
+  boundary before encoding.

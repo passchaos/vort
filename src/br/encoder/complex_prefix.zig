@@ -8,9 +8,17 @@ const code_length_order = [_]u5{ 1, 2, 3, 4, 0, 5, 17, 6, 16, 7, 8, 9, 10, 11, 1
 /// non-zero code lengths remain explicit for deterministic production output.
 pub fn write(allocator: std.mem.Allocator, writer: anytype, alphabet_size: usize, lengths: []const u4) !void {
     if (lengths.len < alphabet_size) return error.InvalidBlockPlan;
+    const stop_index = try code_length_rle.validatedStopIndex(lengths[0..alphabet_size]);
+    return writeWithStopIndex(allocator, writer, alphabet_size, lengths, stop_index);
+}
+
+/// Encode a tree whose highest non-zero symbol is already known by the
+/// caller. PrefixAlphabet maintains exactly that sparse symbol set, so its
+/// wire path can avoid rescanning the complete dense code-length array.
+pub fn writeWithStopIndex(allocator: std.mem.Allocator, writer: anytype, alphabet_size: usize, lengths: []const u4, stop_index: usize) !void {
+    if (lengths.len < alphabet_size or stop_index == 0 or stop_index > alphabet_size or lengths[stop_index - 1] == 0) return error.InvalidBlockPlan;
     try writer.writeBits(allocator, 0, 2); // HSKIP=0, complex prefix.
 
-    const stop_index = try code_length_rle.validatedStopIndex(lengths[0..alphabet_size]);
     return if (alphabet_size <= 256)
         writeWithStorage(256, allocator, writer, lengths, stop_index)
     else if (alphabet_size <= 520)
@@ -58,4 +66,16 @@ fn writeCodeLengthCodeLength(allocator: std.mem.Allocator, writer: anytype, leng
         5 => try writer.writeBits(allocator, 0b1111, 4),
         else => return error.InvalidBlockPlan,
     }
+}
+
+test "precomputed complex prefix stop index is validated" {
+    const TestWriter = struct {
+        fn writeBits(_: *@This(), _: std.mem.Allocator, _: u64, _: u6) !void {}
+    };
+    var writer = TestWriter{};
+    var lengths: [8]u4 = @splat(0);
+    lengths[0] = 1;
+    try std.testing.expectError(error.InvalidBlockPlan, writeWithStopIndex(std.testing.allocator, &writer, lengths.len, &lengths, 0));
+    try std.testing.expectError(error.InvalidBlockPlan, writeWithStopIndex(std.testing.allocator, &writer, lengths.len, &lengths, lengths.len + 1));
+    try std.testing.expectError(error.InvalidBlockPlan, writeWithStopIndex(std.testing.allocator, &writer, lengths.len, &lengths, 2));
 }

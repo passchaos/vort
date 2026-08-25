@@ -14116,7 +14116,9 @@ fn plannedDistanceAlphabetSize(alphabet: *const command_plan.PrefixAlphabet) usi
 fn writePrefixSymbolsWithLengths(allocator: std.mem.Allocator, writer: *BitWriter, alphabet_size: usize, alphabet: *const command_plan.PrefixAlphabet, lengths: []const u4) Error!void {
     if (alphabet.len == 0) return error.InvalidBlockPlan;
     if (alphabet.len > 4) {
-        return complex_prefix.write(allocator, writer, alphabet_size, lengths);
+        var highest: usize = 0;
+        for (alphabet.symbols[0..alphabet.len]) |symbol| highest = @max(highest, symbol);
+        return complex_prefix.writeWithStopIndex(allocator, writer, alphabet_size, lengths, highest + 1);
     }
     try writer.writeBits(allocator, 1, 2);
     try writer.writeBits(allocator, alphabet.len - 1, 2);
