@@ -4,8 +4,10 @@ const lz77 = @import("../../lz77.zig");
 // Upstream dfast gives both tables enough index bits to avoid letting common
 // four-byte JSON/source prefixes continuously evict useful candidates. These
 // bounds still fit comfortably in caller stack space for Vort's 128 KiB block.
-const short_hash_size = 1 << 14;
-const long_hash_size = 1 << 15;
+const short_hash_bits = 10;
+const long_hash_bits = 12;
+const short_hash_size = 1 << short_hash_bits;
+const long_hash_size = 1 << long_hash_bits;
 const invalid_position = std.math.maxInt(u32);
 pub const max_input_len = 128 * 1024;
 // Long recent offsets are still available through the hash tables. Restrict
@@ -288,12 +290,12 @@ fn insertPosition(input: []const u8, position: usize, short_table: *[short_hash_
 
 fn shortHash(input: []const u8, position: usize) usize {
     const word = std.mem.readInt(u32, input[position..][0..4], .little);
-    return @intCast((word *% 0x9e37_79b1) >> (32 - 14));
+    return @intCast((word *% 0x9e37_79b1) >> (32 - short_hash_bits));
 }
 
 fn longHash(input: []const u8, position: usize) usize {
     const word = std.mem.readInt(u64, input[position..][0..8], .little);
-    return @intCast((word *% 0x9e37_79b1_85eb_ca87) >> (64 - 15));
+    return @intCast((word *% 0x9e37_79b1_85eb_ca87) >> (64 - long_hash_bits));
 }
 
 fn equalPrefix(input: []const u8, a: usize, b: usize, len: usize) bool {

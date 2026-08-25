@@ -7010,3 +7010,10 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   leaving the short table untouched. All nine locked stage sizes remain
   identical. Eleven alternating fixed-CPU-8 A/B pairs improved median primary
   text/JSON/binary stage time by about 0.9%/1.7%/1.6%, respectively.
+  Double-fast's short/long hash tables are now sized at 10/12 bits instead of
+  14/15. The smaller stack footprint and cheaper initialization outweigh the
+  additional collisions on the locked corpus: all primary and binary sizes are
+  unchanged, while JSON adaptive 4/8 KiB output improves from 3,678/2,164 to
+  3,673/2,158 bytes. Eleven alternating fixed-CPU-8 A/B pairs improved median
+  primary text/JSON/binary stage time by about 20.9%/5.8%/1.7%, and adaptive
+  rows by roughly 14.5% to 44.0%.
