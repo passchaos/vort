@@ -7075,3 +7075,9 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   copies of rep2 even though the resulting token distances still formed a valid
   stream. A focused state test now pins the required `{rep2, rep0, rep1}`
   rotation; all locked stage sizes remain unchanged.
+  Equal-length double-fast candidates now prefer shorter direct distances after
+  retaining repcode priority. This lowers offset extra-bit cost and produces a
+  more useful future rep0 without changing any locked candidate size. Eleven
+  alternating fixed-CPU-8 A/B pairs improved median primary text/JSON/binary
+  stage time by about 3.1%/6.9%/2.0%; adaptive text and 8 KiB JSON improved by
+  roughly 6.4%–7.1%, while the remaining adaptive rows were neutral.

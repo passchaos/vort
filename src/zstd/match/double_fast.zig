@@ -253,10 +253,25 @@ test "double-fast zero-literal rep2 rotates the previous offset queue" {
     try std.testing.expectEqual([3]usize{ 8, 1, 4 }, reps);
 }
 
+test "double-fast equal matches prefer repcodes then shorter distance" {
+    const reps = [3]usize{ 8, 4, 16 };
+    try std.testing.expect(preferEqualLengthDistance(8, 32, reps, 1));
+    try std.testing.expect(!preferEqualLengthDistance(4, 8, reps, 1));
+    try std.testing.expect(preferEqualLengthDistance(32, 64, reps, 1));
+    try std.testing.expect(!preferEqualLengthDistance(64, 32, reps, 1));
+}
+
 fn preferMatch(candidate: Match, current: Match, reps: [3]usize, literal_len: usize) bool {
     if (candidate.length != current.length) return candidate.length > current.length;
     if (candidate.length == 0) return false;
-    return repeatRank(candidate.distance, reps, literal_len) < repeatRank(current.distance, reps, literal_len);
+    return preferEqualLengthDistance(candidate.distance, current.distance, reps, literal_len);
+}
+
+fn preferEqualLengthDistance(candidate: usize, current: usize, reps: [3]usize, literal_len: usize) bool {
+    const candidate_rank = repeatRank(candidate, reps, literal_len);
+    const current_rank = repeatRank(current, reps, literal_len);
+    if (candidate_rank != current_rank) return candidate_rank < current_rank;
+    return candidate < current;
 }
 
 fn repeatRank(distance: usize, reps: [3]usize, literal_len: usize) u8 {
