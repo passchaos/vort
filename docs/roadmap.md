@@ -6971,3 +6971,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   text stays at 80 bytes. Eleven alternating fixed-CPU-8 runs improved complete
   encode medians by roughly 23.8% for JSON, 3.1% for binary, and 1.1% for text;
   decisive beam results also bypass the slower generic optimal pass.
+  The same upstream review showed that double-fast and greedy strategies keep
+  repcode checks active rather than reserving them for high-ratio modes. Vort
+  therefore extends its already bounded repeat-offset candidate through level 3
+  (level 2 follows the same policy between the public benchmark points). On the
+  locked matrix, level-3 JSON drops from 781 to 640 bytes and binary from 8,846
+  to 8,607 while text remains 80 bytes. Nine alternating fixed-CPU-8 runs
+  improved complete level-3 JSON and binary medians by about 11.1% and 1.9%;
+  text was within 0.6% noise. Final-wire arbitration remains authoritative.
