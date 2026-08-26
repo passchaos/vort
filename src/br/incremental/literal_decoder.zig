@@ -18,6 +18,9 @@ pub fn Decoder(comptime Codec: type) type {
         stream_bits: usize = 0,
         output_remaining: usize = 0,
         final_meta_block: bool = true,
+        next_header_state: NextHeaderState = .is_last,
+        next_length_width: u6 = 0,
+        stored_remaining: usize = 0,
         total_input: usize = 0,
         total_output: usize = 0,
         finished: bool = false,
@@ -30,7 +33,8 @@ pub fn Decoder(comptime Codec: type) type {
             max_output_len: usize = std.math.maxInt(usize),
             expected_output_len: ?usize = null,
         };
-        pub const Phase = enum { header, literals, trailer, padding, done };
+        pub const Phase = enum { header, literals, trailer, stored, padding, done };
+        const NextHeaderState = enum { is_last, last_empty, nibbles, block_len, uncompressed, alignment };
         pub const Snapshot = struct {
             phase: Phase,
             input_read: usize,
@@ -108,8 +112,11 @@ pub fn Decoder(comptime Codec: type) type {
                         };
                         if (parsed.header.decoded_len > self.options.max_output_len)
                             return self.fail(.header, error.OutputLimitExceeded);
-                        if (self.options.expected_output_len) |expected|
-                            if (parsed.header.decoded_len != expected) return self.fail(.header, error.SizeMismatch);
+                        if (self.options.expected_output_len) |expected| {
+                            if (parsed.header.final) {
+                                if (parsed.header.decoded_len != expected) return self.fail(.header, error.SizeMismatch);
+                            } else if (parsed.header.decoded_len > expected) return self.fail(.header, error.SizeMismatch);
+                        }
 
                         const byte_index = parsed.bits_read / 8;
                         const bit_index: u3 = @intCast(parsed.bits_read % 8);
@@ -152,23 +159,75 @@ pub fn Decoder(comptime Codec: type) type {
                 },
                 .trailer => {
                     var reader = progressive_bits.Reader.init(input, &input_read, &self.staged_bits, &self.staged_bit_count, &self.stream_bits);
-                    const saved = reader.checkpoint();
-                    const is_last = reader.readBits(u1, 1) catch |err| switch (err) {
-                        error.TruncatedFrame => {
-                            try reader.restoreKeepingInput(saved);
-                            return result(input_read, output_written, .need_input);
+                    while (true) switch (self.next_header_state) {
+                        .is_last => {
+                            const value = reader.readBits(u1, 1) catch |err| switch (err) {
+                                error.TruncatedFrame => return result(input_read, output_written, .need_input),
+                                else => return self.fail(.trailer, err),
+                            };
+                            self.next_header_state = if (value != 0) .last_empty else .nibbles;
                         },
-                        else => return self.fail(.trailer, err),
-                    };
-                    const is_empty = reader.readBits(u1, 1) catch |err| switch (err) {
-                        error.TruncatedFrame => {
-                            try reader.restoreKeepingInput(saved);
-                            return result(input_read, output_written, .need_input);
+                        .last_empty => {
+                            const value = reader.readBits(u1, 1) catch |err| switch (err) {
+                                error.TruncatedFrame => return result(input_read, output_written, .need_input),
+                                else => return self.fail(.trailer, err),
+                            };
+                            if (value != 1) return self.fail(.trailer, error.UnsupportedBrotliFeature);
+                            try self.validateFinalOutputSize();
+                            self.phase = .padding;
+                            break;
                         },
-                        else => return self.fail(.trailer, err),
+                        .nibbles => {
+                            const code = reader.readBits(u2, 2) catch |err| switch (err) {
+                                error.TruncatedFrame => return result(input_read, output_written, .need_input),
+                                else => return self.fail(.trailer, err),
+                            };
+                            if (code == 3) return self.fail(.trailer, error.UnsupportedBrotliFeature);
+                            self.next_length_width = @intCast((4 + @as(usize, code)) * 4);
+                            self.next_header_state = .block_len;
+                        },
+                        .block_len => {
+                            const len_minus_one = reader.readBits(usize, self.next_length_width) catch |err| switch (err) {
+                                error.TruncatedFrame => return result(input_read, output_written, .need_input),
+                                else => return self.fail(.trailer, err),
+                            };
+                            const nibbles = self.next_length_width / 4;
+                            if (nibbles > 4 and ((len_minus_one >> @intCast((nibbles - 1) * 4)) & 0xf) == 0) return self.fail(.trailer, error.CorruptFrame);
+                            self.stored_remaining = std.math.add(usize, len_minus_one, 1) catch return self.fail(.trailer, error.IntegerOverflow);
+                            if (self.total_output > self.options.max_output_len or self.stored_remaining > self.options.max_output_len - self.total_output) return self.fail(.trailer, error.OutputLimitExceeded);
+                            self.next_header_state = .uncompressed;
+                        },
+                        .uncompressed => {
+                            const value = reader.readBits(u1, 1) catch |err| switch (err) {
+                                error.TruncatedFrame => return result(input_read, output_written, .need_input),
+                                else => return self.fail(.trailer, err),
+                            };
+                            if (value != 1) return self.fail(.trailer, error.UnsupportedBrotliFeature);
+                            self.next_header_state = .alignment;
+                        },
+                        .alignment => {
+                            const padding: u6 = @intCast((8 - self.stream_bits % 8) % 8);
+                            const value = reader.readBits(u8, padding) catch |err| switch (err) {
+                                error.TruncatedFrame => return result(input_read, output_written, .need_input),
+                                else => return self.fail(.trailer, err),
+                            };
+                            if (value != 0 or self.staged_bit_count != 0) return self.fail(.trailer, error.CorruptFrame);
+                            self.phase = .stored;
+                            self.next_header_state = .is_last;
+                            break;
+                        },
                     };
-                    if (is_last != 1 or is_empty != 1) return self.fail(.trailer, error.UnsupportedBrotliFeature);
-                    self.phase = .padding;
+                },
+                .stored => {
+                    const n = @min(self.stored_remaining, @min(input.len - input_read, output.len - output_written));
+                    @memcpy(output[output_written..][0..n], input[input_read..][0..n]);
+                    input_read += n;
+                    output_written += n;
+                    self.total_output += n;
+                    self.stored_remaining -= n;
+                    if (self.stored_remaining != 0) return result(input_read, output_written, if (output_written == output.len) .need_output else .need_input);
+                    if (self.options.expected_output_len) |expected| if (self.total_output > expected) return self.fail(.stored, error.SizeMismatch);
+                    self.phase = .trailer;
                 },
                 .padding => {
                     const padding_bits: u8 = @intCast((8 - self.stream_bits % 8) % 8);
@@ -201,6 +260,10 @@ pub fn Decoder(comptime Codec: type) type {
             self.last_error_name = @errorName(err);
             self.last_error_phase = phase;
             return err;
+        }
+        fn validateFinalOutputSize(self: *Self) Error!void {
+            if (self.options.expected_output_len) |expected|
+                if (self.total_output != expected) return self.fail(.trailer, error.SizeMismatch);
         }
         fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
             return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = status };

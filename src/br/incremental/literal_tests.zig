@@ -75,6 +75,57 @@ test "byte-progressive compressed literal decoder consumes final-empty trailer" 
     try std.testing.expect(truncated_output < decoded.len or truncated_input < encoded.len);
 }
 
+test "byte-progressive compressed literal decoder streams following stored blocks" {
+    const encoded = try br.IncrementalTestSupport.encodeCompressedHelloThenStored(std.testing.allocator, " world");
+    defer std.testing.allocator.free(encoded);
+    const expected = "hello world";
+    var decoded: [expected.len]u8 = undefined;
+    var decoder = br.IncrementalLiteralStreamDecoder.initWithOptions(.{
+        .max_output_len = expected.len,
+        .expected_output_len = expected.len,
+    });
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(encoded.len, input_offset + 1);
+        const output_end = @min(decoded.len, output_offset + 2);
+        const step = try decoder.step(encoded[input_offset..input_end], decoded[output_offset..output_end]);
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+    }
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, expected, &decoded);
+
+    var limited = br.IncrementalLiteralStreamDecoder.initWithOptions(.{ .max_output_len = expected.len - 1 });
+    var limited_output: [expected.len]u8 = undefined;
+    try std.testing.expectError(error.OutputLimitExceeded, limited.step(encoded, &limited_output));
+
+    const longer = try br.IncrementalTestSupport.encodeCompressedHelloThenStored(std.testing.allocator, "!" ** 257);
+    defer std.testing.allocator.free(longer);
+    var expected_mismatch = br.IncrementalLiteralStreamDecoder.initWithOptions(.{ .expected_output_len = 5 });
+    var longer_output: [262]u8 = undefined;
+    try std.testing.expectError(error.SizeMismatch, expected_mismatch.step(longer, &longer_output));
+}
+
+test "byte-progressive compressed literal decoder streams multiple stored blocks" {
+    const encoded = try br.IncrementalTestSupport.encodeCompressedHelloThenStoredBlocks(std.testing.allocator, &.{ " ", "world", "!" });
+    defer std.testing.allocator.free(encoded);
+    const expected = "hello world!";
+    var decoded: [expected.len]u8 = undefined;
+    var decoder = br.IncrementalLiteralStreamDecoder.initWithOptions(.{ .expected_output_len = expected.len });
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(encoded.len, input_offset + 1);
+        const output_end = @min(decoded.len, output_offset + 1);
+        const step = try decoder.step(encoded[input_offset..input_end], decoded[output_offset..output_end]);
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+    }
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, expected, &decoded);
+}
+
 test "byte-progressive compressed literal decoder crosses insert and length boundaries" {
     inline for (.{ 5, 66, 130, 578, 65_535, 65_536 }) |len| {
         const encoded = try br.IncrementalTestSupport.encodeCompressedLiteralCycle(std.testing.allocator, len);

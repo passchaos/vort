@@ -60,6 +60,18 @@ test "byte-progressive compressed copy decoder consumes final-empty trailer" {
     try std.testing.expect(truncated_output < decoded.len or truncated_input < encoded.len);
 }
 
+test "byte-progressive compressed copy decoder streams following stored blocks" {
+    const encoded = try br.IncrementalTestSupport.encodeCompressedAlternatingThenStored(std.testing.allocator, 'x', 'y', 257, " tail");
+    defer std.testing.allocator.free(encoded);
+    const expected = ("xy" ** 128) ++ "x tail";
+    var history: [32]u8 = undefined;
+    try drainSplit(encoded, expected, &history, 1, 2);
+
+    var limited = br.IncrementalCopyStreamDecoder.initWithOptions(&history, .{ .max_output_len = expected.len - 1 });
+    var output: [expected.len]u8 = undefined;
+    try std.testing.expectError(error.OutputLimitExceeded, limited.step(encoded, &output));
+}
+
 test "byte-progressive compressed copy decoder handles repeated commands and history wrap" {
     const cases = .{
         .{ "xy", 31 },

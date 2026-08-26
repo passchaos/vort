@@ -7223,5 +7223,12 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   empty meta-block without whole-frame buffering; the two-bit terminator and
   trailing zero padding are consumed incrementally. One-byte split tests cover
   successful termination and truncated streams at the final input-byte
-  boundary. Mixed stored/compressed blocks and multiple non-empty compressed
-  blocks remain the next stream-level extensions.
+  boundary.
+  Extended non-final progressive compressed streams to accept one or more
+  following stored meta-blocks before the final-empty terminator. The decoder
+  parses each stored header incrementally, enforces cumulative output limits,
+  validates byte-alignment padding, and copies stored payload bytes directly
+  from caller input to caller output. Literal and copy decoder tests cover
+  one-byte input, tiny output buffers, multiple stored blocks, exact-size
+  completion, output-limit rejection, and truncated boundaries. Multiple
+  non-empty compressed blocks remain the next stream-level extension.
