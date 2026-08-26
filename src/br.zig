@@ -64,18 +64,19 @@ const IncrementalLiteralCodec = struct {
     pub const Header = struct {
         decoded_len: usize,
         literal_tree: PrefixCode(256),
+        final: bool,
     };
     pub const ParsedHeader = struct { header: Header, bits_read: usize };
 
-    /// Parse a final compressed meta-block whose only command inserts MLEN
-    /// literals. The complete compressed header is bounded independently of
-    /// the literal payload, which lets the incremental engine discard input as
-    /// soon as the header and each following literal have been consumed.
+    /// Parse a compressed meta-block whose only command inserts MLEN literals.
+    /// Final blocks complete directly; non-final blocks are accepted when a
+    /// final-empty terminator follows. The complete compressed header is bounded
+    /// independently of the literal payload, so consumed input can be discarded.
     pub fn parseHeader(prefix: []const u8) IncrementalLiteralCodec.Error!ParsedHeader {
         var reader = bitstream.BitReader.init(prefix);
         try readWindowBits(&reader);
-        if (try reader.readBits(u1, 1) != 1 or try reader.readBits(u1, 1) != 0)
-            return error.UnsupportedBrotliFeature;
+        const final = try reader.readBits(u1, 1) != 0;
+        if (final and try reader.readBits(u1, 1) != 0) return error.UnsupportedBrotliFeature;
         const mnibbles_code = try reader.readBits(u2, 2);
         const mnibbles: usize = 4 + @as(usize, mnibbles_code);
         if (mnibbles > 6) return error.UnsupportedBrotliFeature;
@@ -83,6 +84,7 @@ const IncrementalLiteralCodec = struct {
         if (mnibbles > 4 and ((len_minus_one >> @intCast((mnibbles - 1) * 4)) & 0xf) == 0)
             return error.CorruptFrame;
         const decoded_len = std.math.add(usize, len_minus_one, 1) catch return error.IntegerOverflow;
+        if (!final and try reader.readBits(u1, 1) != 0) return error.UnsupportedBrotliFeature;
 
         var header = try readMinimalCompressedHeader(&reader);
         if (header.literal_block.block_type_count != 1 or
@@ -95,7 +97,7 @@ const IncrementalLiteralCodec = struct {
         const lengths = try readInsertCopyLengths(command_symbol, &reader);
         if (lengths.insert_len != decoded_len) return error.UnsupportedBrotliFeature;
         return .{
-            .header = .{ .decoded_len = decoded_len, .literal_tree = header.literal_trees[0] },
+            .header = .{ .decoded_len = decoded_len, .literal_tree = header.literal_trees[0], .final = final },
             .bits_read = reader.bitPosition(),
         };
     }
@@ -113,6 +115,7 @@ const IncrementalCopyCodec = struct {
     pub const Header = struct {
         decoded_len: usize,
         compressed: MinimalCompressedHeader,
+        final: bool,
     };
     pub const ParsedHeader = struct { header: Header, bits_read: usize };
     pub const Command = struct { insert_len: usize, copy_len: usize, implicit_last_distance: bool };
@@ -120,17 +123,18 @@ const IncrementalCopyCodec = struct {
     pub fn parseHeader(prefix: []const u8) IncrementalCopyCodec.Error!ParsedHeader {
         var reader = bitstream.BitReader.init(prefix);
         try readWindowBits(&reader);
-        if (try reader.readBits(u1, 1) != 1 or try reader.readBits(u1, 1) != 0)
-            return error.UnsupportedBrotliFeature;
+        const final = try reader.readBits(u1, 1) != 0;
+        if (final and try reader.readBits(u1, 1) != 0) return error.UnsupportedBrotliFeature;
         const mnibbles_code = try reader.readBits(u2, 2);
         const mnibbles: usize = 4 + @as(usize, mnibbles_code);
         if (mnibbles > 6) return error.UnsupportedBrotliFeature;
         const len_minus_one = try reader.readBits(u32, @intCast(mnibbles * 4));
         if (mnibbles > 4 and ((len_minus_one >> @intCast((mnibbles - 1) * 4)) & 0xf) == 0) return error.CorruptFrame;
         const decoded_len = std.math.add(usize, len_minus_one, 1) catch return error.IntegerOverflow;
+        if (!final and try reader.readBits(u1, 1) != 0) return error.UnsupportedBrotliFeature;
         const header = try readMinimalCompressedHeader(&reader);
         return .{
-            .header = .{ .decoded_len = decoded_len, .compressed = header },
+            .header = .{ .decoded_len = decoded_len, .compressed = header, .final = final },
             .bits_read = reader.bitPosition(),
         };
     }
@@ -323,20 +327,54 @@ pub const IncrementalTestSupport = struct {
     /// fixture construction here lets incremental tests exercise compressed
     /// input without exposing test-only bitstream helpers as production APIs.
     pub fn encodeCompressedHello(allocator: std.mem.Allocator) Error![]u8 {
+        return encodeCompressedHelloWithFinal(allocator, true);
+    }
+
+    pub fn encodeCompressedHelloWithFinal(allocator: std.mem.Allocator, final: bool) Error![]u8 {
         var encoded: std.ArrayList(u8) = .empty;
         errdefer encoded.deinit(allocator);
         var writer = BitWriter{ .out = &encoded };
         try writeWindowBits(allocator, &writer, default_window_bits);
-        try writer.writeBits(allocator, 1, 1); // ISLAST
-        try writer.writeBits(allocator, 0, 1); // ISLASTEMPTY = false
+        try writer.writeBits(allocator, @intFromBool(final), 1); // ISLAST
+        if (final) try writer.writeBits(allocator, 0, 1); // ISLASTEMPTY = false
         try writer.writeBits(allocator, 0, 2); // MNIBBLES = 4
         try writer.writeBits(allocator, 4, 16); // MLEN - 1
+        if (!final) try writer.writeBits(allocator, 0, 1); // ISUNCOMPRESSED = false
         try writeMinimalCompressedHeaderForHello(allocator, &writer);
         try writer.writeBits(allocator, 2, 2); // h
         try writer.writeBits(allocator, 0, 2); // e
         try writer.writeBits(allocator, 1, 2); // l
         try writer.writeBits(allocator, 1, 2); // l
         try writer.writeBits(allocator, 3, 2); // o
+        if (!final) {
+            try writer.writeBits(allocator, 1, 1); // final ISLAST
+            try writer.writeBits(allocator, 1, 1); // final ISLASTEMPTY
+        }
+        return try encoded.toOwnedSlice(allocator);
+    }
+
+    pub fn encodeCompressedAlternatingWithFinalEmpty(allocator: std.mem.Allocator, first: u8, second: u8, len: usize) Error![]u8 {
+        if (first == second or len < 5 or len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
+        var encoded: std.ArrayList(u8) = .empty;
+        errdefer encoded.deinit(allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeWindowBits(allocator, &writer, default_window_bits);
+        try writer.writeBits(allocator, 0, 1); // non-final compressed block
+        const len_minus_one = len - 1;
+        const mnibbles: usize = if (len_minus_one <= 0xffff) 4 else if (len_minus_one <= 0xfffff) 5 else 6;
+        try writer.writeBits(allocator, @intCast(mnibbles - 4), 2);
+        try writer.writeBits(allocator, len_minus_one, @intCast(mnibbles * 4));
+        try writer.writeBits(allocator, 0, 1); // ISUNCOMPRESSED = false
+        const copy_len = len - 2;
+        const entry = commandEntryForLengths(2, copy_len) orelse return error.InvalidBlockPlan;
+        try writeMinimalCompressedHeaderForAlternatingPattern(allocator, &writer, first, second, entry.symbol);
+        if (entry.command.copy_extra_bits != 0)
+            try writer.writeBits(allocator, copy_len - entry.command.copy_base, entry.command.copy_extra_bits);
+        try writer.writeBits(allocator, 0, 1);
+        try writer.writeBits(allocator, 1, 1);
+        try writer.writeBits(allocator, 1, 1); // final ISLAST
+        try writer.writeBits(allocator, 1, 1); // final ISLASTEMPTY
+        if (writer.bit_index != 0) writer.alignToByte();
         return try encoded.toOwnedSlice(allocator);
     }
 

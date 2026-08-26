@@ -35,6 +35,31 @@ test "byte-progressive compressed copy decoder resumes overlapping copies" {
     }
 }
 
+test "byte-progressive compressed copy decoder consumes final-empty trailer" {
+    const len = 4096;
+    const encoded = try br.IncrementalTestSupport.encodeCompressedAlternatingWithFinalEmpty(std.testing.allocator, 'x', 'y', len);
+    defer std.testing.allocator.free(encoded);
+    const expected = try std.testing.allocator.alloc(u8, len);
+    defer std.testing.allocator.free(expected);
+    for (expected, 0..) |*byte, i| byte.* = "xy"[i & 1];
+    var history: [2]u8 = undefined;
+    try drainSplit(encoded, expected, &history, 1, 3);
+
+    var truncated = br.IncrementalCopyStreamDecoder.init(&history);
+    const decoded = try std.testing.allocator.alloc(u8, len);
+    defer std.testing.allocator.free(decoded);
+    var truncated_input: usize = 0;
+    var truncated_output: usize = 0;
+    while (truncated_output != decoded.len) {
+        const step = try truncated.step(encoded[truncated_input .. encoded.len - 1], decoded[truncated_output..]);
+        truncated_input += step.progress.input_read;
+        truncated_output += step.progress.output_written;
+        if (step.status == .need_input and truncated_input == encoded.len - 1) break;
+    }
+    try std.testing.expectError(error.TruncatedFrame, truncated.finish());
+    try std.testing.expect(truncated_output < decoded.len or truncated_input < encoded.len);
+}
+
 test "byte-progressive compressed copy decoder handles repeated commands and history wrap" {
     const cases = .{
         .{ "xy", 31 },

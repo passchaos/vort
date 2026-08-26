@@ -7218,3 +7218,10 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   backpressure. Dictionary copies deliberately do not update recent-distance
   state. One-byte input/output tests cover identity, capitalization, multiple
   dictionary commands, and mixed LZ77/dictionary planner output.
+  Final and non-final compressed headers now share the progressive literal/copy
+  parser. Non-final compressed blocks may be terminated by a following final-
+  empty meta-block without whole-frame buffering; the two-bit terminator and
+  trailing zero padding are consumed incrementally. One-byte split tests cover
+  successful termination and truncated streams at the final input-byte
+  boundary. Mixed stored/compressed blocks and multiple non-empty compressed
+  blocks remain the next stream-level extensions.

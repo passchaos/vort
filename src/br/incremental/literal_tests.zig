@@ -45,6 +45,36 @@ test "byte-progressive compressed literal decoder accepts Node-gated hello shape
     try std.testing.expectEqualSlices(u8, "hello", &decoded);
 }
 
+test "byte-progressive compressed literal decoder consumes final-empty trailer" {
+    const encoded = try br.IncrementalTestSupport.encodeCompressedHelloWithFinal(std.testing.allocator, false);
+    defer std.testing.allocator.free(encoded);
+    var decoder = br.IncrementalLiteralStreamDecoder.initWithOptions(.{ .expected_output_len = 5 });
+    var decoded: [5]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(encoded.len, input_offset + 1);
+        const output_end = @min(decoded.len, output_offset + 1);
+        const step = try decoder.step(encoded[input_offset..input_end], decoded[output_offset..output_end]);
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+    }
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, "hello", &decoded);
+
+    var truncated = br.IncrementalLiteralStreamDecoder.init();
+    var truncated_input: usize = 0;
+    var truncated_output: usize = 0;
+    while (truncated_output != decoded.len) {
+        const step = try truncated.step(encoded[truncated_input .. encoded.len - 1], decoded[truncated_output..]);
+        truncated_input += step.progress.input_read;
+        truncated_output += step.progress.output_written;
+        if (step.status == .need_input and truncated_input == encoded.len - 1) break;
+    }
+    try std.testing.expectError(error.TruncatedFrame, truncated.finish());
+    try std.testing.expect(truncated_output < decoded.len or truncated_input < encoded.len);
+}
+
 test "byte-progressive compressed literal decoder crosses insert and length boundaries" {
     inline for (.{ 5, 66, 130, 578, 65_535, 65_536 }) |len| {
         const encoded = try br.IncrementalTestSupport.encodeCompressedLiteralCycle(std.testing.allocator, len);

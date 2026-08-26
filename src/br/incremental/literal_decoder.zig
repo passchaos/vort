@@ -17,6 +17,7 @@ pub fn Decoder(comptime Codec: type) type {
         staged_bit_count: u8 = 0,
         stream_bits: usize = 0,
         output_remaining: usize = 0,
+        final_meta_block: bool = true,
         total_input: usize = 0,
         total_output: usize = 0,
         finished: bool = false,
@@ -29,7 +30,7 @@ pub fn Decoder(comptime Codec: type) type {
             max_output_len: usize = std.math.maxInt(usize),
             expected_output_len: ?usize = null,
         };
-        pub const Phase = enum { header, literals, padding, done };
+        pub const Phase = enum { header, literals, trailer, padding, done };
         pub const Snapshot = struct {
             phase: Phase,
             input_read: usize,
@@ -119,6 +120,7 @@ pub fn Decoder(comptime Codec: type) type {
                         self.stream_bits = parsed.bits_read;
                         self.header = parsed.header;
                         self.output_remaining = parsed.header.decoded_len;
+                        self.final_meta_block = parsed.header.final;
                         self.phase = .literals;
                         break;
                     }
@@ -146,6 +148,26 @@ pub fn Decoder(comptime Codec: type) type {
                     if (self.output_remaining != 0) {
                         return result(input_read, output_written, .need_output);
                     }
+                    self.phase = if (self.final_meta_block) .padding else .trailer;
+                },
+                .trailer => {
+                    var reader = progressive_bits.Reader.init(input, &input_read, &self.staged_bits, &self.staged_bit_count, &self.stream_bits);
+                    const saved = reader.checkpoint();
+                    const is_last = reader.readBits(u1, 1) catch |err| switch (err) {
+                        error.TruncatedFrame => {
+                            try reader.restoreKeepingInput(saved);
+                            return result(input_read, output_written, .need_input);
+                        },
+                        else => return self.fail(.trailer, err),
+                    };
+                    const is_empty = reader.readBits(u1, 1) catch |err| switch (err) {
+                        error.TruncatedFrame => {
+                            try reader.restoreKeepingInput(saved);
+                            return result(input_read, output_written, .need_input);
+                        },
+                        else => return self.fail(.trailer, err),
+                    };
+                    if (is_last != 1 or is_empty != 1) return self.fail(.trailer, error.UnsupportedBrotliFeature);
                     self.phase = .padding;
                 },
                 .padding => {

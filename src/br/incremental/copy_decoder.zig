@@ -17,6 +17,7 @@ pub fn Decoder(comptime Codec: type) type {
         staged_bit_count: u8 = 0,
         stream_bits: usize = 0,
         decoded_len: usize = 0,
+        final_meta_block: bool = true,
         pending_literals: usize = 0,
         pending_copy: usize = 0,
         copy_distance: usize = 0,
@@ -38,7 +39,7 @@ pub fn Decoder(comptime Codec: type) type {
             max_output_len: usize = std.math.maxInt(usize),
             expected_output_len: ?usize = null,
         };
-        pub const Phase = enum { header, command, literals, distance, copy, dictionary, padding, done };
+        pub const Phase = enum { header, command, literals, distance, copy, dictionary, trailer, padding, done };
         pub const Snapshot = struct {
             phase: Phase,
             input_read: usize,
@@ -126,6 +127,7 @@ pub fn Decoder(comptime Codec: type) type {
                         self.stream_bits = parsed.bits_read;
                         self.header = parsed.header;
                         self.decoded_len = parsed.header.decoded_len;
+                        self.final_meta_block = parsed.header.final;
                         self.phase = .command;
                         break;
                     }
@@ -133,7 +135,7 @@ pub fn Decoder(comptime Codec: type) type {
                 },
                 .command => {
                     if (self.total_output == self.decoded_len) {
-                        self.phase = .padding;
+                        self.phase = if (self.final_meta_block) .padding else .trailer;
                         continue;
                     }
                     var reader = progressive_bits.Reader.init(input, &input_read, &self.staged_bits, &self.staged_bit_count, &self.stream_bits);
@@ -176,7 +178,7 @@ pub fn Decoder(comptime Codec: type) type {
                     if (self.pending_literals != 0) return result(input_read, output_written, .need_output);
                     if (self.total_output == self.decoded_len) {
                         self.pending_copy = 0;
-                        self.phase = .padding;
+                        self.phase = if (self.final_meta_block) .padding else .trailer;
                     } else {
                         self.phase = .distance;
                     }
@@ -211,6 +213,26 @@ pub fn Decoder(comptime Codec: type) type {
                     }
                     if (self.pending_copy != 0) return result(input_read, output_written, .need_output);
                     self.phase = .command;
+                },
+                .trailer => {
+                    var reader = progressive_bits.Reader.init(input, &input_read, &self.staged_bits, &self.staged_bit_count, &self.stream_bits);
+                    const saved = reader.checkpoint();
+                    const is_last = reader.readBits(u1, 1) catch |err| switch (err) {
+                        error.TruncatedFrame => {
+                            try reader.restoreKeepingInput(saved);
+                            return result(input_read, output_written, .need_input);
+                        },
+                        else => return self.fail(.trailer, err),
+                    };
+                    const is_empty = reader.readBits(u1, 1) catch |err| switch (err) {
+                        error.TruncatedFrame => {
+                            try reader.restoreKeepingInput(saved);
+                            return result(input_read, output_written, .need_input);
+                        },
+                        else => return self.fail(.trailer, err),
+                    };
+                    if (is_last != 1 or is_empty != 1) return self.fail(.trailer, error.UnsupportedBrotliFeature);
+                    self.phase = .padding;
                 },
                 .dictionary => {
                     const remaining = self.dictionary_scratch[self.dictionary_offset..self.dictionary_len];
