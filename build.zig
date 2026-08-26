@@ -2695,6 +2695,25 @@ pub fn build(b: *std.Build) void {
     );
     br_reference_bench_gate_step.dependOn(&br_reference_bench_gate.step);
 
+    const br_upstream_multiblock_diff_exe = b.addExecutable(.{
+        .name = "vort-br-upstream-multiblock-diff",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/upstream_multiblock_diff.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_br_upstream_multiblock_diff = b.addRunArtifact(br_upstream_multiblock_diff_exe);
+    const br_upstream_multiblock_diff_step = b.step(
+        "run-br-upstream-multiblock-diff",
+        "Decode flushed multi-meta-block libbrotli streams byte progressively",
+    );
+    br_upstream_multiblock_diff_step.dependOn(&run_br_upstream_multiblock_diff.step);
+
     const zstd_reference_bench_exe = b.addExecutable(.{
         .name = "vort-zstd-reference-bench",
         .root_module = b.createModule(.{
@@ -3687,6 +3706,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&cpu_features_exe.step);
     check_step.dependOn(&br_stored_corpus_exe.step);
     check_step.dependOn(&br_static_dictionary_report_exe.step);
+    check_step.dependOn(&br_upstream_multiblock_diff_exe.step);
     check_step.dependOn(&zstd_native_frame_probe_exe.step);
     check_step.dependOn(&zstd_native_dictionary_probe_exe.step);
     check_step.dependOn(&lz4_native_dictionary_probe_exe.step);
