@@ -4,8 +4,9 @@ const libbrotli = @import("libbrotli_runtime.zig");
 
 const Case = struct {
     name: []const u8,
-    first: []const u8,
-    second: []const u8,
+    chunks: []const []const u8,
+    expected: []const u8,
+    qualities: []const u32,
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -16,29 +17,44 @@ pub fn main(init: std.process.Init) !void {
     const json = "{\"service\":\"vort\",\"status\":\"ok\",\"value\":12345}\n" ** 48;
     const first_pattern = "abcdefghijklmnopqrstuvwxyz012345" ** 64;
     const second_pattern = "zyxwvutsrqponmlkjihgfedcba543210" ** 64;
+    const third_pattern = "012345abcdefghijklmnopqrstuvwxyz" ** 64;
+    var binary: [4096]u8 = undefined;
+    for (&binary, 0..) |*byte, index| byte.* = @intCast((index * 29) % 251);
+    const text_chunks = [_][]const u8{ text, text };
+    const json_chunks = [_][]const u8{ json, json };
+    const pattern_chunks = [_][]const u8{ first_pattern, second_pattern, third_pattern };
+    const binary_chunks = [_][]const u8{ binary[0..2048], binary[2048..] };
+    const all_qualities = [_]u32{ 0, 1, 3, 4, 5, 6, 9, 11 };
     const cases = [_]Case{
-        .{ .name = "repeated-text", .first = text, .second = text },
-        .{ .name = "structured-json", .first = json, .second = json },
-        .{ .name = "changed-pattern", .first = first_pattern, .second = second_pattern },
+        .{ .name = "repeated-text", .chunks = &text_chunks, .expected = text ++ text, .qualities = &all_qualities },
+        .{ .name = "structured-json", .chunks = &json_chunks, .expected = json ++ json, .qualities = &all_qualities },
+        .{ .name = "changed-pattern-three-block", .chunks = &pattern_chunks, .expected = first_pattern ++ second_pattern ++ third_pattern, .qualities = &all_qualities },
+        .{ .name = "binary-cycle", .chunks = &binary_chunks, .expected = &binary, .qualities = &all_qualities },
     };
-    const qualities = [_]u32{ 0, 1, 3, 4, 5, 6, 9, 11 };
 
     var cases_run: usize = 0;
     for (cases) |case| {
-        var expected: std.ArrayList(u8) = .empty;
-        defer expected.deinit(init.gpa);
-        try expected.appendSlice(init.gpa, case.first);
-        try expected.appendSlice(init.gpa, case.second);
-        for (qualities) |quality| {
+        for (case.qualities) |quality| {
             const encoded = try reference.encodeFlushedChunksAlloc(
                 init.gpa,
-                &.{ case.first, case.second },
+                case.chunks,
                 quality,
                 16,
                 16,
             );
             defer init.gpa.free(encoded);
-            try decodeByteProgressive(init.gpa, encoded, expected.items);
+            const summary = try vort.brSummarizeStream(encoded);
+            if (summary.compressed_meta_block_count < case.chunks.len) {
+                std.debug.print(
+                    "{s} quality={d}: expected at least {d} compressed blocks, got {d} (stored={d}, empty={d})\n",
+                    .{ case.name, quality, case.chunks.len, summary.compressed_meta_block_count, summary.uncompressed_meta_block_count, summary.empty_meta_block_count },
+                );
+                return error.ReferenceEncodeFailed;
+            }
+            decodeByteProgressive(init.gpa, encoded, case.expected) catch |err| {
+                std.debug.print("{s} quality={d}: {s}\n", .{ case.name, quality, @errorName(err) });
+                return err;
+            };
             cases_run += 1;
         }
     }

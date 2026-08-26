@@ -46,7 +46,10 @@ fn utf8LastByte(value_: u8) usize {
 }
 
 fn utf8SecondLastByte(value_: u8) usize {
-    if (value_ >= 208) return 2;
+    // RFC 7932's lookup table treats E0..FF as the continuation-expected
+    // class. D0..DF belongs to the neutral class; using the broader >=208
+    // range silently selected the wrong literal tree for binary data.
+    if (value_ >= 224) return 2;
     if (value_ >= 128) return 0;
     return switch (value_) {
         0...32, 127 => 0,
@@ -74,5 +77,13 @@ test "utf8 text tree selects lowercase letter contexts" {
     try std.testing.expectEqual(@as(u1, 1), utf8TextTree(value(mode_utf8, 'z', 'a')));
     try std.testing.expectEqual(@as(u1, 0), utf8TextTree(value(mode_utf8, ' ', 'a')));
     try std.testing.expectEqual(@as(u1, 0), utf8TextTree(value(mode_utf8, 0xff, 0xff)));
+}
+
+test "utf8 context separates two-byte and four-byte lead history" {
+    try std.testing.expectEqual(@as(usize, 0), value(mode_utf8, 0, 0xd0));
+    try std.testing.expectEqual(@as(usize, 0), value(mode_utf8, 0, 0xdf));
+    try std.testing.expectEqual(@as(usize, 2), value(mode_utf8, 0, 0xe0));
+    try std.testing.expectEqual(@as(usize, 2), value(mode_utf8, 0, 0xf0));
+    try std.testing.expectEqual(@as(usize, 2), value(mode_utf8, 0, 0xff));
 }
 const std = @import("std");

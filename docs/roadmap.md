@@ -7248,10 +7248,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   selection, tiny output backpressure, and a truncated second block; both
   synthetic streams are additionally accepted by Node's Brotli decoder.
   A separate runtime differential now drives libbrotli 1.1's streaming encoder
-  with a completed flush between two chunks, then feeds its real multi-block
-  output to the Vort decoder one byte at a time. Twenty-four text, JSON, and
-  changed-pattern cases across qualities 0/1/3/4/5/6/9/11 cover upstream block
-  planning independently of Vort's synthetic writers.
+  with a completed flush between chunks, verifies the resulting summaries
+  contain the expected non-empty compressed-block count, then feeds each real
+  multi-block stream to Vort one byte at a time. Thirty-two two-/three-block
+  text, JSON, changed-pattern, and binary cases cover qualities
+  0/1/3/4/5/6/9/11 independently of Vort's synthetic writers. The binary
+  corpus exposed an RFC UTF-8 context-table transcription bug: second-last
+  bytes D0..DF were incorrectly classified like E0..FF. Correcting that range
+  restores one-shot and incremental parity with libbrotli's quality 5+ output.
   Added byte-progressive metadata handling after compressed blocks. Metadata
   headers and payloads can span arbitrary input chunks, payload bytes are
   skipped without affecting decoded-size accounting, and callers may provide

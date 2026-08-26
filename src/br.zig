@@ -6069,57 +6069,6 @@ fn literalContextFromMode(mode: u2, previous: u8, second_previous: u8) Error!usi
     return literal_context.value(mode, previous, second_previous);
 }
 
-fn utf8Context(previous: u8, second_previous: u8) usize {
-    return utf8LastByteContext(previous) | utf8SecondLastByteContext(second_previous);
-}
-
-fn utf8LastByteContext(value: u8) usize {
-    if (value >= 192) return 2 + (value & 1);
-    if (value >= 128) return value & 1;
-    if ((value < 32 and value != 9 and value != 10 and value != 13) or value == 127) return 0;
-    return switch (value) {
-        9, 10, 13 => 4,
-        32 => 8,
-        '"', '\'' => 16,
-        '%' => 20,
-        '(', '<', '[', '{' => 24,
-        ')', '>', ']', '}' => 28,
-        ',', ';', ':' => 32,
-        '.' => 36,
-        '=' => 40,
-        '0'...'9' => 44,
-        'A', 'E', 'I', 'O', 'U' => 48,
-        'B'...'D', 'F'...'H', 'J'...'N', 'P'...'T', 'V'...'Z' => 52,
-        'a', 'e', 'i', 'o', 'u' => 56,
-        'b'...'d', 'f'...'h', 'j'...'n', 'p'...'t', 'v'...'z' => 60,
-        else => 12,
-    };
-}
-
-fn utf8SecondLastByteContext(value: u8) usize {
-    if (value >= 208) return 2;
-    if (value >= 128) return 0;
-    return switch (value) {
-        0...32, 127 => 0,
-        '0'...'9', 'A'...'Z' => 2,
-        'a'...'z' => 3,
-        else => 1,
-    };
-}
-
-fn signedContextBucket(value: u8) usize {
-    return switch (value) {
-        0 => 0,
-        1...15 => 1,
-        16...63 => 2,
-        64...127 => 3,
-        128...191 => 4,
-        192...239 => 5,
-        240...254 => 6,
-        255 => 7,
-    };
-}
-
 fn readMinimalDistance(
     header: *MinimalCompressedHeader,
     reader: *bitstream.BitReader,
