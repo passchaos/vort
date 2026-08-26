@@ -15,7 +15,7 @@ major gaps before Vort can claim broad industry-best parity:
 - True byte-progressive Brotli compressed-meta-block decoding remains future
   work for arbitrary context/block-switch/dictionary/recent-distance streams;
   the stored subset, insert-only Huffman literals, compressed single-command
-  RLE, and single-block-type explicit-distance copy streams now stream directly,
+  RLE, and single-block-type copy streams now stream directly,
   while the general incremental facade still buffers a bounded complete payload.
 - Incremental DEFLATE source throughput remains behind the local zlib-ng level-6
   comparison on stable runs, despite leading several binary/history shapes.
@@ -7181,13 +7181,21 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Huffman code crosses an input boundary. Tests cover one-byte input, three-byte
   output backpressure, insert/meta-block length boundaries through 65,536 bytes,
   output limits, exact sizes, truncation, trailing data, and copy-command
-  rejection. Copy-command streams outside the explicit-distance subset below
+  rejection. Copy-command streams outside the single-block-type subset below
   remain on the existing bounded whole-frame facade.
   Added the first byte-progressive Brotli copy-command decoder. It accepts final
-  compressed streams with one literal/command/distance block type and a
-  single-symbol explicit direct distance, retaining only a bounded entropy header plus a
-  caller-owned history ring, and resumes overlapping match copies across tiny
+  compressed streams with one literal/command/distance block type, retaining
+  only a bounded entropy header plus a caller-owned history ring, and resumes
+  overlapping match copies across tiny
   output buffers. A shared fixed-size reservoir bit reader now gives literal and copy
   decoders atomic rollback at input boundaries. Tests cover alternating runs up
   to 65,536 bytes, multi-command repeated prefixes, history-ring wrap, missing or
   undersized history, output limits, truncation, and trailing input.
+  Extended the progressive copy state machine to decode distance symbols after
+  each command's inserted literals, matching Brotli wire order. Dynamic distance
+  Huffman trees, direct and regular distances, short codes, implicit rep0, and
+  the four-entry recent-distance ring are now supported. One-byte input tests
+  cover the existing last-distance, short-distance, and regular-distance
+  fixtures plus representative fast-planner streams with simple and complex
+  literal/command alphabets. Static-dictionary matches and block switching
+  remain on the bounded whole-frame decoder.

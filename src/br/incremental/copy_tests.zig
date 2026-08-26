@@ -53,6 +53,35 @@ test "byte-progressive compressed copy decoder handles repeated commands and his
     }
 }
 
+test "byte-progressive compressed copy decoder supports recent and regular distances" {
+    inline for (.{
+        .{ br.IncrementalTestSupport.CompressedCopyFixture.implicit_last, "aaaaa" },
+        .{ br.IncrementalTestSupport.CompressedCopyFixture.short, "aaaaa" },
+        .{ br.IncrementalTestSupport.CompressedCopyFixture.regular, "ababa" },
+    }) |case| {
+        const kind, const expected = case;
+        const encoded = try br.IncrementalTestSupport.encodeCompressedCopyFixture(std.testing.allocator, kind);
+        defer std.testing.allocator.free(encoded);
+        var history: [16]u8 = undefined;
+        try drainSplit(encoded, expected, &history, 1, 1);
+    }
+}
+
+test "byte-progressive compressed copy decoder accepts planner output" {
+    inline for (.{
+        "abcabcXabcabcXabcabcX",
+        ("abcd" ** 10) ++ "aa" ++ ("abcd" ** 10),
+        "abcdefabcdefXabcdefabcdefXabcdefabcdefX",
+        "abcdefghijklmnop" ** 8,
+        ("abcd" ** 128) ++ "UNMATCHED-LITERAL-TAIL!",
+    }) |payload| {
+        const encoded = try br.encodePlannedStreamAlloc(std.testing.allocator, payload);
+        defer std.testing.allocator.free(encoded);
+        var history: [32 * 1024]u8 = undefined;
+        try drainSplit(encoded, payload, &history, 1, 3);
+    }
+}
+
 test "byte-progressive compressed copy decoder enforces history and framing" {
     const encoded = try br.encodeAlternatingStreamAlloc(std.testing.allocator, 'a', 'b', 257);
     defer std.testing.allocator.free(encoded);
@@ -60,9 +89,11 @@ test "byte-progressive compressed copy decoder enforces history and framing" {
 
     var no_history = br.IncrementalCopyStreamDecoder.init(&.{});
     try std.testing.expectError(error.OutputTooSmall, no_history.step(encoded, &output));
+    const wider_distance = try br.encodeRepeatedPrefixStreamAlloc(std.testing.allocator, "abcd", 8);
+    defer std.testing.allocator.free(wider_distance);
     var short_history: [1]u8 = undefined;
     var invalid_match = br.IncrementalCopyStreamDecoder.init(&short_history);
-    try std.testing.expectError(error.InvalidMatch, invalid_match.step(encoded, &output));
+    try std.testing.expectError(error.InvalidMatch, invalid_match.step(wider_distance, &output));
     var history: [2]u8 = undefined;
     var limited = br.IncrementalCopyStreamDecoder.initWithOptions(&history, .{ .max_output_len = 256 });
     try std.testing.expectError(error.OutputLimitExceeded, limited.step(encoded, &output));

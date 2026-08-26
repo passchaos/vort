@@ -114,10 +114,12 @@ const IncrementalCopyCodec = struct {
         decoded_len: usize,
         literal_tree: PrefixCode(256),
         command_tree: PrefixCode(704),
-        distance: usize,
+        distance_tree: PrefixCode(max_distance_alphabet_size),
+        npostfix: u2,
+        ndirect: u16,
     };
     pub const ParsedHeader = struct { header: Header, bits_read: usize };
-    pub const Command = struct { insert_len: usize, copy_len: usize, distance: usize };
+    pub const Command = struct { insert_len: usize, copy_len: usize, implicit_last_distance: bool };
 
     pub fn parseHeader(prefix: []const u8) IncrementalCopyCodec.Error!ParsedHeader {
         var reader = bitstream.BitReader.init(prefix);
@@ -135,14 +137,14 @@ const IncrementalCopyCodec = struct {
             return error.UnsupportedBrotliFeature;
         for (header.literal_context_map[0..64]) |tree_index| if (tree_index != 0) return error.UnsupportedBrotliFeature;
         for (header.distance_context_map[0..4]) |tree_index| if (tree_index != 0) return error.UnsupportedBrotliFeature;
-        const distance_symbol = header.distance_trees[0].single_symbol orelse return error.UnsupportedBrotliFeature;
-        if (distance_symbol < 16 or distance_symbol - 16 >= header.ndirect) return error.UnsupportedBrotliFeature;
         return .{
             .header = .{
                 .decoded_len = decoded_len,
                 .literal_tree = header.literal_trees[0],
                 .command_tree = header.insert_copy_trees[0],
-                .distance = @as(usize, distance_symbol - 16) + 1,
+                .distance_tree = header.distance_trees[0],
+                .npostfix = header.npostfix,
+                .ndirect = header.ndirect,
             },
             .bits_read = reader.bitPosition(),
         };
@@ -160,11 +162,29 @@ const IncrementalCopyCodec = struct {
         const entry = command_lut.entries[symbol];
         const insert_extra = if (entry.insert_extra_bits == 0) 0 else try reader.readBits(usize, entry.insert_extra_bits);
         const copy_extra = if (entry.copy_extra_bits == 0) 0 else try reader.readBits(usize, entry.copy_extra_bits);
-        if (entry.distance_code == 0) return error.UnsupportedBrotliFeature;
         return .{
             .insert_len = entry.insert_base + insert_extra,
             .copy_len = entry.copy_base + copy_extra,
-            .distance = header.distance,
+            .implicit_last_distance = entry.distance_code == 0,
+        };
+    }
+
+    pub fn readDistance(header: *const Header, reader: anytype, last_distances: *const [4]usize) IncrementalCopyCodec.Error!struct { distance: usize, update_ring: bool } {
+        const symbol = try header.distance_tree.decode(reader);
+        if (symbol < 16) return .{
+            .distance = try resolveShortDistance(symbol, last_distances),
+            .update_ring = symbol != 0,
+        };
+        const direct_index = symbol - 16;
+        if (direct_index < header.ndirect) return .{ .distance = @as(usize, direct_index) + 1, .update_ring = true };
+        const xcode = @as(usize, symbol) - @as(usize, header.ndirect) - 16;
+        const npostfix: usize = header.npostfix;
+        const extra_bits_value = 1 + (xcode >> @intCast(npostfix + 1));
+        if (extra_bits_value > 24) return error.CorruptFrame;
+        const extra = try reader.readBits(usize, @intCast(extra_bits_value));
+        return .{
+            .distance = try resolveRegularDistance(header.npostfix, header.ndirect, symbol, extra),
+            .update_ring = true,
         };
     }
 };
@@ -339,6 +359,44 @@ pub const IncrementalTestSupport = struct {
         const literal_codes = [_]u2{ 0, 2, 1, 3 };
         var i: usize = 0;
         while (i < len) : (i += 1) try writer.writeBits(allocator, literal_codes[i & 3], 2);
+        if (writer.bit_index != 0) writer.alignToByte();
+        return try encoded.toOwnedSlice(allocator);
+    }
+
+    pub const CompressedCopyFixture = enum { implicit_last, short, regular };
+
+    /// Build the focused `aaaaa`/`ababa` fixtures used by the one-shot decoder
+    /// tests so incremental tests exercise the same short and regular distance
+    /// semantics without duplicating private wire writers.
+    pub fn encodeCompressedCopyFixture(allocator: std.mem.Allocator, kind: CompressedCopyFixture) Error![]u8 {
+        var encoded: std.ArrayList(u8) = .empty;
+        errdefer encoded.deinit(allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeWindowBits(allocator, &writer, default_window_bits);
+        try writer.writeBits(allocator, 1, 1);
+        try writer.writeBits(allocator, 0, 1);
+        try writer.writeBits(allocator, 0, 2);
+        try writer.writeBits(allocator, 4, 16);
+        switch (kind) {
+            .implicit_last => {
+                try writeMinimalCompressedHeaderForLastDistance(allocator, &writer);
+                try writer.writeBits(allocator, 1, 1); // explicit seed command 136
+                try writer.writeBits(allocator, 0, 1); // implicit rep0 command 0
+            },
+            .short => {
+                try writeMinimalCompressedHeaderForShortDistance(allocator, &writer);
+                try writer.writeBits(allocator, 1, 1); // command 136
+                try writer.writeBits(allocator, 1, 1); // distance tree selects direct 1
+                try writer.writeBits(allocator, 0, 1); // command 128
+                try writer.writeBits(allocator, 0, 1); // distance tree selects short code 5
+            },
+            .regular => {
+                try writeMinimalCompressedHeaderForRegularDistance(allocator, &writer);
+                try writer.writeBits(allocator, 0, 1); // a
+                try writer.writeBits(allocator, 1, 1); // b
+                try writer.writeBits(allocator, 0, 1); // regular-distance extra bit
+            },
+        }
         if (writer.bit_index != 0) writer.alignToByte();
         return try encoded.toOwnedSlice(allocator);
     }

@@ -20,6 +20,8 @@ pub fn Decoder(comptime Codec: type) type {
         pending_literals: usize = 0,
         pending_copy: usize = 0,
         copy_distance: usize = 0,
+        implicit_last_distance: bool = false,
+        last_distances: [4]usize = .{ 16, 15, 11, 4 },
         total_input: usize = 0,
         total_output: usize = 0,
         finished: bool = false,
@@ -32,7 +34,7 @@ pub fn Decoder(comptime Codec: type) type {
             max_output_len: usize = std.math.maxInt(usize),
             expected_output_len: ?usize = null,
         };
-        pub const Phase = enum { header, command, literals, copy, padding, done };
+        pub const Phase = enum { header, command, literals, distance, copy, padding, done };
         pub const Snapshot = struct {
             phase: Phase,
             input_read: usize,
@@ -139,16 +141,17 @@ pub fn Decoder(comptime Codec: type) type {
                         },
                         else => return self.fail(.command, err),
                     };
-                    const command_len = std.math.add(usize, command.insert_len, command.copy_len) catch return self.fail(.command, error.IntegerOverflow);
-                    if (command_len > self.decoded_len - self.total_output) return self.fail(.command, error.CorruptFrame);
-                    // The command's inserted literals become history before
-                    // its copy executes, so validate against that future
-                    // position rather than only the already-emitted prefix.
-                    if (command.distance == 0 or command.distance > self.total_output + command.insert_len or command.distance > self.history.len) return self.fail(.command, error.InvalidMatch);
+                    const remaining = self.decoded_len - self.total_output;
+                    if (command.insert_len > remaining) return self.fail(.command, error.CorruptFrame);
+                    // RFC 7932 ignores the copy half of the final command when
+                    // its insert reaches MLEN exactly. Otherwise both spans
+                    // must fit before any caller output is mutated.
+                    if (command.insert_len < remaining and command.copy_len > remaining - command.insert_len)
+                        return self.fail(.command, error.CorruptFrame);
                     self.pending_literals = command.insert_len;
                     self.pending_copy = command.copy_len;
-                    self.copy_distance = command.distance;
-                    self.phase = if (self.pending_literals == 0) .copy else .literals;
+                    self.implicit_last_distance = command.implicit_last_distance;
+                    self.phase = if (self.pending_literals == 0) .distance else .literals;
                 },
                 .literals => {
                     while (self.pending_literals != 0 and output_written < output.len) {
@@ -165,9 +168,34 @@ pub fn Decoder(comptime Codec: type) type {
                         self.pending_literals -= 1;
                     }
                     if (self.pending_literals != 0) return result(input_read, output_written, .need_output);
+                    if (self.total_output == self.decoded_len) {
+                        self.pending_copy = 0;
+                        self.phase = .padding;
+                    } else {
+                        self.phase = .distance;
+                    }
+                },
+                .distance => {
+                    if (self.implicit_last_distance) {
+                        self.copy_distance = self.last_distances[3];
+                        self.phase = .copy;
+                        continue;
+                    }
+                    var reader = progressive_bits.Reader.init(input, &input_read, &self.staged_bits, &self.staged_bit_count, &self.stream_bits);
+                    const saved = reader.checkpoint();
+                    const decoded = Codec.readDistance(&self.header, &reader, &self.last_distances) catch |err| switch (err) {
+                        error.TruncatedFrame => {
+                            try reader.restoreKeepingInput(saved);
+                            return result(input_read, output_written, .need_input);
+                        },
+                        else => return self.fail(.distance, err),
+                    };
+                    self.copy_distance = decoded.distance;
+                    if (decoded.update_ring) pushLastDistance(&self.last_distances, decoded.distance);
                     self.phase = .copy;
                 },
                 .copy => {
+                    if (self.copy_distance > self.total_output or self.copy_distance > self.history.len) return self.fail(.copy, error.InvalidMatch);
                     while (self.pending_copy != 0 and output_written < output.len) {
                         const source = self.total_output - self.copy_distance;
                         const value = self.history[source % self.history.len];
@@ -201,6 +229,12 @@ pub fn Decoder(comptime Codec: type) type {
             output_written.* += 1;
             self.history[self.total_output % self.history.len] = value;
             self.total_output += 1;
+        }
+        fn pushLastDistance(last_distances: *[4]usize, distance: usize) void {
+            last_distances[0] = last_distances[1];
+            last_distances[1] = last_distances[2];
+            last_distances[2] = last_distances[3];
+            last_distances[3] = distance;
         }
         fn fail(self: *Self, phase: Phase, err: Error) Error {
             self.last_error_name = @errorName(err);
