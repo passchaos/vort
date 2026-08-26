@@ -274,6 +274,17 @@ const IncrementalStoredEncoderCodec = struct {
     pub const max_block_len = br.max_uncompressed_meta_block_len;
     pub const State = struct { bit_index: u3 = 0 };
 
+    pub fn readyOutputLen(state: *const State, pending_len: usize, final_written: bool) usize {
+        // A non-byte-aligned tail is still mutable: the next meta-block header
+        // must continue in that byte. Publishing it early would both corrupt
+        // the caller's copy and leave the next BitWriter with no backing byte.
+        if (!final_written and state.bit_index != 0) {
+            std.debug.assert(pending_len != 0);
+            return pending_len - 1;
+        }
+        return pending_len;
+    }
+
     pub fn writePrefix(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, options: StreamOptions) br.Error!void {
         var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
         try writeWindowBits(allocator, &writer, options.window_bits);

@@ -6104,6 +6104,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   bit-writer state across flushed uncompressed meta-blocks. Input limits are now
   validated before pending prefix output is drained, so deterministic limit
   errors no longer depend on whether the caller supplied an empty output slice.
+  Incremental output now retains a partially filled header byte until a later
+  meta-block or final marker makes it immutable, allowing runtime metadata and
+  subsequent payload blocks to share the Brotli bitstream safely under tiny
+  output buffers. Continued-stream snapshots also distinguish cumulative byte
+  totals from the current stream's counters.
 - Added pledged compressed length to the general Brotli incremental decoder. A
   framed transport can now trigger validation and stored/compressed meta-block
   decode automatically at the known payload boundary, consume the boundary

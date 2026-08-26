@@ -33,9 +33,13 @@ pub fn Encoder(comptime Codec: type) type {
             block_len: usize = 64 * 1024,
         };
         pub const Snapshot = struct {
+            /// Cumulative source bytes accepted across all continued streams.
             input_read: usize,
+            /// Cumulative encoded bytes returned across all continued streams.
             output_written: usize,
+            /// Source bytes accepted for the current stream.
             stream_input: usize,
+            /// Encoded bytes returned for the current stream.
             stream_output: usize,
             buffered_input: usize,
             pending_output: usize,
@@ -86,13 +90,16 @@ pub fn Encoder(comptime Codec: type) type {
             self.resetStream(options);
         }
         pub fn snapshot(self: *const Self) Snapshot {
+            const ready_end = Codec.readyOutputLen(&self.codec_state, self.pending.items.len, self.final_written);
             return .{
-                .input_read = self.total_input,
+                .input_read = self.stream_input,
                 .output_written = self.stream_output,
                 .stream_input = self.total_input,
                 .stream_output = self.total_output,
                 .buffered_input = self.plain.items.len,
-                .pending_output = self.pending.items.len - self.pending_offset,
+                // Exclude the mutable bit-reservoir tail: the encoder owns it
+                // until a later header or the final marker completes the byte.
+                .pending_output = ready_end - self.pending_offset,
                 .stream_count = self.stream_count,
                 .stream_index = if (self.done and self.stream_count != 0) self.stream_count - 1 else self.stream_count,
                 .metadata_pending = self.metadata_requested,
@@ -138,17 +145,20 @@ pub fn Encoder(comptime Codec: type) type {
             var input_read: usize = 0;
             var output_written: usize = 0;
             while (true) {
-                if (self.pending_offset != self.pending.items.len) {
-                    const remaining = self.pending.items[self.pending_offset..];
+                const ready_end = Codec.readyOutputLen(&self.codec_state, self.pending.items.len, self.final_written);
+                if (self.pending_offset != ready_end) {
+                    const remaining = self.pending.items[self.pending_offset..ready_end];
                     const n = @min(output.len - output_written, remaining.len);
                     @memcpy(output[output_written..][0..n], remaining[0..n]);
                     self.pending_offset += n;
                     output_written += n;
                     self.total_output += n;
                     self.stream_output += n;
-                    if (self.pending_offset != self.pending.items.len) return result(input_read, output_written, .need_output);
-                    self.pending.clearRetainingCapacity();
-                    self.pending_offset = 0;
+                    if (self.pending_offset != ready_end) return result(input_read, output_written, .need_output);
+                    if (ready_end == self.pending.items.len) {
+                        self.pending.clearRetainingCapacity();
+                        self.pending_offset = 0;
+                    }
                     if (output_written == output.len and output.len != 0) return result(input_read, output_written, .need_output);
                 }
                 if (!self.prefix_written) {

@@ -224,6 +224,9 @@ test "incremental stored encoder continues independent streams" {
     try std.testing.expectEqual(@as(usize, 2), encoder.snapshot().stream_count);
     try std.testing.expectEqual(@as(usize, 1), encoder.snapshot().stream_index);
     try std.testing.expectEqual(first.len + second.len, encoder.snapshot().input_read);
+    try std.testing.expectEqual(second.len, encoder.snapshot().stream_input);
+    try std.testing.expectEqual(first_encoded.len + second_encoded.len, encoder.snapshot().output_written);
+    try std.testing.expectEqual(second_encoded.len, encoder.snapshot().stream_output);
     const first_decoded = try br.decodeStreamAlloc(std.testing.allocator, first_encoded);
     defer std.testing.allocator.free(first_decoded);
     const second_decoded = try br.decodeStreamAlloc(std.testing.allocator, second_encoded);
