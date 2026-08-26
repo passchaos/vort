@@ -425,8 +425,10 @@ test "static dictionary reference matcher returns copy length and address" {
     const match = findLongestMatch(" information follows").?;
     var out: [64]u8 = undefined;
     const transformed = transform(match.address, match.copy_len, &out).?;
-    try std.testing.expectEqualSlices(u8, " information", transformed);
-    try std.testing.expectEqual(@as(usize, transformed.len), match.output_len);
+    // Longest-match semantics prefer the legal trailing-space transform over
+    // the shorter identity-prefix match when another input byte is available.
+    try std.testing.expectEqual(@as(usize, 13), match.output_len);
+    try std.testing.expectEqualSlices(u8, " information ", transformed);
 }
 
 test "static dictionary transform metadata agrees with materialization" {
