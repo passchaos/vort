@@ -4564,7 +4564,7 @@ fn readHuffmanLiteralSymbolFromCursor(
 ) Error!u8 {
     const max_bit_count = huffman_tree.max_bit_count;
     if (cursor.reader.remaining_bits >= max_bit_count) {
-        const prefix = peekReverseBits(&cursor.reader, max_bit_count);
+        const prefix = cursor.reader.peekAtMost16(max_bit_count);
         const symbol, const bit_count = try lookup.query(prefix);
         cursor.reader.remaining_bits -= bit_count;
         return symbol;
@@ -4598,21 +4598,6 @@ fn readHuffmanLiteralSymbolFromCursor(
             },
         }
     }
-}
-
-fn peekReverseBits(reader: *const ReverseBitReader, bit_count: u4) u16 {
-    std.debug.assert(bit_count != 0);
-    std.debug.assert(bit_count <= huffman_lookup_max_bits);
-    std.debug.assert(bit_count <= reader.remaining_bits);
-    var value: u16 = 0;
-    var bit = reader.remaining_bits;
-    while (bit > reader.remaining_bits - bit_count) {
-        bit -= 1;
-        const byte = reader.bytes[bit / 8];
-        const bit_index: u3 = @intCast(bit & 7);
-        value = (value << 1) | @as(u16, (byte >> bit_index) & 1);
-    }
-    return value;
 }
 
 fn queryHuffmanTree(
@@ -5463,10 +5448,48 @@ const ReverseBitReader = struct {
         return value;
     }
 
+    fn peekAtMost16(self: *const ReverseBitReader, bit_count: u4) u16 {
+        std.debug.assert(bit_count != 0);
+        std.debug.assert(bit_count <= 16);
+        std.debug.assert(bit_count <= self.remaining_bits);
+        const first_bit = self.remaining_bits - bit_count;
+        const first_byte = first_bit / 8;
+        const last_byte = (self.remaining_bits - 1) / 8;
+        var window: u32 = self.bytes[first_byte];
+        if (last_byte > first_byte) {
+            window |= @as(u32, self.bytes[first_byte + 1]) << 8;
+            if (last_byte > first_byte + 1) {
+                window |= @as(u32, self.bytes[first_byte + 2]) << 16;
+            }
+        }
+        const low_bits = window >> @intCast(first_bit & 7);
+        return @truncate(low_bits & ((@as(u32, 1) << bit_count) - 1));
+    }
+
     fn expectEnd(self: ReverseBitReader) Error!void {
         if (self.remaining_bits != 0) return error.CorruptFrame;
     }
 };
+
+test "zstd reverse bit peek matches consuming reader" {
+    const bytes = [_]u8{ 0xa7, 0x3c, 0xe1, 0x5b };
+    for (1..bytes.len * 8 + 1) |remaining_bits| {
+        const max_count = @min(@as(usize, 11), remaining_bits);
+        for (1..max_count + 1) |count| {
+            const reader = ReverseBitReader{
+                .bytes = &bytes,
+                .remaining_bits = remaining_bits,
+            };
+            var consuming = reader;
+            const expected = try consuming.read(@intCast(count));
+            try std.testing.expectEqual(
+                @as(u16, @intCast(expected)),
+                reader.peekAtMost16(@intCast(count)),
+            );
+            try std.testing.expectEqual(remaining_bits, reader.remaining_bits);
+        }
+    }
+}
 
 const low_bit_mask = [9]u8{
     0b00000000,
