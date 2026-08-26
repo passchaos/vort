@@ -6931,6 +6931,10 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Leaf depths in that two-queue tree are now recovered by one reverse node pass.
   Parent nodes are always appended after their children, so parent depths are
   available before child assignment and repeated leaf-to-root walks disappear.
+  The builder's descending-frequency precondition is now explicit and asserted
+  in debug builds; its package-merge weighted-cost oracle sorts generated inputs
+  into the same `PrefixAlphabet` order instead of accidentally exercising an
+  unsupported unsorted queue.
   The same exact heap oracle passes; fixed-CPU 10,000-run A/B adds roughly
   0.8%/0.9%/1.9% on JSON/source/log with unchanged streams.
   Static-dictionary candidate verification now compares RFC prefix, transformed

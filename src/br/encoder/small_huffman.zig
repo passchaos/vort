@@ -1,11 +1,17 @@
 const std = @import("std");
 
-/// Unbounded Huffman tree for at most 64 active symbols. Planner alphabets in
-/// current text/source/log corpora are <=33 symbols, so depth is comfortably
-/// below Brotli's 15-bit limit. Returns false if an adversarial distribution
-/// exceeds that limit, allowing the caller to retain package-merge fallback.
+/// Unbounded Huffman tree for at most 64 active symbols. `frequencies` must be
+/// ordered from highest to lowest weight, with the caller's deterministic tie
+/// order preserved. Planner alphabets in current text/source/log corpora are
+/// <=33 symbols, so depth is comfortably below Brotli's 15-bit limit. Returns
+/// false if an adversarial distribution exceeds that limit, allowing the
+/// caller to retain package-merge fallback.
 pub fn build(comptime capacity: usize, frequencies: []const u32, lengths: *[capacity]u4) bool {
     std.debug.assert(capacity <= 64 and frequencies.len <= capacity);
+    if (frequencies.len > 1) {
+        for (frequencies[1..], frequencies[0 .. frequencies.len - 1]) |frequency, previous|
+            std.debug.assert(previous >= frequency);
+    }
     lengths.* = @splat(0);
     if (frequencies.len == 0) return false;
     if (frequencies.len == 1) {
@@ -136,7 +142,7 @@ test "small Huffman builds complete tree" {
     try std.testing.expectEqual(@as(usize, 0), space);
 }
 
-test "small Huffman matches package merge weighted cost" {
+test "small Huffman ordered frequencies match package merge weighted cost" {
     const huffman = @import("../../huffman.zig");
     var state: u32 = 0x1234_5678;
     for (0..64) |_| {
@@ -146,6 +152,9 @@ test "small Huffman matches package merge weighted cost" {
             state = state *% 1_664_525 +% 1_013_904_223;
             frequency.* = 1 + (state >> 20);
         }
+        // The two-queue builder intentionally consumes PrefixAlphabet's
+        // descending order rather than paying to sort on every hot-path call.
+        std.mem.sort(u32, frequencies[0..active], {}, std.sort.desc(u32));
         var small: [64]u4 = undefined;
         if (!build(64, frequencies[0..active], &small)) continue;
         const reference = huffman.treeCodeLengths(64, &frequencies, 15);
