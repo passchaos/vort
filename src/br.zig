@@ -185,6 +185,10 @@ const IncrementalCopyCodec = struct {
             .update_ring = true,
         };
     }
+
+    pub fn dictionaryWord(distance: usize, copy_len: usize, current_output_len: usize, scratch: *[64]u8) IncrementalCopyCodec.Error![]const u8 {
+        return minimalStaticDictionaryWord(distance, copy_len, current_output_len, scratch);
+    }
 };
 
 fn ensureDistanceBlockAny(header: *MinimalCompressedHeader, reader: anytype) Error!void {

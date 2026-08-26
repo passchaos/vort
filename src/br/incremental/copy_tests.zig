@@ -148,3 +148,17 @@ test "byte-progressive compressed copy decoder enforces history and framing" {
     var trailing = br.IncrementalCopyStreamDecoder.init(&history);
     try std.testing.expectError(error.TrailingData, trailing.step(trailing_bytes[0 .. encoded.len + 1], &output));
 }
+
+test "byte-progressive compressed copy decoder emits transformed dictionary words" {
+    inline for (.{
+        "information",
+        "Information about compression performance and dictionary support.",
+        " information follows the information",
+        "abcdefghabcdefgh information follows abcdefghabcdefgh",
+    }) |payload| {
+        const encoded = try br.encodePlannedStreamStaticDictionaryAlloc(std.testing.allocator, payload);
+        defer std.testing.allocator.free(encoded);
+        var history: [32 * 1024]u8 = undefined;
+        try drainSplit(encoded, payload, &history, 1, 1);
+    }
+}

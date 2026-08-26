@@ -21,6 +21,9 @@ pub fn Decoder(comptime Codec: type) type {
         pending_copy: usize = 0,
         copy_distance: usize = 0,
         implicit_last_distance: bool = false,
+        dictionary_scratch: [64]u8 = undefined,
+        dictionary_offset: usize = 0,
+        dictionary_len: usize = 0,
         last_distances: [4]usize = .{ 16, 15, 11, 4 },
         previous: [2]u8 = .{ 0, 0 },
         total_input: usize = 0,
@@ -35,7 +38,7 @@ pub fn Decoder(comptime Codec: type) type {
             max_output_len: usize = std.math.maxInt(usize),
             expected_output_len: ?usize = null,
         };
-        pub const Phase = enum { header, command, literals, distance, copy, padding, done };
+        pub const Phase = enum { header, command, literals, distance, copy, dictionary, padding, done };
         pub const Snapshot = struct {
             phase: Phase,
             input_read: usize,
@@ -149,8 +152,6 @@ pub fn Decoder(comptime Codec: type) type {
                     // RFC 7932 ignores the copy half of the final command when
                     // its insert reaches MLEN exactly. Otherwise both spans
                     // must fit before any caller output is mutated.
-                    if (command.insert_len < remaining and command.copy_len > remaining - command.insert_len)
-                        return self.fail(.command, error.CorruptFrame);
                     self.pending_literals = command.insert_len;
                     self.pending_copy = command.copy_len;
                     self.implicit_last_distance = command.implicit_last_distance;
@@ -183,7 +184,7 @@ pub fn Decoder(comptime Codec: type) type {
                 .distance => {
                     if (self.implicit_last_distance) {
                         self.copy_distance = self.last_distances[3];
-                        self.phase = .copy;
+                        try self.beginCopy();
                         continue;
                     }
                     var reader = progressive_bits.Reader.init(input, &input_read, &self.staged_bits, &self.staged_bit_count, &self.stream_bits);
@@ -198,11 +199,10 @@ pub fn Decoder(comptime Codec: type) type {
                         else => return self.fail(.distance, err),
                     };
                     self.copy_distance = decoded.distance;
-                    if (decoded.update_ring) pushLastDistance(&self.last_distances, decoded.distance);
-                    self.phase = .copy;
+                    if (decoded.distance <= self.total_output and decoded.update_ring) pushLastDistance(&self.last_distances, decoded.distance);
+                    try self.beginCopy();
                 },
                 .copy => {
-                    if (self.copy_distance > self.total_output or self.copy_distance > self.history.len) return self.fail(.copy, error.InvalidMatch);
                     while (self.pending_copy != 0 and output_written < output.len) {
                         const source = self.total_output - self.copy_distance;
                         const value = self.history[source % self.history.len];
@@ -210,6 +210,17 @@ pub fn Decoder(comptime Codec: type) type {
                         self.pending_copy -= 1;
                     }
                     if (self.pending_copy != 0) return result(input_read, output_written, .need_output);
+                    self.phase = .command;
+                },
+                .dictionary => {
+                    const remaining = self.dictionary_scratch[self.dictionary_offset..self.dictionary_len];
+                    const n = @min(output.len - output_written, remaining.len);
+                    for (remaining[0..n]) |value| self.emit(output, &output_written, value);
+                    self.dictionary_offset += n;
+                    if (self.dictionary_offset != self.dictionary_len) return result(input_read, output_written, .need_output);
+                    self.dictionary_offset = 0;
+                    self.dictionary_len = 0;
+                    self.pending_copy = 0;
                     self.phase = .command;
                 },
                 .padding => {
@@ -238,6 +249,27 @@ pub fn Decoder(comptime Codec: type) type {
             self.previous[0] = self.previous[1];
             self.previous[1] = value;
             self.total_output += 1;
+        }
+        fn beginCopy(self: *Self) Error!void {
+            if (self.copy_distance == 0) return self.fail(.copy, error.InvalidMatch);
+            const remaining = self.decoded_len - self.total_output;
+            if (self.copy_distance <= self.total_output) {
+                if (self.copy_distance > self.history.len) return self.fail(.copy, error.InvalidMatch);
+                if (self.pending_copy > remaining) return self.fail(.copy, error.CorruptFrame);
+                self.phase = .copy;
+                return;
+            }
+
+            // Dictionary references are encoded as distances beyond the
+            // produced history. Materialize only the transformed word (at most
+            // 64 bytes) and stream that scratch through the normal output and
+            // history accounting. Dictionary references never update repcodes.
+            const word = try Codec.dictionaryWord(self.copy_distance, self.pending_copy, self.total_output, &self.dictionary_scratch);
+            if (word.len > remaining or word.len > self.dictionary_scratch.len) return self.fail(.dictionary, error.CorruptFrame);
+            if (word.ptr != self.dictionary_scratch[0..].ptr) @memcpy(self.dictionary_scratch[0..word.len], word);
+            self.dictionary_offset = 0;
+            self.dictionary_len = word.len;
+            self.phase = .dictionary;
         }
         fn pushLastDistance(last_distances: *[4]usize, distance: usize) void {
             last_distances[0] = last_distances[1];
