@@ -7197,13 +7197,19 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   the four-entry recent-distance ring are now supported. One-byte input tests
   cover the existing last-distance, short-distance, and regular-distance
   fixtures plus representative fast-planner streams with simple and complex
-  literal/command alphabets. Static-dictionary matches and block switching
-  remain on the bounded whole-frame decoder.
+  literal/command alphabets. Static-dictionary matches remain on the bounded
+  whole-frame decoder.
   The progressive copy decoder now retains all parsed literal and distance
   context trees instead of requiring all context-map entries to select tree
   zero. It derives literal context from the last two streamed history bytes and
   selects the distance tree from the current copy length, with state snapshots
   restored alongside bit-reader rollback. One-byte input/output tests cover the
   established LSB6 literal-context and distance-context fixtures, while a ratio
-  planner fixture exercises its two-tree UTF-8 context map. Block-type switching
-  and static-dictionary copies remain the next compatibility slices.
+  planner fixture exercises its two-tree UTF-8 context map. Static-dictionary
+  copies remain the next compatibility slice.
+  Generalized the existing block-length, command-symbol, and block-switch
+  helpers over the progressive bit reader and retained the complete mutable
+  entropy header in the copy decoder. Literal, command, and distance block
+  switches now advance atomically with the bitstream and roll back together on
+  split input. One-byte input/output tests cover two- and three-type switches as
+  well as a complex block-length tree.

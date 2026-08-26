@@ -366,7 +366,20 @@ pub const IncrementalTestSupport = struct {
         return try encoded.toOwnedSlice(allocator);
     }
 
-    pub const CompressedCopyFixture = enum { implicit_last, short, regular, literal_context, distance_context };
+    pub const CompressedCopyFixture = enum {
+        implicit_last,
+        short,
+        regular,
+        literal_context,
+        distance_context,
+        command_switch,
+        command_switch_three,
+        literal_switch,
+        literal_switch_complex_length,
+        literal_switch_three,
+        distance_switch,
+        distance_switch_three,
+    };
 
     /// Build the focused `aaaaa`/`ababa` fixtures used by the one-shot decoder
     /// tests so incremental tests exercise the same short and regular distance
@@ -379,7 +392,17 @@ pub const IncrementalTestSupport = struct {
         try writer.writeBits(allocator, 1, 1);
         try writer.writeBits(allocator, 0, 1);
         try writer.writeBits(allocator, 0, 2);
-        try writer.writeBits(allocator, if (kind == .literal_context) 2 else 4, 16);
+        const decoded_len: usize = switch (kind) {
+            .literal_context => 3,
+            .command_switch => 4,
+            .command_switch_three => 7,
+            .literal_switch, .literal_switch_complex_length => 2,
+            .literal_switch_three => 3,
+            .distance_switch => 7,
+            .distance_switch_three => 9,
+            else => 5,
+        };
+        try writer.writeBits(allocator, decoded_len - 1, 16);
         switch (kind) {
             .implicit_last => {
                 try writeMinimalCompressedHeaderForLastDistance(allocator, &writer);
@@ -404,6 +427,48 @@ pub const IncrementalTestSupport = struct {
                 try writeMinimalCompressedHeaderForDistanceContext(allocator, &writer);
                 try writer.writeBits(allocator, 0, 1); // a
                 try writer.writeBits(allocator, 1, 1); // b
+            },
+            // The command-switch fixture helper includes the two literal bits
+            // and the next-block length bits used by its one-shot oracle.
+            .command_switch => try writeMinimalCompressedHeaderForCommandSwitch(allocator, &writer),
+            .command_switch_three => {
+                try writeMinimalCompressedHeaderForCommandSwitchThreeTypes(allocator, &writer);
+                try writer.writeBits(allocator, 0, 1); // a
+                try writer.writeBits(allocator, 0, 2); // next command block count = 1
+                try writer.writeBits(allocator, 1, 2); // b
+                try writer.writeBits(allocator, 0, 2); // next command block count = 1
+                try writer.writeBits(allocator, 3, 2); // c
+            },
+            .literal_switch => try writeMinimalCompressedHeaderForLiteralBlockSwitch(allocator, &writer),
+            .literal_switch_complex_length => {
+                try writeMinimalCompressedHeaderForLiteralBlockSwitchComplexLength(allocator, &writer);
+                try writer.writeBits(allocator, 0, 1); // block length symbol 0
+                try writer.writeBits(allocator, 0, 2); // next literal block count = 1
+            },
+            .literal_switch_three => {
+                try writeMinimalCompressedHeaderForLiteralBlockSwitchThreeTypes(allocator, &writer);
+                try writer.writeBits(allocator, 0, 2);
+                try writer.writeBits(allocator, 0, 2);
+            },
+            .distance_switch => {
+                try writeMinimalCompressedHeaderForDistanceBlockSwitch(allocator, &writer);
+                try writer.writeBits(allocator, 1, 1); // command 152
+                try writer.writeBits(allocator, 0, 1); // a
+                try writer.writeBits(allocator, 1, 2); // b
+                try writer.writeBits(allocator, 3, 2); // c
+                try writer.writeBits(allocator, 0, 1); // command 128
+                try writer.writeBits(allocator, 0, 2); // next distance block count = 1
+            },
+            .distance_switch_three => {
+                try writeMinimalCompressedHeaderForDistanceBlockSwitchThreeTypes(allocator, &writer);
+                try writer.writeBits(allocator, 1, 1); // command 152
+                try writer.writeBits(allocator, 0, 1); // a
+                try writer.writeBits(allocator, 1, 2); // b
+                try writer.writeBits(allocator, 3, 2); // c
+                try writer.writeBits(allocator, 0, 1); // command 128
+                try writer.writeBits(allocator, 0, 2); // next distance block count = 1
+                try writer.writeBits(allocator, 0, 1); // command 128
+                try writer.writeBits(allocator, 0, 2); // next distance block count = 1
             },
         }
         if (writer.bit_index != 0) writer.alignToByte();

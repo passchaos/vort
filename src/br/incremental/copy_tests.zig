@@ -103,6 +103,24 @@ test "byte-progressive compressed copy decoder selects literal and distance cont
     }
 }
 
+test "byte-progressive compressed copy decoder switches entropy block types" {
+    inline for (.{
+        .{ br.IncrementalTestSupport.CompressedCopyFixture.command_switch, "aaab" },
+        .{ br.IncrementalTestSupport.CompressedCopyFixture.command_switch_three, "aaabbbc" },
+        .{ br.IncrementalTestSupport.CompressedCopyFixture.literal_switch, "ab" },
+        .{ br.IncrementalTestSupport.CompressedCopyFixture.literal_switch_complex_length, "ab" },
+        .{ br.IncrementalTestSupport.CompressedCopyFixture.literal_switch_three, "abc" },
+        .{ br.IncrementalTestSupport.CompressedCopyFixture.distance_switch, "abcabab" },
+        .{ br.IncrementalTestSupport.CompressedCopyFixture.distance_switch_three, "abcababbb" },
+    }) |case| {
+        const kind, const expected = case;
+        const encoded = try br.IncrementalTestSupport.encodeCompressedCopyFixture(std.testing.allocator, kind);
+        defer std.testing.allocator.free(encoded);
+        var history: [16]u8 = undefined;
+        try drainSplit(encoded, expected, &history, 1, 1);
+    }
+}
+
 test "byte-progressive compressed copy decoder enforces history and framing" {
     const encoded = try br.encodeAlternatingStreamAlloc(std.testing.allocator, 'a', 'b', 257);
     defer std.testing.allocator.free(encoded);
