@@ -2,9 +2,10 @@ const std = @import("std");
 const core = @import("../../core.zig");
 const progressive_bits = @import("bit_reader.zig");
 
-/// Progressive decoder for final, single-block-type compressed streams with
-/// explicit distances. History is caller-owned, which makes memory use visible
-/// and lets overlapping copies resume across arbitrarily small output buffers.
+/// Progressive decoder for compressed Brotli streams with explicit distances.
+/// History is caller-owned, which makes memory use visible and lets overlapping
+/// copies and persistent RFC distance/context state resume across meta-blocks
+/// and arbitrarily small output buffers.
 pub fn Decoder(comptime Codec: type) type {
     return struct {
         options: Options,
@@ -12,6 +13,7 @@ pub fn Decoder(comptime Codec: type) type {
         phase: Phase = .header,
         header_bytes: [Codec.max_stream_header_bytes]u8 = undefined,
         header_len: usize = 0,
+        header_bit_count: usize = 0,
         header: Codec.Header = undefined,
         staged_bits: u128 = 0,
         staged_bit_count: u8 = 0,
@@ -52,7 +54,7 @@ pub fn Decoder(comptime Codec: type) type {
             metadata_output: []u8 = &.{},
             metadata_block_lengths: []usize = &.{},
         };
-        pub const Phase = enum { header, command, literals, distance, copy, dictionary, trailer, stored, metadata, padding, done };
+        pub const Phase = enum { header, compressed_header, command, literals, distance, copy, dictionary, trailer, stored, metadata, padding, done };
         const NextHeaderState = enum { is_last, last_empty, nibbles, metadata_reserved, metadata_count, metadata_len, block_len, uncompressed, alignment };
         pub const Snapshot = struct {
             phase: Phase,
@@ -146,6 +148,7 @@ pub fn Decoder(comptime Codec: type) type {
                         if (self.header_len == self.header_bytes.len) return self.fail(.header, error.UnsupportedBrotliFeature);
                         self.header_bytes[self.header_len] = input[input_read];
                         self.header_len += 1;
+                        self.header_bit_count += 8;
                         input_read += 1;
                         const parsed = Codec.parseHeader(self.header_bytes[0..self.header_len]) catch |err| switch (err) {
                             error.TruncatedFrame => continue,
@@ -172,6 +175,32 @@ pub fn Decoder(comptime Codec: type) type {
                         break;
                     }
                     if (self.phase == .header) return result(input_read, output_written, .need_input);
+                },
+                .compressed_header => {
+                    while (true) {
+                        // Only expose complete bytes to the ordinary parser.
+                        // The partial tail is valid retained input, but padding
+                        // it with zeroes could make a truncated prefix appear
+                        // to be a complete Huffman header.
+                        const complete_bytes = self.header_bit_count / 8;
+                        if (complete_bytes != 0) {
+                            const parsed = Codec.parseMetaBlockHeader(
+                                self.header_bytes[0..complete_bytes],
+                                self.decoded_len,
+                                self.final_meta_block,
+                            ) catch |err| switch (err) {
+                                error.TruncatedFrame => null,
+                                else => return self.fail(.compressed_header, err),
+                            };
+                            if (parsed) |ready| {
+                                try self.installCompressedHeader(ready);
+                                break;
+                            }
+                        }
+                        if (input_read == input.len) return result(input_read, output_written, .need_input);
+                        try self.appendHeaderByte(input[input_read]);
+                        input_read += 1;
+                    }
                 },
                 .command => {
                     if (self.total_output == self.decoded_len) {
@@ -262,17 +291,20 @@ pub fn Decoder(comptime Codec: type) type {
                                 error.TruncatedFrame => return result(input_read, output_written, .need_input),
                                 else => return self.fail(.trailer, err),
                             };
-                            self.next_header_state = if (value != 0) .last_empty else .nibbles;
+                            self.final_meta_block = value != 0;
+                            self.next_header_state = if (self.final_meta_block) .last_empty else .nibbles;
                         },
                         .last_empty => {
                             const value = reader.readBits(u1, 1) catch |err| switch (err) {
                                 error.TruncatedFrame => return result(input_read, output_written, .need_input),
                                 else => return self.fail(.trailer, err),
                             };
-                            if (value != 1) return self.fail(.trailer, error.UnsupportedBrotliFeature);
-                            try self.validateFinalOutputSize();
-                            self.phase = .padding;
-                            break;
+                            if (value != 0) {
+                                try self.validateFinalOutputSize();
+                                self.phase = .padding;
+                                break;
+                            }
+                            self.next_header_state = .nibbles;
                         },
                         .nibbles => {
                             const code = reader.readBits(u2, 2) catch |err| switch (err) {
@@ -327,6 +359,10 @@ pub fn Decoder(comptime Codec: type) type {
                             if (self.total_output > self.options.max_output_len or self.stored_remaining > self.options.max_output_len - self.total_output) return self.fail(.trailer, error.OutputLimitExceeded);
                             if (self.options.expected_output_len) |expected|
                                 if (self.total_output > expected or self.stored_remaining > expected - self.total_output) return self.fail(.trailer, error.SizeMismatch);
+                            if (self.final_meta_block) {
+                                try self.beginCompressedHeader();
+                                break;
+                            }
                             self.next_header_state = .uncompressed;
                         },
                         .uncompressed => {
@@ -334,7 +370,10 @@ pub fn Decoder(comptime Codec: type) type {
                                 error.TruncatedFrame => return result(input_read, output_written, .need_input),
                                 else => return self.fail(.trailer, err),
                             };
-                            if (value != 1) return self.fail(.trailer, error.UnsupportedBrotliFeature);
+                            if (value == 0) {
+                                try self.beginCompressedHeader();
+                                break;
+                            }
                             self.next_header_state = .alignment;
                         },
                         .alignment => {
@@ -433,6 +472,63 @@ pub fn Decoder(comptime Codec: type) type {
             self.dictionary_offset = 0;
             self.dictionary_len = word.len;
             self.phase = .dictionary;
+        }
+        fn beginCompressedHeader(self: *Self) Error!void {
+            const block_end = std.math.add(usize, self.total_output, self.stored_remaining) catch
+                return self.fail(.trailer, error.IntegerOverflow);
+            if (self.final_meta_block) {
+                if (self.options.expected_output_len) |expected|
+                    if (block_end != expected) return self.fail(.trailer, error.SizeMismatch);
+            }
+            self.decoded_len = block_end;
+            self.stored_remaining = 0;
+            self.next_header_state = .is_last;
+
+            // Normalize the already-prefetched low bits so the regular bounded
+            // header parser can start at bit zero. Later caller bytes are packed
+            // behind this prefix without retaining the original input slices.
+            self.header_bit_count = self.staged_bit_count;
+            self.header_len = (@as(usize, self.staged_bit_count) + 7) / 8;
+            var bits = self.staged_bits;
+            for (self.header_bytes[0..self.header_len]) |*byte| {
+                byte.* = @truncate(bits);
+                bits >>= 8;
+            }
+            self.staged_bits = 0;
+            self.staged_bit_count = 0;
+            self.phase = .compressed_header;
+        }
+        fn appendHeaderByte(self: *Self, value: u8) Error!void {
+            if (self.header_bit_count > self.header_bytes.len * 8 - 8)
+                return self.fail(.compressed_header, error.UnsupportedBrotliFeature);
+            const byte_index = self.header_bit_count / 8;
+            const bit_index: u3 = @intCast(self.header_bit_count % 8);
+            if (bit_index == 0) {
+                self.header_bytes[byte_index] = value;
+            } else {
+                self.header_bytes[byte_index] |= value << bit_index;
+                self.header_bytes[byte_index + 1] = value >> @intCast(8 - @as(usize, bit_index));
+            }
+            self.header_bit_count += 8;
+            self.header_len = (self.header_bit_count + 7) / 8;
+        }
+        fn installCompressedHeader(self: *Self, parsed: Codec.ParsedHeader) Error!void {
+            if (parsed.bits_read > self.header_bit_count) return self.fail(.compressed_header, error.CorruptFrame);
+            const remaining = self.header_bit_count - parsed.bits_read;
+            if (remaining > 127) return self.fail(.compressed_header, error.CorruptFrame);
+            var staged: u128 = 0;
+            for (0..remaining) |bit| {
+                const source = parsed.bits_read + bit;
+                const value = (self.header_bytes[source / 8] >> @intCast(source % 8)) & 1;
+                staged |= @as(u128, value) << @intCast(bit);
+            }
+            self.staged_bits = staged;
+            self.staged_bit_count = @intCast(remaining);
+            self.stream_bits += parsed.bits_read;
+            self.header = parsed.header;
+            self.header_len = 0;
+            self.header_bit_count = 0;
+            self.phase = .command;
         }
         fn pushLastDistance(last_distances: *[4]usize, distance: usize) void {
             last_distances[0] = last_distances[1];

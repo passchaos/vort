@@ -120,6 +120,15 @@ const IncrementalCopyCodec = struct {
     pub const ParsedHeader = struct { header: Header, bits_read: usize };
     pub const Command = struct { insert_len: usize, copy_len: usize, implicit_last_distance: bool };
 
+    pub fn parseMetaBlockHeader(prefix: []const u8, decoded_len: usize, final: bool) IncrementalCopyCodec.Error!ParsedHeader {
+        var reader = bitstream.BitReader.init(prefix);
+        const compressed = try readMinimalCompressedHeader(&reader);
+        return .{
+            .header = .{ .decoded_len = decoded_len, .compressed = compressed, .final = final },
+            .bits_read = reader.bitPosition(),
+        };
+    }
+
     pub fn parseHeader(prefix: []const u8) IncrementalCopyCodec.Error!ParsedHeader {
         var reader = bitstream.BitReader.init(prefix);
         try readWindowBits(&reader);
@@ -420,6 +429,56 @@ pub const IncrementalTestSupport = struct {
 
     pub fn encodeCompressedAlternatingWithFinalEmpty(allocator: std.mem.Allocator, first: u8, second: u8, len: usize) Error![]u8 {
         return encodeCompressedAlternatingThenStored(allocator, first, second, len, "");
+    }
+
+    /// Build two compressed meta-blocks where the second block reuses the
+    /// recent-distance ring installed by the first. This pins both the bit-level
+    /// header transition and the RFC stream state that survives that boundary.
+    pub fn encodeCompressedCopiesAcrossMetaBlocks(allocator: std.mem.Allocator) Error![]u8 {
+        var encoded: std.ArrayList(u8) = .empty;
+        errdefer encoded.deinit(allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeWindowBits(allocator, &writer, default_window_bits);
+
+        try writer.writeBits(allocator, 0, 1); // ISLAST = false
+        try writer.writeBits(allocator, 0, 2); // MNIBBLES = 4
+        try writer.writeBits(allocator, 2, 16); // MLEN - 1
+        try writer.writeBits(allocator, 0, 1); // ISUNCOMPRESSED = false
+        try writeMinimalCompressedHeaderForShortDistance(allocator, &writer);
+        try writer.writeBits(allocator, 1, 1); // command 136: insert one, copy two
+        try writer.writeBits(allocator, 1, 1); // direct distance 1
+
+        try writer.writeBits(allocator, 1, 1); // ISLAST
+        try writer.writeBits(allocator, 0, 1); // ISLASTEMPTY = false
+        try writer.writeBits(allocator, 0, 2); // MNIBBLES = 4
+        try writer.writeBits(allocator, 1, 16); // MLEN - 1
+        try writeMinimalCompressedHeaderForShortDistance(allocator, &writer);
+        try writer.writeBits(allocator, 0, 1); // command 128: insert zero, copy two
+        try writer.writeBits(allocator, 0, 1); // short code 5: last distance + 1
+
+        return try encoded.toOwnedSlice(allocator);
+    }
+
+    /// Build two one-literal compressed blocks. The second block's context map
+    /// selects `b` only when the previous byte from the first block is `a`.
+    pub fn encodeCompressedLiteralContextAcrossMetaBlocks(allocator: std.mem.Allocator) Error![]u8 {
+        var encoded: std.ArrayList(u8) = .empty;
+        errdefer encoded.deinit(allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeWindowBits(allocator, &writer, default_window_bits);
+
+        try writer.writeBits(allocator, 0, 1); // ISLAST = false
+        try writer.writeBits(allocator, 0, 2); // MNIBBLES = 4
+        try writer.writeBits(allocator, 0, 16); // MLEN - 1
+        try writer.writeBits(allocator, 0, 1); // ISUNCOMPRESSED = false
+        try writeMinimalCompressedHeaderForSingleLiteral(allocator, &writer, 'a');
+
+        try writer.writeBits(allocator, 1, 1); // ISLAST
+        try writer.writeBits(allocator, 0, 1); // ISLASTEMPTY = false
+        try writer.writeBits(allocator, 0, 2); // MNIBBLES = 4
+        try writer.writeBits(allocator, 0, 16); // MLEN - 1
+        try writeMinimalCompressedHeaderForLiteralContextAfterStoredA(allocator, &writer);
+        return try encoded.toOwnedSlice(allocator);
     }
 
     pub fn encodeCompressedAlternatingThenStored(allocator: std.mem.Allocator, first: u8, second: u8, len: usize, stored: []const u8) Error![]u8 {
@@ -14415,6 +14474,20 @@ fn writeMinimalCompressedHeaderForHello(allocator: std.mem.Allocator, writer: *B
     try writer.writeBits(allocator, 0, 1); // tree-select
 
     try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 40);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
+}
+
+fn writeMinimalCompressedHeaderForSingleLiteral(allocator: std.mem.Allocator, writer: *BitWriter, literal: u8) Error!void {
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writer.writeBits(allocator, 0, 2); // NPOSTFIX
+    try writer.writeBits(allocator, 0, 4); // NDIRECT
+    try writer.writeBits(allocator, 0, 2); // LSB6 literal context
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeBlockTypeCount(allocator, writer, 1);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 256, literal);
+    try writeSimpleSingleSymbolPrefix(allocator, writer, 704, 8);
     try writeSimpleSingleSymbolPrefix(allocator, writer, 64, 0);
 }
 

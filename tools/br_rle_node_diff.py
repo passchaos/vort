@@ -14,6 +14,8 @@ def main() -> int:
         ("rle", b"a" * 4096),
         ("ababa", b"ababa"),
         ("binary-ababa", bytes((0, 255, 0, 255, 0))),
+        ("multi-compressed-distance", b"aaaaa"),
+        ("multi-compressed-context", b"ab"),
         *(
             (f"alternating-{n}", (b"xy" * ((n + 1) // 2))[:n])
             for n in (*range(6, 24), 71, 327, 1095, 1096, 1097, 2119, 2120, 65535, 65536, 1048576, 16777216)

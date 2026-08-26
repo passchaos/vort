@@ -12,11 +12,11 @@ major gaps before Vort can claim broad industry-best parity:
 - Brotli general-purpose compression is not implemented; production encoding
   currently covers stored streams, single-byte RLE, and externally gated short
   alternating patterns only.
-- True byte-progressive Brotli compressed-meta-block decoding remains future
-  work for arbitrary context/block-switch/dictionary/recent-distance streams;
-  the stored subset, insert-only Huffman literals, compressed single-command
-  RLE, and single-block-type copy streams now stream directly,
-  while the general incremental facade still buffers a bounded complete payload.
+- True byte-progressive Brotli decoding now covers stored data, metadata,
+  insert-only Huffman literals, compressed RLE, copy commands, context maps,
+  entropy block switching, static dictionaries, and consecutive compressed
+  meta-blocks. Arbitrary upstream Brotli streams still need broader decoder
+  coverage; the general fallback facade buffers a bounded complete payload.
 - Incremental DEFLATE source throughput remains behind the local zlib-ng level-6
   comparison on stable runs, despite leading several binary/history shapes.
 - Zstd-compatible dictionary training, seekable/indexed framing, and broader
@@ -24,10 +24,10 @@ major gaps before Vort can claim broad industry-best parity:
 - Cross-platform optimized kernels and reproducible competitor measurements are
   not yet comprehensive enough for a blanket performance-leadership claim.
 
-The next highest-value deliverable is a general Brotli literal/command encoder
-built from an upstream-verified command LUT, followed by a byte-progressive
-compressed-meta-block decoder. Performance work should then resume on the
-profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
+The next highest-value deliverable is broader byte-progressive decoding against
+upstream-produced multi-meta-block corpora, followed by the remaining general
+Brotli encoder features. Performance work should then resume on the profiled
+DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
 
 ## Milestone 0: repository and validation spine
 
@@ -7239,8 +7239,14 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   validates byte-alignment padding, and copies stored payload bytes directly
   from caller input to caller output. Literal and copy decoder tests cover
   one-byte input, tiny output buffers, multiple stored blocks, exact-size
-  completion, output-limit rejection, and truncated boundaries. Multiple
-  non-empty compressed blocks remain the next stream-level extension.
+  completion, output-limit rejection, and truncated boundaries.
+  The copy decoder now also crosses consecutive non-empty compressed
+  meta-blocks without buffering the complete stream. It repacks prefetched
+  boundary bits into its bounded header buffer, parses the next entropy header,
+  and preserves output history, literal context, and the recent-distance ring.
+  Byte-at-a-time tests cover cross-block short-distance reuse, context-tree
+  selection, tiny output backpressure, and a truncated second block; both
+  synthetic streams are additionally accepted by Node's Brotli decoder.
   Added byte-progressive metadata handling after compressed blocks. Metadata
   headers and payloads can span arbitrary input chunks, payload bytes are
   skipped without affecting decoded-size accounting, and callers may provide

@@ -60,6 +60,37 @@ test "byte-progressive compressed copy decoder consumes final-empty trailer" {
     try std.testing.expect(truncated_output < decoded.len or truncated_input < encoded.len);
 }
 
+test "byte-progressive compressed copy decoder crosses compressed meta-blocks" {
+    const encoded = try br.IncrementalTestSupport.encodeCompressedCopiesAcrossMetaBlocks(std.testing.allocator);
+    defer std.testing.allocator.free(encoded);
+    const one_shot = try br.decodeStreamAlloc(std.testing.allocator, encoded);
+    defer std.testing.allocator.free(one_shot);
+    try std.testing.expectEqualSlices(u8, "aaaaa", one_shot);
+    var history: [4]u8 = undefined;
+    try drainSplit(encoded, "aaaaa", &history, 1, 1);
+
+    // Removing the final byte leaves the second compressed header or payload
+    // incomplete, depending on how many bits its compact trees occupy.
+    var truncated = br.IncrementalCopyStreamDecoder.init(&history);
+    var output: [5]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (input_offset < encoded.len - 1) {
+        const end = @min(encoded.len - 1, input_offset + 1);
+        const step = try truncated.step(encoded[input_offset..end], output[output_offset..][0..@min(1, output.len - output_offset)]);
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+    }
+    try std.testing.expectError(error.TruncatedFrame, truncated.finish());
+}
+
+test "byte-progressive compressed copy decoder preserves contexts across meta-blocks" {
+    const encoded = try br.IncrementalTestSupport.encodeCompressedLiteralContextAcrossMetaBlocks(std.testing.allocator);
+    defer std.testing.allocator.free(encoded);
+    var history: [2]u8 = undefined;
+    try drainSplit(encoded, "ab", &history, 1, 1);
+}
+
 test "byte-progressive compressed copy decoder streams following stored blocks" {
     const encoded = try br.IncrementalTestSupport.encodeCompressedAlternatingThenStored(std.testing.allocator, 'x', 'y', 257, " tail");
     defer std.testing.allocator.free(encoded);
