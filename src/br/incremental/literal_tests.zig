@@ -126,6 +126,35 @@ test "byte-progressive compressed literal decoder streams multiple stored blocks
     try std.testing.expectEqualSlices(u8, expected, &decoded);
 }
 
+test "byte-progressive compressed literal decoder captures following metadata" {
+    const metadata = "stream metadata";
+    const encoded = try br.IncrementalTestSupport.encodeCompressedHelloThenMetadataAndStoredBlocks(std.testing.allocator, metadata, &.{"!"});
+    defer std.testing.allocator.free(encoded);
+    var metadata_output: [6]u8 = undefined;
+    var block_lengths: [1]usize = undefined;
+    var decoder = br.IncrementalLiteralStreamDecoder.initWithOptions(.{
+        .expected_output_len = 6,
+        .metadata_output = &metadata_output,
+        .metadata_block_lengths = &block_lengths,
+    });
+    var decoded: [6]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(encoded.len, input_offset + 1);
+        const step = try decoder.step(encoded[input_offset..input_end], decoded[output_offset..][0..@min(2, decoded.len - output_offset)]);
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+    }
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, "hello!", &decoded);
+    const snapshot = decoder.snapshot();
+    try std.testing.expectEqualSlices(u8, metadata[0..metadata_output.len], &metadata_output);
+    try std.testing.expectEqual(metadata.len, snapshot.metadata_total);
+    try std.testing.expectEqual(@as(usize, 1), snapshot.metadata_block_count);
+    try std.testing.expectEqual(metadata.len, block_lengths[0]);
+}
+
 test "byte-progressive compressed literal decoder crosses insert and length boundaries" {
     inline for (.{ 5, 66, 130, 578, 65_535, 65_536 }) |len| {
         const encoded = try br.IncrementalTestSupport.encodeCompressedLiteralCycle(std.testing.allocator, len);

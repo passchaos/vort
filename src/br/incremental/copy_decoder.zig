@@ -21,6 +21,14 @@ pub fn Decoder(comptime Codec: type) type {
         next_header_state: NextHeaderState = .is_last,
         next_length_width: u6 = 0,
         stored_remaining: usize = 0,
+        metadata: bool = false,
+        metadata_remaining: usize = 0,
+        metadata_output: []u8 = &.{},
+        metadata_written: usize = 0,
+        metadata_total: usize = 0,
+        current_metadata_len: usize = 0,
+        metadata_block_lengths: []usize = &.{},
+        metadata_block_count: usize = 0,
         pending_literals: usize = 0,
         pending_copy: usize = 0,
         copy_distance: usize = 0,
@@ -41,9 +49,11 @@ pub fn Decoder(comptime Codec: type) type {
         pub const Options = struct {
             max_output_len: usize = std.math.maxInt(usize),
             expected_output_len: ?usize = null,
+            metadata_output: []u8 = &.{},
+            metadata_block_lengths: []usize = &.{},
         };
-        pub const Phase = enum { header, command, literals, distance, copy, dictionary, trailer, stored, padding, done };
-        const NextHeaderState = enum { is_last, last_empty, nibbles, block_len, uncompressed, alignment };
+        pub const Phase = enum { header, command, literals, distance, copy, dictionary, trailer, stored, metadata, padding, done };
+        const NextHeaderState = enum { is_last, last_empty, nibbles, metadata_reserved, metadata_count, metadata_len, block_len, uncompressed, alignment };
         pub const Snapshot = struct {
             phase: Phase,
             input_read: usize,
@@ -53,6 +63,12 @@ pub fn Decoder(comptime Codec: type) type {
             pending_copy: usize,
             retained_input_bytes: usize,
             history_bytes: usize,
+            metadata_written: usize,
+            metadata_total: usize,
+            metadata_truncated: bool,
+            metadata_block_count: usize,
+            metadata_blocks_captured: usize,
+            metadata_blocks_truncated: bool,
             last_error_name: []const u8,
             last_error_phase: Phase,
         };
@@ -61,12 +77,22 @@ pub fn Decoder(comptime Codec: type) type {
             return initWithOptions(history, .{});
         }
         pub fn initWithOptions(history: []u8, options: Options) Self {
-            return .{ .options = options, .history = history };
+            return .{
+                .options = options,
+                .history = history,
+                .metadata_output = options.metadata_output,
+                .metadata_block_lengths = options.metadata_block_lengths,
+            };
         }
         pub fn reset(self: *Self) void {
             const history = self.history;
             const options = self.options;
-            self.* = .{ .options = options, .history = history };
+            self.* = .{
+                .options = options,
+                .history = history,
+                .metadata_output = options.metadata_output,
+                .metadata_block_lengths = options.metadata_block_lengths,
+            };
         }
         pub fn snapshot(self: *const Self) Snapshot {
             return .{
@@ -78,6 +104,12 @@ pub fn Decoder(comptime Codec: type) type {
                 .pending_copy = self.pending_copy,
                 .retained_input_bytes = self.header_len,
                 .history_bytes = @min(self.total_output, self.history.len),
+                .metadata_written = self.metadata_written,
+                .metadata_total = self.metadata_total,
+                .metadata_truncated = self.metadata_written != self.metadata_total,
+                .metadata_block_count = self.metadata_block_count,
+                .metadata_blocks_captured = @min(self.metadata_block_count, self.metadata_block_lengths.len),
+                .metadata_blocks_truncated = self.metadata_block_count > self.metadata_block_lengths.len,
                 .last_error_name = self.last_error_name,
                 .last_error_phase = self.last_error_phase,
             };
@@ -247,9 +279,42 @@ pub fn Decoder(comptime Codec: type) type {
                                 error.TruncatedFrame => return result(input_read, output_written, .need_input),
                                 else => return self.fail(.trailer, err),
                             };
-                            if (code == 3) return self.fail(.trailer, error.UnsupportedBrotliFeature);
+                            if (code == 3) {
+                                self.metadata = true;
+                                self.next_header_state = .metadata_reserved;
+                                continue;
+                            }
                             self.next_length_width = @intCast((4 + @as(usize, code)) * 4);
                             self.next_header_state = .block_len;
+                        },
+                        .metadata_reserved => {
+                            const value = reader.readBits(u1, 1) catch |err| switch (err) {
+                                error.TruncatedFrame => return result(input_read, output_written, .need_input),
+                                else => return self.fail(.trailer, err),
+                            };
+                            if (value != 0) return self.fail(.trailer, error.CorruptFrame);
+                            self.next_header_state = .metadata_count;
+                        },
+                        .metadata_count => {
+                            const count = reader.readBits(u2, 2) catch |err| switch (err) {
+                                error.TruncatedFrame => return result(input_read, output_written, .need_input),
+                                else => return self.fail(.trailer, err),
+                            };
+                            self.next_length_width = @intCast(@as(usize, count) * 8);
+                            if (count == 0) {
+                                self.metadata_remaining = 0;
+                                self.next_header_state = .alignment;
+                            } else self.next_header_state = .metadata_len;
+                        },
+                        .metadata_len => {
+                            const len_minus_one = reader.readBits(usize, self.next_length_width) catch |err| switch (err) {
+                                error.TruncatedFrame => return result(input_read, output_written, .need_input),
+                                else => return self.fail(.trailer, err),
+                            };
+                            const bytes = self.next_length_width / 8;
+                            if (bytes > 1 and ((len_minus_one >> @intCast((bytes - 1) * 8)) & 0xff) == 0) return self.fail(.trailer, error.CorruptFrame);
+                            self.metadata_remaining = std.math.add(usize, len_minus_one, 1) catch return self.fail(.trailer, error.IntegerOverflow);
+                            self.next_header_state = .alignment;
                         },
                         .block_len => {
                             const len_minus_one = reader.readBits(usize, self.next_length_width) catch |err| switch (err) {
@@ -260,6 +325,8 @@ pub fn Decoder(comptime Codec: type) type {
                             if (nibbles > 4 and ((len_minus_one >> @intCast((nibbles - 1) * 4)) & 0xf) == 0) return self.fail(.trailer, error.CorruptFrame);
                             self.stored_remaining = std.math.add(usize, len_minus_one, 1) catch return self.fail(.trailer, error.IntegerOverflow);
                             if (self.total_output > self.options.max_output_len or self.stored_remaining > self.options.max_output_len - self.total_output) return self.fail(.trailer, error.OutputLimitExceeded);
+                            if (self.options.expected_output_len) |expected|
+                                if (self.total_output > expected or self.stored_remaining > expected - self.total_output) return self.fail(.trailer, error.SizeMismatch);
                             self.next_header_state = .uncompressed;
                         },
                         .uncompressed => {
@@ -277,7 +344,10 @@ pub fn Decoder(comptime Codec: type) type {
                                 else => return self.fail(.trailer, err),
                             };
                             if (value != 0 or self.staged_bit_count != 0) return self.fail(.trailer, error.CorruptFrame);
-                            self.phase = .stored;
+                            if (self.metadata and self.metadata_remaining == 0) {
+                                self.recordMetadataBlock();
+                                self.phase = .trailer;
+                            } else self.phase = if (self.metadata) .metadata else .stored;
                             self.next_header_state = .is_last;
                             break;
                         },
@@ -290,6 +360,19 @@ pub fn Decoder(comptime Codec: type) type {
                     self.stored_remaining -= n;
                     if (self.stored_remaining != 0) return result(input_read, output_written, if (output_written == output.len) .need_output else .need_input);
                     if (self.options.expected_output_len) |expected| if (self.total_output > expected) return self.fail(.stored, error.SizeMismatch);
+                    self.phase = .trailer;
+                },
+                .metadata => {
+                    const n = @min(self.metadata_remaining, input.len - input_read);
+                    const capture = @min(n, self.metadata_output.len -| self.metadata_written);
+                    if (capture != 0) @memcpy(self.metadata_output[self.metadata_written..][0..capture], input[input_read..][0..capture]);
+                    self.metadata_written += capture;
+                    self.metadata_total += n;
+                    self.current_metadata_len += n;
+                    input_read += n;
+                    self.metadata_remaining -= n;
+                    if (self.metadata_remaining != 0) return result(input_read, output_written, .need_input);
+                    self.recordMetadataBlock();
                     self.phase = .trailer;
                 },
                 .dictionary => {
@@ -365,6 +448,13 @@ pub fn Decoder(comptime Codec: type) type {
         fn validateFinalOutputSize(self: *Self) Error!void {
             if (self.options.expected_output_len) |expected|
                 if (self.total_output != expected) return self.fail(.trailer, error.SizeMismatch);
+        }
+        fn recordMetadataBlock(self: *Self) void {
+            if (self.metadata_block_count < self.metadata_block_lengths.len)
+                self.metadata_block_lengths[self.metadata_block_count] = self.current_metadata_len;
+            self.metadata_block_count += 1;
+            self.current_metadata_len = 0;
+            self.metadata = false;
         }
         fn result(input_read: usize, output_written: usize, status: core.StepResult.Status) core.StepResult {
             return .{ .progress = .{ .input_read = input_read, .output_written = output_written }, .status = status };

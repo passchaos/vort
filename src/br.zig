@@ -358,6 +358,10 @@ pub const IncrementalTestSupport = struct {
     }
 
     pub fn encodeCompressedHelloThenStoredBlocks(allocator: std.mem.Allocator, stored_blocks: []const []const u8) Error![]u8 {
+        return encodeCompressedHelloThenMetadataAndStoredBlocks(allocator, "", stored_blocks);
+    }
+
+    pub fn encodeCompressedHelloThenMetadataAndStoredBlocks(allocator: std.mem.Allocator, metadata: []const u8, stored_blocks: []const []const u8) Error![]u8 {
         if (stored_blocks.len == 0) return error.InvalidBlockPlan;
         for (stored_blocks) |stored| if (stored.len == 0 or stored.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
         var encoded: std.ArrayList(u8) = .empty;
@@ -374,7 +378,30 @@ pub const IncrementalTestSupport = struct {
         try writer.writeBits(allocator, 1, 2);
         try writer.writeBits(allocator, 1, 2);
         try writer.writeBits(allocator, 3, 2);
+        if (metadata.len != 0) try writeMetadataMetaBlock(allocator, &writer, metadata);
         for (stored_blocks) |stored| try writeUncompressedMetaBlock(allocator, &writer, stored);
+        try writer.writeBits(allocator, 1, 1);
+        try writer.writeBits(allocator, 1, 1);
+        return try encoded.toOwnedSlice(allocator);
+    }
+
+    pub fn encodeCompressedAlternatingThenMetadataAndStored(allocator: std.mem.Allocator, metadata: []const u8, stored: []const u8) Error![]u8 {
+        if (metadata.len == 0 or stored.len == 0) return error.InvalidBlockPlan;
+        var encoded: std.ArrayList(u8) = .empty;
+        errdefer encoded.deinit(allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeWindowBits(allocator, &writer, default_window_bits);
+        try writer.writeBits(allocator, 0, 1);
+        try writer.writeBits(allocator, 0, 2);
+        try writer.writeBits(allocator, 252, 16); // 253-byte alternating block
+        try writer.writeBits(allocator, 0, 1);
+        const entry = commandEntryForLengths(2, 251) orelse return error.InvalidBlockPlan;
+        try writeMinimalCompressedHeaderForAlternatingPattern(allocator, &writer, 'x', 'y', entry.symbol);
+        try writeCommandLengthExtras(allocator, &writer, entry, 2, 251);
+        try writer.writeBits(allocator, 0, 1);
+        try writer.writeBits(allocator, 1, 1);
+        try writeMetadataMetaBlock(allocator, &writer, metadata);
+        try writeUncompressedMetaBlock(allocator, &writer, stored);
         try writer.writeBits(allocator, 1, 1);
         try writer.writeBits(allocator, 1, 1);
         return try encoded.toOwnedSlice(allocator);

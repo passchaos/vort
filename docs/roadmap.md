@@ -7232,3 +7232,9 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   one-byte input, tiny output buffers, multiple stored blocks, exact-size
   completion, output-limit rejection, and truncated boundaries. Multiple
   non-empty compressed blocks remain the next stream-level extension.
+  Added byte-progressive metadata handling after compressed blocks. Metadata
+  headers and payloads can span arbitrary input chunks, payload bytes are
+  skipped without affecting decoded-size accounting, and callers may provide
+  bounded metadata and per-block-length buffers matching the stored decoder's
+  observability model. Tests cover truncated capture, exact block-length
+  reporting, and metadata followed by stored data and a final-empty terminator.

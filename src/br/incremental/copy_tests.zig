@@ -72,6 +72,37 @@ test "byte-progressive compressed copy decoder streams following stored blocks" 
     try std.testing.expectError(error.OutputLimitExceeded, limited.step(encoded, &output));
 }
 
+test "byte-progressive compressed copy decoder skips following metadata" {
+    const metadata = "copy metadata";
+    const encoded = try br.IncrementalTestSupport.encodeCompressedAlternatingThenMetadataAndStored(std.testing.allocator, metadata, "!");
+    defer std.testing.allocator.free(encoded);
+    const expected = ("xy" ** 126) ++ "x!";
+    var metadata_output: [4]u8 = undefined;
+    var lengths: [1]usize = undefined;
+    var history: [32]u8 = undefined;
+    var decoder = br.IncrementalCopyStreamDecoder.initWithOptions(&history, .{
+        .expected_output_len = expected.len,
+        .metadata_output = &metadata_output,
+        .metadata_block_lengths = &lengths,
+    });
+    var output: [expected.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const end = @min(encoded.len, input_offset + 1);
+        const step = try decoder.step(encoded[input_offset..end], output[output_offset..][0..@min(2, output.len - output_offset)]);
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+    }
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, expected, &output);
+    const snapshot = decoder.snapshot();
+    try std.testing.expectEqualSlices(u8, metadata[0..metadata_output.len], &metadata_output);
+    try std.testing.expectEqual(metadata.len, snapshot.metadata_total);
+    try std.testing.expectEqual(@as(usize, 1), snapshot.metadata_block_count);
+    try std.testing.expectEqual(metadata.len, lengths[0]);
+}
+
 test "byte-progressive compressed copy decoder handles repeated commands and history wrap" {
     const cases = .{
         .{ "xy", 31 },
