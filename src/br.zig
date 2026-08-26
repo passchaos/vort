@@ -112,11 +112,7 @@ const IncrementalCopyCodec = struct {
     pub const max_stream_header_bytes: usize = 4096;
     pub const Header = struct {
         decoded_len: usize,
-        literal_tree: PrefixCode(256),
-        command_tree: PrefixCode(704),
-        distance_tree: PrefixCode(max_distance_alphabet_size),
-        npostfix: u2,
-        ndirect: u16,
+        compressed: MinimalCompressedHeader,
     };
     pub const ParsedHeader = struct { header: Header, bits_read: usize };
     pub const Command = struct { insert_len: usize, copy_len: usize, implicit_last_distance: bool };
@@ -132,32 +128,28 @@ const IncrementalCopyCodec = struct {
         const len_minus_one = try reader.readBits(u32, @intCast(mnibbles * 4));
         if (mnibbles > 4 and ((len_minus_one >> @intCast((mnibbles - 1) * 4)) & 0xf) == 0) return error.CorruptFrame;
         const decoded_len = std.math.add(usize, len_minus_one, 1) catch return error.IntegerOverflow;
-        var header = try readMinimalCompressedHeader(&reader);
-        if (header.literal_block.block_type_count != 1 or header.command_block.block_type_count != 1 or header.distance_block.block_type_count != 1)
-            return error.UnsupportedBrotliFeature;
-        for (header.literal_context_map[0..64]) |tree_index| if (tree_index != 0) return error.UnsupportedBrotliFeature;
-        for (header.distance_context_map[0..4]) |tree_index| if (tree_index != 0) return error.UnsupportedBrotliFeature;
+        const header = try readMinimalCompressedHeader(&reader);
         return .{
-            .header = .{
-                .decoded_len = decoded_len,
-                .literal_tree = header.literal_trees[0],
-                .command_tree = header.insert_copy_trees[0],
-                .distance_tree = header.distance_trees[0],
-                .npostfix = header.npostfix,
-                .ndirect = header.ndirect,
-            },
+            .header = .{ .decoded_len = decoded_len, .compressed = header },
             .bits_read = reader.bitPosition(),
         };
     }
 
-    pub fn readLiteral(header: *const Header, reader: anytype) IncrementalCopyCodec.Error!u8 {
-        const symbol = try header.literal_tree.decode(reader);
+    pub fn readLiteral(header: *Header, reader: anytype, previous: u8, second_previous: u8) IncrementalCopyCodec.Error!u8 {
+        try ensureLiteralBlockAny(&header.compressed, reader);
+        const block_type = header.compressed.literal_block.current_type;
+        if (block_type >= max_literal_block_types) return error.UnsupportedBrotliFeature;
+        const context = try literalContextFromMode(header.compressed.literal_context_modes[block_type], previous, second_previous);
+        const tree_index = header.compressed.literal_context_map[@as(usize, block_type) * 64 + context];
+        if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
+        const symbol = try header.compressed.literal_trees[tree_index].decode(reader);
         if (symbol > 0xff) return error.InvalidHuffmanCode;
+        if (header.compressed.literal_block.remaining != 0) header.compressed.literal_block.remaining -= 1;
         return @intCast(symbol);
     }
 
-    pub fn readCommand(header: *const Header, reader: anytype) IncrementalCopyCodec.Error!Command {
-        const symbol = try header.command_tree.decode(reader);
+    pub fn readCommand(header: *Header, reader: anytype) IncrementalCopyCodec.Error!Command {
+        const symbol = try readCommandSymbolAny(&header.compressed, reader);
         if (symbol >= command_lut.entries.len) return error.InvalidHuffmanCode;
         const entry = command_lut.entries[symbol];
         const insert_extra = if (entry.insert_extra_bits == 0) 0 else try reader.readBits(usize, entry.insert_extra_bits);
@@ -169,25 +161,36 @@ const IncrementalCopyCodec = struct {
         };
     }
 
-    pub fn readDistance(header: *const Header, reader: anytype, last_distances: *const [4]usize) IncrementalCopyCodec.Error!struct { distance: usize, update_ring: bool } {
-        const symbol = try header.distance_tree.decode(reader);
+    pub fn readDistance(header: *Header, reader: anytype, copy_len: usize, last_distances: *const [4]usize) IncrementalCopyCodec.Error!struct { distance: usize, update_ring: bool } {
+        try ensureDistanceBlockAny(&header.compressed, reader);
+        const block_type = header.compressed.distance_block.current_type;
+        if (block_type >= max_distance_block_types) return error.UnsupportedBrotliFeature;
+        const tree_index = header.compressed.distance_context_map[@as(usize, block_type) * 4 + distanceContext(copy_len)];
+        if (tree_index >= max_distance_context_trees) return error.UnsupportedBrotliFeature;
+        const symbol = try header.compressed.distance_trees[tree_index].decode(reader);
+        if (header.compressed.distance_block.remaining != 0) header.compressed.distance_block.remaining -= 1;
         if (symbol < 16) return .{
             .distance = try resolveShortDistance(symbol, last_distances),
             .update_ring = symbol != 0,
         };
         const direct_index = symbol - 16;
-        if (direct_index < header.ndirect) return .{ .distance = @as(usize, direct_index) + 1, .update_ring = true };
-        const xcode = @as(usize, symbol) - @as(usize, header.ndirect) - 16;
-        const npostfix: usize = header.npostfix;
+        if (direct_index < header.compressed.ndirect) return .{ .distance = @as(usize, direct_index) + 1, .update_ring = true };
+        const xcode = @as(usize, symbol) - @as(usize, header.compressed.ndirect) - 16;
+        const npostfix: usize = header.compressed.npostfix;
         const extra_bits_value = 1 + (xcode >> @intCast(npostfix + 1));
         if (extra_bits_value > 24) return error.CorruptFrame;
         const extra = try reader.readBits(usize, @intCast(extra_bits_value));
         return .{
-            .distance = try resolveRegularDistance(header.npostfix, header.ndirect, symbol, extra),
+            .distance = try resolveRegularDistance(header.compressed.npostfix, header.compressed.ndirect, symbol, extra),
             .update_ring = true,
         };
     }
 };
+
+fn ensureDistanceBlockAny(header: *MinimalCompressedHeader, reader: anytype) Error!void {
+    if (header.distance_block.block_type_count > 1 and header.distance_block.remaining == 0)
+        try switchBlockAny(max_distance_block_types, &header.distance_block, reader);
+}
 
 const IncrementalRleCodec = struct {
     pub const Error = br.Error;
@@ -363,7 +366,7 @@ pub const IncrementalTestSupport = struct {
         return try encoded.toOwnedSlice(allocator);
     }
 
-    pub const CompressedCopyFixture = enum { implicit_last, short, regular };
+    pub const CompressedCopyFixture = enum { implicit_last, short, regular, literal_context, distance_context };
 
     /// Build the focused `aaaaa`/`ababa` fixtures used by the one-shot decoder
     /// tests so incremental tests exercise the same short and regular distance
@@ -376,7 +379,7 @@ pub const IncrementalTestSupport = struct {
         try writer.writeBits(allocator, 1, 1);
         try writer.writeBits(allocator, 0, 1);
         try writer.writeBits(allocator, 0, 2);
-        try writer.writeBits(allocator, 4, 16);
+        try writer.writeBits(allocator, if (kind == .literal_context) 2 else 4, 16);
         switch (kind) {
             .implicit_last => {
                 try writeMinimalCompressedHeaderForLastDistance(allocator, &writer);
@@ -395,6 +398,12 @@ pub const IncrementalTestSupport = struct {
                 try writer.writeBits(allocator, 0, 1); // a
                 try writer.writeBits(allocator, 1, 1); // b
                 try writer.writeBits(allocator, 0, 1); // regular-distance extra bit
+            },
+            .literal_context => try writeMinimalCompressedHeaderForLiteralContext(allocator, &writer),
+            .distance_context => {
+                try writeMinimalCompressedHeaderForDistanceContext(allocator, &writer);
+                try writer.writeBits(allocator, 0, 1); // a
+                try writer.writeBits(allocator, 1, 1); // b
             },
         }
         if (writer.bit_index != 0) writer.alignToByte();
@@ -2784,6 +2793,10 @@ fn readMinimalCompressedHeaderInto(reader: *bitstream.BitReader, header: *Minima
 }
 
 fn readBlockLength(prefix: *const PrefixCode(26), reader: *bitstream.BitReader) Error!usize {
+    return readBlockLengthAny(prefix, reader);
+}
+
+fn readBlockLengthAny(prefix: *const PrefixCode(26), reader: anytype) Error!usize {
     const symbol = try prefix.decode(reader);
     if (symbol >= block_length_specs.len) return error.InvalidHuffmanCode;
     const spec = block_length_specs[symbol];
@@ -5764,8 +5777,12 @@ pub const transformStaticDictionaryWord = static_dictionary.transform;
 pub const fullStaticDictionarySizeBits = static_dictionary.sizeBits;
 
 fn readCommandSymbol(header: *MinimalCompressedHeader, reader: *bitstream.BitReader) Error!u16 {
+    return readCommandSymbolAny(header, reader);
+}
+
+fn readCommandSymbolAny(header: *MinimalCompressedHeader, reader: anytype) Error!u16 {
     if (header.command_block.block_type_count > 1 and header.command_block.remaining == 0) {
-        try switchCommandBlock(&header.command_block, reader);
+        try switchBlockAny(max_command_block_types, &header.command_block, reader);
     }
     if (header.command_block.current_type >= max_command_block_types) return error.UnsupportedBrotliFeature;
     const symbol = try header.insert_copy_trees[header.command_block.current_type].decode(reader);
@@ -5774,16 +5791,24 @@ fn readCommandSymbol(header: *MinimalCompressedHeader, reader: *bitstream.BitRea
 }
 
 fn ensureLiteralBlock(header: *MinimalCompressedHeader, reader: *bitstream.BitReader) Error!void {
+    return ensureLiteralBlockAny(header, reader);
+}
+
+fn ensureLiteralBlockAny(header: *MinimalCompressedHeader, reader: anytype) Error!void {
     if (header.literal_block.block_type_count > 1 and header.literal_block.remaining == 0) {
-        try switchBlock(max_literal_block_types, &header.literal_block, reader);
+        try switchBlockAny(max_literal_block_types, &header.literal_block, reader);
     }
 }
 
 fn switchCommandBlock(block: *BlockSwitchState(max_command_block_types), reader: *bitstream.BitReader) Error!void {
-    try switchBlock(max_command_block_types, block, reader);
+    try switchBlockAny(max_command_block_types, block, reader);
 }
 
 fn switchBlock(comptime max_block_types: usize, block: *BlockSwitchState(max_block_types), reader: *bitstream.BitReader) Error!void {
+    return switchBlockAny(max_block_types, block, reader);
+}
+
+fn switchBlockAny(comptime max_block_types: usize, block: *BlockSwitchState(max_block_types), reader: anytype) Error!void {
     if (block.block_type_count <= 1) return error.CorruptFrame;
     const symbol = try block.type_tree.decode(reader);
     var block_type: u16 = switch (symbol) {
@@ -5794,7 +5819,7 @@ fn switchBlock(comptime max_block_types: usize, block: *BlockSwitchState(max_blo
     if (block_type >= block.block_type_count) block_type -= block.block_type_count;
     block.previous_type = block.current_type;
     block.current_type = block_type;
-    block.remaining = try readBlockLength(&block.length_tree, reader);
+    block.remaining = try readBlockLengthAny(&block.length_tree, reader);
 }
 
 fn literalContext(header: *const MinimalCompressedHeader, output: []const u8, written: usize) Error!usize {

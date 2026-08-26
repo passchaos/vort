@@ -7186,9 +7186,9 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Added the first byte-progressive Brotli copy-command decoder. It accepts final
   compressed streams with one literal/command/distance block type, retaining
   only a bounded entropy header plus a caller-owned history ring, and resumes
-  overlapping match copies across tiny
-  output buffers. A shared fixed-size reservoir bit reader now gives literal and copy
-  decoders atomic rollback at input boundaries. Tests cover alternating runs up
+  overlapping match copies across tiny output buffers. A shared fixed-size
+  reservoir bit reader now gives literal and copy decoders atomic rollback at
+  input boundaries. Tests cover alternating runs up
   to 65,536 bytes, multi-command repeated prefixes, history-ring wrap, missing or
   undersized history, output limits, truncation, and trailing input.
   Extended the progressive copy state machine to decode distance symbols after
@@ -7199,3 +7199,11 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   fixtures plus representative fast-planner streams with simple and complex
   literal/command alphabets. Static-dictionary matches and block switching
   remain on the bounded whole-frame decoder.
+  The progressive copy decoder now retains all parsed literal and distance
+  context trees instead of requiring all context-map entries to select tree
+  zero. It derives literal context from the last two streamed history bytes and
+  selects the distance tree from the current copy length, with state snapshots
+  restored alongside bit-reader rollback. One-byte input/output tests cover the
+  established LSB6 literal-context and distance-context fixtures, while a ratio
+  planner fixture exercises its two-tree UTF-8 context map. Block-type switching
+  and static-dictionary copies remain the next compatibility slices.

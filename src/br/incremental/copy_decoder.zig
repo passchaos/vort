@@ -22,6 +22,7 @@ pub fn Decoder(comptime Codec: type) type {
         copy_distance: usize = 0,
         implicit_last_distance: bool = false,
         last_distances: [4]usize = .{ 16, 15, 11, 4 },
+        previous: [2]u8 = .{ 0, 0 },
         total_input: usize = 0,
         total_output: usize = 0,
         finished: bool = false,
@@ -134,8 +135,10 @@ pub fn Decoder(comptime Codec: type) type {
                     }
                     var reader = progressive_bits.Reader.init(input, &input_read, &self.staged_bits, &self.staged_bit_count, &self.stream_bits);
                     const saved = reader.checkpoint();
+                    const saved_header = self.header;
                     const command = Codec.readCommand(&self.header, &reader) catch |err| switch (err) {
                         error.TruncatedFrame => {
+                            self.header = saved_header;
                             try reader.restoreKeepingInput(saved);
                             return result(input_read, output_written, .need_input);
                         },
@@ -157,8 +160,10 @@ pub fn Decoder(comptime Codec: type) type {
                     while (self.pending_literals != 0 and output_written < output.len) {
                         var reader = progressive_bits.Reader.init(input, &input_read, &self.staged_bits, &self.staged_bit_count, &self.stream_bits);
                         const saved = reader.checkpoint();
-                        const literal = Codec.readLiteral(&self.header, &reader) catch |err| switch (err) {
+                        const saved_header = self.header;
+                        const literal = Codec.readLiteral(&self.header, &reader, self.previous[1], self.previous[0]) catch |err| switch (err) {
                             error.TruncatedFrame => {
+                                self.header = saved_header;
                                 try reader.restoreKeepingInput(saved);
                                 return result(input_read, output_written, .need_input);
                             },
@@ -183,8 +188,10 @@ pub fn Decoder(comptime Codec: type) type {
                     }
                     var reader = progressive_bits.Reader.init(input, &input_read, &self.staged_bits, &self.staged_bit_count, &self.stream_bits);
                     const saved = reader.checkpoint();
-                    const decoded = Codec.readDistance(&self.header, &reader, &self.last_distances) catch |err| switch (err) {
+                    const saved_header = self.header;
+                    const decoded = Codec.readDistance(&self.header, &reader, self.pending_copy, &self.last_distances) catch |err| switch (err) {
                         error.TruncatedFrame => {
+                            self.header = saved_header;
                             try reader.restoreKeepingInput(saved);
                             return result(input_read, output_written, .need_input);
                         },
@@ -228,6 +235,8 @@ pub fn Decoder(comptime Codec: type) type {
             output[output_written.*] = value;
             output_written.* += 1;
             self.history[self.total_output % self.history.len] = value;
+            self.previous[0] = self.previous[1];
+            self.previous[1] = value;
             self.total_output += 1;
         }
         fn pushLastDistance(last_distances: *[4]usize, distance: usize) void {

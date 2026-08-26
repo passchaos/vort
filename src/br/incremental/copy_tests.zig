@@ -82,6 +82,27 @@ test "byte-progressive compressed copy decoder accepts planner output" {
     }
 }
 
+test "byte-progressive compressed copy decoder accepts ratio context output" {
+    const payload = ("compression contexts favor repeated lowercase words and spaces; " ** 128);
+    const encoded = try br.encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+    var history: [32 * 1024]u8 = undefined;
+    try drainSplit(encoded, payload, &history, 1, 7);
+}
+
+test "byte-progressive compressed copy decoder selects literal and distance contexts" {
+    inline for (.{
+        .{ br.IncrementalTestSupport.CompressedCopyFixture.literal_context, "aba" },
+        .{ br.IncrementalTestSupport.CompressedCopyFixture.distance_context, "ababa" },
+    }) |case| {
+        const kind, const expected = case;
+        const encoded = try br.IncrementalTestSupport.encodeCompressedCopyFixture(std.testing.allocator, kind);
+        defer std.testing.allocator.free(encoded);
+        var history: [16]u8 = undefined;
+        try drainSplit(encoded, expected, &history, 1, 1);
+    }
+}
+
 test "byte-progressive compressed copy decoder enforces history and framing" {
     const encoded = try br.encodeAlternatingStreamAlloc(std.testing.allocator, 'a', 'b', 257);
     defer std.testing.allocator.free(encoded);
