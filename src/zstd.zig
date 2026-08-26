@@ -4384,12 +4384,17 @@ fn copyHuffmanLiteralsFromSection(
     // native Zstd path is still correctness-first and sequence/FSE support is
     // incomplete.
     const huffman_tree = section.huffman_tree orelse return error.CorruptFrame;
+    const lookup = try HuffmanLiteralLookup.init(&huffman_tree);
     const end = std.math.add(usize, literal_offset, dest.len) catch return error.IntegerOverflow;
     var decoded_index: usize = 0;
     var output_index: usize = 0;
     var cursor = try initHuffmanLiteralCursor(block, section);
     while (decoded_index < end) {
-        const symbol = try readHuffmanLiteralSymbolFromCursor(&cursor, &huffman_tree);
+        const symbol = try readHuffmanLiteralSymbolFromCursor(
+            &cursor,
+            &huffman_tree,
+            &lookup,
+        );
         if (decoded_index >= literal_offset) dest[output_index] = symbol;
         if (decoded_index >= literal_offset) output_index += 1;
         decoded_index += 1;
@@ -4400,14 +4405,17 @@ fn copyHuffmanLiteralsFromSection(
 const HuffmanLiteralDecodeState = struct {
     cursor: HuffmanLiteralCursor,
     tree: StdZstdHuffmanTree,
+    lookup: HuffmanLiteralLookup,
     decoded: usize = 0,
 };
 
 fn initHuffmanLiteralDecodeState(block: []const u8, section: LiteralOnlySection) Error!?HuffmanLiteralDecodeState {
     if (section.kind != .compressed and section.kind != .treeless) return null;
+    const tree = section.huffman_tree orelse return error.CorruptFrame;
     return .{
         .cursor = try initHuffmanLiteralCursor(block, section),
-        .tree = section.huffman_tree orelse return error.CorruptFrame,
+        .tree = tree,
+        .lookup = try HuffmanLiteralLookup.init(&tree),
     };
 }
 
@@ -4420,7 +4428,11 @@ fn copyLiteralsFromHuffmanState(
     if (literal_offset != state.decoded) return error.CorruptFrame;
     if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < dest.len) return error.CorruptFrame;
     for (dest) |*out| {
-        out.* = try readHuffmanLiteralSymbolFromCursor(&state.cursor, &state.tree);
+        out.* = try readHuffmanLiteralSymbolFromCursor(
+            &state.cursor,
+            &state.tree,
+            &state.lookup,
+        );
         state.decoded += 1;
     }
     if (state.decoded == section.regenerated_size) try state.cursor.expectEnd();
@@ -4429,9 +4441,14 @@ fn copyLiteralsFromHuffmanState(
 fn validateHuffmanLiteralsConsumed(block: []const u8, section: LiteralOnlySection) Error!void {
     if (section.kind != .compressed and section.kind != .treeless) return;
     const huffman_tree = section.huffman_tree orelse return error.CorruptFrame;
+    const lookup = try HuffmanLiteralLookup.init(&huffman_tree);
     var cursor = try initHuffmanLiteralCursor(block, section);
     for (0..section.regenerated_size) |_| {
-        _ = try readHuffmanLiteralSymbolFromCursor(&cursor, &huffman_tree);
+        _ = try readHuffmanLiteralSymbolFromCursor(
+            &cursor,
+            &huffman_tree,
+            &lookup,
+        );
     }
     try cursor.expectEnd();
 }
@@ -4476,6 +4493,56 @@ const HuffmanLiteralCursor = struct {
     }
 };
 
+const huffman_lookup_max_bits: u4 = 11;
+const huffman_lookup_size: usize = 1 << huffman_lookup_max_bits;
+
+const HuffmanLiteralLookup = struct {
+    /// Zero denotes an invalid prefix; otherwise bits 8..11 hold the consumed
+    /// bit count and bits 0..7 hold the decoded symbol.
+    entries: [huffman_lookup_size]u16,
+
+    fn init(tree: *const StdZstdHuffmanTree) Error!HuffmanLiteralLookup {
+        if (tree.max_bit_count == 0 or
+            tree.max_bit_count > huffman_lookup_max_bits)
+        {
+            return error.CorruptFrame;
+        }
+        var result: HuffmanLiteralLookup = .{ .entries = @splat(0) };
+        const symbol_count: usize = @as(usize, tree.symbol_count_minus_one) + 1;
+        for (tree.nodes[0..symbol_count]) |node| {
+            const bit_count = StdZstdHuffmanTree.weightToBitCount(
+                node.weight,
+                tree.max_bit_count,
+            );
+            if (bit_count == 0 or bit_count > tree.max_bit_count) {
+                return error.CorruptFrame;
+            }
+            const suffix_bits: u4 = tree.max_bit_count - bit_count;
+            const repeat_count: usize = @as(usize, 1) << suffix_bits;
+            const start: usize = @as(usize, node.prefix) << suffix_bits;
+            if (start >= result.entries.len or
+                result.entries.len - start < repeat_count)
+            {
+                return error.CorruptFrame;
+            }
+            const encoded = (@as(u16, bit_count) << 8) | node.symbol;
+            for (result.entries[start..][0..repeat_count]) |*entry| {
+                if (entry.* != 0) return error.CorruptFrame;
+                entry.* = encoded;
+            }
+        }
+        return result;
+    }
+
+    fn query(self: *const HuffmanLiteralLookup, prefix: u16) Error!struct { u8, u4 } {
+        if (prefix >= self.entries.len) return error.CorruptFrame;
+        const encoded = self.entries[prefix];
+        const bit_count: u4 = @truncate(encoded >> 8);
+        if (bit_count == 0) return error.CorruptFrame;
+        return .{ @truncate(encoded), bit_count };
+    }
+};
+
 fn initHuffmanLiteralCursor(block: []const u8, section: LiteralOnlySection) Error!HuffmanLiteralCursor {
     switch (section.huffman_streams) {
         .one => return .{
@@ -4493,8 +4560,15 @@ fn initHuffmanLiteralCursor(block: []const u8, section: LiteralOnlySection) Erro
 fn readHuffmanLiteralSymbolFromCursor(
     cursor: *HuffmanLiteralCursor,
     huffman_tree: *const StdZstdHuffmanTree,
+    lookup: *const HuffmanLiteralLookup,
 ) Error!u8 {
     const max_bit_count = huffman_tree.max_bit_count;
+    if (cursor.reader.remaining_bits >= max_bit_count) {
+        const prefix = peekReverseBits(&cursor.reader, max_bit_count);
+        const symbol, const bit_count = try lookup.query(prefix);
+        cursor.reader.remaining_bits -= bit_count;
+        return symbol;
+    }
     const starting_bit_count = StdZstdHuffmanTree.weightToBitCount(
         huffman_tree.nodes[huffman_tree.symbol_count_minus_one].weight,
         max_bit_count,
@@ -4524,6 +4598,21 @@ fn readHuffmanLiteralSymbolFromCursor(
             },
         }
     }
+}
+
+fn peekReverseBits(reader: *const ReverseBitReader, bit_count: u4) u16 {
+    std.debug.assert(bit_count != 0);
+    std.debug.assert(bit_count <= huffman_lookup_max_bits);
+    std.debug.assert(bit_count <= reader.remaining_bits);
+    var value: u16 = 0;
+    var bit = reader.remaining_bits;
+    while (bit > reader.remaining_bits - bit_count) {
+        bit -= 1;
+        const byte = reader.bytes[bit / 8];
+        const bit_index: u3 = @intCast(bit & 7);
+        value = (value << 1) | @as(u16, (byte >> bit_index) & 1);
+    }
+    return value;
 }
 
 fn queryHuffmanTree(
