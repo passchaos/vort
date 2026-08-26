@@ -7238,3 +7238,9 @@ profiled DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   bounded metadata and per-block-length buffers matching the stored decoder's
   observability model. Tests cover truncated capture, exact block-length
   reporting, and metadata followed by stored data and a final-empty terminator.
+  Fixed decoded-size preflight for ratio-mode Brotli streams whose matches reach
+  beyond 32 KiB. `LiteralHistory` now retains the encoder's full advertised
+  16-bit-window maximum (`2^16 - 16` bytes), so copied history remains known for
+  subsequent UTF-8 literal-context decisions. The previously failing embedded
+  `br.zig` ratio round trip and explicit 48/80 KiB distance tests now pass; a
+  layout assertion pins the history capacity to the encoder limit.

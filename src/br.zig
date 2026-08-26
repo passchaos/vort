@@ -755,6 +755,7 @@ const max_command_block_types = 32;
 const max_distance_block_types = 32;
 const max_distance_context_trees = 32;
 const initial_last_distances = [_]usize{ 16, 15, 11, 4 };
+const planner_max_backward_distance = (@as(usize, 1) << default_window_bits) - 16;
 
 pub const CompressedSupportLimits = struct {
     max_literal_block_types: usize,
@@ -800,10 +801,10 @@ const LiteralHistory = struct {
     // decisions. The actual decoder can look back through the full output
     // buffer; this bounded preflight history intentionally grows in audited
     // compatibility slices as we add coverage for farther Brotli distances.
-    // The production planners search a 32 KiB LZ window. Retaining the same
-    // amount lets decoded-size preflight preserve exact literal contexts for
-    // every stream emitted by Vort, including context-split ratio streams.
-    tail: [32 * 1024]u8 = @splat(0),
+    // The production ratio planner can search the full advertised 16-bit
+    // Brotli window. Retaining that exact maximum lets decoded-size preflight
+    // preserve literal contexts even after its farthest legal match.
+    tail: [planner_max_backward_distance]u8 = @splat(0),
     tail_len: usize = 0,
     tail_start: usize = 0,
     known: bool = true,
@@ -6941,6 +6942,10 @@ test "br ratio UTF8 context split round trips beyond summary history" {
     const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "br summary history covers the full encoder backward window" {
+    try std.testing.expectEqual(planner_max_backward_distance, @sizeOf(@TypeOf(@as(LiteralHistory, .{}).tail)));
 }
 
 test "br ratio planner uses the full 16-bit stream window" {
