@@ -4389,7 +4389,7 @@ fn copyHuffmanLiteralsFromSection(
     var output_index: usize = 0;
     var cursor = try initHuffmanLiteralCursor(block, section);
     while (decoded_index < end) {
-        const symbol = try readHuffmanLiteralSymbolFromCursor(&cursor, huffman_tree);
+        const symbol = try readHuffmanLiteralSymbolFromCursor(&cursor, &huffman_tree);
         if (decoded_index >= literal_offset) dest[output_index] = symbol;
         if (decoded_index >= literal_offset) output_index += 1;
         decoded_index += 1;
@@ -4420,7 +4420,7 @@ fn copyLiteralsFromHuffmanState(
     if (literal_offset != state.decoded) return error.CorruptFrame;
     if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < dest.len) return error.CorruptFrame;
     for (dest) |*out| {
-        out.* = try readHuffmanLiteralSymbolFromCursor(&state.cursor, state.tree);
+        out.* = try readHuffmanLiteralSymbolFromCursor(&state.cursor, &state.tree);
         state.decoded += 1;
     }
     if (state.decoded == section.regenerated_size) try state.cursor.expectEnd();
@@ -4431,7 +4431,7 @@ fn validateHuffmanLiteralsConsumed(block: []const u8, section: LiteralOnlySectio
     const huffman_tree = section.huffman_tree orelse return error.CorruptFrame;
     var cursor = try initHuffmanLiteralCursor(block, section);
     for (0..section.regenerated_size) |_| {
-        _ = try readHuffmanLiteralSymbolFromCursor(&cursor, huffman_tree);
+        _ = try readHuffmanLiteralSymbolFromCursor(&cursor, &huffman_tree);
     }
     try cursor.expectEnd();
 }
@@ -4490,7 +4490,10 @@ fn initHuffmanLiteralCursor(block: []const u8, section: LiteralOnlySection) Erro
     }
 }
 
-fn readHuffmanLiteralSymbolFromCursor(cursor: *HuffmanLiteralCursor, huffman_tree: StdZstdHuffmanTree) Error!u8 {
+fn readHuffmanLiteralSymbolFromCursor(
+    cursor: *HuffmanLiteralCursor,
+    huffman_tree: *const StdZstdHuffmanTree,
+) Error!u8 {
     const max_bit_count = huffman_tree.max_bit_count;
     const starting_bit_count = StdZstdHuffmanTree.weightToBitCount(
         huffman_tree.nodes[huffman_tree.symbol_count_minus_one].weight,
