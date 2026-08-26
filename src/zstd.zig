@@ -4508,7 +4508,8 @@ fn readHuffmanLiteralSymbolFromCursor(
         prefix <<= bit_count_to_read;
         prefix |= @intCast(new_bits);
         bits_read += bit_count_to_read;
-        const result = huffman_tree.query(huffman_tree_index, prefix) catch return error.CorruptFrame;
+        const result = queryHuffmanTree(huffman_tree, huffman_tree_index, prefix) catch
+            return error.CorruptFrame;
 
         switch (result) {
             .symbol => |symbol| return symbol,
@@ -4523,6 +4524,26 @@ fn readHuffmanLiteralSymbolFromCursor(
             },
         }
     }
+}
+
+fn queryHuffmanTree(
+    tree: *const StdZstdHuffmanTree,
+    index: usize,
+    prefix: u16,
+) error{HuffmanTreeIncomplete}!StdZstdHuffmanTree.Result {
+    // Zig std's method currently receives the 1 KiB tree by value. Calling it
+    // for every symbol therefore materializes a full memcpy in optimized code.
+    // Keep the same search algorithm but borrow the immutable tree instead.
+    var node = tree.nodes[index];
+    const weight = node.weight;
+    var i = index;
+    while (node.weight == weight) {
+        if (node.prefix == prefix) return .{ .symbol = node.symbol };
+        if (i == 0) return error.HuffmanTreeIncomplete;
+        i -= 1;
+        node = tree.nodes[i];
+    }
+    return .{ .index = i };
 }
 
 fn compressedLiteralOnlyBlockDecodedSize(
