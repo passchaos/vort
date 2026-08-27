@@ -7517,3 +7517,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   the unused 2 KiB array. Ten alternating fixed-CPU-8 A/B pairs preserve every
   fast/balanced/ratio stream size and improve JSON by roughly 3.6%/3.0%/2.9%,
   source by 3.5%/5.2%/3.6%, and log by 3.2%/3.6%/3.1%, respectively.
+  Brotli complex-prefix construction now tries the existing linear small-
+  alphabet Huffman builder for its at-most-18-symbol code-length alphabet,
+  falling back to five-bit package merge only when the unbounded tree is too
+  deep. A 1,024-shape deterministic oracle proves the same optimal weighted
+  cost, a legal complete tree, and no larger code-length declaration. Ten
+  alternating ReleaseFast CPU-8 A/B pairs preserve benchmark stream sizes and
+  improve fast JSON/source/log by about 3.2%/2.5%/2.8%; balanced improves by
+  0.6%/1.4%/1.4%, and ratio by 0.7%/0.5%/1.9%.

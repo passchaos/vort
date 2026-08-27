@@ -1,6 +1,7 @@
 const std = @import("std");
 const huffman = @import("../../huffman.zig");
 const code_length_rle = @import("code_length_rle.zig");
+const small_huffman = @import("small_huffman.zig");
 
 const code_length_order = [_]u5{ 1, 2, 3, 4, 0, 5, 17, 6, 16, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
 
@@ -34,7 +35,7 @@ fn writeWithStorage(comptime storage_len: usize, allocator: std.mem.Allocator, w
 
     var code_length_freqs: [18]u32 = @splat(0);
     for (rle) |token| code_length_freqs[token.symbol] += 1;
-    const code_length_lengths = huffman.treeCodeLengths(18, &code_length_freqs, 5);
+    const code_length_lengths = codeLengthCodeLengths(&code_length_freqs);
 
     var space: i32 = 32;
     for (code_length_order) |symbol| {
@@ -54,6 +55,37 @@ fn writeWithStorage(comptime storage_len: usize, allocator: std.mem.Allocator, w
         if (token.symbol == 17) try writer.writeBits(allocator, token.extra, 3);
         if (token.symbol == 16) try writer.writeBits(allocator, token.extra, 2);
     }
+}
+
+/// The code-length alphabet has at most 18 live symbols. Its common trees fit
+/// Brotli's five-bit limit without length limiting, so reuse the linear small
+/// Huffman builder and reserve package merge for the rare over-depth shape.
+fn codeLengthCodeLengths(frequencies: *const [18]u32) [18]u4 {
+    var symbols: [18]u16 = undefined;
+    var compact_frequencies: [18]u32 = undefined;
+    var active: usize = 0;
+    for (frequencies, 0..) |frequency, symbol| {
+        if (frequency == 0) continue;
+        var index = active;
+        while (index != 0 and frequency > compact_frequencies[index - 1]) : (index -= 1) {
+            compact_frequencies[index] = compact_frequencies[index - 1];
+            symbols[index] = symbols[index - 1];
+        }
+        compact_frequencies[index] = frequency;
+        symbols[index] = @intCast(symbol);
+        active += 1;
+    }
+    if (active == 0) return @splat(0);
+
+    var compact_lengths: [18]u4 = undefined;
+    if (small_huffman.build(18, compact_frequencies[0..active], &compact_lengths)) {
+        for (compact_lengths[0..active]) |length| if (length > 5)
+            return huffman.treeCodeLengths(18, frequencies, 5);
+        var lengths: [18]u4 = @splat(0);
+        for (symbols[0..active], compact_lengths[0..active]) |symbol, length| lengths[symbol] = length;
+        return lengths;
+    }
+    return huffman.treeCodeLengths(18, frequencies, 5);
 }
 
 fn writeCodeLengthCodeLength(allocator: std.mem.Allocator, writer: anytype, length: u4) !void {
@@ -78,4 +110,57 @@ test "precomputed complex prefix stop index is validated" {
     try std.testing.expectError(error.InvalidBlockPlan, writeWithStopIndex(std.testing.allocator, &writer, lengths.len, &lengths, 0));
     try std.testing.expectError(error.InvalidBlockPlan, writeWithStopIndex(std.testing.allocator, &writer, lengths.len, &lengths, lengths.len + 1));
     try std.testing.expectError(error.InvalidBlockPlan, writeWithStopIndex(std.testing.allocator, &writer, lengths.len, &lengths, 2));
+}
+
+test "small code-length alphabet matches package-merge weighted cost" {
+    var state: u32 = 0x4f1b_2c3d;
+    for (0..1024) |_| {
+        var frequencies: [18]u32 = @splat(0);
+        for (&frequencies) |*frequency| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            frequency.* = if (state & 3 == 0) 0 else 1 + (state >> 24);
+        }
+        const actual = codeLengthCodeLengths(&frequencies);
+        const reference = huffman.treeCodeLengths(18, &frequencies, 5);
+        var actual_cost: u64 = 0;
+        var reference_cost: u64 = 0;
+        var actual_declaration_bits: usize = 0;
+        var reference_declaration_bits: usize = 0;
+        var actual_space: usize = 32;
+        var reference_space: usize = 32;
+        for (frequencies, actual, reference) |frequency, actual_length, reference_length| {
+            try std.testing.expect(actual_length <= 5);
+            actual_cost += @as(u64, frequency) * actual_length;
+            reference_cost += @as(u64, frequency) * reference_length;
+        }
+        for (code_length_order) |symbol| {
+            const actual_length = actual[symbol];
+            actual_declaration_bits += codeLengthCodeLengthBits(actual_length);
+            if (actual_length != 0) {
+                actual_space -= @as(usize, 32) >> actual_length;
+                if (actual_space == 0) break;
+            }
+        }
+        for (code_length_order) |symbol| {
+            const length = reference[symbol];
+            reference_declaration_bits += codeLengthCodeLengthBits(length);
+            if (length != 0) {
+                reference_space -= @as(usize, 32) >> length;
+                if (reference_space == 0) break;
+            }
+        }
+        try std.testing.expectEqual(reference_cost, actual_cost);
+        try std.testing.expectEqual(@as(usize, 0), actual_space);
+        try std.testing.expectEqual(@as(usize, 0), reference_space);
+        try std.testing.expect(actual_declaration_bits <= reference_declaration_bits);
+    }
+}
+
+fn codeLengthCodeLengthBits(length: u4) usize {
+    return switch (length) {
+        0, 3, 4 => 2,
+        2 => 3,
+        1, 5 => 4,
+        else => unreachable,
+    };
 }
