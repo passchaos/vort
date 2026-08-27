@@ -7383,3 +7383,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   respectively. Together with cancellable indexed scans, the JSON improvement
   over the pre-cancellation baseline is about 9.4%; the 9-row encode gate,
   90-row stage gate, and 328-case system-zstd compatibility probe all pass.
+  One-shot native Zstd encoding now allocates and populates cross-block history
+  only for non-final blocks. A single-block frame cannot have a later block that
+  references its output, and the last block of a multi-block frame likewise
+  never needs to enter the rolling index. A fixed-buffer test proves a 4 KiB
+  single-block literal-only frame no longer requires the roughly 1 MiB history
+  index, while existing multi-block Huffman/history coverage preserves cross-
+  block behavior. Twenty alternating ReleaseFast CPU-8 A/B pairs retain the
+  80/640/8607-byte level-9 text/JSON/binary frames and improve their median times
+  by about 80.0%/5.8%/3.4%, respectively. The 9-row encode gate, 90-row stage
+  gate, 328-case CLI compatibility probe, and 237-case frame probe all pass.

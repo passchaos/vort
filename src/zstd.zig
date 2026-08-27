@@ -4127,9 +4127,16 @@ fn encodeLiteralOnlyFrameAppendWithDictionaryInternal(
         while (offset < input.len) {
             const block_end = @min(input.len, offset + block_size_max);
             const block = input[offset..block_end];
-            try frame_history.prepareCompletedBlock(allocator, block, native_dictionary_window_len);
-            try emitLiteralOnlyCompressedBlockWithHistory(allocator, out, block, block_end == input.len, &encoder_state, dictionary, frame_history.view(), offset, match_search_budget, frame_options.rep_beam_search, rep_beam_scratch);
-            frame_history.appendCompletedBlock(block, native_dictionary_window_len);
+            const last = block_end == input.len;
+            // A final block cannot become history for another block. Avoid
+            // allocating and clearing the 1 MiB cross-block index for every
+            // one-block frame, and avoid updating it after the last block of a
+            // longer frame. Non-final first blocks still prepare before emit so
+            // appendCompletedBlock can index them for the following block.
+            if (!last)
+                try frame_history.prepareCompletedBlock(allocator, block, native_dictionary_window_len);
+            try emitLiteralOnlyCompressedBlockWithHistory(allocator, out, block, last, &encoder_state, dictionary, frame_history.view(), offset, match_search_budget, frame_options.rep_beam_search, rep_beam_scratch);
+            if (!last) frame_history.appendCompletedBlock(block, native_dictionary_window_len);
             offset = block_end;
         }
     }
@@ -16422,6 +16429,25 @@ test "zstd literal-only writer emits max direct Huffman symbol set" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, &payload, decoded);
     try std.testing.expect(encoded.len < raw_encoded.len);
+}
+
+test "zstd one-block writer does not allocate future history" {
+    const payload = "z" ** 4096;
+    // This buffer is ample for the tiny RLE frame but far smaller than the
+    // 1 MiB cross-block index. Success therefore proves a final-only frame does
+    // not reserve history that no later block could observe.
+    var memory: [4096]u8 = undefined;
+    var fixed = std.heap.FixedBufferAllocator.init(&memory);
+    const encoded = try encodeNativeFrameWithOptionsAlloc(fixed.allocator(), payload, .{
+        .selection = .literal_only,
+        .content_checksum = false,
+        .match_search_budget = 0,
+    });
+    defer fixed.allocator().free(encoded.frame);
+
+    const decoded = try decodeNativeFrameAlloc(std.testing.allocator, encoded.frame);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
 test "zstd raw literal header writer rejects compressed kinds as corrupt" {
