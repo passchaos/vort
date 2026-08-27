@@ -111,7 +111,7 @@ const IncrementalLiteralCodec = struct {
 
 const IncrementalCopyCodec = struct {
     pub const Error = br.Error;
-    pub const max_stream_header_bytes: usize = 4096;
+    pub const max_stream_header_bytes: usize = 16 * 1024;
     pub const Header = struct {
         decoded_len: usize,
         compressed: MinimalCompressedHeader,
@@ -735,7 +735,11 @@ pub const StreamSummary = struct {
     uses_static_dictionary: bool = false,
     static_dictionary_copy_count: usize = 0,
     static_dictionary_bytes: usize = 0,
+    max_literal_block_types: usize = 0,
     max_literal_context_trees: usize = 0,
+    max_command_block_types: usize = 0,
+    max_distance_block_types: usize = 0,
+    max_distance_context_trees: usize = 0,
     stored_only: bool = true,
 };
 
@@ -766,7 +770,11 @@ pub const StreamProbeResult = struct {
 const StreamSummaryMetaBlockStats = struct {
     static_dictionary_copy_count: usize = 0,
     static_dictionary_bytes: usize = 0,
+    max_literal_block_types: usize = 0,
     max_literal_context_trees: usize = 0,
+    max_command_block_types: usize = 0,
+    max_distance_block_types: usize = 0,
+    max_distance_context_trees: usize = 0,
 };
 
 const BitWriter = struct {
@@ -828,6 +836,7 @@ const MinimalCompressedHeader = struct {
     npostfix: u2,
     ndirect: u16,
     literal_tree_count: u16 = 1,
+    distance_tree_count: u16 = 1,
     literal_context_modes: [max_literal_block_types]u2,
     literal_block: BlockSwitchState(max_literal_block_types),
     literal_context_map: [max_literal_block_types * 64]u8,
@@ -842,15 +851,15 @@ const MinimalCompressedHeader = struct {
 const max_distance_alphabet_size = 16 + 120 + (48 << 3);
 const max_context_map_alphabet_size = 256 + 16;
 const max_literal_block_types = 32;
-// Large upstream source streams already use 91 literal trees. Retain the next
-// power-of-two bounded tier so those frames fit without inflating every caller-
-// owned decoder all the way to the format's 256-tree ceiling.
-const max_literal_context_trees = 128;
+// Large upstream source streams can use more than 128 literal trees. Retain
+// the complete one-byte wire range; direct-to-header parsing initializes only
+// declared slots, so ordinary streams do not pay per-tree setup cost.
+const max_literal_context_trees = 256;
 const max_command_block_types = 32;
 // Real libbrotli quality-8/9 source frames use 33 distance block types and
 // context trees. Keep a bounded 64-entry tier rather than the format maximum.
-const max_distance_block_types = 32;
-const max_distance_context_trees = 32;
+const max_distance_block_types = 64;
+const max_distance_context_trees = 64;
 const initial_last_distances = [_]usize{ 16, 15, 11, 4 };
 const planner_max_backward_distance = (@as(usize, 1) << default_window_bits) - 16;
 const SummaryError = Error || error{SummaryHistoryExhausted};
@@ -2922,7 +2931,11 @@ fn applySummaryMetaBlockStats(summary: *StreamSummary, stats: StreamSummaryMetaB
         summary.static_dictionary_copy_count = std.math.add(usize, summary.static_dictionary_copy_count, stats.static_dictionary_copy_count) catch return error.IntegerOverflow;
         summary.static_dictionary_bytes = std.math.add(usize, summary.static_dictionary_bytes, stats.static_dictionary_bytes) catch return error.IntegerOverflow;
     }
+    summary.max_literal_block_types = @max(summary.max_literal_block_types, stats.max_literal_block_types);
     summary.max_literal_context_trees = @max(summary.max_literal_context_trees, stats.max_literal_context_trees);
+    summary.max_command_block_types = @max(summary.max_command_block_types, stats.max_command_block_types);
+    summary.max_distance_block_types = @max(summary.max_distance_block_types, stats.max_distance_block_types);
+    summary.max_distance_context_trees = @max(summary.max_distance_context_trees, stats.max_distance_context_trees);
 }
 
 pub const StoredStreamEncoder = struct {
@@ -3311,6 +3324,7 @@ fn readMinimalCompressedHeaderInto(reader: *bitstream.BitReader, header: *Minima
     header.npostfix = npostfix;
     header.ndirect = ndirect;
     header.literal_tree_count = ntrees_l;
+    header.distance_tree_count = ntrees_d;
 }
 
 fn readBlockLength(prefix: *const PrefixCode(26), reader: *bitstream.BitReader) Error!usize {
@@ -3491,7 +3505,11 @@ fn skipMinimalCompressedMetaBlock(
     var header: MinimalCompressedHeader = undefined;
     try readMinimalCompressedHeaderInto(reader, &header);
     if (stats) |s| {
+        s.max_literal_block_types = header.literal_block.block_type_count;
         s.max_literal_context_trees = header.literal_tree_count;
+        s.max_command_block_types = header.command_block.block_type_count;
+        s.max_distance_block_types = header.distance_block.block_type_count;
+        s.max_distance_context_trees = header.distance_tree_count;
     }
     var transformed_dictionary_word: [64]u8 = undefined;
     var written = start_written;

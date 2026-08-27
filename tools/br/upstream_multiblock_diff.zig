@@ -17,6 +17,8 @@ const Case = struct {
     min_stored_blocks: usize = 0,
     allow_summary_unsupported: bool = false,
     min_literal_context_trees: usize = 0,
+    min_distance_block_types: usize = 0,
+    min_distance_context_trees: usize = 0,
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -73,6 +75,26 @@ pub fn main(init: std.process.Init) !void {
         byte.* = dictionary_bytes[(base + i % 1024) % dictionary_bytes.len];
     }
     const clustered_source_chunks = [_][]const u8{clustered_source};
+    const mixed_clustered_source = try init.gpa.alloc(u8, 1024 * 1024);
+    defer init.gpa.free(mixed_clustered_source);
+    const clustered_tokens = [_][]const u8{
+        "const function allocator return error while if else switch struct union enum defer try catch payload input output\n",
+        "{\"service\":\"vort\",\"codec\":\"brotli\",\"status\":\"ok\",\"value\":123456}\n",
+        "The quick brown fox jumps over the lazy dog. Compression context model and distance tree.\n",
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-=+[]{}();:,.<>/\\\n",
+    };
+    for (mixed_clustered_source, 0..) |*byte, i| {
+        const segment = i / 8192;
+        const token = clustered_tokens[segment % clustered_tokens.len];
+        byte.* = if (i % 256 < 192)
+            token[(i + segment) % token.len]
+        else
+            dictionary_bytes[(i * 17 + segment) % dictionary_bytes.len];
+    }
+    const mixed_clustered_source_chunks = [_][]const u8{mixed_clustered_source};
+    const distance_clustered_source = try std.Io.Dir.cwd().readFileAlloc(init.io, "src/deflate.zig", init.gpa, .limited(2 * 1024 * 1024));
+    defer init.gpa.free(distance_clustered_source);
+    const distance_clustered_chunks = [_][]const u8{distance_clustered_source};
     const tiny_prefix = "alpha alpha alpha alpha" ++
         "{\"kind\":\"tiny\",\"value\":1}\n" ++
         "beta beta beta beta";
@@ -91,7 +113,9 @@ pub fn main(init: std.process.Init) !void {
     const context_qualities = [_]u32{ 4, 5, 9, 11 };
     const compact_qualities = [_]u32{ 5, 9 };
     const quality_eleven = [_]u32{11};
-    const clustered_qualities = [_]u32{5};
+    const clustered_qualities = [_]u32{ 5, 8 };
+    const mixed_clustered_qualities = [_]u32{5};
+    const distance_clustered_qualities = [_]u32{8};
     const all_modes = [_]u32{ 0, 1, 2 };
     const window_sweep = [_]u32{ 10, 16, 18, 20, 22, 24 };
     const cases = [_]Case{
@@ -105,7 +129,9 @@ pub fn main(init: std.process.Init) !void {
         .{ .name = "window-sweep", .chunks = &pattern_chunks, .expected = first_pattern ++ second_pattern ++ third_pattern, .qualities = &compact_qualities, .windows = &window_sweep },
         .{ .name = "history-wrap", .chunks = &long_text_chunks, .expected = long_text, .qualities = &compact_qualities },
         .{ .name = "large-source", .chunks = &large_source_chunks, .expected = large_source, .qualities = &compact_qualities, .windows = &.{20}, .lgblock = 18 },
-        .{ .name = "large-source-clustered", .chunks = &clustered_source_chunks, .expected = clustered_source, .qualities = &clustered_qualities, .windows = &.{20}, .lgblock = 16, .min_compressed_blocks = 1, .allow_summary_unsupported = true, .min_literal_context_trees = 65 },
+        .{ .name = "large-source-clustered", .chunks = &clustered_source_chunks, .expected = clustered_source, .qualities = &clustered_qualities, .windows = &.{20}, .lgblock = 16, .min_compressed_blocks = 1, .allow_summary_unsupported = true, .min_literal_context_trees = 39 },
+        .{ .name = "large-source-mixed-clustered", .chunks = &mixed_clustered_source_chunks, .expected = mixed_clustered_source, .qualities = &mixed_clustered_qualities, .windows = &.{20}, .lgblock = 16, .min_compressed_blocks = 1, .allow_summary_unsupported = true, .min_literal_context_trees = 128 },
+        .{ .name = "large-source-distance-clustered", .chunks = &distance_clustered_chunks, .expected = distance_clustered_source, .qualities = &distance_clustered_qualities, .windows = &.{20}, .lgblock = 16, .min_compressed_blocks = 1, .allow_summary_unsupported = true, .min_distance_block_types = 33, .min_distance_context_trees = 33 },
         .{ .name = "large-source-quality-eleven", .chunks = &large_source_chunks, .expected = large_source, .qualities = &quality_eleven, .windows = &.{ 18, 20, 22, 24 }, .lgblock = 18, .allow_summary_unsupported = true },
         .{ .name = "far-history", .chunks = &far_history_chunks, .expected = far_history_expected, .qualities = &compact_qualities, .windows = &.{17}, .min_compressed_blocks = 1, .min_stored_blocks = 2 },
         .{ .name = "compressed-stored-compressed", .chunks = &transition_chunks, .expected = text ++ random[0..2048] ++ text, .qualities = &context_qualities, .min_compressed_blocks = 2, .min_stored_blocks = 1 },
@@ -209,10 +235,13 @@ pub fn main(init: std.process.Init) !void {
 }
 
 fn validateClusterCoverage(case: Case, summary: vort.BrotliStreamSummary) !void {
-    if (summary.max_literal_context_trees < case.min_literal_context_trees) {
+    if (summary.max_literal_context_trees < case.min_literal_context_trees or
+        summary.max_distance_block_types < case.min_distance_block_types or
+        summary.max_distance_context_trees < case.min_distance_context_trees)
+    {
         std.debug.print(
-            "{s}: expected literal context trees >= {d}, got {d}\n",
-            .{ case.name, case.min_literal_context_trees, summary.max_literal_context_trees },
+            "{s}: expected trees/types >= {d}/{d}/{d}, got {d}/{d}/{d}\n",
+            .{ case.name, case.min_literal_context_trees, case.min_distance_block_types, case.min_distance_context_trees, summary.max_literal_context_trees, summary.max_distance_block_types, summary.max_distance_context_trees },
         );
         return error.ReferenceEncodeFailed;
     }

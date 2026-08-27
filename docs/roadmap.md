@@ -7355,6 +7355,18 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   reduce median decoded-size summary time from about 44.34 ms to 6.65 ms for 500
   iterations (6.67x); exact-size decode improves about 2.2%, while direct decode
   remains effectively neutral.
+  Brotli clustered decoding now covers the remaining observed bounded-tree
+  gaps: literal context trees retain the full 256-entry wire range, distance
+  block types/context trees use a 64-entry tier, and the progressive copy
+  decoder retains up to 16 KiB of compressed header bytes. Stream summaries
+  report the observed literal and distance maxima. Deterministic 1 MiB corpora
+  exercise 169 literal trees and a real `src/deflate.zig` quality-8 stream
+  exercises 35 distance block types/context trees; both pass allocator summary,
+  one-shot decode, and byte-progressive decode. The libbrotli differential
+  matrix grows again from 95 to 98 cases. Ten long fixed-CPU-8 A/B pairs keep
+  ordinary compressed decode within roughly 2% of the previous build on most
+  rows (structured quality 4 improves about 4%); summary overhead rises about
+  1--2% on most rows in exchange for the broader bounded state.
   Ordinary allocator-returning Brotli decode now consumes each declared
   meta-block length, grows its owned output under the caller's limit, and
   decodes that block immediately. This removes the full summary/preflight pass
@@ -7483,3 +7495,15 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   direct-header implementation improving compressed caller-owned decode by
   roughly 49--66% and summary by about 37--48%, while the random/stored control
   remains effectively neutral.
+  Brotli's remaining clustered-tree ceiling is now removed for literal trees:
+  the decoder retains the complete 256-entry wire range, while distance block
+  types and distance context trees move from 32 to a bounded 64-entry tier. The
+  general copy decoder also raises its bounded compressed-header prefix from
+  4 KiB to 16 KiB. A second deterministic 1 MiB corpus forces libbrotli quality
+  5 to emit 169 literal trees, and quality 8 coverage crosses the old distance
+  limits; allocator summaries now report observed literal/distance maxima so
+  the 97-case upstream differential proves those shapes rather than merely
+  decoding them. Direct-to-header parsing keeps ordinary 12-case decode medians
+  mostly within about 2% of the prior build (with structured quality 4 about 4%
+  faster); summary medians trade roughly 1--2% on most compressed rows for the
+  broader bounded state.
