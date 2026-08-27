@@ -888,6 +888,7 @@ const InsertCopyLengths = struct {
 };
 
 const LiteralHistory = struct {
+    external: ?[]u8 = null,
     previous: [2]u8 = .{ 0, 0 },
     // Summary/size preflight does not materialize decoded output, so it keeps
     // enough recent bytes to replay copies that feed following literal-context
@@ -919,32 +920,38 @@ const LiteralHistory = struct {
     fn push(self: *LiteralHistory, value: u8) void {
         self.previous[0] = self.previous[1];
         self.previous[1] = value;
-        if (self.tail_len < self.tail.len) {
-            self.tail[(self.tail_start + self.tail_len) % self.tail.len] = value;
+        const bytes = self.storage();
+        if (self.tail_len < bytes.len) {
+            bytes[(self.tail_start + self.tail_len) % bytes.len] = value;
             self.tail_len += 1;
         } else {
-            self.tail[self.tail_start] = value;
-            self.tail_start = (self.tail_start + 1) % self.tail.len;
+            bytes[self.tail_start] = value;
+            self.tail_start = (self.tail_start + 1) % bytes.len;
         }
         self.known_suffix_len = @min(2, self.known_suffix_len + 1);
     }
 
     fn pushSlice(self: *LiteralHistory, bytes: []const u8) void {
-        const keep = @min(bytes.len, self.tail.len);
+        const keep = @min(bytes.len, self.storage().len);
         for (bytes[bytes.len - keep ..]) |value| self.push(value);
     }
 
     fn copy(self: *LiteralHistory, distance: usize, len: usize) void {
-        if (self.known_suffix_len < 2 or len == 0) return;
+        if (len == 0) return;
         if (distance == 0 or distance > self.tail_len) {
             self.markUnknown();
             return;
         }
         var i: usize = 0;
         while (i < len) : (i += 1) {
-            const source_index = (self.tail_start + self.tail_len - distance) % self.tail.len;
-            self.push(self.tail[source_index]);
+            const bytes = self.storage();
+            const source_index = (self.tail_start + self.tail_len - distance) % bytes.len;
+            self.push(bytes[source_index]);
         }
+    }
+
+    fn storage(self: *LiteralHistory) []u8 {
+        return self.external orelse self.tail[0..];
     }
 
     fn markUnknown(self: *LiteralHistory) void {
@@ -973,6 +980,12 @@ test "br summary context needs two literals after unknown history" {
     try std.testing.expectEqual(@as(u2, 1), history.known_suffix_len);
     history.push('b');
     try std.testing.expectEqual(@as(u2, 2), history.known_suffix_len);
+
+    history.markUnknown();
+    history.push('x');
+    history.copy(1, 2);
+    try std.testing.expectEqual(@as(u2, 2), history.known_suffix_len);
+    try std.testing.expectEqual([2]u8{ 'x', 'x' }, history.previous);
 }
 
 pub fn encodeStoredStreamAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
@@ -2232,7 +2245,7 @@ pub fn decodeStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8),
 }
 
 pub fn decodeStreamAppendLimited(allocator: std.mem.Allocator, out: *std.ArrayList(u8), stream: []const u8, max_output_len: usize) Error!usize {
-    const decoded_len = try decodedStreamSizeLimited(stream, max_output_len);
+    const decoded_len = try decodedStreamSizeAllocLimited(allocator, stream, max_output_len);
     try out.ensureUnusedCapacity(allocator, decoded_len);
     const start = out.items.len;
     const slot = out.addManyAsSliceAssumeCapacity(decoded_len);
@@ -2354,6 +2367,10 @@ pub fn summarizeStreamWithDiagnostics(stream: []const u8, diagnostics: *StreamSu
 }
 
 pub fn summarizeStreamLimitedWithDiagnostics(stream: []const u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    return try summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, diagnostics, null);
+}
+
+fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics, history_storage: ?[]u8) Error!StreamSummary {
     diagnostics.* = .{};
     var reader = bitstream.BitReader.init(stream);
     var summary = StreamSummary{
@@ -2364,7 +2381,7 @@ pub fn summarizeStreamLimitedWithDiagnostics(stream: []const u8, max_output_len:
         .input_bytes = stream.len,
     };
     var last_distances = initial_last_distances;
-    var literal_history = LiteralHistory{};
+    var literal_history = LiteralHistory{ .external = history_storage };
     while (true) {
         const meta_block_index = summary.meta_block_count;
         const is_last_bit = reader.readBits(u1, 1) catch |err| {
@@ -2473,6 +2490,16 @@ pub fn summarizeStreamLimitedWithDiagnostics(stream: []const u8, max_output_len:
         literal_history.pushSlice(stream[reader.byte_index..][0..meta_block_len]);
         reader.byte_index += meta_block_len;
     }
+}
+
+fn decodedStreamSizeAllocLimited(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize) Error!usize {
+    var reader = bitstream.BitReader.init(stream);
+    const window_bits = try readWindowBitsValue(&reader);
+    const history_len = @min(max_output_len, (@as(usize, 1) << window_bits) - 16);
+    const history = try allocator.alloc(u8, history_len);
+    defer allocator.free(history);
+    var diagnostics: StreamSummaryDiagnostics = .{};
+    return (try summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, &diagnostics, history)).decoded_bytes;
 }
 
 pub fn decodeStreamChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8) Error![]u8 {

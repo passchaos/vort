@@ -7305,13 +7305,15 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   window fills. One-shot decode, summary/preflight, and the byte-progressive
   copy decoder now retain the parsed window and use that RFC maximum for both
   dictionary classification and recent-distance updates. The upstream matrix
-  reaches 90 cases with a 1.26 MiB source stream at window 20, and a focused
-  boundary test pins the post-window dictionary-address calculation.
+  initially reached 90 cases with a 1.26 MiB source stream at window 20, and a
+  focused boundary test pins the post-window dictionary-address calculation.
   Quality-11 source streams at window bits 18/20/22/24 add 1.26 MiB real-world
-  decode coverage. Their one-shot and byte-progressive output is exact; the
+  decode coverage. Their caller-buffer and byte-progressive output is exact; the
   allocation-free summary deliberately reports `UnsupportedBrotliFeature` for
   four cases whose literal context depends on history beyond its fixed 65,520-
-  byte scratch. Summary history now tracks zero, one, or two known suffix bytes
+  byte scratch. Allocator-returning decode still uses that summary preflight and
+  therefore shares this explicit limit. Summary history now tracks zero, one,
+  or two known suffix bytes
   after such a copy, preventing one newly decoded literal from incorrectly
   making a two-byte context look valid and turning the limitation into a later
   misleading `CorruptFrame`.

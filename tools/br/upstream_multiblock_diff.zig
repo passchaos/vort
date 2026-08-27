@@ -120,12 +120,15 @@ pub fn main(init: std.process.Init) !void {
                         std.debug.print("{s} quality={d} mode={d} lgwin={d}: decode {s} encoded={d} expected={d}\n", .{ case.name, quality, mode, lgwin, @errorName(err), encoded.len, case.expected.len });
                         return err;
                     };
-                    var diagnostics: vort.BrotliStreamSummaryDiagnostics = .{};
-                    const summary = vort.brSummarizeStreamWithDiagnostics(encoded, &diagnostics) catch |err| {
-                        if (case.allow_summary_unsupported and
-                            err == error.UnsupportedBrotliFeature and
-                            diagnostics.phase == .compressed_meta_block)
-                        {
+                    const summary = vort.brSummarizeStream(encoded) catch |err| {
+                        if (case.allow_summary_unsupported and err == error.UnsupportedBrotliFeature) {
+                            const decoded = try vort.brDecodeStreamAlloc(init.gpa, encoded);
+                            defer init.gpa.free(decoded);
+                            if (!std.mem.eql(u8, decoded, case.expected)) return error.SizeMismatch;
+                            const exact_output = try init.gpa.alloc(u8, case.expected.len);
+                            defer init.gpa.free(exact_output);
+                            const written = try vort.brDecodeStreamIntoExactSize(encoded, exact_output, case.expected.len);
+                            if (written != case.expected.len or !std.mem.eql(u8, exact_output, case.expected)) return error.SizeMismatch;
                             summaries_unsupported += 1;
                             cases_run += 1;
                             continue;
