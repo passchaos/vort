@@ -122,6 +122,8 @@ pub fn main(init: std.process.Init) !void {
                     };
                     const summary = vort.brSummarizeStream(encoded) catch |err| {
                         if (case.allow_summary_unsupported and err == error.UnsupportedBrotliFeature) {
+                            const allocated_summary = try vort.brSummarizeStreamAlloc(init.gpa, encoded);
+                            if (allocated_summary.decoded_bytes != case.expected.len) return error.SizeMismatch;
                             const decoded = try vort.brDecodeStreamAlloc(init.gpa, encoded);
                             defer init.gpa.free(decoded);
                             if (!std.mem.eql(u8, decoded, case.expected)) return error.SizeMismatch;

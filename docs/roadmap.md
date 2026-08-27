@@ -7311,9 +7311,10 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   decode coverage. Their caller-buffer and byte-progressive output is exact; the
   allocation-free summary deliberately reports `UnsupportedBrotliFeature` for
   four cases whose literal context depends on history beyond its fixed 65,520-
-  byte scratch. Allocator-returning decode still uses that summary preflight and
-  therefore shares this explicit limit. Summary history now tracks zero, one,
-  or two known suffix bytes
+  byte scratch. New allocator-backed summary variants size history from the
+  stream's declared window, and allocator-returning decode uses that path, so
+  all four large-window cases also pass ordinary `decodeStreamAlloc`. Summary
+  history now tracks zero, one, or two known suffix bytes
   after such a copy, preventing one newly decoded literal from incorrectly
   making a two-byte context look valid and turning the limitation into a later
   misleading `CorruptFrame`.

@@ -2370,6 +2370,34 @@ pub fn summarizeStreamLimitedWithDiagnostics(stream: []const u8, max_output_len:
     return try summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, diagnostics, null);
 }
 
+/// Summarize a Brotli stream while allocating enough history for its declared
+/// RFC window. Unlike the allocation-free summary APIs, this supports literal
+/// contexts that depend on copies beyond Vort's fixed 65,520-byte scratch.
+pub fn summarizeStreamAlloc(allocator: std.mem.Allocator, stream: []const u8) Error!StreamSummary {
+    return try summarizeStreamAllocLimited(allocator, stream, std.math.maxInt(usize));
+}
+
+pub fn summarizeStreamAllocLimited(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize) Error!StreamSummary {
+    var diagnostics: StreamSummaryDiagnostics = .{};
+    return try summarizeStreamAllocLimitedWithDiagnostics(allocator, stream, max_output_len, &diagnostics);
+}
+
+pub fn summarizeStreamAllocWithDiagnostics(allocator: std.mem.Allocator, stream: []const u8, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    return try summarizeStreamAllocLimitedWithDiagnostics(allocator, stream, std.math.maxInt(usize), diagnostics);
+}
+
+pub fn summarizeStreamAllocLimitedWithDiagnostics(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    var reader = bitstream.BitReader.init(stream);
+    const window_bits = readWindowBitsValue(&reader) catch |err| {
+        diagnostics.* = .{ .phase = .window_bits };
+        return err;
+    };
+    const history_len = @min(max_output_len, (@as(usize, 1) << window_bits) - 16);
+    const history = try allocator.alloc(u8, history_len);
+    defer allocator.free(history);
+    return try summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, diagnostics, history);
+}
+
 fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics, history_storage: ?[]u8) Error!StreamSummary {
     diagnostics.* = .{};
     var reader = bitstream.BitReader.init(stream);
@@ -2493,13 +2521,7 @@ fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_outpu
 }
 
 fn decodedStreamSizeAllocLimited(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize) Error!usize {
-    var reader = bitstream.BitReader.init(stream);
-    const window_bits = try readWindowBitsValue(&reader);
-    const history_len = @min(max_output_len, (@as(usize, 1) << window_bits) - 16);
-    const history = try allocator.alloc(u8, history_len);
-    defer allocator.free(history);
-    var diagnostics: StreamSummaryDiagnostics = .{};
-    return (try summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, &diagnostics, history)).decoded_bytes;
+    return (try summarizeStreamAllocLimited(allocator, stream, max_output_len)).decoded_bytes;
 }
 
 pub fn decodeStreamChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, compressed_scratch: []u8) Error![]u8 {
