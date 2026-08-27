@@ -7573,6 +7573,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   An independent eight-pair sweep over all 13 reference rows retains matching
   checksums, measures `binary_mixed` at 7.9%, and finds no material regression
   elsewhere (the lowest median is -0.4%, within run noise).
+  Sequence-interleaved Huffman literal runs now use the same unchecked bulk
+  prefix peek/consume primitives as whole-section decoding after proving that a
+  full-width prefix remains. Stream tails retain the checked canonical fallback.
+  Ten alternating fixed-CPU-8 pairs at 500 decodes improve `large_json` by a
+  paired median 1.8%; an independent eight-pair 13-row sweep measures 2.1%
+  (8/8 wins), keeps the FSE-heavy `huffman80k` row slightly positive, and finds
+  no material regression while preserving every decoded checksum.
   Single-tree literal-frequency collection now uses a 256-bit first-seen map,
   initializing only active byte counters while retaining O(1) updates. The
   ratio-only two-context candidate keeps dense histograms because both trees

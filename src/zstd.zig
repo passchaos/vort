@@ -5285,9 +5285,12 @@ inline fn copyLiteralsFromHuffmanStateFast(
     for (dest) |*out| {
         if (state.tree.max_bit_count != 0 and state.cursor.reader.available() >= state.tree.max_bit_count) {
             const width = state.tree.max_bit_count;
-            const prefix = try state.cursor.reader.peekSmall(width);
+            // The guard proves a full prefix remains in the current stream.
+            // Use the unchecked bulk primitives here just as the whole-section
+            // decoder does, leaving checked stream-tail handling below.
+            const prefix = state.cursor.reader.peekBulkHuffman(width);
             if (state.lookup.lookup(prefix << @intCast(11 - width))) |entry| {
-                try state.cursor.reader.skip(entry.bit_count);
+                state.cursor.reader.skipBulkHuffman(entry.bit_count);
                 out.* = entry.symbol;
                 state.decoded += 1;
                 continue;
