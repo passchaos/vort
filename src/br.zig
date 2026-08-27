@@ -180,8 +180,12 @@ const IncrementalCopyCodec = struct {
         };
     }
 
-    pub fn dictionaryWord(distance: usize, copy_len: usize, current_output_len: usize, scratch: *[64]u8) IncrementalCopyCodec.Error![]const u8 {
-        return minimalStaticDictionaryWord(distance, copy_len, current_output_len, scratch);
+    pub fn dictionaryWord(distance: usize, copy_len: usize, max_backward_distance: usize, scratch: *[64]u8) IncrementalCopyCodec.Error![]const u8 {
+        return minimalStaticDictionaryWord(distance, copy_len, max_backward_distance, scratch);
+    }
+
+    pub fn maxBackwardDistance(window_bits: u5, output_len: usize) usize {
+        return maxBackwardDistanceForWindow(window_bits, output_len);
     }
 };
 
@@ -850,6 +854,10 @@ pub const CompressedSupportLimits = struct {
     max_distance_context_trees: usize,
     max_distance_alphabet_size: usize,
 };
+
+fn maxBackwardDistanceForWindow(window_bits: u5, output_len: usize) usize {
+    return @min(output_len, (@as(usize, 1) << window_bits) - 16);
+}
 
 pub fn compressedSupportLimits() CompressedSupportLimits {
     return .{
@@ -2241,7 +2249,7 @@ pub fn decodeStreamAppendExactSize(allocator: std.mem.Allocator, out: *std.Array
 
 pub fn decodeStreamInto(stream: []const u8, output: []u8) Error!usize {
     var reader = bitstream.BitReader.init(stream);
-    try readWindowBits(&reader);
+    const window_bits = try readWindowBitsValue(&reader);
     var written: usize = 0;
     var last_distances = initial_last_distances;
     while (true) {
@@ -2269,13 +2277,13 @@ pub fn decodeStreamInto(stream: []const u8, output: []u8) Error!usize {
         if (mnibbles > 4 and ((len_minus_one >> @intCast((mnibbles - 1) * 4)) & 0xf) == 0) return error.CorruptFrame;
         const meta_block_len = std.math.add(usize, len_minus_one, 1) catch return error.IntegerOverflow;
         if (is_last) {
-            try processMinimalCompressedMetaBlock(&reader, output, &written, meta_block_len, &last_distances);
+            try processMinimalCompressedMetaBlock(&reader, output, &written, meta_block_len, &last_distances, window_bits);
             try ensureZeroPaddingAndEnd(reader);
             return written;
         }
         const is_uncompressed = try reader.readBits(u1, 1) == 1;
         if (!is_uncompressed) {
-            try processMinimalCompressedMetaBlock(&reader, output, &written, meta_block_len, &last_distances);
+            try processMinimalCompressedMetaBlock(&reader, output, &written, meta_block_len, &last_distances, window_bits);
             continue;
         }
         try consumeZeroPaddingToByte(&reader);
@@ -2409,7 +2417,7 @@ pub fn summarizeStreamLimitedWithDiagnostics(stream: []const u8, max_output_len:
             summary.uses_compressed_meta_blocks = true;
             summary.stored_only = false;
             var block_stats: StreamSummaryMetaBlockStats = .{};
-            skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history, &block_stats) catch |err| {
+            skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history, &block_stats, summary.window_bits) catch |err| {
                 recordSummaryError(diagnostics, .compressed_meta_block, reader, meta_block_index);
                 return err;
             };
@@ -2430,7 +2438,7 @@ pub fn summarizeStreamLimitedWithDiagnostics(stream: []const u8, max_output_len:
             summary.uses_compressed_meta_blocks = true;
             summary.stored_only = false;
             var block_stats: StreamSummaryMetaBlockStats = .{};
-            skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history, &block_stats) catch |err| {
+            skipMinimalCompressedMetaBlock(&reader, meta_block_start, meta_block_len, &last_distances, &literal_history, &block_stats, summary.window_bits) catch |err| {
                 recordSummaryError(diagnostics, .compressed_meta_block, reader, meta_block_index);
                 return err;
             };
@@ -3166,6 +3174,7 @@ fn processMinimalCompressedMetaBlock(
     written: *usize,
     meta_block_len: usize,
     last_distances: *[4]usize,
+    window_bits: u5,
 ) Error!void {
     const meta_block_end = std.math.add(usize, written.*, meta_block_len) catch return error.IntegerOverflow;
     if (meta_block_end > output.len) return error.OutputTooSmall;
@@ -3194,8 +3203,9 @@ fn processMinimalCompressedMetaBlock(
         const decoded_distance = try readMinimalDistance(&header, reader, lengths, last_distances);
         const distance = decoded_distance.distance;
         if (distance == 0) return error.InvalidMatch;
-        if (distance > written.*) {
-            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, written.*, &transformed_dictionary_word);
+        const max_distance = maxBackwardDistanceForWindow(window_bits, written.*);
+        if (distance > max_distance) {
+            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
             if (word.len > meta_block_end - written.*) return error.CorruptFrame;
             @memcpy(output[written.*..][0..word.len], word);
             written.* += word.len;
@@ -3214,6 +3224,7 @@ fn skipMinimalCompressedMetaBlock(
     last_distances: *[4]usize,
     literal_history: *LiteralHistory,
     stats: ?*StreamSummaryMetaBlockStats,
+    window_bits: u5,
 ) Error!void {
     const meta_block_end = std.math.add(usize, start_written, meta_block_len) catch return error.IntegerOverflow;
     var header: MinimalCompressedHeader = undefined;
@@ -3242,8 +3253,9 @@ fn skipMinimalCompressedMetaBlock(
         const decoded_distance = try readMinimalDistance(&header, reader, lengths, last_distances);
         const distance = decoded_distance.distance;
         if (distance == 0) return error.InvalidMatch;
-        if (distance > written) {
-            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, written, &transformed_dictionary_word);
+        const max_distance = maxBackwardDistanceForWindow(window_bits, written);
+        if (distance > max_distance) {
+            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
             if (word.len > meta_block_end - written) return error.CorruptFrame;
             if (stats) |s| {
                 s.static_dictionary_copy_count = std.math.add(usize, s.static_dictionary_copy_count, 1) catch return error.IntegerOverflow;
@@ -5988,18 +6000,14 @@ pub fn minimalStaticDictionaryCoverage() []const StaticDictionaryEntry {
 fn minimalStaticDictionaryWord(
     distance: usize,
     copy_len: usize,
-    current_output_len: usize,
+    max_backward_distance: usize,
     transformed_scratch: *[64]u8,
 ) Error![]const u8 {
     // Brotli static-dictionary addresses are relative to the current maximum
-    // LZ77 distance, not the raw distance code. In this minimal decoder slice
-    // we only enter here while `distance > current_output_len`, so the current
-    // output length is the same limit used by RFC 7932 for small streams. The
-    // table below intentionally keeps just the proven word/transform tuples;
-    // full dictionary bytes, full transform metadata, and late-window dictionary
-    // references remain follow-up work.
-    if (distance <= current_output_len) return error.InvalidMatch;
-    const address = distance - current_output_len - 1;
+    // LZ77 distance: min(decoded bytes, 2^WBITS - 16). This differs from total
+    // output after the stream has filled its window.
+    if (distance <= max_backward_distance) return error.InvalidMatch;
+    const address = distance - max_backward_distance - 1;
     const size_bits = minimalStaticDictionarySizeBits(copy_len) orelse return error.UnsupportedBrotliFeature;
     const mask = (@as(usize, 1) << @intCast(size_bits)) - 1;
     const word_index = address & mask;
@@ -14157,6 +14165,25 @@ test "br regular distance resolver covers postfix and extra bits" {
     try std.testing.expectEqual(@as(usize, 3), try resolveRegularDistance(0, 1, 17, 1));
     try std.testing.expectEqual(@as(usize, 18), try resolveRegularDistance(2, 4, 25, 1));
     try std.testing.expectError(error.InvalidHuffmanCode, resolveRegularDistance(0, 4, 19, 0));
+}
+
+test "br static dictionary addresses use the active window distance" {
+    var scratch: [64]u8 = undefined;
+    const output_len = (@as(usize, 1) << 16) + 4096;
+    const window_distance = maxBackwardDistanceForWindow(16, output_len);
+    try std.testing.expectEqual(@as(usize, 65_520), window_distance);
+
+    const address: usize = 3;
+    const copy_len: usize = 5;
+    const expected = try minimalStaticDictionaryWord(window_distance + 1 + address, copy_len, window_distance, &scratch);
+    try std.testing.expectEqualSlices(u8, "world", expected);
+
+    // Using total output as the base after the window has filled would shift
+    // the same wire distance into an invalid/non-equivalent dictionary address.
+    try std.testing.expectError(
+        error.InvalidMatch,
+        minimalStaticDictionaryWord(window_distance + 1 + address, copy_len, output_len, &scratch),
+    );
 }
 
 test "br simple prefix code decodes three-symbol canonical tree" {

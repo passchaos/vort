@@ -12,6 +12,7 @@ pub fn Decoder(comptime Codec: type) type {
         history: []u8,
         phase: Phase = .window,
         window_state: WindowState = .first,
+        window_bits: u5 = 16,
         header_bytes: [Codec.max_stream_header_bytes]u8 = undefined,
         header_len: usize = 0,
         header_bit_count: usize = 0,
@@ -154,6 +155,7 @@ pub fn Decoder(comptime Codec: type) type {
                                 else => return self.fail(.window, err),
                             };
                             if (first == 0) {
+                                self.window_bits = 16;
                                 self.phase = .trailer;
                             } else {
                                 self.window_state = .low3;
@@ -167,6 +169,7 @@ pub fn Decoder(comptime Codec: type) type {
                             if (low3 == 0) {
                                 self.window_state = .tail;
                             } else {
+                                self.window_bits = @as(u5, low3) + 17;
                                 self.phase = .trailer;
                             }
                         },
@@ -176,6 +179,7 @@ pub fn Decoder(comptime Codec: type) type {
                                 else => return self.fail(.window, err),
                             };
                             if (tail == 1) return self.fail(.window, error.CorruptFrame);
+                            self.window_bits = if (tail == 0) 17 else @as(u5, tail) + 8;
                             self.phase = .trailer;
                         },
                     };
@@ -275,7 +279,8 @@ pub fn Decoder(comptime Codec: type) type {
                         else => return self.fail(.distance, err),
                     };
                     self.copy_distance = decoded.distance;
-                    if (decoded.distance <= self.total_output and decoded.update_ring) pushLastDistance(&self.last_distances, decoded.distance);
+                    const max_backward_distance = self.maxBackwardDistance();
+                    if (decoded.distance <= max_backward_distance and decoded.update_ring) pushLastDistance(&self.last_distances, decoded.distance);
                     try self.beginCopy();
                 },
                 .copy => {
@@ -460,7 +465,8 @@ pub fn Decoder(comptime Codec: type) type {
         fn beginCopy(self: *Self) Error!void {
             if (self.copy_distance == 0) return self.fail(.copy, error.InvalidMatch);
             const remaining = self.decoded_len - self.total_output;
-            if (self.copy_distance <= self.total_output) {
+            const max_backward_distance = self.maxBackwardDistance();
+            if (self.copy_distance <= max_backward_distance) {
                 if (self.copy_distance > self.history.len) return self.fail(.copy, error.InvalidMatch);
                 if (self.pending_copy > remaining) return self.fail(.copy, error.CorruptFrame);
                 self.phase = .copy;
@@ -471,12 +477,15 @@ pub fn Decoder(comptime Codec: type) type {
             // produced history. Materialize only the transformed word (at most
             // 64 bytes) and stream that scratch through the normal output and
             // history accounting. Dictionary references never update repcodes.
-            const word = try Codec.dictionaryWord(self.copy_distance, self.pending_copy, self.total_output, &self.dictionary_scratch);
+            const word = try Codec.dictionaryWord(self.copy_distance, self.pending_copy, max_backward_distance, &self.dictionary_scratch);
             if (word.len > remaining or word.len > self.dictionary_scratch.len) return self.fail(.dictionary, error.CorruptFrame);
             if (word.ptr != self.dictionary_scratch[0..].ptr) @memcpy(self.dictionary_scratch[0..word.len], word);
             self.dictionary_offset = 0;
             self.dictionary_len = word.len;
             self.phase = .dictionary;
+        }
+        fn maxBackwardDistance(self: *const Self) usize {
+            return Codec.maxBackwardDistance(self.window_bits, self.total_output);
         }
         fn beginCompressedHeader(self: *Self) Error!void {
             const block_end = std.math.add(usize, self.total_output, self.stored_remaining) catch

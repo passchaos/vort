@@ -7300,6 +7300,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   shared meta-block state machine, so upstream streams may begin with stored or
   metadata blocks before reaching compressed data. Focused byte-split tests pin
   stored-to-context-compressed and metadata-to-compressed transitions.
+  A larger real-source case exposed that static-dictionary addresses must be
+  based on `min(total_output, 2^WBITS - 16)`, not total output after the ring
+  window fills. One-shot decode, summary/preflight, and the byte-progressive
+  copy decoder now retain the parsed window and use that RFC maximum for both
+  dictionary classification and recent-distance updates. The upstream matrix
+  reaches 90 cases with a 1.26 MiB source stream at window 20, and a focused
+  boundary test pins the post-window dictionary-address calculation.
   Added byte-progressive metadata handling after compressed blocks. Metadata
   headers and payloads can span arbitrary input chunks, payload bytes are
   skipped without affecting decoded-size accounting, and callers may provide

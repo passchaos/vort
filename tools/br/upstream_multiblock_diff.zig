@@ -54,6 +54,9 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(far_history_expected);
     const long_text = text ** 32;
     const long_text_chunks = [_][]const u8{ long_text[0 .. long_text.len / 3], long_text[long_text.len / 3 .. 2 * long_text.len / 3], long_text[2 * long_text.len / 3 ..] };
+    const large_source = try std.Io.Dir.cwd().readFileAlloc(init.io, "src/br.zig", init.gpa, .limited(2 * 1024 * 1024));
+    defer init.gpa.free(large_source);
+    const large_source_chunks = [_][]const u8{ large_source[0 .. large_source.len / 4], large_source[large_source.len / 4 .. large_source.len / 2], large_source[large_source.len / 2 .. 3 * large_source.len / 4], large_source[3 * large_source.len / 4 ..] };
     const tiny_prefix = "alpha alpha alpha alpha" ++
         "{\"kind\":\"tiny\",\"value\":1}\n" ++
         "beta beta beta beta";
@@ -83,6 +86,7 @@ pub fn main(init: std.process.Init) !void {
         .{ .name = "json-no-context", .chunks = &json_chunks, .expected = json ++ json, .qualities = &context_qualities, .disable_literal_context_modeling = true },
         .{ .name = "window-sweep", .chunks = &pattern_chunks, .expected = first_pattern ++ second_pattern ++ third_pattern, .qualities = &compact_qualities, .windows = &window_sweep },
         .{ .name = "history-wrap", .chunks = &long_text_chunks, .expected = long_text, .qualities = &compact_qualities },
+        .{ .name = "large-source", .chunks = &large_source_chunks, .expected = large_source, .qualities = &compact_qualities, .windows = &.{20}, .lgblock = 18 },
         .{ .name = "far-history", .chunks = &far_history_chunks, .expected = far_history_expected, .qualities = &compact_qualities, .windows = &.{17}, .min_compressed_blocks = 1, .min_stored_blocks = 2 },
         .{ .name = "compressed-stored-compressed", .chunks = &transition_chunks, .expected = text ++ random[0..2048] ++ text, .qualities = &context_qualities, .min_compressed_blocks = 2, .min_stored_blocks = 1 },
         .{ .name = "tiny-flushes", .chunks = &tiny_chunks, .expected = tiny_expected, .qualities = &context_qualities, .lgblock = 14, .min_compressed_blocks = 0 },
@@ -108,7 +112,14 @@ pub fn main(init: std.process.Init) !void {
                         },
                     );
                     defer init.gpa.free(encoded);
-                    const summary = try vort.brSummarizeStream(encoded);
+                    decodeByteProgressive(init.gpa, encoded, case.expected, lgwin) catch |err| {
+                        std.debug.print("{s} quality={d} mode={d} lgwin={d}: decode {s} encoded={d} expected={d}\n", .{ case.name, quality, mode, lgwin, @errorName(err), encoded.len, case.expected.len });
+                        return err;
+                    };
+                    const summary = vort.brSummarizeStream(encoded) catch |err| {
+                        std.debug.print("{s} quality={d} mode={d} lgwin={d}: summary {s} encoded={d} expected={d}\n", .{ case.name, quality, mode, lgwin, @errorName(err), encoded.len, case.expected.len });
+                        return err;
+                    };
                     const payload_blocks = summary.compressed_meta_block_count + summary.uncompressed_meta_block_count;
                     const min_compressed = case.min_compressed_blocks orelse case.chunks.len;
                     if (payload_blocks < case.chunks.len or
@@ -121,10 +132,6 @@ pub fn main(init: std.process.Init) !void {
                         );
                         return error.ReferenceEncodeFailed;
                     }
-                    decodeByteProgressive(init.gpa, encoded, case.expected, lgwin) catch |err| {
-                        std.debug.print("{s} quality={d} mode={d} lgwin={d}: {s}\n", .{ case.name, quality, mode, lgwin, @errorName(err) });
-                        return err;
-                    };
                     cases_run += 1;
                 }
             }
@@ -180,7 +187,10 @@ fn decodeByteProgressiveWithMetadata(allocator: std.mem.Allocator, encoded: []co
     while (decoder.snapshot().phase != .done) {
         const input_end = @min(encoded.len, input_offset + 1);
         const output_end = @min(output.len, output_offset + 7);
-        const step = try decoder.step(encoded[input_offset..input_end], output[output_offset..output_end]);
+        const step = decoder.step(encoded[input_offset..input_end], output[output_offset..output_end]) catch |err| {
+            std.debug.print("decode failure input={d}/{d} output={d}/{d} snapshot={any}\n", .{ input_offset, encoded.len, output_offset, expected.len, decoder.snapshot() });
+            return err;
+        };
         if (step.progress.input_read == 0 and step.progress.output_written == 0) return error.ReferenceDecodeFailed;
         input_offset += step.progress.input_read;
         output_offset += step.progress.output_written;
@@ -221,7 +231,10 @@ fn decodeByteProgressive(allocator: std.mem.Allocator, encoded: []const u8, expe
     while (decoder.snapshot().phase != .done) {
         const input_end = @min(encoded.len, input_offset + 1);
         const output_end = @min(output.len, output_offset + 7);
-        const step = try decoder.step(encoded[input_offset..input_end], output[output_offset..output_end]);
+        const step = decoder.step(encoded[input_offset..input_end], output[output_offset..output_end]) catch |err| {
+            std.debug.print("decode failure input={d}/{d} output={d}/{d} snapshot={any}\n", .{ input_offset, encoded.len, output_offset, expected.len, decoder.snapshot() });
+            return err;
+        };
         if (step.progress.input_read == 0 and step.progress.output_written == 0)
             return error.ReferenceDecodeFailed;
         input_offset += step.progress.input_read;
@@ -229,5 +242,9 @@ fn decodeByteProgressive(allocator: std.mem.Allocator, encoded: []const u8, expe
     }
     try decoder.finish();
     if (input_offset != encoded.len or output_offset != expected.len or !std.mem.eql(u8, output, expected))
+        return error.SizeMismatch;
+
+    const one_shot_written = try vort.brDecodeStreamInto(encoded, output);
+    if (one_shot_written != expected.len or !std.mem.eql(u8, output, expected))
         return error.SizeMismatch;
 }
