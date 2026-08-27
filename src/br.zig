@@ -849,6 +849,10 @@ const MinimalCompressedHeader = struct {
 };
 
 const max_distance_alphabet_size = 16 + 120 + (48 << 3);
+// Planned streams fix NPOSTFIX=0 and NDIRECT=15, so their distance alphabet is
+// exactly 79 symbols even though the decoder accepts the RFC-wide 520-symbol
+// maximum. Keep encoder scratch proportional to what its header advertises.
+const planned_distance_alphabet_size = 16 + 15 + 48;
 const max_context_map_alphabet_size = 256 + 16;
 const max_literal_block_types = 32;
 // Large upstream source streams can use more than 128 literal trees. Retain
@@ -2028,7 +2032,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     // trees; the ordinary ratio path benefits too when it keeps one tree.
     if (options.use_utf8_text_contexts) @memset(&literal_context_frequencies, @splat(0));
     var command_frequencies: [704]u32 = @splat(0);
-    var distance_frequencies: [max_distance_alphabet_size]u32 = @splat(0);
+    var distance_frequencies: [planned_distance_alphabet_size]u32 = @splat(0);
     const frequency_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     var last_distances = initial_last_distances;
     for (commands) |command| {
@@ -2049,6 +2053,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         if (!command.has_copy) continue;
         if (encoding.command.distance_code == -1) {
             const distance = if (recent_symbol) |symbol| encoder_distance.Encoding{ .symbol = symbol } else encoder_distance.encode(commandWireDistance(command), 15) orelse return error.InvalidBlockPlan;
+            if (distance.symbol >= planned_distance_alphabet_size) return error.InvalidBlockPlan;
             distance_frequencies[distance.symbol] += 1;
         }
         if (command.dictionary_output_len == 0 and recent_symbol != 0) pushLastDistance(&last_distances, command.distance);
@@ -2057,20 +2062,20 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     // entire meta-block. A deterministic unused symbol keeps that tree legal
     // without adding payload bits.
     if (allZeroFrequencies(256, &literal_frequencies)) literal_frequencies[0] = 1;
-    if (allZeroFrequencies(max_distance_alphabet_size, &distance_frequencies)) distance_frequencies[0] = 1;
+    if (allZeroFrequencies(planned_distance_alphabet_size, &distance_frequencies)) distance_frequencies[0] = 1;
     if (io) |active| stats.frequency_ns = elapsedNs(frequency_start.?, active);
     const alphabet_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     var literal_alphabet = command_plan.PrefixAlphabetFor(256){};
     var literal_context_alphabets: [2]command_plan.PrefixAlphabetFor(256) = undefined;
     var command_alphabet = command_plan.PrefixAlphabet{};
-    var distance_alphabet = command_plan.PrefixAlphabetFor(max_distance_alphabet_size){};
+    var distance_alphabet = command_plan.PrefixAlphabetFor(planned_distance_alphabet_size){};
     try command_plan.alphabetFromFrequenciesInto(256, &literal_alphabet, &literal_frequencies);
     if (options.use_utf8_text_contexts) for (&literal_context_alphabets, &literal_context_frequencies) |*alphabet, *frequencies| {
         if (allZeroFrequencies(256, frequencies)) frequencies[0] = 1;
         try command_plan.alphabetFromFrequenciesInto(256, alphabet, frequencies);
     };
     try command_plan.alphabetFromFrequenciesInto(704, &command_alphabet, &command_frequencies);
-    try command_plan.alphabetFromFrequenciesInto(max_distance_alphabet_size, &distance_alphabet, &distance_frequencies);
+    try command_plan.alphabetFromFrequenciesInto(planned_distance_alphabet_size, &distance_alphabet, &distance_frequencies);
     stats.literal_symbol_count = literal_alphabet.len;
     stats.command_symbol_count = command_alphabet.len;
     stats.distance_symbol_count = distance_alphabet.len;
@@ -2082,7 +2087,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     if (!writer.bounded) try writer.out.ensureUnusedCapacity(allocator, commandPlanInitialCapacity(input.len));
     try writeWindowBits(allocator, writer, options.window_bits);
     try writeLastCompressedMetaBlockHeader(allocator, writer, input.len);
-    const distance_alphabet_size = plannedDistanceAlphabetSize(&distance_alphabet);
+    const distance_alphabet_size = planned_distance_alphabet_size;
     const lengths_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     const literal_lengths = try literal_alphabet.codeLengths(&literal_frequencies);
     const literal_context_lengths = if (options.use_utf8_text_contexts) blk: {
@@ -2091,7 +2096,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         break :blk lengths;
     } else undefined;
     const command_lengths = if (command_alphabet.len <= 4) @as([704]u4, @splat(0)) else try command_alphabet.codeLengths(&command_frequencies);
-    const distance_lengths = if (distance_alphabet.len <= 4) @as([max_distance_alphabet_size]u4, @splat(0)) else try distance_alphabet.codeLengths(&distance_frequencies);
+    const distance_lengths = if (distance_alphabet.len <= 4) @as([planned_distance_alphabet_size]u4, @splat(0)) else try distance_alphabet.codeLengths(&distance_frequencies);
     if (io) |active| stats.lengths_ns = elapsedNs(lengths_start.?, active);
     const header_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     if (options.use_utf8_text_contexts) {
@@ -2112,11 +2117,11 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     else
         try huffman.HuffmanTable(704).Encoder.init(&command_lengths);
     const distance_encoder = if (distance_alphabet.len <= 4)
-        huffman.HuffmanTable(max_distance_alphabet_size).Encoder{}
+        huffman.HuffmanTable(planned_distance_alphabet_size).Encoder{}
     else if (distance_alphabet.len <= 64)
-        try huffman.HuffmanTable(max_distance_alphabet_size).Encoder.initSparseTrusted(&distance_lengths, distance_alphabet.symbols[0..distance_alphabet.len])
+        try huffman.HuffmanTable(planned_distance_alphabet_size).Encoder.initSparseTrusted(&distance_lengths, distance_alphabet.symbols[0..distance_alphabet.len])
     else
-        try huffman.HuffmanTable(max_distance_alphabet_size).Encoder.init(&distance_lengths);
+        try huffman.HuffmanTable(planned_distance_alphabet_size).Encoder.init(&distance_lengths);
     if (io) |active| stats.encoder_ns = elapsedNs(encoder_start.?, active);
     const payload_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     last_distances = initial_last_distances;
@@ -14955,11 +14960,11 @@ fn writePlannedCompressedHeader(
     writer: *BitWriter,
     literal_alphabet: *const command_plan.PrefixAlphabetFor(256),
     command_alphabet: *const command_plan.PrefixAlphabet,
-    distance_alphabet: *const command_plan.PrefixAlphabetFor(max_distance_alphabet_size),
+    distance_alphabet: *const command_plan.PrefixAlphabetFor(planned_distance_alphabet_size),
     distance_alphabet_size: usize,
     literal_lengths: *const [256]u4,
     command_lengths: *const [704]u4,
-    distance_lengths: *const [max_distance_alphabet_size]u4,
+    distance_lengths: *const [planned_distance_alphabet_size]u4,
 ) Error!void {
     try writeBlockTypeCount(allocator, writer, 1);
     try writeBlockTypeCount(allocator, writer, 1);
@@ -14980,10 +14985,10 @@ fn writePlannedCompressedHeaderTwoLiteralContexts(
     literal_alphabets: *const [2]command_plan.PrefixAlphabetFor(256),
     literal_lengths: *const [2][256]u4,
     command_alphabet: *const command_plan.PrefixAlphabet,
-    distance_alphabet: *const command_plan.PrefixAlphabetFor(max_distance_alphabet_size),
+    distance_alphabet: *const command_plan.PrefixAlphabetFor(planned_distance_alphabet_size),
     distance_alphabet_size: usize,
     command_lengths: *const [704]u4,
-    distance_lengths: *const [max_distance_alphabet_size]u4,
+    distance_lengths: *const [planned_distance_alphabet_size]u4,
 ) Error!void {
     try writeBlockTypeCount(allocator, writer, 1);
     try writeBlockTypeCount(allocator, writer, 1);
@@ -15011,12 +15016,6 @@ fn writeUtf8TextContextMap(allocator: std.mem.Allocator, writer: *BitWriter) Err
     try writer.writeBits(allocator, 56 - 32, 5);
     for (0..8) |_| try writer.writeBits(allocator, 1, 1); // Symbol 7.
     try writer.writeBits(allocator, 0, 1); // IMTF = false.
-}
-
-fn plannedDistanceAlphabetSize(alphabet: *const command_plan.PrefixAlphabetFor(max_distance_alphabet_size)) usize {
-    var highest: usize = 0;
-    for (alphabet.symbols[0..alphabet.len]) |symbol| highest = @max(highest, symbol);
-    return @max(@as(usize, 16 + 15 + 48), highest + 1);
 }
 
 fn writePrefixSymbolsWithLengths(allocator: std.mem.Allocator, writer: *BitWriter, alphabet_size: usize, alphabet: anytype, lengths: []const u4) Error!void {

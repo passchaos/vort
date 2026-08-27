@@ -50,3 +50,10 @@ test "regular distance inversion covers window boundaries" {
         try std.testing.expectEqual(distance, decode(encoded, 15));
     }
 }
+
+test "planned ndirect alphabet covers the complete Brotli meta-block" {
+    const max_meta_block_distance = (@as(usize, 1) << 24) - 1;
+    const encoding = encode(max_meta_block_distance, 15) orelse return error.TestUnexpectedResult;
+    try std.testing.expect(encoding.symbol < 16 + 15 + 48);
+    try std.testing.expectEqual(max_meta_block_distance, decode(encoding, 15));
+}

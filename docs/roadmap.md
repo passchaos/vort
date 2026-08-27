@@ -7525,3 +7525,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   alternating ReleaseFast CPU-8 A/B pairs preserve benchmark stream sizes and
   improve fast JSON/source/log by about 3.2%/2.5%/2.8%; balanced improves by
   0.6%/1.4%/1.4%, and ratio by 0.7%/0.5%/1.9%.
+  Planned Brotli distance scratch now follows the encoder's fixed NPOSTFIX=0,
+  NDIRECT=15 header: frequency, alphabet, length, and canonical-code arrays use
+  79 entries instead of the decoder's RFC-wide 520-symbol maximum. A boundary
+  test proves the highest 24-bit meta-block distance still maps inside that
+  alphabet and round trips through the distance formula. Ten alternating
+  ReleaseFast CPU-8 pairs preserve all benchmark stream sizes; median paired
+  speedups are about 13.1%/8.7%/10.9% for fast JSON/source/log, 2.2%/7.2%/6.6%
+  for balanced, and 0.9%/1.4%/6.0% for ratio.
