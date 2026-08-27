@@ -735,6 +735,7 @@ pub const StreamSummary = struct {
     uses_static_dictionary: bool = false,
     static_dictionary_copy_count: usize = 0,
     static_dictionary_bytes: usize = 0,
+    max_literal_context_trees: usize = 0,
     stored_only: bool = true,
 };
 
@@ -765,6 +766,7 @@ pub const StreamProbeResult = struct {
 const StreamSummaryMetaBlockStats = struct {
     static_dictionary_copy_count: usize = 0,
     static_dictionary_bytes: usize = 0,
+    max_literal_context_trees: usize = 0,
 };
 
 const BitWriter = struct {
@@ -825,6 +827,7 @@ pub fn PrefixCode(comptime alphabet_size: usize) type {
 const MinimalCompressedHeader = struct {
     npostfix: u2,
     ndirect: u16,
+    literal_tree_count: u16 = 1,
     literal_context_modes: [max_literal_block_types]u2,
     literal_block: BlockSwitchState(max_literal_block_types),
     literal_context_map: [max_literal_block_types * 64]u8,
@@ -839,8 +842,13 @@ const MinimalCompressedHeader = struct {
 const max_distance_alphabet_size = 16 + 120 + (48 << 3);
 const max_context_map_alphabet_size = 256 + 16;
 const max_literal_block_types = 32;
-const max_literal_context_trees = 32;
+// Large upstream source streams already use 91 literal trees. Retain the next
+// power-of-two bounded tier so those frames fit without inflating every caller-
+// owned decoder all the way to the format's 256-tree ceiling.
+const max_literal_context_trees = 128;
 const max_command_block_types = 32;
+// Real libbrotli quality-8/9 source frames use 33 distance block types and
+// context trees. Keep a bounded 64-entry tier rather than the format maximum.
 const max_distance_block_types = 32;
 const max_distance_context_trees = 32;
 const initial_last_distances = [_]usize{ 16, 15, 11, 4 };
@@ -2914,6 +2922,7 @@ fn applySummaryMetaBlockStats(summary: *StreamSummary, stats: StreamSummaryMetaB
         summary.static_dictionary_copy_count = std.math.add(usize, summary.static_dictionary_copy_count, stats.static_dictionary_copy_count) catch return error.IntegerOverflow;
         summary.static_dictionary_bytes = std.math.add(usize, summary.static_dictionary_bytes, stats.static_dictionary_bytes) catch return error.IntegerOverflow;
     }
+    summary.max_literal_context_trees = @max(summary.max_literal_context_trees, stats.max_literal_context_trees);
 }
 
 pub const StoredStreamEncoder = struct {
@@ -3244,27 +3253,27 @@ fn readMinimalCompressedHeader(reader: *bitstream.BitReader) Error!MinimalCompre
 fn readMinimalCompressedHeaderInto(reader: *bitstream.BitReader, header: *MinimalCompressedHeader) Error!void {
     const nbltypes_l = try readBlockTypeCount(reader);
     if (nbltypes_l > max_literal_block_types) return error.UnsupportedBrotliFeature;
-    var literal_block = BlockSwitchState(max_literal_block_types){ .block_type_count = nbltypes_l };
+    header.literal_block = .{ .block_type_count = nbltypes_l };
     if (nbltypes_l >= 2) {
-        literal_block.type_tree = try readPrefixCodeRuntime(max_literal_block_types + 2, @as(usize, nbltypes_l) + 2, reader);
-        literal_block.length_tree = try readPrefixCode(26, reader);
-        literal_block.remaining = try readBlockLength(&literal_block.length_tree, reader);
+        header.literal_block.type_tree = try readPrefixCodeRuntime(max_literal_block_types + 2, @as(usize, nbltypes_l) + 2, reader);
+        header.literal_block.length_tree = try readPrefixCode(26, reader);
+        header.literal_block.remaining = try readBlockLength(&header.literal_block.length_tree, reader);
     }
     const nbltypes_i = try readBlockTypeCount(reader);
     if (nbltypes_i > max_command_block_types) return error.UnsupportedBrotliFeature;
-    var command_block = BlockSwitchState(max_command_block_types){ .block_type_count = nbltypes_i };
+    header.command_block = .{ .block_type_count = nbltypes_i };
     if (nbltypes_i >= 2) {
-        command_block.type_tree = try readPrefixCodeRuntime(max_command_block_types + 2, @as(usize, nbltypes_i) + 2, reader);
-        command_block.length_tree = try readPrefixCode(26, reader);
-        command_block.remaining = try readBlockLength(&command_block.length_tree, reader);
+        header.command_block.type_tree = try readPrefixCodeRuntime(max_command_block_types + 2, @as(usize, nbltypes_i) + 2, reader);
+        header.command_block.length_tree = try readPrefixCode(26, reader);
+        header.command_block.remaining = try readBlockLength(&header.command_block.length_tree, reader);
     }
     const nbltypes_d = try readBlockTypeCount(reader);
     if (nbltypes_d > max_distance_block_types) return error.UnsupportedBrotliFeature;
-    var distance_block = BlockSwitchState(max_distance_block_types){ .block_type_count = nbltypes_d };
+    header.distance_block = .{ .block_type_count = nbltypes_d };
     if (nbltypes_d >= 2) {
-        distance_block.type_tree = try readPrefixCodeRuntime(max_distance_block_types + 2, @as(usize, nbltypes_d) + 2, reader);
-        distance_block.length_tree = try readPrefixCode(26, reader);
-        distance_block.remaining = try readBlockLength(&distance_block.length_tree, reader);
+        header.distance_block.type_tree = try readPrefixCodeRuntime(max_distance_block_types + 2, @as(usize, nbltypes_d) + 2, reader);
+        header.distance_block.length_tree = try readPrefixCode(26, reader);
+        header.distance_block.remaining = try readBlockLength(&header.distance_block.length_tree, reader);
     }
 
     const npostfix = try reader.readBits(u2, 2);
@@ -3273,54 +3282,35 @@ fn readMinimalCompressedHeaderInto(reader: *bitstream.BitReader, header: *Minima
     if (ndirect > 120) return error.CorruptFrame;
     const distance_alphabet_size: usize = 16 + @as(usize, ndirect) + (@as(usize, 48) << npostfix);
 
-    var literal_context_modes: [max_literal_block_types]u2 = @splat(0);
-    for (0..nbltypes_l) |i| {
-        literal_context_modes[i] = try reader.readBits(u2, 2);
-    }
+    for (0..nbltypes_l) |i| header.literal_context_modes[i] = try reader.readBits(u2, 2);
 
     const ntrees_l = try readBlockTypeCount(reader);
     if (ntrees_l > max_literal_context_trees) return error.UnsupportedBrotliFeature;
-    var literal_context_map: [max_literal_block_types * 64]u8 = @splat(0);
-    try readContextMap(reader, literal_context_map[0..(@as(usize, nbltypes_l) * 64)], ntrees_l);
+    try readContextMap(reader, header.literal_context_map[0..(@as(usize, nbltypes_l) * 64)], ntrees_l);
     const ntrees_d = try readBlockTypeCount(reader);
     if (ntrees_d > max_distance_context_trees) return error.UnsupportedBrotliFeature;
-    var distance_context_map: [max_distance_block_types * 4]u8 = @splat(0);
-    try readContextMap(reader, distance_context_map[0..(@as(usize, nbltypes_d) * 4)], ntrees_d);
+    try readContextMap(reader, header.distance_context_map[0..(@as(usize, nbltypes_d) * 4)], ntrees_d);
 
-    var literal_trees: [max_literal_context_trees]PrefixCode(256) = undefined;
-    literal_trees[0] = try readPrefixCode(256, reader);
+    header.literal_trees[0] = try readPrefixCode(256, reader);
     var literal_tree_index: u16 = 1;
     while (literal_tree_index < ntrees_l) : (literal_tree_index += 1) {
-        literal_trees[literal_tree_index] = try readPrefixCode(256, reader);
+        header.literal_trees[literal_tree_index] = try readPrefixCode(256, reader);
     }
 
-    var insert_copy_trees: [max_command_block_types]PrefixCode(704) = undefined;
-    insert_copy_trees[0] = try readPrefixCode(704, reader);
+    header.insert_copy_trees[0] = try readPrefixCode(704, reader);
     var command_tree_index: u16 = 1;
     while (command_tree_index < nbltypes_i) : (command_tree_index += 1) {
-        insert_copy_trees[command_tree_index] = try readPrefixCode(704, reader);
+        header.insert_copy_trees[command_tree_index] = try readPrefixCode(704, reader);
     }
 
-    var distance_trees: [max_distance_context_trees]PrefixCode(max_distance_alphabet_size) = undefined;
-    distance_trees[0] = try readPrefixCodeRuntime(max_distance_alphabet_size, distance_alphabet_size, reader);
+    header.distance_trees[0] = try readPrefixCodeRuntime(max_distance_alphabet_size, distance_alphabet_size, reader);
     var distance_tree_index: u16 = 1;
     while (distance_tree_index < ntrees_d) : (distance_tree_index += 1) {
-        distance_trees[distance_tree_index] = try readPrefixCodeRuntime(max_distance_alphabet_size, distance_alphabet_size, reader);
+        header.distance_trees[distance_tree_index] = try readPrefixCodeRuntime(max_distance_alphabet_size, distance_alphabet_size, reader);
     }
-
-    header.* = .{
-        .npostfix = npostfix,
-        .ndirect = ndirect,
-        .literal_context_modes = literal_context_modes,
-        .literal_block = literal_block,
-        .literal_context_map = literal_context_map,
-        .literal_trees = literal_trees,
-        .command_block = command_block,
-        .insert_copy_trees = insert_copy_trees,
-        .distance_block = distance_block,
-        .distance_context_map = distance_context_map,
-        .distance_trees = distance_trees,
-    };
+    header.npostfix = npostfix;
+    header.ndirect = ndirect;
+    header.literal_tree_count = ntrees_l;
 }
 
 fn readBlockLength(prefix: *const PrefixCode(26), reader: *bitstream.BitReader) Error!usize {
@@ -3500,6 +3490,9 @@ fn skipMinimalCompressedMetaBlock(
     const meta_block_end = std.math.add(usize, start_written, meta_block_len) catch return error.IntegerOverflow;
     var header: MinimalCompressedHeader = undefined;
     try readMinimalCompressedHeaderInto(reader, &header);
+    if (stats) |s| {
+        s.max_literal_context_trees = header.literal_tree_count;
+    }
     var transformed_dictionary_word: [64]u8 = undefined;
     var written = start_written;
     while (written < meta_block_end) {

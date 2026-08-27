@@ -7470,3 +7470,16 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   retain the 80/640/8607-byte frames while improving level-3 JSON by about
   9.9% and binary by about 3.9%; level 1 and level 9 remain within roughly 1.5%
   noise.
+  Brotli compressed decoding now retains up to 128 literal context trees per
+  meta-block, up from 32, and reports the observed maximum in stream summaries.
+  The header parser writes block-switch state, context maps, and prefix trees
+  directly into the caller-provided header object; this removes the large
+  temporary aggregates and final copy that otherwise made the wider bound
+  expensive. A deterministic 1 MiB dictionary-derived corpus makes libbrotli
+  quality 5 emit 65 literal context trees and now passes allocator-backed
+  summary, one-shot decode, and byte-progressive decode. The upstream
+  differential matrix grows from 94 to 95 cases. Sixteen alternating
+  ReleaseFast CPU-8 pairs on the existing 12-case reference benchmark show the
+  direct-header implementation improving compressed caller-owned decode by
+  roughly 49--66% and summary by about 37--48%, while the random/stored control
+  remains effectively neutral.

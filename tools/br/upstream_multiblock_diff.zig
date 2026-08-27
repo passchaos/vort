@@ -16,6 +16,7 @@ const Case = struct {
     min_compressed_blocks: ?usize = null,
     min_stored_blocks: usize = 0,
     allow_summary_unsupported: bool = false,
+    min_literal_context_trees: usize = 0,
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -58,6 +59,20 @@ pub fn main(init: std.process.Init) !void {
     const large_source = try std.Io.Dir.cwd().readFileAlloc(init.io, "src/br.zig", init.gpa, .limited(2 * 1024 * 1024));
     defer init.gpa.free(large_source);
     const large_source_chunks = [_][]const u8{ large_source[0 .. large_source.len / 4], large_source[large_source.len / 4 .. large_source.len / 2], large_source[large_source.len / 2 .. 3 * large_source.len / 4], large_source[3 * large_source.len / 4 ..] };
+    // A single large source meta-block makes libbrotli's higher-quality
+    // clustering exercise more than 32 literal trees. Keep this separate from
+    // the flushed case above: flush boundaries intentionally simplify each
+    // header.
+    const dictionary_bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, "src/br/dictionary.bin", init.gpa, .limited(128 * 1024));
+    defer init.gpa.free(dictionary_bytes);
+    const clustered_source = try init.gpa.alloc(u8, 1024 * 1024);
+    defer init.gpa.free(clustered_source);
+    for (clustered_source, 0..) |*byte, i| {
+        const segment = i / 1024;
+        const base = (segment * 3571) % dictionary_bytes.len;
+        byte.* = dictionary_bytes[(base + i % 1024) % dictionary_bytes.len];
+    }
+    const clustered_source_chunks = [_][]const u8{clustered_source};
     const tiny_prefix = "alpha alpha alpha alpha" ++
         "{\"kind\":\"tiny\",\"value\":1}\n" ++
         "beta beta beta beta";
@@ -76,6 +91,7 @@ pub fn main(init: std.process.Init) !void {
     const context_qualities = [_]u32{ 4, 5, 9, 11 };
     const compact_qualities = [_]u32{ 5, 9 };
     const quality_eleven = [_]u32{11};
+    const clustered_qualities = [_]u32{5};
     const all_modes = [_]u32{ 0, 1, 2 };
     const window_sweep = [_]u32{ 10, 16, 18, 20, 22, 24 };
     const cases = [_]Case{
@@ -89,6 +105,7 @@ pub fn main(init: std.process.Init) !void {
         .{ .name = "window-sweep", .chunks = &pattern_chunks, .expected = first_pattern ++ second_pattern ++ third_pattern, .qualities = &compact_qualities, .windows = &window_sweep },
         .{ .name = "history-wrap", .chunks = &long_text_chunks, .expected = long_text, .qualities = &compact_qualities },
         .{ .name = "large-source", .chunks = &large_source_chunks, .expected = large_source, .qualities = &compact_qualities, .windows = &.{20}, .lgblock = 18 },
+        .{ .name = "large-source-clustered", .chunks = &clustered_source_chunks, .expected = clustered_source, .qualities = &clustered_qualities, .windows = &.{20}, .lgblock = 16, .min_compressed_blocks = 1, .allow_summary_unsupported = true, .min_literal_context_trees = 65 },
         .{ .name = "large-source-quality-eleven", .chunks = &large_source_chunks, .expected = large_source, .qualities = &quality_eleven, .windows = &.{ 18, 20, 22, 24 }, .lgblock = 18, .allow_summary_unsupported = true },
         .{ .name = "far-history", .chunks = &far_history_chunks, .expected = far_history_expected, .qualities = &compact_qualities, .windows = &.{17}, .min_compressed_blocks = 1, .min_stored_blocks = 2 },
         .{ .name = "compressed-stored-compressed", .chunks = &transition_chunks, .expected = text ++ random[0..2048] ++ text, .qualities = &context_qualities, .min_compressed_blocks = 2, .min_stored_blocks = 1 },
@@ -122,8 +139,12 @@ pub fn main(init: std.process.Init) !void {
                     };
                     const summary = vort.brSummarizeStream(encoded) catch |err| {
                         if (case.allow_summary_unsupported and err == error.UnsupportedBrotliFeature) {
-                            const allocated_summary = try vort.brSummarizeStreamAlloc(init.gpa, encoded);
+                            const allocated_summary = vort.brSummarizeStreamAlloc(init.gpa, encoded) catch |allocated_err| {
+                                std.debug.print("{s} quality={d} mode={d} lgwin={d}: allocated summary {s}\n", .{ case.name, quality, mode, lgwin, @errorName(allocated_err) });
+                                return allocated_err;
+                            };
                             if (allocated_summary.decoded_bytes != case.expected.len) return error.SizeMismatch;
+                            try validateClusterCoverage(case, allocated_summary);
                             const decoded = try vort.brDecodeStreamAlloc(init.gpa, encoded);
                             defer init.gpa.free(decoded);
                             if (!std.mem.eql(u8, decoded, case.expected)) return error.SizeMismatch;
@@ -139,6 +160,7 @@ pub fn main(init: std.process.Init) !void {
                         return err;
                     };
                     const payload_blocks = summary.compressed_meta_block_count + summary.uncompressed_meta_block_count;
+                    try validateClusterCoverage(case, summary);
                     const min_compressed = case.min_compressed_blocks orelse case.chunks.len;
                     if (payload_blocks < case.chunks.len or
                         summary.compressed_meta_block_count < min_compressed or
@@ -184,6 +206,16 @@ pub fn main(init: std.process.Init) !void {
         .{ cases_run, summaries_unsupported, reference.version() },
     );
     try stdout.interface.flush();
+}
+
+fn validateClusterCoverage(case: Case, summary: vort.BrotliStreamSummary) !void {
+    if (summary.max_literal_context_trees < case.min_literal_context_trees) {
+        std.debug.print(
+            "{s}: expected literal context trees >= {d}, got {d}\n",
+            .{ case.name, case.min_literal_context_trees, summary.max_literal_context_trees },
+        );
+        return error.ReferenceEncodeFailed;
+    }
 }
 
 fn decodeByteProgressiveWithMetadata(allocator: std.mem.Allocator, encoded: []const u8, expected: []const u8, expected_metadata: []const u8, lgwin: u32) !void {
