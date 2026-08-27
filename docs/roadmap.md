@@ -7564,6 +7564,15 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   per sample preserve checksums and improve the 512 KiB `large_json` all-FSE/
   Huffman path by a paired median 10.8%, while the `binary_mixed` FSE/FSE/RLE
   path improves 2.3%; both candidates won all twelve pairs.
+  Repeat-offset selection now inlines its bounded three-entry queue update into
+  sequence decoding. The optimized profile had attributed about 2.4% of large-
+  JSON cycles to the remaining call boundary, while the raw-literal mixed-
+  binary path uses repeat selectors more heavily. Ten alternating fixed-CPU-8
+  pairs at 500 decodes per sample improve `binary_mixed` by a paired median
+  7.8% (10/10 wins) and keep `large_json` modestly positive at 0.7% (7/10).
+  An independent eight-pair sweep over all 13 reference rows retains matching
+  checksums, measures `binary_mixed` at 7.9%, and finds no material regression
+  elsewhere (the lowest median is -0.4%, within run noise).
   Single-tree literal-frequency collection now uses a 256-bit first-seen map,
   initializing only active byte counters while retaining O(1) updates. The
   ratio-only two-context candidate keeps dense histograms because both trees

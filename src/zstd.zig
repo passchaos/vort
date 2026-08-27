@@ -6669,7 +6669,7 @@ fn updateRepeatedOffsets(repeated_offsets: *[3]usize, offset: usize) void {
     repeated_offsets.* = .{ offset, previous_0, previous_1 };
 }
 
-fn useRepeatedOffset(repeated_offsets: *[3]usize, index: usize) Error!usize {
+inline fn useRepeatedOffset(repeated_offsets: *[3]usize, index: usize) Error!usize {
     switch (index) {
         0 => {},
         1 => std.mem.swap(usize, &repeated_offsets[0], &repeated_offsets[1]),
