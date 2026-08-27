@@ -9019,6 +9019,8 @@ fn searchMixedCandidateLookaheadPlans(
     literal_histogram.remove(covered);
     defer literal_histogram.add(covered);
 
+    if (cancelled) |flag| if (flag.load(.acquire)) return;
+
     // Treat "stop matching here and carry the remaining bytes as literals"
     // as one valid branch once there are enough sequences to form a mixed
     // block. Extra sequences are not free: their table state transitions and
@@ -9160,11 +9162,12 @@ fn mixedMatchCandidatesAtUncached(
         if (try duplicateMixedMatchCandidate(block, literal_start, duplicate_index, cancelled)) |candidate| {
             out[count] = candidate;
             count += 1;
+            if (cancelled) |flag| if (flag.load(.acquire)) return 0;
             // Also expose the match starting exactly at the current cursor.
             // The existing global-best candidate often skips useful bytes to
             // buy a longer match; lookahead needs both choices to avoid turning
             // those skipped bytes into literals across the whole plan.
-            if (try duplicateMixedMatchCandidateAtCursor(block, literal_start, duplicate_index)) |cursor_candidate| {
+            if (try duplicateMixedMatchCandidateAtCursor(block, literal_start, duplicate_index, cancelled)) |cursor_candidate| {
                 if (cursor_candidate.literal_end != candidate.literal_end or cursor_candidate.offset != candidate.offset) {
                     out[count] = cursor_candidate;
                     count += 1;
@@ -9173,6 +9176,7 @@ fn mixedMatchCandidatesAtUncached(
         }
     }
     if (allowed.repeated) {
+        if (cancelled) |flag| if (flag.load(.acquire)) return 0;
         if (repeatedMixedMatchCandidate(block, literal_start)) |candidate| {
             out[count] = candidate;
             count += 1;
@@ -9182,12 +9186,18 @@ fn mixedMatchCandidatesAtUncached(
     return count;
 }
 
-fn duplicateMixedMatchCandidateAtCursor(block: []const u8, literal_start: usize, duplicate_index: ?*DuplicateMatchIndex) Error!?MixedMatchCandidate {
+fn duplicateMixedMatchCandidateAtCursor(
+    block: []const u8,
+    literal_start: usize,
+    duplicate_index: ?*DuplicateMatchIndex,
+    cancelled: ?*const std.atomic.Value(bool),
+) Error!?MixedMatchCandidate {
     if (literal_start == 0 or literal_start + 8 > block.len) return null;
     var best: ?DuplicateMatch = null;
     if (duplicate_index) |index| {
         var candidate_index = index.hash_predecessors[literal_start];
         while (candidate_index != duplicate_index_invalid) {
+            if (cancelled) |flag| if (flag.load(.acquire)) return null;
             considerCursorDuplicateMatch(block, literal_start, candidate_index, &best);
             // The chain is newest first. A match reaching the block end has
             // the maximum possible length, and later nodes can only offer the
@@ -9222,7 +9232,7 @@ fn duplicateMixedMatchCandidateAtCursor(block: []const u8, literal_start: usize,
 }
 
 fn duplicateMixedMatchCandidateAtCursorScan(block: []const u8, literal_start: usize) Error!?MixedMatchCandidate {
-    return duplicateMixedMatchCandidateAtCursor(block, literal_start, null);
+    return duplicateMixedMatchCandidateAtCursor(block, literal_start, null, null);
 }
 
 fn considerCursorDuplicateMatch(block: []const u8, literal_start: usize, first: usize, best: *?DuplicateMatch) void {
@@ -12752,7 +12762,7 @@ test "zstd reusable duplicate index matches rebuilt search" {
         if (start_min != 0) {
             try std.testing.expectEqual(
                 try duplicateMixedMatchCandidateAtCursorScan(&payload, start_min),
-                try duplicateMixedMatchCandidateAtCursor(&payload, start_min, &index),
+                try duplicateMixedMatchCandidateAtCursor(&payload, start_min, &index, null),
             );
         }
     }
@@ -12770,11 +12780,11 @@ test "zstd reusable duplicate index matches rebuilt search" {
         if (start_min != 0) {
             try std.testing.expectEqual(
                 try duplicateMixedMatchCandidateAtCursorScan(repeated, start_min),
-                try duplicateMixedMatchCandidateAtCursor(repeated, start_min, &repeated_index),
+                try duplicateMixedMatchCandidateAtCursor(repeated, start_min, &repeated_index, null),
             );
         }
     }
-    const full_tail_match = (try duplicateMixedMatchCandidateAtCursor(repeated, 17, &repeated_index)) orelse return error.CorruptFrame;
+    const full_tail_match = (try duplicateMixedMatchCandidateAtCursor(repeated, 17, &repeated_index, null)) orelse return error.CorruptFrame;
     try std.testing.expectEqual(repeated.len - 17, full_tail_match.match_len);
     try std.testing.expectEqual(@as(usize, 8), full_tail_match.offset);
     try std.testing.expectEqual(try duplicateMixedMatchCandidateAtCursorScan(repeated, 17), full_tail_match);

@@ -7375,3 +7375,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   ReleaseFast CPU-8 A/B pairs retain the 640-byte level-9 JSON frame and reduce
   median end-to-end time from about 11.57 ms to 10.55 ms (about 8.8%); repetitive
   text is neutral and the mixed-binary control remains within about 1.2% noise.
+  Additional cancellation polls now bracket exact candidate scoring, cursor-
+  match discovery, and repeated-pattern discovery. They affect only a mixed
+  worker whose result has already become ineligible for publication. Twelve
+  fixed-CPU-8 pairs against the preceding commit keep the 80/640/8607-byte
+  text/JSON/binary frames while improving their medians by about 1.0%/0.6%/0.3%,
+  respectively. Together with cancellable indexed scans, the JSON improvement
+  over the pre-cancellation baseline is about 9.4%; the 9-row encode gate,
+  90-row stage gate, and 328-case system-zstd compatibility probe all pass.
