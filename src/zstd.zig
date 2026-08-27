@@ -5271,6 +5271,34 @@ fn copyLiteralsFromHuffmanState(
     if (state.decoded == section.regenerated_size) try state.cursor.expectEnd();
 }
 
+/// Decode one sequence literal run with the common full-width lookup kept in
+/// this loop. The generic state helper remains the cold path for a stream tail
+/// or malformed prefix and owns all four-stream boundary validation.
+inline fn copyLiteralsFromHuffmanStateFast(
+    state: *HuffmanLiteralDecodeState,
+    section: LiteralOnlySection,
+    literal_offset: usize,
+    dest: []u8,
+) Error!void {
+    if (literal_offset != state.decoded) return error.CorruptFrame;
+    if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < dest.len) return error.CorruptFrame;
+    for (dest) |*out| {
+        if (state.tree.max_bit_count != 0 and state.cursor.reader.available() >= state.tree.max_bit_count) {
+            const width = state.tree.max_bit_count;
+            const prefix = try state.cursor.reader.peekSmall(width);
+            if (state.lookup.lookup(prefix << @intCast(11 - width))) |entry| {
+                try state.cursor.reader.skip(entry.bit_count);
+                out.* = entry.symbol;
+                state.decoded += 1;
+                continue;
+            }
+        }
+        out.* = try readHuffmanLiteralSymbolFromCursorCold(&state.cursor, state.tree);
+        state.decoded += 1;
+    }
+    if (state.decoded == section.regenerated_size) try state.cursor.expectEnd();
+}
+
 fn validateHuffmanLiteralsConsumed(block: []const u8, section: LiteralOnlySection) Error!void {
     if (section.kind != .compressed and section.kind != .treeless) return;
     const huffman_tree = &(section.huffman_tree orelse return error.CorruptFrame);
@@ -6314,7 +6342,7 @@ noinline fn decodeAllFseHuffmanSequences(
 
         if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < literal_len) return error.CorruptFrame;
         if (output.len - written.* < literal_len) return error.OutputTooSmall;
-        try copyLiteralsFromHuffmanState(&huffman_state, section, literal_offset, output[written.*..][0..literal_len]);
+        try copyLiteralsFromHuffmanStateFast(&huffman_state, section, literal_offset, output[written.*..][0..literal_len]);
         written.* += literal_len;
         literal_offset += literal_len;
         try copyMatchFromHistory(output, written, frame_output_start, &.{}, match_offset, match_len);
@@ -6322,7 +6350,7 @@ noinline fn decodeAllFseHuffmanSequences(
     if (section.regenerated_size < literal_offset) return error.CorruptFrame;
     const last_literals = section.regenerated_size - literal_offset;
     if (output.len - written.* < last_literals) return error.OutputTooSmall;
-    try copyLiteralsFromHuffmanState(&huffman_state, section, literal_offset, output[written.*..][0..last_literals]);
+    try copyLiteralsFromHuffmanStateFast(&huffman_state, section, literal_offset, output[written.*..][0..last_literals]);
     written.* += last_literals;
     if (continuation.retainsState()) {
         frame_state.previous_tables = spec.tables();

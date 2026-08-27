@@ -7548,6 +7548,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   preserve every benchmark stream size and improve paired fast/balanced/ratio
   medians by about 11.5%/4.8%/4.4% for JSON, 7.5%/8.6%/5.9% for source, and
   9.9%/6.1%/7.3% for log.
+  The all-FSE/Huffman Zstd sequence decoder now keeps its full-width literal
+  lookup directly inside each literal-run loop, falling back to the existing
+  cold canonical decoder only at stream tails or invalid lookup prefixes. This
+  removes a helper boundary and repeated width dispatch from the dominant
+  libzstd-produced large-frame path without weakening four-stream validation.
+  Ten alternating ReleaseFast CPU-8 pairs preserve decoded checksums while
+  improving both 512 KiB `large_json` and `binary_mixed` caller-buffer decode
+  by about 2.0%.
   Single-tree literal-frequency collection now uses a 256-bit first-seen map,
   initializing only active byte counters while retaining O(1) updates. The
   ratio-only two-context candidate keeps dense histograms because both trees
