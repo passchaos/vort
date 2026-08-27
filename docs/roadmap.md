@@ -7509,3 +7509,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   mostly within about 2% of the prior build (with structured quality 4 about 4%
   faster); summary medians trade roughly 1--2% on most compressed rows for the
   broader bounded state.
+  ReleaseFast profiling of the planned Brotli encoder found dense scratch
+  clearing responsible for about 15.7% of balanced source samples, ahead of
+  compressed-header construction at about 7.8%. Literal-context histograms are
+  now initialized only when the selected wire candidate actually emits two
+  context trees; fast, balanced, and ordinary ratio candidates no longer clear
+  the unused 2 KiB array. Ten alternating fixed-CPU-8 A/B pairs preserve every
+  fast/balanced/ratio stream size and improve JSON by roughly 3.6%/3.0%/2.9%,
+  source by 3.5%/5.2%/3.6%, and log by 3.2%/3.6%/3.1%, respectively.

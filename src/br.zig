@@ -2022,7 +2022,11 @@ fn initPlannedLiteralEncoder(lengths: *const [256]u4, alphabet: *const command_p
 fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error!void {
     if (commands.len == 0) return error.InvalidBlockPlan;
     var literal_frequencies: [256]u32 = @splat(0);
-    var literal_context_frequencies: [2][256]u32 = @splat(@splat(0));
+    var literal_context_frequencies: [2][256]u32 = undefined;
+    // Fast and balanced encoding use one literal tree. Avoid clearing two
+    // additional dense histograms unless a ratio candidate requests context
+    // trees; the ordinary ratio path benefits too when it keeps one tree.
+    if (options.use_utf8_text_contexts) @memset(&literal_context_frequencies, @splat(0));
     var command_frequencies: [704]u32 = @splat(0);
     var distance_frequencies: [max_distance_alphabet_size]u32 = @splat(0);
     const frequency_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
