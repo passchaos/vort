@@ -7435,13 +7435,3 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   and binary from about 62.23 ms to 51.63 ms (1.21x); level 1 is unaffected and
   level 9 remains within roughly 1.5% noise. All encode, stage, CLI-compatibility,
   and native-frame gates continue to pass.
-  Adaptive split screening now applies to every compression level above the
-  existing 24 KiB audit threshold. The encoder first evaluates the larger split
-  and runs the smaller split only when splitting can at least tie the primary
-  frame; short inputs retain the full ladder because a boundary immediately
-  after the larger block can uniquely favor the smaller size. A deterministic
-  512-case level-3 audit preserves the aggregate frame hash. Twenty alternating
-  ReleaseFast CPU-8 A/B pairs retain the 80/640/8607-byte benchmark frames and
-  reduce two-encode level-3 JSON time from about 38.00 ms to 20.46 ms (46.2%)
-  and binary from about 51.75 ms to 25.11 ms (51.5%); level 1 and level 9 remain
-  within roughly 2% noise.
