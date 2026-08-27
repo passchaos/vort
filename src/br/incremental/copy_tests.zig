@@ -91,6 +91,38 @@ test "byte-progressive compressed copy decoder preserves contexts across meta-bl
     try drainSplit(encoded, "ab", &history, 1, 1);
 }
 
+test "byte-progressive copy decoder accepts stored and metadata first blocks" {
+    const stored_first = try br.IncrementalTestSupport.encodeStoredThenCompressedContext(std.testing.allocator);
+    defer std.testing.allocator.free(stored_first);
+    var history: [8]u8 = undefined;
+    try drainSplit(stored_first, "ab", &history, 1, 1);
+
+    const metadata = "leading metadata";
+    const metadata_first = try br.IncrementalTestSupport.encodeMetadataThenCompressedHello(std.testing.allocator, metadata);
+    defer std.testing.allocator.free(metadata_first);
+    var metadata_output: [metadata.len]u8 = undefined;
+    var lengths: [1]usize = undefined;
+    var decoder = br.IncrementalCopyStreamDecoder.initWithOptions(&history, .{
+        .expected_output_len = 5,
+        .metadata_output = &metadata_output,
+        .metadata_block_lengths = &lengths,
+    });
+    var output: [5]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(metadata_first.len, input_offset + 1);
+        const output_end = @min(output.len, output_offset + 1);
+        const step = try decoder.step(metadata_first[input_offset..input_end], output[output_offset..output_end]);
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+    }
+    try decoder.finish();
+    try std.testing.expectEqualSlices(u8, "hello", &output);
+    try std.testing.expectEqualSlices(u8, metadata, &metadata_output);
+    try std.testing.expectEqual(metadata.len, lengths[0]);
+}
+
 test "byte-progressive compressed copy decoder streams following stored blocks" {
     const encoded = try br.IncrementalTestSupport.encodeCompressedAlternatingThenStored(std.testing.allocator, 'x', 'y', 257, " tail");
     defer std.testing.allocator.free(encoded);

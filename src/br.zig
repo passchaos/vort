@@ -129,25 +129,6 @@ const IncrementalCopyCodec = struct {
         };
     }
 
-    pub fn parseHeader(prefix: []const u8) IncrementalCopyCodec.Error!ParsedHeader {
-        var reader = bitstream.BitReader.init(prefix);
-        try readWindowBits(&reader);
-        const final = try reader.readBits(u1, 1) != 0;
-        if (final and try reader.readBits(u1, 1) != 0) return error.UnsupportedBrotliFeature;
-        const mnibbles_code = try reader.readBits(u2, 2);
-        const mnibbles: usize = 4 + @as(usize, mnibbles_code);
-        if (mnibbles > 6) return error.UnsupportedBrotliFeature;
-        const len_minus_one = try reader.readBits(u32, @intCast(mnibbles * 4));
-        if (mnibbles > 4 and ((len_minus_one >> @intCast((mnibbles - 1) * 4)) & 0xf) == 0) return error.CorruptFrame;
-        const decoded_len = std.math.add(usize, len_minus_one, 1) catch return error.IntegerOverflow;
-        if (!final and try reader.readBits(u1, 1) != 0) return error.UnsupportedBrotliFeature;
-        const header = try readMinimalCompressedHeader(&reader);
-        return .{
-            .header = .{ .decoded_len = decoded_len, .compressed = header, .final = final },
-            .bits_read = reader.bitPosition(),
-        };
-    }
-
     pub fn readLiteral(header: *Header, reader: anytype, previous: u8, second_previous: u8) IncrementalCopyCodec.Error!u8 {
         try ensureLiteralBlockAny(&header.compressed, reader);
         const block_type = header.compressed.literal_block.current_type;
@@ -478,6 +459,40 @@ pub const IncrementalTestSupport = struct {
         try writer.writeBits(allocator, 0, 2); // MNIBBLES = 4
         try writer.writeBits(allocator, 0, 16); // MLEN - 1
         try writeMinimalCompressedHeaderForLiteralContextAfterStoredA(allocator, &writer);
+        return try encoded.toOwnedSlice(allocator);
+    }
+
+    pub fn encodeStoredThenCompressedContext(allocator: std.mem.Allocator) Error![]u8 {
+        var encoded: std.ArrayList(u8) = .empty;
+        errdefer encoded.deinit(allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeWindowBits(allocator, &writer, default_window_bits);
+        try writeUncompressedMetaBlock(allocator, &writer, "a");
+
+        try writer.writeBits(allocator, 1, 1); // ISLAST
+        try writer.writeBits(allocator, 0, 1); // ISLASTEMPTY = false
+        try writer.writeBits(allocator, 0, 2); // MNIBBLES = 4
+        try writer.writeBits(allocator, 0, 16); // MLEN - 1
+        try writeMinimalCompressedHeaderForLiteralContextAfterStoredA(allocator, &writer);
+        return try encoded.toOwnedSlice(allocator);
+    }
+
+    pub fn encodeMetadataThenCompressedHello(allocator: std.mem.Allocator, metadata: []const u8) Error![]u8 {
+        var encoded: std.ArrayList(u8) = .empty;
+        errdefer encoded.deinit(allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeWindowBits(allocator, &writer, default_window_bits);
+        try writeMetadataMetaBlock(allocator, &writer, metadata);
+        try writer.writeBits(allocator, 1, 1); // ISLAST
+        try writer.writeBits(allocator, 0, 1); // ISLASTEMPTY = false
+        try writer.writeBits(allocator, 0, 2); // MNIBBLES = 4
+        try writer.writeBits(allocator, 4, 16); // MLEN - 1
+        try writeMinimalCompressedHeaderForHello(allocator, &writer);
+        try writer.writeBits(allocator, 2, 2);
+        try writer.writeBits(allocator, 0, 2);
+        try writer.writeBits(allocator, 1, 2);
+        try writer.writeBits(allocator, 1, 2);
+        try writer.writeBits(allocator, 3, 2);
         return try encoded.toOwnedSlice(allocator);
     }
 

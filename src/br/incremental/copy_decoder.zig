@@ -10,7 +10,8 @@ pub fn Decoder(comptime Codec: type) type {
     return struct {
         options: Options,
         history: []u8,
-        phase: Phase = .header,
+        phase: Phase = .window,
+        window_state: WindowState = .first,
         header_bytes: [Codec.max_stream_header_bytes]u8 = undefined,
         header_len: usize = 0,
         header_bit_count: usize = 0,
@@ -44,7 +45,7 @@ pub fn Decoder(comptime Codec: type) type {
         total_output: usize = 0,
         finished: bool = false,
         last_error_name: []const u8 = "",
-        last_error_phase: Phase = .header,
+        last_error_phase: Phase = .window,
 
         const Self = @This();
         pub const Error = Codec.Error;
@@ -54,7 +55,8 @@ pub fn Decoder(comptime Codec: type) type {
             metadata_output: []u8 = &.{},
             metadata_block_lengths: []usize = &.{},
         };
-        pub const Phase = enum { header, compressed_header, command, literals, distance, copy, dictionary, trailer, stored, metadata, padding, done };
+        pub const Phase = enum { window, compressed_header, command, literals, distance, copy, dictionary, trailer, stored, metadata, padding, done };
+        const WindowState = enum { first, low3, tail };
         const NextHeaderState = enum { is_last, last_empty, nibbles, metadata_reserved, metadata_count, metadata_len, block_len, uncompressed, alignment };
         pub const Snapshot = struct {
             phase: Phase,
@@ -143,38 +145,41 @@ pub fn Decoder(comptime Codec: type) type {
             var output_written: usize = 0;
             defer self.total_input += input_read;
             while (true) switch (self.phase) {
-                .header => {
-                    while (input_read < input.len) {
-                        if (self.header_len == self.header_bytes.len) return self.fail(.header, error.UnsupportedBrotliFeature);
-                        self.header_bytes[self.header_len] = input[input_read];
-                        self.header_len += 1;
-                        self.header_bit_count += 8;
-                        input_read += 1;
-                        const parsed = Codec.parseHeader(self.header_bytes[0..self.header_len]) catch |err| switch (err) {
-                            error.TruncatedFrame => continue,
-                            else => return self.fail(.header, err),
-                        };
-                        if (parsed.header.decoded_len > self.options.max_output_len) return self.fail(.header, error.OutputLimitExceeded);
-                        if (self.options.expected_output_len) |expected| {
-                            if (parsed.header.final) {
-                                if (parsed.header.decoded_len != expected) return self.fail(.header, error.SizeMismatch);
-                            } else if (parsed.header.decoded_len > expected) return self.fail(.header, error.SizeMismatch);
-                        }
-                        if (self.history.len == 0) return self.fail(.header, error.OutputTooSmall);
-                        const byte_index = parsed.bits_read / 8;
-                        const bit_index: u3 = @intCast(parsed.bits_read % 8);
-                        const available_bits = self.header_len * 8 - parsed.bits_read;
-                        if (available_bits > 127) return self.fail(.header, error.CorruptFrame);
-                        self.staged_bits = if (available_bits == 0) 0 else @as(u128, self.header_bytes[byte_index]) >> bit_index;
-                        self.staged_bit_count = @intCast(available_bits);
-                        self.stream_bits = parsed.bits_read;
-                        self.header = parsed.header;
-                        self.decoded_len = parsed.header.decoded_len;
-                        self.final_meta_block = parsed.header.final;
-                        self.phase = .command;
-                        break;
-                    }
-                    if (self.phase == .header) return result(input_read, output_written, .need_input);
+                .window => {
+                    var reader = progressive_bits.Reader.init(input, &input_read, &self.staged_bits, &self.staged_bit_count, &self.stream_bits);
+                    while (self.phase == .window) switch (self.window_state) {
+                        .first => {
+                            const first = reader.readBits(u1, 1) catch |err| switch (err) {
+                                error.TruncatedFrame => return result(input_read, output_written, .need_input),
+                                else => return self.fail(.window, err),
+                            };
+                            if (first == 0) {
+                                self.phase = .trailer;
+                            } else {
+                                self.window_state = .low3;
+                            }
+                        },
+                        .low3 => {
+                            const low3 = reader.readBits(u3, 3) catch |err| switch (err) {
+                                error.TruncatedFrame => return result(input_read, output_written, .need_input),
+                                else => return self.fail(.window, err),
+                            };
+                            if (low3 == 0) {
+                                self.window_state = .tail;
+                            } else {
+                                self.phase = .trailer;
+                            }
+                        },
+                        .tail => {
+                            const tail = reader.readBits(u3, 3) catch |err| switch (err) {
+                                error.TruncatedFrame => return result(input_read, output_written, .need_input),
+                                else => return self.fail(.window, err),
+                            };
+                            if (tail == 1) return self.fail(.window, error.CorruptFrame);
+                            self.phase = .trailer;
+                        },
+                    };
+                    if (self.history.len == 0) return self.fail(.window, error.OutputTooSmall);
                 },
                 .compressed_header => {
                     while (true) {
