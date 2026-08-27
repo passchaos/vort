@@ -95,6 +95,15 @@ pub fn main(init: std.process.Init) !void {
     const distance_clustered_source = try std.Io.Dir.cwd().readFileAlloc(init.io, "src/deflate.zig", init.gpa, .limited(2 * 1024 * 1024));
     defer init.gpa.free(distance_clustered_source);
     const distance_clustered_chunks = [_][]const u8{distance_clustered_source};
+    // Local upstream/competitor checkouts are optional. When the neighboring
+    // Godot checkout is present, its large ufbx source provides a stable real-
+    // world header with 247 literal trees and 43 distance types/trees.
+    const external_cluster_source_path = "../../Work/godot/thirdparty/ufbx/ufbx.c";
+    const external_cluster_source = std.Io.Dir.cwd().readFileAlloc(init.io, external_cluster_source_path, init.gpa, .limited(2 * 1024 * 1024)) catch |err| switch (err) {
+        error.FileNotFound => null,
+        else => return err,
+    };
+    defer if (external_cluster_source) |source| init.gpa.free(source);
     const tiny_prefix = "alpha alpha alpha alpha" ++
         "{\"kind\":\"tiny\",\"value\":1}\n" ++
         "beta beta beta beta";
@@ -202,6 +211,33 @@ pub fn main(init: std.process.Init) !void {
                 }
             }
         }
+    }
+
+    if (external_cluster_source) |source| {
+        const chunks = [_][]const u8{source};
+        const external_case: Case = .{
+            .name = "external-large-source-clustered",
+            .chunks = &chunks,
+            .expected = source,
+            .qualities = &.{8},
+            .windows = &.{20},
+            .lgblock = 16,
+            .min_compressed_blocks = 1,
+            .min_literal_context_trees = 247,
+            .min_distance_block_types = 43,
+            .min_distance_context_trees = 43,
+        };
+        const encoded = try reference.encodeFlushedChunksWithOptionsAlloc(init.gpa, external_case.chunks, .{
+            .quality = 8,
+            .lgwin = 20,
+            .lgblock = 16,
+        });
+        defer init.gpa.free(encoded);
+        try decodeByteProgressive(init.gpa, encoded, source, 20);
+        const summary = try vort.brSummarizeStreamAlloc(init.gpa, encoded);
+        try validateClusterCoverage(external_case, summary);
+        if (summary.compressed_meta_block_count < 1) return error.ReferenceEncodeFailed;
+        cases_run += 1;
     }
 
     const metadata = "vort/libbrotli metadata boundary";

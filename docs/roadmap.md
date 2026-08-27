@@ -7502,8 +7502,10 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   4 KiB to 16 KiB. A second deterministic 1 MiB corpus forces libbrotli quality
   5 to emit 169 literal trees, and quality 8 coverage crosses the old distance
   limits; allocator summaries now report observed literal/distance maxima so
-  the 97-case upstream differential proves those shapes rather than merely
-  decoding them. Direct-to-header parsing keeps ordinary 12-case decode medians
+  the 99-case upstream differential proves those shapes rather than merely
+  decoding them. An optional local-upstream source row additionally reaches
+  247 literal trees and 43 distance types/trees when that checkout is present.
+  Direct-to-header parsing keeps ordinary 12-case decode medians
   mostly within about 2% of the prior build (with structured quality 4 about 4%
   faster); summary medians trade roughly 1--2% on most compressed rows for the
   broader bounded state.
