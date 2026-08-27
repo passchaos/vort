@@ -8702,9 +8702,14 @@ fn dictionaryMixedMatchCandidate(
     };
 }
 
-fn duplicateMixedMatchCandidate(block: []const u8, literal_start: usize, duplicate_index: ?*DuplicateMatchIndex) Error!?MixedMatchCandidate {
+fn duplicateMixedMatchCandidate(
+    block: []const u8,
+    literal_start: usize,
+    duplicate_index: ?*DuplicateMatchIndex,
+    cancelled: ?*const std.atomic.Value(bool),
+) Error!?MixedMatchCandidate {
     const best = if (duplicate_index) |index|
-        try findBestDuplicateMatchIndexed(block, literal_start, index)
+        try findBestDuplicateMatchIndexedCancellable(block, literal_start, index, cancelled)
     else
         try findBestDuplicateMatchIn(block, literal_start);
     if (best) |match| {
@@ -8780,17 +8785,19 @@ const MixedMatchCandidateCache = struct {
     slots: [mixed_candidate_cache_slot_count]u16 = @splat(mixed_candidate_cache_invalid),
     owned_duplicate_index: DuplicateMatchIndex = undefined,
     duplicate_index: ?*DuplicateMatchIndex = null,
+    cancelled: ?*const std.atomic.Value(bool) = null,
     len: usize = 0,
     lookup_count: usize = 0,
     hit_count: usize = 0,
 
-    fn initWithDuplicateIndex(duplicate_index: ?*DuplicateMatchIndex) MixedMatchCandidateCache {
+    fn initWithDuplicateIndex(duplicate_index: ?*DuplicateMatchIndex, cancelled: ?*const std.atomic.Value(bool)) MixedMatchCandidateCache {
         // Keep the large owned fallback index undefined. Initializing the
         // enclosing value with `.{}` can otherwise zero or copy megabytes of
         // dead storage before the externally prepared index is installed.
         var cache: MixedMatchCandidateCache = undefined;
         cache.slots = @splat(mixed_candidate_cache_invalid);
         cache.duplicate_index = duplicate_index;
+        cache.cancelled = cancelled;
         cache.len = 0;
         cache.lookup_count = 0;
         cache.hit_count = 0;
@@ -8807,6 +8814,7 @@ const MixedMatchCandidateCache = struct {
         out: []MixedMatchCandidate,
     ) Error!usize {
         if (out.len < mixed_candidates_per_position) return error.OutputTooSmall;
+        if (self.cancelled) |flag| if (flag.load(.acquire)) return 0;
         self.lookup_count += 1;
         const allowed_bits = @as(usize, @intFromBool(allowed.dictionary)) |
             (@as(usize, @intFromBool(allowed.duplicate)) << 1) |
@@ -8825,7 +8833,7 @@ const MixedMatchCandidateCache = struct {
             self.owned_duplicate_index.build(block);
             self.duplicate_index = &self.owned_duplicate_index;
         }
-        const count = try mixedMatchCandidatesAtUncached(dictionary, block, literal_start, frame_offset, allowed, self.duplicate_index, out);
+        const count = try mixedMatchCandidatesAtUncached(dictionary, block, literal_start, frame_offset, allowed, self.duplicate_index, self.cancelled, out);
         if (self.len < self.entries.len) {
             const entry_index: u16 = @intCast(self.len);
             self.entries[entry_index] = .{
@@ -8870,7 +8878,7 @@ fn bestMixedMatchLookaheadPlan(
 ) Error!?MixedMatchLookaheadPlan {
     if (match_search_budget == 0) return null;
     var first_candidates: [mixed_candidates_per_position]MixedMatchCandidate = undefined;
-    var candidate_cache = MixedMatchCandidateCache.initWithDuplicateIndex(duplicate_index);
+    var candidate_cache = MixedMatchCandidateCache.initWithDuplicateIndex(duplicate_index, cancelled);
     const first_count = try candidate_cache.candidatesAt(dictionary, block, 0, frame_offset, allowed, first_candidates[0..]);
     if (first_count == 0) return null;
 
@@ -9127,7 +9135,7 @@ fn mixedMatchCandidatesAt(
     // snapshot. The recursive planner passes an explicit MixedMatchCandidateCache
     // through its call tree so repeated positions share scan results; allocating a
     // fresh full-size cache here would only add stack pressure without reuse.
-    return try mixedMatchCandidatesAtUncached(dictionary, block, literal_start, frame_offset, allowed, null, out);
+    return try mixedMatchCandidatesAtUncached(dictionary, block, literal_start, frame_offset, allowed, null, null, out);
 }
 
 fn mixedMatchCandidatesAtUncached(
@@ -9137,6 +9145,7 @@ fn mixedMatchCandidatesAtUncached(
     frame_offset: usize,
     allowed: MixedMatchKindSet,
     duplicate_index: ?*DuplicateMatchIndex,
+    cancelled: ?*const std.atomic.Value(bool),
     out: []MixedMatchCandidate,
 ) Error!usize {
     if (out.len < mixed_candidates_per_position) return error.OutputTooSmall;
@@ -9148,7 +9157,7 @@ fn mixedMatchCandidatesAtUncached(
         }
     }
     if (allowed.duplicate) {
-        if (try duplicateMixedMatchCandidate(block, literal_start, duplicate_index)) |candidate| {
+        if (try duplicateMixedMatchCandidate(block, literal_start, duplicate_index, cancelled)) |candidate| {
             out[count] = candidate;
             count += 1;
             // Also expose the match starting exactly at the current cursor.
@@ -12366,11 +12375,19 @@ fn findBestDuplicateMatchIn(block: []const u8, start_min: usize) Error!?Duplicat
 }
 
 fn findBestDuplicateMatchIndexed(block: []const u8, start_min: usize, index: *DuplicateMatchIndex) Error!?DuplicateMatch {
+    return try findBestDuplicateMatchIndexedCancellable(block, start_min, index, null);
+}
+
+fn findBestDuplicateMatchIndexedCancellable(block: []const u8, start_min: usize, index: *DuplicateMatchIndex, cancelled: ?*const std.atomic.Value(bool)) Error!?DuplicateMatch {
     if (block.len < 24 or start_min + 16 > block.len) return null;
     var best: ?DuplicateMatch = null;
     var best_payload_len: usize = std.math.maxInt(usize);
     var second: usize = index.next_candidate_position[start_min];
     while (second != duplicate_index_invalid and second + 8 <= block.len) {
+        // The mixed worker's caller never observes a partial candidate after
+        // cancellation. Poll at candidate positions so a long suffix search
+        // does not delay joining a decisive non-mixed result.
+        if (cancelled) |flag| if (flag.load(.acquire)) return null;
         defer second = if (second + 1 < block.len) index.next_candidate_position[second + 1] else duplicate_index_invalid;
         if (best) |current| if (block.len - second < current.len) break;
         for (index.predecessors[second][0..index.predecessor_counts[second]], 0..) |candidate_index, age| {
@@ -12795,6 +12812,28 @@ test "zstd indexed raw literal shortcut preserves single-match score" {
             try singleMatchPayloadLenFromIndex(&payload, match, start_min, &index),
         );
     }
+}
+
+test "zstd indexed duplicate scan observes mixed cancellation" {
+    const payload = ("abcdefghijklmnop" ** 384) ++ ("xy" ** 64);
+    var index: DuplicateMatchIndex = undefined;
+    index.build(payload);
+
+    var cancelled: std.atomic.Value(bool) = .init(true);
+    try std.testing.expect(try findBestDuplicateMatchIndexedCancellable(payload, 0, &index, &cancelled) == null);
+
+    cancelled.store(false, .release);
+    try std.testing.expectEqual(
+        try findBestDuplicateMatchIndexed(payload, 0, &index),
+        try findBestDuplicateMatchIndexedCancellable(payload, 0, &index, &cancelled),
+    );
+
+    var cache = MixedMatchCandidateCache.initWithDuplicateIndex(&index, &cancelled);
+    var candidates: [mixed_candidates_per_position]MixedMatchCandidate = undefined;
+    const allowed: MixedMatchKindSet = .{ .duplicate = true, .repeated = true };
+    cancelled.store(true, .release);
+    try std.testing.expectEqual(@as(usize, 0), try cache.candidatesAt(&.{}, payload, 0, 0, allowed, candidates[0..]));
+    try std.testing.expectEqual(@as(usize, 0), cache.lookup_count);
 }
 
 fn duplicateMatchCannotBeat(candidate: DuplicateMatch, current: ?DuplicateMatch) bool {
@@ -17733,7 +17772,7 @@ test "zstd mixed match cache borrows a prepared duplicate index" {
     const payload = ("abcdefghijklmnop" ** 384) ++ ("xy" ** 64);
     var index: DuplicateMatchIndex = undefined;
     index.build(payload);
-    var cache = MixedMatchCandidateCache.initWithDuplicateIndex(&index);
+    var cache = MixedMatchCandidateCache.initWithDuplicateIndex(&index, null);
     try std.testing.expect(cache.duplicate_index.? == &index);
 
     var cached: [mixed_candidates_per_position]MixedMatchCandidate = undefined;
@@ -17741,7 +17780,7 @@ test "zstd mixed match cache borrows a prepared duplicate index" {
     const allowed: MixedMatchKindSet = .{ .duplicate = true, .repeated = true };
     const start: usize = 4097;
     const cached_count = try cache.candidatesAt(&.{}, payload, start, 0, allowed, &cached);
-    const expected_count = try mixedMatchCandidatesAtUncached(&.{}, payload, start, 0, allowed, &index, &expected);
+    const expected_count = try mixedMatchCandidatesAtUncached(&.{}, payload, start, 0, allowed, &index, null, &expected);
     try std.testing.expectEqual(expected_count, cached_count);
     try std.testing.expectEqualSlices(MixedMatchCandidate, expected[0..expected_count], cached[0..cached_count]);
 }

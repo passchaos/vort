@@ -7366,3 +7366,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   median ordinary alloc decode time from about 12.86 ms to 5.78 ms for 500
   iterations (2.23x), with direct caller-buffer decode neutral. The expanded
   12-case reference performance gate and 94-case multi-block differential pass.
+  Zstd's parallel mixed-search worker now observes cooperative cancellation
+  inside the indexed duplicate suffix scan, rather than only between recursive
+  lookahead nodes. Once the caller proves a non-mixed repeat-beam result is
+  decisively better, the worker stops at its next candidate position and never
+  publishes the partial plan. A pre-cancelled scan/cache oracle and the existing
+  24-case full-serial winner comparison pin that behavior. Twelve alternating
+  ReleaseFast CPU-8 A/B pairs retain the 640-byte level-9 JSON frame and reduce
+  median end-to-end time from about 11.57 ms to 10.55 ms (about 8.8%); repetitive
+  text is neutral and the mixed-binary control remains within about 1.2% noise.
