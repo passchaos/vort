@@ -6406,6 +6406,17 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   mixes remained identical. A whole-run source profile measured 2779.93 MiB/s
   versus local zlib-ng 2.3.90 at 2812.29 MiB/s, narrowing the remaining gap to
   about 1.2%.
+- Incremental fixed/best block publication now exchanges the bit writer's
+  completed-byte allocation with the pending-output queue instead of copying
+  every encoded block through a second `ArrayList`. The partial bit remains in
+  writer state, and the final alignment byte uses the existing append fallback
+  because it follows final-block publication in the same step. Seven
+  alternating CPU-8, 512-iteration binary A/B pairs kept identical 262184-byte
+  output and CRC mixes while improving median throughput from about 156.64 to
+  157.25 MiB/s (about 0.4%); structured text is effectively neutral because its
+  encoded blocks are only a few hundred bytes. Incremental raw-DEFLATE tests
+  cover tiny output, sync flush, final alignment, reset, direct/buffered input,
+  stored selection, and retained history with the exchanged ownership.
 - Added a byte-progressive raw-DEFLATE stored-block decoder under
   `src/deflate/incremental/decoder/`. It preserves split header state, streams
   payload directly caller-to-caller through tiny output, enforces exact/maximum

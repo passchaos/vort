@@ -97,15 +97,15 @@ const IncrementalFixedEncoderCodec = struct {
             try writeFixedTokens(allocator, state, plan.tokens, final);
             try matcher.observeUnindexedBlock(block.len, history.len);
         }
-        try drainWriterBytes(allocator, pending, state);
+        try publishIncrementalWriterBytes(allocator, pending, state);
     }
     pub fn writeSyncFlush(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) IncrementalFixedEncoderCodec.Error!void {
         try writeStoredBlock(allocator, state, "", false);
-        try drainWriterBytes(allocator, pending, state);
+        try publishIncrementalWriterBytes(allocator, pending, state);
     }
     pub fn finishState(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) IncrementalFixedEncoderCodec.Error!void {
         try state.alignToByte(allocator);
-        try drainWriterBytes(allocator, pending, state);
+        try publishIncrementalWriterBytes(allocator, pending, state);
     }
     pub fn chooseBlockLen(allocator: std.mem.Allocator, input: []const u8, options: IncrementalFixedEncoderCodec.CompressionOptions) IncrementalFixedEncoderCodec.Error!usize {
         _ = allocator;
@@ -114,10 +114,6 @@ const IncrementalFixedEncoderCodec = struct {
     }
     pub fn chooseLookaheadLen(allocator: std.mem.Allocator, input: []const u8, history: []const u8, target: usize, options: IncrementalFixedEncoderCodec.CompressionOptions) IncrementalFixedEncoderCodec.Error!usize {
         return try chooseTokenBoundaryWithLookahead(allocator, input, history, target, options);
-    }
-    fn drainWriterBytes(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) std.mem.Allocator.Error!void {
-        try pending.appendSlice(allocator, state.bytes.items);
-        state.bytes.clearRetainingCapacity();
     }
 };
 
@@ -144,7 +140,7 @@ const IncrementalBestEncoderCodec = struct {
             // forcing a full chain search for unrelated random data.
             try matcher.observeUnindexedBlock(block.len, history.len);
             try writeStoredBlock(allocator, state, block, final);
-            try drainWriterBytes(allocator, pending, state);
+            try publishIncrementalWriterBytes(allocator, pending, state);
             return;
         }
         if (rollingParser(options)) |parser| {
@@ -159,7 +155,7 @@ const IncrementalBestEncoderCodec = struct {
             try writeBestTokensBlock(allocator, state, block, plan.tokens, final, options);
             try matcher.observeUnindexedBlock(block.len, history.len);
         }
-        try drainWriterBytes(allocator, pending, state);
+        try publishIncrementalWriterBytes(allocator, pending, state);
     }
     pub fn writeSyncFlush(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) IncrementalBestEncoderCodec.Error!void {
         return IncrementalFixedEncoderCodec.writeSyncFlush(allocator, pending, state);
@@ -173,11 +169,22 @@ const IncrementalBestEncoderCodec = struct {
     pub fn chooseLookaheadLen(allocator: std.mem.Allocator, input: []const u8, history: []const u8, target: usize, options: IncrementalBestEncoderCodec.CompressionOptions) IncrementalBestEncoderCodec.Error!usize {
         return try chooseTokenBoundaryWithLookahead(allocator, input, history, target, options);
     }
-    fn drainWriterBytes(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *State) std.mem.Allocator.Error!void {
+};
+
+fn publishIncrementalWriterBytes(allocator: std.mem.Allocator, pending: *std.ArrayList(u8), state: *bitstream.BitWriter) std.mem.Allocator.Error!void {
+    // The stream state keeps its partial byte in scratch/bit_index; only
+    // complete bytes move to the pending-output queue. Swap the two owned
+    // buffers so normal block publication is O(1), while the previously
+    // drained pending allocation becomes the writer's buffer for the next
+    // block. Final-byte alignment follows final-block emission in the same
+    // step, so that one-byte tail must instead append to the pending block.
+    if (pending.items.len == 0) {
+        std.mem.swap(std.ArrayList(u8), pending, &state.bytes);
+    } else {
         try pending.appendSlice(allocator, state.bytes.items);
         state.bytes.clearRetainingCapacity();
     }
-};
+}
 
 pub const RawDeflateIncrementalBestEncoder = incremental_fixed_encoder.Encoder(IncrementalBestEncoderCodec);
 /// Internal instrumentation surface used by the staged DEFLATE benchmark.
