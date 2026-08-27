@@ -984,11 +984,35 @@ const LiteralHistory = struct {
             self.markUnknown();
             return;
         }
-        var i: usize = 0;
-        while (i < len) : (i += 1) {
-            const bytes = self.storage();
-            const source_index = (self.tail_start + self.tail_len - distance) % bytes.len;
-            self.push(bytes[source_index]);
+
+        // Copy through a small temporary so the ring needs only one modulo and
+        // at most two source spans per batch. Limiting the initial seed to the
+        // distance preserves Brotli's forward-overlap semantics; doubling that
+        // seed in scratch then expands short periodic matches in logarithmically
+        // many contiguous copies rather than one ring operation per output byte.
+        var scratch: [256]u8 = undefined;
+        var remaining = len;
+        while (remaining != 0) {
+            const batch_len = @min(remaining, scratch.len);
+            const seed_len = @min(distance, batch_len);
+            const ring = self.storage();
+            const source_index = (self.tail_start + self.tail_len - distance) % ring.len;
+            const first_len = @min(seed_len, ring.len - source_index);
+            @memcpy(scratch[0..first_len], ring[source_index..][0..first_len]);
+            @memcpy(scratch[first_len..seed_len], ring[0 .. seed_len - first_len]);
+
+            if (seed_len == 1) {
+                @memset(scratch[1..batch_len], scratch[0]);
+            } else {
+                var initialized = seed_len;
+                while (initialized < batch_len) {
+                    const take = @min(initialized, batch_len - initialized);
+                    @memcpy(scratch[initialized..][0..take], scratch[0..take]);
+                    initialized += take;
+                }
+            }
+            self.pushSlice(scratch[0..batch_len]);
+            remaining -= batch_len;
         }
     }
 
@@ -1045,14 +1069,55 @@ test "br summary history appends slices across ring boundaries" {
     try std.testing.expectEqual(@as(usize, 2), history.tail_start);
     try std.testing.expectEqualSlices(u8, "fgcde", &storage);
     history.copy(5, 5);
-    try std.testing.expectEqual(@as(usize, 2), history.tail_start);
-    try std.testing.expectEqualSlices(u8, "fgcde", &storage);
+    try std.testing.expectEqual(@as(usize, 0), history.tail_start);
+    try std.testing.expectEqualSlices(u8, "cdefg", &storage);
     try std.testing.expectEqual([2]u8{ 'f', 'g' }, history.previous);
 
     history.pushSlice("123456");
     try std.testing.expectEqual(@as(usize, 0), history.tail_start);
     try std.testing.expectEqualSlices(u8, "23456", &storage);
     try std.testing.expectEqual([2]u8{ '5', '6' }, history.previous);
+}
+
+test "br summary history copy matches forward overlap oracle" {
+    var storage: [31]u8 = undefined;
+    var history = LiteralHistory{ .external = &storage };
+    var expected: std.ArrayList(u8) = .empty;
+    defer expected.deinit(std.testing.allocator);
+
+    var state: u32 = 0x75a3_b19d;
+    for (0..500) |_| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        if (expected.items.len == 0 or state & 3 == 0) {
+            var literals: [19]u8 = undefined;
+            const literal_len = 1 + (state % literals.len);
+            for (literals[0..literal_len]) |*value| {
+                state = state *% 1_664_525 +% 1_013_904_223;
+                value.* = @truncate(state >> 16);
+            }
+            history.pushSlice(literals[0..literal_len]);
+            try expected.appendSlice(std.testing.allocator, literals[0..literal_len]);
+        } else {
+            const available = @min(expected.items.len, storage.len);
+            const distance = 1 + (state % available);
+            state = state *% 1_664_525 +% 1_013_904_223;
+            const copy_len = 1 + (state % 700);
+            for (0..copy_len) |_| {
+                try expected.append(std.testing.allocator, expected.items[expected.items.len - distance]);
+            }
+            history.copy(distance, copy_len);
+        }
+
+        const retained = @min(expected.items.len, storage.len);
+        for (0..retained) |i| {
+            const actual = storage[(history.tail_start + i) % storage.len];
+            try std.testing.expectEqual(expected.items[expected.items.len - retained + i], actual);
+        }
+        try std.testing.expectEqual(retained, history.tail_len);
+        try std.testing.expectEqual(expected.items[expected.items.len - 1], history.previous[1]);
+        if (expected.items.len >= 2)
+            try std.testing.expectEqual(expected.items[expected.items.len - 2], history.previous[0]);
+    }
 }
 
 pub fn encodeStoredStreamAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {

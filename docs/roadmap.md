@@ -7345,3 +7345,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   alternating ReleaseFast CPU-8 A/B pairs on the structured quality-11 stream
   reduce median decoded-size summary time by about 8.9%, while exact-size decode
   remains effectively neutral and decoded bytes stay identical.
+  Brotli summary match copies now seed a bounded scratch from at most two ring
+  spans, expand overlapping repetitions by doubling, and append each batch with
+  the contiguous history path. This replaces a modulo-heavy operation per output
+  byte while preserving RFC forward-copy overlap. A deterministic 500-operation
+  oracle compares retained ring contents against materialized output across
+  random literals, distances, lengths up to 700 bytes, and repeated wraps. Seven
+  alternating ReleaseFast CPU-8 A/B pairs on the structured quality-11 stream
+  reduce median decoded-size summary time from about 44.34 ms to 6.65 ms for 500
+  iterations (6.67x); exact-size decode improves about 2.2%, while direct decode
+  remains effectively neutral.
