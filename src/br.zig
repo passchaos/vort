@@ -2065,10 +2065,10 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     if (allZeroFrequencies(planned_distance_alphabet_size, &distance_frequencies)) distance_frequencies[0] = 1;
     if (io) |active| stats.frequency_ns = elapsedNs(frequency_start.?, active);
     const alphabet_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
-    var literal_alphabet = command_plan.PrefixAlphabetFor(256){};
+    var literal_alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
     var literal_context_alphabets: [2]command_plan.PrefixAlphabetFor(256) = undefined;
-    var command_alphabet = command_plan.PrefixAlphabet{};
-    var distance_alphabet = command_plan.PrefixAlphabetFor(planned_distance_alphabet_size){};
+    var command_alphabet: command_plan.PrefixAlphabet = undefined;
+    var distance_alphabet: command_plan.PrefixAlphabetFor(planned_distance_alphabet_size) = undefined;
     try command_plan.alphabetFromFrequenciesInto(256, &literal_alphabet, &literal_frequencies);
     if (options.use_utf8_text_contexts) for (&literal_context_alphabets, &literal_context_frequencies) |*alphabet, *frequencies| {
         if (allZeroFrequencies(256, frequencies)) frequencies[0] = 1;

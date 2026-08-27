@@ -179,6 +179,8 @@ pub fn alphabetFromFrequencies(comptime alphabet_size: usize, frequencies: *cons
 }
 
 pub fn alphabetFromFrequenciesInto(comptime alphabet_size: usize, alphabet: *PrefixAlphabetFor(alphabet_size), frequencies: *const [alphabet_size]u32) !void {
+    // `symbols` is scratch beyond `len`; callers may pass undefined storage so
+    // constructing several dense-alphabet plans does not clear unused tails.
     alphabet.len = 0;
     for (frequencies, 0..) |frequency, symbol| {
         if (frequency == 0) continue;
@@ -659,6 +661,16 @@ test "fused alphabet collection preserves frequency and symbol ordering" {
                 (frequencies[previous] == frequencies[current] and previous < current));
         }
     }
+}
+
+test "fused alphabet collection initializes undefined scratch" {
+    var alphabet: PrefixAlphabetFor(16) = undefined;
+    var frequencies: [16]u32 = @splat(0);
+    frequencies[3] = 7;
+    frequencies[9] = 11;
+    try alphabetFromFrequenciesInto(16, &alphabet, &frequencies);
+    try std.testing.expectEqual(@as(usize, 2), alphabet.len);
+    try std.testing.expectEqualSlices(u16, &.{ 9, 3 }, alphabet.symbols[0..alphabet.len]);
 }
 
 test "simple alphabet direct codes match canonical encoder" {

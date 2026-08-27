@@ -7533,3 +7533,10 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   ReleaseFast CPU-8 pairs preserve all benchmark stream sizes; median paired
   speedups are about 13.1%/8.7%/10.9% for fast JSON/source/log, 2.2%/7.2%/6.6%
   for balanced, and 0.9%/1.4%/6.0% for ratio.
+  Planner prefix alphabets now use undefined backing arrays because
+  `alphabetFromFrequenciesInto` always initializes `len` and every symbol below
+  it; unused tail entries are never observable. A focused test starts from
+  undefined storage and pins the complete active ordering. Ten alternating
+  ReleaseFast CPU-8 pairs preserve every fast/balanced/ratio benchmark size and
+  improve paired medians by about 3.6%/2.5%/2.8% for JSON, 1.7%/1.0%/0.5% for
+  source, and 3.7%/2.7%/2.9% for log, respectively.
