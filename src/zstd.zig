@@ -88,6 +88,11 @@ const decisive_mixed_dominance_ratio = 24;
 // fallback if a corpus benefits from the mixed family.
 const adaptive_split_match_search_budget_max: usize = 64;
 const deferred_adaptive_candidate_input_min = 24 * 1024;
+// Keep the smaller split in play when the larger screen narrowly trails the
+// primary. Generated level-3 auditing found a real smaller-split winner with a
+// 129-byte screen deficit; 256 bytes covers that case without paying the
+// expensive candidate on clearly noncompetitive frames.
+const deferred_adaptive_candidate_size_slack = 256;
 const repeated_pattern_period_max = 64;
 const repeated_pattern_start_scan = 48;
 const max_direct_huffman_symbol = 128;
@@ -3695,12 +3700,11 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
         var locked_allocator = LockedAllocator{ .child = allocator };
         const parallel_allocator = locked_allocator.allocator();
         const block_sizes = adaptiveLevelBlockSizes(level);
-        // At ratio-oriented levels the 8 KiB frame is a useful conservative
-        // screen for the more expensive 4 KiB frame. Beyond small inputs, the
-        // latter is only evaluated when the 8 KiB split can at least tie the
-        // primary frame. Small inputs retain the complete parallel ladder: a
-        // split immediately after 8 KiB can uniquely favor 4 KiB blocks.
-        const defer_smallest_candidate = (level == 1 or level >= 6) and input.len > deferred_adaptive_candidate_input_min;
+        // Beyond small inputs, evaluate the larger split before paying for the
+        // more expensive smaller split. Small inputs retain the complete
+        // parallel ladder because a boundary immediately after the larger
+        // block can uniquely favor the smaller block size.
+        const defer_smallest_candidate = input.len > deferred_adaptive_candidate_input_min;
         // The primary and split encoders are independent full-frame jobs. Put
         // the primary in the same worker set instead of running it on the
         // coordinator after starting the split workers. This lets the
@@ -3753,7 +3757,10 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
                     return err;
                 }
                 const result = candidate.result.?;
-                adaptive_competitive = adaptive_competitive or result.frame.len <= best.frame.len;
+                adaptive_competitive = adaptive_competitive or if (level >= 2 and level <= 5)
+                    adaptiveCandidateCanTriggerDeferred(result.frame.len, best.frame.len)
+                else
+                    result.frame.len <= best.frame.len;
                 if (result.frame.len < best.frame.len) {
                     parallel_allocator.free(best.frame);
                     best = result;
@@ -3991,6 +3998,11 @@ fn adaptiveLevelBlockSizes(level: c_int) [2]usize {
         3...5 => .{ 2 * 1024, 4 * 1024 },
         else => .{ 4 * 1024, 8 * 1024 },
     };
+}
+
+fn adaptiveCandidateCanTriggerDeferred(candidate_len: usize, best_len: usize) bool {
+    return candidate_len <= std.math.add(usize, best_len, deferred_adaptive_candidate_size_slack) catch
+        std.math.maxInt(usize);
 }
 
 fn adaptiveLevelCandidateOptions(primary: NativeFrameOptions, block_size: usize) NativeFrameOptions {
@@ -15552,6 +15564,9 @@ test "zstd adaptive candidates cap search at measured ratio plateau" {
     try std.testing.expectEqual(@as(usize, 64), level9.adaptive_match_search_budget);
     try std.testing.expectEqual(@as(usize, 128), level5.primary_options.match_search_budget);
     try std.testing.expectEqual(@as(usize, 96), level9.primary_options.match_search_budget);
+    try std.testing.expect(adaptiveCandidateCanTriggerDeferred(10_256, 10_000));
+    try std.testing.expect(!adaptiveCandidateCanTriggerDeferred(10_257, 10_000));
+    try std.testing.expect(adaptiveCandidateCanTriggerDeferred(std.math.maxInt(usize), std.math.maxInt(usize)));
     const split = adaptiveLevelCandidateOptions(level9.primary_options, level9.adaptive_block_sizes[0]);
     try std.testing.expectEqual(level9.adaptive_block_sizes[0], split.block_size_max);
     try std.testing.expectEqual(level9.adaptive_match_search_budget, split.match_search_budget);

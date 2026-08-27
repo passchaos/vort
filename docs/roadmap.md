@@ -7435,3 +7435,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   and binary from about 62.23 ms to 51.63 ms (1.21x); level 1 is unaffected and
   level 9 remains within roughly 1.5% noise. All encode, stage, CLI-compatibility,
   and native-frame gates continue to pass.
+  Levels 2--5 now use the existing deferred-smallest adaptive policy above
+  24 KiB, with a conservative 256-byte screen margin: the smaller split still
+  runs whenever the larger split is within that margin of the current best. A
+  1,024-case, 16-shape level-3 audit found 23 smaller-split winners; one required
+  the new margin because the 4 KiB screen trailed primary by 129 bytes, and none
+  fell outside 256 bytes. A separate 512-case end-to-end audit remains byte-
+  identical. Twenty-four alternating ReleaseFast CPU-8 pairs retain the locked
+  80/640/8607-byte frames and reduce two-encode level-3 JSON time from about
+  38.56 ms to 20.50 ms (46.8%) and binary from about 53.93 ms to 26.07 ms
+  (51.7%); levels 1 and 9 retain their prior screening and remain effectively
+  neutral on the long-running controls.
