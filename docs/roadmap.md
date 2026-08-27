@@ -7564,3 +7564,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   pin token statistics, exact wire bytes, and stable retained capacity. Ten
   alternating ReleaseFast CPU-8 pairs improve reusable balanced JSON/source/log
   encoding by about 14.9%/13.1%/7.0%, respectively, with identical sizes.
+  The reusable Brotli encoder now exposes `encodeScratchWithOptions`, extending
+  borrowed encoder-owned output from fast mode to balanced and ratio modes.
+  Small balanced blocks reuse parser, command, and output capacity; plans that
+  need exact short-match alternatives and one-shot ratio/large inputs copy only
+  the selected final stream into retained output. Level-wide wire/capacity tests
+  pin the borrowed-slice lifecycle. Ten alternating ReleaseFast CPU-8 pairs
+  improve balanced JSON/source/log over allocator-returning reuse by about
+  1.6%/1.7%/0.9%, respectively, with identical output sizes.

@@ -1695,27 +1695,62 @@ pub const PlannedStreamEncoder = struct {
     /// returned slice is invalidated by the next call or by `deinit`. This path
     /// avoids allocating an owned result once input/output capacities stabilize.
     pub fn encodeScratch(self: *PlannedStreamEncoder, input: []const u8) Error![]const u8 {
-        if (input.len > 32 * 1024) return error.InvalidBlockPlan;
+        return self.encodeScratchWithOptions(input, .{});
+    }
+
+    /// Encode into retained encoder-owned output. Fast and balanced reuse their
+    /// parser, command, and output capacity for small blocks; ratio keeps the
+    /// stable one-shot candidate selection and copies only its final winner.
+    /// The returned slice is invalidated by the next call or by `deinit`.
+    pub fn encodeScratchWithOptions(self: *PlannedStreamEncoder, input: []const u8, options: PlannedEncodeOptions) Error![]const u8 {
+        if (options.level == .ratio or input.len > 32 * 1024) {
+            const encoded = try encodePlannedStreamWithOptionsAlloc(self.allocator, input, options);
+            defer self.allocator.free(encoded);
+            self.output.clearRetainingCapacity();
+            try self.output.appendSlice(self.allocator, encoded);
+            return self.output.items;
+        }
         self.output.clearRetainingCapacity();
         if (input.len < 5) {
             try encodeStoredStreamAppend(self.allocator, &self.output, input);
             return self.output.items;
         }
-        const stats = try lz77.hashGreedyPlanAutoTinyScratchReuse(&self.tokens, &self.greedy_scratch, self.allocator, input, .{
-            .window_len = input.len,
-            .max_chain = 64,
-            .nice_len = 64,
-            .max_candidates = 8,
-            .min_match = 3,
-            .max_match = lz77.max_match_len,
-        });
+        const stats = switch (options.level) {
+            .fast => try lz77.hashGreedyPlanAutoTinyScratchReuse(&self.tokens, &self.greedy_scratch, self.allocator, input, .{
+                .window_len = input.len,
+                .max_chain = 64,
+                .nice_len = 64,
+                .max_candidates = 8,
+                .min_match = 3,
+                .max_match = lz77.max_match_len,
+            }),
+            .balanced => try lz77.lazyGreedyPlanTinyReuse(&self.tokens, self.allocator, input, .{
+                .window_len = input.len,
+                .max_chain = 64,
+                .nice_len = 64,
+                .max_candidates = 1,
+                .lazy_min_gain = 1,
+                .min_match = 3,
+                .max_match = lz77.max_match_len,
+            }),
+            .ratio => unreachable,
+        };
         if (stats.matches == 0) {
             try encodeStoredStreamAppend(self.allocator, &self.output, input);
             return self.output.items;
         }
         _ = try command_plan.buildTrustedReuse(&self.commands, self.allocator, input, self.tokens.items);
         var stats_out: encoder_stats.PlannedEncodeStats = .{};
-        try encodeCommandPlanWithOptionsAppend(self.allocator, &self.output, input, self.commands.items, null, &stats_out, .{});
+        const balanced_alternatives = options.level == .balanced and
+            ((self.commands.items.len == 2 and self.commands.items[0].has_copy and self.commands.items[0].dictionary_output_len == 0 and self.commands.items[0].copy_len == 3) or
+                short_match_candidates.collect(self.commands.items).len != 0);
+        if (balanced_alternatives) {
+            const encoded = try encodeLazyCommandPlanAlloc(self.allocator, input, self.commands.items, &stats_out, .{});
+            defer self.allocator.free(encoded);
+            try self.output.appendSlice(self.allocator, encoded);
+        } else {
+            try encodeCommandPlanWithOptionsAppend(self.allocator, &self.output, input, self.commands.items, null, &stats_out, .{});
+        }
         const stored_len = try encodedStoredStreamBound(input.len);
         if (self.output.items.len > stored_len) {
             self.output.clearRetainingCapacity();
@@ -7621,6 +7656,22 @@ test "br reusable planner retains encoded output scratch" {
     const decoded = try decodeStreamAlloc(std.testing.allocator, stored);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, incompressible, decoded);
+}
+
+test "br reusable planner exposes borrowed output for every level" {
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const payload = "pub fn update(state: *State, value: u32) void { state.total += value; state.count += 1; }\n" ** 40;
+    for ([_]PlannedCompressionLevel{ .fast, .balanced, .ratio }) |level| {
+        const expected = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .level = level });
+        defer std.testing.allocator.free(expected);
+        const first = try encoder.encodeScratchWithOptions(payload, .{ .level = level });
+        try std.testing.expectEqualSlices(u8, expected, first);
+        const retained = encoder.retainedCapacity();
+        const second = try encoder.encodeScratchWithOptions(payload, .{ .level = level });
+        try std.testing.expectEqualSlices(u8, expected, second);
+        try std.testing.expectEqual(retained, encoder.retainedCapacity());
+    }
 }
 
 test "br reusable planner encodes fast streams into caller storage" {
