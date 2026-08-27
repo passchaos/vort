@@ -42,6 +42,7 @@ const duplicate_hash_candidates = 8;
 const duplicate_index_max_input_len = std.math.maxInt(u16);
 const duplicate_exact_hash_table_len = duplicate_hash_table_len;
 const duplicate_exact_hash_input_max = 4096;
+const shared_duplicate_index_input_min = 1024;
 const duplicate_exact_key_table_len = 1 << 13;
 const mixed_candidates_per_position = 4;
 // The mixed planner's current search budget can reach at most 128 useful
@@ -7562,7 +7563,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeam(allocator: std.mem.Allocator, ou
     var optimal_scratch: lz77.OptimalScratch = .{};
     defer optimal_scratch.deinit(allocator);
     var duplicate_index: DuplicateMatchIndex = undefined;
-    const duplicate_index_ptr: ?*DuplicateMatchIndex = if (block.len > duplicate_exact_hash_input_max and block.len <= duplicate_index_max_input_len) blk: {
+    const duplicate_index_ptr: ?*DuplicateMatchIndex = if (block.len >= shared_duplicate_index_input_min and block.len <= duplicate_index_max_input_len) blk: {
         duplicate_index.build(block);
         break :blk &duplicate_index;
     } else null;
@@ -7754,8 +7755,9 @@ pub const NativeMatchStageScratch = struct {
 };
 
 /// Prepare the predecessor index shared by duplicate-aware benchmark stages.
-/// Returns false for blocks that use the exact small matcher or the unindexed
-/// oversized fallback, neither of which has a distinct setup phase.
+/// Returns false only for tiny blocks and the unindexed oversized fallback.
+/// At 1 KiB and above, one bounded predecessor index is cheaper than rebuilding
+/// the exact small-block hash for every multi-duplicate suffix query.
 pub fn benchmarkPrepareNativeMatchStageScratch(
     allocator: std.mem.Allocator,
     block: []const u8,
@@ -7764,7 +7766,7 @@ pub fn benchmarkPrepareNativeMatchStageScratch(
     scratch.duplicate_index_input_ptr = null;
     scratch.duplicate_index_input_len = 0;
     scratch.duplicate_index_fingerprint = 0;
-    if (block.len <= duplicate_exact_hash_input_max or block.len > duplicate_index_max_input_len) return false;
+    if (block.len < shared_duplicate_index_input_min or block.len > duplicate_index_max_input_len) return false;
     const index = scratch.duplicate_index orelse blk: {
         const allocated = try allocator.create(DuplicateMatchIndex);
         scratch.duplicate_index = allocated;
@@ -7787,7 +7789,7 @@ pub fn benchmarkInvalidateNativeMatchStageScratch(scratch: *NativeMatchStageScra
 }
 
 fn duplicateIndexInputFingerprint(block: []const u8) u64 {
-    std.debug.assert(block.len > duplicate_exact_hash_input_max);
+    std.debug.assert(block.len >= shared_duplicate_index_input_min);
     const first = std.mem.readInt(u64, block[0..8], .little);
     const middle_start = block.len / 2 - 4;
     const middle = std.mem.readInt(u64, block[middle_start..][0..8], .little);
@@ -7816,7 +7818,7 @@ pub fn benchmarkNativeMatchStage(
     scratch.candidate.clearRetainingCapacity();
 
     const duplicate_index: ?*DuplicateMatchIndex = if ((stage == .mixed or stage == .multi_duplicate or stage == .single_duplicate) and
-        block.len > duplicate_exact_hash_input_max and
+        block.len >= shared_duplicate_index_input_min and
         block.len <= duplicate_index_max_input_len)
     blk: {
         if (scratch.duplicate_index_input_ptr == null or
@@ -12345,6 +12347,10 @@ const DuplicateMatchIndex = struct {
     // suffix searches do not walk empty buckets byte by byte.
     next_candidate_position: [duplicate_index_max_input_len]u16 = undefined,
     hash_predecessors: [duplicate_index_max_input_len]u16 = undefined,
+    // Small-block exact matching walks a complete hash chain. Store its reverse
+    // traversal here so candidates retain the old earliest-first tie order
+    // without rebuilding an open-addressed table for every suffix query.
+    exact_chain: [duplicate_exact_hash_input_max]u16 = undefined,
     high_byte_count: u16 = 0,
     max_byte_frequency: u16 = 0,
 
@@ -12468,6 +12474,8 @@ fn findBestDuplicateMatchIndexed(block: []const u8, start_min: usize, index: *Du
 
 fn findBestDuplicateMatchIndexedCancellable(block: []const u8, start_min: usize, index: *DuplicateMatchIndex, cancelled: ?*const std.atomic.Value(bool)) Error!?DuplicateMatch {
     if (block.len < 24 or start_min + 16 > block.len) return null;
+    if (block.len <= duplicate_exact_hash_input_max)
+        return try findBestDuplicateMatchIndexedExact(block, start_min, index, cancelled);
     var best: ?DuplicateMatch = null;
     var best_payload_len: usize = std.math.maxInt(usize);
     var second: usize = index.next_candidate_position[start_min];
@@ -12495,6 +12503,44 @@ fn findBestDuplicateMatchIndexedCancellable(block: []const u8, start_min: usize,
             if (duplicateMatchCannotBeat(candidate, best)) continue;
             const candidate_payload_len = singleMatchPayloadLenFromIndex(block, candidate, start_min, index) catch continue;
             if (candidate_payload_len < best_payload_len or (candidate_payload_len == best_payload_len and len > (best orelse candidate).len)) {
+                var scored = candidate;
+                scored.payload_len = candidate_payload_len;
+                best = scored;
+                best_payload_len = candidate_payload_len;
+            }
+        }
+    }
+    return best;
+}
+
+fn findBestDuplicateMatchIndexedExact(block: []const u8, start_min: usize, index: *DuplicateMatchIndex, cancelled: ?*const std.atomic.Value(bool)) Error!?DuplicateMatch {
+    std.debug.assert(block.len <= duplicate_exact_hash_input_max);
+    var best: ?DuplicateMatch = null;
+    var best_payload_len: usize = std.math.maxInt(usize);
+    var second = start_min;
+    while (second + 8 <= block.len) : (second += 1) {
+        if (cancelled) |flag| if (flag.load(.acquire)) return null;
+        if (best) |current| if (block.len - second < current.len) break;
+
+        var chain_len: usize = 0;
+        var candidate_index = index.hash_predecessors[second];
+        while (candidate_index != duplicate_index_invalid) {
+            if (candidate_index < start_min) break;
+            index.exact_chain[chain_len] = candidate_index;
+            chain_len += 1;
+            candidate_index = index.hash_predecessors[candidate_index];
+        }
+        while (chain_len != 0) {
+            chain_len -= 1;
+            const first: usize = index.exact_chain[chain_len];
+            const len = duplicateMatchLength(block, first, second);
+            if (len < 8) continue;
+            const candidate: DuplicateMatch = .{ .first_start = first, .second_start = second, .len = len };
+            if (duplicateMatchCannotBeat(candidate, best)) continue;
+            const candidate_payload_len = singleMatchPayloadLenFrom(block, candidate, start_min) catch continue;
+            if (candidate_payload_len < best_payload_len or
+                (candidate_payload_len == best_payload_len and len > (best orelse candidate).len))
+            {
                 var scored = candidate;
                 scored.payload_len = candidate_payload_len;
                 best = scored;
@@ -12594,6 +12640,8 @@ fn findBestDuplicateMatchScanReference(block: []const u8, start_min: usize) Erro
 
 test "zstd exact small duplicate hash matches scan reference" {
     var payload: [768]u8 = undefined;
+    const reusable_index = try std.testing.allocator.create(DuplicateMatchIndex);
+    defer std.testing.allocator.destroy(reusable_index);
     const starts = [_]usize{ 0, 7, 93 };
     for (0..12) |seed| {
         var state: u32 = @intCast(0x9e37_79b9 + seed);
@@ -12607,11 +12655,13 @@ test "zstd exact small duplicate hash matches scan reference" {
         @memcpy(payload[240..296], payload[112..168]);
         @memcpy(payload[512..576], payload[320..384]);
         @memcpy(payload[640..704], payload[320..384]);
+        reusable_index.build(&payload);
 
         for (starts) |start_min| {
             const expected = try findBestDuplicateMatchScanReference(&payload, start_min);
             const actual = try findBestDuplicateMatchExactHashed(&payload, start_min);
             try std.testing.expectEqual(expected, actual);
+            try std.testing.expectEqual(expected, try findBestDuplicateMatchIndexed(&payload, start_min, reusable_index));
         }
     }
 }

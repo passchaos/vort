@@ -7413,3 +7413,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   JSON, and binary medians by about 1.7%, 2.0%, and 1.1%. Focused tests pin the
   exact raw and short-RLE sizes, and all Zstd encode/stage/compatibility gates
   continue to pass.
+  Zstd duplicate arbitration now builds the reusable predecessor index for
+  1--4 KiB blocks as well as larger blocks. Small-block queries retain exact
+  behavior by walking the complete predecessor chain in oldest-first order;
+  mixed, multi-duplicate, and single-duplicate candidates share that one build
+  instead of rebuilding an open-addressed exact table for every suffix. The
+  level-3 JSON stage profile drops 2/4 KiB multi-duplicate work from about
+  5.78/13.50 ms to 2.29/2.13 ms. Sixteen alternating ReleaseFast CPU-8 A/B
+  pairs retain the 80/640/8607-byte frames and improve level-3 JSON/binary
+  medians by about 41.1%/8.6%; level-9 remains effectively neutral. The exact
+  small matcher, reusable-index oracle, 9-row encode gate, 90-row stage gate,
+  328-case CLI probe, and 237-case frame probe all pass.

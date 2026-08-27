@@ -219,8 +219,7 @@ fn measureStagePass(
             .candidate => |candidate_stage| {
                 // Production shares this setup across mixed/multi/single. Keep
                 // it outside each family timer and report it as its own row.
-                if (block.len > 4096 and block.len <= std.math.maxInt(u16))
-                    _ = try vort.zstd.benchmarkPrepareNativeMatchStageScratch(allocator, block, scratch);
+                _ = try vort.zstd.benchmarkPrepareNativeMatchStageScratch(allocator, block, scratch);
                 const start = std.Io.Clock.awake.now(io);
                 const result = try vort.zstd.benchmarkNativeMatchStage(allocator, block, end == payload.len, search_budget, candidate_stage, scratch);
                 sample.ns +%= elapsed(start, io);
@@ -260,8 +259,7 @@ fn evaluateAllBlocks(
     while (offset < payload.len) {
         const end = @min(payload.len, offset + block_size);
         const block = payload[offset..end];
-        if (block.len > 4096 and block.len <= std.math.maxInt(u16))
-            _ = try vort.zstd.benchmarkPrepareNativeMatchStageScratch(allocator, block, scratch);
+        _ = try vort.zstd.benchmarkPrepareNativeMatchStageScratch(allocator, block, scratch);
         const result = try vort.zstd.benchmarkNativeMatchStage(allocator, block, end == payload.len, search_budget, stage, scratch);
         available_blocks += @intFromBool(result.available);
         encoded_len +%= result.encoded_len;
