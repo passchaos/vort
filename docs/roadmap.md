@@ -7461,3 +7461,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   2.6%/2.0%/4.1% and binary levels 1/3/9 by about 1.7%/3.1%/4.6%. Isolated
   index construction improves roughly 8--12%; duplicate search itself ranges
   from neutral to a small gain once the shared setup cost is excluded.
+  After the <=4 KiB multi-duplicate candidate was removed, those blocks no
+  longer had a second production consumer for the shared predecessor index.
+  They now use the standalone full-key exact matcher for the remaining single-
+  duplicate candidate, avoiding a roughly 0.7--1.1 ms index build per complete
+  32 KiB benchmark input. The exact/indexed oracle and 512-/1,024-case frame
+  audits preserve their hashes. Twenty-four alternating ReleaseFast CPU-8 pairs
+  retain the 80/640/8607-byte frames while improving level-3 JSON by about
+  9.9% and binary by about 3.9%; level 1 and level 9 remain within roughly 1.5%
+  noise.

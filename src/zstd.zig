@@ -46,7 +46,6 @@ const duplicate_hash_candidate_slot_bits = std.math.log2_int(usize, duplicate_ha
 const duplicate_index_max_input_len = std.math.maxInt(u16);
 const duplicate_exact_hash_table_len = duplicate_hash_table_len;
 const duplicate_exact_hash_input_max = 4096;
-const shared_duplicate_index_input_min = 1024;
 const duplicate_exact_key_table_len = 1 << 13;
 const mixed_candidates_per_position = 4;
 // The mixed planner's current search budget can reach at most 128 useful
@@ -7584,7 +7583,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeam(allocator: std.mem.Allocator, ou
     var optimal_scratch: lz77.OptimalScratch = .{};
     defer optimal_scratch.deinit(allocator);
     var duplicate_index: DuplicateMatchIndex = undefined;
-    const duplicate_index_ptr: ?*DuplicateMatchIndex = if (block.len >= shared_duplicate_index_input_min and block.len <= duplicate_index_max_input_len) blk: {
+    const duplicate_index_ptr: ?*DuplicateMatchIndex = if (block.len > duplicate_exact_hash_input_max and block.len <= duplicate_index_max_input_len) blk: {
         duplicate_index.build(block);
         break :blk &duplicate_index;
     } else null;
@@ -7782,9 +7781,8 @@ pub const NativeMatchStageScratch = struct {
 };
 
 /// Prepare the predecessor index shared by duplicate-aware benchmark stages.
-/// Returns false only for tiny blocks and the unindexed oversized fallback.
-/// At 1 KiB and above, one bounded predecessor index is cheaper than rebuilding
-/// the exact small-block hash for every multi-duplicate suffix query.
+/// Returns false for blocks handled by the standalone exact matcher or the
+/// unindexed oversized fallback, neither of which has a distinct setup phase.
 pub fn benchmarkPrepareNativeMatchStageScratch(
     allocator: std.mem.Allocator,
     block: []const u8,
@@ -7793,7 +7791,7 @@ pub fn benchmarkPrepareNativeMatchStageScratch(
     scratch.duplicate_index_input_ptr = null;
     scratch.duplicate_index_input_len = 0;
     scratch.duplicate_index_fingerprint = 0;
-    if (block.len < shared_duplicate_index_input_min or block.len > duplicate_index_max_input_len) return false;
+    if (block.len <= duplicate_exact_hash_input_max or block.len > duplicate_index_max_input_len) return false;
     const index = scratch.duplicate_index orelse blk: {
         const allocated = try allocator.create(DuplicateMatchIndex);
         scratch.duplicate_index = allocated;
@@ -7816,7 +7814,7 @@ pub fn benchmarkInvalidateNativeMatchStageScratch(scratch: *NativeMatchStageScra
 }
 
 fn duplicateIndexInputFingerprint(block: []const u8) u64 {
-    std.debug.assert(block.len >= shared_duplicate_index_input_min);
+    std.debug.assert(block.len > duplicate_exact_hash_input_max);
     const first = std.mem.readInt(u64, block[0..8], .little);
     const middle_start = block.len / 2 - 4;
     const middle = std.mem.readInt(u64, block[middle_start..][0..8], .little);
@@ -7845,7 +7843,7 @@ pub fn benchmarkNativeMatchStage(
     scratch.candidate.clearRetainingCapacity();
 
     const duplicate_index: ?*DuplicateMatchIndex = if ((stage == .mixed or stage == .multi_duplicate or stage == .single_duplicate) and
-        block.len >= shared_duplicate_index_input_min and
+        block.len > duplicate_exact_hash_input_max and
         block.len <= duplicate_index_max_input_len)
     blk: {
         if (scratch.duplicate_index_input_ptr == null or
@@ -12963,57 +12961,6 @@ test "zstd reusable duplicate index matches rebuilt search" {
     try std.testing.expectEqual(repeated.len - 17, full_tail_match.match_len);
     try std.testing.expectEqual(@as(usize, 8), full_tail_match.offset);
     try std.testing.expectEqual(try duplicateMixedMatchCandidateAtCursorScan(repeated, 17), full_tail_match);
-}
-
-test "zstd small reusable duplicate index preserves multi and single candidates" {
-    var payload: std.ArrayList(u8) = .empty;
-    defer payload.deinit(std.testing.allocator);
-    while (payload.items.len < 32 * 1024) {
-        var line: [128]u8 = undefined;
-        const i = payload.items.len / 64;
-        const text = try std.fmt.bufPrint(&line, "{{\"id\":{d},\"service\":\"vort\",\"message\":\"structured zstd encode corpus\"}}\n", .{i});
-        try payload.appendSlice(std.testing.allocator, text);
-    }
-
-    const index = try std.testing.allocator.create(DuplicateMatchIndex);
-    defer std.testing.allocator.destroy(index);
-    for ([_]usize{ 2048, 4096 }) |block_len| {
-        var offset: usize = 0;
-        while (offset < payload.items.len) : (offset += block_len) {
-            const block = payload.items[offset..@min(payload.items.len, offset + block_len)];
-            if (block.len < shared_duplicate_index_input_min) continue;
-            index.build(block);
-
-            var suffix_start: usize = 0;
-            while (suffix_start + 16 <= block.len) {
-                const expected_match = try findBestDuplicateMatchIn(block, suffix_start);
-                const actual_match = try findBestDuplicateMatchIndexed(block, suffix_start, index);
-                try std.testing.expectEqual(expected_match, actual_match);
-                const found = expected_match orelse break;
-                suffix_start = found.second_start + found.len;
-            }
-
-            var expected_multi: std.ArrayList(u8) = .empty;
-            defer expected_multi.deinit(std.testing.allocator);
-            var actual_multi: std.ArrayList(u8) = .empty;
-            defer actual_multi.deinit(std.testing.allocator);
-            try std.testing.expectEqual(
-                try emitMultiDuplicateMatchCompressedBlock(std.testing.allocator, &expected_multi, block, true, null),
-                try emitMultiDuplicateMatchCompressedBlock(std.testing.allocator, &actual_multi, block, true, index),
-            );
-            try std.testing.expectEqualSlices(u8, expected_multi.items, actual_multi.items);
-
-            var expected_single: std.ArrayList(u8) = .empty;
-            defer expected_single.deinit(std.testing.allocator);
-            var actual_single: std.ArrayList(u8) = .empty;
-            defer actual_single.deinit(std.testing.allocator);
-            try std.testing.expectEqual(
-                try emitSingleMatchCompressedBlock(std.testing.allocator, &expected_single, block, true, null),
-                try emitSingleMatchCompressedBlock(std.testing.allocator, &actual_single, block, true, index),
-            );
-            try std.testing.expectEqualSlices(u8, expected_single.items, actual_single.items);
-        }
-    }
 }
 
 test "zstd duplicate match retains its selected payload score" {
