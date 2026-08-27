@@ -9,7 +9,7 @@ COLUMNS = [
     "case", "reference_version", "input_bytes", "encoded_bytes",
     "iterations", "vort_ns", "reference_ns", "vort_mib_s",
     "reference_mib_s", "vort_over_reference", "checksum", "size_ns",
-    "exact_alloc_ns", "dictionary_cases",
+    "alloc_ns", "exact_alloc_ns", "dictionary_cases",
 ]
 CASES = {
     "tiny", "text", "structured", "repetitive", "random4k",
@@ -38,7 +38,7 @@ def main() -> int:
         for key in (
             "input_bytes", "encoded_bytes", "iterations", "vort_ns",
             "reference_ns", "checksum", "size_ns", "exact_alloc_ns",
-            "dictionary_cases",
+            "alloc_ns", "dictionary_cases",
         ):
             if int(row[key]) <= 0:
                 raise AssertionError(f"non-positive {key}: {row}")
@@ -65,6 +65,8 @@ def main() -> int:
     ):
         if int(by_case[name]["exact_alloc_ns"]) > int(by_case[name]["vort_ns"]) * 2:
             raise AssertionError(f"exact alloc regression {name}: {by_case[name]}")
+        if int(by_case[name]["alloc_ns"]) > int(by_case[name]["vort_ns"]) * 2:
+            raise AssertionError(f"alloc regression {name}: {by_case[name]}")
     print(f"br_reference_bench_gate=ok rows={len(rows)} reference_version={next(iter(versions))}")
     return 0
 

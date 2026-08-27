@@ -7355,3 +7355,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   reduce median decoded-size summary time from about 44.34 ms to 6.65 ms for 500
   iterations (6.67x); exact-size decode improves about 2.2%, while direct decode
   remains effectively neutral.
+  Ordinary allocator-returning Brotli decode now consumes each declared
+  meta-block length, grows its owned output under the caller's limit, and
+  decodes that block immediately. This removes the full summary/preflight pass
+  from `decodeStreamAlloc*`; caller-owned append APIs retain preflight so a
+  failed validation cannot change their logical output length. Shared meta-block
+  header parsing keeps the one-shot paths behaviorally aligned, and the
+  libbrotli reference benchmark now measures ordinary allocation separately.
+  Seven alternating ReleaseFast CPU-8 A/B pairs on structured quality-11 reduce
+  median ordinary alloc decode time from about 12.86 ms to 5.78 ms for 500
+  iterations (2.23x), with direct caller-buffer decode neutral. The expanded
+  12-case reference performance gate and 94-case multi-block differential pass.

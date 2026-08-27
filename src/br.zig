@@ -2360,8 +2360,43 @@ pub fn decodeStreamAlloc(allocator: std.mem.Allocator, stream: []const u8) Error
 pub fn decodeStreamAllocLimited(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize) Error![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(allocator);
-    _ = try decodeStreamAppendLimited(allocator, &out, stream, max_output_len);
-    return out.toOwnedSlice(allocator);
+
+    // Every non-metadata Brotli meta-block declares its exact decoded length
+    // before the payload. Grow the owned result at that boundary and decode it
+    // immediately, avoiding the former full summary pass plus second decode.
+    // Append APIs deliberately retain preflight because they promise not to
+    // change caller-owned output when validation fails.
+    var reader = bitstream.BitReader.init(stream);
+    const window_bits = try readWindowBitsValue(&reader);
+    var written: usize = 0;
+    var last_distances = initial_last_distances;
+    while (true) {
+        switch (try readStreamMetaBlockHeader(&reader)) {
+            .end => {
+                try ensureZeroPaddingAndEnd(reader);
+                std.debug.assert(written == out.items.len);
+                return out.toOwnedSlice(allocator);
+            },
+            .metadata => try skipMetadataMetaBlock(&reader),
+            .compressed => |header| {
+                const meta_block_end = try checkedDecodedEnd(written, header.decoded_len, max_output_len);
+                try out.resize(allocator, meta_block_end);
+                try processMinimalCompressedMetaBlock(&reader, out.items, &written, header.decoded_len, &last_distances, window_bits);
+                if (written != meta_block_end) return error.SizeMismatch;
+                if (header.final) {
+                    try ensureZeroPaddingAndEnd(reader);
+                    return out.toOwnedSlice(allocator);
+                }
+            },
+            .uncompressed => |meta_block_len| {
+                const meta_block_end = try checkedDecodedEnd(written, meta_block_len, max_output_len);
+                try out.resize(allocator, meta_block_end);
+                try consumeZeroPaddingToByte(&reader);
+                try reader.readAlignedBytes(out.items[written..meta_block_end]);
+                written = meta_block_end;
+            },
+        }
+    }
 }
 
 pub fn decodeStreamAllocExactSize(allocator: std.mem.Allocator, stream: []const u8, expected_output_len: usize) Error![]u8 {
@@ -2407,49 +2442,69 @@ pub fn decodeStreamAppendExactSize(allocator: std.mem.Allocator, out: *std.Array
     return written;
 }
 
+const StreamMetaBlockHeader = union(enum) {
+    end,
+    metadata,
+    compressed: struct {
+        decoded_len: usize,
+        final: bool,
+    },
+    uncompressed: usize,
+};
+
+fn readStreamMetaBlockHeader(reader: *bitstream.BitReader) Error!StreamMetaBlockHeader {
+    const final = try reader.readBits(u1, 1) == 1;
+    if (final and try reader.readBits(u1, 1) == 1) return .end;
+
+    const mnibbles_code = try reader.readBits(u2, 2);
+    const mnibbles: usize = switch (mnibbles_code) {
+        0b00 => 4,
+        0b01 => 5,
+        0b10 => 6,
+        0b11 => 0,
+    };
+    if (mnibbles == 0) return .metadata;
+
+    const len_minus_one = try reader.readBits(u32, @intCast(mnibbles * 4));
+    if (mnibbles > 4 and ((len_minus_one >> @intCast((mnibbles - 1) * 4)) & 0xf) == 0) return error.CorruptFrame;
+    const decoded_len = std.math.add(usize, len_minus_one, 1) catch return error.IntegerOverflow;
+    if (final) return .{ .compressed = .{ .decoded_len = decoded_len, .final = true } };
+    if (try reader.readBits(u1, 1) == 1) return .{ .uncompressed = decoded_len };
+    return .{ .compressed = .{ .decoded_len = decoded_len, .final = false } };
+}
+
+fn checkedDecodedEnd(written: usize, decoded_len: usize, max_output_len: usize) Error!usize {
+    const end = std.math.add(usize, written, decoded_len) catch return error.IntegerOverflow;
+    if (end > max_output_len) return error.OutputLimitExceeded;
+    return end;
+}
+
 pub fn decodeStreamInto(stream: []const u8, output: []u8) Error!usize {
     var reader = bitstream.BitReader.init(stream);
     const window_bits = try readWindowBitsValue(&reader);
     var written: usize = 0;
     var last_distances = initial_last_distances;
     while (true) {
-        const is_last = try reader.readBits(u1, 1) == 1;
-        if (is_last) {
-            const is_last_empty = try reader.readBits(u1, 1) == 1;
-            if (is_last_empty) {
+        switch (try readStreamMetaBlockHeader(&reader)) {
+            .end => {
                 try ensureZeroPaddingAndEnd(reader);
                 return written;
-            }
+            },
+            .metadata => try skipMetadataMetaBlock(&reader),
+            .compressed => |header| {
+                try processMinimalCompressedMetaBlock(&reader, output, &written, header.decoded_len, &last_distances, window_bits);
+                if (header.final) {
+                    try ensureZeroPaddingAndEnd(reader);
+                    return written;
+                }
+            },
+            .uncompressed => |meta_block_len| {
+                try consumeZeroPaddingToByte(&reader);
+                if (output.len - written < meta_block_len) return error.OutputTooSmall;
+                try reader.readAlignedBytes(output[written..][0..meta_block_len]);
+                written += meta_block_len;
+            },
         }
-
-        const mnibbles_code = try reader.readBits(u2, 2);
-        const mnibbles: usize = switch (mnibbles_code) {
-            0b00 => 4,
-            0b01 => 5,
-            0b10 => 6,
-            0b11 => 0,
-        };
-        if (mnibbles == 0) {
-            try skipMetadataMetaBlock(&reader);
-            continue;
-        }
-        const len_minus_one = try reader.readBits(u32, @intCast(mnibbles * 4));
-        if (mnibbles > 4 and ((len_minus_one >> @intCast((mnibbles - 1) * 4)) & 0xf) == 0) return error.CorruptFrame;
-        const meta_block_len = std.math.add(usize, len_minus_one, 1) catch return error.IntegerOverflow;
-        if (is_last) {
-            try processMinimalCompressedMetaBlock(&reader, output, &written, meta_block_len, &last_distances, window_bits);
-            try ensureZeroPaddingAndEnd(reader);
-            return written;
-        }
-        const is_uncompressed = try reader.readBits(u1, 1) == 1;
-        if (!is_uncompressed) {
-            try processMinimalCompressedMetaBlock(&reader, output, &written, meta_block_len, &last_distances, window_bits);
-            continue;
-        }
-        try consumeZeroPaddingToByte(&reader);
-        if (output.len - written < meta_block_len) return error.OutputTooSmall;
-        try reader.readAlignedBytes(output[written..][0..meta_block_len]);
-        written += meta_block_len;
     }
 }
 
@@ -6874,6 +6929,30 @@ test "br stored stream decodes multiple uncompressed meta-blocks" {
     const decoded = try decodeStreamAlloc(std.testing.allocator, encoded.items);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "br allocator decode enforces limits while decoding meta-blocks" {
+    var encoded: std.ArrayList(u8) = .empty;
+    defer encoded.deinit(std.testing.allocator);
+    var writer = BitWriter{ .out = &encoded };
+    try writeWindowBits(std.testing.allocator, &writer, 24);
+    try writeMetadataMetaBlock(std.testing.allocator, &writer, "ignored");
+    try writeUncompressedMetaBlock(std.testing.allocator, &writer, "first ");
+    try writeUncompressedMetaBlock(std.testing.allocator, &writer, "second");
+    try writer.writeBits(std.testing.allocator, 1, 1);
+    try writer.writeBits(std.testing.allocator, 1, 1);
+
+    const payload = "first second";
+    const decoded = try decodeStreamAllocLimited(std.testing.allocator, encoded.items, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+    try std.testing.expectError(error.OutputLimitExceeded, decodeStreamAllocLimited(std.testing.allocator, encoded.items, payload.len - 1));
+
+    var trailing = try std.ArrayList(u8).initCapacity(std.testing.allocator, encoded.items.len + 1);
+    defer trailing.deinit(std.testing.allocator);
+    try trailing.appendSlice(std.testing.allocator, encoded.items);
+    try trailing.append(std.testing.allocator, 0);
+    try std.testing.expectError(error.TrailingData, decodeStreamAlloc(std.testing.allocator, trailing.items));
 }
 
 test "br minimal compressed stream decodes literal-only final metablock" {
