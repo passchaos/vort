@@ -2031,7 +2031,9 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     // additional dense histograms unless a ratio candidate requests context
     // trees; the ordinary ratio path benefits too when it keeps one tree.
     if (options.use_utf8_text_contexts) @memset(&literal_context_frequencies, @splat(0));
-    var command_frequencies: [704]u32 = @splat(0);
+    var command_frequencies: [704]u32 = undefined;
+    var command_alphabet: command_plan.PrefixAlphabet = undefined;
+    command_alphabet.len = 0;
     var distance_frequencies: [planned_distance_alphabet_size]u32 = @splat(0);
     const frequency_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     var last_distances = initial_last_distances;
@@ -2040,7 +2042,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         const use_last_distance = recent_symbol == 0;
         const encoding = commandEntryForLengthsAndDistance(command.insert_len, command.copy_len, use_last_distance) orelse
             commandEntryForLengths(command.insert_len, command.copy_len) orelse return error.InvalidBlockPlan;
-        command_frequencies[encoding.symbol] += 1;
+        try command_alphabet.recordFrequency(&command_frequencies, encoding.symbol);
         for (input[command.insert_start..][0..command.insert_len], command.insert_start..) |literal, position| {
             literal_frequencies[literal] += 1;
             if (options.use_utf8_text_contexts) {
@@ -2067,14 +2069,13 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     const alphabet_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     var literal_alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
     var literal_context_alphabets: [2]command_plan.PrefixAlphabetFor(256) = undefined;
-    var command_alphabet: command_plan.PrefixAlphabet = undefined;
     var distance_alphabet: command_plan.PrefixAlphabetFor(planned_distance_alphabet_size) = undefined;
     try command_plan.alphabetFromFrequenciesInto(256, &literal_alphabet, &literal_frequencies);
     if (options.use_utf8_text_contexts) for (&literal_context_alphabets, &literal_context_frequencies) |*alphabet, *frequencies| {
         if (allZeroFrequencies(256, frequencies)) frequencies[0] = 1;
         try command_plan.alphabetFromFrequenciesInto(256, alphabet, frequencies);
     };
-    try command_plan.alphabetFromFrequenciesInto(704, &command_alphabet, &command_frequencies);
+    try command_alphabet.sortByFrequencies(&command_frequencies);
     try command_plan.alphabetFromFrequenciesInto(planned_distance_alphabet_size, &distance_alphabet, &distance_frequencies);
     stats.literal_symbol_count = literal_alphabet.len;
     stats.command_symbol_count = command_alphabet.len;

@@ -152,6 +152,40 @@ pub fn PrefixAlphabetFor(comptime capacity: usize) type {
                 (left_frequency == right_frequency and left_symbol < right_symbol);
         }
 
+        /// Increment one symbol without requiring the dense frequency array to
+        /// be zero-initialized. This is intended for small event streams such
+        /// as Brotli command plans, where the active set is much smaller than
+        /// the 704-symbol wire alphabet.
+        pub fn recordFrequency(self: *Self, frequencies: *[capacity]u32, symbol: usize) !void {
+            if (symbol >= capacity) return error.InvalidBlockPlan;
+            for (self.symbols[0..self.len]) |active_symbol| {
+                if (active_symbol != symbol) continue;
+                frequencies[symbol] += 1;
+                return;
+            }
+            if (self.len == capacity) return error.InvalidBlockPlan;
+            frequencies[symbol] = 1;
+            self.symbols[self.len] = @intCast(symbol);
+            self.len += 1;
+        }
+
+        /// Put a sparsely collected active set in the same deterministic order
+        /// produced by `alphabetFromFrequenciesInto`: descending frequency,
+        /// then ascending symbol for ties.
+        pub fn sortByFrequencies(self: *Self, frequencies: *const [capacity]u32) !void {
+            if (self.len == 0) return error.InvalidBlockPlan;
+            for (self.symbols[1..self.len], 1..) |symbol, i| {
+                const frequency = frequencies[symbol];
+                var index = i;
+                while (index != 0) : (index -= 1) {
+                    const previous = self.symbols[index - 1];
+                    if (!lessValue(symbol, frequency, previous, frequencies[previous])) break;
+                    self.symbols[index] = previous;
+                }
+                self.symbols[index] = symbol;
+            }
+        }
+
         fn fillTreeLengths(self: *const Self, frequencies: *const [capacity]u32, comptime compact_size: usize, lengths: *[capacity]u4) void {
             std.debug.assert(self.len <= compact_size);
             var compact_frequencies: [compact_size]u32 = @splat(0);
@@ -671,6 +705,23 @@ test "fused alphabet collection initializes undefined scratch" {
     try alphabetFromFrequenciesInto(16, &alphabet, &frequencies);
     try std.testing.expectEqual(@as(usize, 2), alphabet.len);
     try std.testing.expectEqualSlices(u16, &.{ 9, 3 }, alphabet.symbols[0..alphabet.len]);
+}
+
+test "sparse frequency collection matches dense alphabet ordering" {
+    var frequencies: [32]u32 = undefined;
+    var sparse: PrefixAlphabetFor(32) = undefined;
+    sparse.len = 0;
+    for ([_]u16{ 9, 4, 9, 7, 4, 9, 7 }) |symbol|
+        try sparse.recordFrequency(&frequencies, symbol);
+    try sparse.sortByFrequencies(&frequencies);
+
+    var dense_frequencies: [32]u32 = @splat(0);
+    for ([_]u16{ 9, 4, 9, 7, 4, 9, 7 }) |symbol| dense_frequencies[symbol] += 1;
+    var dense: PrefixAlphabetFor(32) = undefined;
+    try alphabetFromFrequenciesInto(32, &dense, &dense_frequencies);
+    try std.testing.expectEqualSlices(u16, dense.symbols[0..dense.len], sparse.symbols[0..sparse.len]);
+    for (sparse.symbols[0..sparse.len]) |symbol|
+        try std.testing.expectEqual(dense_frequencies[symbol], frequencies[symbol]);
 }
 
 test "simple alphabet direct codes match canonical encoder" {
