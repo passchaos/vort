@@ -6186,7 +6186,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   covered alongside the one-shot concatenated APIs.
   Regression coverage pins cumulative `max_output_len`, short/long exact sizes,
   EOF validation, and reset after an error so wrapper limits cannot silently
-  degrade into per-stream limits.
+  degrade into per-stream limits. Exhaustion of an exact cumulative output
+  pledge is reported as `SizeMismatch`, while a lower explicit safety cap
+  remains `OutputLimitExceeded`. The concatenated-gzip test adapter now
+  declares EOF with `finish()` after the last complete member instead of
+  repeatedly polling the intentionally resumable `between_members` state with
+  empty input; progress guards prevent future zero-progress regressions from
+  becoming unbounded test hangs.
 - Added bounded adaptive block sizing to the incremental best core. Full input
   windows use the existing stored/fixed/dynamic cost scorer and split policy to
   choose a shorter prefix, while buffering never exceeds `max_block_len`; raw,

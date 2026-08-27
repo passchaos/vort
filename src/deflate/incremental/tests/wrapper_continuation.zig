@@ -146,12 +146,14 @@ fn appendGzipBestMember(encoder: *deflate.GzipIncrementalBestEncoder, encoded: *
     var offset: usize = 0;
     while (offset < payload.len) {
         const result = try encoder.step(payload[offset..], &scratch);
+        if (result.progress.input_read == 0 and result.progress.output_written == 0) return error.InvalidBlockPlan;
         offset += result.progress.input_read;
         try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
     }
     encoder.finish();
     while (true) {
         const result = try encoder.step("", &scratch);
+        if (result.progress.input_read == 0 and result.progress.output_written == 0 and result.status != .done) return error.InvalidBlockPlan;
         try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
         if (result.status == .done) break;
     }
@@ -180,13 +182,14 @@ fn decodeGzipMembersTest(decoder: *deflate.GzipIncrementalDecoder, encoded: []co
     var output_offset: usize = 0;
     while (input_offset < encoded.len) {
         const result = try decoder.step(encoded[input_offset..], decoded[output_offset..]);
+        if (result.progress.input_read == 0 and result.progress.output_written == 0) return error.InvalidBlockPlan;
         input_offset += result.progress.input_read;
         output_offset += result.progress.output_written;
     }
-    while (decoder.snapshot().phase != .done) {
-        const result = try decoder.step("", decoded[output_offset..]);
-        output_offset += result.progress.output_written;
-    }
+    // Concatenated gzip has no in-band end marker after the last member. The
+    // decoder intentionally remains between_members until the caller declares
+    // EOF, so spinning step("") here can never make progress.
+    try decoder.finish();
     try std.testing.expectEqual(expected_len, output_offset);
     return decoded;
 }

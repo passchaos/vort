@@ -192,7 +192,7 @@ pub fn Decoder(comptime Codec: type) type {
                 },
                 .raw => {
                     const raw_input = if (input_read < input.len) input[input_read .. input_read + 1] else "";
-                    const raw_result = self.raw.step(raw_input, output[output_written..]) catch |err| return self.fail(.raw, err);
+                    const raw_result = self.raw.step(raw_input, output[output_written..]) catch |err| return self.failRaw(err);
                     input_read += raw_result.progress.input_read;
                     self.total_input += raw_result.progress.input_read;
                     if (raw_result.progress.output_written != 0) {
@@ -262,6 +262,20 @@ pub fn Decoder(comptime Codec: type) type {
         fn validateExpectedOutput(self: *Self) Error!void {
             if (self.options.expected_output_len) |expected|
                 if (self.total_output != expected) return self.fail(self.phase, error.SizeMismatch);
+        }
+        fn cumulativeLimitError(self: *const Self) Error {
+            if (self.options.expected_output_len) |expected| {
+                if (expected <= self.options.max_output_len) return error.SizeMismatch;
+            }
+            return error.OutputLimitExceeded;
+        }
+        fn failRaw(self: *Self, err: Error) Error {
+            // In concatenated mode the raw decoder's per-stream limit is the
+            // remaining cumulative allowance. Reaching a caller-pledged exact
+            // size is a size mismatch, not a configured safety-limit failure.
+            if (self.options.allow_concatenated and err == error.OutputLimitExceeded)
+                return self.fail(.raw, self.cumulativeLimitError());
+            return self.fail(.raw, err);
         }
         fn diagnosticStreamIndex(self: *const Self, phase: Phase) usize {
             if ((phase == .between_streams or phase == .done) and self.stream_count != 0) return self.stream_count - 1;
