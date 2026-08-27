@@ -7580,6 +7580,15 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   paired median 1.8%; an independent eight-pair 13-row sweep measures 2.1%
   (8/8 wins), keeps the FSE-heavy `huffman80k` row slightly positive, and finds
   no material regression while preserving every decoded checksum.
+  The two large compressed-FSE sequence loops now index their validated decode
+  tables without repeating three state-range branches per sequence. Initial
+  states are bounded by the table logs and every transition is produced by the
+  validated FSE entry; generic paths retain checked lookup for hostile states.
+  Twelve alternating fixed-CPU-8 pairs at 500 decodes improve `large_json` by
+  a paired median 0.9% (10/12 wins), with `binary_mixed` neutral and
+  `huffman80k` slightly positive. An independent eight-pair 13-row sweep
+  measures `large_json` at 1.7% (8/8) with matching checksums and no material
+  control-row regression.
   Single-tree literal-frequency collection now uses a 256-bit first-seen map,
   initializing only active byte counters while retaining O(1) updates. The
   ratio-only two-context candidate keeps dense histograms because both trees

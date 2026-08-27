@@ -5790,6 +5790,11 @@ const SequenceFseTable = struct {
         if (state >= self.len) return error.CorruptFrame;
         return self.entries[state];
     }
+
+    inline fn symbolUnchecked(self: *const SequenceFseTable, state: usize) SequenceSymbol {
+        std.debug.assert(state < self.len);
+        return self.entries[state];
+    }
 };
 
 const sequence_table_accuracy_log_max = struct {
@@ -6329,9 +6334,9 @@ noinline fn decodeAllFseHuffmanSequences(
     var huffman_state = initial_huffman;
     var literal_offset: usize = 0;
     while (state.remaining != 0) {
-        const ll_symbol = try spec.literal_fse.symbol(state.ll_state);
-        const of_symbol = try spec.offset_fse.symbol(state.of_state);
-        const ml_symbol = try spec.match_fse.symbol(state.ml_state);
+        const ll_symbol = spec.literal_fse.symbolUnchecked(state.ll_state);
+        const of_symbol = spec.offset_fse.symbolUnchecked(state.of_state);
+        const ml_symbol = spec.match_fse.symbolUnchecked(state.ml_state);
         const offset_extra = try state.reader.readSequenceField(of_symbol.additional_bits);
         const match_len = std.math.add(usize, ml_symbol.base, try state.reader.readSequenceField(ml_symbol.additional_bits)) catch return error.IntegerOverflow;
         const literal_len = std.math.add(usize, ll_symbol.base, try state.reader.readSequenceField(ll_symbol.additional_bits)) catch return error.IntegerOverflow;
@@ -6378,8 +6383,8 @@ noinline fn decodeFseFseRleSequences(
     var literal_offset: usize = 0;
     const ml_symbol = spec.match_rle orelse return error.CorruptFrame;
     while (state.remaining != 0) {
-        const ll_symbol = try spec.literal_fse.symbol(state.ll_state);
-        const of_symbol = try spec.offset_fse.symbol(state.of_state);
+        const ll_symbol = spec.literal_fse.symbolUnchecked(state.ll_state);
+        const of_symbol = spec.offset_fse.symbolUnchecked(state.of_state);
         const offset_extra = try state.reader.readSequenceField(of_symbol.additional_bits);
         const match_len = std.math.add(usize, ml_symbol.base, try state.reader.readSequenceField(ml_symbol.additional_bits)) catch return error.IntegerOverflow;
         const literal_len = std.math.add(usize, ll_symbol.base, try state.reader.readSequenceField(ll_symbol.additional_bits)) catch return error.IntegerOverflow;
