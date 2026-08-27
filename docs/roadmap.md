@@ -7452,3 +7452,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   equality test had exposed the stale zero-valued field; a focused assertion
   now independently recomputes and pins the returned score before this oracle
   is used to validate future matcher performance changes.
+  The bounded duplicate index now retains four recent predecessors per hash
+  instead of eight, halving both its predecessor and lazy match-length tables.
+  The repaired sentinel oracle, exact/indexed comparisons, a 512-case frame
+  hash audit, and a separate 1,024-case split-policy audit all preserve their
+  prior results. Twenty-four alternating ReleaseFast CPU-8 pairs retain the
+  80/640/8607-byte benchmark frames while improving JSON levels 1/3/9 by about
+  2.6%/2.0%/4.1% and binary levels 1/3/9 by about 1.7%/3.1%/4.6%. Isolated
+  index construction improves roughly 8--12%; duplicate search itself ranges
+  from neutral to a small gain once the shared setup cost is excluded.

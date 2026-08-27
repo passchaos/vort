@@ -38,7 +38,11 @@ const duplicate_hash_bits = 15;
 const duplicate_hash_table_len = 1 << duplicate_hash_bits;
 const duplicate_hash_invalid = std.math.maxInt(u32);
 const duplicate_index_invalid = std.math.maxInt(u16);
-const duplicate_hash_candidates = 8;
+// Four recent candidates per hash retain the current generated-corpus winners
+// while halving the predecessor and lazy match-length tables. This reduces the
+// index build's memory traffic for every duplicate-aware block.
+const duplicate_hash_candidates = 4;
+const duplicate_hash_candidate_slot_bits = std.math.log2_int(usize, duplicate_hash_candidates);
 const duplicate_index_max_input_len = std.math.maxInt(u16);
 const duplicate_exact_hash_table_len = duplicate_hash_table_len;
 const duplicate_exact_hash_input_max = 4096;
@@ -12396,7 +12400,7 @@ const DuplicateMatchIndex = struct {
             index.hash_predecessors[position] = latest[hash];
             latest[hash] = @intCast(position);
             const state = states[hash];
-            const count: usize = state >> 3;
+            const count: usize = state >> duplicate_hash_candidate_slot_bits;
             const next_slot: usize = state & (duplicate_hash_candidates - 1);
             index.predecessor_counts[position] = @intCast(count);
             for (0..count) |age| {
@@ -12407,7 +12411,7 @@ const DuplicateMatchIndex = struct {
             table[hash][next_slot] = @intCast(position);
             const updated_len = @min(count + 1, duplicate_hash_candidates);
             const updated_next = (next_slot + 1) & (duplicate_hash_candidates - 1);
-            states[hash] = @intCast((updated_len << 3) | updated_next);
+            states[hash] = @intCast((updated_len << duplicate_hash_candidate_slot_bits) | updated_next);
         }
         var next_position: u16 = duplicate_index_invalid;
         var position = block.len;
@@ -12797,13 +12801,13 @@ fn findBestDuplicateMatchHashed(block: []const u8, start_min: usize) Error!?Dupl
         const hash = duplicateHash8(block[index..][0..8]);
         const bucket = &table[hash];
         const bucket_state = bucket_states[hash];
-        const bucket_len: usize = bucket_state >> 3;
+        const bucket_len: usize = bucket_state >> duplicate_hash_candidate_slot_bits;
         const next_slot: usize = bucket_state & (duplicate_hash_candidates - 1);
         defer {
             bucket[next_slot] = @intCast(index);
             const updated_len = @min(bucket_len + 1, duplicate_hash_candidates);
             const updated_next = (next_slot + 1) & (duplicate_hash_candidates - 1);
-            bucket_states[hash] = @intCast((updated_len << 3) | updated_next);
+            bucket_states[hash] = @intCast((updated_len << duplicate_hash_candidate_slot_bits) | updated_next);
         }
 
         for (0..bucket_len) |age| {
