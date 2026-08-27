@@ -12937,6 +12937,15 @@ test "zstd small reusable duplicate index preserves multi and single candidates"
             if (block.len < shared_duplicate_index_input_min) continue;
             index.build(block);
 
+            var suffix_start: usize = 0;
+            while (suffix_start + 16 <= block.len) {
+                const expected_match = try findBestDuplicateMatchIn(block, suffix_start);
+                const actual_match = try findBestDuplicateMatchIndexed(block, suffix_start, index);
+                try std.testing.expectEqual(expected_match, actual_match);
+                const found = expected_match orelse break;
+                suffix_start = found.second_start + found.len;
+            }
+
             var expected_multi: std.ArrayList(u8) = .empty;
             defer expected_multi.deinit(std.testing.allocator);
             var actual_multi: std.ArrayList(u8) = .empty;
