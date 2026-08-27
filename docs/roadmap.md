@@ -7556,3 +7556,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   stream size and improve paired fast/balanced/ratio medians by about
   4.5%/4.1%/2.7% for JSON, 2.4%/4.2%/2.4% for source, and 3.2%/1.8%/2.4% for
   log.
+  `PlannedStreamEncoder` now retains token and command capacity for balanced
+  small-block encoding instead of delegating every call to the allocating
+  one-shot lazy planner. The reusable entry preserves the production scan/hash
+  selection and the balanced short-match wire arbitration; caller-buffer
+  encoding shares the same retained path. Cross-input parser and encoder tests
+  pin token statistics, exact wire bytes, and stable retained capacity. Ten
+  alternating ReleaseFast CPU-8 pairs improve reusable balanced JSON/source/log
+  encoding by about 14.9%/13.1%/7.0%, respectively, with identical sizes.

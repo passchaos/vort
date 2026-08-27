@@ -343,6 +343,15 @@ pub fn lazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
     return hashLazyGreedyPlanAlloc(allocator, input, options);
 }
 
+/// Reusable-token counterpart to `lazyGreedyPlanAlloc` for small blocks. It
+/// preserves the production scan-vs-hash policy while retaining the caller's
+/// token capacity across independent inputs.
+pub fn lazyGreedyPlanTinyReuse(tokens: *std.ArrayList(Token), allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
+    if (input.len > 32 * 1024) return error.InvalidBlockPlan;
+    if (preferScanLazy(input)) return scanLazyGreedyPlanReuse(tokens, allocator, input, options);
+    return hashLazyGreedyPlanTinyReuse(tokens, allocator, input, options);
+}
+
 pub fn hashGreedyPlanAllocWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: GreedyOptions) !GreedyPlan {
     const dict = activeDictionary(dictionary, options);
     if (dict.len == 0) return hashGreedyPlanAlloc(allocator, input, options);
@@ -483,6 +492,12 @@ fn preferScanLazy(input: []const u8) bool {
 fn scanLazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
     var tokens = try initTokenList(allocator, input.len);
     errdefer tokens.deinit(allocator);
+    const stats = try scanLazyGreedyPlanReuse(&tokens, allocator, input, options);
+    return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+}
+
+fn scanLazyGreedyPlanReuse(tokens: *std.ArrayList(Token), allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !PlanStats {
+    tokens.clearRetainingCapacity();
     var stats = PlanStats{};
 
     var pos: usize = 0;
@@ -511,7 +526,7 @@ fn scanLazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, opti
         pos += best.length;
     }
 
-    return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+    return stats;
 }
 
 fn hashLazyGreedyPlanAlloc(allocator: std.mem.Allocator, input: []const u8, options: GreedyOptions) !GreedyPlan {
@@ -2292,6 +2307,22 @@ test "reusable tiny lazy hash planner preserves tokens and capacity" {
     const capacity = tokens.capacity;
     _ = try hashLazyGreedyPlanTinyReuse(&tokens, std.testing.allocator, input, options);
     try std.testing.expectEqual(capacity, tokens.capacity);
+}
+
+test "reusable lazy planner preserves production scan and hash policies" {
+    const options = GreedyOptions{ .window_len = 32 * 1024, .max_chain = 64, .nice_len = 64, .max_candidates = 1, .lazy_min_gain = 1, .min_match = 3, .max_match = max_match_len };
+    var tokens: std.ArrayList(Token) = .empty;
+    defer tokens.deinit(std.testing.allocator);
+    for ([_][]const u8{
+        "abcabcabcabc" ** 128,
+        "pub fn update(state: *State, value: u32) void { state.total += value; }\n" ** 40,
+    }) |input| {
+        const reference = try lazyGreedyPlanAlloc(std.testing.allocator, input, options);
+        defer reference.deinit(std.testing.allocator);
+        const stats = try lazyGreedyPlanTinyReuse(&tokens, std.testing.allocator, input, options);
+        try expectEqualTokenSlices(reference.tokens, tokens.items);
+        try std.testing.expectEqual(reference.stats, stats);
+    }
 }
 
 test "automatic hash anchor selects four-byte planner and round trips" {

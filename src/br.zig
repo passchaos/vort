@@ -1646,28 +1646,41 @@ pub const PlannedStreamEncoder = struct {
         return self.encodeWithOptionsAlloc(allocator, input, .{});
     }
 
-    /// Encode through the stable level API while retaining the fast level's
-    /// token and command capacity. Balanced and ratio currently delegate to
-    /// their production one-shot planners so behavior stays identical until
-    /// their larger parser scratch is made reusable as well.
+    /// Encode through the stable level API while retaining token and command
+    /// capacity for the fast and balanced small-block planners. Ratio and large
+    /// inputs retain their one-shot paths because they need wider search state.
     pub fn encodeWithOptionsAlloc(self: *PlannedStreamEncoder, allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
-        if (options.level != .fast) {
+        if (options.level == .ratio or input.len > 32 * 1024) {
             return encodePlannedStreamWithOptionsAlloc(allocator, input, options);
         }
-        if (input.len > 32 * 1024) return encodePlannedStreamWithOptionsAlloc(allocator, input, options);
         if (input.len < 5) return encodeStoredStreamAlloc(allocator, input);
-        const stats = try lz77.hashGreedyPlanAutoTinyScratchReuse(&self.tokens, &self.greedy_scratch, self.allocator, input, .{
-            .window_len = input.len,
-            .max_chain = 64,
-            .nice_len = 64,
-            .max_candidates = 8,
-            .min_match = 3,
-            .max_match = lz77.max_match_len,
-        });
+        const stats = switch (options.level) {
+            .fast => try lz77.hashGreedyPlanAutoTinyScratchReuse(&self.tokens, &self.greedy_scratch, self.allocator, input, .{
+                .window_len = input.len,
+                .max_chain = 64,
+                .nice_len = 64,
+                .max_candidates = 8,
+                .min_match = 3,
+                .max_match = lz77.max_match_len,
+            }),
+            .balanced => try lz77.lazyGreedyPlanTinyReuse(&self.tokens, self.allocator, input, .{
+                .window_len = input.len,
+                .max_chain = 64,
+                .nice_len = 64,
+                .max_candidates = 1,
+                .lazy_min_gain = 1,
+                .min_match = 3,
+                .max_match = lz77.max_match_len,
+            }),
+            .ratio => unreachable,
+        };
         if (stats.matches == 0) return encodeStoredStreamAlloc(allocator, input);
         _ = try command_plan.buildTrustedReuse(&self.commands, self.allocator, input, self.tokens.items);
         var stats_out: encoder_stats.PlannedEncodeStats = .{};
-        const compressed = try encodeCommandPlanAlloc(allocator, input, self.commands.items, null, &stats_out);
+        const compressed = if (options.level == .balanced)
+            try encodeLazyCommandPlanAlloc(allocator, input, self.commands.items, &stats_out, .{})
+        else
+            try encodeCommandPlanAlloc(allocator, input, self.commands.items, null, &stats_out);
         return chooseStoredIfSmaller(allocator, input, compressed);
     }
 
@@ -1722,7 +1735,9 @@ pub const PlannedStreamEncoder = struct {
         const needed = try encodedPlannedStreamBoundWithOptions(input.len, options);
         if (output.len < needed) return error.OutOfMemory;
         if (options.level != .fast) {
-            const encoded = try encodePlannedStreamWithOptionsAlloc(self.allocator, input, options);
+            // Route balanced through this encoder's retained token/command
+            // buffers; ratio still delegates inside encodeWithOptionsAlloc.
+            const encoded = try self.encodeWithOptionsAlloc(self.allocator, input, options);
             defer self.allocator.free(encoded);
             @memcpy(output[0..encoded.len], encoded);
             return encoded.len;
@@ -7661,6 +7676,23 @@ test "br planned levels encode into caller storage" {
     }
 }
 
+test "br balanced caller storage retains reusable planner state" {
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const payload = "pub fn update(state: *State, value: u32) void { state.total += value; state.count += 1; }\n" ** 40;
+    const expected = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .level = .balanced });
+    defer std.testing.allocator.free(expected);
+    const output = try std.testing.allocator.alloc(u8, try encodedPlannedStreamBoundWithOptions(payload.len, .{ .level = .balanced }));
+    defer std.testing.allocator.free(output);
+
+    const first_written = try encoder.encodeIntoWithOptions(payload, output, .{ .level = .balanced });
+    try std.testing.expectEqualSlices(u8, expected, output[0..first_written]);
+    const retained = encoder.retainedCapacity();
+    const second_written = try encoder.encodeIntoWithOptions(payload, output, .{ .level = .balanced });
+    try std.testing.expectEqualSlices(u8, expected, output[0..second_written]);
+    try std.testing.expectEqual(retained, encoder.retainedCapacity());
+}
+
 test "br reusable planner exposes stable levels and stored fallback" {
     var encoder = PlannedStreamEncoder.init(std.testing.allocator);
     defer encoder.deinit();
@@ -7679,6 +7711,26 @@ test "br reusable planner exposes stable levels and stored fallback" {
         const decoded = try decodeStreamAlloc(std.testing.allocator, stored);
         defer std.testing.allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, incompressible, decoded);
+    }
+}
+
+test "br reusable planner retains balanced token and command capacity" {
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const inputs = [_][]const u8{
+        "{\"kind\":\"event\",\"active\":true,\"values\":[1,2,3,5,8,13]}\n" ** 48,
+        "pub fn update(state: *State, value: u32) void { state.total += value; state.count += 1; }\n" ** 40,
+        "2026-08-21T02:00:00Z level=info service=vort request=compress status=ok bytes=4096\n" ** 40,
+    };
+    var retained: usize = 0;
+    for (inputs, 0..) |input, index| {
+        const expected = try encodePlannedStreamWithOptionsAlloc(std.testing.allocator, input, .{ .level = .balanced });
+        defer std.testing.allocator.free(expected);
+        const actual = try encoder.encodeWithOptionsAlloc(std.testing.allocator, input, .{ .level = .balanced });
+        defer std.testing.allocator.free(actual);
+        try std.testing.expectEqualSlices(u8, expected, actual);
+        if (index != 0) try std.testing.expect(encoder.retainedCapacity() >= retained);
+        retained = encoder.retainedCapacity();
     }
 }
 
