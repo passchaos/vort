@@ -900,12 +900,17 @@ const LiteralHistory = struct {
     tail: [planner_max_backward_distance]u8 = @splat(0),
     tail_len: usize = 0,
     tail_start: usize = 0,
-    known: bool = true,
+    // The implicit bytes before stream start are zero, so both context bytes
+    // begin known. A copy beyond this bounded summary history invalidates them;
+    // two subsequently decoded literals are required to restore both values.
+    known_suffix_len: u2 = 2,
 
     fn context(self: *const LiteralHistory, header: *const MinimalCompressedHeader) Error!usize {
-        if (!self.known) return contextIndependentLiteralContext(header) orelse error.UnsupportedBrotliFeature;
+        const mode = header.literal_context_modes[header.literal_block.current_type];
+        const needed: u2 = if (mode <= 1) 1 else 2;
+        if (self.known_suffix_len < needed) return contextIndependentLiteralContext(header) orelse error.UnsupportedBrotliFeature;
         return try literalContextFromMode(
-            header.literal_context_modes[header.literal_block.current_type],
+            mode,
             self.previous[1],
             self.previous[0],
         );
@@ -921,7 +926,7 @@ const LiteralHistory = struct {
             self.tail[self.tail_start] = value;
             self.tail_start = (self.tail_start + 1) % self.tail.len;
         }
-        self.known = true;
+        self.known_suffix_len = @min(2, self.known_suffix_len + 1);
     }
 
     fn pushSlice(self: *LiteralHistory, bytes: []const u8) void {
@@ -930,9 +935,9 @@ const LiteralHistory = struct {
     }
 
     fn copy(self: *LiteralHistory, distance: usize, len: usize) void {
-        if (!self.known or len == 0) return;
+        if (self.known_suffix_len < 2 or len == 0) return;
         if (distance == 0 or distance > self.tail_len) {
-            self.known = false;
+            self.markUnknown();
             return;
         }
         var i: usize = 0;
@@ -943,7 +948,7 @@ const LiteralHistory = struct {
     }
 
     fn markUnknown(self: *LiteralHistory) void {
-        self.known = false;
+        self.known_suffix_len = 0;
         self.tail_len = 0;
         self.tail_start = 0;
     }
@@ -958,6 +963,16 @@ fn contextIndependentLiteralContext(header: *const MinimalCompressedHeader) ?usi
         if (tree_index != first_tree) return null;
     }
     return 0;
+}
+
+test "br summary context needs two literals after unknown history" {
+    var history = LiteralHistory{};
+    history.markUnknown();
+    try std.testing.expectEqual(@as(u2, 0), history.known_suffix_len);
+    history.push('a');
+    try std.testing.expectEqual(@as(u2, 1), history.known_suffix_len);
+    history.push('b');
+    try std.testing.expectEqual(@as(u2, 2), history.known_suffix_len);
 }
 
 pub fn encodeStoredStreamAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {

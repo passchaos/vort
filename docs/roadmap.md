@@ -7285,7 +7285,7 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   A separate runtime differential now drives libbrotli 1.1's streaming encoder
   with a completed flush between chunks, verifies the resulting summaries
   contain the expected non-empty compressed-block count, then feeds each real
-  multi-block stream to Vort one byte at a time. The matrix now covers 88
+  multi-block stream to Vort one byte at a time. The matrix now covers 94
   flushed/metadata streams across generic, text, and font modes; window bits
   10/16/18/20/22/24; qualities 0/1/3/4/5/6/9/11; enabled and disabled literal
   contexts; explicit postfix/direct distances; short dense flushes; Unicode;
@@ -7307,6 +7307,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   dictionary classification and recent-distance updates. The upstream matrix
   reaches 90 cases with a 1.26 MiB source stream at window 20, and a focused
   boundary test pins the post-window dictionary-address calculation.
+  Quality-11 source streams at window bits 18/20/22/24 add 1.26 MiB real-world
+  decode coverage. Their one-shot and byte-progressive output is exact; the
+  allocation-free summary deliberately reports `UnsupportedBrotliFeature` for
+  four cases whose literal context depends on history beyond its fixed 65,520-
+  byte scratch. Summary history now tracks zero, one, or two known suffix bytes
+  after such a copy, preventing one newly decoded literal from incorrectly
+  making a two-byte context look valid and turning the limitation into a later
+  misleading `CorruptFrame`.
   Added byte-progressive metadata handling after compressed blocks. Metadata
   headers and payloads can span arbitrary input chunks, payload bytes are
   skipped without affecting decoded-size accounting, and callers may provide

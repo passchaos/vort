@@ -61,11 +61,14 @@ pub fn Decoder(comptime Codec: type) type {
         const NextHeaderState = enum { is_last, last_empty, nibbles, metadata_reserved, metadata_count, metadata_len, block_len, uncompressed, alignment };
         pub const Snapshot = struct {
             phase: Phase,
+            window_bits: u5,
             input_read: usize,
             output_written: usize,
             payload_remaining: usize,
             pending_literals: usize,
             pending_copy: usize,
+            copy_distance: usize,
+            last_distances: [4]usize,
             retained_input_bytes: usize,
             history_bytes: usize,
             metadata_written: usize,
@@ -102,11 +105,14 @@ pub fn Decoder(comptime Codec: type) type {
         pub fn snapshot(self: *const Self) Snapshot {
             return .{
                 .phase = self.phase,
+                .window_bits = self.window_bits,
                 .input_read = self.total_input,
                 .output_written = self.total_output,
                 .payload_remaining = self.decoded_len -| self.total_output,
                 .pending_literals = self.pending_literals,
                 .pending_copy = self.pending_copy,
+                .copy_distance = self.copy_distance,
+                .last_distances = self.last_distances,
                 .retained_input_bytes = self.header_len,
                 .history_bytes = @min(self.total_output, self.history.len),
                 .metadata_written = self.metadata_written,

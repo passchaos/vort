@@ -15,6 +15,7 @@ const Case = struct {
     ndirect: ?u32 = null,
     min_compressed_blocks: ?usize = null,
     min_stored_blocks: usize = 0,
+    allow_summary_unsupported: bool = false,
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -74,6 +75,7 @@ pub fn main(init: std.process.Init) !void {
     const all_qualities = [_]u32{ 0, 1, 3, 4, 5, 6, 9, 11 };
     const context_qualities = [_]u32{ 4, 5, 9, 11 };
     const compact_qualities = [_]u32{ 5, 9 };
+    const quality_eleven = [_]u32{11};
     const all_modes = [_]u32{ 0, 1, 2 };
     const window_sweep = [_]u32{ 10, 16, 18, 20, 22, 24 };
     const cases = [_]Case{
@@ -87,6 +89,7 @@ pub fn main(init: std.process.Init) !void {
         .{ .name = "window-sweep", .chunks = &pattern_chunks, .expected = first_pattern ++ second_pattern ++ third_pattern, .qualities = &compact_qualities, .windows = &window_sweep },
         .{ .name = "history-wrap", .chunks = &long_text_chunks, .expected = long_text, .qualities = &compact_qualities },
         .{ .name = "large-source", .chunks = &large_source_chunks, .expected = large_source, .qualities = &compact_qualities, .windows = &.{20}, .lgblock = 18 },
+        .{ .name = "large-source-quality-eleven", .chunks = &large_source_chunks, .expected = large_source, .qualities = &quality_eleven, .windows = &.{ 18, 20, 22, 24 }, .lgblock = 18, .allow_summary_unsupported = true },
         .{ .name = "far-history", .chunks = &far_history_chunks, .expected = far_history_expected, .qualities = &compact_qualities, .windows = &.{17}, .min_compressed_blocks = 1, .min_stored_blocks = 2 },
         .{ .name = "compressed-stored-compressed", .chunks = &transition_chunks, .expected = text ++ random[0..2048] ++ text, .qualities = &context_qualities, .min_compressed_blocks = 2, .min_stored_blocks = 1 },
         .{ .name = "tiny-flushes", .chunks = &tiny_chunks, .expected = tiny_expected, .qualities = &context_qualities, .lgblock = 14, .min_compressed_blocks = 0 },
@@ -94,6 +97,7 @@ pub fn main(init: std.process.Init) !void {
     };
 
     var cases_run: usize = 0;
+    var summaries_unsupported: usize = 0;
     for (cases) |case| {
         for (case.qualities) |quality| {
             for (case.modes) |mode| {
@@ -116,7 +120,16 @@ pub fn main(init: std.process.Init) !void {
                         std.debug.print("{s} quality={d} mode={d} lgwin={d}: decode {s} encoded={d} expected={d}\n", .{ case.name, quality, mode, lgwin, @errorName(err), encoded.len, case.expected.len });
                         return err;
                     };
-                    const summary = vort.brSummarizeStream(encoded) catch |err| {
+                    var diagnostics: vort.BrotliStreamSummaryDiagnostics = .{};
+                    const summary = vort.brSummarizeStreamWithDiagnostics(encoded, &diagnostics) catch |err| {
+                        if (case.allow_summary_unsupported and
+                            err == error.UnsupportedBrotliFeature and
+                            diagnostics.phase == .compressed_meta_block)
+                        {
+                            summaries_unsupported += 1;
+                            cases_run += 1;
+                            continue;
+                        }
                         std.debug.print("{s} quality={d} mode={d} lgwin={d}: summary {s} encoded={d} expected={d}\n", .{ case.name, quality, mode, lgwin, @errorName(err), encoded.len, case.expected.len });
                         return err;
                     };
@@ -162,8 +175,8 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [256]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     try stdout.interface.print(
-        "br_upstream_multiblock_diff=ok cases={d} reference_version={x}\n",
-        .{ cases_run, reference.version() },
+        "br_upstream_multiblock_diff=ok cases={d} summaries_unsupported={d} reference_version={x}\n",
+        .{ cases_run, summaries_unsupported, reference.version() },
     );
     try stdout.interface.flush();
 }
