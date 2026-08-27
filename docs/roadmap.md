@@ -7446,3 +7446,9 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   38.56 ms to 20.50 ms (46.8%) and binary from about 53.93 ms to 26.07 ms
   (51.7%); levels 1 and 9 retain their prior screening and remain effectively
   neutral on the long-running controls.
+  Repaired the legacy bounded duplicate-matcher reference oracle so it records
+  the selected candidate's computed payload length, matching the production
+  matcher and the newer exact/indexed references. The stronger full-struct
+  equality test had exposed the stale zero-valued field; a focused assertion
+  now independently recomputes and pins the returned score before this oracle
+  is used to validate future matcher performance changes.

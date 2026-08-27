@@ -12859,7 +12859,9 @@ fn findBestDuplicateMatchHashedSentinelReference(block: []const u8, start_min: u
             if (duplicateMatchCannotBeat(candidate, best)) continue;
             const candidate_payload_len = singleMatchPayloadLenFrom(block, candidate, start_min) catch continue;
             if (candidate_payload_len < best_payload_len or (candidate_payload_len == best_payload_len and len > (best orelse candidate).len)) {
-                best = candidate;
+                var scored = candidate;
+                scored.payload_len = candidate_payload_len;
+                best = scored;
                 best_payload_len = candidate_payload_len;
             }
         }
@@ -12890,6 +12892,24 @@ test "zstd bounded duplicate hash bucket counts match sentinel reference" {
             try findBestDuplicateMatchHashed(&payload, start_min),
         );
     }
+}
+
+test "zstd bounded duplicate sentinel reference preserves selected payload score" {
+    var payload: [6144]u8 = undefined;
+    var state: u32 = 0x1319_8a2e;
+    for (&payload) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 16);
+    }
+    @memcpy(payload[3072..3584], payload[1024..1536]);
+    @memcpy(payload[5120..5632], payload[2048..2560]);
+
+    const match = (try findBestDuplicateMatchHashedSentinelReference(&payload, 0)) orelse return error.CorruptFrame;
+    try std.testing.expect(match.payload_len != 0);
+    try std.testing.expectEqual(
+        try singleMatchPayloadLenFrom(&payload, match, 0),
+        match.payload_len,
+    );
 }
 
 test "zstd reusable duplicate index matches rebuilt search" {
