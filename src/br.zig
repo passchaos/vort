@@ -845,6 +845,7 @@ const max_distance_block_types = 32;
 const max_distance_context_trees = 32;
 const initial_last_distances = [_]usize{ 16, 15, 11, 4 };
 const planner_max_backward_distance = (@as(usize, 1) << default_window_bits) - 16;
+const SummaryError = Error || error{SummaryHistoryExhausted};
 
 pub const CompressedSupportLimits = struct {
     max_literal_block_types: usize,
@@ -906,10 +907,10 @@ const LiteralHistory = struct {
     // two subsequently decoded literals are required to restore both values.
     known_suffix_len: u2 = 2,
 
-    fn context(self: *const LiteralHistory, header: *const MinimalCompressedHeader) Error!usize {
+    fn context(self: *const LiteralHistory, header: *const MinimalCompressedHeader) SummaryError!usize {
         const mode = header.literal_context_modes[header.literal_block.current_type];
         const needed: u2 = if (mode <= 1) 1 else 2;
-        if (self.known_suffix_len < needed) return contextIndependentLiteralContext(header) orelse error.UnsupportedBrotliFeature;
+        if (self.known_suffix_len < needed) return contextIndependentLiteralContext(header) orelse error.SummaryHistoryExhausted;
         return try literalContextFromMode(
             mode,
             self.previous[1],
@@ -2367,12 +2368,16 @@ pub fn summarizeStreamWithDiagnostics(stream: []const u8, diagnostics: *StreamSu
 }
 
 pub fn summarizeStreamLimitedWithDiagnostics(stream: []const u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
-    return try summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, diagnostics, null);
+    return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, diagnostics, null) catch |err| switch (err) {
+        error.SummaryHistoryExhausted => error.UnsupportedBrotliFeature,
+        else => |public_err| public_err,
+    };
 }
 
 /// Summarize a Brotli stream while allocating enough history for its declared
-/// RFC window. Unlike the allocation-free summary APIs, this supports literal
-/// contexts that depend on copies beyond Vort's fixed 65,520-byte scratch.
+/// RFC window when necessary. Streams covered by Vort's fixed 65,520-byte
+/// scratch do not allocate; larger history is allocated only after that fast
+/// path proves it cannot resolve a literal context.
 pub fn summarizeStreamAlloc(allocator: std.mem.Allocator, stream: []const u8) Error!StreamSummary {
     return try summarizeStreamAllocLimited(allocator, stream, std.math.maxInt(usize));
 }
@@ -2387,6 +2392,16 @@ pub fn summarizeStreamAllocWithDiagnostics(allocator: std.mem.Allocator, stream:
 }
 
 pub fn summarizeStreamAllocLimitedWithDiagnostics(allocator: std.mem.Allocator, stream: []const u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    // Most Brotli streams never reference history beyond the encoder's common
+    // 16-bit window. Avoid reserving as much as 16 MiB merely because the wire
+    // header advertises WBITS=24; retry with the declared window only when the
+    // fixed summary actually loses context needed to select a literal tree.
+    const fixed_summary = summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, diagnostics, null) catch |err| switch (err) {
+        error.SummaryHistoryExhausted => null,
+        else => |public_err| return public_err,
+    };
+    if (fixed_summary) |summary| return summary;
+
     var reader = bitstream.BitReader.init(stream);
     const window_bits = readWindowBitsValue(&reader) catch |err| {
         diagnostics.* = .{ .phase = .window_bits };
@@ -2395,10 +2410,16 @@ pub fn summarizeStreamAllocLimitedWithDiagnostics(allocator: std.mem.Allocator, 
     const history_len = @min(max_output_len, (@as(usize, 1) << window_bits) - 16);
     const history = try allocator.alloc(u8, history_len);
     defer allocator.free(history);
-    return try summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, diagnostics, history);
+    return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, diagnostics, history) catch |err| switch (err) {
+        // A full RFC window can replay every legal backward copy. Preserve the
+        // public error contract if a future decoder extension violates that
+        // invariant rather than leaking this private retry signal.
+        error.SummaryHistoryExhausted => error.UnsupportedBrotliFeature,
+        else => |public_err| public_err,
+    };
 }
 
-fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics, history_storage: ?[]u8) Error!StreamSummary {
+fn summarizeStreamLimitedWithDiagnosticsAndHistory(stream: []const u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics, history_storage: ?[]u8) SummaryError!StreamSummary {
     diagnostics.* = .{};
     var reader = bitstream.BitReader.init(stream);
     var summary = StreamSummary{
@@ -3289,7 +3310,7 @@ fn skipMinimalCompressedMetaBlock(
     literal_history: *LiteralHistory,
     stats: ?*StreamSummaryMetaBlockStats,
     window_bits: u5,
-) Error!void {
+) SummaryError!void {
     const meta_block_end = std.math.add(usize, start_written, meta_block_len) catch return error.IntegerOverflow;
     var header: MinimalCompressedHeader = undefined;
     try readMinimalCompressedHeaderInto(reader, &header);
@@ -7052,6 +7073,33 @@ test "br ratio UTF8 context split round trips beyond summary history" {
 
 test "br summary history covers the full encoder backward window" {
     try std.testing.expectEqual(planner_max_backward_distance, @sizeOf(@TypeOf(@as(LiteralHistory, .{}).tail)));
+}
+
+test "br allocator summary avoids unused advertised window allocation" {
+    // WBITS describes the maximum legal copy distance, not memory that every
+    // stream necessarily needs. A stored stream with WBITS=24 must therefore
+    // remain usable with an allocator that rejects every allocation.
+    const payload = "small payload";
+    const encoded = try encodeStoredStreamWithOptionsAlloc(std.testing.allocator, payload, .{ .window_bits = 24 });
+    defer std.testing.allocator.free(encoded);
+
+    const summary = try summarizeStreamAlloc(std.testing.failing_allocator, encoded);
+    try std.testing.expectEqual(@as(u5, 24), summary.window_bits);
+    try std.testing.expectEqual(@as(usize, payload.len), summary.decoded_bytes);
+    try std.testing.expectEqual(payload.len, (try summarizeStreamAllocLimited(std.testing.failing_allocator, encoded, payload.len)).decoded_bytes);
+
+    var diagnostics: StreamSummaryDiagnostics = undefined;
+    try std.testing.expectEqual(payload.len, (try summarizeStreamAllocWithDiagnostics(std.testing.failing_allocator, encoded, &diagnostics)).decoded_bytes);
+    try std.testing.expectEqual(StreamSummaryErrorPhase.stream, diagnostics.phase);
+    try std.testing.expectError(error.OutputLimitExceeded, summarizeStreamAllocLimitedWithDiagnostics(std.testing.failing_allocator, encoded, payload.len - 1, &diagnostics));
+    try std.testing.expectEqual(StreamSummaryErrorPhase.meta_block_header, diagnostics.phase);
+
+    // Pre-reserving append output isolates the preflight: no hidden history
+    // allocation is needed when the fixed summary can finish the stream.
+    var output = try std.ArrayList(u8).initCapacity(std.testing.allocator, payload.len);
+    defer output.deinit(std.testing.allocator);
+    try std.testing.expectEqual(payload.len, try decodeStreamAppendLimited(std.testing.failing_allocator, &output, encoded, payload.len));
+    try std.testing.expectEqualSlices(u8, payload, output.items);
 }
 
 test "br ratio planner uses the full 16-bit stream window" {

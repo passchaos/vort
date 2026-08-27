@@ -7330,3 +7330,10 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   subsequent UTF-8 literal-context decisions. The previously failing embedded
   `br.zig` ratio round trip and explicit 48/80 KiB distance tests now pass; a
   layout assertion pins the history capacity to the encoder limit.
+  Allocator-backed Brotli summaries now try that fixed 65,520-byte history
+  before reserving the stream's full declared window. This keeps ordinary
+  WBITS=24 streams from allocating almost 16 MiB merely because their header
+  permits far copies, while preserving an exact retry for the quality-11 source
+  cases that genuinely need older context. A failing-allocator test pins the
+  allocation-free fast path across all four public allocator-summary variants
+  and pre-reserved append decode.
