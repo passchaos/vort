@@ -7404,3 +7404,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   level-9 text/JSON/binary frames while improving median encode time by about
   8.5%/2.2%/1.3%, respectively; the 9-row encode gate, 90-row stage gate,
   328-case CLI probe, and 237-case frame probe all pass.
+  The delayed raw/RLE comparison now uses an exact zero-copy shape pass for all
+  supported inputs, including short whole-block RLE and runs split out of raw
+  blocks. If entropy loses or ties, an all-raw result is emitted directly
+  without repeating RLE discovery; mixed raw/RLE winners retain the existing
+  writer. Sixteen fixed-CPU-8 A/B pairs against the initial delayed-materialize
+  implementation preserve the 80/640/8607-byte level-9 frames and improve text,
+  JSON, and binary medians by about 1.7%, 2.0%, and 1.1%. Focused tests pin the
+  exact raw and short-RLE sizes, and all Zstd encode/stage/compatibility gates
+  continue to pass.

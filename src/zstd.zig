@@ -4066,6 +4066,63 @@ pub fn encodeRawOrRleFrameAppend(
     try emitContentChecksum(allocator, out, input, options);
 }
 
+const RawOrRleFrameShape = struct {
+    encoded_len: usize,
+    all_raw: bool = true,
+};
+
+fn inspectRawOrRleFrameShape(input: []const u8, options: NativeFrameOptions) Error!RawOrRleFrameShape {
+    _ = try nativeMatchSearchBudget(options);
+    var shape: RawOrRleFrameShape = .{ .encoded_len = try nativeFrameHeaderLen(try checkedUsizeToU64(input.len), options) };
+    const block_size_max = try nativeBlockSizeMax(options);
+    if (input.len == 0) {
+        shape.encoded_len = std.math.add(usize, shape.encoded_len, 3) catch return error.IntegerOverflow;
+    } else {
+        var offset: usize = 0;
+        while (offset < input.len) {
+            const search_end = @min(input.len, offset + block_size_max);
+            if (findRleRun(input[offset..search_end])) |run| {
+                shape.all_raw = false;
+                const run_start = offset + run.start;
+                if (run_start > offset)
+                    shape.encoded_len = try addRawOrRleBlockLen(shape.encoded_len, input[offset..run_start], &shape.all_raw);
+                shape.encoded_len = std.math.add(usize, shape.encoded_len, 4) catch return error.IntegerOverflow;
+                offset = run_start + run.len;
+            } else {
+                shape.encoded_len = try addRawOrRleBlockLen(shape.encoded_len, input[offset..search_end], &shape.all_raw);
+                offset = search_end;
+            }
+        }
+    }
+    if (options.content_checksum)
+        shape.encoded_len = std.math.add(usize, shape.encoded_len, 4) catch return error.IntegerOverflow;
+    return shape;
+}
+
+fn addRawOrRleBlockLen(total: usize, block: []const u8, all_raw: *bool) Error!usize {
+    const payload_len: usize = if (rleByte(block) != null) blk: {
+        all_raw.* = false;
+        break :blk 1;
+    } else block.len;
+    return std.math.add(usize, total, 3 + payload_len) catch return error.IntegerOverflow;
+}
+
+fn encodeRawFrameAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: NativeFrameOptions) Error!void {
+    try emitFrameHeader(allocator, out, try checkedUsizeToU64(input.len), options);
+    const block_size_max = try nativeBlockSizeMax(options);
+    if (input.len == 0) {
+        try emitRawBlock(allocator, out, "", true);
+    } else {
+        var offset: usize = 0;
+        while (offset < input.len) {
+            const end = @min(input.len, offset + block_size_max);
+            try emitRawBlock(allocator, out, input[offset..end], end == input.len);
+            offset = end;
+        }
+    }
+    try emitContentChecksum(allocator, out, input, options);
+}
+
 pub fn encodeRawOrRleFrameIntoSlice(
     allocator: std.mem.Allocator,
     input: []const u8,
@@ -4490,21 +4547,20 @@ pub const NativeFrameEncoder = struct {
         self.literal_scratch.clearRetainingCapacity();
         try encodeLiteralOnlyFrameAppendWithDictionaryInternal(self.allocator, &self.literal_scratch, input, frame_options, dictionary, &self.rep_beam_scratch);
 
-        // With no qualifying repeated-byte run the raw/RLE writer is exactly
-        // header + raw block headers + input + optional checksum. Its public
-        // bound is therefore the exact competing frame length. Delay copying
-        // the complete input and hashing it a second time until that candidate
-        // can actually win. Strict `<` preserves the historical raw-on-equal
-        // mode and bytes.
-        if (findRleRun(input) == null) {
-            const raw_len = try encodedNativeFrameBoundWithOptions(input.len, frame_options);
-            if (self.literal_scratch.items.len < raw_len) {
-                try out.appendSlice(self.allocator, self.literal_scratch.items);
-                return .literal_only;
-            }
+        // The raw/RLE candidate's byte length can be computed from its block
+        // segmentation without copying input or hashing it a second time.
+        // Materialize it only when it can win; strict `<` preserves the
+        // historical raw-on-equal mode and bytes.
+        const raw_shape = try inspectRawOrRleFrameShape(input, frame_options);
+        if (self.literal_scratch.items.len < raw_shape.encoded_len) {
+            try out.appendSlice(self.allocator, self.literal_scratch.items);
+            return .literal_only;
         }
 
-        try encodeRawOrRleFrameAppend(self.allocator, &self.raw_scratch, input, frame_options);
+        if (raw_shape.all_raw)
+            try encodeRawFrameAppend(self.allocator, &self.raw_scratch, input, frame_options)
+        else
+            try encodeRawOrRleFrameAppend(self.allocator, &self.raw_scratch, input, frame_options);
 
         // Keep the bootstrap selector deterministic and transparent: both
         // supported native encoders run against reusable scratch buffers, then
@@ -15210,6 +15266,13 @@ test "zstd auto selection uses exact uncompressed-frame bound" {
     const raw = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, &payload, options);
     defer std.testing.allocator.free(raw);
     try std.testing.expectEqual(raw.len, try encodedNativeFrameBoundWithOptions(payload.len, options));
+    const raw_shape = try inspectRawOrRleFrameShape(&payload, options);
+    try std.testing.expect(raw_shape.all_raw);
+    try std.testing.expectEqual(raw.len, raw_shape.encoded_len);
+    var direct_raw: std.ArrayList(u8) = .empty;
+    defer direct_raw.deinit(std.testing.allocator);
+    try encodeRawFrameAppend(std.testing.allocator, &direct_raw, &payload, options);
+    try std.testing.expectEqualSlices(u8, raw, direct_raw.items);
 
     const auto = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &payload, options);
     defer std.testing.allocator.free(auto.frame);
@@ -15229,6 +15292,14 @@ test "zstd auto selection uses exact uncompressed-frame bound" {
     defer std.testing.allocator.free(selected.frame);
     try std.testing.expectEqual(NativeFrameMode.literal_only, selected.mode);
     try std.testing.expectEqualSlices(u8, forced.frame, selected.frame);
+
+    const short_rle = "zzzzzzzzz";
+    const rle_options: NativeFrameOptions = .{ .content_checksum = false, .match_search_budget = 0 };
+    const rle = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, short_rle, rle_options);
+    defer std.testing.allocator.free(rle);
+    const rle_shape = try inspectRawOrRleFrameShape(short_rle, rle_options);
+    try std.testing.expect(!rle_shape.all_raw);
+    try std.testing.expectEqual(rle.len, rle_shape.encoded_len);
 }
 
 test "zstd compression levels map to increasing search budgets" {
