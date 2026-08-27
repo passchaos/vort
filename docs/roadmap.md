@@ -7285,9 +7285,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   A separate runtime differential now drives libbrotli 1.1's streaming encoder
   with a completed flush between chunks, verifies the resulting summaries
   contain the expected non-empty compressed-block count, then feeds each real
-  multi-block stream to Vort one byte at a time. Forty two-/three-block text,
-  JSON, changed-pattern, binary, and incompressible-random cases cover qualities
-  0/1/3/4/5/6/9/11 independently of Vort's synthetic writers. The binary
+  multi-block stream to Vort one byte at a time. The matrix now covers 88
+  flushed/metadata streams across generic, text, and font modes; window bits
+  10/16/18/20/22/24; qualities 0/1/3/4/5/6/9/11; enabled and disabled literal
+  contexts; explicit postfix/direct distances; short dense flushes; Unicode;
+  compressed-to-stored-to-compressed transitions; and history that crosses the
+  64 KiB boundary. Actual block-type counts are checked rather than inferred
+  from requested operations, and real metadata payload bytes plus split block
+  lengths are verified through the incremental decoder. The original binary
   corpus exposed an RFC UTF-8 context-table transcription bug: second-last
   bytes D0..DF were incorrectly classified like E0..FF. Correcting that range
   restores one-shot and incremental parity with libbrotli's quality 5+ output.

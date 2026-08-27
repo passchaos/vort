@@ -50,6 +50,12 @@ const TransformDictionaryWordFn = *const fn (
     c_int,
 ) callconv(.c) c_int;
 
+const StreamingOperationCode = enum(c_int) {
+    flush = 1,
+    finish = 2,
+    metadata = 3,
+};
+
 pub const Runtime = struct {
     encoder: std.DynLib,
     decoder: std.DynLib,
@@ -154,19 +160,79 @@ pub const Runtime = struct {
         lgwin: u32,
         lgblock: u32,
     ) ![]u8 {
-        const state = self.create_encoder(null, null, null) orelse return error.ReferenceEncodeFailed;
+        return self.encodeFlushedChunksWithOptionsAlloc(allocator, chunks, .{
+            .quality = quality,
+            .lgwin = lgwin,
+            .lgblock = lgblock,
+        });
+    }
+
+    pub const StreamingOptions = struct {
+        quality: u32,
+        lgwin: u32,
+        lgblock: u32,
+        /// BrotliEncoderMode: generic=0, text=1, font=2.
+        mode: u32 = 0,
+        disable_literal_context_modeling: bool = false,
+        npostfix: ?u32 = null,
+        ndirect: ?u32 = null,
+    };
+    pub const StreamingOperation = union(enum) {
+        flush: []const u8,
+        metadata: []const u8,
+    };
+
+    pub fn encodeFlushedChunksWithOptionsAlloc(
+        self: Runtime,
+        allocator: std.mem.Allocator,
+        chunks: []const []const u8,
+        options: StreamingOptions,
+    ) ![]u8 {
+        const state = try self.createConfiguredEncoder(options);
         defer self.destroy_encoder(state);
-        if (self.set_encoder_parameter(state, 1, quality) == 0 or
-            self.set_encoder_parameter(state, 2, lgwin) == 0 or
-            self.set_encoder_parameter(state, 3, lgblock) == 0)
-            return error.ReferenceEncodeFailed;
 
         var output: std.ArrayList(u8) = .empty;
         errdefer output.deinit(allocator);
-        for (chunks) |chunk| try self.pushOperation(allocator, state, 1, chunk, &output);
-        try self.pushOperation(allocator, state, 2, &.{}, &output);
+        for (chunks) |chunk| try self.pushOperation(allocator, state, @intFromEnum(StreamingOperationCode.flush), chunk, &output);
+        try self.pushOperation(allocator, state, @intFromEnum(StreamingOperationCode.finish), &.{}, &output);
         if (self.encoder_is_finished(state) == 0) return error.ReferenceEncodeFailed;
         return output.toOwnedSlice(allocator);
+    }
+
+    pub fn encodeOperationsAlloc(
+        self: Runtime,
+        allocator: std.mem.Allocator,
+        operations: []const StreamingOperation,
+        options: StreamingOptions,
+    ) ![]u8 {
+        const state = try self.createConfiguredEncoder(options);
+        defer self.destroy_encoder(state);
+
+        var output: std.ArrayList(u8) = .empty;
+        errdefer output.deinit(allocator);
+        for (operations) |operation| switch (operation) {
+            .flush => |input| try self.pushOperation(allocator, state, @intFromEnum(StreamingOperationCode.flush), input, &output),
+            .metadata => |input| try self.pushOperation(allocator, state, @intFromEnum(StreamingOperationCode.metadata), input, &output),
+        };
+        try self.pushOperation(allocator, state, @intFromEnum(StreamingOperationCode.finish), &.{}, &output);
+        if (self.encoder_is_finished(state) == 0) return error.ReferenceEncodeFailed;
+        return output.toOwnedSlice(allocator);
+    }
+
+    fn createConfiguredEncoder(self: Runtime, options: StreamingOptions) !*EncoderState {
+        const state = self.create_encoder(null, null, null) orelse return error.ReferenceEncodeFailed;
+        errdefer self.destroy_encoder(state);
+        if (self.set_encoder_parameter(state, 0, options.mode) == 0 or
+            self.set_encoder_parameter(state, 1, options.quality) == 0 or
+            self.set_encoder_parameter(state, 2, options.lgwin) == 0 or
+            self.set_encoder_parameter(state, 3, options.lgblock) == 0 or
+            self.set_encoder_parameter(state, 4, @intFromBool(options.disable_literal_context_modeling)) == 0)
+            return error.ReferenceEncodeFailed;
+        if (options.npostfix) |value|
+            if (self.set_encoder_parameter(state, 7, value) == 0) return error.ReferenceEncodeFailed;
+        if (options.ndirect) |value|
+            if (self.set_encoder_parameter(state, 8, value) == 0) return error.ReferenceEncodeFailed;
+        return state;
     }
 
     fn pushOperation(
