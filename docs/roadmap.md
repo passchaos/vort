@@ -3271,6 +3271,16 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   cache reuse path. Twelve fixed-CPU-8 pairs retained the 14619-byte stage
   candidate and improved its median by about 4.3%; both 76- and 128-case frame
   probes remained byte-identical, including the locked 80/640/8607-byte frames.
+  Parallel primary-block arbitration now cooperatively cancels its recursive
+  mixed worker when the repeat-aware beam is the retained non-mixed winner and
+  beats both primitive repeated/single candidates by at least 24x. Cancellation
+  is sampled only at bounded search nodes and a cancelled partial plan is never
+  published, preserving deterministic output. A 24-case structured oracle
+  compares the parallel result with full serial arbitration. Eight alternating
+  CPU-8 JSON level-9 pairs retained the 640-byte frame and checksum while moving
+  median encode time from about 20.9 ms to 14.3 ms (about 1.46x); libzstd 1.5.5
+  remains far faster despite emitting 677 bytes, so throughput is still the
+  dominant Zstd gap.
   Adaptive 4/8 KiB candidates explicitly disable the beam: their lower-budget
   parsers remain the ratio fallback, while only the primary level-9 block pays
   the stateful search. Twelve fixed-CPU-8..10 end-to-end pairs versus the

@@ -71,6 +71,11 @@ const lazy_match_min_search_budget = 32;
 // 1. Keep the legacy multi-duplicate scan for level 2+ ratio arbitration, but do
 // not rebuild its 1 MiB candidate table repeatedly for the fastest level.
 const multi_duplicate_min_search_budget = 32;
+// Once the repeat-aware winner beats both primitive families by this factor,
+// their recursive combination has not been competitive across the retained
+// generated corpus. This conservative margin permits deterministic worker
+// cancellation without weakening the ordinary exact best-of-family path.
+const decisive_mixed_dominance_ratio = 24;
 // The adaptive 4/8 KiB candidates preserve their locked output without mixed
 // recursion at the 64-state level-3 budget. Keep the primary candidate at the
 // full level budget, so the high-level selector still has an unrestricted ratio
@@ -3623,6 +3628,7 @@ const MixedBlockCandidate = struct {
     block: []const u8,
     last: bool,
     match_search_budget: usize,
+    cancelled: *const std.atomic.Value(bool),
     frame: ?[]u8 = null,
     err: ?Error = null,
 
@@ -3636,11 +3642,14 @@ const MixedBlockCandidate = struct {
             self.last,
             self.match_search_budget,
             null,
+            self.cancelled,
         ) catch |err| {
             self.err = err;
             return;
         };
-        if (!ok) return;
+        // Cancellation means the caller has accepted a deterministic decisive
+        // non-mixed winner. Never publish a timing-dependent partial search.
+        if (!ok or self.cancelled.load(.acquire)) return;
         self.frame = candidate.toOwnedSlice(std.heap.smp_allocator) catch |err| {
             self.err = err;
             return;
@@ -7383,27 +7392,33 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
         }
     }
     if (match_search_budget >= mixed_match_min_search_budget) {
+        var cancel_mixed: std.atomic.Value(bool) = .init(false);
         var mixed_candidate: MixedBlockCandidate = .{
             .block = block,
             .last = last,
             .match_search_budget = match_search_budget,
+            .cancelled = &cancel_mixed,
         };
         // Thread creation is an optimization only. If the platform refuses a
         // worker, fall through to the byte-identical serial selector below.
         if (std.Thread.spawn(.{}, MixedBlockCandidate.run, .{&mixed_candidate})) |thread| {
             const non_mixed_budget = @min(match_search_budget, mixed_match_min_search_budget - 1);
-            const non_mixed_ok = emitNativeMatchCompressedBlockSerialWithBeam(allocator, out, block, last, non_mixed_budget, rep_beam_search, rep_beam_scratch) catch |err| {
+            var mixed_dominated = false;
+            const non_mixed_ok = emitNativeMatchCompressedBlockSerialWithBeam(allocator, out, block, last, non_mixed_budget, rep_beam_search, rep_beam_scratch, &mixed_dominated) catch |err| {
+                cancel_mixed.store(true, .release);
                 thread.join();
                 if (mixed_candidate.frame) |frame| std.heap.smp_allocator.free(frame);
                 return err;
             };
+            if (mixed_dominated) cancel_mixed.store(true, .release);
             thread.join();
+            const mixed_cancelled = cancel_mixed.load(.acquire);
             if (mixed_candidate.err) |err| return err;
             if (mixed_candidate.frame) |mixed| {
                 defer std.heap.smp_allocator.free(mixed);
                 // Mixed historically ran first, so it retains an equal-length
                 // tie even though the other families complete on this thread.
-                if (!non_mixed_ok or mixed.len <= out.items.len) {
+                if (!mixed_cancelled and (!non_mixed_ok or mixed.len <= out.items.len)) {
                     out.clearRetainingCapacity();
                     try out.appendSlice(allocator, mixed);
                 }
@@ -7411,7 +7426,7 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
             return out.items.len != 0;
         } else |_| {}
     }
-    return try emitNativeMatchCompressedBlockSerialWithBeam(allocator, out, block, last, match_search_budget, rep_beam_search, rep_beam_scratch);
+    return try emitNativeMatchCompressedBlockSerialWithBeam(allocator, out, block, last, match_search_budget, rep_beam_search, rep_beam_scratch, null);
 }
 
 fn findPrefixTailDuplicateMatch(block: []const u8) ?DuplicateMatch {
@@ -7428,8 +7443,9 @@ fn findPrefixTailDuplicateMatch(block: []const u8) ?DuplicateMatch {
     return null;
 }
 
-fn emitNativeMatchCompressedBlockSerialWithBeam(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, match_search_budget: usize, enable_rep_beam: bool, reusable_rep_beam: ?*lz77.RepBeamScratch) Error!bool {
+fn emitNativeMatchCompressedBlockSerialWithBeam(allocator: std.mem.Allocator, out: *std.ArrayList(u8), block: []const u8, last: bool, match_search_budget: usize, enable_rep_beam: bool, reusable_rep_beam: ?*lz77.RepBeamScratch, mixed_dominated: ?*bool) Error!bool {
     if (match_search_budget == 0) return false;
+    if (mixed_dominated) |value| value.* = false;
 
     // The bootstrap match emitters are intentionally independent heuristics.
     // Reuse one scratch buffer and retain only the current winner so a broad
@@ -7476,7 +7492,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeam(allocator: std.mem.Allocator, ou
         }
     }
     const mixed_ok = if (match_search_budget >= mixed_match_min_search_budget)
-        try emitMixedDuplicateRepeatedMatchCompressedBlock(allocator, &candidate, block, last, match_search_budget, duplicate_index_ptr)
+        try emitMixedDuplicateRepeatedMatchCompressedBlock(allocator, &candidate, block, last, match_search_budget, duplicate_index_ptr, null)
     else
         false;
     try retainShortestCandidate(allocator, mixed_ok, candidate.items, &best);
@@ -7534,6 +7550,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeam(allocator: std.mem.Allocator, ou
 
     candidate.clearRetainingCapacity();
     const repeated_ok = try emitRepeatedPatternCompressedBlock(allocator, &candidate, block, last);
+    const repeated_len: ?usize = if (repeated_ok) candidate.items.len else null;
     try retainShortestCandidate(allocator, repeated_ok, candidate.items, &best);
 
     candidate.clearRetainingCapacity();
@@ -7559,7 +7576,9 @@ fn emitNativeMatchCompressedBlockSerialWithBeam(allocator: std.mem.Allocator, ou
     // single candidate. Reuse that result rather than walking/scoring the block
     // again. A decisive beam has already completed that query even when no
     // match exists; only paths that skipped both searches need the fallback.
+    var single_len: ?usize = null;
     if (early_single_tested) {
+        if (early_single_available) single_len = early_single.items.len;
         try retainShortestCandidate(allocator, early_single_available, early_single.items, &best);
     } else {
         const single_duplicate_ok = if (first_duplicate) |match|
@@ -7568,10 +7587,19 @@ fn emitNativeMatchCompressedBlockSerialWithBeam(allocator: std.mem.Allocator, ou
             false
         else
             try emitSingleMatchCompressedBlock(allocator, &candidate, block, last, duplicate_index_ptr);
+        if (single_duplicate_ok) single_len = candidate.items.len;
         try retainShortestCandidate(allocator, single_duplicate_ok, candidate.items, &best);
     }
 
     if (best.items.len == 0) return false;
+    if (mixed_dominated) |value| {
+        if (beam_is_decisive and rep_beam_len != null and best.items.len == rep_beam_len.?) {
+            const rep_len = rep_beam_len.?;
+            const repeated_is_dominated = repeated_len == null or rep_len <= repeated_len.? / decisive_mixed_dominance_ratio;
+            const single_is_dominated = single_len == null or rep_len <= single_len.? / decisive_mixed_dominance_ratio;
+            value.* = repeated_is_dominated and single_is_dominated;
+        }
+    }
     try out.appendSlice(allocator, best.items);
     return true;
 }
@@ -7701,7 +7729,7 @@ pub fn benchmarkNativeMatchStage(
     var sequence_count: usize = 0;
     const available = switch (stage) {
         .mixed => if (match_search_budget >= mixed_match_min_search_budget)
-            try emitMixedDuplicateRepeatedMatchCompressedBlock(allocator, &scratch.candidate, block, last, match_search_budget, duplicate_index)
+            try emitMixedDuplicateRepeatedMatchCompressedBlock(allocator, &scratch.candidate, block, last, match_search_budget, duplicate_index, null)
         else
             false,
         .double_fast => if (block.len <= double_fast_match.max_input_len) blk: {
@@ -7974,7 +8002,7 @@ test "zstd native match stage benchmark mirrors production emitters" {
         var expected: std.ArrayList(u8) = .empty;
         defer expected.deinit(std.testing.allocator);
         const expected_ok = switch (stage) {
-            .mixed => try emitMixedDuplicateRepeatedMatchCompressedBlock(std.testing.allocator, &expected, payload, true, 192, scratch.duplicate_index),
+            .mixed => try emitMixedDuplicateRepeatedMatchCompressedBlock(std.testing.allocator, &expected, payload, true, 192, scratch.duplicate_index, null),
             .double_fast => blk: {
                 const stats = try double_fast_match.planReuse(&scratch.double_fast_tokens, std.testing.allocator, payload, zstdHashParserOptions(payload.len));
                 break :blk try emitHashTokenSequenceBlock(std.testing.allocator, &expected, payload, true, scratch.double_fast_tokens.items, stats);
@@ -8086,13 +8114,113 @@ test "zstd parallel mixed match selection matches serial wire" {
     for (payloads) |payload| {
         var expected: std.ArrayList(u8) = .empty;
         defer expected.deinit(std.testing.allocator);
-        const expected_ok = try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &expected, payload, true, 96, true, null);
+        const expected_ok = try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &expected, payload, true, 96, true, null, null);
         var actual: std.ArrayList(u8) = .empty;
         defer actual.deinit(std.testing.allocator);
         const actual_ok = try emitNativeMatchCompressedBlock(std.testing.allocator, &actual, payload, true, 96, true, null);
         try std.testing.expectEqual(expected_ok, actual_ok);
         try std.testing.expectEqualSlices(u8, expected.items, actual.items);
     }
+}
+
+test "zstd decisive beam cancels dominated mixed search without changing wire" {
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    while (payload.items.len < 32 * 1024) {
+        var line: [128]u8 = undefined;
+        const index = payload.items.len / 64;
+        const formatted = try std.fmt.bufPrint(&line, "{{\"id\":{d},\"service\":\"vort\",\"message\":\"structured zstd encode corpus\"}}\n", .{index});
+        try payload.appendSlice(std.testing.allocator, formatted);
+    }
+
+    var expected: std.ArrayList(u8) = .empty;
+    defer expected.deinit(std.testing.allocator);
+    var mixed_dominated = false;
+    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(
+        std.testing.allocator,
+        &expected,
+        payload.items,
+        true,
+        96,
+        true,
+        null,
+        &mixed_dominated,
+    ));
+    try std.testing.expect(mixed_dominated);
+
+    var actual: std.ArrayList(u8) = .empty;
+    defer actual.deinit(std.testing.allocator);
+    try std.testing.expect(try emitNativeMatchCompressedBlock(
+        std.testing.allocator,
+        &actual,
+        payload.items,
+        true,
+        96,
+        true,
+        null,
+    ));
+    try std.testing.expect(actual.items.len * 32 <= payload.items.len);
+    try std.testing.expectEqualSlices(u8, expected.items, actual.items);
+}
+
+test "zstd decisive beam cancellation preserves generated structured winners" {
+    var cancelled_cases: usize = 0;
+    for (0..24) |seed| {
+        var payload: std.ArrayList(u8) = .empty;
+        defer payload.deinit(std.testing.allocator);
+        const target_len = 16 * 1024 + seed * 613;
+        while (payload.items.len < target_len) {
+            var line: [160]u8 = undefined;
+            const formatted = try std.fmt.bufPrint(
+                &line,
+                "{{\"id\":{d},\"shard\":{d},\"service\":\"vort\",\"message\":\"structured cancellation corpus\"}}\n",
+                .{ payload.items.len / 64, seed % 7 },
+            );
+            try payload.appendSlice(std.testing.allocator, formatted);
+        }
+
+        var expected: std.ArrayList(u8) = .empty;
+        defer expected.deinit(std.testing.allocator);
+        try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(
+            std.testing.allocator,
+            &expected,
+            payload.items,
+            true,
+            96,
+            true,
+            null,
+            null,
+        ));
+
+        var non_mixed: std.ArrayList(u8) = .empty;
+        defer non_mixed.deinit(std.testing.allocator);
+        var mixed_dominated = false;
+        try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(
+            std.testing.allocator,
+            &non_mixed,
+            payload.items,
+            true,
+            mixed_match_min_search_budget - 1,
+            true,
+            null,
+            &mixed_dominated,
+        ));
+        cancelled_cases += @intFromBool(mixed_dominated);
+
+        var actual: std.ArrayList(u8) = .empty;
+        defer actual.deinit(std.testing.allocator);
+        try std.testing.expect(try emitNativeMatchCompressedBlock(
+            std.testing.allocator,
+            &actual,
+            payload.items,
+            true,
+            96,
+            true,
+            null,
+        ));
+        try std.testing.expectEqualSlices(u8, expected.items, actual.items);
+    }
+    try std.testing.expect(cancelled_cases != 0);
 }
 
 test "zstd prefix-tail shortcut matches full native selection across levels" {
@@ -8108,7 +8236,7 @@ test "zstd prefix-tail shortcut matches full native selection across levels" {
     }) |policy| {
         var expected: std.ArrayList(u8) = .empty;
         defer expected.deinit(std.testing.allocator);
-        try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &expected, payload, true, policy.budget, policy.rep_beam, null));
+        try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &expected, payload, true, policy.budget, policy.rep_beam, null, null));
         var actual: std.ArrayList(u8) = .empty;
         defer actual.deinit(std.testing.allocator);
         try std.testing.expect(try emitNativeMatchCompressedBlock(std.testing.allocator, &actual, payload, true, policy.budget, policy.rep_beam, null));
@@ -8436,7 +8564,7 @@ fn emitMixedDictionaryDuplicateMatchCompressedBlock(
         .dictionary = true,
         .duplicate = true,
         .repeated = true,
-    }, .{ .kind = .dictionary }, .non_dictionary, match_search_budget, null) orelse return false;
+    }, .{ .kind = .dictionary }, .non_dictionary, match_search_budget, null, null) orelse return false;
     return try emitBestSequenceCompressedBlockFromLookaheadPlan(
         allocator,
         out,
@@ -8453,12 +8581,13 @@ fn emitMixedDuplicateRepeatedMatchCompressedBlock(
     last: bool,
     match_search_budget: usize,
     duplicate_index: ?*DuplicateMatchIndex,
+    cancelled: ?*const std.atomic.Value(bool),
 ) Error!bool {
     const plan = try bestMixedMatchLookaheadPlan(&.{}, block, 0, .{
         .dictionary = false,
         .duplicate = true,
         .repeated = true,
-    }, .{ .kind = .duplicate }, .{ .kind = .repeated }, match_search_budget, duplicate_index) orelse return false;
+    }, .{ .kind = .duplicate }, .{ .kind = .repeated }, match_search_budget, duplicate_index, cancelled) orelse return false;
     return try emitBestSequenceCompressedBlockFromLookaheadPlan(
         allocator,
         out,
@@ -8670,6 +8799,7 @@ fn bestMixedMatchLookaheadPlan(
     required_second: MixedMatchRequirement,
     match_search_budget: usize,
     duplicate_index: ?*DuplicateMatchIndex,
+    cancelled: ?*const std.atomic.Value(bool),
 ) Error!?MixedMatchLookaheadPlan {
     if (match_search_budget == 0) return null;
     var first_candidates: [mixed_candidates_per_position]MixedMatchCandidate = undefined;
@@ -8707,6 +8837,7 @@ fn bestMixedMatchLookaheadPlan(
             &have_best,
             &literal_histogram,
             &huffman_bit_prefix,
+            cancelled,
         );
     }
     return if (have_best) best else null;
@@ -8768,6 +8899,7 @@ fn bestMixedCandidateLookaheadPlanFromFirstWithCache(
         &have_best,
         &literal_histogram,
         &huffman_bit_prefix,
+        null,
     );
     if (!have_best or best.count < 2) return null;
     return best;
@@ -8789,8 +8921,10 @@ fn searchMixedCandidateLookaheadPlans(
     have_best: *bool,
     literal_histogram: *MixedLiteralHistogram,
     huffman_bit_prefix: *MixedHuffmanBitPrefix,
+    cancelled: ?*const std.atomic.Value(bool),
 ) Error!void {
-    if (search_budget.* == 0 or depth >= max_bootstrap_sequence_count) return;
+    if (search_budget.* == 0 or depth >= max_bootstrap_sequence_count or
+        (cancelled != null and cancelled.?.load(.acquire))) return;
     search_budget.* -= 1;
 
     const previous_seen = seen.*;
@@ -8817,7 +8951,9 @@ fn searchMixedCandidateLookaheadPlans(
     // candidate also makes the bounded search degrade safely if dense
     // candidate graphs exhaust the small bootstrap budget.
     try considerMixedMatchLookaheadPlan(block, plan, count, candidate.literal_end, seen.*, requirements, best, have_best, literal_histogram, huffman_bit_prefix);
-    if (candidate.literal_end < block.len and count < max_bootstrap_sequence_count) {
+    if (candidate.literal_end < block.len and count < max_bootstrap_sequence_count and
+        (cancelled == null or !cancelled.?.load(.acquire)))
+    {
         var next_candidates: [mixed_candidates_per_position]MixedMatchCandidate = undefined;
         const next_count = try candidate_cache.candidatesAt(dictionary, block, candidate.literal_end, frame_offset, allowed, next_candidates[0..]);
         for (next_candidates[0..next_count]) |next| {
@@ -8837,6 +8973,7 @@ fn searchMixedCandidateLookaheadPlans(
                 have_best,
                 literal_histogram,
                 huffman_bit_prefix,
+                cancelled,
             );
             if (search_budget.* == 0) break;
         }
@@ -15005,10 +15142,10 @@ test "zstd decisive rep beam safely bypasses ordinary optimal parser" {
     }
     var with_skip: std.ArrayList(u8) = .empty;
     defer with_skip.deinit(std.testing.allocator);
-    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &with_skip, payload.items, true, 95, true, null));
+    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &with_skip, payload.items, true, 95, true, null, null));
     var all_families: std.ArrayList(u8) = .empty;
     defer all_families.deinit(std.testing.allocator);
-    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &all_families, payload.items, true, 95, false, null));
+    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &all_families, payload.items, true, 95, false, null, null));
     try std.testing.expect(with_skip.items.len < all_families.items.len);
 }
 
@@ -15022,10 +15159,10 @@ test "zstd relative beam win bypasses ordinary optimal parser" {
 
     var without_beam: std.ArrayList(u8) = .empty;
     defer without_beam.deinit(std.testing.allocator);
-    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &without_beam, &payload, true, 95, false, null));
+    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &without_beam, &payload, true, 95, false, null, null));
     var with_beam: std.ArrayList(u8) = .empty;
     defer with_beam.deinit(std.testing.allocator);
-    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &with_beam, &payload, true, 95, true, null));
+    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &with_beam, &payload, true, 95, true, null, null));
     var greedy: std.ArrayList(u8) = .empty;
     defer greedy.deinit(std.testing.allocator);
     try std.testing.expect(try emitHashMatchCompressedBlock(std.testing.allocator, &greedy, &payload, true, .greedy));
@@ -15454,11 +15591,11 @@ test "zstd mixed match lookahead explores non-greedy continuations" {
         .dictionary = false,
         .duplicate = true,
         .repeated = true,
-    }, .{ .kind = .duplicate }, .{ .kind = .repeated }, mixed_match_path_search_budget, null)) orelse return error.CorruptFrame;
+    }, .{ .kind = .duplicate }, .{ .kind = .repeated }, mixed_match_path_search_budget, null, null)) orelse return error.CorruptFrame;
     var frame: std.ArrayList(u8) = .empty;
     defer frame.deinit(std.testing.allocator);
     try emitFrameHeader(std.testing.allocator, &frame, payload.len, .{ .content_checksum = false });
-    try std.testing.expect(try emitMixedDuplicateRepeatedMatchCompressedBlock(std.testing.allocator, &frame, payload, true, mixed_match_path_search_budget, null));
+    try std.testing.expect(try emitMixedDuplicateRepeatedMatchCompressedBlock(std.testing.allocator, &frame, payload, true, mixed_match_path_search_budget, null, null));
 
     const first_block = try inspectNativeFrameFirstBlock(frame.items);
     try std.testing.expectEqual(NativeBlockType.compressed, first_block.block_type);
@@ -19449,7 +19586,7 @@ test "zstd native writer emits branch-scored dictionary duplicate repeated match
         .dictionary = true,
         .duplicate = true,
         .repeated = true,
-    }, .{ .kind = .dictionary }, .non_dictionary, mixed_match_path_search_budget, null)) orelse return error.CorruptFrame;
+    }, .{ .kind = .dictionary }, .non_dictionary, mixed_match_path_search_budget, null, null)) orelse return error.CorruptFrame;
     try std.testing.expectEqual(@as(usize, 3), plan.count);
     try std.testing.expectEqual(MixedMatchKind.dictionary, plan.kinds[0]);
     try std.testing.expectEqual(MixedMatchKind.duplicate, plan.kinds[1]);
