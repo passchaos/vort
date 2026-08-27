@@ -3700,7 +3700,7 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
         // latter is only evaluated when the 8 KiB split can at least tie the
         // primary frame. Small inputs retain the complete parallel ladder: a
         // split immediately after 8 KiB can uniquely favor 4 KiB blocks.
-        const defer_smallest_candidate = (level == 1 or level >= 6) and input.len > deferred_adaptive_candidate_input_min;
+        const defer_smallest_candidate = shouldDeferSmallestAdaptiveCandidate(input.len);
         // The primary and split encoders are independent full-frame jobs. Put
         // the primary in the same worker set instead of running it on the
         // coordinator after starting the split workers. This lets the
@@ -3991,6 +3991,15 @@ fn adaptiveLevelBlockSizes(level: c_int) [2]usize {
         3...5 => .{ 2 * 1024, 4 * 1024 },
         else => .{ 4 * 1024, 8 * 1024 },
     };
+}
+
+fn shouldDeferSmallestAdaptiveCandidate(input_len: usize) bool {
+    // Above the audit threshold, evaluate the larger split first and pay for
+    // the smaller split only when block splitting is already competitive with
+    // the primary frame. This preserves the complete ladder for short inputs,
+    // where a boundary immediately after the larger block can uniquely favor
+    // the smaller block size.
+    return input_len > deferred_adaptive_candidate_input_min;
 }
 
 fn adaptiveLevelCandidateOptions(primary: NativeFrameOptions, block_size: usize) NativeFrameOptions {
@@ -15552,6 +15561,8 @@ test "zstd adaptive candidates cap search at measured ratio plateau" {
     try std.testing.expectEqual(@as(usize, 64), level9.adaptive_match_search_budget);
     try std.testing.expectEqual(@as(usize, 128), level5.primary_options.match_search_budget);
     try std.testing.expectEqual(@as(usize, 96), level9.primary_options.match_search_budget);
+    try std.testing.expect(!shouldDeferSmallestAdaptiveCandidate(deferred_adaptive_candidate_input_min));
+    try std.testing.expect(shouldDeferSmallestAdaptiveCandidate(deferred_adaptive_candidate_input_min + 1));
     const split = adaptiveLevelCandidateOptions(level9.primary_options, level9.adaptive_block_sizes[0]);
     try std.testing.expectEqual(level9.adaptive_block_sizes[0], split.block_size_max);
     try std.testing.expectEqual(level9.adaptive_match_search_budget, split.match_search_budget);
