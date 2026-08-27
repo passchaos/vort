@@ -7337,3 +7337,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   cases that genuinely need older context. A failing-allocator test pins the
   allocation-free fast path across all four public allocator-summary variants
   and pre-reserved append decode.
+  Brotli summary history no longer zero-fills its 65,520-byte inline ring before
+  decoding, because `tail_len` makes unwritten bytes unobservable. Stored and
+  dictionary slices are now appended with at most two contiguous copies instead
+  of a modulo operation per byte, while match copies retain their overlap-aware
+  byte loop. A focused wrap/replacement oracle pins logical ring ordering. Seven
+  alternating ReleaseFast CPU-8 A/B pairs on the structured quality-11 stream
+  reduce median decoded-size summary time by about 8.9%, while exact-size decode
+  remains effectively neutral and decoded bytes stay identical.

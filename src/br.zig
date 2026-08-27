@@ -899,7 +899,9 @@ const LiteralHistory = struct {
     // The production ratio planner can search the full advertised 16-bit
     // Brotli window. Retaining that exact maximum lets decoded-size preflight
     // preserve literal contexts even after its farthest legal match.
-    tail: [planner_max_backward_distance]u8 = @splat(0),
+    // `tail_len` gates every read, so clearing this relatively large buffer on
+    // each summary would only initialize bytes that cannot yet be observed.
+    tail: [planner_max_backward_distance]u8 = undefined,
     tail_len: usize = 0,
     tail_start: usize = 0,
     // The implicit bytes before stream start are zero, so both context bytes
@@ -932,9 +934,48 @@ const LiteralHistory = struct {
         self.known_suffix_len = @min(2, self.known_suffix_len + 1);
     }
 
-    fn pushSlice(self: *LiteralHistory, bytes: []const u8) void {
-        const keep = @min(bytes.len, self.storage().len);
-        for (bytes[bytes.len - keep ..]) |value| self.push(value);
+    fn pushSlice(self: *LiteralHistory, values: []const u8) void {
+        if (values.len == 0) return;
+
+        if (values.len == 1) {
+            self.previous[0] = self.previous[1];
+            self.previous[1] = values[0];
+            self.known_suffix_len = @min(2, self.known_suffix_len + 1);
+        } else {
+            self.previous = .{ values[values.len - 2], values[values.len - 1] };
+            self.known_suffix_len = 2;
+        }
+
+        const ring = self.storage();
+        std.debug.assert(ring.len != 0);
+        if (values.len >= ring.len) {
+            // The newest complete window is already contiguous in `values`;
+            // replacing the ring avoids one modulo operation per stored byte.
+            @memcpy(ring, values[values.len - ring.len ..]);
+            self.tail_len = ring.len;
+            self.tail_start = 0;
+            return;
+        }
+
+        if (self.tail_len < ring.len) {
+            // A partially filled ring has never wrapped (markUnknown resets it),
+            // so append the first span directly and wrap only any overflow.
+            std.debug.assert(self.tail_start == 0);
+            const append_len = @min(values.len, ring.len - self.tail_len);
+            @memcpy(ring[self.tail_len..][0..append_len], values[0..append_len]);
+            self.tail_len += append_len;
+            if (append_len == values.len) return;
+
+            const wrapped = values[append_len..];
+            @memcpy(ring[0..wrapped.len], wrapped);
+            self.tail_start = wrapped.len;
+            return;
+        }
+
+        const first_len = @min(values.len, ring.len - self.tail_start);
+        @memcpy(ring[self.tail_start..][0..first_len], values[0..first_len]);
+        @memcpy(ring[0 .. values.len - first_len], values[first_len..]);
+        self.tail_start = (self.tail_start + values.len) % ring.len;
     }
 
     fn copy(self: *LiteralHistory, distance: usize, len: usize) void {
@@ -987,6 +1028,31 @@ test "br summary context needs two literals after unknown history" {
     history.copy(1, 2);
     try std.testing.expectEqual(@as(u2, 2), history.known_suffix_len);
     try std.testing.expectEqual([2]u8{ 'x', 'x' }, history.previous);
+}
+
+test "br summary history appends slices across ring boundaries" {
+    var storage: [5]u8 = undefined;
+    var history = LiteralHistory{ .external = &storage };
+
+    history.pushSlice("abc");
+    try std.testing.expectEqual(@as(usize, 3), history.tail_len);
+    try std.testing.expectEqual(@as(usize, 0), history.tail_start);
+    try std.testing.expectEqualSlices(u8, "abc", storage[0..3]);
+    try std.testing.expectEqual([2]u8{ 'b', 'c' }, history.previous);
+
+    history.pushSlice("defg");
+    try std.testing.expectEqual(@as(usize, 5), history.tail_len);
+    try std.testing.expectEqual(@as(usize, 2), history.tail_start);
+    try std.testing.expectEqualSlices(u8, "fgcde", &storage);
+    history.copy(5, 5);
+    try std.testing.expectEqual(@as(usize, 2), history.tail_start);
+    try std.testing.expectEqualSlices(u8, "fgcde", &storage);
+    try std.testing.expectEqual([2]u8{ 'f', 'g' }, history.previous);
+
+    history.pushSlice("123456");
+    try std.testing.expectEqual(@as(usize, 0), history.tail_start);
+    try std.testing.expectEqualSlices(u8, "23456", &storage);
+    try std.testing.expectEqual([2]u8{ '5', '6' }, history.previous);
 }
 
 pub fn encodeStoredStreamAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
