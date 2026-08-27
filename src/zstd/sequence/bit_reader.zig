@@ -57,6 +57,31 @@ pub const Reader = struct {
         return little;
     }
 
+    /// Read a Zstd sequence field, whose width is bounded to 32 bits, from one
+    /// 64-bit reservoir whenever enough bytes remain after the field start.
+    /// The first few reverse reads can start too close to the physical end of
+    /// the stream; those retain the generic exact-width gather to avoid any
+    /// out-of-bounds over-read.
+    pub inline fn readSequenceField(self: *Reader, bit_count: u8) Error!usize {
+        if (bit_count == 0) return 0;
+        if (bit_count > 32) return error.CorruptFrame;
+        if (bit_count > self.remaining_bits) return error.TruncatedFrame;
+
+        const start = self.remaining_bits - bit_count;
+        const first_byte = start >> 3;
+        if (self.bytes.len - first_byte < @sizeOf(u64)) {
+            return self.read(bit_count);
+        }
+        const reservoir = std.mem.readInt(
+            u64,
+            self.bytes[first_byte..][0..@sizeOf(u64)],
+            .little,
+        );
+        const mask = (@as(u64, 1) << @intCast(bit_count)) - 1;
+        self.remaining_bits = start;
+        return @intCast((reservoir >> @intCast(start & 7)) & mask);
+    }
+
     /// Return the next bits without advancing. The value uses the same stream
     /// order as `read`, so table decoders can index fixed-width prefixes and
     /// then consume the actual code length.
@@ -224,4 +249,29 @@ test "Zstd reverse reader small read matches generic read" {
             try std.testing.expectEqual(try generic.read(width), try fast.readSmall(width));
         }
     }
+}
+
+test "Zstd reverse sequence-field read matches generic read" {
+    var bytes: [16]u8 = undefined;
+    for (&bytes, 0..) |*byte, index| byte.* = @truncate(index * 73 + 19);
+    bytes[bytes.len - 1] |= 0x80;
+
+    // Independent reads cover every bit alignment, both the exact-width
+    // fallback near the physical end and the 64-bit reservoir fast path.
+    for (0..96) |consumed| {
+        var positioned = try Reader.init(&bytes);
+        if (consumed != 0) try positioned.skip(@intCast(consumed));
+        const max_width = @min(@as(usize, 32), positioned.available());
+        for (1..max_width + 1) |width| {
+            var fast = positioned;
+            var generic = positioned;
+            try std.testing.expectEqual(
+                try generic.read(@intCast(width)),
+                try fast.readSequenceField(@intCast(width)),
+            );
+            try std.testing.expectEqual(generic.available(), fast.available());
+        }
+    }
+    var reader = try Reader.init(&bytes);
+    try std.testing.expectError(error.CorruptFrame, reader.readSequenceField(33));
 }

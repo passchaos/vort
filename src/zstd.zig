@@ -6329,9 +6329,9 @@ noinline fn decodeAllFseHuffmanSequences(
         const ll_symbol = try spec.literal_fse.symbol(state.ll_state);
         const of_symbol = try spec.offset_fse.symbol(state.of_state);
         const ml_symbol = try spec.match_fse.symbol(state.ml_state);
-        const offset_extra = try state.reader.read(of_symbol.additional_bits);
-        const match_len = std.math.add(usize, ml_symbol.base, try state.reader.read(ml_symbol.additional_bits)) catch return error.IntegerOverflow;
-        const literal_len = std.math.add(usize, ll_symbol.base, try state.reader.read(ll_symbol.additional_bits)) catch return error.IntegerOverflow;
+        const offset_extra = try state.reader.readSequenceField(of_symbol.additional_bits);
+        const match_len = std.math.add(usize, ml_symbol.base, try state.reader.readSequenceField(ml_symbol.additional_bits)) catch return error.IntegerOverflow;
+        const literal_len = std.math.add(usize, ll_symbol.base, try state.reader.readSequenceField(ll_symbol.additional_bits)) catch return error.IntegerOverflow;
         const match_offset = try resolveSequenceOffset(of_symbol.base, of_symbol.additional_bits, offset_extra, literal_len, &state.repeated_offsets);
         state.remaining -= 1;
         if (state.remaining != 0) {
@@ -6377,9 +6377,9 @@ noinline fn decodeFseFseRleSequences(
     while (state.remaining != 0) {
         const ll_symbol = try spec.literal_fse.symbol(state.ll_state);
         const of_symbol = try spec.offset_fse.symbol(state.of_state);
-        const offset_extra = try state.reader.read(of_symbol.additional_bits);
-        const match_len = std.math.add(usize, ml_symbol.base, try state.reader.read(ml_symbol.additional_bits)) catch return error.IntegerOverflow;
-        const literal_len = std.math.add(usize, ll_symbol.base, try state.reader.read(ll_symbol.additional_bits)) catch return error.IntegerOverflow;
+        const offset_extra = try state.reader.readSequenceField(of_symbol.additional_bits);
+        const match_len = std.math.add(usize, ml_symbol.base, try state.reader.readSequenceField(ml_symbol.additional_bits)) catch return error.IntegerOverflow;
+        const literal_len = std.math.add(usize, ll_symbol.base, try state.reader.readSequenceField(ll_symbol.additional_bits)) catch return error.IntegerOverflow;
         const match_offset = try resolveSequenceOffset(of_symbol.base, of_symbol.additional_bits, offset_extra, literal_len, &state.repeated_offsets);
         state.remaining -= 1;
         if (state.remaining != 0) {

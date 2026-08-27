@@ -7556,6 +7556,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Ten alternating ReleaseFast CPU-8 pairs preserve decoded checksums while
   improving both 512 KiB `large_json` and `binary_mixed` caller-buffer decode
   by about 2.0%.
+  The two high-volume sequence decode specializations now read their bounded
+  offset, match-length, and literal-length fields from one 64-bit reservoir
+  whenever eight source bytes remain, falling back to the exact-width reverse
+  reader at the physical stream boundary. An exhaustive alignment/width oracle
+  covers both paths. Twelve alternating ReleaseFast CPU-8 pairs at 200 decodes
+  per sample preserve checksums and improve the 512 KiB `large_json` all-FSE/
+  Huffman path by a paired median 10.8%, while the `binary_mixed` FSE/FSE/RLE
+  path improves 2.3%; both candidates won all twelve pairs.
   Single-tree literal-frequency collection now uses a 256-bit first-seen map,
   initializing only active byte counters while retaining O(1) updates. The
   ratio-only two-context candidate keeps dense histograms because both trees
