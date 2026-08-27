@@ -4488,8 +4488,23 @@ pub const NativeFrameEncoder = struct {
 
         self.raw_scratch.clearRetainingCapacity();
         self.literal_scratch.clearRetainingCapacity();
-        try encodeRawOrRleFrameAppend(self.allocator, &self.raw_scratch, input, frame_options);
         try encodeLiteralOnlyFrameAppendWithDictionaryInternal(self.allocator, &self.literal_scratch, input, frame_options, dictionary, &self.rep_beam_scratch);
+
+        // With no qualifying repeated-byte run the raw/RLE writer is exactly
+        // header + raw block headers + input + optional checksum. Its public
+        // bound is therefore the exact competing frame length. Delay copying
+        // the complete input and hashing it a second time until that candidate
+        // can actually win. Strict `<` preserves the historical raw-on-equal
+        // mode and bytes.
+        if (findRleRun(input) == null) {
+            const raw_len = try encodedNativeFrameBoundWithOptions(input.len, frame_options);
+            if (self.literal_scratch.items.len < raw_len) {
+                try out.appendSlice(self.allocator, self.literal_scratch.items);
+                return .literal_only;
+            }
+        }
+
+        try encodeRawOrRleFrameAppend(self.allocator, &self.raw_scratch, input, frame_options);
 
         // Keep the bootstrap selector deterministic and transparent: both
         // supported native encoders run against reusable scratch buffers, then
@@ -15168,6 +15183,52 @@ test "zstd pure Zig facade maps level zero to fastest native mode" {
     const decoded = try decodeFrameAlloc(std.testing.allocator, fastest);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
+}
+
+test "zstd auto selection uses exact uncompressed-frame bound" {
+    var payload: [10 * 1024 + 37]u8 = undefined;
+    var state: u32 = 0x6a09_e667;
+    for (&payload) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    // Break every accidental 12-byte equal run so the raw/RLE writer is known
+    // to emit only raw blocks and its conservative public bound is exact.
+    var run_start: usize = 0;
+    while (run_start < payload.len) {
+        const run_len = sameByteRunLen(&payload, run_start);
+        if (run_len >= min_rle_split_len) payload[run_start + min_rle_split_len - 1] +%= 1;
+        run_start += @max(run_len, 1);
+    }
+    try std.testing.expect(findRleRun(&payload) == null);
+
+    const options: NativeFrameOptions = .{
+        .content_checksum = true,
+        .block_size_max = 1024,
+        .match_search_budget = 0,
+    };
+    const raw = try encodeRawOrRleFrameWithOptionsAlloc(std.testing.allocator, &payload, options);
+    defer std.testing.allocator.free(raw);
+    try std.testing.expectEqual(raw.len, try encodedNativeFrameBoundWithOptions(payload.len, options));
+
+    const auto = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &payload, options);
+    defer std.testing.allocator.free(auto.frame);
+    try std.testing.expectEqual(NativeFrameMode.raw_or_rle, auto.mode);
+    try std.testing.expectEqualSlices(u8, raw, auto.frame);
+
+    const structured = "{\"service\":\"vort\",\"codec\":\"zstd\",\"value\":12345}\n" ** 256;
+    try std.testing.expect(findRleRun(structured) == null);
+    const forced = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, structured, .{
+        .selection = .literal_only,
+        .content_checksum = true,
+    });
+    defer std.testing.allocator.free(forced.frame);
+    const selected = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, structured, .{
+        .content_checksum = true,
+    });
+    defer std.testing.allocator.free(selected.frame);
+    try std.testing.expectEqual(NativeFrameMode.literal_only, selected.mode);
+    try std.testing.expectEqualSlices(u8, forced.frame, selected.frame);
 }
 
 test "zstd compression levels map to increasing search budgets" {

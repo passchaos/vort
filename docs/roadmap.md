@@ -7393,3 +7393,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   80/640/8607-byte level-9 text/JSON/binary frames and improve their median times
   by about 80.0%/5.8%/3.4%, respectively. The 9-row encode gate, 90-row stage
   gate, 328-case CLI compatibility probe, and 237-case frame probe all pass.
+  Native Zstd automatic block selection now materializes the entropy/match frame
+  before its raw/RLE competitor. When the input has no qualifying RLE run, the
+  existing encoded-frame bound is the exact raw-frame size; a strictly smaller
+  entropy result can therefore win without copying the complete input and
+  computing its checksum a second time. Equal-size cases still materialize and
+  select raw, preserving the established tie rule and byte output. Tests cover
+  both the incompressible raw winner and the structured compressed winner.
+  Sixteen alternating ReleaseFast CPU-8 A/B pairs retain the 80/640/8607-byte
+  level-9 text/JSON/binary frames while improving median encode time by about
+  8.5%/2.2%/1.3%, respectively; the 9-row encode gate, 90-row stage gate,
+  328-case CLI probe, and 237-case frame probe all pass.
