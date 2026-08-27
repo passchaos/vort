@@ -3281,6 +3281,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   median encode time from about 20.9 ms to 14.3 ms (about 1.46x); libzstd 1.5.5
   remains far faster despite emitting 677 bytes, so throughput is still the
   dominant Zstd gap.
+  The enclosing block selector now evaluates ratio-mode matching before its
+  standalone Huffman candidate when no dictionary/history candidate exists. A
+  complete non-RLE match block at or below one eighth of the source is provably
+  smaller than any literal-only prefix code, whose symbols require at least one
+  bit each, so this path returns without building a redundant literal tree and
+  stream. A focused wire oracle covers the bound. Eight more alternating CPU-8
+  JSON level-9 pairs retained 640 bytes and reduced median time from about 14.41
+  to 12.20 ms (about 1.18x on top of worker cancellation, 1.71x combined).
   Adaptive 4/8 KiB candidates explicitly disable the beam: their lower-budget
   parsers remain the ratio fallback, while only the primary level-9 block pays
   the stateful search. Twelve fixed-CPU-8..10 end-to-end pairs versus the

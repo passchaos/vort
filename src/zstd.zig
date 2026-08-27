@@ -7279,6 +7279,7 @@ fn emitLiteralOnlyCompressedBlockWithHistory(
     var best: std.ArrayList(u8) = .empty;
     defer best.deinit(allocator);
     var best_kind: ?CandidateKind = null;
+    var match_tested = false;
 
     const dictionary_ok = if (dictionary) |dict|
         try emitDictionaryMatchCompressedBlock(allocator, &candidate, block, last, dict, frame_offset, match_search_budget)
@@ -7297,6 +7298,25 @@ fn emitLiteralOnlyCompressedBlockWithHistory(
         best_kind = .history;
     }
 
+    if (best_kind == null and rep_beam_search and rleByte(block) == null) {
+        candidate.clearRetainingCapacity();
+        const match_ok = try emitNativeMatchCompressedBlock(allocator, &candidate, block, last, match_search_budget, true, rep_beam_scratch);
+        match_tested = true;
+        if (match_ok) {
+            // A literal-only prefix code needs at least one bit for every input
+            // byte when the block is not RLE. The match candidate includes its
+            // block/section headers, so meeting this lower bound proves that no
+            // raw, RLE, or Huffman-only candidate can tie or beat it.
+            if (candidate.items.len <= block.len / 8) {
+                state.previous_huffman_plan = null;
+                try out.appendSlice(allocator, candidate.items);
+                return;
+            }
+            try best.appendSlice(allocator, candidate.items);
+            best_kind = .match;
+        }
+    }
+
     var huffman_state = state.*;
     candidate.clearRetainingCapacity();
     const huffman_ok = try emitSmallHuffmanLiteralBlock(allocator, &candidate, block, last, &huffman_state);
@@ -7307,12 +7327,14 @@ fn emitLiteralOnlyCompressedBlockWithHistory(
         best_kind = .huffman;
     }
 
-    candidate.clearRetainingCapacity();
-    const match_ok = try emitNativeMatchCompressedBlock(allocator, &candidate, block, last, match_search_budget, rep_beam_search, rep_beam_scratch);
-    if (match_ok and (best_kind == null or candidate.items.len < best.items.len)) {
-        best.clearRetainingCapacity();
-        try best.appendSlice(allocator, candidate.items);
-        best_kind = .match;
+    if (!match_tested) {
+        candidate.clearRetainingCapacity();
+        const match_ok = try emitNativeMatchCompressedBlock(allocator, &candidate, block, last, match_search_budget, rep_beam_search, rep_beam_scratch);
+        if (match_ok and (best_kind == null or candidate.items.len < best.items.len)) {
+            best.clearRetainingCapacity();
+            try best.appendSlice(allocator, candidate.items);
+            best_kind = .match;
+        }
     }
 
     if (best_kind) |kind| switch (kind) {
@@ -8221,6 +8243,51 @@ test "zstd decisive beam cancellation preserves generated structured winners" {
         try std.testing.expectEqualSlices(u8, expected.items, actual.items);
     }
     try std.testing.expect(cancelled_cases != 0);
+}
+
+test "zstd decisive match block beats literal-only lower bound" {
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    while (payload.items.len < 32 * 1024) {
+        var line: [128]u8 = undefined;
+        const index = payload.items.len / 64;
+        const formatted = try std.fmt.bufPrint(&line, "{{\"id\":{d},\"service\":\"vort\",\"message\":\"structured zstd encode corpus\"}}\n", .{index});
+        try payload.appendSlice(std.testing.allocator, formatted);
+    }
+    try std.testing.expect(rleByte(payload.items) == null);
+
+    var match_block: std.ArrayList(u8) = .empty;
+    defer match_block.deinit(std.testing.allocator);
+    var beam_scratch: lz77.RepBeamScratch = .{};
+    defer beam_scratch.deinit(std.testing.allocator);
+    try std.testing.expect(try emitNativeMatchCompressedBlock(
+        std.testing.allocator,
+        &match_block,
+        payload.items,
+        true,
+        96,
+        true,
+        &beam_scratch,
+    ));
+    try std.testing.expect(match_block.items.len <= payload.items.len / 8);
+
+    var state: LiteralOnlyEncoderState = .{};
+    var selected: std.ArrayList(u8) = .empty;
+    defer selected.deinit(std.testing.allocator);
+    try emitLiteralOnlyCompressedBlockWithHistory(
+        std.testing.allocator,
+        &selected,
+        payload.items,
+        true,
+        &state,
+        null,
+        emptyIncrementalHistoryView(),
+        0,
+        96,
+        true,
+        &beam_scratch,
+    );
+    try std.testing.expectEqualSlices(u8, match_block.items, selected.items);
 }
 
 test "zstd prefix-tail shortcut matches full native selection across levels" {
