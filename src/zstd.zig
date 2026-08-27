@@ -72,6 +72,11 @@ const lazy_match_min_search_budget = 32;
 // 1. Keep the legacy multi-duplicate scan for level 2+ ratio arbitration, but do
 // not rebuild its 1 MiB candidate table repeatedly for the fastest level.
 const multi_duplicate_min_search_budget = 32;
+// On exact <=4 KiB blocks, the legacy multi-duplicate planner rebuilds its hash
+// table for every suffix and is dominated by the linear/DP match families in
+// the retained generated corpus. Preserve it as a diagnostic stage and for
+// larger blocks, where the shared predecessor index makes suffix queries cheap.
+const multi_duplicate_min_input_len = duplicate_exact_hash_input_max + 1;
 // Once the repeat-aware winner beats both primitive families by this factor,
 // their recursive combination has not been competitive across the retained
 // generated corpus. This conservative margin permits deterministic worker
@@ -7666,7 +7671,7 @@ fn emitNativeMatchCompressedBlockSerialWithBeam(allocator: std.mem.Allocator, ou
         else
             try findBestDuplicateMatch(block);
     }
-    const multi_duplicate_ok = if (!beam_is_decisive and match_search_budget >= multi_duplicate_min_search_budget)
+    const multi_duplicate_ok = if (shouldSearchMultiDuplicate(block.len, match_search_budget, beam_is_decisive))
         try emitMultiDuplicateMatchCompressedBlockWithFirst(allocator, &candidate, block, last, duplicate_index_ptr, &first_duplicate)
     else
         false;
@@ -7703,6 +7708,12 @@ fn emitNativeMatchCompressedBlockSerialWithBeam(allocator: std.mem.Allocator, ou
     }
     try out.appendSlice(allocator, best.items);
     return true;
+}
+
+fn shouldSearchMultiDuplicate(block_len: usize, match_search_budget: usize, beam_is_decisive: bool) bool {
+    return !beam_is_decisive and
+        match_search_budget >= multi_duplicate_min_search_budget and
+        block_len >= multi_duplicate_min_input_len;
 }
 
 /// Candidate families evaluated by the native compressed-block selector.
@@ -15544,6 +15555,46 @@ test "zstd adaptive candidates cap search at measured ratio plateau" {
     const split = adaptiveLevelCandidateOptions(level9.primary_options, level9.adaptive_block_sizes[0]);
     try std.testing.expectEqual(level9.adaptive_block_sizes[0], split.block_size_max);
     try std.testing.expectEqual(level9.adaptive_match_search_budget, split.match_search_budget);
+    try std.testing.expectEqual(@as(usize, 4097), multi_duplicate_min_input_len);
+    try std.testing.expect(!shouldSearchMultiDuplicate(4096, 64, false));
+    try std.testing.expect(shouldSearchMultiDuplicate(4097, 64, false));
+    try std.testing.expect(!shouldSearchMultiDuplicate(4097, 31, false));
+    try std.testing.expect(!shouldSearchMultiDuplicate(4097, 64, true));
+}
+
+test "zstd small blocks defer dominated multi-duplicate search" {
+    var payload: [duplicate_exact_hash_input_max]u8 = undefined;
+    var state: u32 = 0x6a09_e667;
+    for (&payload, 0..) |*byte, i| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (i % 64 < 52) @intCast('a' + (i % 23)) else @truncate(state >> 24);
+    }
+    @memcpy(payload[2048..2560], payload[256..768]);
+    @memcpy(payload[3072..3584], payload[1024..1536]);
+
+    var selected: std.ArrayList(u8) = .empty;
+    defer selected.deinit(std.testing.allocator);
+    try std.testing.expect(try emitNativeMatchCompressedBlockSerialWithBeam(
+        std.testing.allocator,
+        &selected,
+        &payload,
+        true,
+        64,
+        true,
+        null,
+        null,
+    ));
+
+    var multi: std.ArrayList(u8) = .empty;
+    defer multi.deinit(std.testing.allocator);
+    try std.testing.expect(try emitMultiDuplicateMatchCompressedBlock(
+        std.testing.allocator,
+        &multi,
+        &payload,
+        true,
+        null,
+    ));
+    try std.testing.expect(selected.items.len <= multi.items.len);
 }
 
 test "zstd low latency levels defer mixed-family match search" {

@@ -7424,3 +7424,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   medians by about 41.1%/8.6%; level-9 remains effectively neutral. The exact
   small matcher, reusable-index oracle, 9-row encode gate, 90-row stage gate,
   328-case CLI probe, and 237-case frame probe all pass.
+  Level-3 adaptive blocks now omit the legacy multi-duplicate candidate at and
+  below 4 KiB. The greedy, lazy, optimal, repeat-beam, repeated-pattern, and
+  single-duplicate families still participate; the removed path repeatedly
+  rebuilt an exact hash table for each suffix and did not win any final frame in
+  a 512-case deterministic mix of structured, periodic, copied, and noisy 32 KiB
+  inputs. Baseline and candidate runs produced the same aggregate frame hash.
+  Twenty fixed-CPU-8 A/B pairs retain the 80/640/8607-byte benchmark frames and
+  improve level-3 JSON from about 81.69 ms to 37.82 ms for two encodes (2.16x),
+  and binary from about 62.23 ms to 51.63 ms (1.21x); level 1 is unaffected and
+  level 9 remains within roughly 1.5% noise. All encode, stage, CLI-compatibility,
+  and native-frame gates continue to pass.
