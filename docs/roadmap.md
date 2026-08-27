@@ -7548,3 +7548,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   preserve every benchmark stream size and improve paired fast/balanced/ratio
   medians by about 11.5%/4.8%/4.4% for JSON, 7.5%/8.6%/5.9% for source, and
   9.9%/6.1%/7.3% for log.
+  Single-tree literal-frequency collection now uses a 256-bit first-seen map,
+  initializing only active byte counters while retaining O(1) updates. The
+  ratio-only two-context candidate keeps dense histograms because both trees
+  are populated together. A sparse-vs-dense oracle pins frequencies and final
+  ordering. Ten alternating ReleaseFast CPU-8 pairs preserve every benchmark
+  stream size and improve paired fast/balanced/ratio medians by about
+  4.5%/4.1%/2.7% for JSON, 2.4%/4.2%/2.4% for source, and 3.2%/1.8%/2.4% for
+  log.

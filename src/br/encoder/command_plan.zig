@@ -169,6 +169,24 @@ pub fn PrefixAlphabetFor(comptime capacity: usize) type {
             self.len += 1;
         }
 
+        /// O(1) sparse collection for byte-sized alphabets. `seen` is cleared
+        /// once per plan; untouched dense counters and symbol slots remain
+        /// undefined and are never observed below `len`.
+        pub fn recordByteFrequency(self: *Self, frequencies: *[capacity]u32, seen: *[4]u64, symbol: u8) !void {
+            comptime std.debug.assert(capacity >= 256);
+            const word = symbol >> 6;
+            const mask = @as(u64, 1) << @intCast(symbol & 63);
+            if (seen[word] & mask != 0) {
+                frequencies[symbol] += 1;
+                return;
+            }
+            if (self.len == capacity) return error.InvalidBlockPlan;
+            seen[word] |= mask;
+            frequencies[symbol] = 1;
+            self.symbols[self.len] = symbol;
+            self.len += 1;
+        }
+
         /// Put a sparsely collected active set in the same deterministic order
         /// produced by `alphabetFromFrequenciesInto`: descending frequency,
         /// then ascending symbol for ties.
@@ -719,6 +737,23 @@ test "sparse frequency collection matches dense alphabet ordering" {
     for ([_]u16{ 9, 4, 9, 7, 4, 9, 7 }) |symbol| dense_frequencies[symbol] += 1;
     var dense: PrefixAlphabetFor(32) = undefined;
     try alphabetFromFrequenciesInto(32, &dense, &dense_frequencies);
+    try std.testing.expectEqualSlices(u16, dense.symbols[0..dense.len], sparse.symbols[0..sparse.len]);
+    for (sparse.symbols[0..sparse.len]) |symbol|
+        try std.testing.expectEqual(dense_frequencies[symbol], frequencies[symbol]);
+}
+
+test "bitmap byte frequency collection matches dense alphabet ordering" {
+    var frequencies: [256]u32 = undefined;
+    var seen: [4]u64 = @splat(0);
+    var sparse: PrefixAlphabetFor(256) = undefined;
+    sparse.len = 0;
+    for ("abracadabra") |symbol| try sparse.recordByteFrequency(&frequencies, &seen, symbol);
+    try sparse.sortByFrequencies(&frequencies);
+
+    var dense_frequencies: [256]u32 = @splat(0);
+    for ("abracadabra") |symbol| dense_frequencies[symbol] += 1;
+    var dense: PrefixAlphabetFor(256) = undefined;
+    try alphabetFromFrequenciesInto(256, &dense, &dense_frequencies);
     try std.testing.expectEqualSlices(u16, dense.symbols[0..dense.len], sparse.symbols[0..sparse.len]);
     for (sparse.symbols[0..sparse.len]) |symbol|
         try std.testing.expectEqual(dense_frequencies[symbol], frequencies[symbol]);

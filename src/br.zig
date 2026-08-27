@@ -2025,7 +2025,10 @@ fn initPlannedLiteralEncoder(lengths: *const [256]u4, alphabet: *const command_p
 
 fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error!void {
     if (commands.len == 0) return error.InvalidBlockPlan;
-    var literal_frequencies: [256]u32 = @splat(0);
+    var literal_frequencies: [256]u32 = undefined;
+    var literal_seen: [4]u64 = @splat(0);
+    var literal_alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
+    literal_alphabet.len = 0;
     var literal_context_frequencies: [2][256]u32 = undefined;
     // Fast and balanced encoding use one literal tree. Avoid clearing two
     // additional dense histograms unless a ratio candidate requests context
@@ -2044,7 +2047,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
             commandEntryForLengths(command.insert_len, command.copy_len) orelse return error.InvalidBlockPlan;
         try command_alphabet.recordFrequency(&command_frequencies, encoding.symbol);
         for (input[command.insert_start..][0..command.insert_len], command.insert_start..) |literal, position| {
-            literal_frequencies[literal] += 1;
+            try literal_alphabet.recordByteFrequency(&literal_frequencies, &literal_seen, literal);
             if (options.use_utf8_text_contexts) {
                 const previous = if (position == 0) 0 else input[position - 1];
                 const second_previous = if (position < 2) 0 else input[position - 2];
@@ -2063,14 +2066,13 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     // Brotli still carries a literal tree when dictionary commands cover the
     // entire meta-block. A deterministic unused symbol keeps that tree legal
     // without adding payload bits.
-    if (allZeroFrequencies(256, &literal_frequencies)) literal_frequencies[0] = 1;
+    if (literal_alphabet.len == 0) try literal_alphabet.recordByteFrequency(&literal_frequencies, &literal_seen, 0);
     if (allZeroFrequencies(planned_distance_alphabet_size, &distance_frequencies)) distance_frequencies[0] = 1;
     if (io) |active| stats.frequency_ns = elapsedNs(frequency_start.?, active);
     const alphabet_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
-    var literal_alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
     var literal_context_alphabets: [2]command_plan.PrefixAlphabetFor(256) = undefined;
     var distance_alphabet: command_plan.PrefixAlphabetFor(planned_distance_alphabet_size) = undefined;
-    try command_plan.alphabetFromFrequenciesInto(256, &literal_alphabet, &literal_frequencies);
+    try literal_alphabet.sortByFrequencies(&literal_frequencies);
     if (options.use_utf8_text_contexts) for (&literal_context_alphabets, &literal_context_frequencies) |*alphabet, *frequencies| {
         if (allZeroFrequencies(256, frequencies)) frequencies[0] = 1;
         try command_plan.alphabetFromFrequenciesInto(256, alphabet, frequencies);
