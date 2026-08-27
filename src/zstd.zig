@@ -12918,6 +12918,48 @@ test "zstd reusable duplicate index matches rebuilt search" {
     try std.testing.expectEqual(try duplicateMixedMatchCandidateAtCursorScan(repeated, 17), full_tail_match);
 }
 
+test "zstd small reusable duplicate index preserves multi and single candidates" {
+    var payload: std.ArrayList(u8) = .empty;
+    defer payload.deinit(std.testing.allocator);
+    while (payload.items.len < 32 * 1024) {
+        var line: [128]u8 = undefined;
+        const i = payload.items.len / 64;
+        const text = try std.fmt.bufPrint(&line, "{{\"id\":{d},\"service\":\"vort\",\"message\":\"structured zstd encode corpus\"}}\n", .{i});
+        try payload.appendSlice(std.testing.allocator, text);
+    }
+
+    const index = try std.testing.allocator.create(DuplicateMatchIndex);
+    defer std.testing.allocator.destroy(index);
+    for ([_]usize{ 2048, 4096 }) |block_len| {
+        var offset: usize = 0;
+        while (offset < payload.items.len) : (offset += block_len) {
+            const block = payload.items[offset..@min(payload.items.len, offset + block_len)];
+            if (block.len < shared_duplicate_index_input_min) continue;
+            index.build(block);
+
+            var expected_multi: std.ArrayList(u8) = .empty;
+            defer expected_multi.deinit(std.testing.allocator);
+            var actual_multi: std.ArrayList(u8) = .empty;
+            defer actual_multi.deinit(std.testing.allocator);
+            try std.testing.expectEqual(
+                try emitMultiDuplicateMatchCompressedBlock(std.testing.allocator, &expected_multi, block, true, null),
+                try emitMultiDuplicateMatchCompressedBlock(std.testing.allocator, &actual_multi, block, true, index),
+            );
+            try std.testing.expectEqualSlices(u8, expected_multi.items, actual_multi.items);
+
+            var expected_single: std.ArrayList(u8) = .empty;
+            defer expected_single.deinit(std.testing.allocator);
+            var actual_single: std.ArrayList(u8) = .empty;
+            defer actual_single.deinit(std.testing.allocator);
+            try std.testing.expectEqual(
+                try emitSingleMatchCompressedBlock(std.testing.allocator, &expected_single, block, true, null),
+                try emitSingleMatchCompressedBlock(std.testing.allocator, &actual_single, block, true, index),
+            );
+            try std.testing.expectEqualSlices(u8, expected_single.items, actual_single.items);
+        }
+    }
+}
+
 test "zstd duplicate match retains its selected payload score" {
     const payload =
         "header:{\"service\":\"vort\",\"message\":\"repeatable payload\"}\n" ** 16 ++
