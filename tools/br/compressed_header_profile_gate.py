@@ -18,6 +18,21 @@ COLUMNS = [
     "command_trees", "distance_trees", "tree_symbols",
     "tree_entries", "complex_trees", "simple_trees",
     "code_length_symbols", "repeat_symbols", "repeated_lengths",
+    "literal_code_length_header_ns", "literal_code_length_rle_ns",
+    "literal_canonical_build_ns", "literal_simple_tree_ns",
+    "literal_complex_trees", "literal_simple_trees",
+    "literal_active_entries", "literal_code_length_symbols",
+    "literal_repeat_symbols", "literal_repeated_lengths",
+    "command_code_length_header_ns", "command_code_length_rle_ns",
+    "command_canonical_build_ns", "command_simple_tree_ns",
+    "command_complex_trees", "command_simple_trees",
+    "command_active_entries", "command_code_length_symbols",
+    "command_repeat_symbols", "command_repeated_lengths",
+    "distance_code_length_header_ns", "distance_code_length_rle_ns",
+    "distance_canonical_build_ns", "distance_simple_tree_ns",
+    "distance_complex_trees", "distance_simple_trees",
+    "distance_active_entries", "distance_code_length_symbols",
+    "distance_repeat_symbols", "distance_repeated_lengths",
     "checksum",
 ]
 CASES = {
@@ -76,6 +91,14 @@ def main() -> int:
             raise AssertionError(f"stage share mismatch: {row}")
         if int(row["tree_symbols"]) + int(row["tree_entries"]) <= 0:
             raise AssertionError(f"empty tree shape: {row}")
+        for metric in ("complex_trees", "simple_trees",
+                       "code_length_symbols", "repeat_symbols", "repeated_lengths"):
+            if sum(int(row[f"{family}_{metric}"]) for family in ("literal", "command", "distance")) != int(row[metric]):
+                raise AssertionError(f"family {metric} mismatch: {row}")
+        for metric in ("code_length_header_ns", "code_length_rle_ns",
+                       "canonical_build_ns", "simple_tree_ns"):
+            if sum(int(row[f"{family}_{metric}"]) for family in ("literal", "command", "distance")) != int(row[metric]):
+                raise AssertionError(f"family {metric} timing mismatch: {row}")
 
     if int(by_case["clustered_q8"]["literal_trees"]) < 32:
         raise AssertionError(f"clustered case lost high tree count: {by_case['clustered_q8']}")

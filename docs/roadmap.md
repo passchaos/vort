@@ -7652,3 +7652,15 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   12-case libbrotli decode matrix showed mixed or negative results, so this
   commit intentionally adds measurement infrastructure without changing the
   production prefix-code algorithm.
+  The compressed-header profile now attributes those prefix-code substages to
+  literal, command, and distance tree families independently, including active
+  entries and code-length/repeat work. The clustered q8 fixture currently
+  reports 43/3/17 complex literal/command/distance trees with 1767/415/653
+  active entries and 528/96/80 repeat symbols, respectively. This confirms that
+  literal-tree RLE is the dominant high-tree workload while ordinary q3/q4/q11
+  command and distance trees are mostly simple. Several measured candidates
+  were rejected rather than broadening production code: whole-header and
+  literal-only buffered readers regressed the 12-case decode matrix by roughly
+  2--6% despite improving the isolated clustered header; context-map preamble
+  fusion, zero-repeat write elision, compact active-length construction, small
+  MTF specialization, and repeat-extra-bit fusion were also neutral or mixed.

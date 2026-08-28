@@ -851,6 +851,7 @@ const MinimalCompressedHeader = struct {
 };
 
 pub const CompressedHeaderProfile = header_profile.Profile;
+pub const CompressedHeaderFamily = header_profile.Family;
 
 const max_distance_alphabet_size = 16 + 120 + (48 << 3);
 // Planned streams fix NPOSTFIX=0 and NDIRECT=15, so their distance alphabet is
@@ -3353,6 +3354,7 @@ const CompressedHeaderTreeCounts = struct {
 };
 
 const PrefixCodeProfile = header_profile.PrefixCodeProfile;
+const PrefixCodeFamily = header_profile.Family;
 
 inline fn readCompressedHeaderBlockSwitches(reader: *bitstream.BitReader, header: *MinimalCompressedHeader) Error!CompressedHeaderShape {
     const nbltypes_l = try readBlockTypeCount(reader);
@@ -3456,7 +3458,9 @@ pub fn profileCompressedHeaders(io: std.Io, allocator: std.mem.Allocator, stream
             reader.byte_index = start / 8;
             reader.bit_index = @intCast(start % 8);
             var header: MinimalCompressedHeader = undefined;
-            var prefix_profile: PrefixCodeProfile = .{};
+            var literal_profile: PrefixCodeProfile = .{};
+            var command_profile: PrefixCodeProfile = .{};
+            var distance_profile: PrefixCodeProfile = .{};
 
             var stage_start = std.Io.Clock.awake.now(io);
             const shape = try readCompressedHeaderBlockSwitches(&reader, &header);
@@ -3467,15 +3471,15 @@ pub fn profileCompressedHeaders(io: std.Io, allocator: std.mem.Allocator, stream
             total.context_map_ns +%= elapsedNs(stage_start, io);
 
             stage_start = std.Io.Clock.awake.now(io);
-            try readCompressedHeaderLiteralTreesProfiled(io, &reader, &header, tree_counts.literal, &prefix_profile);
+            try readCompressedHeaderLiteralTreesProfiled(io, &reader, &header, tree_counts.literal, &literal_profile);
             total.literal_tree_ns +%= elapsedNs(stage_start, io);
 
             stage_start = std.Io.Clock.awake.now(io);
-            try readCompressedHeaderCommandTreesProfiled(io, &reader, &header, shape.command_block_types, &prefix_profile);
+            try readCompressedHeaderCommandTreesProfiled(io, &reader, &header, shape.command_block_types, &command_profile);
             total.command_tree_ns +%= elapsedNs(stage_start, io);
 
             stage_start = std.Io.Clock.awake.now(io);
-            try readCompressedHeaderDistanceTreesProfiled(io, &reader, &header, tree_counts.distance, shape.distance_alphabet_size, &prefix_profile);
+            try readCompressedHeaderDistanceTreesProfiled(io, &reader, &header, tree_counts.distance, shape.distance_alphabet_size, &distance_profile);
             total.distance_tree_ns +%= elapsedNs(stage_start, io);
             finishCompressedHeader(&header, shape, tree_counts);
 
@@ -3487,7 +3491,9 @@ pub fn profileCompressedHeaders(io: std.Io, allocator: std.mem.Allocator, stream
             total.literal_context_trees +%= tree_counts.literal;
             total.command_trees +%= shape.command_block_types;
             total.distance_context_trees +%= tree_counts.distance;
-            prefix_profile.addTo(&total);
+            literal_profile.addTo(&total, PrefixCodeFamily.literal);
+            command_profile.addTo(&total, PrefixCodeFamily.command);
+            distance_profile.addTo(&total, PrefixCodeFamily.distance);
             accumulateCompressedHeaderTableShape(&total, &header);
             std.mem.doNotOptimizeAway(&header);
         }
@@ -6923,6 +6929,7 @@ fn readPrefixCodeRuntimeProfiled(comptime max_alphabet_size: usize, alphabet_siz
         else => unreachable,
     };
     profile.simple_trees += 1;
+    profile.active_entries += nsym;
     profile.simple_tree_ns +%= elapsedNs(start, io);
     return result;
 }
@@ -7157,6 +7164,7 @@ fn readComplexPrefixCodeRuntimeProfiled(comptime max_alphabet_size: usize, alpha
         }
     }
     if (active < 2) return error.InvalidHuffmanCode;
+    profile.active_entries += active;
     profile.code_length_rle_ns +%= elapsedNs(rle_start, io);
 
     const build_start = std.Io.Clock.awake.now(io);

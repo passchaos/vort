@@ -35,7 +35,7 @@ pub fn main(init: std.process.Init) !void {
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.writeAll("case,reference_version,quality,input_bytes,encoded_bytes,iterations,headers,header_bits,parse_ns,block_switch_ns,context_map_ns,literal_tree_ns,command_tree_ns,distance_tree_ns,total_ns,block_switch_share,context_map_share,literal_tree_share,command_tree_share,distance_tree_share,code_length_header_ns,code_length_rle_ns,canonical_build_ns,simple_tree_ns,literal_block_types,command_block_types,distance_block_types,literal_trees,command_trees,distance_trees,tree_symbols,tree_entries,complex_trees,simple_trees,code_length_symbols,repeat_symbols,repeated_lengths,checksum\n");
+    try csv.writer.writeAll("case,reference_version,quality,input_bytes,encoded_bytes,iterations,headers,header_bits,parse_ns,block_switch_ns,context_map_ns,literal_tree_ns,command_tree_ns,distance_tree_ns,total_ns,block_switch_share,context_map_share,literal_tree_share,command_tree_share,distance_tree_share,code_length_header_ns,code_length_rle_ns,canonical_build_ns,simple_tree_ns,literal_block_types,command_block_types,distance_block_types,literal_trees,command_trees,distance_trees,tree_symbols,tree_entries,complex_trees,simple_trees,code_length_symbols,repeat_symbols,repeated_lengths,literal_code_length_header_ns,literal_code_length_rle_ns,literal_canonical_build_ns,literal_simple_tree_ns,literal_complex_trees,literal_simple_trees,literal_active_entries,literal_code_length_symbols,literal_repeat_symbols,literal_repeated_lengths,command_code_length_header_ns,command_code_length_rle_ns,command_canonical_build_ns,command_simple_tree_ns,command_complex_trees,command_simple_trees,command_active_entries,command_code_length_symbols,command_repeat_symbols,command_repeated_lengths,distance_code_length_header_ns,distance_code_length_rle_ns,distance_canonical_build_ns,distance_simple_tree_ns,distance_complex_trees,distance_simple_trees,distance_active_entries,distance_code_length_symbols,distance_repeat_symbols,distance_repeated_lengths,checksum\n");
     for (cases) |case| {
         if (options.only_case) |wanted| {
             if (!std.mem.eql(u8, wanted, case.name)) continue;
@@ -72,7 +72,7 @@ pub fn main(init: std.process.Init) !void {
             },
         );
         try csv.writer.print(
-            ",{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}\n",
+            ",{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}",
             .{
                 profile.code_length_header_ns,
                 profile.code_length_rle_ns,
@@ -91,6 +91,19 @@ pub fn main(init: std.process.Init) !void {
                 profile.code_length_symbols / divisor,
                 profile.repeat_symbols / divisor,
                 profile.repeated_lengths / divisor,
+            },
+        );
+        const literal = profile.families[@intFromEnum(vort.br.CompressedHeaderFamily.literal)];
+        const command = profile.families[@intFromEnum(vort.br.CompressedHeaderFamily.command)];
+        const distance = profile.families[@intFromEnum(vort.br.CompressedHeaderFamily.distance)];
+        try csv.writer.print(
+            ",{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}\n",
+            .{
+                literal.code_length_header_ns,         literal.code_length_rle_ns,            literal.canonical_build_ns,        literal.simple_tree_ns,                 literal.complex_trees / divisor,   literal.simple_trees / divisor,
+                literal.active_entries / divisor,      literal.code_length_symbols / divisor, literal.repeat_symbols / divisor,  literal.repeated_lengths / divisor,     command.code_length_header_ns,     command.code_length_rle_ns,
+                command.canonical_build_ns,            command.simple_tree_ns,                command.complex_trees / divisor,   command.simple_trees / divisor,         command.active_entries / divisor,  command.code_length_symbols / divisor,
+                command.repeat_symbols / divisor,      command.repeated_lengths / divisor,    distance.code_length_header_ns,    distance.code_length_rle_ns,            distance.canonical_build_ns,       distance.simple_tree_ns,
+                distance.complex_trees / divisor,      distance.simple_trees / divisor,       distance.active_entries / divisor, distance.code_length_symbols / divisor, distance.repeat_symbols / divisor, distance.repeated_lengths / divisor,
                 profile.checksum() +% sample.checksum,
             },
         );
