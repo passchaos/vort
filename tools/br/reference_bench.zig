@@ -57,7 +57,7 @@ pub fn main(init: std.process.Init) !void {
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
     const writer = &csv.writer;
-    try writer.writeAll("case,reference_version,input_bytes,encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,size_ns,alloc_ns,exact_alloc_ns,dictionary_cases,max_literal_context_trees,max_command_block_types,max_distance_context_trees\n");
+    try writer.writeAll("case,reference_version,input_bytes,encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,size_ns,alloc_ns,exact_alloc_ns,dictionary_cases,static_dictionary_copies,static_dictionary_bytes,max_literal_context_trees,max_command_block_types,max_distance_context_trees\n");
     for (&cases) |case| {
         if (options.only_case) |wanted| {
             if (!std.mem.eql(u8, wanted, case.name)) continue;
@@ -92,8 +92,8 @@ pub fn main(init: std.process.Init) !void {
         const vort_mib_s = mibPerSecond(case.payload.len * iterations, vort_sample.elapsed_ns);
         const reference_mib_s = mibPerSecond(case.payload.len * iterations, reference_sample.elapsed_ns);
         try writer.print(
-            "{s},{x},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d},{d},{d},{d},{d},{d},{d},{d}\n",
-            .{ case.name, runtime.version(), case.payload.len, encoded.len, iterations, vort_sample.elapsed_ns, reference_sample.elapsed_ns, vort_mib_s, reference_mib_s, vort_mib_s / reference_mib_s, vort_sample.mix +% reference_sample.mix, size_sample.elapsed_ns, alloc_sample.elapsed_ns, exact_sample.elapsed_ns, dictionary_cases, summary.max_literal_context_trees, summary.max_command_block_types, summary.max_distance_context_trees },
+            "{s},{x},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}\n",
+            .{ case.name, runtime.version(), case.payload.len, encoded.len, iterations, vort_sample.elapsed_ns, reference_sample.elapsed_ns, vort_mib_s, reference_mib_s, vort_mib_s / reference_mib_s, vort_sample.mix +% reference_sample.mix, size_sample.elapsed_ns, alloc_sample.elapsed_ns, exact_sample.elapsed_ns, dictionary_cases, summary.static_dictionary_copy_count, summary.static_dictionary_bytes, summary.max_literal_context_trees, summary.max_command_block_types, summary.max_distance_context_trees },
         );
     }
     if (options.csv_path) |path| {

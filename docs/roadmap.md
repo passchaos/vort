@@ -7682,3 +7682,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   CPU-8 pairs improve `clustered_q8` decode by about `2.66x`; structured q4 and
   q11 improve about `1.72x` and `1.74x`, while the remaining compressed rows
   improve roughly 2--4% or remain effectively neutral.
+  The reference CSV now records `static_dictionary_copies` and
+  `static_dictionary_bytes`; the gate requires the clustered row to retain more
+  than 1000 dictionary copies and 4 KiB of transformed output. This prevents a
+  future encoder or corpus change from silently removing the workload that
+  exposed the linear-scan bottleneck while leaving a misleading green timing
+  row. Post-fix profiling moves the dominant cost to compact literal, command,
+  and distance Huffman decode. No-extra-memory canonical-range and in-table
+  lookup prototypes improved clustered decode by about 6--79%, but regressed
+  common q0/q3/q11 rows by up to roughly 37%; both were rejected.

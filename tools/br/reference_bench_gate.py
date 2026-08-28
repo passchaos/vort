@@ -10,6 +10,7 @@ COLUMNS = [
     "iterations", "vort_ns", "reference_ns", "vort_mib_s",
     "reference_mib_s", "vort_over_reference", "checksum", "size_ns",
     "alloc_ns", "exact_alloc_ns", "dictionary_cases",
+    "static_dictionary_copies", "static_dictionary_bytes",
     "max_literal_context_trees", "max_command_block_types",
     "max_distance_context_trees",
 ]
@@ -78,6 +79,8 @@ def main() -> int:
     clustered = by_case["clustered_q8"]
     if int(clustered["max_literal_context_trees"]) < 32 or int(clustered["max_distance_context_trees"]) < 8:
         raise AssertionError(f"clustered header coverage regression: {clustered}")
+    if int(clustered["static_dictionary_copies"]) <= 1000 or int(clustered["static_dictionary_bytes"]) <= 4096:
+        raise AssertionError(f"clustered dictionary workload regression: {clustered}")
     print(f"br_reference_bench_gate=ok rows={len(rows)} reference_version={next(iter(versions))}")
     return 0
 
