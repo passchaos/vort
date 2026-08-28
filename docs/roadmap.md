@@ -6419,6 +6419,15 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   fit the existing 64-symbol compact package-merge path, and neither a 96-symbol
   specialization nor an unconstrained-Huffman fast path produced a pinned
   source win; none remains in production.
+- The same benchmark now accepts `persistent-only` after its optional CPU
+  index, keeping Linux `perf` captures limited to the production incremental
+  encoder instead of also timing the rebuild, zlib-compatible competitor, and
+  staged reference paths. An 8192-iteration CPU-8 source capture attributes
+  roughly 56.6% of samples to the rolling matcher (`plan`, `findBest`, and
+  cross-slice match length), 14.4% to dynamic-plan construction, 10.8% to
+  block emission, and 7.4% to memory copying. The ordinary default invocation
+  and CSV schema remain unchanged, and the five-corpus zlib-ng gate still
+  passes.
 - Rolling DEFLATE history/block match extension now compares 32-byte vectors
   before its existing 8-byte and scalar tails. The first differing-lane mask
   preserves exact byte offsets and removes three dependent word comparisons on

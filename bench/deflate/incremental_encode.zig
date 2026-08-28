@@ -30,7 +30,14 @@ pub fn main(init: std.process.Init) !void {
     const iterations = if (args.next()) |text| try std.fmt.parseInt(usize, text, 10) else default_iterations;
     const case_filter = args.next();
     const cpu = if (args.next()) |text| try std.fmt.parseInt(usize, text, 10) else null;
+    // Perf needs a production-only loop: the normal matrix also executes the
+    // rebuild, competitor, and staged reference paths, which otherwise dwarf
+    // the samples from the incremental encoder being investigated.
+    const mode_filter = args.next();
     if (args.next() != null or iterations == 0) return error.InvalidBlockPlan;
+    if (mode_filter) |mode| {
+        if (!std.mem.eql(u8, mode, "persistent-only")) return error.InvalidBlockPlan;
+    }
     if (cpu) |index| try pinCurrentThread(index);
 
     const cases = try buildCases(init.gpa);
@@ -58,6 +65,10 @@ pub fn main(init: std.process.Init) !void {
         }
         const compression = compressionForCase(case.name, options);
         persistent.options.compression = compression;
+        if (mode_filter != null) {
+            try writeRow(stdout, try measurePersistent(init, &persistent, case, iterations));
+            continue;
+        }
         const rows = [_]Row{
             try measurePersistent(init, &persistent, case, iterations),
             try measureRebuild(init, case, compression, iterations),
