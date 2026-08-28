@@ -16,6 +16,10 @@ pub const Matcher = struct {
     head: std.ArrayList(usize) = .empty,
     head_epoch: std.ArrayList(u32) = .empty,
     prev: std.ArrayList(usize) = .empty,
+    // The returned plan borrows this histogram until the next plan/reset.
+    // Keeping it with the matcher avoids copying its 316 counters through the
+    // encoder call chain for every block.
+    dynamic_stats: dynamic_stats.Stats = .{},
     epoch: u32 = 1,
     absolute_position: usize = 0,
     indexed_positions: usize = 0,
@@ -39,6 +43,7 @@ pub const Matcher = struct {
 
     pub fn reset(self: *Matcher) void {
         self.absolute_position = 0;
+        self.dynamic_stats.reset();
         self.invalidateIndex();
     }
 
@@ -80,7 +85,7 @@ pub const Matcher = struct {
         history: []const u8,
         options: lz77.GreedyOptions,
         lazy: bool,
-    ) !struct { tokens: []const lz77.Token, stats: lz77.PlanStats, dynamic: dynamic_stats.Stats } {
+    ) !struct { tokens: []const lz77.Token, stats: lz77.PlanStats, dynamic: *const dynamic_stats.Stats } {
         if (options.window_len == 0 or options.window_len > lz77.default_window_len or
             options.min_match < 3 or options.min_match > 4) return error.InvalidMatch;
         try self.ensureTables(allocator);
@@ -98,7 +103,7 @@ pub const Matcher = struct {
         tokens.clearRetainingCapacity();
         try tokens.ensureTotalCapacity(allocator, @min(block.len, 4096));
         var stats: lz77.PlanStats = .{};
-        var dynamic: dynamic_stats.Stats = .{};
+        self.dynamic_stats.reset();
         // These bounds depend only on the block's options. Hoist their nested
         // clamps out of both the current-position and lazy-probe searches; on
         // source-like input those searches run for nearly every token.
@@ -112,7 +117,7 @@ pub const Matcher = struct {
             if (!acceptMatch(block, pos, best.length, best.distance, options, minimum)) {
                 try appendToken(tokens, allocator, .{ .literal = block[pos] });
                 stats.literals += 1;
-                dynamic.recordLiteral(block[pos]);
+                self.dynamic_stats.recordLiteral(block[pos]);
                 self.insertBlockPosition(history, block, pos, anchor_len);
                 pos += 1;
                 continue;
@@ -131,7 +136,7 @@ pub const Matcher = struct {
                 {
                     try appendToken(tokens, allocator, .{ .literal = block[pos] });
                     stats.literals += 1;
-                    dynamic.recordLiteral(block[pos]);
+                    self.dynamic_stats.recordLiteral(block[pos]);
                     pos += 1;
                     continue;
                 }
@@ -143,7 +148,7 @@ pub const Matcher = struct {
             } });
             stats.matches += 1;
             stats.matched_bytes += best.length;
-            dynamic.recordMatch(.{ .length = @intCast(best.length), .distance = @intCast(best.distance) });
+            self.dynamic_stats.recordMatch(.{ .length = @intCast(best.length), .distance = @intCast(best.distance) });
             const end = @min(block.len, pos + best.length);
             if (lazy) {
                 if (!current_inserted) self.insertBlockPosition(history, block, pos, anchor_len);
@@ -168,7 +173,7 @@ pub const Matcher = struct {
             }
         }
         self.absolute_position = std.math.add(usize, self.absolute_position, block.len) catch return error.IntegerOverflow;
-        return .{ .tokens = tokens.items, .stats = stats, .dynamic = dynamic };
+        return .{ .tokens = tokens.items, .stats = stats, .dynamic = &self.dynamic_stats };
     }
 
     fn ensureTables(self: *Matcher, allocator: std.mem.Allocator) !void {
@@ -337,6 +342,29 @@ test "rolling match length vector path matches byte reference" {
     // Exercise every boundary around both the vector and scalar tail widths.
     for (0..maximum + 1) |limit|
         try std.testing.expectEqual(limit, crossSliceMatchLength(&left, 0, &right, 8, limit));
+}
+
+test "rolling matcher reuses and resets borrowed dynamic stats" {
+    var matcher: Matcher = .{};
+    defer matcher.deinit(std.testing.allocator);
+    var tokens: std.ArrayList(lz77.Token) = .empty;
+    defer tokens.deinit(std.testing.allocator);
+
+    const first = try matcher.plan(std.testing.allocator, &tokens, "abcdef", "", .{}, true);
+    const stats_address = first.dynamic;
+    var first_literals: u32 = 0;
+    for (first.dynamic.literal_frequencies) |frequency| first_literals += frequency;
+    try std.testing.expectEqual(@as(u32, 6), first_literals);
+
+    matcher.reset();
+    try std.testing.expectEqual(@as(usize, 0), matcher.dynamic_stats.literalActiveCount());
+    try std.testing.expectEqual(@as(usize, 0), matcher.dynamic_stats.distanceActiveCount());
+    const second = try matcher.plan(std.testing.allocator, &tokens, "x", "", .{}, true);
+    try std.testing.expectEqual(stats_address, second.dynamic);
+    var second_literals: u32 = 0;
+    for (second.dynamic.literal_frequencies) |frequency| second_literals += frequency;
+    try std.testing.expectEqual(@as(u32, 1), second_literals);
+    try std.testing.expectEqual(@as(u32, 1), second.dynamic.literal_frequencies['x']);
 }
 
 fn hashAt(history: []const u8, block: []const u8, block_absolute: usize, absolute: usize, anchor_len: usize) usize {

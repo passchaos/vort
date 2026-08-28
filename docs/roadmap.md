@@ -6436,6 +6436,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   about 1.3% (15/16 wins; one scheduler outlier), while twelve equivalent JSON
   pairs improved about 1.8% (12/12 wins); encoded sizes and checksum mixes were
   identical, and the five-corpus zlib-ng gate remains green.
+- Incremental dynamic histograms now live in reusable matcher state and the
+  completed plan borrows them until the next `plan` or `reset`, instead of
+  copying 316 counters through the matcher, codec adapter, and block writer. A
+  lifecycle test pins address reuse and reset semantics. Twelve alternating
+  fixed-CPU-8, 4096-iteration pairs improve source and JSON medians by about
+  1.8% and 1.6%, respectively (9/12 and 11/12 wins), with identical encoded
+  sizes/checksum mixes; the
+  five-corpus zlib-ng gate remains green.
 - Rolling DEFLATE history/block match extension now compares 32-byte vectors
   before its existing 8-byte and scalar tails. The first differing-lane mask
   preserves exact byte offsets and removes three dependent word comparisons on

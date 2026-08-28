@@ -200,7 +200,7 @@ pub fn writeIncrementalBestPlannedBlock(
     tokens: []const lz77.Token,
     final: bool,
     options: CompressionOptions,
-    stats: incremental_dynamic_stats.Stats,
+    stats: *const incremental_dynamic_stats.Stats,
 ) !void {
     return writeBestTokensBlockWithStats(allocator, writer, plain, tokens, final, options, stats);
 }
@@ -1248,11 +1248,11 @@ fn writeBestTokensBlock(allocator: std.mem.Allocator, writer: *bitstream.BitWrit
     return writeBestTokensBlockMaybeStats(allocator, writer, plain, tokens, final, options, null);
 }
 
-fn writeBestTokensBlockWithStats(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, plain: []const u8, tokens: []const lz77.Token, final: bool, options: CompressionOptions, stats: incremental_dynamic_stats.Stats) !void {
+fn writeBestTokensBlockWithStats(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, plain: []const u8, tokens: []const lz77.Token, final: bool, options: CompressionOptions, stats: *const incremental_dynamic_stats.Stats) !void {
     return writeBestTokensBlockMaybeStats(allocator, writer, plain, tokens, final, options, stats);
 }
 
-fn writeBestTokensBlockMaybeStats(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, plain: []const u8, tokens: []const lz77.Token, final: bool, options: CompressionOptions, stats: ?incremental_dynamic_stats.Stats) !void {
+fn writeBestTokensBlockMaybeStats(allocator: std.mem.Allocator, writer: *bitstream.BitWriter, plain: []const u8, tokens: []const lz77.Token, final: bool, options: CompressionOptions, stats: ?*const incremental_dynamic_stats.Stats) !void {
     const stored_len = storedBlocksEncodedSizeFromState(writer.*, plain.len);
 
     if (options.block_selection == .stored_fixed) {
@@ -1416,7 +1416,7 @@ const DynamicCodingPlan = struct {
         return initFromStats(lit_freqs, dist_freqs, length_extra_bits, distance_extra_bits);
     }
 
-    fn initFromIncrementalStats(stats: incremental_dynamic_stats.Stats) !DynamicCodingPlan {
+    fn initFromIncrementalStats(stats: *const incremental_dynamic_stats.Stats) !DynamicCodingPlan {
         var lit_freqs = stats.literal_frequencies;
         lit_freqs[256] = 1;
         return initFromStatsKnownActive(
