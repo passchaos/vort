@@ -7722,3 +7722,10 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   clustered profile attributes about 24% to command Huffman decode, 31% to
   distance decode/extra bits, 10% to literal decode, and 7% to UTF-8 context
   selection, providing a clean next-hotspot baseline.
+  Brotli regular-distance reconstruction now uses validated `u32` arithmetic
+  after checking the symbol and extra-bit width. RFC bounds keep the complete
+  expression below 2^30, so the former chain of four generic `usize` overflow
+  checks was redundant. A maximum NPOSTFIX/NDIRECT/symbol/extra test pins that
+  bound and rejects an out-of-range extra value. Twenty-four alternating
+  ReleaseFast CPU-8 pairs improve `clustered_q8` by about 0.9% at the median;
+  the other twelve rows remain within roughly 1.2% noise.

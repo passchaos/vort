@@ -6727,7 +6727,8 @@ fn minimalStaticDictionaryWord(
     // The historical compatibility list is retained for introspection and
     // regression metadata only; scanning its thousands of entries on every
     // dictionary copy made dictionary-heavy decode accidentally quadratic in
-    // that coverage list.
+    // that coverage list. RFC copy lengths are bounded to 4...24 before this
+    // point, so no separate size-bit lookup is needed here.
     return static_dictionary.transform(address, copy_len, transformed_scratch) orelse error.UnsupportedBrotliFeature;
 }
 
@@ -6860,15 +6861,15 @@ fn resolveRegularDistance(npostfix: u2, ndirect: u16, symbol: u16, dextra: usize
     const ndistbits = 1 + (xcode >> @intCast(npostfix_usize + 1));
     if (ndistbits > 24) return error.CorruptFrame;
 
-    const hcode = xcode >> @intCast(npostfix_usize);
-    const postfix_mask = (@as(usize, 1) << @intCast(npostfix_usize)) - 1;
-    const lcode = xcode & postfix_mask;
-    const offset = ((@as(usize, 2) + (hcode & 1)) << @intCast(ndistbits)) - 4;
-    const base_with_extra = std.math.add(usize, offset, dextra) catch return error.IntegerOverflow;
-    const shifted = base_with_extra << @intCast(npostfix_usize);
-    const with_postfix = std.math.add(usize, shifted, lcode) catch return error.IntegerOverflow;
-    const with_direct = std.math.add(usize, with_postfix, ndirect) catch return error.IntegerOverflow;
-    return std.math.add(usize, with_direct, 1) catch return error.IntegerOverflow;
+    // RFC limits (NPOSTFIX<=3, NDIRECT<=120, NDISTBITS<=24) bound this
+    // expression below 2^30. Compute in u32 after validating those fields
+    // rather than carrying four redundant usize overflow checks per distance.
+    if (dextra >= (@as(usize, 1) << @intCast(ndistbits))) return error.CorruptFrame;
+    const hcode: u32 = @intCast(xcode >> @intCast(npostfix_usize));
+    const postfix_mask = (@as(u32, 1) << npostfix) - 1;
+    const lcode: u32 = @as(u32, symbol - ndirect - 16) & postfix_mask;
+    const offset = ((@as(u32, 2) + (hcode & 1)) << @intCast(ndistbits)) - 4;
+    return @as(usize, ((offset + @as(u32, @intCast(dextra))) << npostfix) + lcode + ndirect + 1);
 }
 
 fn resolveShortDistance(symbol: u16, last_distances: *const [4]usize) Error!usize {
@@ -15179,6 +15180,16 @@ test "br regular distance resolver covers postfix and extra bits" {
     try std.testing.expectEqual(@as(usize, 3), try resolveRegularDistance(0, 1, 17, 1));
     try std.testing.expectEqual(@as(usize, 18), try resolveRegularDistance(2, 4, 25, 1));
     try std.testing.expectError(error.InvalidHuffmanCode, resolveRegularDistance(0, 4, 19, 0));
+}
+
+test "br regular distance resolver remains bounded at RFC maxima" {
+    const max_symbol: u16 = max_distance_alphabet_size - 1;
+    const xcode = @as(usize, max_symbol) - 120 - 16;
+    const extra_bits = 1 + (xcode >> 4);
+    const extra = (@as(usize, 1) << @intCast(extra_bits)) - 1;
+    const distance = try resolveRegularDistance(3, 120, max_symbol, extra);
+    try std.testing.expect(distance < (@as(usize, 1) << 30));
+    try std.testing.expectError(error.CorruptFrame, resolveRegularDistance(3, 120, max_symbol, extra + 1));
 }
 
 test "br static dictionary addresses use the active window distance" {
