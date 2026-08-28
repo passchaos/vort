@@ -6444,6 +6444,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   1.8% and 1.6%, respectively (9/12 and 11/12 wins), with identical encoded
   sizes/checksum mixes; the
   five-corpus zlib-ng gate remains green.
+- Reusable incremental histograms now remember exactly which literal/length
+  and distance symbols became active, so the next block clears only those
+  counters instead of memset-zeroing all 316 entries. Twelve alternating
+  fixed-CPU-8, 4096-iteration pairs improve source and JSON medians by about
+  1.1% and 1.7% (12/12 and 11/12 wins), respectively; encoded sizes and mixes
+  remain exact and the five-corpus zlib-ng gate stays green.
 - Rolling DEFLATE history/block match extension now compares 32-byte vectors
   before its existing 8-byte and scalar tails. The first differing-lane mask
   preserves exact byte offsets and removes three dependent word comparisons on

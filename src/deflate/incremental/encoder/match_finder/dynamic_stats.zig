@@ -8,22 +8,42 @@ pub const Stats = struct {
     distance_extra_bits: usize = 0,
     literal_active_count: usize = 0,
     distance_active_count: usize = 0,
+    // Preserve the exact symbols made non-zero so the reusable histogram can
+    // be cleared in O(active symbols), not by zeroing all 316 counters.
+    active_literals: [286]u16 = undefined,
+    active_distances: [30]u8 = undefined,
 
     pub fn reset(self: *Stats) void {
-        self.* = .{};
+        for (self.active_literals[0..self.literal_active_count]) |symbol|
+            self.literal_frequencies[symbol] = 0;
+        for (self.active_distances[0..self.distance_active_count]) |symbol|
+            self.distance_frequencies[symbol] = 0;
+        self.length_extra_bits = 0;
+        self.distance_extra_bits = 0;
+        self.literal_active_count = 0;
+        self.distance_active_count = 0;
     }
 
     pub fn recordLiteral(self: *Stats, byte: u8) void {
-        if (self.literal_frequencies[byte] == 0) self.literal_active_count += 1;
+        if (self.literal_frequencies[byte] == 0) {
+            self.active_literals[self.literal_active_count] = byte;
+            self.literal_active_count += 1;
+        }
         self.literal_frequencies[byte] += 1;
     }
 
     pub fn recordMatch(self: *Stats, match: lz77.Token.Match) void {
         const length = lengthSymbol(match.length);
         const distance = distanceSymbol(match.distance);
-        if (self.literal_frequencies[length.symbol] == 0) self.literal_active_count += 1;
+        if (self.literal_frequencies[length.symbol] == 0) {
+            self.active_literals[self.literal_active_count] = @intCast(length.symbol);
+            self.literal_active_count += 1;
+        }
         self.literal_frequencies[length.symbol] += 1;
-        if (self.distance_frequencies[distance.symbol] == 0) self.distance_active_count += 1;
+        if (self.distance_frequencies[distance.symbol] == 0) {
+            self.active_distances[self.distance_active_count] = @intCast(distance.symbol);
+            self.distance_active_count += 1;
+        }
         self.distance_frequencies[distance.symbol] += 1;
         self.length_extra_bits += length.extra_bits;
         self.distance_extra_bits += distance.extra_bits;
