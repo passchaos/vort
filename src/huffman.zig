@@ -977,7 +977,15 @@ fn compactPackageMergeCodeLengthsKnownActive(
     std.debug.assert(active_symbols.len <= compact_n);
     var symbols: [compact_n]u16 = undefined;
     @memcpy(symbols[0..active_symbols.len], active_symbols);
-    std.mem.sort(u16, symbols[0..active_symbols.len], {}, std.sort.asc(u16));
+    // Matcher discovery order is usually close to source-symbol order. A tiny
+    // stable insertion sort avoids the generic introsort setup for <=64 items
+    // while preserving canonical equal-frequency tie ordering exactly.
+    for (symbols[1..active_symbols.len], 1..) |symbol, index| {
+        var insert = index;
+        while (insert != 0 and symbol < symbols[insert - 1]) : (insert -= 1)
+            symbols[insert] = symbols[insert - 1];
+        symbols[insert] = symbol;
+    }
     var compact_freqs: [compact_n]u32 = @splat(0);
     for (symbols[0..active_symbols.len], 0..) |symbol, index| {
         std.debug.assert(symbol < n and freqs[symbol] != 0);

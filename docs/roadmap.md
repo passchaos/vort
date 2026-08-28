@@ -6465,6 +6465,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   oracle matches the scanned builder exactly. Twelve alternating fixed-CPU-8,
   4096-iteration pairs improve source and JSON medians by about 1.7% and 2.3%
   (11/12 wins each); encoded sizes/mixes are exact and the zlib-ng gate passes.
+  The at-most-64-symbol canonical tie-order step now uses a stable insertion
+  sort instead of generic introsort setup. The list arrives in near-source
+  order and remains small by construction; the same active-count oracle pins
+  exact lengths. Twelve alternating CPU-8 pairs improve source by about 1.3%
+  (10/12 wins) and JSON by about 0.5% (9/12 wins), with unchanged output and a
+  green five-corpus zlib-ng gate.
   A post-series 16-run CPU-8 comparison measures current persistent source and
   JSON medians at about 2902 and 3042 MiB/s, respectively; the same benchmark's
   local zlib-ng 2.3.90 level-6 rows cluster near 2822 and 2880 MiB/s. This is a
