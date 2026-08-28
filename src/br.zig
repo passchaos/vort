@@ -803,7 +803,13 @@ const BitWriter = struct {
     }
 
     inline fn appendZeroByte(self: *BitWriter, allocator: std.mem.Allocator) Error!void {
-        if (self.bounded) try self.out.appendBounded(0) else try self.out.append(allocator, 0);
+        if (self.out.items.len < self.out.capacity) {
+            self.out.appendAssumeCapacity(0);
+        } else if (self.bounded) {
+            return error.OutOfMemory;
+        } else {
+            try self.out.append(allocator, 0);
+        }
     }
 
     fn alignToByte(self: *BitWriter) void {
@@ -819,6 +825,18 @@ const BitWriter = struct {
         }
     }
 };
+
+test "Brotli bit writer uses reserved and bounded capacity" {
+    var storage: [2]u8 = undefined;
+    var out: std.ArrayList(u8) = .{
+        .items = storage[0..0],
+        .capacity = storage.len,
+    };
+    var writer = BitWriter{ .out = &out, .bounded = true };
+    try writer.writeBits(std.testing.allocator, 0xabcd, 16);
+    try std.testing.expectEqualSlices(u8, &.{ 0xcd, 0xab }, out.items);
+    try std.testing.expectError(error.OutOfMemory, writer.writeBits(std.testing.allocator, 1, 1));
+}
 
 pub fn PrefixCode(comptime alphabet_size: usize) type {
     return struct {

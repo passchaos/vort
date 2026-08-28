@@ -7731,6 +7731,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   pin the borrowed-slice lifecycle. Ten alternating ReleaseFast CPU-8 pairs
   improve balanced JSON/source/log over allocator-returning reuse by about
   1.6%/1.7%/0.9%, respectively, with identical output sizes.
+  The Brotli bit writer now appends a new zero byte directly whenever its
+  output capacity is already available, retaining explicit bounded-output
+  failure and allocator growth only at true capacity boundaries. A bounded
+  two-byte test pins both the byte order and overflow contract. Sixteen
+  alternating fixed-CPU-8 stage pairs improve full planned JSON/source/log
+  encoding by about 0.5%/1.8%/1.7%, respectively, with every pair positive and
+  the seven-row libbrotli encode gate green.
   Brotli complex-prefix decoding now records the ascending active-symbol list
   during its mandatory validation pass and hands it to a trusted sparse
   canonical decoder builder. This avoids rescanning all 256/520/704 code-length
