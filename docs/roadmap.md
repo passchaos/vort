@@ -4,7 +4,7 @@ This roadmap is a living checklist toward the larger goal: outperform and
 out-feature `zlib`, `zlib-ng`, `zlib-rs`, and `zstd` without copying their
 architecture blindly.
 
-### Current completion audit (2026-08-20)
+### Current completion audit (2026-08-29)
 
 The long-term objective is **not complete**. Current evidence still leaves these
 major gaps before Vort can claim broad industry-best parity:
@@ -17,8 +17,9 @@ major gaps before Vort can claim broad industry-best parity:
   entropy block switching, static dictionaries, and consecutive compressed
   meta-blocks. Arbitrary upstream Brotli streams still need broader decoder
   coverage; the general fallback facade buffers a bounded complete payload.
-- Incremental DEFLATE source throughput remains behind the local zlib-ng level-6
-  comparison on stable runs, despite leading several binary/history shapes.
+- Incremental DEFLATE source and JSON throughput now reach or exceed the local
+  zlib-ng level-6 comparison on the locked 256 KiB fixtures, while broader
+  real-corpus, ratio, memory, and cross-platform parity still needs evidence.
 - Zstd-compatible dictionary training, seekable/indexed framing, and broader
   entropy-mode parity still require completion and competitor evidence.
 - Cross-platform optimized kernels and reproducible competitor measurements are
