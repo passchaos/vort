@@ -6477,6 +6477,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   bounded to 64 on this path. Twelve alternating CPU-8 pairs improve source and
   JSON medians by about 0.9% and 1.2% (8/12 and 11/12 wins); exact-output oracles
   and the five-corpus zlib-ng gate remain green.
+  The rolling matcher's `findBest` search is now inlined into its per-block
+  planner, allowing block-invariant limits and hash-chain state to stay in the
+  surrounding loop instead of crossing up to two call boundaries per token.
+  Twelve alternating fixed-CPU-8, 4096-iteration pairs improve source and JSON
+  medians by about 4.1% and 4.0% (11/12 and 12/12 wins); encoded sizes and mixes
+  remain exact, and the five-corpus zlib-ng gate stays green.
   A post-series 16-run CPU-8 comparison measures current persistent source and
   JSON medians at about 2902 and 3042 MiB/s, respectively; the same benchmark's
   local zlib-ng 2.3.90 level-6 rows cluster near 2822 and 2880 MiB/s. This is a

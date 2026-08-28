@@ -207,7 +207,7 @@ pub const Matcher = struct {
 
     const Candidate = struct { length: usize = 0, distance: usize = 0 };
 
-    fn findBest(
+    inline fn findBest(
         self: *const Matcher,
         history: []const u8,
         block: []const u8,
