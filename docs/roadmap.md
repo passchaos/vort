@@ -7578,7 +7578,9 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   cannot perturb the existing reference benchmark binary. It isolates
   `numbered_json`, raw-literal/all-FSE `huffman80k`, multi-block `large_json`,
   and `binary_mixed` without timing libzstd, allocator wrappers, or inspection
-  passes. Fixed-CPU perf now attributes `huffman80k`
+  passes. Its gate pins block and compressed-block counts for both large rows,
+  preventing a libzstd or corpus change from silently replacing the intended
+  multi-block workloads. Fixed-CPU perf now attributes `huffman80k`
   primarily to generic sequence decoding, `large_json` to the all-FSE/Huffman
   loop and copy work, and `binary_mixed` to generic sequence/copy work. Several
   measured candidates were rejected: an all-FSE/raw loop improved its target by

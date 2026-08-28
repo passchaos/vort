@@ -48,7 +48,7 @@ pub fn main(init: std.process.Init) !void {
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
-    try csv.writer.writeAll("case,input_bytes,encoded_bytes,iterations,vort_ns,vort_mib_s,checksum,literals_kind,sequence_count,ll_mode,of_mode,ml_mode\n");
+    try csv.writer.writeAll("case,input_bytes,encoded_bytes,iterations,vort_ns,vort_mib_s,checksum,block_count,compressed_blocks,literals_kind,sequence_count,ll_mode,of_mode,ml_mode\n");
     var selected: usize = 0;
     for (cases) |case| {
         if (options.only_case) |wanted| if (!std.mem.eql(u8, wanted, case.name)) continue;
@@ -61,6 +61,7 @@ pub fn main(init: std.process.Init) !void {
         if (written != case.payload.len or !std.mem.eql(u8, case.payload, output)) return error.SizeMismatch;
         const block = try vort.zstdInspectNativeFrameFirstBlock(encoded);
         const shape = try vort.zstdInspectNativeFrameBlockSequenceModes(encoded, block);
+        const summary = try vort.zstdSummarizeNativeFrameBlocks(encoded);
         var mix: u64 = 0;
         const start = std.Io.Clock.awake.now(init.io);
         for (0..options.iterations) |_| {
@@ -68,10 +69,11 @@ pub fn main(init: std.process.Init) !void {
             if (output.len != 0) mix +%= output[0];
         }
         const elapsed_ns = elapsedNs(init.io, start);
-        try csv.writer.print("{s},{d},{d},{d},{d},{d:.2},{d},{s},{d},{s},{s},{s}\n", .{
-            case.name,                                                       case.payload.len,                  encoded.len,                   options.iterations,   elapsed_ns,
-            mibPerSecond(case.payload.len * options.iterations, elapsed_ns), mix,                               @tagName(shape.literals_kind), shape.sequence_count, @tagName(shape.literal_length_mode),
-            @tagName(shape.offset_mode),                                     @tagName(shape.match_length_mode),
+        try csv.writer.print("{s},{d},{d},{d},{d},{d:.2},{d},{d},{d},{s},{d},{s},{s},{s}\n", .{
+            case.name,                      case.payload.len,                                                encoded.len,          options.iterations,
+            elapsed_ns,                     mibPerSecond(case.payload.len * options.iterations, elapsed_ns), mix,                  summary.block_count,
+            summary.compressed_block_count, @tagName(shape.literals_kind),                                   shape.sequence_count, @tagName(shape.literal_length_mode),
+            @tagName(shape.offset_mode),    @tagName(shape.match_length_mode),
         });
     }
     if (selected == 0) return error.InvalidBlockPlan;
