@@ -6567,16 +6567,13 @@ fn minimalStaticDictionaryWord(
     // output after the stream has filled its window.
     if (distance <= max_backward_distance) return error.InvalidMatch;
     const address = distance - max_backward_distance - 1;
-    const size_bits = minimalStaticDictionarySizeBits(copy_len) orelse return error.UnsupportedBrotliFeature;
-    const mask = (@as(usize, 1) << @intCast(size_bits)) - 1;
-    const word_index = address & mask;
-    const transform_index = address >> @intCast(size_bits);
 
-    for (minimal_static_dictionary_entries) |entry| {
-        if (entry.transform == transform_index and entry.copy_len == copy_len and entry.word_index == word_index) return entry.word;
-    }
-    if (static_dictionary.transform(address, copy_len, transformed_scratch)) |word| return word;
-    return error.UnsupportedBrotliFeature;
+    // `static_dictionary.transform` is the complete RFC 7932 implementation.
+    // The historical compatibility list is retained for introspection and
+    // regression metadata only; scanning its thousands of entries on every
+    // dictionary copy made dictionary-heavy decode accidentally quadratic in
+    // that coverage list.
+    return static_dictionary.transform(address, copy_len, transformed_scratch) orelse error.UnsupportedBrotliFeature;
 }
 
 pub fn minimalStaticDictionarySizeBits(copy_len: usize) ?u5 {
@@ -7968,6 +7965,16 @@ test "br ratio planner mixes LZ77 and static dictionary commands" {
 
 test "br static dictionary direct transformed comparison is exhaustive over transform shapes" {
     try static_dictionary.testDirectTransformedComparison();
+}
+
+test "br retained static dictionary coverage matches the complete transformer" {
+    var scratch: [64]u8 = undefined;
+    for (minimal_static_dictionary_entries) |entry| {
+        const size_bits = minimalStaticDictionarySizeBits(entry.copy_len).?;
+        const address = (@as(usize, entry.transform) << size_bits) | entry.word_index;
+        const transformed = static_dictionary.transform(address, entry.copy_len, &scratch) orelse return error.UnsupportedBrotliFeature;
+        try std.testing.expectEqualSlices(u8, entry.word, transformed);
+    }
 }
 
 test "br planner-backed encoder emits regular distances" {

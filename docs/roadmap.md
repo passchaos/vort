@@ -7672,3 +7672,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   code-layout effects. The first ReleaseFast CPU-8 result is deliberately
   recorded as a gap rather than a claim: Vort is about 219 MiB/s versus
   libbrotli's 1961 MiB/s (`0.112x`) on this 1 MiB high-tree-count decode.
+  Profiling that new end-to-end row corrected the earlier header-only
+  hypothesis: roughly 60% of cycles were in `minimalStaticDictionaryWord`,
+  which linearly scanned the historical compatibility-coverage list before
+  calling the already-complete RFC dictionary transformer. Removing that
+  redundant scan keeps the public coverage metadata intact and has an
+  exhaustive test showing every retained tuple produces the same transformed
+  bytes through the complete implementation. Sixteen alternating ReleaseFast
+  CPU-8 pairs improve `clustered_q8` decode by about `2.66x`; structured q4 and
+  q11 improve about `1.72x` and `1.74x`, while the remaining compressed rows
+  improve roughly 2--4% or remain effectively neutral.
