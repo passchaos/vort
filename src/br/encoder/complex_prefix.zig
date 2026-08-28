@@ -50,7 +50,7 @@ fn writeWithStorage(comptime storage_len: usize, allocator: std.mem.Allocator, w
 
     const encoder = try huffman.HuffmanTable(18).Encoder.init(&code_length_lengths);
     for (rle) |token| {
-        try writer.writeBits(allocator, encoder.codes[token.symbol], encoder.bits[token.symbol]);
+        try writer.writeHuffmanBits(allocator, encoder.codes[token.symbol], encoder.bits[token.symbol]);
         if (token.symbol == 17) try writer.writeBits(allocator, token.extra, 3);
         if (token.symbol == 16) try writer.writeBits(allocator, token.extra, 2);
     }
@@ -102,6 +102,7 @@ fn writeCodeLengthCodeLength(allocator: std.mem.Allocator, writer: anytype, leng
 test "precomputed complex prefix stop index is validated" {
     const TestWriter = struct {
         fn writeBits(_: *@This(), _: std.mem.Allocator, _: u64, _: u6) !void {}
+        fn writeHuffmanBits(_: *@This(), _: std.mem.Allocator, _: u16, _: u4) !void {}
     };
     var writer = TestWriter{};
     var lengths: [8]u4 = @splat(0);

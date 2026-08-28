@@ -812,7 +812,7 @@ const BitWriter = struct {
     /// out those writes avoids the general bit writer's per-byte loop in its
     /// hottest call sites while preserving the same growth and bounded-output
     /// behavior through `appendZeroByte`.
-    inline fn writeHuffmanBits(self: *BitWriter, allocator: std.mem.Allocator, value: u16, count: u4) Error!void {
+    pub inline fn writeHuffmanBits(self: *BitWriter, allocator: std.mem.Allocator, value: u16, count: u4) Error!void {
         std.debug.assert(count != 0);
         std.debug.assert(value < (@as(u16, 1) << count));
 

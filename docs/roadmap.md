@@ -7766,6 +7766,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   0.6%/1.2%/0.3% (16/16, 16/16, and 10/16 wins), with matching checksums; the
   seven-row libbrotli encode gate and 99-case upstream differential remain
   green.
+  Complex-prefix code-length tokens now use the same validated narrow Huffman
+  writer as command/literal/distance payload symbols. Their code widths are at
+  most five bits, while repeat extras and tree declarations remain on the
+  general writer. Sixteen alternating ReleaseFast CPU-8 stage pairs at 20,000
+  encodes preserve checksums and improve full planned JSON/source/log medians
+  by about 3.5%/3.7%/3.5%, with all 16 pairs positive for every corpus. The
+  seven-row libbrotli encode gate and 99-case upstream differential remain
+  green.
   Brotli complex-prefix decoding now records the ascending active-symbol list
   during its mandatory validation pass and hands it to a trusted sparse
   canonical decoder builder. This avoids rescanning all 256/520/704 code-length
