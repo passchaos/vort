@@ -1609,6 +1609,12 @@ test "tail lookup decoder matches compact decoder" {
 
     var too_dense = try HuffmanTable(256).init(&([_]u4{8} ** 256));
     try std.testing.expect(!too_dense.buildTailLookup8());
+
+    const short = try HuffmanTable(256).init(&([_]u4{7} ++ [_]u4{0} ** 255));
+    var short_with_lookup = short;
+    try std.testing.expect(short_with_lookup.buildTailLookup8());
+    var truncated = bitstream.BitReader.init(&.{});
+    try std.testing.expectError(error.TruncatedFrame, short_with_lookup.decodeValueTailLookup8(&truncated));
 }
 
 test "fast Huffman decoder falls back for long codes" {

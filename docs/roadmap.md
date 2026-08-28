@@ -7699,3 +7699,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   prototype accelerated `clustered_q8` by about `1.79x`, but regressed common
   text/structured rows substantially, so only the isolated reusable primitive
   was retained for a future dedicated clustered state machine.
+  Wired that tail lookup into an isolated large-stream decoder selected before
+  entering the existing small-stream function. Only meta-blocks with at least
+  16 literal context trees build the in-table lookups, and only their literal
+  loop uses them; command/distance trees and every ordinary stream retain the
+  existing compact decoder. Sixteen alternating ReleaseFast CPU-8 pairs against
+  `e90d1e7` improve `clustered_q8` by about `1.19x`, while the twelve established
+  rows remain neutral-to-positive at the median. The lookup still falls back to
+  compact decoding for long codes and refuses trees without enough unused entry
+  capacity, preserving the 290 KiB header footprint.

@@ -831,6 +831,16 @@ pub fn PrefixCode(comptime alphabet_size: usize) type {
             if (self.single_symbol) |symbol| return symbol;
             return try self.table.decodeValue(reader);
         }
+
+        pub fn prepareTailLookup(self: *Self) bool {
+            if (self.single_symbol != null) return true;
+            return self.table.buildTailLookup8();
+        }
+
+        pub fn decodeTailLookup(self: *const Self, reader: *bitstream.BitReader) Error!u16 {
+            if (self.single_symbol) |symbol| return symbol;
+            return self.table.decodeValueTailLookup8(reader);
+        }
     };
 }
 
@@ -2564,6 +2574,7 @@ fn checkedDecodedEnd(written: usize, decoded_len: usize, max_output_len: usize) 
 }
 
 pub fn decodeStreamInto(stream: []const u8, output: []u8) Error!usize {
+    if (stream.len >= large_stream_decode_threshold) return decodeLargeStreamInto(stream, output);
     var reader = bitstream.BitReader.init(stream);
     const window_bits = try readWindowBitsValue(&reader);
     var written: usize = 0;
@@ -2578,6 +2589,37 @@ pub fn decodeStreamInto(stream: []const u8, output: []u8) Error!usize {
             .compressed => |header| {
                 try processMinimalCompressedMetaBlock(&reader, output, &written, header.decoded_len, &last_distances, window_bits);
                 if (header.final) {
+                    try ensureZeroPaddingAndEnd(reader);
+                    return written;
+                }
+            },
+            .uncompressed => |meta_block_len| {
+                try consumeZeroPaddingToByte(&reader);
+                if (output.len - written < meta_block_len) return error.OutputTooSmall;
+                try reader.readAlignedBytes(output[written..][0..meta_block_len]);
+                written += meta_block_len;
+            },
+        }
+    }
+}
+
+const large_stream_decode_threshold: usize = 16 * 1024;
+
+noinline fn decodeLargeStreamInto(stream: []const u8, output: []u8) Error!usize {
+    var reader = bitstream.BitReader.init(stream);
+    const window_bits = try readWindowBitsValue(&reader);
+    var written: usize = 0;
+    var last_distances = initial_last_distances;
+    while (true) {
+        switch (try readStreamMetaBlockHeader(&reader)) {
+            .end => {
+                try ensureZeroPaddingAndEnd(reader);
+                return written;
+            },
+            .metadata => try skipMetadataMetaBlock(&reader),
+            .compressed => |meta| {
+                try processLargeCompressedMetaBlock(&reader, output, &written, meta.decoded_len, &last_distances, window_bits);
+                if (meta.final) {
                     try ensureZeroPaddingAndEnd(reader);
                     return written;
                 }
@@ -3753,6 +3795,119 @@ fn processMinimalCompressedMetaBlock(
             return;
         }
         const decoded_distance = try readMinimalDistance(&header, reader, lengths, last_distances);
+        const distance = decoded_distance.distance;
+        if (distance == 0) return error.InvalidMatch;
+        const max_distance = maxBackwardDistanceForWindow(window_bits, written.*);
+        if (distance > max_distance) {
+            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
+            if (word.len > meta_block_end - written.*) return error.CorruptFrame;
+            @memcpy(output[written.*..][0..word.len], word);
+            written.* += word.len;
+            continue;
+        }
+        if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
+        if (lengths.copy_len > meta_block_end - written.*) return error.CorruptFrame;
+        match_copy.append(output, written, distance, lengths.copy_len);
+    }
+}
+
+fn processLargeCompressedMetaBlock(
+    reader: *bitstream.BitReader,
+    output: []u8,
+    written: *usize,
+    meta_block_len: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+) Error!void {
+    const meta_block_end = std.math.add(usize, written.*, meta_block_len) catch return error.IntegerOverflow;
+    if (meta_block_end > output.len) return error.OutputTooSmall;
+    var header: MinimalCompressedHeader = undefined;
+    try readMinimalCompressedHeaderInto(reader, &header);
+    if (header.literal_tree_count < clustered_literal_tree_threshold or !prepareLiteralTailLookups(&header))
+        return processDecodedCompressedPayload(reader, output, written, meta_block_end, last_distances, window_bits, &header);
+    return processTailLookupCompressedPayload(reader, output, written, meta_block_end, last_distances, window_bits, &header);
+}
+
+const clustered_literal_tree_threshold: u16 = 16;
+
+fn prepareLiteralTailLookups(header: *MinimalCompressedHeader) bool {
+    for (header.literal_trees[0..header.literal_tree_count]) |*tree|
+        if (!tree.prepareTailLookup()) return false;
+    return true;
+}
+
+noinline fn processDecodedCompressedPayload(
+    reader: *bitstream.BitReader,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+) Error!void {
+    var transformed_dictionary_word: [64]u8 = undefined;
+    while (written.* < meta_block_end) {
+        const command_symbol = try readCommandSymbol(header, reader);
+        const lengths = try readInsertCopyLengths(command_symbol, reader);
+        if (lengths.insert_len > meta_block_end - written.*) return error.CorruptFrame;
+        var i: usize = 0;
+        while (i < lengths.insert_len) : (i += 1) {
+            try ensureLiteralBlock(header, reader);
+            const context = try literalContext(header, output, written.*);
+            const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
+            if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
+            const literal = try header.literal_trees[tree_index].decode(reader);
+            if (literal > 0xff) return error.InvalidHuffmanCode;
+            output[written.*] = @intCast(literal);
+            written.* += 1;
+            if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
+        }
+        if (written.* == meta_block_end) return;
+        const decoded_distance = try readMinimalDistance(header, reader, lengths, last_distances);
+        const distance = decoded_distance.distance;
+        if (distance == 0) return error.InvalidMatch;
+        const max_distance = maxBackwardDistanceForWindow(window_bits, written.*);
+        if (distance > max_distance) {
+            const word = try minimalStaticDictionaryWord(distance, lengths.copy_len, max_distance, &transformed_dictionary_word);
+            if (word.len > meta_block_end - written.*) return error.CorruptFrame;
+            @memcpy(output[written.*..][0..word.len], word);
+            written.* += word.len;
+            continue;
+        }
+        if (decoded_distance.update_ring) pushLastDistance(last_distances, distance);
+        if (lengths.copy_len > meta_block_end - written.*) return error.CorruptFrame;
+        match_copy.append(output, written, distance, lengths.copy_len);
+    }
+}
+
+noinline fn processTailLookupCompressedPayload(
+    reader: *bitstream.BitReader,
+    output: []u8,
+    written: *usize,
+    meta_block_end: usize,
+    last_distances: *[4]usize,
+    window_bits: u5,
+    header: *MinimalCompressedHeader,
+) Error!void {
+    var transformed_dictionary_word: [64]u8 = undefined;
+    while (written.* < meta_block_end) {
+        const command_symbol = try readCommandSymbol(header, reader);
+        const lengths = try readInsertCopyLengths(command_symbol, reader);
+        if (lengths.insert_len > meta_block_end - written.*) return error.CorruptFrame;
+        var i: usize = 0;
+        while (i < lengths.insert_len) : (i += 1) {
+            try ensureLiteralBlock(header, reader);
+            const context = try literalContext(header, output, written.*);
+            const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
+            if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
+            const literal = try header.literal_trees[tree_index].decodeTailLookup(reader);
+            if (literal > 0xff) return error.InvalidHuffmanCode;
+            output[written.*] = @intCast(literal);
+            written.* += 1;
+            if (header.literal_block.remaining != 0) header.literal_block.remaining -= 1;
+        }
+        if (written.* == meta_block_end) return;
+        const decoded_distance = try readMinimalDistance(header, reader, lengths, last_distances);
         const distance = decoded_distance.distance;
         if (distance == 0) return error.InvalidMatch;
         const max_distance = maxBackwardDistanceForWindow(window_bits, written.*);
