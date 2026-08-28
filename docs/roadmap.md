@@ -7672,6 +7672,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   alternating fixed-CPU-8 runs improve the 64 KiB high-entropy ASCII row by a
   paired median 16.2% (8/8 wins); `huffman80k`, `large_json`, and `binary_mixed`
   stay within about 0.4% at the median with matching checksums.
+  Sequence-driven Huffman literal helpers now borrow their parsed section
+  instead of copying the structure (including its roughly 1 KiB canonical
+  tree) for each literal run. Sixteen alternating fixed-CPU-8 pairs improve
+  `large_json` by a paired median 5.2% (15/16 wins); longer confirmation keeps
+  `huffman80k` and `binary_mixed` effectively neutral at roughly +0.1% and
+  -0.4%, respectively, with matching checksums.
   The two large compressed-FSE sequence loops now index their validated decode
   tables without repeating three state-range branches per sequence. Initial
   states are bounded by the table logs and every transition is produced by the

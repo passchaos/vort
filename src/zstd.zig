@@ -5269,7 +5269,7 @@ fn initHuffmanLiteralDecodeState(block: []const u8, section: LiteralOnlySection)
 
 fn copyLiteralsFromHuffmanState(
     state: *HuffmanLiteralDecodeState,
-    section: LiteralOnlySection,
+    section: *const LiteralOnlySection,
     literal_offset: usize,
     dest: []u8,
 ) Error!void {
@@ -5287,7 +5287,7 @@ fn copyLiteralsFromHuffmanState(
 /// or malformed prefix and owns all four-stream boundary validation.
 inline fn copyLiteralsFromHuffmanStateFast(
     state: *HuffmanLiteralDecodeState,
-    section: LiteralOnlySection,
+    section: *const LiteralOnlySection,
     literal_offset: usize,
     dest: []u8,
 ) Error!void {
@@ -6308,7 +6308,7 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
         const literal_len = sequence.literal_len;
         if (huffman_literals) |*huffman_state| {
             if (output.len - written.* < literal_len) return error.OutputTooSmall;
-            try copyLiteralsFromHuffmanState(huffman_state, section, literal_offset, output[written.*..][0..literal_len]);
+            try copyLiteralsFromHuffmanState(huffman_state, &section, literal_offset, output[written.*..][0..literal_len]);
             written.* += literal_len;
         } else {
             try copyLiteralsFromSection(block, section, literal_offset, output, written, literal_len);
@@ -6320,7 +6320,7 @@ fn decodeRleSequencesCompressedBlockIntoBuffer(
     const last_literals = section.regenerated_size - literal_offset;
     if (huffman_literals) |*huffman_state| {
         if (output.len - written.* < last_literals) return error.OutputTooSmall;
-        try copyLiteralsFromHuffmanState(huffman_state, section, literal_offset, output[written.*..][0..last_literals]);
+        try copyLiteralsFromHuffmanState(huffman_state, &section, literal_offset, output[written.*..][0..last_literals]);
         written.* += last_literals;
     } else {
         try copyLiteralsFromSection(block, section, literal_offset, output, written, last_literals);
@@ -6361,7 +6361,7 @@ noinline fn decodeAllFseHuffmanSequences(
 
         if (literal_offset > section.regenerated_size or section.regenerated_size - literal_offset < literal_len) return error.CorruptFrame;
         if (output.len - written.* < literal_len) return error.OutputTooSmall;
-        try copyLiteralsFromHuffmanStateFast(&huffman_state, section, literal_offset, output[written.*..][0..literal_len]);
+        try copyLiteralsFromHuffmanStateFast(&huffman_state, &section, literal_offset, output[written.*..][0..literal_len]);
         written.* += literal_len;
         literal_offset += literal_len;
         try copyMatchFromHistory(output, written, frame_output_start, &.{}, match_offset, match_len);
@@ -6369,7 +6369,7 @@ noinline fn decodeAllFseHuffmanSequences(
     if (section.regenerated_size < literal_offset) return error.CorruptFrame;
     const last_literals = section.regenerated_size - literal_offset;
     if (output.len - written.* < last_literals) return error.OutputTooSmall;
-    try copyLiteralsFromHuffmanStateFast(&huffman_state, section, literal_offset, output[written.*..][0..last_literals]);
+    try copyLiteralsFromHuffmanStateFast(&huffman_state, &section, literal_offset, output[written.*..][0..last_literals]);
     written.* += last_literals;
     if (continuation.retainsState()) {
         frame_state.previous_tables = spec.tables();
@@ -6408,7 +6408,7 @@ noinline fn decodeFseFseRleSequences(
 
         if (huffman_literals) |*huffman_state| {
             if (output.len - written.* < literal_len) return error.OutputTooSmall;
-            try copyLiteralsFromHuffmanState(huffman_state, section, literal_offset, output[written.*..][0..literal_len]);
+            try copyLiteralsFromHuffmanState(huffman_state, &section, literal_offset, output[written.*..][0..literal_len]);
             written.* += literal_len;
         } else try copyLiteralsFromSection(block, section, literal_offset, output, written, literal_len);
         literal_offset = std.math.add(usize, literal_offset, literal_len) catch return error.IntegerOverflow;
@@ -6418,7 +6418,7 @@ noinline fn decodeFseFseRleSequences(
     const last_literals = section.regenerated_size - literal_offset;
     if (huffman_literals) |*huffman_state| {
         if (output.len - written.* < last_literals) return error.OutputTooSmall;
-        try copyLiteralsFromHuffmanState(huffman_state, section, literal_offset, output[written.*..][0..last_literals]);
+        try copyLiteralsFromHuffmanState(huffman_state, &section, literal_offset, output[written.*..][0..last_literals]);
         written.* += last_literals;
     } else try copyLiteralsFromSection(block, section, literal_offset, output, written, last_literals);
     if (continuation.retainsState()) {
