@@ -7665,6 +7665,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   paired median 1.8%; an independent eight-pair 13-row sweep measures 2.1%
   (8/8 wins), keeps the FSE-heavy `huffman80k` row slightly positive, and finds
   no material regression while preserving every decoded checksum.
+  Large four-stream, sequence-free literal sections now reuse one reverse-bit
+  reservoir load for two consecutive Huffman lookups whenever both full-width
+  prefixes remain. A width-1...11/alignment oracle pins the paired peek against
+  checked reads, while stream tails keep the canonical fallback. Eight
+  alternating fixed-CPU-8 runs improve the 64 KiB high-entropy ASCII row by a
+  paired median 16.2% (8/8 wins); `huffman80k`, `large_json`, and `binary_mixed`
+  stay within about 0.4% at the median with matching checksums.
   The two large compressed-FSE sequence loops now index their validated decode
   tables without repeating three state-range branches per sequence. Initial
   states are bounded by the table logs and every transition is produced by the

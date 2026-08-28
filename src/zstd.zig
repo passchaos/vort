@@ -5210,6 +5210,17 @@ fn copyHuffmanLiteralsFromSection(
         var segment_start: usize = 0;
         for (0..4) |stream_index| {
             const segment_end = @min(section.regenerated_size, segment_start + segment_len);
+            while (segment_end - segment_start >= 2 and cursor.reader.available() >= @as(usize, huffman_tree.max_bit_count) * 2) {
+                const width = huffman_tree.max_bit_count;
+                const pair = cursor.reader.peekBulkHuffmanPair(width);
+                const first = lookup.lookup((pair >> width) << @intCast(11 - width)) orelse return error.CorruptFrame;
+                const second_prefix = (pair >> @intCast(width - first.bit_count)) & ((@as(u32, 1) << width) - 1);
+                const second = lookup.lookup(second_prefix << @intCast(11 - width)) orelse return error.CorruptFrame;
+                cursor.reader.skipBulkHuffman(@intCast(@as(u5, first.bit_count) + second.bit_count));
+                dest[segment_start] = first.symbol;
+                dest[segment_start + 1] = second.symbol;
+                segment_start += 2;
+            }
             while (segment_start < segment_end and cursor.reader.available() >= huffman_tree.max_bit_count) : (segment_start += 1) {
                 dest[segment_start] = try cursor.readFullWidthSymbol(huffman_tree.max_bit_count, &lookup);
             }

@@ -132,6 +132,25 @@ pub const Reader = struct {
         return @intCast((reservoir >> shift) & ((@as(u32, 1) << bit_count) - 1));
     }
 
+    /// Load up to two adjacent Huffman prefixes. The first prefix starts in the
+    /// high bits, matching two consecutive reverse-stream reads.
+    pub fn peekBulkHuffmanPair(self: Reader, bit_count: u4) u32 {
+        std.debug.assert(bit_count != 0 and @as(usize, bit_count) * 2 <= self.remaining_bits);
+        const total_bits: u5 = @as(u5, bit_count) * 2;
+        const start = self.remaining_bits - total_bits;
+        const first_byte = start >> 3;
+        const shift: u3 = @intCast(start & 7);
+        const span_bits: u5 = @as(u5, shift) + total_bits;
+        const reservoir: u32 = if (span_bits <= 16)
+            std.mem.readInt(u16, self.bytes[first_byte..][0..2], .little)
+        else if (span_bits <= 24)
+            @as(u32, std.mem.readInt(u16, self.bytes[first_byte..][0..2], .little)) |
+                (@as(u32, self.bytes[first_byte + 2]) << 16)
+        else
+            std.mem.readInt(u32, self.bytes[first_byte..][0..4], .little);
+        return (reservoir >> shift) & ((@as(u32, 1) << total_bits) - 1);
+    }
+
     /// Consume a code after a successful bulk Huffman lookup. The caller just
     /// proved that a full table width remains, and every valid code is no wider
     /// than that width, so this unchecked update removes a redundant bounds
@@ -235,6 +254,20 @@ test "Zstd reverse reader bulk Huffman peek matches checked prefix" {
                 reader.peekBulkHuffman(width),
             );
         }
+    }
+}
+
+test "Zstd reverse reader paired Huffman peek matches checked prefix" {
+    var bytes: [8]u8 = .{ 0x35, 0xa6, 0x59, 0xc3, 0x17, 0xe8, 0x42, 0xd0 };
+    for (0..16) |prefix_bits| {
+        var reader = try Reader.init(&bytes);
+        if (prefix_bits != 0) try reader.skip(@intCast(prefix_bits));
+        var width: u4 = 1;
+        while (width <= 11 and @as(usize, width) * 2 <= reader.available()) : (width += 1)
+            try std.testing.expectEqual(
+                @as(u32, @intCast(try reader.peek(@as(u8, width) * 2))),
+                reader.peekBulkHuffmanPair(width),
+            );
     }
 }
 
