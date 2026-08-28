@@ -176,7 +176,7 @@ const IncrementalCopyCodec = struct {
         if (extra_bits_value > 24) return error.CorruptFrame;
         const extra = try reader.readBits(usize, @intCast(extra_bits_value));
         return .{
-            .distance = try resolveRegularDistance(header.compressed.npostfix, header.compressed.ndirect, symbol, extra),
+            .distance = resolveRegularDistanceParts(header.compressed.npostfix, header.compressed.ndirect, xcode, extra_bits_value, extra),
             .update_ring = true,
         };
     }
@@ -6851,7 +6851,7 @@ fn readRegularDistance(header: *const MinimalCompressedHeader, reader: *bitstrea
     if (ndistbits_value > 24) return error.CorruptFrame;
     const ndistbits: u5 = @intCast(ndistbits_value);
     const dextra = if (ndistbits == 0) 0 else try reader.readBits(u32, ndistbits);
-    return try resolveRegularDistance(header.npostfix, header.ndirect, symbol, dextra);
+    return resolveRegularDistanceParts(header.npostfix, header.ndirect, xcode, ndistbits_value, dextra);
 }
 
 fn resolveRegularDistance(npostfix: u2, ndirect: u16, symbol: u16, dextra: usize) Error!usize {
@@ -6865,9 +6865,13 @@ fn resolveRegularDistance(npostfix: u2, ndirect: u16, symbol: u16, dextra: usize
     // expression below 2^30. Compute in u32 after validating those fields
     // rather than carrying four redundant usize overflow checks per distance.
     if (dextra >= (@as(usize, 1) << @intCast(ndistbits))) return error.CorruptFrame;
-    const hcode: u32 = @intCast(xcode >> @intCast(npostfix_usize));
+    return resolveRegularDistanceParts(npostfix, ndirect, xcode, ndistbits, dextra);
+}
+
+inline fn resolveRegularDistanceParts(npostfix: u2, ndirect: u16, xcode: usize, ndistbits: usize, dextra: usize) usize {
+    const hcode: u32 = @intCast(xcode >> @intCast(@as(usize, npostfix)));
     const postfix_mask = (@as(u32, 1) << npostfix) - 1;
-    const lcode: u32 = @as(u32, symbol - ndirect - 16) & postfix_mask;
+    const lcode: u32 = @intCast(xcode & postfix_mask);
     const offset = ((@as(u32, 2) + (hcode & 1)) << @intCast(ndistbits)) - 4;
     return @as(usize, ((offset + @as(u32, @intCast(dextra))) << npostfix) + lcode + ndirect + 1);
 }

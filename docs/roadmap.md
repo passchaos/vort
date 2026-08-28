@@ -7729,3 +7729,9 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   bound and rejects an out-of-range extra value. Twenty-four alternating
   ReleaseFast CPU-8 pairs improve `clustered_q8` by about 0.9% at the median;
   the other twelve rows remain within roughly 1.2% noise.
+  Regular-distance parsing now also passes its already-computed `xcode` and
+  extra-bit width directly into the arithmetic helper instead of deriving both
+  a second time. Sixteen alternating ReleaseFast CPU-8 pairs against `0daaacc`
+  improve `clustered_q8` by about 2.3% at the median; the remaining rows stay
+  within roughly 2.4%, with their small mixed movement treated as noise rather
+  than a broad throughput claim.
