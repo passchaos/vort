@@ -7586,6 +7586,15 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   measured candidates were rejected: an all-FSE/raw loop improved its target by
   about 27% but regressed `binary_mixed`; fused state/extra-field reads and a
   cached reverse reader were neutral or negative across the full matrix.
+  Added a separate `run-lz4-decode-profile` executable and four-row gate for
+  caller-owned block decode. It pins three match-heavy shapes plus the exact
+  256 KiB single-literal incompressible shape, keeping profiler instrumentation
+  out of the liblz4 reference binary. The first pure profile attributes almost
+  all Vort cost on that raw row to the existing explicit vector copy. A direct
+  compiler-rt `memcpy` replacement regressed it by roughly 8--11%; x86
+  `rep movsb` improved the target about 6% but changed the shared function/code
+  layout enough to regress compressed rows, so both production candidates were
+  rejected.
   Sequence-interleaved Huffman literal runs now use the same unchecked bulk
   prefix peek/consume primitives as whole-section decoding after proving that a
   full-width prefix remains. Stream tails retain the checked canonical fallback.
