@@ -7748,6 +7748,16 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   source, and log medians by about 2.2%, 1.3%, and 2.0%, respectively
   (14/16, 16/16, and 15/16 wins). The seven-row libbrotli encode gate and
   99-case upstream differential remain green.
+  The at-most-64-symbol Huffman builder now stores weights, parent indexes, and
+  depths in compact parallel arrays instead of a padded node struct, relying on
+  the proven creation-order serial invariant for stable equal-weight choices.
+  A 1,024-case oracle retains exact lengths against the heap reference. A first
+  sixteen-pair ReleaseFast CPU-8 stage run at 20,000 encodes improved full
+  planned JSON/source/log medians by about 1.8%/2.9%/1.0% (15/16, 16/16, and
+  14/16 wins). A further eight pairs after removing unnecessary parent/depth
+  initialization confirmed about 2.5%/3.0%/2.1% medians, with matching output
+  checksums, a green seven-row libbrotli encode gate, and the 99-case upstream
+  differential still green.
   Brotli complex-prefix decoding now records the ascending active-symbol list
   during its mandatory validation pass and hands it to a trusted sparse
   canonical decoder builder. This avoids rescanning all 256/520/704 code-length

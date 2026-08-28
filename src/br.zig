@@ -13,6 +13,7 @@ const long_distance = @import("br/encoder/long_distance.zig");
 const short_match_candidates = @import("br/encoder/short_match_candidates.zig");
 const encoder_distance = @import("br/encoder/distance.zig");
 const complex_prefix = @import("br/encoder/complex_prefix.zig");
+const small_huffman = @import("br/encoder/small_huffman.zig");
 const encoder_stats = @import("br/encoder/stats.zig");
 const static_dictionary_matcher = @import("br/encoder/static_dictionary_matcher.zig");
 const header_profile = @import("br/header_profile.zig");
@@ -319,6 +320,7 @@ test {
     _ = short_match_candidates;
     _ = encoder_distance;
     _ = complex_prefix;
+    _ = small_huffman;
     _ = encoder_stats;
     _ = static_dictionary_matcher;
     _ = header_profile;

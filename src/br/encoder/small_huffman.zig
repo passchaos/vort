@@ -18,12 +18,18 @@ pub fn build(comptime capacity: usize, frequencies: []const u32, lengths: *[capa
         lengths[0] = 1;
         return true;
     }
-    const Node = struct { weight: u64, parent: i16 = -1, serial: u8 };
-    var nodes: [2 * capacity - 1]Node = undefined;
+    // Leaves always precede generated parents, so node indexes are also the
+    // stable tie-break serials used by the reference heap. Keeping weights and
+    // parents in parallel compact arrays avoids dragging a padded 16-byte Node
+    // through both queues. The largest legal node index is 126, so every
+    // non-root parent fits in i8. All non-root nodes receive a parent during
+    // construction, and the reverse traversal deliberately excludes the root.
+    var weights: [2 * capacity - 1]u64 = undefined;
+    var parents: [2 * capacity - 1]i8 = undefined;
     var leaves: [capacity]u8 = undefined;
     var node_len = frequencies.len;
     for (frequencies, 0..) |frequency, i| {
-        nodes[i] = .{ .weight = frequency, .serial = @intCast(i) };
+        weights[i] = frequency;
         leaves[i] = @intCast(i);
     }
     // PrefixAlphabet supplies descending weight with ascending-symbol ties.
@@ -44,24 +50,24 @@ pub fn build(comptime capacity: usize, frequencies: []const u32, lengths: *[capa
     var parent_i = frequencies.len;
     var remaining = frequencies.len;
     while (remaining > 1) {
-        const first = queuePop(Node, nodes[0..node_len], leaves[0..frequencies.len], &leaf_i, &parent_i, node_len);
-        const second = queuePop(Node, nodes[0..node_len], leaves[0..frequencies.len], &leaf_i, &parent_i, node_len);
+        const first = queuePop(weights[0..node_len], leaves[0..frequencies.len], &leaf_i, &parent_i, node_len);
+        const second = queuePop(weights[0..node_len], leaves[0..frequencies.len], &leaf_i, &parent_i, node_len);
         const parent: u8 = @intCast(node_len);
-        nodes[node_len] = .{ .weight = nodes[first].weight + nodes[second].weight, .serial = parent };
-        nodes[first].parent = parent;
-        nodes[second].parent = parent;
+        weights[node_len] = weights[first] + weights[second];
+        parents[first] = @intCast(parent);
+        parents[second] = @intCast(parent);
         node_len += 1;
         remaining -= 1;
     }
     // Parents are appended after both children. Walking nodes backwards makes
     // every parent depth available before its children, so all leaf depths are
     // recovered in O(nodes) instead of following each leaf-to-root chain.
-    var depths: [2 * capacity - 1]u5 = @splat(0);
+    var depths: [2 * capacity - 1]u5 = undefined;
+    depths[node_len - 1] = 0;
     var index = node_len - 1;
     while (index != 0) {
         index -= 1;
-        const parent = nodes[index].parent;
-        if (parent < 0) continue;
+        const parent = parents[index];
         depths[index] = depths[@intCast(parent)] + 1;
     }
     for (frequencies, 0..) |_, symbol| {
@@ -77,13 +83,15 @@ fn less(comptime Node: type, nodes: []const Node, left_index: u8, right_index: u
     return left.weight < right.weight or (left.weight == right.weight and left.serial < right.serial);
 }
 
-fn queuePop(comptime Node: type, nodes: []const Node, leaves: []const u8, leaf_i: *usize, parent_i: *usize, parent_end: usize) u8 {
+inline fn queuePop(weights: []const u64, leaves: []const u8, leaf_i: *usize, parent_i: *usize, parent_end: usize) u8 {
     if (leaf_i.* >= leaves.len) {
         const result: u8 = @intCast(parent_i.*);
         parent_i.* += 1;
         return result;
     }
-    if (parent_i.* >= parent_end or less(Node, nodes, leaves[leaf_i.*], @intCast(parent_i.*))) {
+    // A leaf index is always smaller than a parent index, so equal weights
+    // select the leaf exactly as `(weight, serial)` ordering would.
+    if (parent_i.* >= parent_end or weights[leaves[leaf_i.*]] <= weights[parent_i.*]) {
         const result = leaves[leaf_i.*];
         leaf_i.* += 1;
         return result;
