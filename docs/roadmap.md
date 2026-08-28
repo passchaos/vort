@@ -7708,3 +7708,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   rows remain neutral-to-positive at the median. The lookup still falls back to
   compact decoding for long codes and refuses trees without enough unused entry
   capacity, preserving the 290 KiB header footprint.
+  Header profiling now reports eight-bit tail-lookup eligibility globally and
+  per tree family. All 52 literal, three command, and 17 distance trees in the
+  current clustered q8 fixture have enough unused canonical-entry capacity,
+  proving that the optimization can cover that workload without increasing the
+  header footprint. A follow-up that enabled command/distance lookups in the
+  same large-stream function improved the clustered row by about 21%, but was
+  rejected because unrelated small rows moved backward by roughly 1--4% from
+  code-layout effects; future expansion must live in a more isolated module.

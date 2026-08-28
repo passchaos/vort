@@ -28,6 +28,7 @@ pub const Profile = struct {
     code_length_symbols: usize = 0,
     repeat_symbols: usize = 0,
     repeated_lengths: usize = 0,
+    tail_lookup_eligible_trees: usize = 0,
     families: [family_count]FamilyProfile = @splat(.{}),
 
     pub fn elapsedNs(self: Profile) u64 {
@@ -54,6 +55,7 @@ pub const FamilyProfile = struct {
     code_length_symbols: usize = 0,
     repeat_symbols: usize = 0,
     repeated_lengths: usize = 0,
+    tail_lookup_eligible_trees: usize = 0,
 };
 
 pub const PrefixCodeProfile = struct {
@@ -67,6 +69,7 @@ pub const PrefixCodeProfile = struct {
     repeat_symbols: usize = 0,
     repeated_lengths: usize = 0,
     active_entries: usize = 0,
+    tail_lookup_eligible_trees: usize = 0,
 
     pub fn addTo(self: PrefixCodeProfile, profile: *Profile, family: Family) void {
         profile.code_length_header_ns +%= self.code_length_header_ns;
@@ -78,6 +81,7 @@ pub const PrefixCodeProfile = struct {
         profile.code_length_symbols +%= self.code_length_symbols;
         profile.repeat_symbols +%= self.repeat_symbols;
         profile.repeated_lengths +%= self.repeated_lengths;
+        profile.tail_lookup_eligible_trees +%= self.tail_lookup_eligible_trees;
         const target = &profile.families[@intFromEnum(family)];
         target.code_length_header_ns +%= self.code_length_header_ns;
         target.code_length_rle_ns +%= self.code_length_rle_ns;
@@ -89,6 +93,7 @@ pub const PrefixCodeProfile = struct {
         target.code_length_symbols +%= self.code_length_symbols;
         target.repeat_symbols +%= self.repeat_symbols;
         target.repeated_lengths +%= self.repeated_lengths;
+        target.tail_lookup_eligible_trees +%= self.tail_lookup_eligible_trees;
     }
 };
 

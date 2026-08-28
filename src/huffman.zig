@@ -346,8 +346,7 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
             const lookup_len = 1 << 8;
             const lookup_bytes = lookup_len * @sizeOf(u16);
             const entry_count = (lookup_bytes + @sizeOf(Entry) - 1) / @sizeOf(Entry);
-            if (comptime max_symbols < entry_count) return false;
-            if (self.len + entry_count > max_symbols) return false;
+            if (!self.canBuildTailLookup8()) return false;
             const lookup: *[lookup_len]u16 = @ptrCast(&self.entries[max_symbols - entry_count]);
             @memset(lookup, 0);
             for (self.entries[0..self.len]) |entry| {
@@ -358,6 +357,13 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
                 while (i < fill) : (i += 1) lookup[entry.code | (i << entry.bits)] = packed_entry;
             }
             return true;
+        }
+
+        pub fn canBuildTailLookup8(self: *const Self) bool {
+            const lookup_bytes = (1 << 8) * @sizeOf(u16);
+            const entry_count = (lookup_bytes + @sizeOf(Entry) - 1) / @sizeOf(Entry);
+            if (comptime max_symbols < entry_count) return false;
+            return self.len + entry_count <= max_symbols;
         }
 
         /// Decode through a lookup previously installed by `buildTailLookup8`.

@@ -7082,6 +7082,7 @@ fn readPrefixCodeRuntimeProfiled(comptime max_alphabet_size: usize, alphabet_siz
     };
     profile.simple_trees += 1;
     profile.active_entries += nsym;
+    profile.tail_lookup_eligible_trees += @intFromBool(result.single_symbol != null or result.table.canBuildTailLookup8());
     profile.simple_tree_ns +%= elapsedNs(start, io);
     return result;
 }
@@ -7321,6 +7322,7 @@ fn readComplexPrefixCodeRuntimeProfiled(comptime max_alphabet_size: usize, alpha
 
     const build_start = std.Io.Clock.awake.now(io);
     const result: PrefixCode(max_alphabet_size) = .{ .table = try huffman.HuffmanTable(max_alphabet_size).initSparseTrusted(&lengths, active_symbols[0..active]) };
+    profile.tail_lookup_eligible_trees += @intFromBool(result.table.canBuildTailLookup8());
     profile.canonical_build_ns +%= elapsedNs(build_start, io);
     return result;
 }
