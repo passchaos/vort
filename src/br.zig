@@ -837,6 +837,10 @@ pub fn PrefixCode(comptime alphabet_size: usize) type {
             return self.table.buildTailLookup8();
         }
 
+        pub fn canPrepareTailLookup(self: *const Self) bool {
+            return self.single_symbol != null or self.table.canBuildTailLookup8();
+        }
+
         pub fn decodeTailLookup(self: *const Self, reader: *bitstream.BitReader) Error!u16 {
             if (self.single_symbol) |symbol| return symbol;
             return self.table.decodeValueTailLookup8(reader);
@@ -3832,7 +3836,9 @@ const clustered_literal_tree_threshold: u16 = 16;
 
 fn prepareLiteralTailLookups(header: *MinimalCompressedHeader) bool {
     for (header.literal_trees[0..header.literal_tree_count]) |*tree|
-        if (!tree.prepareTailLookup()) return false;
+        if (!tree.canPrepareTailLookup()) return false;
+    for (header.literal_trees[0..header.literal_tree_count]) |*tree|
+        std.debug.assert(tree.prepareTailLookup());
     return true;
 }
 
@@ -15043,6 +15049,17 @@ test "br context map reader applies inverse move-to-front maps" {
     var context_map: [4]u8 = @splat(0);
     try readContextMap(&multi_reader, &context_map, 3);
     try std.testing.expectEqualSlices(u8, &.{ 1, 0, 0, 2 }, &context_map);
+}
+
+test "br literal tail lookup preparation is atomic on dense groups" {
+    var header: MinimalCompressedHeader = undefined;
+    header.literal_tree_count = 2;
+    const sparse_lengths = [_]u4{7} ++ [_]u4{0} ** 255;
+    header.literal_trees[0] = .{ .table = try huffman.HuffmanTable(256).init(&sparse_lengths) };
+    header.literal_trees[1] = .{ .table = try huffman.HuffmanTable(256).init(&([_]u4{8} ** 256)) };
+    const before = header.literal_trees[0];
+    try std.testing.expect(!prepareLiteralTailLookups(&header));
+    try std.testing.expectEqualSlices(u8, std.mem.asBytes(&before), std.mem.asBytes(&header.literal_trees[0]));
 }
 
 test "br zero context map reader accepts plain and RLE all-zero maps" {

@@ -7708,6 +7708,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   rows remain neutral-to-positive at the median. The lookup still falls back to
   compact decoding for long codes and refuses trees without enough unused entry
   capacity, preserving the 290 KiB header footprint.
+  Literal lookup preparation now preflights the whole tree group before writing
+  any in-table lookup bytes. A mixed sparse/dense regression test proves that a
+  later ineligible tree leaves earlier compact trees untouched, so fallback is
+  transactional instead of depending on every future corpus sharing the current
+  all-eligible clustered shape.
   Header profiling now reports eight-bit tail-lookup eligibility globally and
   per tree family. All 52 literal, three command, and 17 distance trees in the
   current clustered q8 fixture have enough unused canonical-entry capacity,
