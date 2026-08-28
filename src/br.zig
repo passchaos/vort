@@ -6668,6 +6668,7 @@ fn readPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size: usize
 }
 
 const code_length_alphabet_size = 18;
+const CodeLengthPrefixDecoder = huffman.FastDecoder(code_length_alphabet_size, 5);
 const code_length_order = [_]u5{ 1, 2, 3, 4, 0, 5, 17, 6, 16, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
 
 fn readComplexPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size: usize, reader: *bitstream.BitReader, hskip: u2) Error!PrefixCode(max_alphabet_size) {
@@ -6698,10 +6699,14 @@ fn readComplexPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size
         return error.InvalidHuffmanCode;
     }
 
-    const code_length_prefix = if (code_length_nonzero == 1)
-        singleSymbolPrefixCode(code_length_alphabet_size, &code_length_lengths)
+    const code_length_single_symbol = if (code_length_nonzero == 1)
+        singleSymbolPrefixCode(code_length_alphabet_size, &code_length_lengths).single_symbol
     else
-        PrefixCode(code_length_alphabet_size){ .table = try huffman.HuffmanTable(code_length_alphabet_size).init(&code_length_lengths) };
+        null;
+    const code_length_decoder = if (code_length_single_symbol == null)
+        CodeLengthPrefixDecoder.init(try huffman.HuffmanTable(code_length_alphabet_size).init(&code_length_lengths))
+    else
+        undefined;
 
     var lengths: [max_alphabet_size]u4 = @splat(0);
     var index: usize = 0;
@@ -6712,7 +6717,7 @@ fn readComplexPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size
     var pending_repeat_length: u4 = 0;
     var last_symbol: ?u16 = null;
     while (index < alphabet_size and space > 0) {
-        const symbol = try code_length_prefix.decode(reader);
+        const symbol = code_length_single_symbol orelse try code_length_decoder.decodeValue(reader);
         switch (symbol) {
             0 => {
                 try flushPendingRepeat(alphabet_size, max_alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);

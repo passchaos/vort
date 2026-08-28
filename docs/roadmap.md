@@ -7630,3 +7630,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   1.0--2.8% at quality 0, 5.5--6.7% at quality 3, 11.1% for structured quality
   4, and 7.2--14.0% at quality 11. Tiny and random/stored controls remain
   within about 0.5% noise, with matching checksums.
+  Complex-prefix code-length symbols now decode through a complete five-bit
+  lookup table instead of reading one bit and scanning the 18-symbol table at
+  every code width. Single-symbol code-length trees retain their zero-bit fast
+  path, and malformed/truncated streams keep the checked table fallback rules.
+  Sixteen alternating ReleaseFast CPU-8 pairs against the preceding commit
+  preserve all checksums and improve every compressed row: about 15.2--18.5%
+  at quality 0, 6.5--9.0% at quality 3, 6.7% for structured quality 4, and
+  5.6--14.8% at quality 11. Tiny remains within 0.3% noise.
