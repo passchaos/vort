@@ -7691,3 +7691,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   and distance Huffman decode. No-extra-memory canonical-range and in-table
   lookup prototypes improved clustered decode by about 6--79%, but regressed
   common q0/q3/q11 rows by up to roughly 37%; both were rejected.
+  Added an explicit, opt-in `HuffmanTable` tail-lookup primitive for the next
+  clustered-decoder design. It stores a packed 8-bit lookup inside otherwise
+  unused canonical-entry capacity, proves the table size is unchanged, refuses
+  dense tables without enough slack, and is bit-for-bit checked against compact
+  decoding. No production codec calls it yet: the first global-dispatch
+  prototype accelerated `clustered_q8` by about `1.79x`, but regressed common
+  text/structured rows substantially, so only the isolated reusable primitive
+  was retained for a future dedicated clustered state machine.

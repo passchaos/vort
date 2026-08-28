@@ -339,6 +339,42 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
             return error.InvalidHuffmanCode;
         }
 
+        /// Place an 8-bit lookup in the unused tail of the entry array. Callers
+        /// opt in only when they own enough slack, so this adds no table bytes
+        /// and leaves the ordinary compact decoder completely unchanged.
+        pub fn buildTailLookup8(self: *Self) bool {
+            const lookup_len = 1 << 8;
+            const lookup_bytes = lookup_len * @sizeOf(u16);
+            const entry_count = (lookup_bytes + @sizeOf(Entry) - 1) / @sizeOf(Entry);
+            if (comptime max_symbols < entry_count) return false;
+            if (self.len + entry_count > max_symbols) return false;
+            const lookup: *[lookup_len]u16 = @ptrCast(&self.entries[max_symbols - entry_count]);
+            @memset(lookup, 0);
+            for (self.entries[0..self.len]) |entry| {
+                if (entry.bits > 8) continue;
+                const fill = @as(usize, 1) << @intCast(8 - entry.bits);
+                const packed_entry: u16 = (entry.symbol + 1) << 4 | entry.bits;
+                var i: usize = 0;
+                while (i < fill) : (i += 1) lookup[entry.code | (i << entry.bits)] = packed_entry;
+            }
+            return true;
+        }
+
+        /// Decode through a lookup previously installed by `buildTailLookup8`.
+        pub inline fn decodeValueTailLookup8(self: *const Self, reader: *bitstream.BitReader) Error!u16 {
+            const lookup_len = 1 << 8;
+            const lookup_bytes = lookup_len * @sizeOf(u16);
+            const entry_count = (lookup_bytes + @sizeOf(Entry) - 1) / @sizeOf(Entry);
+            if (comptime max_symbols < entry_count) return self.decodeValue(reader);
+            const lookup: *const [lookup_len]u16 = @ptrCast(&self.entries[max_symbols - entry_count]);
+            const packed_entry = lookup[reader.peekBitsPadded(u16, 8)];
+            if (packed_entry == 0) return self.decodeValue(reader);
+            const bits: u4 = @truncate(packed_entry);
+            if (!reader.hasBits(bits)) return error.TruncatedFrame;
+            reader.advanceBitsAssumeAvailable(bits);
+            return (packed_entry >> 4) - 1;
+        }
+
         fn decodeValueWithBits(self: *const Self, reader: anytype) Error!Symbol {
             var code: u16 = 0;
             var bits: u4 = 1;
@@ -1547,6 +1583,32 @@ test "canonical Huffman decoder handles a small RFC-style tree" {
     try std.testing.expectEqual(@as(u16, 1), (try table.decode(&reader)).value);
     try std.testing.expectEqual(@as(u16, 0), (try table.decode(&reader)).value);
     try std.testing.expectEqual(@as(u16, 2), (try table.decode(&reader)).value);
+}
+
+test "tail lookup decoder matches compact decoder" {
+    const table_size = @sizeOf(HuffmanTable(256));
+    var frequencies: [256]u32 = @splat(0);
+    for (0..64) |symbol| frequencies[symbol] = @intCast(65 - symbol);
+    const lengths = treeCodeLengths(256, &frequencies, max_code_bits);
+    var table = try HuffmanTable(256).init(&lengths);
+    try std.testing.expect(table.buildTailLookup8());
+
+    const encoder = try HuffmanTable(256).Encoder.init(&lengths);
+    var writer: bitstream.BitWriter = .{};
+    defer writer.deinit(std.testing.allocator);
+    for (0..64) |symbol| try encoder.writeSymbol(&writer, std.testing.allocator, symbol);
+    const encoded = try writer.toOwnedSlice(std.testing.allocator);
+    defer std.testing.allocator.free(encoded);
+
+    var reference = bitstream.BitReader.init(encoded);
+    var lookup = bitstream.BitReader.init(encoded);
+    for (0..64) |_|
+        try std.testing.expectEqual(try table.decodeValue(&reference), try table.decodeValueTailLookup8(&lookup));
+    try std.testing.expectEqual(reference.bitPosition(), lookup.bitPosition());
+    try std.testing.expectEqual(table_size, @sizeOf(HuffmanTable(256)));
+
+    var too_dense = try HuffmanTable(256).init(&([_]u4{8} ** 256));
+    try std.testing.expect(!too_dense.buildTailLookup8());
 }
 
 test "fast Huffman decoder falls back for long codes" {
