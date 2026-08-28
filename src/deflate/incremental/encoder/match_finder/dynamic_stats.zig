@@ -11,7 +11,7 @@ pub const Stats = struct {
     // Preserve the exact symbols made non-zero so the reusable histogram can
     // be cleared in O(active symbols), not by zeroing all 316 counters.
     active_literals: [286]u16 = undefined,
-    active_distances: [30]u8 = undefined,
+    active_distances: [30]u16 = undefined,
 
     pub fn reset(self: *Stats) void {
         for (self.active_literals[0..self.literal_active_count]) |symbol|
@@ -61,7 +61,7 @@ pub const Stats = struct {
         return self.active_literals[0..self.literal_active_count];
     }
 
-    pub fn distanceSymbols(self: *const Stats) []const u8 {
+    pub fn distanceSymbols(self: *const Stats) []const u16 {
         return self.active_distances[0..self.distance_active_count];
     }
 };
@@ -111,7 +111,7 @@ test "incremental dynamic stats expose active symbols without stale entries" {
     stats.recordLiteral('a');
     stats.recordMatch(.{ .length = 3, .distance = 5 });
     try std.testing.expectEqualSlices(u16, &.{ 'a', 'b', 257 }, stats.literalSymbols());
-    try std.testing.expectEqualSlices(u8, &.{4}, stats.distanceSymbols());
+    try std.testing.expectEqualSlices(u16, &.{4}, stats.distanceSymbols());
 
     stats.reset();
     stats.recordLiteral('z');

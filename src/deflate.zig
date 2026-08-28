@@ -1434,6 +1434,8 @@ const DynamicCodingPlan = struct {
             stats.literalActiveCount() + @intFromBool(stats.literal_frequencies[256] == 0),
             stats.distanceActiveCount(),
             fixed_bits,
+            stats.literalSymbols(),
+            stats.distanceSymbols(),
         );
     }
 
@@ -1445,8 +1447,18 @@ const DynamicCodingPlan = struct {
         literal_active: usize,
         distance_active: usize,
         fixed_bits: usize,
+        literal_symbols: []const u16,
+        distance_symbols: []const u16,
     ) !DynamicCodingPlan {
-        return initFromStatsCore(
+        var literal_symbols_with_eob: [286]u16 = undefined;
+        @memcpy(literal_symbols_with_eob[0..literal_symbols.len], literal_symbols);
+        var literal_symbol_count = literal_symbols.len;
+        // The matcher records input literals and match length symbols only;
+        // EOB is injected here and therefore cannot already be in this list.
+        std.debug.assert(lit_freqs[256] != 0 and literal_symbol_count < literal_symbols_with_eob.len);
+        literal_symbols_with_eob[literal_symbol_count] = 256;
+        literal_symbol_count += 1;
+        return initFromStatsCoreKnownActive(
             lit_freqs,
             dist_freqs,
             length_extra_bits,
@@ -1454,7 +1466,39 @@ const DynamicCodingPlan = struct {
             fixed_bits,
             literal_active,
             distance_active,
+            literal_symbols_with_eob[0..literal_symbol_count],
+            distance_symbols,
         );
+    }
+
+    fn initFromStatsCoreKnownActive(
+        lit_freqs: [286]u32,
+        dist_freqs: [30]u32,
+        length_extra_bits: usize,
+        distance_extra_bits: usize,
+        fixed_bits: usize,
+        literal_active: usize,
+        distance_active: usize,
+        literal_symbols: []const u16,
+        distance_symbols: []const u16,
+    ) !DynamicCodingPlan {
+        var lit_tree_freqs = lit_freqs;
+        var dist_tree_freqs = dist_freqs;
+        completeFrequencySetKnownActive(286, &lit_tree_freqs, literal_active);
+        if (distance_active != 0) completeFrequencySetKnownActive(30, &dist_tree_freqs, distance_active);
+
+        // Completion adds a synthetic symbol to zero/one-symbol alphabets, so
+        // use the ordinary builder for those rare shapes. Otherwise the active
+        // lists exactly describe the non-zero frequencies.
+        const lit_lengths_full = if (literal_active < 2)
+            huffman.treeCodeLengths(286, &lit_tree_freqs, 15)
+        else
+            huffman.treeCodeLengthsKnownActive(286, &lit_tree_freqs, 15, literal_symbols);
+        const dist_lengths_full = if (distance_active < 2)
+            huffman.treeCodeLengths(30, &dist_tree_freqs, 15)
+        else
+            huffman.treeCodeLengthsKnownActive(30, &dist_tree_freqs, 15, distance_symbols);
+        return finishFromLengths(lit_freqs, dist_freqs, length_extra_bits, distance_extra_bits, fixed_bits, lit_lengths_full, dist_lengths_full);
     }
 
     fn initFromStats(
@@ -1509,8 +1553,20 @@ const DynamicCodingPlan = struct {
         completeFrequencySetKnownActive(286, &lit_tree_freqs, literal_active);
         if (distance_active != 0) completeFrequencySetKnownActive(30, &dist_tree_freqs, distance_active);
 
-        var lit_lengths_full = huffman.treeCodeLengths(286, &lit_tree_freqs, 15);
-        var dist_lengths_full = huffman.treeCodeLengths(30, &dist_tree_freqs, 15);
+        const lit_lengths_full = huffman.treeCodeLengths(286, &lit_tree_freqs, 15);
+        const dist_lengths_full = huffman.treeCodeLengths(30, &dist_tree_freqs, 15);
+        return finishFromLengths(lit_freqs, dist_freqs, length_extra_bits, distance_extra_bits, fixed_bits, lit_lengths_full, dist_lengths_full);
+    }
+
+    fn finishFromLengths(
+        lit_freqs: [286]u32,
+        dist_freqs: [30]u32,
+        length_extra_bits: usize,
+        distance_extra_bits: usize,
+        fixed_bits: usize,
+        lit_lengths_full: [286]u4,
+        dist_lengths_full: [30]u4,
+    ) !DynamicCodingPlan {
         const hlit = trimmedLiteralCodeCount(&lit_lengths_full);
         const hdist = trimmedDistanceCodeCount(&dist_lengths_full);
 
@@ -1870,15 +1926,15 @@ fn trimmedCodeLengthAlphabetCount(lengths: *const [19]u4) usize {
     return hclen;
 }
 
-fn trimmedLiteralCodeCount(lengths: *[286]u4) usize {
+fn trimmedLiteralCodeCount(lengths: *const [286]u4) usize {
     return trimCodeLengthCount(286, 257, lengths);
 }
 
-fn trimmedDistanceCodeCount(lengths: *[30]u4) usize {
+fn trimmedDistanceCodeCount(lengths: *const [30]u4) usize {
     return trimCodeLengthCount(30, 1, lengths);
 }
 
-fn trimCodeLengthCount(comptime n: usize, minimum: usize, lengths: *[n]u4) usize {
+fn trimCodeLengthCount(comptime n: usize, minimum: usize, lengths: *const [n]u4) usize {
     var count = n;
     while (count > minimum and lengths[count - 1] == 0) count -= 1;
     return count;

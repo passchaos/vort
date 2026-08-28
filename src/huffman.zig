@@ -944,6 +944,52 @@ pub fn treeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4) [n
     return packageMergeCodeLengths(n, freqs, max_bits, active);
 }
 
+/// Build lengths when the caller already tracks every non-zero symbol. The
+/// trusted list may be in insertion order; compact package merge requires the
+/// original symbol-order tie break, so sort only that short list instead of
+/// rescanning the full alphabet to rediscover it.
+pub fn treeCodeLengthsKnownActive(
+    comptime n: usize,
+    freqs: *const [n]u32,
+    max_bits: u4,
+    active_symbols: []const u16,
+) [n]u4 {
+    if (active_symbols.len == 0) return @splat(0);
+    if (active_symbols.len == 1) {
+        var lengths: [n]u4 = @splat(0);
+        lengths[active_symbols[0]] = 1;
+        return lengths;
+    }
+    if (active_symbols.len <= 32 and n > 32)
+        return compactPackageMergeCodeLengthsKnownActive(n, freqs, max_bits, active_symbols, 32);
+    if (active_symbols.len <= 64 and n > 64)
+        return compactPackageMergeCodeLengthsKnownActive(n, freqs, max_bits, active_symbols, 64);
+    return treeCodeLengths(n, freqs, max_bits);
+}
+
+fn compactPackageMergeCodeLengthsKnownActive(
+    comptime n: usize,
+    freqs: *const [n]u32,
+    max_bits: u4,
+    active_symbols: []const u16,
+    comptime compact_n: usize,
+) [n]u4 {
+    std.debug.assert(active_symbols.len <= compact_n);
+    var symbols: [compact_n]u16 = undefined;
+    @memcpy(symbols[0..active_symbols.len], active_symbols);
+    std.mem.sort(u16, symbols[0..active_symbols.len], {}, std.sort.asc(u16));
+    var compact_freqs: [compact_n]u32 = @splat(0);
+    for (symbols[0..active_symbols.len], 0..) |symbol, index| {
+        std.debug.assert(symbol < n and freqs[symbol] != 0);
+        compact_freqs[index] = freqs[symbol];
+    }
+    const compact_lengths = packageMergeCodeLengths(compact_n, &compact_freqs, max_bits, active_symbols.len);
+    var lengths: [n]u4 = @splat(0);
+    for (symbols[0..active_symbols.len], compact_lengths[0..active_symbols.len]) |symbol, code_bits|
+        lengths[symbol] = code_bits;
+    return lengths;
+}
+
 /// Full-alphabet package-merge reference retained for focused equivalence and
 /// performance measurements of the compact sparse production path.
 pub fn treeCodeLengthsFullWidth(comptime n: usize, freqs: *const [n]u32, max_bits: u4) [n]u4 {
@@ -1929,6 +1975,22 @@ test "compact sparse package-merge matches full-width reference" {
         try std.testing.expectEqual(
             packageMergeCodeLengths(freqs.len, &freqs, 15, actual_active),
             treeCodeLengths(freqs.len, &freqs, 15),
+        );
+    }
+}
+
+test "known-active package-merge matches scanned sparse builder" {
+    for (2..65) |active_count| {
+        var freqs: [286]u32 = @splat(0);
+        var active: [64]u16 = undefined;
+        for (0..active_count) |index| {
+            const symbol: u16 = @intCast((index * 97 + 41) % freqs.len);
+            active[index] = symbol;
+            freqs[symbol] = @intCast(1 + ((index * 13 + active_count) % 89));
+        }
+        try std.testing.expectEqual(
+            treeCodeLengths(freqs.len, &freqs, 15),
+            treeCodeLengthsKnownActive(freqs.len, &freqs, 15, active[0..active_count]),
         );
     }
 }

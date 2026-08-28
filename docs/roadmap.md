@@ -6457,6 +6457,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   4096-iteration pairs improve source and JSON medians by about 2.2% and 2.4%
   (10/12 and 12/12 wins); output sizes and checksum mixes are unchanged and the
   five-corpus zlib-ng gate remains green.
+- Sparse package-merge now also accepts a trusted active-symbol list. The
+  incremental dynamic planner reuses the matcher's list, sorts at most 64
+  symbols to preserve canonical tie order, and avoids rescanning the 286/30
+  frequency arrays before compacting them. An exhaustive 2...64 active-count
+  oracle matches the scanned builder exactly. Twelve alternating fixed-CPU-8,
+  4096-iteration pairs improve source and JSON medians by about 1.7% and 2.3%
+  (11/12 wins each); encoded sizes/mixes are exact and the zlib-ng gate passes.
 - Rolling DEFLATE history/block match extension now compares 32-byte vectors
   before its existing 8-byte and scalar tails. The first differing-lane mask
   preserves exact byte offsets and removes three dependent word comparisons on
