@@ -7573,6 +7573,17 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   An independent eight-pair sweep over all 13 reference rows retains matching
   checksums, measures `binary_mixed` at 7.9%, and finds no material regression
   elsewhere (the lowest median is -0.4%, within run noise).
+  Added `run-zstd-decode-profile` plus a four-row CSV gate for pure caller-owned
+  Vort decode; the profile is a separate executable so adding instrumentation
+  cannot perturb the existing reference benchmark binary. It isolates
+  `numbered_json`, raw-literal/all-FSE `huffman80k`, multi-block `large_json`,
+  and `binary_mixed` without timing libzstd, allocator wrappers, or inspection
+  passes. Fixed-CPU perf now attributes `huffman80k`
+  primarily to generic sequence decoding, `large_json` to the all-FSE/Huffman
+  loop and copy work, and `binary_mixed` to generic sequence/copy work. Several
+  measured candidates were rejected: an all-FSE/raw loop improved its target by
+  about 27% but regressed `binary_mixed`; fused state/extra-field reads and a
+  cached reverse reader were neutral or negative across the full matrix.
   Sequence-interleaved Huffman literal runs now use the same unchecked bulk
   prefix peek/consume primitives as whole-section decoding after proving that a
   full-width prefix remains. Stream tails retain the checked canonical fallback.

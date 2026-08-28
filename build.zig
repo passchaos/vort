@@ -2792,6 +2792,42 @@ pub fn build(b: *std.Build) void {
         &zstd_reference_bench_gate.step,
     );
 
+    const zstd_decode_profile_exe = b.addExecutable(.{
+        .name = "vort-zstd-decode-profile",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/zstd/decode_profile.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_zstd_decode_profile = b.addRunArtifact(zstd_decode_profile_exe);
+    if (b.args) |args| run_zstd_decode_profile.addArgs(args);
+    const zstd_decode_profile_step = b.step(
+        "run-zstd-decode-profile",
+        "Profile pure-Vort caller-owned Zstd decode hot cases",
+    );
+    zstd_decode_profile_step.dependOn(&run_zstd_decode_profile.step);
+
+    const run_zstd_decode_profile_gate_csv = b.addRunArtifact(zstd_decode_profile_exe);
+    run_zstd_decode_profile_gate_csv.addArgs(&.{
+        "--iterations", "100",
+        "--csv",        "zig-out/vort-zstd-decode-profile.csv",
+    });
+    const zstd_decode_profile_gate = b.addSystemCommand(&.{
+        "python3", "tools/zstd/decode_profile_gate.py",
+        "--csv",   "zig-out/vort-zstd-decode-profile.csv",
+    });
+    zstd_decode_profile_gate.step.dependOn(&run_zstd_decode_profile_gate_csv.step);
+    const zstd_decode_profile_gate_step = b.step(
+        "run-zstd-decode-profile-gate",
+        "Validate pure-Vort Zstd decode profile coverage",
+    );
+    zstd_decode_profile_gate_step.dependOn(&zstd_decode_profile_gate.step);
+
     const zstd_encode_bench_exe = b.addExecutable(.{
         .name = "vort-zstd-encode-bench",
         .root_module = b.createModule(.{
@@ -3725,6 +3761,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&lz4_reference_bench_exe.step);
     check_step.dependOn(&br_compressed_header_profile_exe.step);
     check_step.dependOn(&zstd_reference_bench_exe.step);
+    check_step.dependOn(&zstd_decode_profile_exe.step);
     check_step.dependOn(&zstd_encode_bench_exe.step);
     check_step.dependOn(&zstd_native_encode_stage_bench_exe.step);
     check_step.dependOn(&zstd_dictionary_probe_exe.step);
