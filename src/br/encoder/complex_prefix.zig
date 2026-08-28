@@ -30,11 +30,10 @@ pub fn writeWithStopIndex(allocator: std.mem.Allocator, writer: anytype, alphabe
 
 fn writeWithStorage(comptime storage_len: usize, allocator: std.mem.Allocator, writer: anytype, lengths: []const u4, stop_index: usize) !void {
     var rle_storage: [storage_len]code_length_rle.Token = undefined;
-    const rle_len = try code_length_rle.encodeInto(&rle_storage, lengths, stop_index);
+    var code_length_freqs: [18]u32 = undefined;
+    const rle_len = try code_length_rle.encodeIntoWithFrequencies(&rle_storage, lengths, stop_index, &code_length_freqs);
     const rle = rle_storage[0..rle_len];
 
-    var code_length_freqs: [18]u32 = @splat(0);
-    for (rle) |token| code_length_freqs[token.symbol] += 1;
     const code_length_lengths = codeLengthCodeLengths(&code_length_freqs);
 
     var space: i32 = 32;

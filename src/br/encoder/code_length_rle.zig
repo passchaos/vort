@@ -34,7 +34,19 @@ pub fn encodeAlloc(allocator: std.mem.Allocator, lengths: []const u4, stop_index
 pub fn encodeInto(output: []Token, lengths: []const u4, stop_index: usize) !usize {
     if (stop_index > lengths.len or output.len < stop_index) return error.OutOfMemory;
     var tokens: std.ArrayList(Token) = .{ .items = output[0..0], .capacity = output.len };
-    try encodeIntoList(&tokens, lengths, stop_index);
+    try encodeIntoList(&tokens, lengths, stop_index, null);
+    return tokens.items.len;
+}
+
+/// Encode into caller storage while accumulating the code-length alphabet.
+/// Complex-prefix construction always needs both results, so updating the tiny
+/// 18-entry histogram at each emission avoids rereading the completed token
+/// stream before building its Huffman code.
+pub fn encodeIntoWithFrequencies(output: []Token, lengths: []const u4, stop_index: usize, frequencies: *[18]u32) !usize {
+    if (stop_index > lengths.len or output.len < stop_index) return error.OutOfMemory;
+    frequencies.* = @splat(0);
+    var tokens: std.ArrayList(Token) = .{ .items = output[0..0], .capacity = output.len };
+    try encodeIntoList(&tokens, lengths, stop_index, frequencies);
     return tokens.items.len;
 }
 
@@ -50,44 +62,49 @@ pub fn validatedStopIndex(lengths: []const u4) !usize {
     return stop_index;
 }
 
-fn encodeIntoList(tokens: *std.ArrayList(Token), lengths: []const u4, stop_index: usize) !void {
+fn encodeIntoList(tokens: *std.ArrayList(Token), lengths: []const u4, stop_index: usize, frequencies: ?*[18]u32) !void {
     var i: usize = 0;
     while (i < stop_index) {
         if (lengths[i] != 0) {
             const length = lengths[i];
             var end = i + 1;
             while (end < stop_index and lengths[end] == length) end += 1;
-            try appendNonzeroRunBounded(tokens, length, end - i);
+            try appendNonzeroRunBounded(tokens, frequencies, length, end - i);
             i = end;
             continue;
         }
         var end = i + 1;
         while (end < stop_index and lengths[end] == 0) end += 1;
-        try appendZeroRunBounded(tokens, end - i);
+        try appendZeroRunBounded(tokens, frequencies, end - i);
         i = end;
     }
 }
 
-fn appendNonzeroRunBounded(tokens: *std.ArrayList(Token), length: u4, run: usize) !void {
-    try tokens.appendBounded(.{ .symbol = length });
+inline fn appendTokenBounded(tokens: *std.ArrayList(Token), frequencies: ?*[18]u32, token: Token) !void {
+    try tokens.appendBounded(token);
+    if (frequencies) |counts| counts[token.symbol] += 1;
+}
+
+fn appendNonzeroRunBounded(tokens: *std.ArrayList(Token), frequencies: ?*[18]u32, length: u4, run: usize) !void {
+    try appendTokenBounded(tokens, frequencies, .{ .symbol = length });
     if (run == 1) return;
     const remaining = run - 1;
     if (remaining < 3) {
-        for (0..remaining) |_| try tokens.appendBounded(.{ .symbol = length });
+        for (0..remaining) |_| try appendTokenBounded(tokens, frequencies, .{ .symbol = length });
         return;
     }
-    try appendRepeatRunBounded(tokens, 16, remaining, 4);
+    try appendRepeatRunBounded(tokens, frequencies, 16, remaining, 4);
 }
 
-fn appendZeroRunBounded(tokens: *std.ArrayList(Token), run: usize) !void {
+fn appendZeroRunBounded(tokens: *std.ArrayList(Token), frequencies: ?*[18]u32, run: usize) !void {
     if (run < 3) {
-        for (0..run) |_| try tokens.appendBounded(.{ .symbol = 0 });
+        for (0..run) |_| try appendTokenBounded(tokens, frequencies, .{ .symbol = 0 });
         return;
     }
-    try appendRepeatRunBounded(tokens, 17, run, 8);
+    try appendRepeatRunBounded(tokens, frequencies, 17, run, 8);
 }
 
-fn appendRepeatRunBounded(tokens: *std.ArrayList(Token), symbol: u5, run: usize, comptime radix: usize) !void {
+fn appendRepeatRunBounded(tokens: *std.ArrayList(Token), frequencies: ?*[18]u32, symbol: u5, run: usize, comptime radix: usize) !void {
     const max_extra = radix - 1;
     var extras: [16]u3 = undefined;
     var extra_len: usize = 0;
@@ -98,10 +115,10 @@ fn appendRepeatRunBounded(tokens: *std.ArrayList(Token), symbol: u5, run: usize,
         extras[extra_len] = @intCast(extra);
         extra_len += 1;
     }
-    try tokens.appendBounded(.{ .symbol = symbol, .extra = @intCast(current - 3) });
+    try appendTokenBounded(tokens, frequencies, .{ .symbol = symbol, .extra = @intCast(current - 3) });
     while (extra_len != 0) {
         extra_len -= 1;
-        try tokens.appendBounded(.{ .symbol = symbol, .extra = extras[extra_len] });
+        try appendTokenBounded(tokens, frequencies, .{ .symbol = symbol, .extra = extras[extra_len] });
     }
 }
 
@@ -220,4 +237,27 @@ test "bounded RLE matches allocating encoder" {
     var bounded: [704]Token = undefined;
     const len = try encodeInto(&bounded, &lengths, lengths.len);
     try std.testing.expectEqualSlices(Token, allocated, bounded[0..len]);
+}
+
+test "bounded RLE frequency fusion matches token scan" {
+    var state: u32 = 0x6d2b_79f5;
+    for (0..512) |_| {
+        var lengths: [704]u4 = undefined;
+        for (&lengths) |*length| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            length.* = if (state & 3 == 0) 0 else @intCast(1 + (state >> 28));
+        }
+        const stop_index: usize = state % (lengths.len + 1);
+        var expected_tokens: [704]Token = undefined;
+        const expected_len = try encodeInto(&expected_tokens, &lengths, stop_index);
+        var expected_frequencies: [18]u32 = @splat(0);
+        for (expected_tokens[0..expected_len]) |token| expected_frequencies[token.symbol] += 1;
+
+        var actual_tokens: [704]Token = undefined;
+        var actual_frequencies: [18]u32 = undefined;
+        const actual_len = try encodeIntoWithFrequencies(&actual_tokens, &lengths, stop_index, &actual_frequencies);
+        try std.testing.expectEqual(expected_len, actual_len);
+        try std.testing.expectEqualSlices(Token, expected_tokens[0..expected_len], actual_tokens[0..actual_len]);
+        try std.testing.expectEqual(expected_frequencies, actual_frequencies);
+    }
 }

@@ -7758,6 +7758,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   initialization confirmed about 2.5%/3.0%/2.1% medians, with matching output
   checksums, a green seven-row libbrotli encode gate, and the 99-case upstream
   differential still green.
+  Complex-prefix RLE generation now accumulates its 18-symbol code-length
+  histogram as tokens are emitted instead of scanning the completed token
+  array again. A 512-pattern oracle pins both exact tokens and all frequencies
+  against the independent scan. Sixteen alternating ReleaseFast CPU-8 stage
+  pairs at 20,000 encodes improve full planned JSON/source/log medians by about
+  0.6%/1.2%/0.3% (16/16, 16/16, and 10/16 wins), with matching checksums; the
+  seven-row libbrotli encode gate and 99-case upstream differential remain
+  green.
   Brotli complex-prefix decoding now records the ascending active-symbol list
   during its mandatory validation pass and hands it to a trusted sparse
   canonical decoder builder. This avoids rescanning all 256/520/704 code-length
