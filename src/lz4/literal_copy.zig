@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 /// Copy one validated LZ4 literal span into its decoded output.
 ///
@@ -9,10 +10,25 @@ const std = @import("std");
 /// This stays out of line so the uncommon stored-like path does not inflate the
 /// token/match loop used by ordinary compressed blocks.
 pub const bulk_min_len = 512;
+const rep_movsb_min_len = 192 * 1024;
 
 pub noinline fn copyBulk(destination: []u8, source: []const u8) void {
     std.debug.assert(destination.len == source.len);
     std.debug.assert(source.len >= bulk_min_len);
+    if (source.len >= rep_movsb_min_len and comptime builtin.cpu.arch == .x86_64) {
+        var destination_ptr = destination.ptr;
+        var source_ptr = source.ptr;
+        var len = source.len;
+        asm volatile ("rep movsb"
+            : [destination] "={di}" (destination_ptr),
+              [source] "={si}" (source_ptr),
+              [len] "={cx}" (len),
+            : [destination_input] "0" (destination_ptr),
+              [source_input] "1" (source_ptr),
+              [len_input] "2" (len),
+            : .{ .memory = true });
+        return;
+    }
     const vector_bytes = 32;
     const vectors_per_loop = 4;
     const loop_bytes = vector_bytes * vectors_per_loop;
@@ -44,4 +60,16 @@ test "LZ4 literal copy covers vector boundaries" {
         copyBulk(destination[0..len], source[0..len]);
         try std.testing.expectEqualSlices(u8, source[0..len], destination[0..len]);
     }
+}
+
+test "LZ4 literal copy covers large architecture path" {
+    const len = rep_movsb_min_len + 37;
+    const source = try std.testing.allocator.alloc(u8, len);
+    defer std.testing.allocator.free(source);
+    const destination = try std.testing.allocator.alloc(u8, len);
+    defer std.testing.allocator.free(destination);
+    for (source, 0..) |*byte, index| byte.* = @truncate(index *% 131);
+    @memset(destination, 0);
+    copyBulk(destination, source);
+    try std.testing.expectEqualSlices(u8, source, destination);
 }

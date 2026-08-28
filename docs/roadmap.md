@@ -7592,9 +7592,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   out of the liblz4 reference binary. The first pure profile attributes almost
   all Vort cost on that raw row to the existing explicit vector copy. A direct
   compiler-rt `memcpy` replacement regressed it by roughly 8--11%; x86
-  `rep movsb` improved the target about 6% but changed the shared function/code
-  layout enough to regress compressed rows, so both production candidates were
-  rejected.
+  `rep movsb` improves the 256 KiB target while losing on 1 KiB literals, so
+  the production helper selects it only from 192 KiB on x86_64 and keeps the
+  existing explicit-vector path below that threshold. Thirty-two alternating
+  ReleaseFast CPU-8 profile pairs measure the isolated raw row at about `1.28x`
+  paired median (30/32 wins); all three match-heavy profile rows stay within
+  about 0.4% of baseline. A direct compiler-rt `memcpy` replacement and lower
+  `rep movsb` thresholds were rejected because they regressed ordinary rows.
   Sequence-interleaved Huffman literal runs now use the same unchecked bulk
   prefix peek/consume primitives as whole-section decoding after proving that a
   full-width prefix remains. Stream tails retain the checked canonical fallback.
