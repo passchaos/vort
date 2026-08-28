@@ -6763,12 +6763,16 @@ fn readComplexPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size
     if (space != 0) return error.InvalidHuffmanCode;
     if (last_symbol == null or last_symbol.? == 0 or last_symbol.? == 17) return error.InvalidHuffmanCode;
 
+    var active_symbols: [max_alphabet_size]u16 = undefined;
     var active: usize = 0;
-    for (lengths[0..alphabet_size]) |length| {
-        if (length != 0) active += 1;
+    for (lengths[0..alphabet_size], 0..) |length, symbol| {
+        if (length != 0) {
+            active_symbols[active] = @intCast(symbol);
+            active += 1;
+        }
     }
     if (active < 2) return error.InvalidHuffmanCode;
-    return .{ .table = try huffman.HuffmanTable(max_alphabet_size).init(&lengths) };
+    return .{ .table = try huffman.HuffmanTable(max_alphabet_size).initSparseTrusted(&lengths, active_symbols[0..active]) };
 }
 
 fn readCodeLengthCodeLength(reader: *bitstream.BitReader) Error!u4 {

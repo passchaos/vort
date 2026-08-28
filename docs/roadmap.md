@@ -7613,3 +7613,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   pin the borrowed-slice lifecycle. Ten alternating ReleaseFast CPU-8 pairs
   improve balanced JSON/source/log over allocator-returning reuse by about
   1.6%/1.7%/0.9%, respectively, with identical output sizes.
+  Brotli complex-prefix decoding now records the ascending active-symbol list
+  during its mandatory validation pass and hands it to a trusted sparse
+  canonical decoder builder. This avoids rescanning all 256/520/704 code-length
+  slots while preserving the same grouped decode entries and validation. A
+  focused dense-versus-sparse table oracle pins every active entry and bit-width
+  index. Sixteen alternating ReleaseFast CPU-8 pairs preserve checksums across
+  the 12-case libbrotli matrix: compressed rows improve by about 0.8--10.0%,
+  while tiny and random/stored controls remain within 0.2% noise.

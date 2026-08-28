@@ -208,6 +208,56 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
             return table;
         }
 
+        /// Build a decoder from a validated ascending list of active symbols.
+        /// Format parsers that already discovered this set can avoid rescanning
+        /// a large sparse alphabet solely to reconstruct the same list.
+        pub fn initSparseTrusted(lengths: []const u4, active_symbols: []const u16) Error!Self {
+            if (lengths.len > max_symbols or active_symbols.len > max_symbols) return error.CorruptFrame;
+            if (active_symbols.len == 0) return Self{};
+
+            var counts: [max_code_bits + 1]u16 = @splat(0);
+            var max_bits_seen: u4 = 0;
+            for (active_symbols, 0..) |symbol, index| {
+                if (symbol >= lengths.len or (index != 0 and symbol <= active_symbols[index - 1])) return error.CorruptFrame;
+                const bits = lengths[symbol];
+                if (bits == 0 or bits > max_code_bits) return error.CorruptFrame;
+                counts[bits] += 1;
+                max_bits_seen = @max(max_bits_seen, bits);
+            }
+
+            var available: i32 = 1;
+            var code: u16 = 0;
+            var next_code: [max_code_bits + 1]u16 = @splat(0);
+            for (1..max_code_bits + 1) |bits| {
+                available = (available << 1) - @as(i32, counts[bits]);
+                if (available < 0) return error.InvalidHuffmanCode;
+                code = (code + counts[bits - 1]) << 1;
+                next_code[bits] = code;
+            }
+
+            var table = Self{ .len = active_symbols.len, .max_bits = max_bits_seen };
+            var offset: u16 = 0;
+            for (1..max_code_bits + 1) |bits| {
+                table.first_by_bits[bits] = offset;
+                table.count_by_bits[bits] = counts[bits];
+                offset += counts[bits];
+            }
+            var write_offsets = table.first_by_bits;
+            for (active_symbols) |symbol| {
+                const bits = lengths[symbol];
+                const canonical = next_code[bits];
+                next_code[bits] += 1;
+                const entry_index = write_offsets[bits];
+                write_offsets[bits] += 1;
+                table.entries[entry_index] = .{
+                    .symbol = symbol,
+                    .code = reverseBits(canonical, bits),
+                    .bits = bits,
+                };
+            }
+            return table;
+        }
+
         pub fn decode(self: *const Self, reader: anytype) Error!Symbol {
             const decoded = try self.decodeValueWithBits(reader);
             return .{ .value = decoded.value, .bits = decoded.bits };
@@ -261,6 +311,55 @@ test "sparse trusted encoder matches dense canonical codes" {
     for (active) |symbol| {
         try std.testing.expectEqual(dense.bits[symbol], sparse.bits[symbol]);
         try std.testing.expectEqual(dense.codes[symbol], sparse.codes[symbol]);
+    }
+}
+
+test "sparse trusted decoder matches dense canonical table" {
+    var lengths: [704]u4 = @splat(0);
+    const active = [_]u16{ 3, 17, 99, 241, 500, 700 };
+    for (active) |symbol| lengths[symbol] = if (symbol == 3 or symbol == 17) 2 else 3;
+
+    const dense = try HuffmanTable(704).init(&lengths);
+    const sparse = try HuffmanTable(704).initSparseTrusted(&lengths, &active);
+    try std.testing.expectEqual(dense.len, sparse.len);
+    try std.testing.expectEqual(dense.max_bits, sparse.max_bits);
+    try std.testing.expectEqualSlices(HuffmanTable(704).Entry, dense.entries[0..dense.len], sparse.entries[0..sparse.len]);
+    try std.testing.expectEqual(dense.first_by_bits, sparse.first_by_bits);
+    try std.testing.expectEqual(dense.count_by_bits, sparse.count_by_bits);
+}
+
+test "sparse trusted decoder rejects invalid active sets" {
+    var lengths: [8]u4 = @splat(0);
+    lengths[1] = 1;
+    try std.testing.expectError(error.CorruptFrame, HuffmanTable(8).initSparseTrusted(&lengths, &.{ 1, 1 }));
+    try std.testing.expectError(error.CorruptFrame, HuffmanTable(8).initSparseTrusted(&lengths, &.{2}));
+    try std.testing.expectError(error.CorruptFrame, HuffmanTable(8).initSparseTrusted(&lengths, &.{8}));
+}
+
+test "sparse trusted decoder matches dense randomized tables" {
+    var state: u32 = 0x243f_6a88;
+    for (0..128) |_| {
+        var frequencies: [64]u32 = @splat(0);
+        const active_len: usize = 2 + state % 63;
+        for (0..active_len) |index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            frequencies[index] = 1 + (state >> 20);
+        }
+        const lengths = treeCodeLengths(64, &frequencies, max_code_bits);
+        var active: [64]u16 = undefined;
+        var count: usize = 0;
+        for (lengths, 0..) |bits, symbol| {
+            if (bits == 0) continue;
+            active[count] = @intCast(symbol);
+            count += 1;
+        }
+        const dense = try HuffmanTable(64).init(&lengths);
+        const sparse = try HuffmanTable(64).initSparseTrusted(&lengths, active[0..count]);
+        try std.testing.expectEqual(dense.len, sparse.len);
+        try std.testing.expectEqual(dense.max_bits, sparse.max_bits);
+        try std.testing.expectEqualSlices(HuffmanTable(64).Entry, dense.entries[0..dense.len], sparse.entries[0..sparse.len]);
+        try std.testing.expectEqual(dense.first_by_bits, sparse.first_by_bits);
+        try std.testing.expectEqual(dense.count_by_bits, sparse.count_by_bits);
     }
 }
 
