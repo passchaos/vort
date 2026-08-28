@@ -6450,6 +6450,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   fixed-CPU-8, 4096-iteration pairs improve source and JSON medians by about
   1.1% and 1.7% (12/12 and 11/12 wins), respectively; encoded sizes and mixes
   remain exact and the five-corpus zlib-ng gate stays green.
+- Incremental fixed-Huffman cost calculation now walks those active-symbol
+  lists as well, rather than rescanning all 286 literal/length and 30 distance
+  counters after matching. An oracle compares cached and token-scanned fixed/
+  dynamic plans, including exact code lengths. Twelve alternating fixed-CPU-8,
+  4096-iteration pairs improve source and JSON medians by about 2.2% and 2.4%
+  (10/12 and 12/12 wins); output sizes and checksum mixes are unchanged and the
+  five-corpus zlib-ng gate remains green.
 - Rolling DEFLATE history/block match extension now compares 32-byte vectors
   before its existing 8-byte and scalar tails. The first differing-lane mask
   preserves exact byte offsets and removes three dependent word comparisons on

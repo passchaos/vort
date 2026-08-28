@@ -56,6 +56,14 @@ pub const Stats = struct {
     pub fn distanceActiveCount(self: Stats) usize {
         return self.distance_active_count;
     }
+
+    pub fn literalSymbols(self: *const Stats) []const u16 {
+        return self.active_literals[0..self.literal_active_count];
+    }
+
+    pub fn distanceSymbols(self: *const Stats) []const u8 {
+        return self.active_distances[0..self.distance_active_count];
+    }
 };
 
 const SymbolBits = struct { symbol: usize, extra_bits: usize };
@@ -94,4 +102,19 @@ test "incremental dynamic stats match DEFLATE symbol metadata" {
         for (stats.distance_frequencies) |frequency| distance_total += frequency;
         try std.testing.expectEqual(@as(u32, 1), distance_total);
     }
+}
+
+test "incremental dynamic stats expose active symbols without stale entries" {
+    var stats: Stats = .{};
+    stats.recordLiteral('a');
+    stats.recordLiteral('b');
+    stats.recordLiteral('a');
+    stats.recordMatch(.{ .length = 3, .distance = 5 });
+    try std.testing.expectEqualSlices(u16, &.{ 'a', 'b', 257 }, stats.literalSymbols());
+    try std.testing.expectEqualSlices(u8, &.{4}, stats.distanceSymbols());
+
+    stats.reset();
+    stats.recordLiteral('z');
+    try std.testing.expectEqualSlices(u16, &.{'z'}, stats.literalSymbols());
+    try std.testing.expectEqual(@as(usize, 0), stats.distanceSymbols().len);
 }

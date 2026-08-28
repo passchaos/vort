@@ -1419,6 +1419,13 @@ const DynamicCodingPlan = struct {
     fn initFromIncrementalStats(stats: *const incremental_dynamic_stats.Stats) !DynamicCodingPlan {
         var lit_freqs = stats.literal_frequencies;
         lit_freqs[256] = 1;
+        var fixed_bits: usize = 3 + stats.length_extra_bits + stats.distance_extra_bits;
+        for (stats.literalSymbols()) |symbol|
+            fixed_bits += @as(usize, stats.literal_frequencies[symbol]) * huffman.fixed_literal_encoder.bits[symbol];
+        if (stats.literal_frequencies[256] == 0) fixed_bits += huffman.fixed_literal_encoder.bits[256];
+        for (stats.distanceSymbols()) |symbol|
+            fixed_bits += @as(usize, stats.distance_frequencies[symbol]) * huffman.fixed_distance_encoder.bits[symbol];
+        for (280..285) |symbol| fixed_bits -= stats.literal_frequencies[symbol];
         return initFromStatsKnownActive(
             lit_freqs,
             stats.distance_frequencies,
@@ -1426,6 +1433,7 @@ const DynamicCodingPlan = struct {
             stats.distance_extra_bits,
             stats.literalActiveCount() + @intFromBool(stats.literal_frequencies[256] == 0),
             stats.distanceActiveCount(),
+            fixed_bits,
         );
     }
 
@@ -1436,13 +1444,8 @@ const DynamicCodingPlan = struct {
         distance_extra_bits: usize,
         literal_active: usize,
         distance_active: usize,
+        fixed_bits: usize,
     ) !DynamicCodingPlan {
-        var fixed_bits: usize = 3 + length_extra_bits + distance_extra_bits;
-        for (lit_freqs, huffman.fixed_literal_encoder.bits[0..lit_freqs.len]) |frequency, code_bits|
-            fixed_bits += @as(usize, frequency) * code_bits;
-        for (dist_freqs, huffman.fixed_distance_encoder.bits[0..dist_freqs.len]) |frequency, code_bits|
-            fixed_bits += @as(usize, frequency) * code_bits;
-        for (280..285) |symbol| fixed_bits -= lit_freqs[symbol];
         return initFromStatsCore(
             lit_freqs,
             dist_freqs,
@@ -21018,6 +21021,17 @@ test "cached Deflate block costs match token-scan references" {
         const plan = try DynamicCodingPlan.init(tokens);
         try std.testing.expectEqual(lz77.fixedBitCost(tokens), plan.fixed_bits);
         try std.testing.expectEqual(plan.bitCostReference(tokens), plan.bitCost());
+
+        var cached: incremental_dynamic_stats.Stats = .{};
+        for (tokens) |token| switch (token) {
+            .literal => |byte| cached.recordLiteral(byte),
+            .match => |match| cached.recordMatch(match),
+        };
+        const cached_plan = try DynamicCodingPlan.initFromIncrementalStats(&cached);
+        try std.testing.expectEqual(plan.fixed_bits, cached_plan.fixed_bits);
+        try std.testing.expectEqual(plan.dynamic_bits, cached_plan.dynamic_bits);
+        try std.testing.expectEqual(plan.lit_lengths_full, cached_plan.lit_lengths_full);
+        try std.testing.expectEqual(plan.dist_lengths_full, cached_plan.dist_lengths_full);
     }
 
     // Exercise every literal, length range, and distance range in a larger
