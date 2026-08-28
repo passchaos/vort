@@ -7621,3 +7621,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   index. Sixteen alternating ReleaseFast CPU-8 pairs preserve checksums across
   the 12-case libbrotli matrix: compressed rows improve by about 0.8--10.0%,
   while tiny and random/stored controls remain within 0.2% noise.
+  Brotli simple-prefix decoding now builds its two-to-four canonical entries
+  directly from the wire symbol/length pairs, rather than clearing and scanning
+  a 256-, 520-, or 704-slot temporary length array. Focused tests compare both
+  legal four-symbol tree shapes with the dense constructor and retain malformed
+  list rejection. Sixteen alternating ReleaseFast CPU-8 pairs against the
+  preceding sparse-complex change improve all compressed rows: roughly
+  1.0--2.8% at quality 0, 5.5--6.7% at quality 3, 11.1% for structured quality
+  4, and 7.2--14.0% at quality 11. Tiny and random/stored controls remain
+  within about 0.5% noise, with matching checksums.

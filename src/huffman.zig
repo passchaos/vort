@@ -258,6 +258,65 @@ pub fn HuffmanTable(comptime max_symbols: usize) type {
             return table;
         }
 
+        /// Build a small decoder when code lengths and wire symbols are already
+        /// available as parallel lists. Brotli simple trees contain at most four
+        /// symbols, so expanding them into a max-alphabet-sized sparse array is
+        /// unnecessary. Canonical assignment still follows symbol order.
+        pub fn initExplicitSymbols(code_lengths: []const u4, symbols: []const u16) Error!Self {
+            if (code_lengths.len != symbols.len or symbols.len == 0 or symbols.len > max_symbols) return error.CorruptFrame;
+            var sorted_symbols: [4]u16 = undefined;
+            var sorted_lengths: [4]u4 = undefined;
+            if (symbols.len > sorted_symbols.len) return error.CorruptFrame;
+            for (symbols, code_lengths, 0..) |symbol, bits, i| {
+                if (symbol >= max_symbols or bits == 0 or bits > max_code_bits) return error.CorruptFrame;
+                var insert = i;
+                while (insert != 0 and symbol < sorted_symbols[insert - 1]) : (insert -= 1) {
+                    sorted_symbols[insert] = sorted_symbols[insert - 1];
+                    sorted_lengths[insert] = sorted_lengths[insert - 1];
+                }
+                if (insert != 0 and symbol == sorted_symbols[insert - 1]) return error.CorruptFrame;
+                sorted_symbols[insert] = symbol;
+                sorted_lengths[insert] = bits;
+            }
+
+            var counts: [max_code_bits + 1]u16 = @splat(0);
+            var max_bits_seen: u4 = 0;
+            for (sorted_lengths[0..symbols.len]) |bits| {
+                counts[bits] += 1;
+                max_bits_seen = @max(max_bits_seen, bits);
+            }
+            var available: i32 = 1;
+            var code: u16 = 0;
+            var next_code: [max_code_bits + 1]u16 = @splat(0);
+            for (1..max_code_bits + 1) |bits| {
+                available = (available << 1) - @as(i32, counts[bits]);
+                if (available < 0) return error.InvalidHuffmanCode;
+                code = (code + counts[bits - 1]) << 1;
+                next_code[bits] = code;
+            }
+
+            var table = Self{ .len = symbols.len, .max_bits = max_bits_seen };
+            var offset: u16 = 0;
+            for (1..max_code_bits + 1) |bits| {
+                table.first_by_bits[bits] = offset;
+                table.count_by_bits[bits] = counts[bits];
+                offset += counts[bits];
+            }
+            var write_offsets = table.first_by_bits;
+            for (sorted_symbols[0..symbols.len], sorted_lengths[0..symbols.len]) |symbol, bits| {
+                const canonical = next_code[bits];
+                next_code[bits] += 1;
+                const entry_index = write_offsets[bits];
+                write_offsets[bits] += 1;
+                table.entries[entry_index] = .{
+                    .symbol = symbol,
+                    .code = reverseBits(canonical, bits),
+                    .bits = bits,
+                };
+            }
+            return table;
+        }
+
         pub fn decode(self: *const Self, reader: anytype) Error!Symbol {
             const decoded = try self.decodeValueWithBits(reader);
             return .{ .value = decoded.value, .bits = decoded.bits };
@@ -326,6 +385,35 @@ test "sparse trusted decoder matches dense canonical table" {
     try std.testing.expectEqualSlices(HuffmanTable(704).Entry, dense.entries[0..dense.len], sparse.entries[0..sparse.len]);
     try std.testing.expectEqual(dense.first_by_bits, sparse.first_by_bits);
     try std.testing.expectEqual(dense.count_by_bits, sparse.count_by_bits);
+}
+
+test "explicit-symbol decoder matches dense simple trees" {
+    const cases = [_]struct {
+        symbols: []const u16,
+        lengths: []const u4,
+    }{
+        .{ .symbols = &.{ 241, 3 }, .lengths = &.{ 1, 1 } },
+        .{ .symbols = &.{ 241, 3, 700 }, .lengths = &.{ 1, 2, 2 } },
+        .{ .symbols = &.{ 241, 3, 700, 17 }, .lengths = &.{ 1, 2, 3, 3 } },
+    };
+    for (cases) |case| {
+        var dense_lengths: [704]u4 = @splat(0);
+        for (case.symbols, case.lengths) |symbol, bits| dense_lengths[symbol] = bits;
+        const dense = try HuffmanTable(704).init(&dense_lengths);
+        const explicit = try HuffmanTable(704).initExplicitSymbols(case.lengths, case.symbols);
+        try std.testing.expectEqual(dense.len, explicit.len);
+        try std.testing.expectEqual(dense.max_bits, explicit.max_bits);
+        try std.testing.expectEqualSlices(HuffmanTable(704).Entry, dense.entries[0..dense.len], explicit.entries[0..explicit.len]);
+        try std.testing.expectEqual(dense.first_by_bits, explicit.first_by_bits);
+        try std.testing.expectEqual(dense.count_by_bits, explicit.count_by_bits);
+    }
+}
+
+test "explicit-symbol decoder rejects malformed lists" {
+    try std.testing.expectError(error.CorruptFrame, HuffmanTable(8).initExplicitSymbols(&.{ 1, 1 }, &.{1}));
+    try std.testing.expectError(error.CorruptFrame, HuffmanTable(8).initExplicitSymbols(&.{ 1, 1 }, &.{ 2, 2 }));
+    try std.testing.expectError(error.CorruptFrame, HuffmanTable(8).initExplicitSymbols(&.{ 1, 1 }, &.{ 1, 8 }));
+    try std.testing.expectError(error.CorruptFrame, HuffmanTable(8).initExplicitSymbols(&.{ 1, 0 }, &.{ 1, 2 }));
 }
 
 test "sparse trusted decoder rejects invalid active sets" {

@@ -6638,33 +6638,33 @@ fn readPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size: usize
         symbols[i] = symbol;
     }
 
-    var lengths: [max_alphabet_size]u4 = @splat(0);
+    var lengths: [max_alphabet_size]u4 = undefined;
     switch (nsym) {
         1 => return .{ .single_symbol = symbols[0] },
         2 => {
-            lengths[symbols[0]] = 1;
-            lengths[symbols[1]] = 1;
+            lengths[0] = 1;
+            lengths[1] = 1;
         },
         3 => {
-            lengths[symbols[0]] = 1;
-            lengths[symbols[1]] = 2;
-            lengths[symbols[2]] = 2;
+            lengths[0] = 1;
+            lengths[1] = 2;
+            lengths[2] = 2;
         },
         4 => {
             const tree_select = try reader.readBits(u1, 1);
             if (tree_select == 0) {
-                for (symbols) |symbol| lengths[symbol] = 2;
+                @memset(lengths[0..4], 2);
             } else {
-                lengths[symbols[0]] = 1;
-                lengths[symbols[1]] = 2;
-                lengths[symbols[2]] = 3;
-                lengths[symbols[3]] = 3;
+                lengths[0] = 1;
+                lengths[1] = 2;
+                lengths[2] = 3;
+                lengths[3] = 3;
             }
         },
         else => unreachable,
     }
 
-    return .{ .table = try huffman.HuffmanTable(max_alphabet_size).init(&lengths) };
+    return .{ .table = try huffman.HuffmanTable(max_alphabet_size).initExplicitSymbols(lengths[0..nsym], symbols[0..nsym]) };
 }
 
 const code_length_alphabet_size = 18;
