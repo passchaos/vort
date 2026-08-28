@@ -7738,6 +7738,16 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   alternating fixed-CPU-8 stage pairs improve full planned JSON/source/log
   encoding by about 0.5%/1.8%/1.7%, respectively, with every pair positive and
   the seven-row libbrotli encode gate green.
+  Planner payload Huffman codes now use a dedicated non-empty, at-most-15-bit
+  writer that expands the bounded one-to-three-byte operation directly instead
+  of entering the general arbitrary-width loop. Headers and command/distance
+  extra bits retain the general writer, while a start-alignment, width, and
+  representative-value oracle pins identical bytes and final bit positions; bounded
+  overflow remains explicit. Sixteen alternating ReleaseFast CPU-8 stage pairs
+  at 20,000 encodes preserve output checksums and improve full planned JSON,
+  source, and log medians by about 2.2%, 1.3%, and 2.0%, respectively
+  (14/16, 16/16, and 15/16 wins). The seven-row libbrotli encode gate and
+  99-case upstream differential remain green.
   Brotli complex-prefix decoding now records the ascending active-symbol list
   during its mandatory validation pass and hands it to a trusted sparse
   canonical decoder builder. This avoids rescanning all 256/520/704 code-length

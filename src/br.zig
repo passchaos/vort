@@ -802,6 +802,32 @@ const BitWriter = struct {
         }
     }
 
+    /// Writes a validated, non-empty Brotli Huffman code. Huffman code widths
+    /// are capped at 15 bits, so the code can touch at most three bytes. The
+    /// payload encoder has already validated the tree and code width; spelling
+    /// out those writes avoids the general bit writer's per-byte loop in its
+    /// hottest call sites while preserving the same growth and bounded-output
+    /// behavior through `appendZeroByte`.
+    inline fn writeHuffmanBits(self: *BitWriter, allocator: std.mem.Allocator, value: u16, count: u4) Error!void {
+        std.debug.assert(count != 0);
+        std.debug.assert(value < (@as(u16, 1) << count));
+
+        if (self.bit_index == 0) try self.appendZeroByte(allocator);
+        const shifted = @as(u32, value) << self.bit_index;
+        self.out.items[self.out.items.len - 1] |= @truncate(shifted);
+
+        const total_bits = @as(u5, self.bit_index) + @as(u5, count);
+        if (total_bits > 8) {
+            try self.appendZeroByte(allocator);
+            self.out.items[self.out.items.len - 1] = @truncate(shifted >> 8);
+            if (total_bits > 16) {
+                try self.appendZeroByte(allocator);
+                self.out.items[self.out.items.len - 1] = @truncate(shifted >> 16);
+            }
+        }
+        self.bit_index = @truncate(total_bits & 7);
+    }
+
     inline fn appendZeroByte(self: *BitWriter, allocator: std.mem.Allocator) Error!void {
         if (self.out.items.len < self.out.capacity) {
             self.out.appendAssumeCapacity(0);
@@ -836,6 +862,47 @@ test "Brotli bit writer uses reserved and bounded capacity" {
     try writer.writeBits(std.testing.allocator, 0xabcd, 16);
     try std.testing.expectEqualSlices(u8, &.{ 0xcd, 0xab }, out.items);
     try std.testing.expectError(error.OutOfMemory, writer.writeBits(std.testing.allocator, 1, 1));
+}
+
+test "Brotli narrow Huffman bit writer matches the general writer" {
+    const values = [_]u16{ 0, 1, 0x5555, 0x7fff };
+    for (0..8) |initial_bits| {
+        for (1..huffman.max_code_bits + 1) |count| {
+            const mask = (@as(u16, 1) << @intCast(count)) - 1;
+            for (values) |unmasked| {
+                const value = unmasked & mask;
+                var general: std.ArrayList(u8) = .empty;
+                defer general.deinit(std.testing.allocator);
+                var narrow: std.ArrayList(u8) = .empty;
+                defer narrow.deinit(std.testing.allocator);
+
+                if (initial_bits != 0) {
+                    const initial_byte = @as(u8, 0xa5) & ((@as(u8, 1) << @intCast(initial_bits)) - 1);
+                    try general.append(std.testing.allocator, initial_byte);
+                    try narrow.append(std.testing.allocator, initial_byte);
+                }
+                var general_writer = BitWriter{ .out = &general, .bit_index = @intCast(initial_bits) };
+                var narrow_writer = BitWriter{ .out = &narrow, .bit_index = @intCast(initial_bits) };
+                try general_writer.writeBits(std.testing.allocator, value, @intCast(count));
+                try narrow_writer.writeHuffmanBits(std.testing.allocator, value, @intCast(count));
+
+                try std.testing.expectEqual(general_writer.bit_index, narrow_writer.bit_index);
+                try std.testing.expectEqualSlices(u8, general.items, narrow.items);
+            }
+        }
+    }
+}
+
+test "Brotli narrow Huffman bit writer preserves bounded overflow" {
+    var storage = [_]u8{0} ** 2;
+    var out: std.ArrayList(u8) = .{
+        .items = storage[0..1],
+        .capacity = storage.len,
+    };
+    out.items[0] = 0x7f;
+    var writer = BitWriter{ .out = &out, .bit_index = 7, .bounded = true };
+
+    try std.testing.expectError(error.OutOfMemory, writer.writeHuffmanBits(std.testing.allocator, 0x7fff, 15));
 }
 
 pub fn PrefixCode(comptime alphabet_size: usize) type {
@@ -2223,8 +2290,8 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         if (command_alphabet.len > 1) {
             if (command_alphabet.len <= 4) {
                 const code = command_alphabet.simpleCode(encoding.symbol).?;
-                try writer.writeBits(allocator, code.code, code.bits);
-            } else try writer.writeBits(allocator, command_encoder.codes[encoding.symbol], command_encoder.bits[encoding.symbol]);
+                try writer.writeHuffmanBits(allocator, code.code, code.bits);
+            } else try writer.writeHuffmanBits(allocator, command_encoder.codes[encoding.symbol], command_encoder.bits[encoding.symbol]);
         }
         try writeCommandLengthExtras(allocator, writer, encoding, command.insert_len, command.copy_len);
         for (input[command.insert_start..][0..command.insert_len], command.insert_start..) |literal, position| {
@@ -2233,16 +2300,16 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
                 const second_previous = if (position < 2) 0 else input[position - 2];
                 const context = literal_context.value(literal_context.mode_utf8, previous, second_previous);
                 const encoder = &literal_context_encoders[literal_context.utf8TextTree(context)];
-                if (encoder.bits[literal] != 0) try writer.writeBits(allocator, encoder.codes[literal], encoder.bits[literal]);
-            } else if (literal_alphabet.len > 1) try writer.writeBits(allocator, literal_encoder.codes[literal], literal_encoder.bits[literal]);
+                if (encoder.bits[literal] != 0) try writer.writeHuffmanBits(allocator, encoder.codes[literal], encoder.bits[literal]);
+            } else if (literal_alphabet.len > 1) try writer.writeHuffmanBits(allocator, literal_encoder.codes[literal], literal_encoder.bits[literal]);
         }
         if (command.has_copy and encoding.command.distance_code == -1) {
             const distance = if (recent_symbol) |symbol| encoder_distance.Encoding{ .symbol = symbol } else encoder_distance.encode(commandWireDistance(command), 15) orelse unreachable;
             if (distance_alphabet.len > 1) {
                 if (distance_alphabet.len <= 4) {
                     const code = distance_alphabet.simpleCode(distance.symbol).?;
-                    try writer.writeBits(allocator, code.code, code.bits);
-                } else try writer.writeBits(allocator, distance_encoder.codes[distance.symbol], distance_encoder.bits[distance.symbol]);
+                    try writer.writeHuffmanBits(allocator, code.code, code.bits);
+                } else try writer.writeHuffmanBits(allocator, distance_encoder.codes[distance.symbol], distance_encoder.bits[distance.symbol]);
             }
             if (distance.extra_bits != 0)
                 try writer.writeBits(allocator, distance.extra, distance.extra_bits);
