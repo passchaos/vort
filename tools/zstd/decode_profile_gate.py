@@ -5,7 +5,7 @@ import csv
 from pathlib import Path
 
 COLUMNS = ["case", "input_bytes", "encoded_bytes", "iterations", "vort_ns", "vort_mib_s", "checksum", "block_count", "compressed_blocks", "literals_kind", "sequence_count", "ll_mode", "of_mode", "ml_mode"]
-CASES = {"numbered_json", "huffman80k", "large_json", "binary_mixed"}
+CASES = {"numbered_json", "huffman80k", "ascii64k", "large_json", "binary_mixed"}
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -23,6 +23,9 @@ def main() -> int:
         assert float(row["vort_mib_s"]) > 0, row
     huffman = by_case["huffman80k"]
     assert huffman["literals_kind"] == "raw" and int(huffman["sequence_count"]) >= 1000, huffman
+    ascii_huffman = by_case["ascii64k"]
+    assert ascii_huffman["literals_kind"] == "compressed", ascii_huffman
+    assert int(ascii_huffman["sequence_count"]) == 0, ascii_huffman
     assert (huffman["ll_mode"], huffman["of_mode"], huffman["ml_mode"]) == ("compressed", "compressed", "compressed"), huffman
     for name in ("large_json", "binary_mixed"):
         row = by_case[name]

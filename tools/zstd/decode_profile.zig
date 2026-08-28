@@ -24,6 +24,13 @@ pub fn main(init: std.process.Init) !void {
     defer init.gpa.free(huffman_payload);
     const huffman_alphabet = "ACGTN";
     for (huffman_payload, 0..) |*byte, index| byte.* = huffman_alphabet[(index * 17 + index / 7 + index / 31) % huffman_alphabet.len];
+    const ascii_payload = try init.gpa.alloc(u8, 64 * 1024);
+    defer init.gpa.free(ascii_payload);
+    var ascii_state: u32 = 31;
+    for (ascii_payload) |*byte| {
+        ascii_state = ascii_state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @intCast(32 + ((ascii_state >> 16) % 95));
+    }
     var large_json: std.ArrayList(u8) = .empty;
     defer large_json.deinit(init.gpa);
     while (large_json.items.len < 512 * 1024) {
@@ -42,6 +49,7 @@ pub fn main(init: std.process.Init) !void {
     const cases = [_]Case{
         .{ .name = "numbered_json", .payload = numbered_json.items },
         .{ .name = "huffman80k", .payload = huffman_payload },
+        .{ .name = "ascii64k", .payload = ascii_payload, .level = 9 },
         .{ .name = "large_json", .payload = large_json.items },
         .{ .name = "binary_mixed", .payload = binary_mixed },
     };
