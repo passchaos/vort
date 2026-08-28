@@ -7716,3 +7716,9 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   same large-stream function improved the clustered row by about 21%, but was
   rejected because unrelated small rows moved backward by roughly 1--4% from
   code-layout effects; future expansion must live in a more isolated module.
+  `run-br-reference-bench` now accepts `--vort-only`, skipping dictionary
+  differentials, libbrotli timing, summary, and allocation variants so `perf`
+  profiles contain only caller-owned Vort decode. The first post-lookup
+  clustered profile attributes about 24% to command Huffman decode, 31% to
+  distance decode/extra bits, 10% to literal decode, and 7% to UTF-8 context
+  selection, providing a clean next-hotspot baseline.

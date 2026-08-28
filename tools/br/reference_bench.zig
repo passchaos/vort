@@ -16,6 +16,7 @@ const Options = struct {
     only_case: ?[]const u8 = null,
     quality_override: ?c_int = null,
     print_encoded_hex: bool = false,
+    vort_only: bool = false,
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -25,7 +26,7 @@ pub fn main(init: std.process.Init) !void {
     const options = try parseOptions(&args);
     var runtime = try libbrotli.Runtime.open();
     defer runtime.deinit();
-    const dictionary_cases = try checkDictionaryTransforms(runtime);
+    const dictionary_cases = if (options.vort_only) 0 else try checkDictionaryTransforms(runtime);
     var random: [4096]u8 = undefined;
     var state: u32 = 0x1234_5678;
     for (&random) |*byte| {
@@ -57,7 +58,9 @@ pub fn main(init: std.process.Init) !void {
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
     const writer = &csv.writer;
-    try writer.writeAll("case,reference_version,input_bytes,encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,size_ns,alloc_ns,exact_alloc_ns,dictionary_cases,static_dictionary_copies,static_dictionary_bytes,max_literal_context_trees,max_command_block_types,max_distance_context_trees\n");
+    if (options.vort_only) {
+        try writer.writeAll("case,input_bytes,encoded_bytes,iterations,vort_ns,vort_mib_s,checksum\n");
+    } else try writer.writeAll("case,reference_version,input_bytes,encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,size_ns,alloc_ns,exact_alloc_ns,dictionary_cases,static_dictionary_copies,static_dictionary_bytes,max_literal_context_trees,max_command_block_types,max_distance_context_trees\n");
     for (&cases) |case| {
         if (options.only_case) |wanted| {
             if (!std.mem.eql(u8, wanted, case.name)) continue;
@@ -80,6 +83,11 @@ pub fn main(init: std.process.Init) !void {
         if (written != case.payload.len or !std.mem.eql(u8, case.payload, vort_output)) return error.SizeMismatch;
         try runtime.decode(encoded, reference_output);
         if (!std.mem.eql(u8, case.payload, reference_output)) return error.SizeMismatch;
+        if (options.vort_only) {
+            const sample = try measure(init.io, .vort, runtime, encoded, vort_output, iterations);
+            try writer.print("{s},{d},{d},{d},{d},{d:.2},{d}\n", .{ case.name, case.payload.len, encoded.len, iterations, sample.elapsed_ns, mibPerSecond(case.payload.len * iterations, sample.elapsed_ns), sample.mix });
+            continue;
+        }
         const summary = try vort.brSummarizeStreamAlloc(init.gpa, encoded);
         const vort_sample = try measure(init.io, .vort, runtime, encoded, vort_output, iterations);
         const reference_sample = try measure(init.io, .reference, runtime, encoded, reference_output, iterations);
@@ -186,6 +194,8 @@ fn parseOptions(args: *std.process.Args.Iterator) !Options {
             options.quality_override = try std.fmt.parseInt(c_int, args.next() orelse return error.MissingLimit, 10);
         } else if (std.mem.eql(u8, arg, "--print-encoded-hex")) {
             options.print_encoded_hex = true;
+        } else if (std.mem.eql(u8, arg, "--vort-only")) {
+            options.vort_only = true;
         } else return error.UnknownArgument;
     }
     if (options.iterations == 0) return error.InvalidBlockPlan;
