@@ -99,11 +99,17 @@ pub const Matcher = struct {
         try tokens.ensureTotalCapacity(allocator, @min(block.len, 4096));
         var stats: lz77.PlanStats = .{};
         var dynamic: dynamic_stats.Stats = .{};
+        // These bounds depend only on the block's options. Hoist their nested
+        // clamps out of both the current-position and lazy-probe searches; on
+        // source-like input those searches run for nearly every token.
+        const minimum = @max(@as(usize, 3), @min(options.min_match, @max(@as(usize, 3), @min(options.max_match, lz77.max_match_len))));
+        const maximum_match = @max(@as(usize, 3), @min(options.max_match, lz77.max_match_len));
+        const max_walks = if (minimum <= 3 or options.max_chain > 8) options.max_chain else options.max_chain * 4;
 
         var pos: usize = 0;
         while (pos < block.len) {
-            const best = self.findBest(history, block, pos, options, anchor_len);
-            if (!acceptMatch(block, pos, best.length, best.distance, options)) {
+            const best = self.findBest(history, block, pos, options, anchor_len, minimum, maximum_match, max_walks);
+            if (!acceptMatch(block, pos, best.length, best.distance, options, minimum)) {
                 try appendToken(tokens, allocator, .{ .literal = block[pos] });
                 stats.literals += 1;
                 dynamic.recordLiteral(block[pos]);
@@ -119,9 +125,9 @@ pub const Matcher = struct {
                 // planner's ordering and deterministic tie behavior.
                 self.insertBlockPosition(history, block, pos, anchor_len);
                 current_inserted = true;
-                const next = self.findBest(history, block, pos + 1, options, anchor_len);
+                const next = self.findBest(history, block, pos + 1, options, anchor_len, minimum, maximum_match, max_walks);
                 if (next.length >= best.length + options.lazy_min_gain and
-                    acceptMatch(block, pos + 1, next.length, next.distance, options))
+                    acceptMatch(block, pos + 1, next.length, next.distance, options, minimum))
                 {
                     try appendToken(tokens, allocator, .{ .literal = block[pos] });
                     stats.literals += 1;
@@ -196,7 +202,17 @@ pub const Matcher = struct {
 
     const Candidate = struct { length: usize = 0, distance: usize = 0 };
 
-    fn findBest(self: *const Matcher, history: []const u8, block: []const u8, pos: usize, options: lz77.GreedyOptions, anchor_len: usize) Candidate {
+    fn findBest(
+        self: *const Matcher,
+        history: []const u8,
+        block: []const u8,
+        pos: usize,
+        options: lz77.GreedyOptions,
+        anchor_len: usize,
+        minimum: usize,
+        maximum_match: usize,
+        max_walks: usize,
+    ) Candidate {
         if (pos + anchor_len > block.len) return .{};
         const current = self.absolute_position + pos;
         const h = hash.block(block, pos, anchor_len);
@@ -206,10 +222,8 @@ pub const Matcher = struct {
         const history_chain = candidate < self.absolute_position;
         var checked: usize = 0;
         var best: Candidate = .{};
-        const minimum = @max(@as(usize, 3), @min(options.min_match, @max(@as(usize, 3), @min(options.max_match, lz77.max_match_len))));
-        const max_walks = if (minimum <= 3 or options.max_chain > 8) options.max_chain else options.max_chain * 4;
         var walked: usize = 0;
-        const maximum = @min(@max(@as(usize, 3), @min(options.max_match, lz77.max_match_len)), block.len - pos);
+        const maximum = @min(maximum_match, block.len - pos);
         while (candidate != invalid_position and checked < options.max_chain and walked < max_walks) : (walked += 1) {
             if (candidate >= current) break;
             const distance = current - candidate;
@@ -331,7 +345,6 @@ fn hashAt(history: []const u8, block: []const u8, block_absolute: usize, absolut
     return hash.joined(history, block, absolute - history_absolute, anchor_len);
 }
 
-fn acceptMatch(input: []const u8, pos: usize, length: usize, distance: usize, options: lz77.GreedyOptions) bool {
-    const minimum = @max(@as(usize, 3), @min(options.min_match, @max(@as(usize, 3), @min(options.max_match, lz77.max_match_len))));
+fn acceptMatch(input: []const u8, pos: usize, length: usize, distance: usize, options: lz77.GreedyOptions, minimum: usize) bool {
     return profitability.accept(input, pos, length, distance, minimum, lz77.default_window_len, options.min_savings_bits);
 }

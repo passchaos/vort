@@ -6428,6 +6428,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   block emission, and 7.4% to memory copying. The ordinary default invocation
   and CSV schema remain unchanged, and the five-corpus zlib-ng gate still
   passes.
+- Rolling matcher search bounds derived solely from compression options are
+  now normalized once per block and passed to both the current-position and
+  one-byte lazy probes. This removes nested min/max recomputation from nearly
+  every source-like token without changing token selection. Sixteen alternating
+  fixed-CPU-8 source pairs at 4096 iterations improved the paired median by
+  about 1.3% (15/16 wins; one scheduler outlier), while twelve equivalent JSON
+  pairs improved about 1.8% (12/12 wins); encoded sizes and checksum mixes were
+  identical, and the five-corpus zlib-ng gate remains green.
 - Rolling DEFLATE history/block match extension now compares 32-byte vectors
   before its existing 8-byte and scalar tails. The first differing-lane mask
   preserves exact byte offsets and removes three dependent word comparisons on
