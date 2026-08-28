@@ -7664,3 +7664,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   2--6% despite improving the isolated clustered header; context-map preamble
   fusion, zero-repeat write elision, compact active-length construction, small
   MTF specialization, and repeat-extra-bit fusion were also neutral or mixed.
+  The libbrotli reference decode gate now includes the same deterministic
+  `clustered_q8` payload with a reduced iteration count and validates its
+  observed 52 literal trees, three command block types, and 17 distance trees.
+  This closes a benchmark blind spot: the previous 12 rows exercised at most a
+  few trees, so changes aimed at clustered headers could pass or fail only from
+  code-layout effects. The first ReleaseFast CPU-8 result is deliberately
+  recorded as a gap rather than a claim: Vort is about 219 MiB/s versus
+  libbrotli's 1961 MiB/s (`0.112x`) on this 1 MiB high-tree-count decode.

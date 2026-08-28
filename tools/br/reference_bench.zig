@@ -2,7 +2,13 @@ const std = @import("std");
 const vort = @import("vort");
 const libbrotli = @import("libbrotli_runtime.zig");
 
-const Case = struct { name: []const u8, payload: []const u8, quality: c_int = 0 };
+const Case = struct {
+    name: []const u8,
+    payload: []const u8,
+    quality: c_int = 0,
+    iteration_divisor: usize = 1,
+    size_requires_alloc: bool = false,
+};
 const Sample = struct { elapsed_ns: u64, mix: u64 };
 const Options = struct {
     iterations: usize = 1000,
@@ -26,6 +32,8 @@ pub fn main(init: std.process.Init) !void {
         state = state *% 1_664_525 +% 1_013_904_223;
         byte.* = @truncate(state >> 16);
     }
+    const clustered = try makeClusteredPayload(init.io, init.gpa);
+    defer init.gpa.free(clustered);
     const cases = [_]Case{
         .{ .name = "tiny", .payload = "hello brotli" },
         .{ .name = "text", .payload = "Brotli benchmark text payload. " ** 1024 },
@@ -39,18 +47,24 @@ pub fn main(init: std.process.Init) !void {
         .{ .name = "text_q11", .payload = "Brotli benchmark text payload. " ** 1024, .quality = 11 },
         .{ .name = "structured_q11", .payload = "{\"service\":\"vort\",\"codec\":\"brotli\",\"value\":12345}\n" ** 512, .quality = 11 },
         .{ .name = "repetitive_q11", .payload = ("abcdefghijklmnopqrstuvwxyz012345" ** 4) ** 256, .quality = 11 },
+        // This synthetic but deterministic source shape forces libbrotli's
+        // clustering path to retain dozens of literal and distance trees. It
+        // keeps compressed-header optimizations honest without making the
+        // regular gate run 1 MiB payloads at the full small-case iteration count.
+        .{ .name = "clustered_q8", .payload = clustered, .quality = 8, .iteration_divisor = 10, .size_requires_alloc = true },
     };
 
     var csv = std.Io.Writer.Allocating.init(init.gpa);
     defer csv.deinit();
     const writer = &csv.writer;
-    try writer.writeAll("case,reference_version,input_bytes,encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,size_ns,alloc_ns,exact_alloc_ns,dictionary_cases\n");
+    try writer.writeAll("case,reference_version,input_bytes,encoded_bytes,iterations,vort_ns,reference_ns,vort_mib_s,reference_mib_s,vort_over_reference,checksum,size_ns,alloc_ns,exact_alloc_ns,dictionary_cases,max_literal_context_trees,max_command_block_types,max_distance_context_trees\n");
     for (&cases) |case| {
         if (options.only_case) |wanted| {
             if (!std.mem.eql(u8, wanted, case.name)) continue;
         }
         const encoded = try runtime.encodeAlloc(init.gpa, case.payload, options.quality_override orelse case.quality);
         defer init.gpa.free(encoded);
+        const iterations = @max(1, options.iterations / case.iteration_divisor);
         if (options.print_encoded_hex) {
             var stderr_buffer: [4096]u8 = undefined;
             var stderr = std.Io.File.stderr().writerStreaming(init.io, &stderr_buffer);
@@ -66,16 +80,20 @@ pub fn main(init: std.process.Init) !void {
         if (written != case.payload.len or !std.mem.eql(u8, case.payload, vort_output)) return error.SizeMismatch;
         try runtime.decode(encoded, reference_output);
         if (!std.mem.eql(u8, case.payload, reference_output)) return error.SizeMismatch;
-        const vort_sample = try measure(init.io, .vort, runtime, encoded, vort_output, options.iterations);
-        const reference_sample = try measure(init.io, .reference, runtime, encoded, reference_output, options.iterations);
-        const size_sample = try measureSize(init.io, encoded, options.iterations);
-        const alloc_sample = try measureAlloc(init.io, init.gpa, encoded, options.iterations);
-        const exact_sample = try measureExactAlloc(init.io, init.gpa, encoded, case.payload.len, options.iterations);
-        const vort_mib_s = mibPerSecond(case.payload.len * options.iterations, vort_sample.elapsed_ns);
-        const reference_mib_s = mibPerSecond(case.payload.len * options.iterations, reference_sample.elapsed_ns);
+        const summary = try vort.brSummarizeStreamAlloc(init.gpa, encoded);
+        const vort_sample = try measure(init.io, .vort, runtime, encoded, vort_output, iterations);
+        const reference_sample = try measure(init.io, .reference, runtime, encoded, reference_output, iterations);
+        const size_sample = if (case.size_requires_alloc)
+            try measureSizeAlloc(init.io, init.gpa, encoded, iterations)
+        else
+            try measureSize(init.io, encoded, iterations);
+        const alloc_sample = try measureAlloc(init.io, init.gpa, encoded, iterations);
+        const exact_sample = try measureExactAlloc(init.io, init.gpa, encoded, case.payload.len, iterations);
+        const vort_mib_s = mibPerSecond(case.payload.len * iterations, vort_sample.elapsed_ns);
+        const reference_mib_s = mibPerSecond(case.payload.len * iterations, reference_sample.elapsed_ns);
         try writer.print(
-            "{s},{x},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d},{d},{d},{d},{d}\n",
-            .{ case.name, runtime.version(), case.payload.len, encoded.len, options.iterations, vort_sample.elapsed_ns, reference_sample.elapsed_ns, vort_mib_s, reference_mib_s, vort_mib_s / reference_mib_s, vort_sample.mix +% reference_sample.mix, size_sample.elapsed_ns, alloc_sample.elapsed_ns, exact_sample.elapsed_ns, dictionary_cases },
+            "{s},{x},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.4},{d},{d},{d},{d},{d},{d},{d},{d}\n",
+            .{ case.name, runtime.version(), case.payload.len, encoded.len, iterations, vort_sample.elapsed_ns, reference_sample.elapsed_ns, vort_mib_s, reference_mib_s, vort_mib_s / reference_mib_s, vort_sample.mix +% reference_sample.mix, size_sample.elapsed_ns, alloc_sample.elapsed_ns, exact_sample.elapsed_ns, dictionary_cases, summary.max_literal_context_trees, summary.max_command_block_types, summary.max_distance_context_trees },
         );
     }
     if (options.csv_path) |path| {
@@ -86,6 +104,18 @@ pub fn main(init: std.process.Init) !void {
         try stdout.interface.writeAll(csv.written());
         try stdout.interface.flush();
     }
+}
+
+fn makeClusteredPayload(io: std.Io, allocator: std.mem.Allocator) ![]u8 {
+    const dictionary = try std.Io.Dir.cwd().readFileAlloc(io, "src/br/dictionary.bin", allocator, .limited(128 * 1024));
+    defer allocator.free(dictionary);
+    const payload = try allocator.alloc(u8, 1024 * 1024);
+    for (payload, 0..) |*byte, i| {
+        const segment = i / 1024;
+        const base = (segment * 3571) % dictionary.len;
+        byte.* = dictionary[(base + i % 1024) % dictionary.len];
+    }
+    return payload;
 }
 
 fn checkDictionaryTransforms(runtime: libbrotli.Runtime) !usize {
@@ -168,6 +198,19 @@ fn measureSize(io: std.Io, encoded: []const u8, iterations: usize) !Sample {
         var mix: u64 = 0;
         const start = std.Io.Clock.awake.now(io);
         for (0..iterations) |_| mix +%= try vort.brDecodedStreamSize(encoded);
+        const ns = start.durationTo(std.Io.Clock.awake.now(io)).nanoseconds;
+        const elapsed: u64 = if (ns <= 0) 0 else @intCast(ns);
+        if (elapsed < best.elapsed_ns) best = .{ .elapsed_ns = elapsed, .mix = mix };
+    }
+    return best;
+}
+
+fn measureSizeAlloc(io: std.Io, allocator: std.mem.Allocator, encoded: []const u8, iterations: usize) !Sample {
+    var best = Sample{ .elapsed_ns = std.math.maxInt(u64), .mix = 0 };
+    for (0..5) |_| {
+        var mix: u64 = 0;
+        const start = std.Io.Clock.awake.now(io);
+        for (0..iterations) |_| mix +%= (try vort.brSummarizeStreamAlloc(allocator, encoded)).decoded_bytes;
         const ns = start.durationTo(std.Io.Clock.awake.now(io)).nanoseconds;
         const elapsed: u64 = if (ns <= 0) 0 else @intCast(ns);
         if (elapsed < best.elapsed_ns) best = .{ .elapsed_ns = elapsed, .mix = mix };
