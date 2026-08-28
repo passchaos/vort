@@ -7599,6 +7599,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   paired median (30/32 wins); all three match-heavy profile rows stay within
   about 0.4% of baseline. A direct compiler-rt `memcpy` replacement and lower
   `rep movsb` thresholds were rejected because they regressed ordinary rows.
+  A post-commit eight-run CPU-8 comparison at 20,000 decodes per run measures
+  the locked 256 KiB raw row at a `1.0474x` paired median versus liblz4 1.9.4,
+  with Vort winning all eight runs (median about 50,728 versus 48,422 MiB/s).
+  A 30,000-decode `perf` capture attributes 98.26% of the isolated decoder's
+  samples to `copyBulk`, confirming that the remaining cost is the unavoidable
+  payload copy rather than token parsing. This establishes a narrow lead for
+  this exact caller-owned single-literal shape, not a general LZ4 superiority
+  claim.
   Sequence-interleaved Huffman literal runs now use the same unchecked bulk
   prefix peek/consume primitives as whole-section decoding after proving that a
   full-width prefix remains. Stream tails retain the checked canonical fallback.
