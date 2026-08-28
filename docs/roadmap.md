@@ -7638,3 +7638,17 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   preserve all checksums and improve every compressed row: about 15.2--18.5%
   at quality 0, 6.5--9.0% at quality 3, 6.7% for structured quality 4, and
   5.6--14.8% at quality 11. Tiny remains within 0.3% noise.
+  Added `run-br-compressed-header-profile` and its CSV gate to isolate Brotli
+  compressed-header parsing from payload decode. The q0/q3/q4/q11 cases report
+  block-switch setup, context maps, and literal/command/distance tree stages; a
+  deterministic 1 MiB clustered q8 case holds 52 literal trees, three command
+  trees, and 17 distance trees so high-tree-count costs remain visible. Nested
+  counters further split prefix construction into code-length-header parsing,
+  RLE expansion, canonical table construction, and simple trees. Initial
+  ReleaseFast CPU-8 evidence attributes about 60% of the clustered header to
+  literal trees; within all tree construction, code-length RLE is the largest
+  measured substage and canonical construction is second. A no-memset tail
+  experiment and a bulk repeat-fill experiment were both rejected after the
+  12-case libbrotli decode matrix showed mixed or negative results, so this
+  commit intentionally adds measurement infrastructure without changing the
+  production prefix-code algorithm.

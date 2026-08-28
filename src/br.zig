@@ -15,6 +15,7 @@ const encoder_distance = @import("br/encoder/distance.zig");
 const complex_prefix = @import("br/encoder/complex_prefix.zig");
 const encoder_stats = @import("br/encoder/stats.zig");
 const static_dictionary_matcher = @import("br/encoder/static_dictionary_matcher.zig");
+const header_profile = @import("br/header_profile.zig");
 const incremental = @import("br/incremental/stream_decoder.zig");
 const incremental_tests = @import("br/incremental/tests.zig");
 const incremental_literal = @import("br/incremental/literal_decoder.zig");
@@ -320,6 +321,7 @@ test {
     _ = complex_prefix;
     _ = encoder_stats;
     _ = static_dictionary_matcher;
+    _ = header_profile;
 }
 
 pub const IncrementalTestSupport = struct {
@@ -847,6 +849,8 @@ const MinimalCompressedHeader = struct {
     distance_context_map: [max_distance_block_types * 4]u8,
     distance_trees: [max_distance_context_trees]PrefixCode(max_distance_alphabet_size),
 };
+
+pub const CompressedHeaderProfile = header_profile.Profile;
 
 const max_distance_alphabet_size = 16 + 120 + (48 << 3);
 // Planned streams fix NPOSTFIX=0 and NDIRECT=15, so their distance alphabet is
@@ -3326,6 +3330,31 @@ fn readMinimalCompressedHeader(reader: *bitstream.BitReader) Error!MinimalCompre
 }
 
 fn readMinimalCompressedHeaderInto(reader: *bitstream.BitReader, header: *MinimalCompressedHeader) Error!void {
+    const shape = try readCompressedHeaderBlockSwitches(reader, header);
+    const tree_counts = try readCompressedHeaderContextMaps(reader, header, shape);
+    try readCompressedHeaderLiteralTrees(reader, header, tree_counts.literal);
+    try readCompressedHeaderCommandTrees(reader, header, shape.command_block_types);
+    try readCompressedHeaderDistanceTrees(reader, header, tree_counts.distance, shape.distance_alphabet_size);
+    finishCompressedHeader(header, shape, tree_counts);
+}
+
+const CompressedHeaderShape = struct {
+    literal_block_types: u16,
+    command_block_types: u16,
+    distance_block_types: u16,
+    distance_alphabet_size: usize,
+    npostfix: u2,
+    ndirect: u16,
+};
+
+const CompressedHeaderTreeCounts = struct {
+    literal: u16,
+    distance: u16,
+};
+
+const PrefixCodeProfile = header_profile.PrefixCodeProfile;
+
+inline fn readCompressedHeaderBlockSwitches(reader: *bitstream.BitReader, header: *MinimalCompressedHeader) Error!CompressedHeaderShape {
     const nbltypes_l = try readBlockTypeCount(reader);
     if (nbltypes_l > max_literal_block_types) return error.UnsupportedBrotliFeature;
     header.literal_block = .{ .block_type_count = nbltypes_l };
@@ -3358,35 +3387,215 @@ fn readMinimalCompressedHeaderInto(reader: *bitstream.BitReader, header: *Minima
     const distance_alphabet_size: usize = 16 + @as(usize, ndirect) + (@as(usize, 48) << npostfix);
 
     for (0..nbltypes_l) |i| header.literal_context_modes[i] = try reader.readBits(u2, 2);
+    return .{
+        .literal_block_types = nbltypes_l,
+        .command_block_types = nbltypes_i,
+        .distance_block_types = nbltypes_d,
+        .distance_alphabet_size = distance_alphabet_size,
+        .npostfix = npostfix,
+        .ndirect = ndirect,
+    };
+}
 
+inline fn readCompressedHeaderContextMaps(reader: *bitstream.BitReader, header: *MinimalCompressedHeader, shape: CompressedHeaderShape) Error!CompressedHeaderTreeCounts {
     const ntrees_l = try readBlockTypeCount(reader);
     if (ntrees_l > max_literal_context_trees) return error.UnsupportedBrotliFeature;
-    try readContextMap(reader, header.literal_context_map[0..(@as(usize, nbltypes_l) * 64)], ntrees_l);
+    try readContextMap(reader, header.literal_context_map[0..(@as(usize, shape.literal_block_types) * 64)], ntrees_l);
     const ntrees_d = try readBlockTypeCount(reader);
     if (ntrees_d > max_distance_context_trees) return error.UnsupportedBrotliFeature;
-    try readContextMap(reader, header.distance_context_map[0..(@as(usize, nbltypes_d) * 4)], ntrees_d);
+    try readContextMap(reader, header.distance_context_map[0..(@as(usize, shape.distance_block_types) * 4)], ntrees_d);
+    return .{ .literal = ntrees_l, .distance = ntrees_d };
+}
 
+inline fn readCompressedHeaderLiteralTrees(reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16) Error!void {
     header.literal_trees[0] = try readPrefixCode(256, reader);
     var literal_tree_index: u16 = 1;
-    while (literal_tree_index < ntrees_l) : (literal_tree_index += 1) {
+    while (literal_tree_index < tree_count) : (literal_tree_index += 1) {
         header.literal_trees[literal_tree_index] = try readPrefixCode(256, reader);
     }
+}
 
+inline fn readCompressedHeaderCommandTrees(reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16) Error!void {
     header.insert_copy_trees[0] = try readPrefixCode(704, reader);
     var command_tree_index: u16 = 1;
-    while (command_tree_index < nbltypes_i) : (command_tree_index += 1) {
+    while (command_tree_index < tree_count) : (command_tree_index += 1) {
         header.insert_copy_trees[command_tree_index] = try readPrefixCode(704, reader);
     }
+}
 
-    header.distance_trees[0] = try readPrefixCodeRuntime(max_distance_alphabet_size, distance_alphabet_size, reader);
+inline fn readCompressedHeaderDistanceTrees(reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16, alphabet_size: usize) Error!void {
+    header.distance_trees[0] = try readPrefixCodeRuntime(max_distance_alphabet_size, alphabet_size, reader);
     var distance_tree_index: u16 = 1;
-    while (distance_tree_index < ntrees_d) : (distance_tree_index += 1) {
-        header.distance_trees[distance_tree_index] = try readPrefixCodeRuntime(max_distance_alphabet_size, distance_alphabet_size, reader);
+    while (distance_tree_index < tree_count) : (distance_tree_index += 1) {
+        header.distance_trees[distance_tree_index] = try readPrefixCodeRuntime(max_distance_alphabet_size, alphabet_size, reader);
     }
-    header.npostfix = npostfix;
-    header.ndirect = ndirect;
-    header.literal_tree_count = ntrees_l;
-    header.distance_tree_count = ntrees_d;
+}
+
+inline fn finishCompressedHeader(header: *MinimalCompressedHeader, shape: CompressedHeaderShape, tree_counts: CompressedHeaderTreeCounts) void {
+    header.npostfix = shape.npostfix;
+    header.ndirect = shape.ndirect;
+    header.literal_tree_count = tree_counts.literal;
+    header.distance_tree_count = tree_counts.distance;
+}
+
+/// Attribute compressed-header parsing without adding clock reads to the
+/// production decoder. The discovery pass uses normal decoding to locate every
+/// header; timed iterations reconstruct only those headers from their bit
+/// offsets, so payload cost cannot hide parser and table-builder differences.
+pub fn profileCompressedHeaders(io: std.Io, allocator: std.mem.Allocator, stream: []const u8, iterations: usize) Error!CompressedHeaderProfile {
+    if (iterations == 0) return error.InvalidBlockPlan;
+
+    const starts = try collectCompressedHeaderStarts(allocator, stream);
+    defer allocator.free(starts);
+    if (starts.len == 0) return error.UnsupportedBrotliFeature;
+
+    var total: CompressedHeaderProfile = .{};
+    for (0..iterations) |_| {
+        for (starts) |start| {
+            var reader = bitstream.BitReader.init(stream);
+            reader.byte_index = start / 8;
+            reader.bit_index = @intCast(start % 8);
+            var header: MinimalCompressedHeader = undefined;
+            var prefix_profile: PrefixCodeProfile = .{};
+
+            var stage_start = std.Io.Clock.awake.now(io);
+            const shape = try readCompressedHeaderBlockSwitches(&reader, &header);
+            total.block_switch_ns +%= elapsedNs(stage_start, io);
+
+            stage_start = std.Io.Clock.awake.now(io);
+            const tree_counts = try readCompressedHeaderContextMaps(&reader, &header, shape);
+            total.context_map_ns +%= elapsedNs(stage_start, io);
+
+            stage_start = std.Io.Clock.awake.now(io);
+            try readCompressedHeaderLiteralTreesProfiled(io, &reader, &header, tree_counts.literal, &prefix_profile);
+            total.literal_tree_ns +%= elapsedNs(stage_start, io);
+
+            stage_start = std.Io.Clock.awake.now(io);
+            try readCompressedHeaderCommandTreesProfiled(io, &reader, &header, shape.command_block_types, &prefix_profile);
+            total.command_tree_ns +%= elapsedNs(stage_start, io);
+
+            stage_start = std.Io.Clock.awake.now(io);
+            try readCompressedHeaderDistanceTreesProfiled(io, &reader, &header, tree_counts.distance, shape.distance_alphabet_size, &prefix_profile);
+            total.distance_tree_ns +%= elapsedNs(stage_start, io);
+            finishCompressedHeader(&header, shape, tree_counts);
+
+            total.compressed_meta_block_count += 1;
+            total.input_bits +%= reader.bitPosition() - start;
+            total.literal_block_types +%= shape.literal_block_types;
+            total.command_block_types +%= shape.command_block_types;
+            total.distance_block_types +%= shape.distance_block_types;
+            total.literal_context_trees +%= tree_counts.literal;
+            total.command_trees +%= shape.command_block_types;
+            total.distance_context_trees +%= tree_counts.distance;
+            prefix_profile.addTo(&total);
+            accumulateCompressedHeaderTableShape(&total, &header);
+            std.mem.doNotOptimizeAway(&header);
+        }
+    }
+    return total;
+}
+
+/// Run the same isolated header parse without nested stage clocks. Use this
+/// total when comparing implementation candidates; the detailed profile above
+/// is for attribution and necessarily includes timing-call overhead.
+pub fn benchmarkCompressedHeaders(io: std.Io, allocator: std.mem.Allocator, stream: []const u8, iterations: usize) Error!struct { elapsed_ns: u64, checksum: usize } {
+    if (iterations == 0) return error.InvalidBlockPlan;
+    const starts = try collectCompressedHeaderStarts(allocator, stream);
+    defer allocator.free(starts);
+    if (starts.len == 0) return error.UnsupportedBrotliFeature;
+
+    var checksum: usize = 0;
+    const start_time = std.Io.Clock.awake.now(io);
+    for (0..iterations) |_| {
+        for (starts) |start| {
+            var reader = bitstream.BitReader.init(stream);
+            reader.byte_index = start / 8;
+            reader.bit_index = @intCast(start % 8);
+            var header: MinimalCompressedHeader = undefined;
+            try readMinimalCompressedHeaderInto(&reader, &header);
+            checksum +%= reader.bitPosition() + header.literal_tree_count + header.command_block.block_type_count + header.distance_tree_count;
+            checksum +%= header.literal_trees[0].table.len + header.insert_copy_trees[0].table.len + header.distance_trees[0].table.len;
+            std.mem.doNotOptimizeAway(&header);
+        }
+    }
+    return .{ .elapsed_ns = elapsedNs(start_time, io), .checksum = checksum };
+}
+
+fn readCompressedHeaderLiteralTreesProfiled(io: std.Io, reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16, profile: *PrefixCodeProfile) Error!void {
+    header.literal_trees[0] = try readPrefixCodeRuntimeProfiled(256, 256, reader, io, profile);
+    var tree_index: u16 = 1;
+    while (tree_index < tree_count) : (tree_index += 1)
+        header.literal_trees[tree_index] = try readPrefixCodeRuntimeProfiled(256, 256, reader, io, profile);
+}
+
+fn readCompressedHeaderCommandTreesProfiled(io: std.Io, reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16, profile: *PrefixCodeProfile) Error!void {
+    header.insert_copy_trees[0] = try readPrefixCodeRuntimeProfiled(704, 704, reader, io, profile);
+    var tree_index: u16 = 1;
+    while (tree_index < tree_count) : (tree_index += 1)
+        header.insert_copy_trees[tree_index] = try readPrefixCodeRuntimeProfiled(704, 704, reader, io, profile);
+}
+
+fn readCompressedHeaderDistanceTreesProfiled(io: std.Io, reader: *bitstream.BitReader, header: *MinimalCompressedHeader, tree_count: u16, alphabet_size: usize, profile: *PrefixCodeProfile) Error!void {
+    header.distance_trees[0] = try readPrefixCodeRuntimeProfiled(max_distance_alphabet_size, alphabet_size, reader, io, profile);
+    var tree_index: u16 = 1;
+    while (tree_index < tree_count) : (tree_index += 1)
+        header.distance_trees[tree_index] = try readPrefixCodeRuntimeProfiled(max_distance_alphabet_size, alphabet_size, reader, io, profile);
+}
+
+fn collectCompressedHeaderStarts(allocator: std.mem.Allocator, stream: []const u8) Error![]usize {
+    var starts: std.ArrayList(usize) = .empty;
+    errdefer starts.deinit(allocator);
+
+    var output: std.ArrayList(u8) = .empty;
+    defer output.deinit(allocator);
+    var reader = bitstream.BitReader.init(stream);
+    const window_bits = try readWindowBitsValue(&reader);
+    var written: usize = 0;
+    var last_distances = initial_last_distances;
+    while (true) {
+        switch (try readStreamMetaBlockHeader(&reader)) {
+            .end => {
+                try ensureZeroPaddingAndEnd(reader);
+                return starts.toOwnedSlice(allocator);
+            },
+            .metadata => try skipMetadataMetaBlock(&reader),
+            .compressed => |meta| {
+                try starts.append(allocator, reader.bitPosition());
+                const end = std.math.add(usize, written, meta.decoded_len) catch return error.IntegerOverflow;
+                try output.resize(allocator, end);
+                try processMinimalCompressedMetaBlock(&reader, output.items, &written, meta.decoded_len, &last_distances, window_bits);
+                if (written != end) return error.SizeMismatch;
+                if (meta.final) {
+                    try ensureZeroPaddingAndEnd(reader);
+                    return starts.toOwnedSlice(allocator);
+                }
+            },
+            .uncompressed => |len| {
+                const end = std.math.add(usize, written, len) catch return error.IntegerOverflow;
+                try output.resize(allocator, end);
+                try consumeZeroPaddingToByte(&reader);
+                try reader.readAlignedBytes(output.items[written..end]);
+                written = end;
+            },
+        }
+    }
+}
+
+fn accumulateCompressedHeaderTableShape(profile: *CompressedHeaderProfile, header: *const MinimalCompressedHeader) void {
+    accumulatePrefixTableShape(34, profile, &header.literal_block.type_tree);
+    accumulatePrefixTableShape(26, profile, &header.literal_block.length_tree);
+    accumulatePrefixTableShape(34, profile, &header.command_block.type_tree);
+    accumulatePrefixTableShape(26, profile, &header.command_block.length_tree);
+    accumulatePrefixTableShape(66, profile, &header.distance_block.type_tree);
+    accumulatePrefixTableShape(26, profile, &header.distance_block.length_tree);
+    for (header.literal_trees[0..header.literal_tree_count]) |*tree| accumulatePrefixTableShape(256, profile, tree);
+    for (header.insert_copy_trees[0..header.command_block.block_type_count]) |*tree| accumulatePrefixTableShape(704, profile, tree);
+    for (header.distance_trees[0..header.distance_tree_count]) |*tree| accumulatePrefixTableShape(max_distance_alphabet_size, profile, tree);
+}
+
+fn accumulatePrefixTableShape(comptime alphabet_size: usize, profile: *CompressedHeaderProfile, tree: *const PrefixCode(alphabet_size)) void {
+    profile.tree_symbols +%= @intFromBool(tree.single_symbol != null);
+    profile.tree_entries +%= tree.table.len;
 }
 
 fn readBlockLength(prefix: *const PrefixCode(26), reader: *bitstream.BitReader) Error!usize {
@@ -6667,6 +6876,57 @@ fn readPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size: usize
     return .{ .table = try huffman.HuffmanTable(max_alphabet_size).initExplicitSymbols(lengths[0..nsym], symbols[0..nsym]) };
 }
 
+fn readPrefixCodeRuntimeProfiled(comptime max_alphabet_size: usize, alphabet_size: usize, reader: *bitstream.BitReader, io: std.Io, profile: *PrefixCodeProfile) Error!PrefixCode(max_alphabet_size) {
+    if (alphabet_size == 0 or alphabet_size > max_alphabet_size) return error.CorruptFrame;
+    const kind = try reader.readBits(u2, 2);
+    if (kind != 1) {
+        profile.complex_trees += 1;
+        return readComplexPrefixCodeRuntimeProfiled(max_alphabet_size, alphabet_size, reader, kind, io, profile);
+    }
+
+    const start = std.Io.Clock.awake.now(io);
+    const nsym = @as(usize, try reader.readBits(u2, 2)) + 1;
+    const alphabet_bits = alphabetBitsRuntime(alphabet_size);
+    var symbols: [4]u16 = undefined;
+    for (0..nsym) |i| {
+        const symbol = try reader.readBits(u16, alphabet_bits);
+        if (symbol >= alphabet_size) return error.InvalidHuffmanCode;
+        for (symbols[0..i]) |previous| {
+            if (previous == symbol) return error.InvalidHuffmanCode;
+        }
+        symbols[i] = symbol;
+    }
+
+    var lengths: [4]u4 = undefined;
+    const result: PrefixCode(max_alphabet_size) = switch (nsym) {
+        1 => .{ .single_symbol = symbols[0] },
+        2 => blk: {
+            lengths[0] = 1;
+            lengths[1] = 1;
+            break :blk .{ .table = try huffman.HuffmanTable(max_alphabet_size).initExplicitSymbols(lengths[0..2], symbols[0..2]) };
+        },
+        3 => blk: {
+            lengths[0] = 1;
+            lengths[1] = 2;
+            lengths[2] = 2;
+            break :blk .{ .table = try huffman.HuffmanTable(max_alphabet_size).initExplicitSymbols(lengths[0..3], symbols[0..3]) };
+        },
+        4 => blk: {
+            const tree_select = try reader.readBits(u1, 1);
+            if (tree_select == 0) {
+                @memset(&lengths, 2);
+            } else {
+                lengths = .{ 1, 2, 3, 3 };
+            }
+            break :blk .{ .table = try huffman.HuffmanTable(max_alphabet_size).initExplicitSymbols(&lengths, &symbols) };
+        },
+        else => unreachable,
+    };
+    profile.simple_trees += 1;
+    profile.simple_tree_ns +%= elapsedNs(start, io);
+    return result;
+}
+
 const code_length_alphabet_size = 18;
 const CodeLengthPrefixDecoder = huffman.FastDecoder(code_length_alphabet_size, 5);
 const code_length_order = [_]u5{ 1, 2, 3, 4, 0, 5, 17, 6, 16, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
@@ -6778,6 +7038,131 @@ fn readComplexPrefixCodeRuntime(comptime max_alphabet_size: usize, alphabet_size
     }
     if (active < 2) return error.InvalidHuffmanCode;
     return .{ .table = try huffman.HuffmanTable(max_alphabet_size).initSparseTrusted(&lengths, active_symbols[0..active]) };
+}
+
+fn readComplexPrefixCodeRuntimeProfiled(comptime max_alphabet_size: usize, alphabet_size: usize, reader: *bitstream.BitReader, hskip: u2, io: std.Io, profile: *PrefixCodeProfile) Error!PrefixCode(max_alphabet_size) {
+    if (hskip == 1) return error.CorruptFrame;
+
+    const header_start = std.Io.Clock.awake.now(io);
+    var code_length_lengths: [code_length_alphabet_size]u4 = @splat(0);
+    var code_length_space: i32 = 32;
+    var code_length_nonzero: usize = 0;
+    var code_length_index: usize = if (hskip == 0) 0 else hskip;
+    while (code_length_index < code_length_order.len) : (code_length_index += 1) {
+        const length = try readCodeLengthCodeLength(reader);
+        const symbol = code_length_order[code_length_index];
+        code_length_lengths[symbol] = length;
+        if (length != 0) {
+            code_length_nonzero += 1;
+            code_length_space -= @intCast(@as(u32, 32) >> length);
+            if (code_length_space < 0) return error.InvalidHuffmanCode;
+            if (code_length_space == 0) {
+                if (code_length_nonzero < 2) return error.InvalidHuffmanCode;
+                break;
+            }
+        }
+    }
+    if (code_length_nonzero == 0) return error.InvalidHuffmanCode;
+    if (code_length_space != 0 and code_length_index == code_length_order.len) {
+        if (code_length_nonzero != 1) return error.InvalidHuffmanCode;
+    } else if (code_length_space != 0) {
+        return error.InvalidHuffmanCode;
+    }
+
+    const code_length_single_symbol = if (code_length_nonzero == 1)
+        singleSymbolPrefixCode(code_length_alphabet_size, &code_length_lengths).single_symbol
+    else
+        null;
+    const code_length_decoder = if (code_length_single_symbol == null)
+        CodeLengthPrefixDecoder.init(try huffman.HuffmanTable(code_length_alphabet_size).init(&code_length_lengths))
+    else
+        undefined;
+    profile.code_length_header_ns +%= elapsedNs(header_start, io);
+
+    const rle_start = std.Io.Clock.awake.now(io);
+    var lengths: [max_alphabet_size]u4 = @splat(0);
+    var index: usize = 0;
+    var space: i32 = 32768;
+    var last_nonzero_length: u4 = 8;
+    var previous_repeat_symbol: ?u16 = null;
+    var pending_repeat_count: usize = 0;
+    var pending_repeat_length: u4 = 0;
+    var last_symbol: ?u16 = null;
+    while (index < alphabet_size and space > 0) {
+        const symbol = code_length_single_symbol orelse try code_length_decoder.decodeValue(reader);
+        profile.code_length_symbols += 1;
+        switch (symbol) {
+            0 => {
+                try flushPendingRepeat(alphabet_size, max_alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                lengths[index] = 0;
+                index += 1;
+            },
+            1...15 => {
+                try flushPendingRepeat(alphabet_size, max_alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                const length: u4 = @intCast(symbol);
+                lengths[index] = length;
+                index += 1;
+                last_nonzero_length = length;
+                space -= @intCast(@as(u32, 32768) >> length);
+                if (space < 0) return error.InvalidHuffmanCode;
+            },
+            16 => {
+                const repeat = @as(usize, try reader.readBits(u2, 2)) + 3;
+                profile.repeat_symbols += 1;
+                if (previous_repeat_symbol == 16) {
+                    const previous_count = pending_repeat_count;
+                    pending_repeat_count = 4 * (pending_repeat_count - 2) + repeat;
+                    profile.repeated_lengths += pending_repeat_count - previous_count;
+                } else {
+                    try flushPendingRepeat(alphabet_size, max_alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                    pending_repeat_count = repeat;
+                    pending_repeat_length = last_nonzero_length;
+                    profile.repeated_lengths += repeat;
+                }
+                previous_repeat_symbol = 16;
+                try validatePendingRepeat(alphabet_size, index, pending_repeat_length, pending_repeat_count, space);
+                if (pendingRepeatCompletesSpace(pending_repeat_length, pending_repeat_count, space))
+                    try flushPendingRepeat(alphabet_size, max_alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+            },
+            17 => {
+                const repeat = @as(usize, try reader.readBits(u3, 3)) + 3;
+                profile.repeat_symbols += 1;
+                if (previous_repeat_symbol == 17) {
+                    const previous_count = pending_repeat_count;
+                    pending_repeat_count = 8 * (pending_repeat_count - 2) + repeat;
+                    profile.repeated_lengths += pending_repeat_count - previous_count;
+                } else {
+                    try flushPendingRepeat(alphabet_size, max_alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+                    pending_repeat_count = repeat;
+                    pending_repeat_length = 0;
+                    profile.repeated_lengths += repeat;
+                }
+                previous_repeat_symbol = 17;
+                try validatePendingRepeat(alphabet_size, index, pending_repeat_length, pending_repeat_count, space);
+            },
+            else => return error.InvalidHuffmanCode,
+        }
+        last_symbol = symbol;
+    }
+    try flushPendingRepeat(alphabet_size, max_alphabet_size, &lengths, &index, &previous_repeat_symbol, &pending_repeat_count, &pending_repeat_length, &space);
+    if (space != 0) return error.InvalidHuffmanCode;
+    if (last_symbol == null or last_symbol.? == 0 or last_symbol.? == 17) return error.InvalidHuffmanCode;
+
+    var active_symbols: [max_alphabet_size]u16 = undefined;
+    var active: usize = 0;
+    for (lengths[0..alphabet_size], 0..) |length, symbol| {
+        if (length != 0) {
+            active_symbols[active] = @intCast(symbol);
+            active += 1;
+        }
+    }
+    if (active < 2) return error.InvalidHuffmanCode;
+    profile.code_length_rle_ns +%= elapsedNs(rle_start, io);
+
+    const build_start = std.Io.Clock.awake.now(io);
+    const result: PrefixCode(max_alphabet_size) = .{ .table = try huffman.HuffmanTable(max_alphabet_size).initSparseTrusted(&lengths, active_symbols[0..active]) };
+    profile.canonical_build_ns +%= elapsedNs(build_start, io);
+    return result;
 }
 
 fn readCodeLengthCodeLength(reader: *bitstream.BitReader) Error!u4 {

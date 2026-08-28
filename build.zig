@@ -2695,6 +2695,42 @@ pub fn build(b: *std.Build) void {
     );
     br_reference_bench_gate_step.dependOn(&br_reference_bench_gate.step);
 
+    const br_compressed_header_profile_exe = b.addExecutable(.{
+        .name = "vort-br-compressed-header-profile",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/compressed_header_profile.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_br_compressed_header_profile = b.addRunArtifact(br_compressed_header_profile_exe);
+    if (b.args) |args| run_br_compressed_header_profile.addArgs(args);
+    const br_compressed_header_profile_step = b.step(
+        "run-br-compressed-header-profile",
+        "Profile Brotli compressed-header parsing and table construction",
+    );
+    br_compressed_header_profile_step.dependOn(&run_br_compressed_header_profile.step);
+
+    const run_br_compressed_header_profile_gate_csv = b.addRunArtifact(br_compressed_header_profile_exe);
+    run_br_compressed_header_profile_gate_csv.addArgs(&.{
+        "--iterations", "100",
+        "--csv",        "zig-out/vort-br-compressed-header-profile.csv",
+    });
+    const br_compressed_header_profile_gate = b.addSystemCommand(&.{
+        "python3", "tools/br/compressed_header_profile_gate.py",
+        "--csv",   "zig-out/vort-br-compressed-header-profile.csv",
+    });
+    br_compressed_header_profile_gate.step.dependOn(&run_br_compressed_header_profile_gate_csv.step);
+    const br_compressed_header_profile_gate_step = b.step(
+        "run-br-compressed-header-profile-gate",
+        "Validate Brotli compressed-header stage profile CSV",
+    );
+    br_compressed_header_profile_gate_step.dependOn(&br_compressed_header_profile_gate.step);
+
     const br_upstream_multiblock_diff_exe = b.addExecutable(.{
         .name = "vort-br-upstream-multiblock-diff",
         .root_module = b.createModule(.{
@@ -3687,6 +3723,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&snappy_report_exe.step);
     check_step.dependOn(&snappy_reference_bench_exe.step);
     check_step.dependOn(&lz4_reference_bench_exe.step);
+    check_step.dependOn(&br_compressed_header_profile_exe.step);
     check_step.dependOn(&zstd_reference_bench_exe.step);
     check_step.dependOn(&zstd_encode_bench_exe.step);
     check_step.dependOn(&zstd_native_encode_stage_bench_exe.step);
