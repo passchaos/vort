@@ -7727,6 +7727,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   clustered profile attributes about 24% to command Huffman decode, 31% to
   distance decode/extra bits, 10% to literal decode, and 7% to UTF-8 context
   selection, providing a clean next-hotspot baseline.
+  High-tree literal decoding now uses two compile-time 256-byte tables for the
+  RFC UTF-8 previous-byte classes while ordinary Brotli paths retain the
+  branch classifier. An exhaustive four-mode, 256x256 byte-pair oracle proves
+  the specialized context values are identical. Sixteen alternating
+  ReleaseFast CPU-8 pairs against `8333cd5` improve `clustered_q8` by about 7.0%
+  at the median; the established small-stream rows remain within about 1.2%
+  noise except structured q4, which improves about 2.6%.
   Brotli regular-distance reconstruction now uses validated `u32` arithmetic
   after checking the symbol and extra-bit width. RFC bounds keep the complete
   expression below 2^30, so the former chain of four generic `usize` overflow

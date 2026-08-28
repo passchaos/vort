@@ -9,6 +9,19 @@ pub fn value(mode: u2, previous: u8, second_previous: u8) usize {
     };
 }
 
+/// Table-driven equivalent used only by the high-tree Brotli payload loop.
+/// Keeping the ordinary branch classifier intact avoids perturbing compact
+/// streams while clustered streams replace its character-range branches with
+/// two cache-resident byte loads.
+pub inline fn valueClustered(mode: u2, previous: u8, second_previous: u8) usize {
+    return switch (mode) {
+        0 => previous & 0x3f,
+        1 => previous >> 2,
+        mode_utf8 => utf8_last_byte_table[previous] | utf8_second_last_byte_table[second_previous],
+        3 => (signedBucket(previous) << 3) | signedBucket(second_previous),
+    };
+}
+
 /// A two-tree UTF-8 split that isolates the letter-heavy final context bucket.
 /// Context 56 represents a previous lowercase vowel; contexts 60...63 cover
 /// lowercase consonants with the second-last-byte class in the low two bits.
@@ -21,6 +34,18 @@ pub fn utf8TextTree(context: usize) u1 {
 fn utf8(previous: u8, second_previous: u8) usize {
     return utf8LastByte(previous) | utf8SecondLastByte(second_previous);
 }
+
+const utf8_last_byte_table = blk: {
+    var table: [256]u8 = undefined;
+    for (&table, 0..) |*slot, byte| slot.* = @intCast(utf8LastByte(@intCast(byte)));
+    break :blk table;
+};
+
+const utf8_second_last_byte_table = blk: {
+    var table: [256]u8 = undefined;
+    for (&table, 0..) |*slot, byte| slot.* = @intCast(utf8SecondLastByte(@intCast(byte)));
+    break :blk table;
+};
 
 fn utf8LastByte(value_: u8) usize {
     if (value_ >= 192) return 2 + (value_ & 1);
@@ -85,5 +110,14 @@ test "utf8 context separates two-byte and four-byte lead history" {
     try std.testing.expectEqual(@as(usize, 2), value(mode_utf8, 0, 0xe0));
     try std.testing.expectEqual(@as(usize, 2), value(mode_utf8, 0, 0xf0));
     try std.testing.expectEqual(@as(usize, 2), value(mode_utf8, 0, 0xff));
+}
+
+test "clustered context lookup matches every byte pair and mode" {
+    inline for (0..4) |mode| {
+        for (0..256) |previous| {
+            for (0..256) |second_previous|
+                try std.testing.expectEqual(value(mode, @intCast(previous), @intCast(second_previous)), valueClustered(mode, @intCast(previous), @intCast(second_previous)));
+        }
+    }
 }
 const std = @import("std");

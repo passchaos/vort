@@ -3903,7 +3903,9 @@ noinline fn processTailLookupCompressedPayload(
         var i: usize = 0;
         while (i < lengths.insert_len) : (i += 1) {
             try ensureLiteralBlock(header, reader);
-            const context = try literalContext(header, output, written.*);
+            const previous = if (written.* == 0) 0 else output[written.* - 1];
+            const second_previous = if (written.* < 2) 0 else output[written.* - 2];
+            const context = literal_context.valueClustered(header.literal_context_modes[header.literal_block.current_type], previous, second_previous);
             const tree_index = header.literal_context_map[@as(usize, header.literal_block.current_type) * 64 + context];
             if (tree_index >= max_literal_context_trees) return error.UnsupportedBrotliFeature;
             const literal = try header.literal_trees[tree_index].decodeTailLookup(reader);
