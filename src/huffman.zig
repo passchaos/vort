@@ -945,15 +945,18 @@ pub fn treeCodeLengths(comptime n: usize, freqs: *const [n]u32, max_bits: u4) [n
 }
 
 /// Build lengths when the caller already tracks every non-zero symbol. The
-/// trusted list may be in insertion order; compact package merge requires the
-/// original symbol-order tie break, so sort only that short list instead of
-/// rescanning the full alphabet to rediscover it.
+/// trusted list is already sorted by symbol so compact package merge can
+/// preserve canonical tie ordering without rescanning the full alphabet.
 pub fn treeCodeLengthsKnownActive(
     comptime n: usize,
     freqs: *const [n]u32,
     max_bits: u4,
     active_symbols: []const u16,
 ) [n]u4 {
+    if (comptime builtin.mode == .Debug or builtin.mode == .ReleaseSafe) {
+        for (active_symbols[1..], active_symbols[0..active_symbols.len -| 1]) |symbol, previous|
+            std.debug.assert(previous < symbol);
+    }
     if (active_symbols.len == 0) return @splat(0);
     if (active_symbols.len == 1) {
         var lengths: [n]u4 = @splat(0);
@@ -977,15 +980,6 @@ fn compactPackageMergeCodeLengthsKnownActive(
     std.debug.assert(active_symbols.len <= compact_n);
     var symbols: [compact_n]u16 = undefined;
     @memcpy(symbols[0..active_symbols.len], active_symbols);
-    // Matcher discovery order is usually close to source-symbol order. A tiny
-    // stable insertion sort avoids the generic introsort setup for <=64 items
-    // while preserving canonical equal-frequency tie ordering exactly.
-    for (symbols[1..active_symbols.len], 1..) |symbol, index| {
-        var insert = index;
-        while (insert != 0 and symbol < symbols[insert - 1]) : (insert -= 1)
-            symbols[insert] = symbols[insert - 1];
-        symbols[insert] = symbol;
-    }
     var compact_freqs: [compact_n]u32 = @splat(0);
     for (symbols[0..active_symbols.len], 0..) |symbol, index| {
         std.debug.assert(symbol < n and freqs[symbol] != 0);
@@ -1996,6 +1990,7 @@ test "known-active package-merge matches scanned sparse builder" {
             active[index] = symbol;
             freqs[symbol] = @intCast(1 + ((index * 13 + active_count) % 89));
         }
+        std.mem.sort(u16, active[0..active_count], {}, std.sort.asc(u16));
         try std.testing.expectEqual(
             treeCodeLengths(freqs.len, &freqs, 15),
             treeCodeLengthsKnownActive(freqs.len, &freqs, 15, active[0..active_count]),

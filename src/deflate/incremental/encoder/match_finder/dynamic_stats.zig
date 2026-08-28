@@ -26,7 +26,7 @@ pub const Stats = struct {
 
     pub fn recordLiteral(self: *Stats, byte: u8) void {
         if (self.literal_frequencies[byte] == 0) {
-            self.active_literals[self.literal_active_count] = byte;
+            insertSorted(u16, &self.active_literals, self.literal_active_count, byte);
             self.literal_active_count += 1;
         }
         self.literal_frequencies[byte] += 1;
@@ -36,12 +36,12 @@ pub const Stats = struct {
         const length = lengthSymbol(match.length);
         const distance = distanceSymbol(match.distance);
         if (self.literal_frequencies[length.symbol] == 0) {
-            self.active_literals[self.literal_active_count] = @intCast(length.symbol);
+            insertSorted(u16, &self.active_literals, self.literal_active_count, @intCast(length.symbol));
             self.literal_active_count += 1;
         }
         self.literal_frequencies[length.symbol] += 1;
         if (self.distance_frequencies[distance.symbol] == 0) {
-            self.active_distances[self.distance_active_count] = @intCast(distance.symbol);
+            insertSorted(u16, &self.active_distances, self.distance_active_count, @intCast(distance.symbol));
             self.distance_active_count += 1;
         }
         self.distance_frequencies[distance.symbol] += 1;
@@ -65,6 +65,13 @@ pub const Stats = struct {
         return self.active_distances[0..self.distance_active_count];
     }
 };
+
+fn insertSorted(comptime T: type, values: []T, len: usize, value: T) void {
+    var index = len;
+    while (index != 0 and value < values[index - 1]) : (index -= 1)
+        values[index] = values[index - 1];
+    values[index] = value;
+}
 
 const SymbolBits = struct { symbol: usize, extra_bits: usize };
 

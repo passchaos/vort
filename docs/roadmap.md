@@ -6471,6 +6471,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   exact lengths. Twelve alternating CPU-8 pairs improve source by about 1.3%
   (10/12 wins) and JSON by about 0.5% (9/12 wins), with unchanged output and a
   green five-corpus zlib-ng gate.
+  Active-symbol arrays are now kept in ascending order at first activation, so
+  the planner can consume canonical order directly without another per-block
+  sort. The insertion cost is paid only for a new symbol and the lists remain
+  bounded to 64 on this path. Twelve alternating CPU-8 pairs improve source and
+  JSON medians by about 0.9% and 1.2% (8/12 and 11/12 wins); exact-output oracles
+  and the five-corpus zlib-ng gate remain green.
   A post-series 16-run CPU-8 comparison measures current persistent source and
   JSON medians at about 2902 and 3042 MiB/s, respectively; the same benchmark's
   local zlib-ng 2.3.90 level-6 rows cluster near 2822 and 2880 MiB/s. This is a
