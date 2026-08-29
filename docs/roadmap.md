@@ -8008,3 +8008,16 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   65,536 random indexed reads measured a 1.24x median speedup, with 10/16
   paired wins; the intentionally tiny payload makes this an index-overhead
   result rather than a general decompression-throughput claim.
+  Level-9 match arbitration now stages low-alphabet primary blocks serially:
+  it runs the bounded non-mixed families first and entirely avoids recursive
+  mixed search when the existing 24x dominance proof succeeds. Four distributed
+  256-byte windows and a 40-symbol limit keep wide binary blocks on the parallel
+  path and avoid serializing their expensive searches; adaptive 4/8 KiB blocks
+  also retain the existing parallel behavior. Two fixed-CPU-8 samples totaling
+  40 alternating pairs preserve the locked 80/640/8607-byte level-9 frames and
+  improve JSON median encode time by about 1.6--2.4% (12/16 and 14/16 wins);
+  binary remains within 1% noise. Text is sub-millisecond and noisy, ranging
+  from +0.5% to -4.8%, so no text throughput claim is made. Narrow/wide
+  classifier tests, a 200-case generated 16--64 KiB corpus with matching
+  aggregate frame hashes, and serial-wire comparisons cover both scheduling
+  branches.

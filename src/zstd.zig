@@ -86,6 +86,9 @@ const multi_duplicate_min_input_len = duplicate_exact_hash_input_max + 1;
 // generated corpus. This conservative margin permits deterministic worker
 // cancellation without weakening the ordinary exact best-of-family path.
 const decisive_mixed_dominance_ratio = 24;
+const serial_mixed_input_min = 16 * 1024;
+const serial_mixed_sample_window_len = 256;
+const serial_mixed_distinct_symbol_max = 40;
 // The adaptive 4/8 KiB candidates preserve their locked output without mixed
 // recursion at the 64-state level-3 budget. Keep the primary candidate at the
 // full level budget, so the high-level selector still has an unrestricted ratio
@@ -7861,6 +7864,28 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
         }
     }
     if (match_search_budget >= mixed_match_min_search_budget) {
+        if (rep_beam_search and block.len >= serial_mixed_input_min and preferSerialMixedSearch(block)) {
+            // Low-alphabet structured blocks make the repeat beam decisive in
+            // the retained corpus. Evaluate the cheap bounded families first
+            // so that proof can skip recursive mixed search without creating
+            // and then joining a worker. Non-decisive blocks still run and
+            // arbitrate the exact same mixed candidate below.
+            const non_mixed_budget = mixed_match_min_search_budget - 1;
+            var mixed_dominated = false;
+            const non_mixed_ok = try emitNativeMatchCompressedBlockSerialWithBeam(allocator, out, block, last, non_mixed_budget, rep_beam_search, rep_beam_scratch, &mixed_dominated);
+            if (mixed_dominated) return non_mixed_ok;
+
+            var mixed: std.ArrayList(u8) = .empty;
+            defer mixed.deinit(allocator);
+            const mixed_ok = try emitMixedDuplicateRepeatedMatchCompressedBlock(allocator, &mixed, block, last, match_search_budget, null, null);
+            // Mixed historically ran first, so retain its equal-length tie.
+            if (mixed_ok and (!non_mixed_ok or mixed.items.len <= out.items.len)) {
+                out.clearRetainingCapacity();
+                try out.appendSlice(allocator, mixed.items);
+            }
+            return out.items.len != 0;
+        }
+
         var cancel_mixed: std.atomic.Value(bool) = .init(false);
         var mixed_candidate: MixedBlockCandidate = .{
             .block = block,
@@ -7868,10 +7893,11 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
             .match_search_budget = match_search_budget,
             .cancelled = &cancel_mixed,
         };
-        // Thread creation is an optimization only. If the platform refuses a
-        // worker, fall through to the byte-identical serial selector below.
+        // Wide-alphabet data is less likely to prove the mixed candidate
+        // dominated. Preserve parallel arbitration there so the classifier
+        // cannot serialize two expensive searches.
         if (std.Thread.spawn(.{}, MixedBlockCandidate.run, .{&mixed_candidate})) |thread| {
-            const non_mixed_budget = @min(match_search_budget, mixed_match_min_search_budget - 1);
+            const non_mixed_budget = mixed_match_min_search_budget - 1;
             var mixed_dominated = false;
             const non_mixed_ok = emitNativeMatchCompressedBlockSerialWithBeam(allocator, out, block, last, non_mixed_budget, rep_beam_search, rep_beam_scratch, &mixed_dominated) catch |err| {
                 cancel_mixed.store(true, .release);
@@ -7885,8 +7911,6 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
             if (mixed_candidate.err) |err| return err;
             if (mixed_candidate.frame) |mixed| {
                 defer std.heap.smp_allocator.free(mixed);
-                // Mixed historically ran first, so it retains an equal-length
-                // tie even though the other families complete on this thread.
                 if (!mixed_cancelled and (!non_mixed_ok or mixed.len <= out.items.len)) {
                     out.clearRetainingCapacity();
                     try out.appendSlice(allocator, mixed);
@@ -7894,8 +7918,43 @@ fn emitNativeMatchCompressedBlock(allocator: std.mem.Allocator, out: *std.ArrayL
             }
             return out.items.len != 0;
         } else |_| {}
+        // Thread creation is an optimization only. If the platform refuses a
+        // worker, fall through to the byte-identical serial selector below.
     }
     return try emitNativeMatchCompressedBlockSerialWithBeam(allocator, out, block, last, match_search_budget, rep_beam_search, rep_beam_scratch, null);
+}
+
+fn preferSerialMixedSearch(block: []const u8) bool {
+    var seen: [4]u64 = @splat(0);
+    var distinct: usize = 0;
+    // This is a scheduling hint, not a correctness predicate: both branches
+    // perform the same exact arbitration. Four distributed windows distinguish
+    // structured low-alphabet cases without adding a full input pass or being
+    // fooled by an unrepresentative text prefix on otherwise binary data.
+    const window_len = @min(block.len, serial_mixed_sample_window_len);
+    const last_start = block.len - window_len;
+    inline for (0..4) |window_index| {
+        const start = window_index * last_start / 3;
+        for (block[start..][0..window_len]) |byte| {
+            const bit = @as(u64, 1) << @intCast(byte & 63);
+            const word = &seen[byte >> 6];
+            if (word.* & bit != 0) continue;
+            word.* |= bit;
+            distinct += 1;
+            if (distinct > serial_mixed_distinct_symbol_max) return false;
+        }
+    }
+    return true;
+}
+
+test "zstd mixed scheduling separates narrow and wide alphabets" {
+    try std.testing.expect(preferSerialMixedSearch("structured JSON 0123456789" ** 32));
+    var misleading_prefix: [serial_mixed_input_min]u8 = @splat('a');
+    for (misleading_prefix[serial_mixed_sample_window_len..], 0..) |*byte, i| byte.* = @intCast(i & 63);
+    try std.testing.expect(!preferSerialMixedSearch(&misleading_prefix));
+    var wide: [serial_mixed_distinct_symbol_max + 1]u8 = undefined;
+    for (&wide, 0..) |*byte, i| byte.* = @intCast(i);
+    try std.testing.expect(!preferSerialMixedSearch(&wide));
 }
 
 fn findPrefixTailDuplicateMatch(block: []const u8) ?DuplicateMatch {
@@ -8581,7 +8640,7 @@ test "zstd double-fast preserves alternate recent offsets on structured input" {
     try std.testing.expectEqual(@as(usize, 687), result.encoded_len);
 }
 
-test "zstd parallel mixed match selection matches serial wire" {
+test "zstd mixed match scheduling preserves serial wire" {
     const payloads = [_][]const u8{
         "Zstandard parallel mixed candidate.\n" ** 1024,
         ("abcdefgh" ** 2048) ++ ("bcdefgha" ** 2048),
@@ -8596,6 +8655,22 @@ test "zstd parallel mixed match selection matches serial wire" {
         try std.testing.expectEqual(expected_ok, actual_ok);
         try std.testing.expectEqualSlices(u8, expected.items, actual.items);
     }
+
+    var wide: [16 * 1024]u8 = undefined;
+    var state: u32 = 0x243f_6a88;
+    for (&wide) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    try std.testing.expect(!preferSerialMixedSearch(&wide));
+    var expected: std.ArrayList(u8) = .empty;
+    defer expected.deinit(std.testing.allocator);
+    const expected_ok = try emitNativeMatchCompressedBlockSerialWithBeam(std.testing.allocator, &expected, &wide, true, 96, true, null, null);
+    var actual: std.ArrayList(u8) = .empty;
+    defer actual.deinit(std.testing.allocator);
+    const actual_ok = try emitNativeMatchCompressedBlock(std.testing.allocator, &actual, &wide, true, 96, true, null);
+    try std.testing.expectEqual(expected_ok, actual_ok);
+    try std.testing.expectEqualSlices(u8, expected.items, actual.items);
 }
 
 test "zstd decisive beam cancels dominated mixed search without changing wire" {
