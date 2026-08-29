@@ -8060,3 +8060,18 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   (16/16, 15/16, and 16/16 wins). The seven-row planned and 13-row libbrotli
   reference gates, root Brotli smoke, and 99-case upstream differential remain
   green.
+  Default-window, metadata-free Brotli stored encoding now writes caller-owned
+  outputs up to 16 KiB directly: the fixed three-byte uncompressed-block header,
+  payload, and final marker bypass the generic bounded bit writer. A generated
+  boundary oracle compares exact bytes against the allocating writer through
+  16,385 bytes, including the optimized cutoff, and nine representative frames
+  decode identically in Node. Twenty alternating ReleaseFast CPU-8 pairs at
+  20,000 calls preserve observed output checksums and improve 0/3/39/512-byte
+  inputs by about 1.73x/2.54x/2.46x/1.73x; 4/8/16 KiB improve about
+  4.7%/3.0%/1.9%. The generic path remains selected above 16 KiB, where the
+  fixed writer overhead is no longer material. Brotli stored/root tests, the
+  seven-row planned encode gate, 13-row libbrotli reference gate, and 99-case
+  upstream differential remain green. Stored-size preflight now also counts
+  the four-bit WBITS encodings for windows 18--24 correctly; caller-buffer
+  tests cover every legal window size and metadata fallback without the former
+  spurious `SizeMismatch`.

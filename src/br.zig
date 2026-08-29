@@ -676,6 +676,11 @@ pub const max_uncompressed_meta_block_len: usize = 1 << 24;
 
 pub const default_window_bits: u5 = 16;
 
+// Above this size payload copying dominates the fixed bit-writer overhead, so
+// keep large streams on the shared implementation to avoid duplicating its
+// multi-block logic without a measured throughput benefit.
+const direct_stored_stream_max_input_len: usize = 16 * 1024;
+
 pub const StoredStreamOptions = struct {
     window_bits: u5 = default_window_bits,
     metadata: []const u8 = "",
@@ -2414,6 +2419,8 @@ pub fn encodeStoredStreamInto(input: []const u8, output: []u8) Error!usize {
 pub fn encodeStoredStreamWithOptionsInto(input: []const u8, output: []u8, options: StoredStreamOptions) Error!usize {
     const needed = try encodedStoredStreamBoundWithOptions(input.len, options);
     if (output.len < needed) return error.OutOfMemory;
+    if (options.window_bits == default_window_bits and options.metadata.len == 0 and input.len <= direct_stored_stream_max_input_len)
+        return encodeDefaultStoredStreamInto(input, output[0..needed]);
     var out: std.ArrayList(u8) = .{
         .items = output[0..0],
         .capacity = output.len,
@@ -2422,6 +2429,30 @@ pub fn encodeStoredStreamWithOptionsInto(input: []const u8, output: []u8, option
     try encodeStoredStreamWithOptionsWrite(std.heap.smp_allocator, &writer, input, options);
     if (out.items.len != needed) return error.SizeMismatch;
     return out.items.len;
+}
+
+/// Emit the common WBITS=16, metadata-free stored stream directly. The exact
+/// bound has already been checked by the caller. Its single uncompressed block
+/// is byte-aligned, so the fixed three-byte header, payload, and final marker
+/// can all be written directly.
+fn encodeDefaultStoredStreamInto(input: []const u8, output: []u8) usize {
+    if (input.len == 0) {
+        output[0] = 0b110; // WBITS=16, ISLAST, ISLASTEMPTY.
+        return 1;
+    }
+
+    // This path is intentionally capped below 64 KiB by its caller, so the
+    // shortest four-nibble MLEN form is always sufficient. With WBITS=16 its
+    // fields occupy exactly three bytes before byte-aligned payload data.
+    std.debug.assert(input.len <= direct_stored_stream_max_input_len);
+    std.debug.assert(output.len == input.len + 4);
+    const header: u24 = (@as(u24, @intCast(input.len - 1)) << 4) | (@as(u24, 1) << 20);
+    output[0] = @truncate(header);
+    output[1] = @truncate(header >> 8);
+    output[2] = @truncate(header >> 16);
+    @memcpy(output[3..][0..input.len], input);
+    output[input.len + 3] = 0b11; // ISLAST + ISLASTEMPTY.
+    return input.len + 4;
 }
 
 pub fn encodeStoredStreamChunksInto(chunks: []const []const u8, output: []u8) Error!usize {
@@ -7611,7 +7642,8 @@ fn writeWindowBits(allocator: std.mem.Allocator, writer: *BitWriter, window_bits
 fn storedWindowBitsLen(window_bits: u5) Error!usize {
     return switch (window_bits) {
         16 => 1,
-        10...15, 17...24 => 7,
+        18...24 => 4,
+        10...15, 17 => 7,
         else => error.InvalidBlockPlan,
     };
 }
@@ -7685,6 +7717,46 @@ test "br stored stream round trips hello with known bytes" {
     try std.testing.expectError(error.OutputLimitExceeded, decodeStreamIntoLimited(encoded, &out, 4));
     try std.testing.expectEqualSlices(u8, &([_]u8{0xaa} ** 5), &out);
     try std.testing.expectError(error.OutputTooSmall, decodeStreamIntoLimited(encoded, out[0..4], 5));
+}
+
+test "br default stored caller output matches allocating wire at length boundaries" {
+    var input: [direct_stored_stream_max_input_len + 1]u8 = undefined;
+    var state: u32 = 0x36a7_f125;
+    for (&input) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    const lengths = [_]usize{ 0, 1, 2, 7, 8, 255, 256, 257, 4095, 4096, 8191, 8192, direct_stored_stream_max_input_len - 1, direct_stored_stream_max_input_len, direct_stored_stream_max_input_len + 1 };
+    for (lengths) |len| {
+        const expected = try encodeStoredStreamAlloc(std.testing.allocator, input[0..len]);
+        defer std.testing.allocator.free(expected);
+        const output = try std.testing.allocator.alloc(u8, try encodedStoredStreamBound(len));
+        defer std.testing.allocator.free(output);
+        const written = try encodeStoredStreamInto(input[0..len], output);
+        try std.testing.expectEqualSlices(u8, expected, output[0..written]);
+        if (output.len != 0)
+            try std.testing.expectError(error.OutOfMemory, encodeStoredStreamInto(input[0..len], output[0 .. output.len - 1]));
+    }
+}
+
+test "br stored caller output preserves general options path" {
+    const input = "stored payload";
+    inline for (.{ 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24 }) |window_bits| {
+        const options = StoredStreamOptions{ .window_bits = window_bits };
+        const expected = try encodeStoredStreamWithOptionsAlloc(std.testing.allocator, input, options);
+        defer std.testing.allocator.free(expected);
+        const output = try std.testing.allocator.alloc(u8, try encodedStoredStreamBoundWithOptions(input.len, options));
+        defer std.testing.allocator.free(output);
+        const written = try encodeStoredStreamWithOptionsInto(input, output, options);
+        try std.testing.expectEqualSlices(u8, expected, output[0..written]);
+    }
+    const metadata_options = StoredStreamOptions{ .metadata = "vort-metadata" };
+    const expected = try encodeStoredStreamWithOptionsAlloc(std.testing.allocator, input, metadata_options);
+    defer std.testing.allocator.free(expected);
+    const output = try std.testing.allocator.alloc(u8, try encodedStoredStreamBoundWithOptions(input.len, metadata_options));
+    defer std.testing.allocator.free(output);
+    const written = try encodeStoredStreamWithOptionsInto(input, output, metadata_options);
+    try std.testing.expectEqualSlices(u8, expected, output[0..written]);
 }
 
 test "br stored stream supports all RFC window bits" {
