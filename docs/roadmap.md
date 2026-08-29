@@ -8156,3 +8156,10 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   alternating ReleaseFast CPU-8 pairs at 500 decodes improve the same focused
   benchmark by a further `1.43x` median, with 20/20 wins and identical
   checksums.
+  Copy spans of at least 16 bytes now seed one distance period from the history
+  ring, expand overlap by doubling in caller output, and commit the finished
+  span back to history in at most two contiguous copies. Smaller spans and
+  spans larger than the caller's history retain the scalar path. Focused tests
+  cover overlap, non-overlap, source wrap, destination wrap, and repeated
+  backpressure. Twenty alternating ReleaseFast CPU-8 pairs at 500 decodes show
+  a further 2.7% median improvement with 15/20 wins and identical checksums.

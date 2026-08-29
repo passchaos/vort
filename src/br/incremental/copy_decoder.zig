@@ -291,22 +291,12 @@ pub fn Decoder(comptime Codec: type) type {
                 },
                 .copy => {
                     const copy_len = @min(self.pending_copy, output.len - output_written);
-                    var source = (self.total_output - self.copy_distance) % self.history.len;
-                    var destination = self.total_output % self.history.len;
-                    var previous = self.previous;
-                    for (output[output_written..][0..copy_len]) |*out| {
-                        const value = self.history[source];
-                        out.* = value;
-                        self.history[destination] = value;
-                        source += 1;
-                        if (source == self.history.len) source = 0;
-                        destination += 1;
-                        if (destination == self.history.len) destination = 0;
-                        previous[0] = previous[1];
-                        previous[1] = value;
-                    }
+                    const target = output[output_written..][0..copy_len];
+                    if (copy_len >= 16 and copy_len <= self.history.len)
+                        self.copySpan(target)
+                    else
+                        self.copySpanScalar(target);
                     output_written += copy_len;
-                    self.previous = previous;
                     self.total_output += copy_len;
                     self.pending_copy -= copy_len;
                     if (self.pending_copy != 0) return result(input_read, output_written, .need_output);
@@ -480,6 +470,56 @@ pub fn Decoder(comptime Codec: type) type {
             self.previous[0] = self.previous[1];
             self.previous[1] = value;
             self.total_output += 1;
+        }
+        fn copySpan(self: *Self, output: []u8) void {
+            std.debug.assert(output.len != 0 and self.copy_distance <= self.history.len);
+            const seed_len = @min(output.len, self.copy_distance);
+            const source = (self.total_output - self.copy_distance) % self.history.len;
+            const first_source_len = @min(seed_len, self.history.len - source);
+            @memcpy(output[0..first_source_len], self.history[source..][0..first_source_len]);
+            if (first_source_len != seed_len)
+                @memcpy(output[first_source_len..seed_len], self.history[0 .. seed_len - first_source_len]);
+
+            // Once one complete distance period is materialized, the output
+            // buffer itself is the cheapest source for the RFC forward-copy
+            // recurrence. Doubling preserves arbitrary overlap patterns.
+            var produced = seed_len;
+            while (produced < output.len) {
+                const n = @min(produced, output.len - produced);
+                std.mem.copyForwards(u8, output[produced..][0..n], output[0..n]);
+                produced += n;
+            }
+
+            const destination = self.total_output % self.history.len;
+            const first_destination_len = @min(output.len, self.history.len - destination);
+            @memcpy(self.history[destination..][0..first_destination_len], output[0..first_destination_len]);
+            if (first_destination_len != output.len)
+                @memcpy(self.history[0 .. output.len - first_destination_len], output[first_destination_len..]);
+            self.updatePreviousFromSpan(output);
+        }
+        fn copySpanScalar(self: *Self, output: []u8) void {
+            var source = (self.total_output - self.copy_distance) % self.history.len;
+            var destination = self.total_output % self.history.len;
+            var previous = self.previous;
+            for (output) |*out| {
+                const value = self.history[source];
+                out.* = value;
+                self.history[destination] = value;
+                source += 1;
+                if (source == self.history.len) source = 0;
+                destination += 1;
+                if (destination == self.history.len) destination = 0;
+                previous[0] = previous[1];
+                previous[1] = value;
+            }
+            self.previous = previous;
+        }
+        fn updatePreviousFromSpan(self: *Self, output: []const u8) void {
+            if (output.len == 1) {
+                self.previous = .{ self.previous[1], output[0] };
+            } else {
+                self.previous = .{ output[output.len - 2], output[output.len - 1] };
+            }
         }
         fn beginCopy(self: *Self) Error!void {
             if (self.copy_distance == 0) return self.fail(.copy, error.InvalidMatch);

@@ -184,6 +184,25 @@ test "byte-progressive compressed copy decoder handles repeated commands and his
     }
 }
 
+test "byte-progressive copy decoder bulk spans preserve overlap and ring wrap" {
+    const prefix = "abcd";
+    const repeated = prefix ** 17;
+    const encoded = try br.encodeRepeatedPrefixStreamAlloc(std.testing.allocator, prefix, 17);
+    defer std.testing.allocator.free(encoded);
+
+    // A 17-byte output slice is just above the bulk threshold and one byte
+    // longer than the overlap period used below. Repeated resumes eventually
+    // cross both source and destination ends of the 32-byte history ring.
+    var history: [32]u8 = undefined;
+    try drainSplit(encoded, repeated, &history, 1, 17);
+
+    const non_overlap = prefix ++ prefix;
+    const non_overlap_encoded = try br.encodePlannedStreamAlloc(std.testing.allocator, non_overlap);
+    defer std.testing.allocator.free(non_overlap_encoded);
+    var wide_history: [64]u8 = undefined;
+    try drainSplit(non_overlap_encoded, non_overlap, &wide_history, 1, 16);
+}
+
 test "byte-progressive compressed copy decoder supports recent and regular distances" {
     inline for (.{
         .{ br.IncrementalTestSupport.CompressedCopyFixture.implicit_last, "aaaaa" },
