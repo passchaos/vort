@@ -7814,6 +7814,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   by about 3.8%/5.7%/2.6%, with every pair positive. The bounded-output tests,
   seven-row libbrotli encode gate, and 99-case upstream differential remain
   green.
+  Code-length RLE now scans zero gaps eight bytes at a time before its scalar
+  tail, preserving the exact token stream while avoiding one branch per zero
+  in sparse literal/command alphabets. A boundary oracle checks every start/end
+  pair around aligned and unaligned non-zero lengths. Sixteen alternating
+  ReleaseFast CPU-8 stage pairs at 20,000 encodes preserve checksums and improve
+  full planned JSON/source/log medians by about 1.15%/1.05%/1.14% (16/16,
+  15/16, and 16/16 wins); the seven-row libbrotli encode gate and 99-case
+  upstream differential remain green.
   Brotli complex-prefix decoding now records the ascending active-symbol list
   during its mandatory validation pass and hands it to a trusted sparse
   canonical decoder builder. This avoids rescanning all 256/520/704 code-length

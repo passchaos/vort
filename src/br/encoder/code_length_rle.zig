@@ -56,12 +56,21 @@ pub fn encodeIntoWithFrequencies(output: []Token, lengths: []const u4, stop_inde
             i = end;
             continue;
         }
-        var end = i + 1;
-        while (end < stop_index and lengths[end] == 0) end += 1;
+        const end = findNonzeroLength(lengths, i + 1, stop_index);
         appendZeroRunWithFrequencies(output, &token_len, frequencies, end - i);
         i = end;
     }
     return token_len;
+}
+
+fn findNonzeroLength(lengths: []const u4, start: usize, end: usize) usize {
+    var index = start;
+    while (index + 8 <= end) : (index += 8) {
+        const bytes: *const [8]u8 = @ptrCast(lengths[index..][0..8]);
+        if (std.mem.readInt(u64, bytes, .little) != 0) break;
+    }
+    while (index < end and lengths[index] == 0) index += 1;
+    return index;
 }
 
 inline fn appendTokenWithFrequencies(output: []Token, token_len: *usize, frequencies: *[18]u32, token: Token) void {
@@ -318,5 +327,17 @@ test "bounded RLE frequency fusion matches token scan" {
         try std.testing.expectEqual(expected_len, actual_len);
         try std.testing.expectEqualSlices(Token, expected_tokens[0..expected_len], actual_tokens[0..actual_len]);
         try std.testing.expectEqual(expected_frequencies, actual_frequencies);
+    }
+}
+
+test "code-length zero scan matches scalar boundaries" {
+    var lengths: [97]u4 = @splat(0);
+    for ([_]usize{ 0, 1, 7, 8, 9, 31, 64, 96 }) |nonzero| lengths[nonzero] = @intCast(1 + nonzero % 15);
+    for (0..lengths.len + 1) |start| {
+        for (start..lengths.len + 1) |end| {
+            var expected = start;
+            while (expected < end and lengths[expected] == 0) expected += 1;
+            try std.testing.expectEqual(expected, findNonzeroLength(&lengths, start, end));
+        }
     }
 }
