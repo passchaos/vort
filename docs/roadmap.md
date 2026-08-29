@@ -8131,3 +8131,9 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   shrinking a duplicated 8 KiB fixture from 8,200 to 4,113 bytes, it made the
   established unrelated mixed-chunk workload about five times slower. No part
   of that regressing encoder path was retained.
+  The same differential now also feeds seven non-flushed, one-shot libbrotli
+  streams through the 8x7 progressive boundary matrix. The cases span quality
+  0/1/4/5/6/9/11, generic/text/font modes, windows 10/16/18/20/22/24, Unicode,
+  binary, repetitive, and clustered data. Together with the flushed and
+  metadata families, the gate now reports 15 matrix streams and 840 distinct
+  input/output chunk combinations in addition to its 99 primary cases.

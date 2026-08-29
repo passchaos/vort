@@ -137,12 +137,31 @@ pub const Runtime = struct {
         input: []const u8,
         quality: c_int,
     ) ![]u8 {
+        return self.encodeWithOptionsAlloc(allocator, input, .{ .quality = quality });
+    }
+
+    pub const OneShotOptions = struct {
+        quality: c_int,
+        lgwin: c_int = 22,
+        /// BrotliEncoderMode: generic=0, text=1, font=2.
+        mode: c_int = 0,
+    };
+
+    /// One-shot libbrotli encoder with the wire-shaping parameters used by
+    /// compatibility matrices. This deliberately stays in the test harness;
+    /// Vort's production encoder remains dependency-free.
+    pub fn encodeWithOptionsAlloc(
+        self: Runtime,
+        allocator: std.mem.Allocator,
+        input: []const u8,
+        options: OneShotOptions,
+    ) ![]u8 {
         const bound = self.max_compressed_size(input.len);
         if (bound == 0) return error.ReferenceEncodeFailed;
         const output = try allocator.alloc(u8, bound);
         errdefer allocator.free(output);
         var written = output.len;
-        if (self.compress(quality, 22, 0, input.len, input.ptr, &written, output.ptr) == 0) {
+        if (self.compress(options.quality, options.lgwin, options.mode, input.len, input.ptr, &written, output.ptr) == 0) {
             return error.ReferenceEncodeFailed;
         }
         return allocator.realloc(output, written);

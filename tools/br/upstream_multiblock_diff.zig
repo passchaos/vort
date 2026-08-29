@@ -153,6 +153,7 @@ pub fn main(init: std.process.Init) !void {
     };
 
     var cases_run: usize = 0;
+    var one_shot_cases: usize = 0;
     var caller_history_summaries: usize = 0;
     var progress_matrix_runs: usize = 0;
     var progress_matrix_streams: usize = 0;
@@ -227,6 +228,37 @@ pub fn main(init: std.process.Init) !void {
             }
         }
     }
+
+    const one_shot_cases_spec = [_]struct {
+        payload: []const u8,
+        quality: c_int,
+        mode: c_int,
+        lgwin: c_int,
+    }{
+        .{ .payload = text, .quality = 0, .mode = 0, .lgwin = 10 },
+        .{ .payload = json, .quality = 1, .mode = 1, .lgwin = 16 },
+        .{ .payload = unicode, .quality = 4, .mode = 1, .lgwin = 18 },
+        .{ .payload = first_pattern ++ second_pattern, .quality = 5, .mode = 0, .lgwin = 20 },
+        .{ .payload = &binary, .quality = 6, .mode = 2, .lgwin = 22 },
+        .{ .payload = long_text, .quality = 9, .mode = 1, .lgwin = 24 },
+        // Quality 11 is already exercised across several windows by the main
+        // one-shot/reference benchmark. Keep this boundary matrix focused on
+        // representative wire families so it remains suitable for CI.
+        .{ .payload = mixed_clustered_source[0 .. 64 * 1024], .quality = 11, .mode = 0, .lgwin = 20 },
+    };
+    for (one_shot_cases_spec) |case| {
+        const encoded = try reference.encodeWithOptionsAlloc(init.gpa, case.payload, .{
+            .quality = case.quality,
+            .mode = case.mode,
+            .lgwin = case.lgwin,
+        });
+        defer init.gpa.free(encoded);
+        const window_bits: u32 = @intCast((try vort.brSummarizeStreamAlloc(init.gpa, encoded)).window_bits);
+        try decodeProgressChunkMatrix(init.gpa, encoded, case.payload, window_bits);
+        progress_matrix_runs += progressChunkMatrixCaseCount();
+        progress_matrix_streams += 1;
+        one_shot_cases += 1;
+    }
     if (caller_history_summaries != 8) return error.ReferenceEncodeFailed;
 
     if (external_cluster_source) |source| {
@@ -283,8 +315,8 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [256]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     try stdout.interface.print(
-        "br_upstream_multiblock_diff=ok cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} reference_version={x}\n",
-        .{ cases_run, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, reference.version() },
+        "br_upstream_multiblock_diff=ok cases={d} one_shot_cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} reference_version={x}\n",
+        .{ cases_run, one_shot_cases, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, reference.version() },
     );
     try stdout.interface.flush();
 }
