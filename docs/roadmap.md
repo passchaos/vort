@@ -8041,3 +8041,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   about 1.3% (17/24 wins). A speculative double-fast replacement was rejected:
   it was much quicker, but a 144-case size audit found up to 33.3% expansion
   versus the exact existing winner.
+  Added caller-owned `LevelFrameEncoder` scratch/alloc/into/append APIs for
+  repeated one-shot-style encoding. They preserve the public compression-level
+  and adaptive-selection policy, but reuse the primary native encoder and return
+  its borrowed result directly whenever no split arbitration is needed. Tests
+  compare levels 0/1/9 and checksum/content-size options byte-for-byte with the
+  one-shot facade, cover caller buffers and prefixed append output, verify
+  retained repeat-beam capacity, recover after an invalid level, and round trip
+  every result. A fixed-CPU-8 median-of-nine benchmark over sixteen repeated
+  32 KiB level-1 binary encodes measured 1.14x versus the allocating one-shot
+  facade, with identical wire bytes.

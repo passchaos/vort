@@ -51,7 +51,7 @@ The repository is currently in bootstrap form. The first implemented pieces are:
   native frames (including dictionary, dictionary-set, no-content-size,
   bounded-history multi-block paths, and small-output scratch fallback), zero-allocation native stream/block iterators, and
   standardized seekable-stream encoding plus zero-allocation terminal seek-table parsing/iteration and bounded range decode (including preset-dictionary encoding, dictionary-set frame selection, optional per-frame checksum verification, decompressed-offset lookup, and a reusable caller-owned cumulative index with O(1) entry access and O(log n) offset lookup),
-  caller-owned encode/decode-into/append, incremental raw/RLE frame encode with optional pledged content size and Dictionary_ID metadata, plus reusable scratch encoder/decoder API,
+  caller-owned encode/decode-into/append, incremental raw/RLE frame encode with optional pledged content size and Dictionary_ID metadata, reusable native scratch encoder/decoder APIs, plus a reusable level-aware frame encoder that preserves adaptive selection policy while retaining primary scratch,
   used by downstream
   projects such as `../mcap` so compression algorithms stay centralized in
   Vort;

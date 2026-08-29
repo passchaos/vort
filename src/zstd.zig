@@ -3585,6 +3585,85 @@ pub fn encodeFrameWithOptionsAlloc(allocator: std.mem.Allocator, input: []const 
     return try encodeFrameWithLevelAndOptionsAlloc(allocator, input, default_compression_level, options);
 }
 
+/// Caller-owned reusable encoder for the public compression-level policy.
+///
+/// The returned scratch slice is owned by this encoder and remains valid only
+/// until its next encoding call. Paths that do not need adaptive block-size
+/// arbitration reuse the embedded native encoder directly; other inputs retain
+/// the exact one-shot policy and copy its selected frame into reusable storage.
+pub const LevelFrameEncoder = struct {
+    allocator: std.mem.Allocator,
+    primary: NativeFrameEncoder,
+    output_scratch: std.ArrayList(u8) = .empty,
+
+    pub fn init(allocator: std.mem.Allocator) LevelFrameEncoder {
+        return .{ .allocator = allocator, .primary = NativeFrameEncoder.init(allocator) };
+    }
+
+    pub fn deinit(self: *LevelFrameEncoder) void {
+        self.output_scratch.deinit(self.allocator);
+        self.primary.deinit();
+        self.* = undefined;
+    }
+
+    pub fn encodeScratch(self: *LevelFrameEncoder, input: []const u8, level: c_int) Error![]const u8 {
+        return try self.encodeScratchWithOptions(input, level, .{});
+    }
+
+    pub fn encodeScratchWithOptions(self: *LevelFrameEncoder, input: []const u8, level: c_int, options: FrameOptions) Error![]const u8 {
+        const primary_options = try nativeFrameOptionsForLevel(level, options);
+        if (level <= 0 or input.len <= 8 * 1024)
+            return (try self.primary.encodeScratch(input, primary_options)).frame;
+
+        if (input.len <= primary_options.block_size_max and
+            (level == 1 or findPrefixTailDuplicateMatch(input) != null))
+        {
+            const primary = try self.primary.encodeScratch(input, primary_options);
+            const decisive_ratio: usize = if (level == 1) 32 else 256;
+            if (primary.frame.len <= input.len / decisive_ratio or
+                (level == 1 and !preferSerialMixedSearch(input))) return primary.frame;
+        }
+
+        self.output_scratch.clearRetainingCapacity();
+        const selected = encodeFrameWithLevelAndOptionsAlloc(self.allocator, input, level, options) catch |err| {
+            self.output_scratch.clearRetainingCapacity();
+            return err;
+        };
+        defer self.allocator.free(selected);
+        try self.output_scratch.appendSlice(self.allocator, selected);
+        return self.output_scratch.items;
+    }
+
+    pub fn encodeAlloc(self: *LevelFrameEncoder, input: []const u8, level: c_int) Error![]u8 {
+        return try self.encodeWithOptionsAlloc(input, level, .{});
+    }
+
+    pub fn encodeWithOptionsAlloc(self: *LevelFrameEncoder, input: []const u8, level: c_int, options: FrameOptions) Error![]u8 {
+        return try self.allocator.dupe(u8, try self.encodeScratchWithOptions(input, level, options));
+    }
+
+    pub fn encodeInto(self: *LevelFrameEncoder, input: []const u8, level: c_int, output: []u8) Error!usize {
+        return try self.encodeIntoWithOptions(input, level, .{}, output);
+    }
+
+    pub fn encodeIntoWithOptions(self: *LevelFrameEncoder, input: []const u8, level: c_int, options: FrameOptions, output: []u8) Error!usize {
+        const frame = try self.encodeScratchWithOptions(input, level, options);
+        if (output.len < frame.len) return error.OutputTooSmall;
+        @memcpy(output[0..frame.len], frame);
+        return frame.len;
+    }
+
+    pub fn encodeAppend(self: *LevelFrameEncoder, out: *std.ArrayList(u8), input: []const u8, level: c_int) Error!usize {
+        return try self.encodeAppendWithOptions(out, input, level, .{});
+    }
+
+    pub fn encodeAppendWithOptions(self: *LevelFrameEncoder, out: *std.ArrayList(u8), input: []const u8, level: c_int, options: FrameOptions) Error!usize {
+        const frame = try self.encodeScratchWithOptions(input, level, options);
+        try out.appendSlice(self.allocator, frame);
+        return frame.len;
+    }
+};
+
 const LockedAllocator = struct {
     child: std.mem.Allocator,
     mutex: std.atomic.Mutex = .unlocked,
@@ -16061,6 +16140,64 @@ test "zstd compression levels map to increasing search budgets" {
     try std.testing.expect(level3.content_checksum);
     try std.testing.expectError(error.InvalidBlockPlan, nativeFrameOptionsForLevel(-1, options));
     try std.testing.expectError(error.InvalidBlockPlan, nativeFrameOptionsForLevel(max_compression_level + 1, options));
+}
+
+test "zstd reusable level encoder matches one-shot policy" {
+    var structured: std.ArrayList(u8) = .empty;
+    defer structured.deinit(std.testing.allocator);
+    while (structured.items.len < 12 * 1024) {
+        var line: [96]u8 = undefined;
+        const formatted = try std.fmt.bufPrint(&line, "{{\"id\":{d},\"service\":\"vort\",\"message\":\"reusable level encoder\"}}\n", .{structured.items.len / 64});
+        try structured.appendSlice(std.testing.allocator, formatted);
+    }
+    var binary: [32 * 1024]u8 = undefined;
+    var state: u32 = 0xfeed_beef;
+    for (&binary, 0..) |*byte, i| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = if (i % 64 < 48) @truncate(i * 17) else @truncate(state >> 16);
+    }
+
+    var encoder = LevelFrameEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    for ([_]struct { input: []const u8, level: c_int, options: FrameOptions }{
+        .{ .input = "short level input", .level = 0, .options = .{} },
+        .{ .input = structured.items, .level = 1, .options = .{} },
+        .{ .input = &binary, .level = 1, .options = .{ .content_checksum = true } },
+        .{ .input = structured.items, .level = 9, .options = .{ .include_content_size = false } },
+    }) |case| {
+        const expected = try encodeFrameWithLevelAndOptionsAlloc(std.testing.allocator, case.input, case.level, case.options);
+        defer std.testing.allocator.free(expected);
+        const actual = try encoder.encodeScratchWithOptions(case.input, case.level, case.options);
+        try std.testing.expectEqualSlices(u8, expected, actual);
+        const decoded = try decodeNativeFrameAlloc(std.testing.allocator, actual);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, case.input, decoded);
+    }
+
+    const retained_capacity = encoder.primary.rep_beam_scratch.states.capacity;
+    const repeated = try encoder.encodeScratch(&binary, 1);
+    try std.testing.expect(repeated.len != 0);
+    try std.testing.expectEqual(retained_capacity, encoder.primary.rep_beam_scratch.states.capacity);
+
+    var output: [40 * 1024]u8 = undefined;
+    const written = try encoder.encodeInto(&binary, 1, &output);
+    const expected = try encodeFrameWithLevelAlloc(std.testing.allocator, &binary, 1);
+    defer std.testing.allocator.free(expected);
+    try std.testing.expectEqualSlices(u8, expected, output[0..written]);
+    try std.testing.expectError(error.OutputTooSmall, encoder.encodeInto(&binary, 1, output[0 .. written - 1]));
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix");
+    try std.testing.expectEqual(expected.len, try encoder.encodeAppend(&appended, &binary, 1));
+    try std.testing.expectEqualSlices(u8, "prefix", appended.items[0.."prefix".len]);
+    try std.testing.expectEqualSlices(u8, expected, appended.items["prefix".len..]);
+
+    try std.testing.expectError(error.InvalidBlockPlan, encoder.encodeScratch("invalid", max_compression_level + 1));
+    const recovered = try encoder.encodeScratch("recovered", 0);
+    const recovered_decoded = try decodeNativeFrameAlloc(std.testing.allocator, recovered);
+    defer std.testing.allocator.free(recovered_decoded);
+    try std.testing.expectEqualSlices(u8, "recovered", recovered_decoded);
 }
 
 test "zstd rep beam parser closes structured level nine ratio gap" {

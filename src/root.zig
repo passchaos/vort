@@ -914,6 +914,7 @@ pub const ZstdNativeFrameEncodeResult = zstd.NativeFrameEncodeResult;
 pub const ZstdNativeFrameEncodeIntoResult = zstd.NativeFrameEncodeIntoResult;
 pub const ZstdNativeFrameEncodeScratchResult = zstd.NativeFrameEncodeScratchResult;
 pub const ZstdNativeFrameEncoder = zstd.NativeFrameEncoder;
+pub const ZstdLevelFrameEncoder = zstd.LevelFrameEncoder;
 pub const ZstdNativeIncrementalFrameEncoder = zstd.NativeIncrementalFrameEncoder;
 
 test "root Zstd incremental encoder continues frames" {
@@ -2820,6 +2821,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = ZstdNativeFrameEncodeIntoResult;
     _ = ZstdNativeFrameEncodeScratchResult;
     _ = ZstdNativeFrameEncoder;
+    _ = ZstdLevelFrameEncoder;
     _ = ZstdNativeFrameDecoder;
     _ = ZstdNativeIncrementalFrameDecoder;
     _ = ZstdNativeDictionary;
