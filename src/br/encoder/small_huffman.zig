@@ -12,7 +12,6 @@ pub fn build(comptime capacity: usize, frequencies: []const u32, lengths: *[capa
         for (frequencies[1..], frequencies[0 .. frequencies.len - 1]) |frequency, previous|
             std.debug.assert(previous >= frequency);
     }
-    lengths.* = @splat(0);
     if (frequencies.len == 0) return false;
     if (frequencies.len == 1) {
         lengths[0] = 1;
@@ -148,6 +147,13 @@ test "small Huffman builds complete tree" {
     var space: usize = 1 << 15;
     for (lengths[0..5]) |bits| space -= @as(usize, 1) << @intCast(15 - bits);
     try std.testing.expectEqual(@as(usize, 0), space);
+}
+
+test "small Huffman writes only the active length prefix" {
+    var lengths: [64]u4 = @splat(0xf);
+    try std.testing.expect(build(64, &.{ 10, 7, 3, 2, 1 }, &lengths));
+    for (lengths[0..5]) |bits| try std.testing.expect(bits != 0 and bits <= 15);
+    for (lengths[5..]) |bits| try std.testing.expectEqual(@as(u4, 0xf), bits);
 }
 
 test "small Huffman ordered frequencies match package merge weighted cost" {

@@ -7822,6 +7822,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   full planned JSON/source/log medians by about 1.15%/1.05%/1.14% (16/16,
   15/16, and 16/16 wins); the seven-row libbrotli encode gate and 99-case
   upstream differential remain green.
+  The small Huffman builder now writes only the active prefix of the caller's
+  length buffer instead of clearing all 64 slots first. Every caller consumes
+  exactly that prefix before scattering into its already-zero dense table; a
+  poison-tail test pins the narrower write contract alongside the existing
+  exact heap-reference oracle. Sixteen alternating ReleaseFast CPU-8 stage
+  pairs at 20,000 encodes keep JSON neutral-positive and improve source/log by
+  about 0.7%/0.66% (10/16, 16/16, and 16/16 wins). Brotli encode/differential,
+  DEFLATE incremental, and Zstd native/reference encode gates remain green.
   Brotli complex-prefix decoding now records the ascending active-symbol list
   during its mandatory validation pass and hands it to a trusted sparse
   canonical decoder builder. This avoids rescanning all 256/520/704 code-length
