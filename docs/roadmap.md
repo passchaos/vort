@@ -20,10 +20,10 @@ major gaps before Vort can claim broad industry-best parity:
 - Incremental DEFLATE source and JSON throughput now reach or exceed the local
   zlib-ng level-6 comparison on the locked 256 KiB fixtures, while broader
   real-corpus, ratio, memory, and cross-platform parity still needs evidence.
-- Zstd-compatible dictionary training, seekable range decode, and broader
-  entropy-mode parity still require completion and competitor evidence;
-  standardized seek-table parsing/iteration and one-shot encoding are now in
-  place.
+- Zstd-compatible dictionary training, dictionary-aware seekable streams, and
+  broader entropy-mode parity still require completion and competitor evidence;
+  standardized seek-table parsing/iteration, one-shot encoding, checksum-aware
+  range decode are now in place.
 - Cross-platform optimized kernels and reproducible competitor measurements are
   not yet comprehensive enough for a blanket performance-leadership claim.
 
@@ -7986,5 +7986,9 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   allocating, append, and caller-buffer APIs, and the one-shot seekable encoder
   splits input into independent native frames before appending that table. Vort
   round trips its own output, and the local upstream zstd seekable decoder reads
-  an interior byte range from it exactly. Per-entry checksum verification and a
-  native Vort range-decode API remain future work.
+  an interior byte range from it exactly. Caller-buffer and allocating range
+  APIs now decode only intersecting independent frames, preflight exact scratch
+  requirements, and verify optional per-entry XXH64-low checksums. Cross-frame,
+  zero-length, short-scratch, out-of-range, and corrupt-checksum tests cover the
+  new path. Dictionary-aware seekable streams and faster indexed lookup remain
+  future work.

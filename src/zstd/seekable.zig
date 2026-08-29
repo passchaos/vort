@@ -5,6 +5,8 @@ pub const Error = core.Error || std.mem.Allocator.Error;
 
 pub const table_skippable_magic: u32 = 0x184d2a5e;
 pub const footer_magic: u32 = 0x8f92eab1;
+pub const max_frames: usize = 0x0800_0000;
+pub const max_frame_decompressed_size: usize = 0x4000_0000;
 const footer_len: usize = 9;
 
 /// Parsed metadata for the standardized terminal Zstandard seek table. The
@@ -107,6 +109,7 @@ pub fn inspect(stream: []const u8) Error!Table {
     const has_checksums = descriptor & 0x80 != 0;
     const entry_size: u8 = if (has_checksums) 12 else 8;
     const entry_count = std.mem.readInt(u32, footer[0..4], .little);
+    if (entry_count > max_frames) return error.CorruptFrame;
     const entries_len = std.math.mul(usize, @as(usize, entry_count), entry_size) catch return error.IntegerOverflow;
     const frame_len = std.math.add(usize, 8 + footer_len, entries_len) catch return error.IntegerOverflow;
     if (frame_len > stream.len) return error.TruncatedFrame;
@@ -138,6 +141,7 @@ pub fn frameIndexForOffset(table: Table, offset: u64) Error!u32 {
 }
 
 pub fn encodedTableBound(entry_count: usize, with_checksums: bool) Error!usize {
+    if (entry_count > max_frames) return error.InvalidBlockPlan;
     const entry_size: usize = if (with_checksums) 12 else 8;
     const entries_len = std.math.mul(usize, entry_count, entry_size) catch return error.IntegerOverflow;
     const payload_len = std.math.add(usize, entries_len, footer_len) catch return error.IntegerOverflow;
@@ -295,6 +299,7 @@ test "empty seek table is valid and has no addressable output" {
     try std.testing.expectEqual(@as(u64, 0), table.decompressed_size);
     try std.testing.expectError(error.RangeOutOfBounds, table.entry(0));
     try std.testing.expectError(error.RangeOutOfBounds, table.frameIndexForDecompressedOffset(0));
+    try std.testing.expectError(error.InvalidBlockPlan, encodedTableBound(max_frames + 1, false));
 }
 
 test "seek table parser accepts official seekable encoder output" {

@@ -7188,7 +7188,7 @@ pub fn encodeNativeSeekableStreamAlloc(allocator: std.mem.Allocator, input: []co
 }
 
 pub fn encodeNativeSeekableStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: NativeSeekableOptions) Error!void {
-    if (options.frame_size == 0 or options.frame_size > std.math.maxInt(u32)) return error.InvalidBlockPlan;
+    if (options.frame_size == 0 or options.frame_size > seekable.max_frame_decompressed_size or options.frame_options.dictionary_id != 0) return error.InvalidBlockPlan;
     const frame_count = if (input.len == 0) 1 else std.math.divCeil(usize, input.len, options.frame_size) catch return error.IntegerOverflow;
     const entries = try allocator.alloc(NativeSeekTableFrameSize, frame_count);
     defer allocator.free(entries);
@@ -7210,6 +7210,74 @@ pub fn encodeNativeSeekableStreamAppend(allocator: std.mem.Allocator, out: *std.
         };
     }
     try encodeNativeSeekTableAppend(allocator, out, entries, options.seek_checksums);
+}
+
+pub fn nativeSeekableRangeScratchLen(table: NativeSeekTable, offset: u64, length: usize) Error!usize {
+    const length_u64 = std.math.cast(u64, length) orelse return error.IntegerOverflow;
+    const range_end = std.math.add(u64, offset, length_u64) catch return error.IntegerOverflow;
+    if (offset > table.decompressed_size or range_end > table.decompressed_size) return error.RangeOutOfBounds;
+    if (length == 0) return 0;
+
+    var needed: usize = 0;
+    var entries = table.iterator();
+    while (try entries.next()) |entry_value| {
+        const frame_end = std.math.add(u64, entry_value.decompressed_offset, entry_value.decompressed_size) catch return error.IntegerOverflow;
+        if (frame_end <= offset) continue;
+        if (entry_value.decompressed_offset >= range_end) break;
+        needed = @max(needed, std.math.cast(usize, entry_value.decompressed_size) orelse return error.IntegerOverflow);
+    }
+    return needed;
+}
+
+/// Decode only seekable frames intersecting `[offset, offset + output.len)`.
+/// `frame_scratch` must fit the largest selected decompressed frame; callers can
+/// obtain the exact requirement from `nativeSeekableRangeScratchLen`.
+pub fn decodeNativeSeekableRangeInto(stream: []const u8, offset: u64, output: []u8, frame_scratch: []u8) Error!usize {
+    const table = try inspectNativeSeekTable(stream);
+    const needed_scratch = try nativeSeekableRangeScratchLen(table, offset, output.len);
+    if (frame_scratch.len < needed_scratch) return error.OutputTooSmall;
+    if (output.len == 0) return 0;
+
+    const range_end = std.math.add(u64, offset, @as(u64, @intCast(output.len))) catch return error.IntegerOverflow;
+    var output_offset: usize = 0;
+    var entries = table.iterator();
+    while (try entries.next()) |entry_value| {
+        const frame_end = std.math.add(u64, entry_value.decompressed_offset, entry_value.decompressed_size) catch return error.IntegerOverflow;
+        if (frame_end <= offset) continue;
+        if (entry_value.decompressed_offset >= range_end) break;
+
+        const compressed_start = std.math.cast(usize, entry_value.compressed_offset) orelse return error.IntegerOverflow;
+        const compressed_size = std.math.cast(usize, entry_value.compressed_size) orelse return error.IntegerOverflow;
+        const compressed_end = std.math.add(usize, compressed_start, compressed_size) catch return error.IntegerOverflow;
+        if (compressed_end > table.frame_offset) return error.CorruptFrame;
+        const decompressed_size = std.math.cast(usize, entry_value.decompressed_size) orelse return error.IntegerOverflow;
+        const decoded_frame = frame_scratch[0..decompressed_size];
+        _ = try decodeNativeFrameIntoExactSize(stream[compressed_start..compressed_end], decoded_frame, decompressed_size);
+        if (entry_value.checksum) |expected| {
+            const actual: u32 = @truncate(std.hash.XxHash64.hash(0, decoded_frame));
+            if (actual != expected) return error.ChecksumMismatch;
+        }
+
+        const copy_start_u64 = @max(offset, entry_value.decompressed_offset) - entry_value.decompressed_offset;
+        const copy_end_u64 = @min(range_end, frame_end) - entry_value.decompressed_offset;
+        const copy_start = std.math.cast(usize, copy_start_u64) orelse return error.IntegerOverflow;
+        const copy_end = std.math.cast(usize, copy_end_u64) orelse return error.IntegerOverflow;
+        @memcpy(output[output_offset..][0 .. copy_end - copy_start], decoded_frame[copy_start..copy_end]);
+        output_offset += copy_end - copy_start;
+    }
+    if (output_offset != output.len) return error.SizeMismatch;
+    return output_offset;
+}
+
+pub fn decodeNativeSeekableRangeAlloc(allocator: std.mem.Allocator, stream: []const u8, offset: u64, length: usize) Error![]u8 {
+    const table = try inspectNativeSeekTable(stream);
+    const scratch_len = try nativeSeekableRangeScratchLen(table, offset, length);
+    const output = try allocator.alloc(u8, length);
+    errdefer allocator.free(output);
+    const scratch = try allocator.alloc(u8, scratch_len);
+    defer allocator.free(scratch);
+    _ = try decodeNativeSeekableRangeInto(stream, offset, output, scratch);
+    return output;
 }
 
 pub fn summarizeNativeStream(frames: []const u8) Error!NativeStreamSummary {
@@ -14405,6 +14473,24 @@ test "zstd native seekable stream encoder round trips indexed frames" {
         const decoded = try decodeNativeConcatenatedFrameAlloc(std.testing.allocator, encoded);
         defer std.testing.allocator.free(decoded);
         try std.testing.expectEqualSlices(u8, payload, decoded);
+        var range_scratch: [13]u8 = undefined;
+        var range_output: [34]u8 = undefined;
+        try std.testing.expectEqual(@as(usize, 13), try nativeSeekableRangeScratchLen(table, 5, range_output.len));
+        try std.testing.expectEqual(range_output.len, try decodeNativeSeekableRangeInto(encoded, 5, &range_output, &range_scratch));
+        try std.testing.expectEqualSlices(u8, payload[5..39], &range_output);
+        const allocated_range = try decodeNativeSeekableRangeAlloc(std.testing.allocator, encoded, 5, range_output.len);
+        defer std.testing.allocator.free(allocated_range);
+        try std.testing.expectEqualSlices(u8, &range_output, allocated_range);
+        try std.testing.expectError(error.OutputTooSmall, decodeNativeSeekableRangeInto(encoded, 5, &range_output, range_scratch[0..12]));
+        try std.testing.expectError(error.RangeOutOfBounds, nativeSeekableRangeScratchLen(table, payload.len, 1));
+        try std.testing.expectEqual(@as(usize, 0), try decodeNativeSeekableRangeInto(encoded, payload.len, &.{}, &.{}));
+
+        if (with_checksums) {
+            var corrupt = try std.testing.allocator.dupe(u8, encoded);
+            defer std.testing.allocator.free(corrupt);
+            corrupt[table.frame_offset + 8 + 12 + 8] ^= 1;
+            try std.testing.expectError(error.ChecksumMismatch, decodeNativeSeekableRangeInto(corrupt, 13, range_output[0..13], &range_scratch));
+        }
         var entries = table.iterator();
         var frame_index: usize = 0;
         while (try entries.next()) |entry_value| : (frame_index += 1) {
@@ -14437,6 +14523,8 @@ test "zstd native seekable stream encoder round trips indexed frames" {
     try std.testing.expectEqual(@as(u64, payload.len), appended_table.decompressed_size);
     try std.testing.expectEqualSlices(u8, "prefix:", appended.items[0.."prefix:".len]);
     try std.testing.expectError(error.InvalidBlockPlan, encodeNativeSeekableStreamAlloc(std.testing.allocator, payload, .{ .frame_size = 0 }));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeNativeSeekableStreamAlloc(std.testing.allocator, payload, .{ .frame_size = seekable.max_frame_decompressed_size + 1 }));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeNativeSeekableStreamAlloc(std.testing.allocator, payload, .{ .frame_options = .{ .dictionary_id = 1 } }));
     try std.testing.expectError(error.InvalidBlockPlan, encodeNativeSeekableStreamAppend(std.testing.allocator, &appended, payload, .{ .frame_size = 0 }));
 }
 
