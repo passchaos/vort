@@ -291,11 +291,19 @@ pub fn Decoder(comptime Codec: type) type {
                 },
                 .copy => {
                     var source = (self.total_output - self.copy_distance) % self.history.len;
+                    var destination = self.total_output % self.history.len;
                     while (self.pending_copy != 0 and output_written < output.len) {
                         const value = self.history[source];
-                        self.emit(output, &output_written, value);
+                        output[output_written] = value;
+                        output_written += 1;
+                        self.history[destination] = value;
                         source += 1;
                         if (source == self.history.len) source = 0;
+                        destination += 1;
+                        if (destination == self.history.len) destination = 0;
+                        self.previous[0] = self.previous[1];
+                        self.previous[1] = value;
+                        self.total_output += 1;
                         self.pending_copy -= 1;
                     }
                     if (self.pending_copy != 0) return result(input_read, output_written, .need_output);

@@ -8145,3 +8145,8 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   from 431.5 ms to 325.2 ms (`1.33x`), with 20/20 candidate wins and identical
   output checksums. A broader dual-cursor design was rejected after regressing
   the same benchmark by about 2.8%.
+  The copy loop now also keeps a local destination cursor while draining each
+  output span, removing the remaining per-byte history-write remainder without
+  changing literal, stored, or dictionary emission. Twenty alternating
+  ReleaseFast CPU-8 pairs at 500 decodes improve the focused 64 KiB overlap
+  median by another 5.6%, with 18/20 wins and identical checksums.
