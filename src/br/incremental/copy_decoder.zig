@@ -291,11 +291,9 @@ pub fn Decoder(comptime Codec: type) type {
                 },
                 .copy => {
                     const copy_len = @min(self.pending_copy, output.len - output_written);
+                    if (copy_len == 0) return result(input_read, output_written, .need_output);
                     const target = output[output_written..][0..copy_len];
-                    if (copy_len >= 16 and copy_len <= self.history.len)
-                        self.copySpan(target)
-                    else
-                        self.copySpanScalar(target);
+                    self.copySpan(target);
                     output_written += copy_len;
                     self.total_output += copy_len;
                     self.pending_copy -= copy_len;
@@ -473,6 +471,18 @@ pub fn Decoder(comptime Codec: type) type {
         }
         fn copySpan(self: *Self, output: []u8) void {
             std.debug.assert(output.len != 0 and self.copy_distance <= self.history.len);
+            if (output.len < 16) return self.copySpanScalar(output);
+            if (output.len > self.history.len) {
+                var offset: usize = 0;
+                while (offset < output.len) {
+                    const n = @min(self.history.len, output.len - offset);
+                    self.copySpan(output[offset..][0..n]);
+                    self.total_output += n;
+                    offset += n;
+                }
+                self.total_output -= output.len;
+                return;
+            }
             const seed_len = @min(output.len, self.copy_distance);
             const source = (self.total_output - self.copy_distance) % self.history.len;
             const first_source_len = @min(seed_len, self.history.len - source);

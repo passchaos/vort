@@ -201,6 +201,14 @@ test "byte-progressive copy decoder bulk spans preserve overlap and ring wrap" {
     defer std.testing.allocator.free(non_overlap_encoded);
     var wide_history: [64]u8 = undefined;
     try drainSplit(non_overlap_encoded, non_overlap, &wide_history, 1, 16);
+
+    const long_repeated = prefix ** 16_384;
+    const long_encoded = try br.encodeRepeatedPrefixStreamAlloc(std.testing.allocator, prefix, 16_384);
+    defer std.testing.allocator.free(long_encoded);
+    // Let one call drain a copy longer than the 32 KiB history. The bulk path
+    // must advance its logical output position between ring-sized segments.
+    var long_history: [32 * 1024]u8 = undefined;
+    try drainSplit(long_encoded, long_repeated, &long_history, long_encoded.len, long_repeated.len);
 }
 
 test "byte-progressive compressed copy decoder supports recent and regular distances" {
