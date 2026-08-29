@@ -7189,6 +7189,33 @@ pub fn encodeNativeSeekableStreamAlloc(allocator: std.mem.Allocator, input: []co
 
 pub fn encodeNativeSeekableStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: NativeSeekableOptions) Error!void {
     if (options.frame_size == 0 or options.frame_size > seekable.max_frame_decompressed_size or options.frame_options.dictionary_id != 0) return error.InvalidBlockPlan;
+    return encodeNativeSeekableStreamAppendInternal(allocator, out, input, options, null);
+}
+
+pub fn encodeNativeSeekableStreamWithDictionaryAlloc(allocator: std.mem.Allocator, input: []const u8, options: NativeSeekableOptions, dictionary: NativeDictionary) Error![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    try encodeNativeSeekableStreamAppendWithDictionary(allocator, &out, input, options, dictionary);
+    return out.toOwnedSlice(allocator);
+}
+
+pub fn encodeNativeSeekableStreamAppendWithDictionary(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: NativeSeekableOptions, dictionary: NativeDictionary) Error!void {
+    if (options.frame_size == 0 or options.frame_size > seekable.max_frame_decompressed_size or options.frame_options.dictionary_id != 0) return error.InvalidBlockPlan;
+    if (dictionary.id == 0) return error.NeedDictionary;
+    return encodeNativeSeekableStreamAppendInternal(allocator, out, input, options, dictionary);
+}
+
+pub fn encodeNativeSeekableStreamWithDictionarySetAlloc(allocator: std.mem.Allocator, input: []const u8, options: NativeSeekableOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error![]u8 {
+    const dictionary = try dictionaryFromSet(dictionary_set, dictionary_id);
+    return encodeNativeSeekableStreamWithDictionaryAlloc(allocator, input, options, dictionary);
+}
+
+pub fn encodeNativeSeekableStreamAppendWithDictionarySet(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: NativeSeekableOptions, dictionary_set: NativeDictionarySet, dictionary_id: u32) Error!void {
+    const dictionary = try dictionaryFromSet(dictionary_set, dictionary_id);
+    return encodeNativeSeekableStreamAppendWithDictionary(allocator, out, input, options, dictionary);
+}
+
+fn encodeNativeSeekableStreamAppendInternal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: NativeSeekableOptions, dictionary: ?NativeDictionary) Error!void {
     const frame_count = if (input.len == 0) 1 else std.math.divCeil(usize, input.len, options.frame_size) catch return error.IntegerOverflow;
     const entries = try allocator.alloc(NativeSeekTableFrameSize, frame_count);
     defer allocator.free(entries);
@@ -7202,7 +7229,10 @@ pub fn encodeNativeSeekableStreamAppend(allocator: std.mem.Allocator, out: *std.
         const end = if (input.len == 0) 0 else @min(input.len, start + options.frame_size);
         const chunk = input[start..end];
         const compressed_start = out.items.len;
-        _ = try encoder.encodeAppend(out, chunk, options.frame_options);
+        if (dictionary) |dict|
+            _ = try encoder.encodeAppendWithDictionary(out, chunk, options.frame_options, dict)
+        else
+            _ = try encoder.encodeAppend(out, chunk, options.frame_options);
         entry_value.* = .{
             .compressed_size = try checkedUsizeToU32(out.items.len - compressed_start),
             .decompressed_size = try checkedUsizeToU32(chunk.len),
@@ -14583,6 +14613,37 @@ test "zstd seekable range decoder resolves per-frame dictionaries" {
     try std.testing.expectEqualSlices(u8, &output, allocated);
     try std.testing.expectError(error.NeedDictionary, decodeNativeSeekableRangeInto(stream.items, range_start, &output, &scratch));
     try std.testing.expectError(error.NeedDictionary, decodeNativeSeekableRangeIntoWithDictionarySet(stream.items, range_start, &output, &scratch, NativeDictionarySet.init(&.{first_dictionary})));
+}
+
+test "zstd native seekable encoder applies a dictionary to every frame" {
+    const dictionary = NativeDictionary.init(0x3456, "abcdefghijklmnopQRSTUVWXYZ");
+    const payload = "abcdefghijklmnop-tail-QRSTUVWXYZ-tail";
+    const options = NativeSeekableOptions{
+        .frame_size = 20,
+        .frame_options = .{ .selection = .literal_only, .content_checksum = false },
+        .seek_checksums = true,
+    };
+    const encoded = try encodeNativeSeekableStreamWithDictionaryAlloc(std.testing.allocator, payload, options, dictionary);
+    defer std.testing.allocator.free(encoded);
+    const table = try inspectNativeSeekTable(encoded);
+    try std.testing.expectEqual(@as(u32, 2), table.entry_count);
+
+    var entries = table.iterator();
+    while (try entries.next()) |entry_value| {
+        const frame_start: usize = @intCast(entry_value.compressed_offset);
+        const frame_end = frame_start + entry_value.compressed_size;
+        try std.testing.expectEqual(dictionary.id, (try inspectNativeFrameHeader(encoded[frame_start..frame_end])).dictionary_id);
+    }
+    const dictionary_set = NativeDictionarySet.init(&.{dictionary});
+    const decoded = try decodeNativeSeekableRangeAllocWithDictionarySet(std.testing.allocator, encoded, 0, payload.len, dictionary_set);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
+
+    const selected = try encodeNativeSeekableStreamWithDictionarySetAlloc(std.testing.allocator, payload, options, dictionary_set, dictionary.id);
+    defer std.testing.allocator.free(selected);
+    try std.testing.expectEqualSlices(u8, encoded, selected);
+    try std.testing.expectError(error.NeedDictionary, encodeNativeSeekableStreamWithDictionarySetAlloc(std.testing.allocator, payload, options, dictionary_set, 0x9999));
+    try std.testing.expectError(error.NeedDictionary, encodeNativeSeekableStreamWithDictionaryAlloc(std.testing.allocator, payload, options, NativeDictionary.init(0, dictionary.content)));
 }
 
 test "zstd raw/RLE native decoder accepts no-size raw frames" {
