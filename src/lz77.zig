@@ -1010,17 +1010,14 @@ fn acceptsEveryHashMatch(options: GreedyOptions) bool {
     }
     const distance_cost = fixedDistanceSymbolCost(options.window_len);
     const minimum = minMatch(options);
-    const maximum = maxMatch(options);
-    var length = minimum;
-    while (length <= maximum) : (length += 1) {
-        const literal_min_cost = length * 8;
-        const match_cost = fixedLengthSymbolCost(length) + distance_cost;
-        if (match_cost > literal_min_cost) return false;
-        if (options.min_savings_bits > literal_min_cost - match_cost) {
-            return false;
-        }
-    }
-    return true;
+    const literal_min_cost = minimum * 8;
+    const match_cost = fixedLengthSymbolCost(minimum) + distance_cost;
+    // Across the legal match range, each additional byte adds eight literal
+    // bits while the fixed length-symbol cost only changes by one at its
+    // boundaries (and drops at length 258). Therefore the shortest permitted
+    // match is the unique worst case for this lower-bound proof.
+    return match_cost <= literal_min_cost and
+        options.min_savings_bits <= literal_min_cost - match_cost;
 }
 
 pub fn fixedBitCost(tokens: []const Token) usize {
@@ -2624,4 +2621,34 @@ test "hash match fast acceptance is a sufficient condition" {
     var oversized_window = fastest;
     oversized_window.window_len = default_window_len + 1;
     try std.testing.expect(!acceptsEveryHashMatch(oversized_window));
+}
+
+test "constant-time hash match acceptance matches exhaustive length scan" {
+    for ([_]usize{ 0, 1, 4, 255, 4096, default_window_len, default_window_len + 1, max_window_len }) |window_len| {
+        for ([_]usize{ 0, 3, 4, 5, 9, 10, 11, 18, 19, 66, 67, 130, 131, 257, 258, 300 }) |minimum| {
+            for ([_]usize{ 3, 4, 10, 66, 130, 257, 258, 300 }) |maximum| {
+                for ([_]usize{ 0, 1, 4, 8, 16, 64, std.math.maxInt(usize) }) |savings| {
+                    const options = GreedyOptions{
+                        .window_len = window_len,
+                        .min_match = minimum,
+                        .max_match = maximum,
+                        .min_savings_bits = savings,
+                    };
+                    try std.testing.expectEqual(acceptsEveryHashMatchReference(options), acceptsEveryHashMatch(options));
+                }
+            }
+        }
+    }
+}
+
+fn acceptsEveryHashMatchReference(options: GreedyOptions) bool {
+    if (options.window_len == 0 or options.window_len > default_window_len) return false;
+    const distance_cost = fixedDistanceSymbolCost(options.window_len);
+    var length = minMatch(options);
+    while (length <= maxMatch(options)) : (length += 1) {
+        const literal_min_cost = length * 8;
+        const match_cost = fixedLengthSymbolCost(length) + distance_cost;
+        if (match_cost > literal_min_cost or options.min_savings_bits > literal_min_cost - match_cost) return false;
+    }
+    return true;
 }

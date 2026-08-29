@@ -7793,6 +7793,17 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   oracles, the DEFLATE incremental gate, the 90-row native Zstd stage gate, the
   nine-row libzstd encode gate, the seven-row libbrotli encode gate, and the
   99-case Brotli differential remain green.
+  The shared hash parser's accept-all preflight now proves its fixed-cost
+  condition from the shortest permitted match instead of scanning every length
+  through 258. The literal-minus-length-code margin is monotonic between the
+  fixed-code boundaries and only improves at length 258; an exhaustive matrix
+  across windows, normalized min/max lengths, and savings thresholds matches
+  the former loop exactly. Sixteen alternating ReleaseFast CPU-8 stage pairs at
+  20,000 encodes improve isolated Brotli parser medians by about
+  1.78x/1.55x/1.57x for JSON/source/log and full planned encoding by about
+  10.9%/6.7%/8.3% (16/16, 16/16, and 15/16 wins). The DEFLATE incremental,
+  90-row native Zstd stage, nine-row libzstd encode, seven-row libbrotli encode,
+  and 99-case Brotli differential gates remain green.
   Brotli complex-prefix decoding now records the ascending active-symbol list
   during its mandatory validation pass and hands it to a trusted sparse
   canonical decoder builder. This avoids rescanning all 256/520/704 code-length
