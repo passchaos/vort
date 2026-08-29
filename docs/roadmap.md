@@ -8122,3 +8122,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   separately encoded frames is throughput-neutral (`1.001x`, 9/16 wins) while
   reducing framing from 127 to 126 bytes; this is an API/streaming capability
   gain rather than a broad speed claim.
+  The upstream multi-meta-block differential now repeats every libbrotli
+  `tiny-flushes` and metadata stream across an 8x7 input/output chunk matrix
+  (1--255 compressed bytes per call and 1--256 output bytes per call). Across
+  four qualities in each family this adds 448 byte-progressive boundary runs
+  while retaining the existing 99-case format matrix. A bounded cross-meta-
+  block LZ77-history encoder prototype was also measured and rejected: despite
+  shrinking a duplicated 8 KiB fixture from 8,200 to 4,113 bytes, it made the
+  established unrelated mixed-chunk workload about five times slower. No part
+  of that regressing encoder path was retained.

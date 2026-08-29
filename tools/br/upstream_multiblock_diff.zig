@@ -2,6 +2,9 @@ const std = @import("std");
 const vort = @import("vort");
 const libbrotli = @import("libbrotli_runtime.zig");
 
+const progress_input_chunks = [_]usize{ 1, 2, 3, 7, 16, 31, 64, 255 };
+const progress_output_chunks = [_]usize{ 1, 2, 3, 7, 16, 63, 256 };
+
 const Case = struct {
     name: []const u8,
     chunks: []const []const u8,
@@ -19,6 +22,7 @@ const Case = struct {
     min_literal_context_trees: usize = 0,
     min_distance_block_types: usize = 0,
     min_distance_context_trees: usize = 0,
+    sweep_progress_chunks: bool = false,
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -144,12 +148,14 @@ pub fn main(init: std.process.Init) !void {
         .{ .name = "large-source-quality-eleven", .chunks = &large_source_chunks, .expected = large_source, .qualities = &quality_eleven, .windows = &.{ 18, 20, 22, 24 }, .lgblock = 18, .retry_summary_with_caller_history = true },
         .{ .name = "far-history", .chunks = &far_history_chunks, .expected = far_history_expected, .qualities = &compact_qualities, .windows = &.{17}, .min_compressed_blocks = 1, .min_stored_blocks = 2 },
         .{ .name = "compressed-stored-compressed", .chunks = &transition_chunks, .expected = text ++ random[0..2048] ++ text, .qualities = &context_qualities, .min_compressed_blocks = 2, .min_stored_blocks = 1 },
-        .{ .name = "tiny-flushes", .chunks = &tiny_chunks, .expected = tiny_expected, .qualities = &context_qualities, .lgblock = 14, .min_compressed_blocks = 0 },
+        .{ .name = "tiny-flushes", .chunks = &tiny_chunks, .expected = tiny_expected, .qualities = &context_qualities, .lgblock = 14, .min_compressed_blocks = 0, .sweep_progress_chunks = true },
         .{ .name = "postfix-distances", .chunks = &pattern_chunks, .expected = first_pattern ++ second_pattern ++ third_pattern, .qualities = &context_qualities, .npostfix = 1, .ndirect = 2 },
     };
 
     var cases_run: usize = 0;
     var caller_history_summaries: usize = 0;
+    var progress_matrix_runs: usize = 0;
+    var progress_matrix_streams: usize = 0;
     for (cases) |case| {
         for (case.qualities) |quality| {
             for (case.modes) |mode| {
@@ -172,6 +178,11 @@ pub fn main(init: std.process.Init) !void {
                         std.debug.print("{s} quality={d} mode={d} lgwin={d}: decode {s} encoded={d} expected={d}\n", .{ case.name, quality, mode, lgwin, @errorName(err), encoded.len, case.expected.len });
                         return err;
                     };
+                    if (case.sweep_progress_chunks) {
+                        try decodeProgressChunkMatrix(init.gpa, encoded, case.expected, lgwin);
+                        progress_matrix_runs += progressChunkMatrixCaseCount();
+                        progress_matrix_streams += 1;
+                    }
                     var used_caller_history = false;
                     const summary = vort.brSummarizeStream(encoded) catch |err| blk: {
                         if (case.retry_summary_with_caller_history and err == error.UnsupportedBrotliFeature) {
@@ -263,14 +274,17 @@ pub fn main(init: std.process.Init) !void {
         if (summary.compressed_meta_block_count < 2 or summary.metadata_meta_block_count < 1)
             return error.ReferenceEncodeFailed;
         try decodeByteProgressiveWithMetadata(init.gpa, encoded, text ++ json, metadata, 16);
+        try decodeMetadataProgressChunkMatrix(init.gpa, encoded, text ++ json, metadata, 16);
+        progress_matrix_runs += progressChunkMatrixCaseCount();
+        progress_matrix_streams += 1;
         cases_run += 1;
     }
 
     var stdout_buffer: [256]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     try stdout.interface.print(
-        "br_upstream_multiblock_diff=ok cases={d} summaries_unsupported=0 caller_history_summaries={d} reference_version={x}\n",
-        .{ cases_run, caller_history_summaries, reference.version() },
+        "br_upstream_multiblock_diff=ok cases={d} progress_matrix_streams={d} progress_matrix_runs={d} summaries_unsupported=0 caller_history_summaries={d} reference_version={x}\n",
+        .{ cases_run, progress_matrix_streams, progress_matrix_runs, caller_history_summaries, reference.version() },
     );
     try stdout.interface.flush();
 }
@@ -289,6 +303,17 @@ fn validateClusterCoverage(case: Case, summary: vort.BrotliStreamSummary) !void 
 }
 
 fn decodeByteProgressiveWithMetadata(allocator: std.mem.Allocator, encoded: []const u8, expected: []const u8, expected_metadata: []const u8, lgwin: u32) !void {
+    return decodeMetadataProgressChunks(allocator, encoded, expected, expected_metadata, lgwin, 1, 7);
+}
+
+fn decodeMetadataProgressChunkMatrix(allocator: std.mem.Allocator, encoded: []const u8, expected: []const u8, expected_metadata: []const u8, lgwin: u32) !void {
+    for (progress_input_chunks) |input_chunk_len| {
+        for (progress_output_chunks) |output_chunk_len|
+            try decodeMetadataProgressChunks(allocator, encoded, expected, expected_metadata, lgwin, input_chunk_len, output_chunk_len);
+    }
+}
+
+fn decodeMetadataProgressChunks(allocator: std.mem.Allocator, encoded: []const u8, expected: []const u8, expected_metadata: []const u8, lgwin: u32, input_chunk_len: usize, output_chunk_len: usize) !void {
     const history = try allocator.alloc(u8, @min(expected.len, (@as(usize, 1) << @intCast(lgwin)) - 16));
     defer allocator.free(history);
     const metadata = try allocator.alloc(u8, expected_metadata.len);
@@ -305,8 +330,8 @@ fn decodeByteProgressiveWithMetadata(allocator: std.mem.Allocator, encoded: []co
     var input_offset: usize = 0;
     var output_offset: usize = 0;
     while (decoder.snapshot().phase != .done) {
-        const input_end = @min(encoded.len, input_offset + 1);
-        const output_end = @min(output.len, output_offset + 7);
+        const input_end = @min(encoded.len, input_offset + input_chunk_len);
+        const output_end = @min(output.len, output_offset + output_chunk_len);
         const step = decoder.step(encoded[input_offset..input_end], output[output_offset..output_end]) catch |err| {
             std.debug.print("decode failure input={d}/{d} output={d}/{d} snapshot={any}\n", .{ input_offset, encoded.len, output_offset, expected.len, decoder.snapshot() });
             return err;
@@ -336,6 +361,21 @@ fn decodeByteProgressiveWithMetadata(allocator: std.mem.Allocator, encoded: []co
 }
 
 fn decodeByteProgressive(allocator: std.mem.Allocator, encoded: []const u8, expected: []const u8, lgwin: u32) !void {
+    return decodeProgressChunks(allocator, encoded, expected, lgwin, 1, 7);
+}
+
+fn decodeProgressChunkMatrix(allocator: std.mem.Allocator, encoded: []const u8, expected: []const u8, lgwin: u32) !void {
+    for (progress_input_chunks) |input_chunk_len| {
+        for (progress_output_chunks) |output_chunk_len|
+            try decodeProgressChunks(allocator, encoded, expected, lgwin, input_chunk_len, output_chunk_len);
+    }
+}
+
+fn progressChunkMatrixCaseCount() usize {
+    return progress_input_chunks.len * progress_output_chunks.len;
+}
+
+fn decodeProgressChunks(allocator: std.mem.Allocator, encoded: []const u8, expected: []const u8, lgwin: u32, input_chunk_len: usize, output_chunk_len: usize) !void {
     // Keep exactly the useful portion of the advertised window so larger-window
     // cases exercise caller-owned history without overallocating short streams.
     const history = try allocator.alloc(u8, @min(expected.len, (@as(usize, 1) << @intCast(lgwin)) - 16));
@@ -349,8 +389,8 @@ fn decodeByteProgressive(allocator: std.mem.Allocator, encoded: []const u8, expe
     var input_offset: usize = 0;
     var output_offset: usize = 0;
     while (decoder.snapshot().phase != .done) {
-        const input_end = @min(encoded.len, input_offset + 1);
-        const output_end = @min(output.len, output_offset + 7);
+        const input_end = @min(encoded.len, input_offset + input_chunk_len);
+        const output_end = @min(output.len, output_offset + output_chunk_len);
         const step = decoder.step(encoded[input_offset..input_end], output[output_offset..output_end]) catch |err| {
             std.debug.print("decode failure input={d}/{d} output={d}/{d} snapshot={any}\n", .{ input_offset, encoded.len, output_offset, expected.len, decoder.snapshot() });
             return err;

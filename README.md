@@ -127,6 +127,7 @@ zig build run-br-stored-corpus
 zig build run-br-literal-cli-diff
 zig build run-br-planned-node-diff
 zig build -Doptimize=ReleaseFast run-br-planned-chunks-bench-gate
+zig build -Doptimize=ReleaseFast run-br-upstream-multiblock-diff
 zig build run -- zlib-fixed-roundtrip "hello vort"
 zig build run -- gzip-fixed-roundtrip "hello vort"
 zig build run -- decode-raw-hex cb48cdc9c90700

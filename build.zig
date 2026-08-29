@@ -3872,6 +3872,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(br_planned_corpus_step);
     ci_smoke_step.dependOn(br_planned_node_diff_step);
     ci_smoke_step.dependOn(br_planned_chunks_bench_gate_step);
+    ci_smoke_step.dependOn(br_upstream_multiblock_diff_step);
     ci_smoke_step.dependOn(br_static_dictionary_report_step);
     ci_smoke_step.dependOn(br_static_dictionary_report_dashboard_step);
     ci_smoke_step.dependOn(br_static_dictionary_report_smoke_step);
