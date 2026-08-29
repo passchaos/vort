@@ -979,6 +979,8 @@ pub const zstdEncodeNativeSeekableStreamAppend = zstd.encodeNativeSeekableStream
 pub const zstdNativeSeekableRangeScratchLen = zstd.nativeSeekableRangeScratchLen;
 pub const zstdDecodeNativeSeekableRangeInto = zstd.decodeNativeSeekableRangeInto;
 pub const zstdDecodeNativeSeekableRangeAlloc = zstd.decodeNativeSeekableRangeAlloc;
+pub const zstdDecodeNativeSeekableRangeIntoWithDictionarySet = zstd.decodeNativeSeekableRangeIntoWithDictionarySet;
+pub const zstdDecodeNativeSeekableRangeAllocWithDictionarySet = zstd.decodeNativeSeekableRangeAllocWithDictionarySet;
 pub const zstdIterateNativeFrameBlocks = zstd.iterateNativeFrameBlocks;
 pub const zstdIterateNativeStream = zstd.iterateNativeStream;
 pub const zstdEncodedNativeFrameBound = zstd.encodedNativeFrameBound;
@@ -2855,6 +2857,8 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdNativeSeekableRangeScratchLen;
     _ = zstdDecodeNativeSeekableRangeInto;
     _ = zstdDecodeNativeSeekableRangeAlloc;
+    _ = zstdDecodeNativeSeekableRangeIntoWithDictionarySet;
+    _ = zstdDecodeNativeSeekableRangeAllocWithDictionarySet;
     _ = zstdEncodedNativeFrameBound;
     _ = zstdEncodedNativeFrameBoundWithOptions;
     _ = zstdEncodedNativeFrameBoundWithDictionary;
