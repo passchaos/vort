@@ -894,6 +894,10 @@ pub const zstdInspectStandardDictionary = zstd.inspectStandardDictionary;
 pub const zstdIsStandardDictionary = zstd.isStandardDictionary;
 pub const zstdStandardDictionaryId = zstd.standardDictionaryId;
 pub const zstdSummarizeStandardDictionary = zstd.summarizeStandardDictionary;
+pub const zstdStandardDictionaryHeaderLen = zstd.standard_dictionary_header_len;
+pub const zstdStandardDictionaryFromContentBound = zstd.standardDictionaryFromContentBound;
+pub const zstdStandardDictionaryFromContentInto = zstd.standardDictionaryFromContentInto;
+pub const zstdStandardDictionaryFromContentAlloc = zstd.standardDictionaryFromContentAlloc;
 pub const zstdTrainDictionaryAlloc = zstd.trainDictionaryAlloc;
 pub const zstdDictionarySetFromMetadataAlloc = zstd.dictionarySetFromMetadataAlloc;
 pub const zstdEncodeRawOrRleFrameAlloc = zstd.encodeRawOrRleFrameAlloc;
@@ -2806,6 +2810,10 @@ test "root exports lz4 and zstd codec helpers" {
     _ = ZstdDictionarySet;
     _ = ZstdOwnedDictionarySet;
     _ = zstdTrainDictionaryAlloc;
+    _ = zstdStandardDictionaryHeaderLen;
+    _ = zstdStandardDictionaryFromContentBound;
+    _ = zstdStandardDictionaryFromContentInto;
+    _ = zstdStandardDictionaryFromContentAlloc;
     _ = zstdDictionarySetFromMetadataAlloc;
     _ = zstdEncodeRawOrRleFrameAlloc;
     _ = zstdEncodeRawOrRleFrameWithOptionsAlloc;
@@ -4325,6 +4333,12 @@ test "root zstd public reusable aliases expose dictionary helpers" {
     defer owned_set.deinit(std.testing.allocator);
     try std.testing.expectEqual(dict.id, metadata_set.dictionaries[0].id);
     try std.testing.expectEqual(dict.id, owned_set.asDictionarySet().dictionaries[0].id);
+
+    const standard = try zstdStandardDictionaryFromContentAlloc(std.testing.allocator, dict.content, dict.id);
+    defer standard.deinit(std.testing.allocator);
+    try std.testing.expectEqual(ZstdDictionaryKind.standard_full, standard.asDictionary().kind());
+    try std.testing.expectEqual(dict.id, zstdStandardDictionaryId(standard.bytes).?);
+    try std.testing.expectEqualSlices(u8, dict.content, standard.view.content);
 
     var options: ZstdAdvancedFrameOptions = .{
         .selection = .literal_only,

@@ -2,6 +2,57 @@ const std = @import("std");
 
 pub const magic: u32 = 0xec30_a437;
 
+// Portable baseline entropy tables for dictionaries created from already-
+// selected content. These bytes are a complete RFC 8878 dictionary entropy
+// section emitted by zstd 1.5.x from a representative corpus. They provide a
+// dependency-free interoperability baseline; unlike COVER/FastCover training,
+// they are deliberately not tuned to the caller's content or sample set.
+const baseline_entropy = [_]u8{
+    0x2f, 0x10, 0x80, 0x4f, 0x63, 0xfc, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0x70, 0x6f, 0xa1, 0x85, 0x16, 0x5a, 0x68, 0xa1, 0x85, 0x16, 0x5a,
+    0x04, 0xee, 0x2d, 0xe5, 0x96, 0x12, 0x1d, 0xea, 0x90, 0x1a, 0x6a, 0xa8, 0x43, 0x6a, 0x20, 0x0c,
+    0x03, 0x41, 0x20, 0x10, 0x08, 0x50, 0x04, 0xdd, 0xd6, 0x41, 0x22, 0x22, 0xf2, 0x54, 0xa0, 0x40,
+    0x41, 0x41, 0x81, 0x0d, 0x86, 0x02, 0x8c, 0x82, 0x82, 0x82, 0x82, 0x82, 0x82, 0x82, 0x82, 0x82,
+    0x82, 0x82, 0x82, 0x82, 0x82, 0x82, 0x02, 0x8c, 0x82, 0x82, 0x02, 0x88, 0x97, 0x02, 0x63, 0x8e,
+    0x29, 0x3e, 0x48, 0x51, 0x4a, 0x29, 0xa5, 0x94, 0x52, 0x55, 0xd5, 0x03, 0x24, 0x15, 0x55, 0x28,
+    0x14, 0x0a, 0x45, 0x51, 0x14, 0x45, 0x51, 0x14, 0x45, 0x51, 0x14, 0x45, 0x51, 0x14, 0xa5, 0x94,
+    0x52, 0x4a, 0x29, 0x55, 0x55, 0x3d,
+};
+
+const baseline_repcodes = [3]u32{ 1, 4, 8 };
+pub const generated_header_len: usize = 8 + baseline_entropy.len + baseline_repcodes.len * @sizeOf(u32);
+
+pub fn validateGenerationInput(content_len: usize, dictionary_id: u32) !void {
+    if (dictionary_id == 0 or content_len < baseline_repcodes[2]) return error.InvalidDictionaryMetadata;
+}
+
+/// Return the exact number of bytes needed to wrap `content` in a standard
+/// Zstandard full-dictionary container. Semantic constraints are checked by
+/// `encodeFromContentInto`, because callers may use this function for sizing.
+pub fn encodedFromContentLen(content_len: usize) !usize {
+    return std.math.add(usize, generated_header_len, content_len) catch return error.IntegerOverflow;
+}
+
+/// Wrap caller-selected history bytes in a standard full dictionary using
+/// stable baseline entropy tables and repcodes. A non-zero ID and at least
+/// eight content bytes are required by the generated metadata and libzstd.
+/// All fallible validation happens before the first write, so a short output
+/// buffer is left unchanged. `content` and `output` must not overlap.
+pub fn encodeFromContentInto(content: []const u8, dictionary_id: u32, output: []u8) !usize {
+    try validateGenerationInput(content.len, dictionary_id);
+    const needed = try encodedFromContentLen(content.len);
+    if (output.len < needed) return error.OutputTooSmall;
+
+    std.mem.writeInt(u32, output[0..4], magic, .little);
+    std.mem.writeInt(u32, output[4..8], dictionary_id, .little);
+    @memcpy(output[8 .. 8 + baseline_entropy.len], &baseline_entropy);
+    const repcode_offset = 8 + baseline_entropy.len;
+    for (baseline_repcodes, 0..) |repcode, i|
+        std.mem.writeInt(u32, output[repcode_offset + i * 4 ..][0..4], repcode, .little);
+    @memcpy(output[generated_header_len..needed], content);
+    return needed;
+}
+
 pub const View = struct {
     id: u32,
     repcodes: [3]u32,
@@ -45,4 +96,23 @@ test "standard dictionary prefix validates repcodes and content" {
     try std.testing.expectEqualSlices(u8, "dict", view.content);
     bytes[8] = 0;
     try std.testing.expectError(error.InvalidDictionaryMetadata, viewAfterEntropy(&bytes, 0));
+}
+
+test "standard dictionary baseline container encoding" {
+    const content = "dictionary history";
+    try std.testing.expectEqual(@as(usize, 154), generated_header_len);
+    var output: [generated_header_len + content.len]u8 = undefined;
+    try std.testing.expectEqual(output.len, try encodedFromContentLen(content.len));
+    try std.testing.expectEqual(output.len, try encodeFromContentInto(content, 0x1234_5678, &output));
+    try std.testing.expectEqual(magic, std.mem.readInt(u32, output[0..4], .little));
+    try std.testing.expectEqual(@as(u32, 0x1234_5678), std.mem.readInt(u32, output[4..8], .little));
+    try std.testing.expectEqualSlices(u8, content, output[generated_header_len..]);
+
+    const before = output;
+    try std.testing.expectError(error.OutputTooSmall, encodeFromContentInto(content, 1, output[0 .. output.len - 1]));
+    try std.testing.expectEqualSlices(u8, &before, &output);
+    try std.testing.expectError(error.InvalidDictionaryMetadata, encodeFromContentInto(content, 0, &output));
+    try std.testing.expectError(error.InvalidDictionaryMetadata, encodeFromContentInto("short", 1, &output));
+    try std.testing.expectEqualSlices(u8, &before, &output);
+    try std.testing.expectError(error.IntegerOverflow, encodedFromContentLen(std.math.maxInt(usize)));
 }

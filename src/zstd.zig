@@ -310,6 +310,67 @@ pub const OwnedStandardDictionary = struct {
     }
 };
 
+/// Fixed bytes added before the caller-selected history by Vort's baseline
+/// standard Zstandard dictionary generator.
+pub const standard_dictionary_header_len = dictionary_format.generated_header_len;
+
+/// Return the exact output size for a baseline full dictionary. This sizing
+/// helper accepts any length; generation additionally requires at least eight
+/// bytes of content and a non-zero Dictionary_ID.
+pub fn standardDictionaryFromContentBound(content_len: usize) Error!usize {
+    return dictionary_format.encodedFromContentLen(content_len);
+}
+
+/// Wrap caller-selected history in a standard full dictionary using portable
+/// baseline entropy tables. This is not corpus-specific entropy training.
+pub fn standardDictionaryFromContentInto(content: []const u8, dictionary_id: u32, output: []u8) Error!usize {
+    return dictionary_format.encodeFromContentInto(content, dictionary_id, output);
+}
+
+/// Allocate and validate a standard full dictionary whose returned view borrows
+/// from the owned `bytes`. Release it with `OwnedStandardDictionary.deinit`.
+pub fn standardDictionaryFromContentAlloc(allocator: std.mem.Allocator, content: []const u8, dictionary_id: u32) Error!OwnedStandardDictionary {
+    // Reject semantic errors before allocation so an exhausted allocator cannot
+    // mask an invalid Dictionary_ID or an unusably short history.
+    try dictionary_format.validateGenerationInput(content.len, dictionary_id);
+    const bytes = try allocator.alloc(u8, try standardDictionaryFromContentBound(content.len));
+    errdefer allocator.free(bytes);
+    _ = try standardDictionaryFromContentInto(content, dictionary_id, bytes);
+    return .{ .bytes = bytes, .view = try inspectStandardDictionary(bytes) };
+}
+
+test "standard Zstd dictionary generator wraps owned content" {
+    const content = "standard dictionary content used as bounded history";
+    const owned = try standardDictionaryFromContentAlloc(std.testing.allocator, content, 0x1234_5678);
+    defer owned.deinit(std.testing.allocator);
+    try std.testing.expectEqual(DictionaryKind.standard_full, owned.asDictionary().kind());
+    try std.testing.expectEqual(@as(u32, 0x1234_5678), owned.view.id);
+    try std.testing.expectEqual([3]u32{ 1, 4, 8 }, owned.view.repcodes);
+    try std.testing.expectEqualSlices(u8, content, owned.view.content);
+    try std.testing.expectEqual(owned.view.content.ptr, owned.asDictionary().content.ptr);
+
+    const summary = try summarizeStandardDictionary(owned.bytes);
+    try std.testing.expectEqual(owned.view.id, summary.id);
+    try std.testing.expectEqual(owned.view.content_offset, summary.content_offset);
+    try std.testing.expect(summary.literal_table_entries != 0);
+    try std.testing.expect(summary.offset_table_entries != 0);
+    try std.testing.expect(summary.match_table_entries != 0);
+
+    var output: [standard_dictionary_header_len + content.len]u8 = undefined;
+    try std.testing.expectEqual(output.len, try standardDictionaryFromContentInto(content, owned.view.id, &output));
+    try std.testing.expectEqualSlices(u8, owned.bytes, &output);
+    try std.testing.expectEqual(output.len, try standardDictionaryFromContentBound(content.len));
+    const before = output;
+    try std.testing.expectError(error.OutputTooSmall, standardDictionaryFromContentInto(content, owned.view.id, output[0 .. output.len - 1]));
+    try std.testing.expectEqualSlices(u8, &before, &output);
+
+    try std.testing.expectError(error.InvalidDictionaryMetadata, standardDictionaryFromContentAlloc(std.testing.allocator, content, 0));
+    try std.testing.expectError(error.InvalidDictionaryMetadata, standardDictionaryFromContentAlloc(std.testing.allocator, "short", 1));
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.InvalidDictionaryMetadata, standardDictionaryFromContentAlloc(failing.allocator(), content, 0));
+    try std.testing.expectError(error.OutOfMemory, standardDictionaryFromContentAlloc(failing.allocator(), content, 1));
+}
+
 pub const NativeDictionary = struct {
     id: u32,
     content: []const u8,

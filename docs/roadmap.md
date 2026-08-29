@@ -20,10 +20,12 @@ major gaps before Vort can claim broad industry-best parity:
 - Incremental DEFLATE source and JSON throughput now reach or exceed the local
   zlib-ng level-6 comparison on the locked 256 KiB fixtures, while broader
   real-corpus, ratio, memory, and cross-platform parity still needs evidence.
-- Full Zstd-compatible dictionary training and broader entropy-mode parity still
-  require completion and competitor evidence; standardized seek-table
-  parsing/iteration, one-shot encoding, checksum-aware range decode, and
-  dictionary-aware encoding/range decode are now in place.
+- Corpus-trained Zstd-compatible dictionary entropy tables and broader
+  entropy-mode parity still require completion and competitor evidence. Vort
+  can now wrap caller-selected history in a dependency-free standard full
+  dictionary using portable baseline tables; standardized seek-table parsing/
+  iteration, one-shot encoding, checksum-aware range decode, and
+  dictionary-aware encoding/range decode are also in place.
 - Cross-platform optimized kernels and reproducible competitor measurements are
   not yet comprehensive enough for a blanket performance-leadership claim.
 
@@ -2556,6 +2558,16 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   Single-dictionary convenience and dictionary/dictionary-set diagnostics
   variants complete the summary API matrix, matching the decode surfaces while
   retaining phase/offset context for missing catalog entries.
+  Added dependency-free standard Zstandard full-dictionary generation from
+  caller-selected history content. The bound, caller-buffer, and owned APIs
+  emit the standard magic, requested non-zero Dictionary_ID, complete portable
+  baseline Huffman/FSE tables, repcodes `1/4/8`, and the selected content. The
+  implementation validates before mutating short output buffers and reparses
+  owned output so all returned views share the owned lifetime. The external
+  full-dictionary differential now exercises both Vort-encode/libzstd-decode
+  and libzstd-encode/Vort-decode with the generated artifact. This is a valid
+  interoperability baseline, not corpus-specific COVER/FastCover entropy
+  training; the native trainer still selects raw history content.
   ReleaseFast profiling of the native Zstd encoder found that recursive
   mixed-family lookahead dominated levels 1-3 even though the hash planners
   selected equally small output on the locked 32 KiB corpus. The encoder now
