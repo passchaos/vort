@@ -12,6 +12,7 @@ const sequence_fse_builder = @import("zstd/sequence/fse_builder.zig");
 const raw_frame = @import("zstd/frame/raw.zig");
 const known_size_frame = @import("zstd/frame/known_size.zig");
 const huffman_lookup = @import("zstd/literals/huffman_lookup.zig");
+const seekable = @import("zstd/seekable.zig");
 const dictionary_format = @import("zstd/dictionary_format.zig");
 const incremental_encoder = @import("zstd/incremental/encoder/frame.zig");
 const incremental_block_emitter = @import("zstd/incremental/encoder/block_emitter.zig");
@@ -250,6 +251,7 @@ test {
     _ = incremental_history_index;
     _ = incremental_history_match;
     _ = dictionary_format;
+    _ = seekable;
 }
 
 pub const StandardDictionaryView = dictionary_format.View;
@@ -4752,6 +4754,13 @@ pub const NativeSkippableFrameHeader = struct {
     next_frame_offset: usize,
 };
 
+/// Header of the standardized Zstandard seek table stored in the final
+/// skippable frame. The retained stream slice is borrowed from the caller and
+/// must remain alive and unchanged while entries are queried or iterated.
+pub const NativeSeekTable = seekable.Table;
+pub const NativeSeekTableEntry = seekable.Entry;
+pub const NativeSeekTableIterator = seekable.Iterator;
+
 pub const NativeStreamSummaryErrorPhase = enum {
     magic,
     frame_header,
@@ -7128,6 +7137,20 @@ pub fn inspectNativeSkippableFrame(frame: []const u8) Error!NativeSkippableFrame
         .payload_len = payload_len,
         .next_frame_offset = 8 + payload_len,
     };
+}
+
+/// Parse the seek table terminating a complete Zstandard seekable stream. The
+/// footer is located from EOF, as required by the contrib seekable format, and
+/// the table's cumulative compressed sizes must point exactly at its own
+/// skippable header. This rejects a valid-looking footer detached from the
+/// frames it claims to index.
+pub fn inspectNativeSeekTable(stream: []const u8) Error!NativeSeekTable {
+    return seekable.inspect(stream);
+}
+
+/// Locate the seekable frame that contains an uncompressed byte offset.
+pub fn nativeSeekTableFrameIndexForOffset(table: NativeSeekTable, offset: u64) Error!u32 {
+    return seekable.frameIndexForOffset(table, offset);
 }
 
 pub fn summarizeNativeStream(frames: []const u8) Error!NativeStreamSummary {
