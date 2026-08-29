@@ -122,32 +122,43 @@ const IncrementalCopyCodec = struct {
     };
     pub const ParsedHeader = struct { header: Header, bits_read: usize };
     pub const Command = struct { insert_len: usize, copy_len: usize, implicit_last_distance: bool };
-    pub const LiteralState = BlockSwitchState(max_literal_block_types);
-    pub const CommandState = BlockSwitchState(max_command_block_types);
-    pub const DistanceState = BlockSwitchState(max_distance_block_types);
+    const BlockState = struct { current_type: u16, previous_type: u16, remaining: usize };
+    pub const LiteralState = BlockState;
+    pub const CommandState = BlockState;
+    pub const DistanceState = BlockState;
 
     pub fn literalState(header: *const Header) LiteralState {
-        return header.compressed.literal_block;
+        return blockState(header.compressed.literal_block);
     }
 
     pub fn restoreLiteralState(header: *Header, state: LiteralState) void {
-        header.compressed.literal_block = state;
+        restoreBlockState(&header.compressed.literal_block, state);
     }
 
     pub fn commandState(header: *const Header) CommandState {
-        return header.compressed.command_block;
+        return blockState(header.compressed.command_block);
     }
 
     pub fn restoreCommandState(header: *Header, state: CommandState) void {
-        header.compressed.command_block = state;
+        restoreBlockState(&header.compressed.command_block, state);
     }
 
     pub fn distanceState(header: *const Header) DistanceState {
-        return header.compressed.distance_block;
+        return blockState(header.compressed.distance_block);
     }
 
     pub fn restoreDistanceState(header: *Header, state: DistanceState) void {
-        header.compressed.distance_block = state;
+        restoreBlockState(&header.compressed.distance_block, state);
+    }
+
+    fn blockState(block: anytype) BlockState {
+        return .{ .current_type = block.current_type, .previous_type = block.previous_type, .remaining = block.remaining };
+    }
+
+    fn restoreBlockState(block: anytype, state: BlockState) void {
+        block.current_type = state.current_type;
+        block.previous_type = state.previous_type;
+        block.remaining = state.remaining;
     }
 
     pub fn parseMetaBlockHeader(prefix: []const u8, decoded_len: usize, final: bool) IncrementalCopyCodec.Error!ParsedHeader {

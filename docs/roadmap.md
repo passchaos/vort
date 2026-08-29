@@ -8184,3 +8184,9 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   alternating ReleaseFast CPU-8 pairs at 500 decodes improve the median by
   `22.6x`, with 16/16 wins and identical checksums; the gain removes accidental
   state-copy overhead rather than changing Huffman semantics.
+  Rollback checkpoints are now narrowed again to the three mutable block-switch
+  scalars (`current_type`, `previous_type`, and `remaining`), leaving the type
+  and length prefix trees in place. Sixteen alternating ReleaseFast CPU-8 pairs
+  keep structured/alternating controls neutral and improve the deterministic
+  distance-heavy q8 median by about 6.6% (paired median `1.07x`, 15/16 wins),
+  with matching checksums.
