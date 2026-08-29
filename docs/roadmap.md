@@ -8150,3 +8150,9 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   changing literal, stored, or dictionary emission. Twenty alternating
   ReleaseFast CPU-8 pairs at 500 decodes improve the focused 64 KiB overlap
   median by another 5.6%, with 18/20 wins and identical checksums.
+  Copy-span accounting now stays local until the current caller output slice is
+  full or the copy completes: output/total/pending counts and the two-byte
+  literal context are committed once per span rather than once per byte. Twenty
+  alternating ReleaseFast CPU-8 pairs at 500 decodes improve the same focused
+  benchmark by a further `1.43x` median, with 20/20 wins and identical
+  checksums.
