@@ -8092,11 +8092,13 @@ fn emitNativeMatchCompressedBlockSerialWithBeam(allocator: std.mem.Allocator, ou
 
     candidate.clearRetainingCapacity();
     var first_duplicate: ?DuplicateMatch = null;
-    if (beam_is_decisive and rleByte(block) == null) {
+    if (shouldQueryDecisiveSingleDuplicate(early_single_tested, beam_is_decisive, rleByte(block) != null)) {
         // The decisive-beam policy omits multi's iterative follow-up searches,
         // but the single-duplicate candidate still wins on some repetitive
         // text. Run only the first query shared by both duplicate planners and
-        // pass its result to the single emitter below.
+        // pass its result to the single emitter below. Level 1 already ran and
+        // retained this exact query in `early_single`, so repeating it here
+        // would scan and score the complete block for a value never consumed.
         first_duplicate = if (duplicate_index_ptr) |index|
             try findBestDuplicateMatchIndexed(block, 0, index)
         else
@@ -8145,6 +8147,17 @@ fn shouldSearchMultiDuplicate(block_len: usize, match_search_budget: usize, beam
     return !beam_is_decisive and
         match_search_budget >= multi_duplicate_min_search_budget and
         block_len >= multi_duplicate_min_input_len;
+}
+
+fn shouldQueryDecisiveSingleDuplicate(early_single_tested: bool, beam_is_decisive: bool, is_rle: bool) bool {
+    return !early_single_tested and beam_is_decisive and !is_rle;
+}
+
+test "zstd decisive single lookup reuses the level one result" {
+    try std.testing.expect(!shouldQueryDecisiveSingleDuplicate(true, true, false));
+    try std.testing.expect(shouldQueryDecisiveSingleDuplicate(false, true, false));
+    try std.testing.expect(!shouldQueryDecisiveSingleDuplicate(false, false, false));
+    try std.testing.expect(!shouldQueryDecisiveSingleDuplicate(false, true, true));
 }
 
 /// Candidate families evaluated by the native compressed-block selector.

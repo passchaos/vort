@@ -8030,3 +8030,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   5.28x with 20/20 wins; text and JSON remain within about 0.6% noise. The
   low-alphabet JSON path continues to evaluate adaptive candidates because it
   has a known split winner.
+  Level-1 primary block arbitration now also reuses that early single-duplicate
+  query when its repeat beam is decisive. Previously the decisive branch ran
+  the same full-block indexed match search a second time to fill a local value
+  that the later `early_single` branch could never consume. A focused policy
+  test pins when the query is required, and the existing single-candidate wire
+  oracle protects the reused result. Twenty-four alternating ReleaseFast CPU-8
+  pairs preserve the 80/640/8607-byte level-1 frames while improving JSON by
+  about 14.9% (23/24 wins), binary by about 11.8% (22/24 wins), and text by
+  about 1.3% (17/24 wins). A speculative double-fast replacement was rejected:
+  it was much quicker, but a 144-case size audit found up to 33.3% expansion
+  versus the exact existing winner.
