@@ -45,9 +45,68 @@ pub fn encodeInto(output: []Token, lengths: []const u4, stop_index: usize) !usiz
 pub fn encodeIntoWithFrequencies(output: []Token, lengths: []const u4, stop_index: usize, frequencies: *[18]u32) !usize {
     if (stop_index > lengths.len or output.len < stop_index) return error.OutOfMemory;
     frequencies.* = @splat(0);
-    var tokens: std.ArrayList(Token) = .{ .items = output[0..0], .capacity = output.len };
-    try encodeIntoList(&tokens, lengths, stop_index, frequencies);
-    return tokens.items.len;
+    var token_len: usize = 0;
+    var i: usize = 0;
+    while (i < stop_index) {
+        if (lengths[i] != 0) {
+            const length = lengths[i];
+            var end = i + 1;
+            while (end < stop_index and lengths[end] == length) end += 1;
+            appendNonzeroRunWithFrequencies(output, &token_len, frequencies, length, end - i);
+            i = end;
+            continue;
+        }
+        var end = i + 1;
+        while (end < stop_index and lengths[end] == 0) end += 1;
+        appendZeroRunWithFrequencies(output, &token_len, frequencies, end - i);
+        i = end;
+    }
+    return token_len;
+}
+
+inline fn appendTokenWithFrequencies(output: []Token, token_len: *usize, frequencies: *[18]u32, token: Token) void {
+    // Each emitted token consumes at least one input code length, so the
+    // entry-point's `output.len >= stop_index` check proves this store fits.
+    output[token_len.*] = token;
+    token_len.* += 1;
+    frequencies[token.symbol] += 1;
+}
+
+fn appendNonzeroRunWithFrequencies(output: []Token, token_len: *usize, frequencies: *[18]u32, length: u4, run: usize) void {
+    appendTokenWithFrequencies(output, token_len, frequencies, .{ .symbol = length });
+    if (run == 1) return;
+    const remaining = run - 1;
+    if (remaining < 3) {
+        for (0..remaining) |_| appendTokenWithFrequencies(output, token_len, frequencies, .{ .symbol = length });
+        return;
+    }
+    appendRepeatRunWithFrequencies(output, token_len, frequencies, 16, remaining, 4);
+}
+
+fn appendZeroRunWithFrequencies(output: []Token, token_len: *usize, frequencies: *[18]u32, run: usize) void {
+    if (run < 3) {
+        for (0..run) |_| appendTokenWithFrequencies(output, token_len, frequencies, .{ .symbol = 0 });
+        return;
+    }
+    appendRepeatRunWithFrequencies(output, token_len, frequencies, 17, run, 8);
+}
+
+fn appendRepeatRunWithFrequencies(output: []Token, token_len: *usize, frequencies: *[18]u32, symbol: u5, run: usize, comptime radix: usize) void {
+    const max_extra = radix - 1;
+    var extras: [16]u3 = undefined;
+    var extra_len: usize = 0;
+    var current = run;
+    while (current > max_extra + 3) {
+        const extra = (current - 3) & max_extra;
+        current = ((current - (extra + 3)) / radix) + 2;
+        extras[extra_len] = @intCast(extra);
+        extra_len += 1;
+    }
+    appendTokenWithFrequencies(output, token_len, frequencies, .{ .symbol = symbol, .extra = @intCast(current - 3) });
+    while (extra_len != 0) {
+        extra_len -= 1;
+        appendTokenWithFrequencies(output, token_len, frequencies, .{ .symbol = symbol, .extra = extras[extra_len] });
+    }
 }
 
 /// Validate and find the last non-zero code length in one forward pass. This

@@ -7774,6 +7774,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   by about 3.5%/3.7%/3.5%, with all 16 pairs positive for every corpus. The
   seven-row libbrotli encode gate and 99-case upstream differential remain
   green.
+  The complex-prefix production RLE path now writes directly into its proven
+  stop-index-sized token buffer while collecting frequencies, instead of
+  repeating an `ArrayList.appendBounded` capacity branch for every token. The
+  independent bounded encoder remains the oracle and public internal safety
+  path. Sixteen alternating ReleaseFast CPU-8 stage pairs at 20,000 encodes
+  preserve checksums and improve full planned JSON/source/log medians by about
+  3.1%/3.5%/3.6% (14/16 wins for each); the seven-row libbrotli encode gate and
+  99-case upstream differential remain green.
   Brotli complex-prefix decoding now records the ascending active-symbol list
   during its mandatory validation pass and hands it to a trusted sparse
   canonical decoder builder. This avoids rescanning all 256/520/704 code-length
