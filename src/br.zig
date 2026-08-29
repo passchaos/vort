@@ -675,6 +675,7 @@ pub const IncrementalTestSupport = struct {
 pub const max_uncompressed_meta_block_len: usize = 1 << 24;
 
 pub const default_window_bits: u5 = 16;
+const planned_chunk_max_input_len: usize = 32 * 1024;
 
 // Above this size payload copying dominates the fixed bit-writer overhead, so
 // keep large streams on the shared implementation to avoid duplicating its
@@ -849,6 +850,11 @@ const BitWriter = struct {
 
     fn alignToByte(self: *BitWriter) void {
         self.bit_index = 0;
+    }
+
+    fn bitPosition(self: *const BitWriter) usize {
+        if (self.bit_index == 0) return self.out.items.len * 8;
+        return (self.out.items.len - 1) * 8 + self.bit_index;
     }
 
     fn writeAlignedBytes(self: *BitWriter, allocator: std.mem.Allocator, bytes: []const u8) Error!void {
@@ -1402,6 +1408,43 @@ pub fn encodedPlannedStreamBoundWithOptions(input_len: usize, options: PlannedEn
     return encodedStoredStreamBound(input_len);
 }
 
+/// Conservative bound for a fast planned stream with one independently
+/// planned meta-block per non-empty chunk. Oversized chunks are split into
+/// 32 KiB blocks so parser memory remains bounded.
+pub fn encodedPlannedStreamChunksBound(chunks: []const []const u8) Error!usize {
+    var bit_count: usize = 1; // Default WBITS=16 prefix.
+    for (chunks) |chunk| {
+        var offset: usize = 0;
+        while (offset < chunk.len) {
+            const block_len = @min(chunk.len - offset, planned_chunk_max_input_len);
+            bit_count = try addStoredUncompressedMetaBlockBitsLen(bit_count, block_len);
+            offset += block_len;
+        }
+    }
+    bit_count = std.math.add(usize, bit_count, 2) catch return error.IntegerOverflow;
+    return bytesForBits(bit_count);
+}
+
+pub fn encodePlannedStreamChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8) Error![]u8 {
+    var encoder = PlannedStreamEncoder.init(allocator);
+    defer encoder.deinit();
+    return encoder.encodeChunksAlloc(allocator, chunks);
+}
+
+pub fn encodePlannedStreamChunksInto(chunks: []const []const u8, output: []u8) Error!usize {
+    const needed = try encodedPlannedStreamChunksBound(chunks);
+    if (output.len < needed) return error.OutOfMemory;
+    var encoder = PlannedStreamEncoder.init(std.heap.smp_allocator);
+    defer encoder.deinit();
+    return encoder.encodeChunksInto(chunks, output);
+}
+
+pub fn encodePlannedStreamChunksAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), chunks: []const []const u8) Error!void {
+    var encoder = PlannedStreamEncoder.init(allocator);
+    defer encoder.deinit();
+    try encoder.encodeChunksAppend(out, chunks);
+}
+
 pub fn encodePlannedStreamInto(input: []const u8, output: []u8) Error!usize {
     return encodePlannedStreamWithOptionsInto(input, output, .{});
 }
@@ -1584,6 +1627,8 @@ const CommandPlanEncodeOptions = struct {
     use_recent_distances: bool = false,
     use_utf8_text_contexts: bool = false,
     window_bits: u5 = default_window_bits,
+    write_stream_prefix: bool = true,
+    final_meta_block: bool = true,
 };
 const min_recent_distance_candidate_count: usize = 64;
 const planned_command_symbol_cache_capacity: usize = 128;
@@ -1766,6 +1811,22 @@ pub const PlannedStreamEncoder = struct {
         return self.encodeWithOptionsAlloc(allocator, input, .{});
     }
 
+    pub fn encodeChunksAlloc(self: *PlannedStreamEncoder, allocator: std.mem.Allocator, chunks: []const []const u8) Error![]u8 {
+        return allocator.dupe(u8, try self.encodeChunksScratch(chunks));
+    }
+
+    pub fn encodeChunksInto(self: *PlannedStreamEncoder, chunks: []const []const u8, output: []u8) Error!usize {
+        const needed = try encodedPlannedStreamChunksBound(chunks);
+        if (output.len < needed) return error.OutOfMemory;
+        const encoded = try self.encodeChunksScratch(chunks);
+        @memcpy(output[0..encoded.len], encoded);
+        return encoded.len;
+    }
+
+    pub fn encodeChunksAppend(self: *PlannedStreamEncoder, out: *std.ArrayList(u8), chunks: []const []const u8) Error!void {
+        try out.appendSlice(self.allocator, try self.encodeChunksScratch(chunks));
+    }
+
     /// Encode through the stable level API while retaining token and command
     /// capacity for the fast and balanced small-block planners. Ratio and large
     /// inputs retain their one-shot paths because they need wider search state.
@@ -1818,6 +1879,70 @@ pub const PlannedStreamEncoder = struct {
     /// avoids allocating an owned result once input/output capacities stabilize.
     pub fn encodeScratch(self: *PlannedStreamEncoder, input: []const u8) Error![]const u8 {
         return self.encodeScratchWithOptions(input, .{});
+    }
+
+    /// Encode one Brotli stream containing multiple independently planned fast
+    /// meta-blocks. Empty chunks are ignored, and chunks above 32 KiB are split
+    /// to keep parser state bounded. The returned slice is invalidated by the
+    /// next call or by `deinit`.
+    pub fn encodeChunksScratch(self: *PlannedStreamEncoder, chunks: []const []const u8) Error![]const u8 {
+        self.output.clearRetainingCapacity();
+        var writer = BitWriter{ .out = &self.output };
+        try writeWindowBits(self.allocator, &writer, default_window_bits);
+        var stored_ceiling_bits: usize = 1;
+        for (chunks) |chunk| {
+            var offset: usize = 0;
+            while (offset < chunk.len) {
+                const block_len = @min(chunk.len - offset, planned_chunk_max_input_len);
+                stored_ceiling_bits = try addStoredUncompressedMetaBlockBitsLen(stored_ceiling_bits, block_len);
+                try self.encodeFastMetaBlock(&writer, chunk[offset..][0..block_len], stored_ceiling_bits);
+                offset += block_len;
+            }
+        }
+        try writer.writeBits(self.allocator, 1, 1); // ISLAST.
+        try writer.writeBits(self.allocator, 1, 1); // ISLASTEMPTY.
+        return self.output.items;
+    }
+
+    fn encodeFastMetaBlock(self: *PlannedStreamEncoder, writer: *BitWriter, input: []const u8, stored_ceiling_bits: usize) Error!void {
+        std.debug.assert(input.len != 0 and input.len <= planned_chunk_max_input_len);
+        const start_len = self.output.items.len;
+        const start_bit_index = writer.bit_index;
+        const start_byte = self.output.items[start_len - 1];
+        const stats = try lz77.hashGreedyPlanAutoTinyScratchReuse(&self.tokens, &self.greedy_scratch, self.allocator, input, .{
+            .window_len = input.len,
+            .max_chain = 64,
+            .nice_len = 64,
+            .max_candidates = 8,
+            .min_match = 3,
+            .max_match = lz77.max_match_len,
+        });
+        if (stats.matches == 0)
+            return self.replacePlannedBlockWithStored(writer, input, start_len, start_bit_index, start_byte);
+        _ = command_plan.buildTrustedReuse(&self.commands, self.allocator, input, self.tokens.items) catch |err| switch (err) {
+            error.InvalidBlockPlan => return self.replacePlannedBlockWithStored(writer, input, start_len, start_bit_index, start_byte),
+            else => return err,
+        };
+        var stats_out: encoder_stats.PlannedEncodeStats = .{};
+        const compressed_ok = blk: {
+            encodeCommandPlanWithOptionsWrite(self.allocator, writer, input, self.commands.items, null, &stats_out, .{
+                .write_stream_prefix = false,
+                .final_meta_block = false,
+            }) catch |err| switch (err) {
+                error.InvalidBlockPlan => break :blk false,
+                else => return err,
+            };
+            break :blk true;
+        };
+        if (compressed_ok and writer.bitPosition() <= stored_ceiling_bits) return;
+        try self.replacePlannedBlockWithStored(writer, input, start_len, start_bit_index, start_byte);
+    }
+
+    fn replacePlannedBlockWithStored(self: *PlannedStreamEncoder, writer: *BitWriter, input: []const u8, start_len: usize, start_bit_index: u3, start_byte: u8) Error!void {
+        self.output.shrinkRetainingCapacity(start_len);
+        self.output.items[start_len - 1] = start_byte;
+        writer.bit_index = start_bit_index;
+        try writeUncompressedMetaBlock(self.allocator, writer, input);
     }
 
     /// Encode into retained encoder-owned output. Fast and balanced reuse their
@@ -2267,8 +2392,8 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     // a capped fraction removes ArrayList's early growth ladder without scaling
     // scratch memory with multi-megabyte inputs.
     if (!writer.bounded) try writer.out.ensureUnusedCapacity(allocator, commandPlanInitialCapacity(input.len));
-    try writeWindowBits(allocator, writer, options.window_bits);
-    try writeLastCompressedMetaBlockHeader(allocator, writer, input.len);
+    if (options.write_stream_prefix) try writeWindowBits(allocator, writer, options.window_bits);
+    try writeCompressedMetaBlockHeader(allocator, writer, input.len, options.final_meta_block);
     const distance_alphabet_size = planned_distance_alphabet_size;
     const lengths_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     const literal_lengths = try literal_alphabet.codeLengths(&literal_frequencies);
@@ -2345,7 +2470,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         if (command.has_copy and command.dictionary_output_len == 0 and recent_symbol != 0) pushLastDistance(&last_distances, command.distance);
     }
     if (io) |active| stats.payload_ns = elapsedNs(payload_start.?, active);
-    if (writer.bit_index != 0) writer.alignToByte();
+    if (options.final_meta_block and writer.bit_index != 0) writer.alignToByte();
 }
 
 fn commandPlanInitialCapacity(input_len: usize) usize {
@@ -2384,13 +2509,18 @@ fn encodeRleStreamWrite(allocator: std.mem.Allocator, writer: *BitWriter, input:
 /// encoders. Choosing the shortest legal length field keeps small streams
 /// compact while still covering Brotli's full 24-bit meta-block limit.
 fn writeLastCompressedMetaBlockHeader(allocator: std.mem.Allocator, writer: *BitWriter, len: usize) Error!void {
+    try writeCompressedMetaBlockHeader(allocator, writer, len, true);
+}
+
+fn writeCompressedMetaBlockHeader(allocator: std.mem.Allocator, writer: *BitWriter, len: usize, final: bool) Error!void {
     if (len == 0 or len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
-    try writer.writeBits(allocator, 1, 1);
-    try writer.writeBits(allocator, 0, 1);
+    try writer.writeBits(allocator, @intFromBool(final), 1);
+    if (final) try writer.writeBits(allocator, 0, 1);
     const len_minus_one = len - 1;
     const mnibbles: usize = if (len_minus_one <= 0xffff) 4 else if (len_minus_one <= 0xfffff) 5 else 6;
     try writer.writeBits(allocator, @intCast(mnibbles - 4), 2);
     try writer.writeBits(allocator, len_minus_one, @intCast(mnibbles * 4));
+    if (!final) try writer.writeBits(allocator, 0, 1); // ISUNCOMPRESSED = false.
 }
 
 fn writeMinimalCompressedHeaderForRun(allocator: std.mem.Allocator, writer: *BitWriter, byte: u8, run_len: usize) Error!void {
@@ -8803,6 +8933,135 @@ test "br reusable planner matches stable API at size boundaries" {
             try std.testing.expectEqualSlices(u8, expected, actual);
         }
     }
+}
+
+test "br planned chunked encoder emits one multi-meta-block stream" {
+    const first = "alpha beta gamma delta alpha beta gamma delta " ** 64;
+    const second = "qzxwvbnm1234567890QZXWVBNM!@#$%^&*";
+    const third = "omega theta lambda omega theta lambda " ** 64;
+    const chunks = [_][]const u8{ "", first, second, "", third };
+    const expected = first ++ second ++ third;
+
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const encoded = try encoder.encodeChunksAlloc(std.testing.allocator, &chunks);
+    defer std.testing.allocator.free(encoded);
+    const encoded_copy = try std.testing.allocator.dupe(u8, encoded);
+    defer std.testing.allocator.free(encoded_copy);
+    const summary = try summarizeStream(encoded);
+    try std.testing.expectEqual(@as(usize, 3), summary.compressed_meta_block_count + summary.uncompressed_meta_block_count);
+    try std.testing.expect(summary.compressed_meta_block_count >= 2);
+    try std.testing.expect(summary.uncompressed_meta_block_count >= 1);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, expected.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
+
+    const output = try std.testing.allocator.alloc(u8, try encodedPlannedStreamChunksBound(&chunks));
+    defer std.testing.allocator.free(output);
+    @memset(output, 0xa5);
+    const before = try std.testing.allocator.dupe(u8, output);
+    defer std.testing.allocator.free(before);
+    try std.testing.expectError(error.OutOfMemory, encoder.encodeChunksInto(&chunks, output[0 .. output.len - 1]));
+    try std.testing.expectEqualSlices(u8, before, output);
+    const written = try encoder.encodeChunksInto(&chunks, output);
+    try std.testing.expectEqualSlices(u8, encoded, output[0..written]);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try encoder.encodeChunksAppend(&appended, &chunks);
+    try std.testing.expectEqualSlices(u8, "prefix:", appended.items[0.."prefix:".len]);
+    try std.testing.expectEqualSlices(u8, encoded, appended.items["prefix:".len..]);
+    try std.testing.expectEqualSlices(u8, encoded_copy, encoded);
+
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.OutOfMemory, encoder.encodeChunksAlloc(failing.allocator(), &chunks));
+    var top_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.OutOfMemory, encodePlannedStreamChunksAlloc(top_failing.allocator(), &chunks));
+    const recovered = try encoder.encodeChunksAlloc(std.testing.allocator, &chunks);
+    defer std.testing.allocator.free(recovered);
+    try std.testing.expectEqualSlices(u8, encoded_copy, recovered);
+
+    const scratch = try encoder.encodeChunksScratch(&chunks);
+    try std.testing.expectEqualSlices(u8, encoded_copy, scratch);
+    const retained = encoder.retainedCapacity();
+    const repeated = try encoder.encodeChunksScratch(&chunks);
+    try std.testing.expectEqualSlices(u8, encoded_copy, repeated);
+    try std.testing.expectEqual(retained, encoder.retainedCapacity());
+    var failing_scratch = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    encoder.allocator = failing_scratch.allocator();
+    const allocation_free = encoder.encodeChunksScratch(&chunks) catch |err| {
+        encoder.allocator = std.testing.allocator;
+        return err;
+    };
+    encoder.allocator = std.testing.allocator;
+    try std.testing.expectEqualSlices(u8, encoded_copy, allocation_free);
+}
+
+test "br planned chunked encoder handles empty and generated mixed blocks" {
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+
+    const empty_chunks = [_][]const u8{ "", "" };
+    const empty = try encoder.encodeChunksScratch(&empty_chunks);
+    try std.testing.expectEqualSlices(u8, &.{0x06}, empty);
+    var empty_output: [1]u8 = undefined;
+    try std.testing.expectEqual(@as(usize, 1), try encodePlannedStreamChunksInto(&empty_chunks, &empty_output));
+    try std.testing.expectEqualSlices(u8, &.{0x06}, &empty_output);
+    try std.testing.expectError(error.OutOfMemory, encodePlannedStreamChunksInto(&empty_chunks, &.{}));
+
+    var input: [4096]u8 = undefined;
+    var state: u32 = 0xb174_2f83;
+    for (0..32) |case_index| {
+        const len = 128 + case_index * 117;
+        const alphabet_size = 2 + case_index * 7;
+        for (input[0..len], 0..) |*byte, index| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = if (index >= 43 and index % 29 < 13)
+                input[index - 41]
+            else
+                @intCast((state >> 16) % alphabet_size);
+        }
+        const split_a = len / 4;
+        const split_b = len * 3 / 4;
+        const chunks = [_][]const u8{ "", input[0..split_a], input[split_a..split_b], "", input[split_b..len] };
+        const encoded = try encoder.encodeChunksScratch(&chunks);
+        const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, len);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, input[0..len], decoded);
+        try std.testing.expect(encoded.len <= try encodedPlannedStreamChunksBound(&chunks));
+    }
+}
+
+test "br planned chunked encoder splits large input and streams byte progressively" {
+    const unit = "abcdefghijklmnopqrstuvwxyz012345";
+    const payload = unit ** 2049;
+    const chunks = [_][]const u8{payload};
+    const encoded = try encodePlannedStreamChunksAlloc(std.testing.allocator, &chunks);
+    defer std.testing.allocator.free(encoded);
+    const summary = try summarizeStream(encoded);
+    try std.testing.expectEqual(@as(usize, 3), summary.compressed_meta_block_count + summary.uncompressed_meta_block_count);
+    try std.testing.expect(summary.compressed_meta_block_count >= 2);
+
+    var history: [planner_max_backward_distance]u8 = undefined;
+    var decoder = IncrementalCopyStreamDecoder.initWithOptions(&history, .{
+        .max_output_len = payload.len,
+        .expected_output_len = payload.len,
+    });
+    var output: [payload.len]u8 = undefined;
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (decoder.snapshot().phase != .done) {
+        const input_end = @min(encoded.len, input_offset + 1);
+        const output_end = @min(output.len, output_offset + 7);
+        const step = try decoder.step(encoded[input_offset..input_end], output[output_offset..output_end]);
+        try std.testing.expect(step.progress.input_read != 0 or step.progress.output_written != 0);
+        input_offset += step.progress.input_read;
+        output_offset += step.progress.output_written;
+    }
+    try decoder.finish();
+    try std.testing.expectEqual(encoded.len, input_offset);
+    try std.testing.expectEqualSlices(u8, payload, output[0..output_offset]);
 }
 
 test "br simple encoder selects RLE or stored streams" {

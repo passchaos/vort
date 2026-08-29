@@ -41,5 +41,28 @@ pub fn main(init: std.process.Init) !void {
             stats.literal_symbol_count, stats.command_symbol_count, stats.distance_symbol_count,
         });
     }
+    const mixed_chunks = [_][]const u8{
+        "alpha beta gamma delta alpha beta gamma delta " ** 64,
+        "qzxwvbnm1234567890QZXWVBNM!@#$%^&*",
+        "omega theta lambda omega theta lambda " ** 64,
+    };
+    const mixed_expected = mixed_chunks[0] ++ mixed_chunks[1] ++ mixed_chunks[2];
+    const mixed = try vort.brEncodePlannedStreamChunksAlloc(init.gpa, &mixed_chunks);
+    defer init.gpa.free(mixed);
+    const mixed_bound = try vort.brEncodedPlannedStreamChunksBound(&mixed_chunks);
+    if (mixed.len > mixed_bound) return error.InvalidBlockPlan;
+    const mixed_summary = try vort.brSummarizeStream(mixed);
+    if (mixed_summary.compressed_meta_block_count < 2 or mixed_summary.uncompressed_meta_block_count < 1)
+        return error.InvalidBlockPlan;
+    const mixed_decoded = try vort.brDecodeStreamAllocExactSize(init.gpa, mixed, mixed_expected.len);
+    defer init.gpa.free(mixed_decoded);
+    if (!std.mem.eql(u8, mixed_expected, mixed_decoded)) return error.SizeMismatch;
+    try stdout.print("brotli planned chunked: input={d} encoded={d} bound={d} compressed_blocks={d} stored_blocks={d}\n", .{
+        mixed_expected.len,
+        mixed.len,
+        mixed_bound,
+        mixed_summary.compressed_meta_block_count,
+        mixed_summary.uncompressed_meta_block_count,
+    });
     try stdout.flush();
 }

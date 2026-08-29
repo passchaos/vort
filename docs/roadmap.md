@@ -8107,3 +8107,18 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   2.1--2.9x, and 16 KiB variants improve about 1.07--1.34x. Brotli stored/root
   tests and the planned, libbrotli-reference, and 99-case upstream gates remain
   green.
+  Added production fast-level Brotli chunked encoding as one RFC stream rather
+  than concatenated independent streams. Each non-empty caller chunk is planned
+  independently and chunks above 32 KiB are split, bounding parser memory; each
+  block keeps compressed output only when its exact bit position does not exceed
+  the stored alternative. The reusable encoder exposes borrowed, owned,
+  caller-buffer, and append variants, while top-level bound/alloc/into/append
+  helpers are exported from `root.zig`. Tests cover empty chunks, generated
+  mixed data, compressed/stored/compressed transitions, automatic large-chunk
+  splitting, output bounds, ownership, failure recovery, and one-byte-input /
+  seven-byte-output incremental decoding. Node accepts both the mixed three-
+  block stream (126 bytes for 5,410 decoded bytes) and the automatically split
+  65,568-byte stream (201 bytes). A 16-run fixed-CPU-8 comparison against three
+  separately encoded frames is throughput-neutral (`1.001x`, 9/16 wins) while
+  reducing framing from 127 to 126 bytes; this is an API/streaming capability
+  gain rather than a broad speed claim.

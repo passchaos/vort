@@ -27,6 +27,22 @@ def main() -> int:
             if actual != expected:
                 raise SystemExit(f"{mode}: node output mismatch")
             print(f"brotli planned {mode} node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = (
+        b"alpha beta gamma delta alpha beta gamma delta " * 64
+        + b"qzxwvbnm1234567890QZXWVBNM!@#$%^&*"
+        + b"omega theta lambda omega theta lambda " * 64
+    )
+    encoded = subprocess.check_output([sys.argv[1], "chunked-multiblock"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("chunked-multiblock: node output mismatch")
+    print(f"brotli planned chunked-multiblock node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = b"abcdefghijklmnopqrstuvwxyz012345" * 2049
+    encoded = subprocess.check_output([sys.argv[1], "chunked-large"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("chunked-large: node output mismatch")
+    print(f"brotli planned chunked-large node diff: encoded={len(encoded)} decoded={len(actual)}")
     expected = b" information follows the information"
     encoded = subprocess.check_output([sys.argv[1], "dictionary-words"])
     actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout

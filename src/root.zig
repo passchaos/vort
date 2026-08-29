@@ -72,8 +72,12 @@ pub const BrotliPlannedParserOptions = br.PlannedParserOptions;
 pub const brEncodePlannedStreamWithOptionsAlloc = br.encodePlannedStreamWithOptionsAlloc;
 pub const brEncodedPlannedStreamBound = br.encodedPlannedStreamBound;
 pub const brEncodedPlannedStreamBoundWithOptions = br.encodedPlannedStreamBoundWithOptions;
+pub const brEncodedPlannedStreamChunksBound = br.encodedPlannedStreamChunksBound;
 pub const brEncodePlannedStreamInto = br.encodePlannedStreamInto;
 pub const brEncodePlannedStreamWithOptionsInto = br.encodePlannedStreamWithOptionsInto;
+pub const brEncodePlannedStreamChunksAlloc = br.encodePlannedStreamChunksAlloc;
+pub const brEncodePlannedStreamChunksAppend = br.encodePlannedStreamChunksAppend;
+pub const brEncodePlannedStreamChunksInto = br.encodePlannedStreamChunksInto;
 pub const brEncodePlannedStreamLazyWithOptionsAlloc = br.encodePlannedStreamLazyWithOptionsAlloc;
 pub const brEncodePlannedStreamStaticDictionaryAlloc = br.encodePlannedStreamStaticDictionaryAlloc;
 pub const brPlannedStaticDictionaryIndexBytes = br.plannedStaticDictionaryIndexBytes;
@@ -2143,6 +2147,10 @@ test "root exports lz4 and zstd codec helpers" {
     _ = brEncodeStoredStreamChunksWithOptionsAlloc;
     _ = brEncodeStoredStreamChunksWithOptionsAppend;
     _ = brEncodeStoredStreamChunksWithOptionsInto;
+    _ = brEncodedPlannedStreamChunksBound;
+    _ = brEncodePlannedStreamChunksAlloc;
+    _ = brEncodePlannedStreamChunksAppend;
+    _ = brEncodePlannedStreamChunksInto;
     _ = BrotliStoredStreamOptions;
     _ = BrotliStreamSummary;
     _ = BrotliStreamSummaryDiagnostics;
@@ -3471,6 +3479,31 @@ test "root brotli stream summary diagnostics report failure phases" {
     try std.testing.expectError(error.OutputLimitExceeded, brSummarizeStreamChunksLimitedWithDiagnostics(&chunks, join, payload.len - 1, &diagnostics));
     try std.testing.expectEqual(BrotliStreamSummaryErrorPhase.meta_block_header, diagnostics.phase);
     try std.testing.expectEqual(@as(usize, 0), diagnostics.meta_block_index);
+}
+
+test "root brotli planned chunked encoder produces one multi-block stream" {
+    const first = "root planned first block " ** 32;
+    const middle = "qzxwvbnm1234567890QZXWVBNM!@#$%^&*";
+    const last = "root planned last block " ** 32;
+    const chunks = [_][]const u8{ first, middle, last };
+    const expected = first ++ middle ++ last;
+    const encoded = try brEncodePlannedStreamChunksAlloc(std.testing.allocator, &chunks);
+    defer std.testing.allocator.free(encoded);
+    const bound = try brEncodedPlannedStreamChunksBound(&chunks);
+    try std.testing.expect(encoded.len <= bound);
+
+    const output = try std.testing.allocator.alloc(u8, bound);
+    defer std.testing.allocator.free(output);
+    const written = try brEncodePlannedStreamChunksInto(&chunks, output);
+    try std.testing.expectEqualSlices(u8, encoded, output[0..written]);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try brEncodePlannedStreamChunksAppend(std.testing.allocator, &appended, &chunks);
+    try std.testing.expectEqualSlices(u8, encoded, appended.items);
+    const decoded = try brDecodeStreamAllocExactSize(std.testing.allocator, encoded, expected.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, expected, decoded);
 }
 
 test "root brotli caller-history summaries cover contiguous and chunked streams" {

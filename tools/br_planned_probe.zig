@@ -18,6 +18,24 @@ pub fn main(init: std.process.Init) !void {
         try std.Io.File.stdout().writeStreamingAll(init.io, written);
         return;
     }
+    if (std.mem.eql(u8, mode, "chunked-multiblock")) {
+        const first = "alpha beta gamma delta alpha beta gamma delta " ** 64;
+        const middle = "qzxwvbnm1234567890QZXWVBNM!@#$%^&*";
+        const last = "omega theta lambda omega theta lambda " ** 64;
+        const chunks = [_][]const u8{ "", first, middle, "", last };
+        const encoded = try vort.brEncodePlannedStreamChunksAlloc(init.gpa, &chunks);
+        defer init.gpa.free(encoded);
+        try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
+        return;
+    }
+    if (std.mem.eql(u8, mode, "chunked-large")) {
+        const payload = "abcdefghijklmnopqrstuvwxyz012345" ** 2049;
+        const chunks = [_][]const u8{payload};
+        const encoded = try vort.brEncodePlannedStreamChunksAlloc(init.gpa, &chunks);
+        defer init.gpa.free(encoded);
+        try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
+        return;
+    }
     const name = if (lazy) mode["lazy-".len..] else if (ratio) mode["ratio-".len..] else if (static_dictionary) mode["dictionary-".len..] else if (stable_fast) mode["stable-fast-".len..] else if (stable_balanced) mode["stable-balanced-".len..] else mode;
     const payload = if (std.mem.eql(u8, name, "json"))
         "{\"kind\":\"event\",\"active\":true,\"values\":[1,2,3,5,8,13]}\n" ** 48
