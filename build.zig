@@ -2807,6 +2807,36 @@ pub fn build(b: *std.Build) void {
     );
     br_upstream_multiblock_diff_step.dependOn(&run_br_upstream_multiblock_diff.step);
 
+    const br_progressive_copy_bench_exe = b.addExecutable(.{
+        .name = "vort-br-progressive-copy-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/progressive_copy_bench.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_br_progressive_copy_bench = b.addRunArtifact(br_progressive_copy_bench_exe);
+    if (b.args) |args| run_br_progressive_copy_bench.addArgs(args);
+    const br_progressive_copy_bench_step = b.step(
+        "run-br-progressive-copy-bench",
+        "Measure caller-owned byte-progressive Brotli copy decoding",
+    );
+    br_progressive_copy_bench_step.dependOn(&run_br_progressive_copy_bench.step);
+    const run_br_progressive_copy_bench_csv = b.addRunArtifact(br_progressive_copy_bench_exe);
+    run_br_progressive_copy_bench_csv.addArg("100");
+    const br_progressive_copy_bench_gate = b.addSystemCommand(&.{
+        "python3", "tools/br/progressive_copy_bench_gate.py", "--csv",
+    });
+    br_progressive_copy_bench_gate.addFileArg(run_br_progressive_copy_bench_csv.captureStdOut(.{}));
+    const br_progressive_copy_bench_gate_step = b.step(
+        "run-br-progressive-copy-bench-gate",
+        "Validate caller-owned byte-progressive Brotli copy throughput",
+    );
+    br_progressive_copy_bench_gate_step.dependOn(&br_progressive_copy_bench_gate.step);
+
     const zstd_reference_bench_exe = b.addExecutable(.{
         .name = "vort-zstd-reference-bench",
         .root_module = b.createModule(.{
@@ -3840,6 +3870,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&br_stored_corpus_exe.step);
     check_step.dependOn(&br_static_dictionary_report_exe.step);
     check_step.dependOn(&br_upstream_multiblock_diff_exe.step);
+    check_step.dependOn(&br_progressive_copy_bench_exe.step);
     check_step.dependOn(&zstd_native_frame_probe_exe.step);
     check_step.dependOn(&zstd_native_dictionary_probe_exe.step);
     check_step.dependOn(&lz4_native_dictionary_probe_exe.step);
@@ -3873,6 +3904,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(br_planned_node_diff_step);
     ci_smoke_step.dependOn(br_planned_chunks_bench_gate_step);
     ci_smoke_step.dependOn(br_upstream_multiblock_diff_step);
+    ci_smoke_step.dependOn(br_progressive_copy_bench_gate_step);
     ci_smoke_step.dependOn(br_static_dictionary_report_step);
     ci_smoke_step.dependOn(br_static_dictionary_report_dashboard_step);
     ci_smoke_step.dependOn(br_static_dictionary_report_smoke_step);

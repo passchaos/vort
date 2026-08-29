@@ -290,10 +290,12 @@ pub fn Decoder(comptime Codec: type) type {
                     try self.beginCopy();
                 },
                 .copy => {
+                    var source = (self.total_output - self.copy_distance) % self.history.len;
                     while (self.pending_copy != 0 and output_written < output.len) {
-                        const source = self.total_output - self.copy_distance;
-                        const value = self.history[source % self.history.len];
+                        const value = self.history[source];
                         self.emit(output, &output_written, value);
+                        source += 1;
+                        if (source == self.history.len) source = 0;
                         self.pending_copy -= 1;
                     }
                     if (self.pending_copy != 0) return result(input_read, output_written, .need_output);

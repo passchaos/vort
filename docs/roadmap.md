@@ -8137,3 +8137,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   binary, repetitive, and clustered data. Together with the flushed and
   metadata families, the gate now reports 15 matrix streams and 840 distinct
   input/output chunk combinations in addition to its 99 primary cases.
+  The byte-progressive copy decoder now computes the ring source once per
+  resumed copy span and advances it with a conditional wrap, instead of
+  performing an integer remainder for every copied byte. A dedicated 64 KiB
+  overlapping-copy benchmark and schema gate keep the hot path observable. In
+  twenty alternating ReleaseFast CPU-8 pairs at 500 decodes, the median moved
+  from 431.5 ms to 325.2 ms (`1.33x`), with 20/20 candidate wins and identical
+  output checksums. A broader dual-cursor design was rejected after regressing
+  the same benchmark by about 2.8%.
