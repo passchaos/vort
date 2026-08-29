@@ -9,6 +9,8 @@ pub const default_window_len: usize = 32 * 1024;
 pub const max_window_len: usize = std.math.maxInt(u16);
 const hash_head_table_size: usize = 1 << 15;
 const hash_head_init_words: usize = hash_head_table_size / 64;
+const tiny_hash_head_table_size: usize = 4096;
+const tiny_hash_head_init_words: usize = tiny_hash_head_table_size / 64;
 const HashAnchor = enum { three, four };
 // Below this size the full predecessor table is modest and avoids changing
 // allocator reuse behavior for short one-shot streams. Large image-style
@@ -66,8 +68,8 @@ pub const TinyGreedyScratch = struct {
     // Only positions with a complete 3-byte hash anchor are stored. At the
     // 32 KiB input limit the largest stored position is 32765, so signed 16-bit
     // entries preserve the `-1` sentinel and every reachable predecessor.
-    head: [4096]i16 = undefined,
-    head_initialized: [hash_head_init_words]u64 = @splat(0),
+    head: [tiny_hash_head_table_size]i16 = undefined,
+    head_initialized: [tiny_hash_head_init_words]u64 = @splat(0),
     prev: std.ArrayList(i16) = .empty,
 
     pub fn retainedCapacity(self: *const TinyGreedyScratch) usize {
@@ -1290,10 +1292,7 @@ pub fn hashGreedyPlanAutoTinyScratchReuse(tokens: *std.ArrayList(Token), scratch
     if (input.len > 32 * 1024) return error.InvalidBlockPlan;
     tokens.clearRetainingCapacity();
     try scratch.prev.resize(allocator, input.len);
-    // Only the first 4K buckets are addressable by this tiny table. Reusing
-    // the shared lazy-head storage type keeps one parser body without paying
-    // to clear its unused 28K-bucket suffix.
-    @memset(scratch.head_initialized[0 .. scratch.head.len / 64], 0);
+    @memset(&scratch.head_initialized, 0);
     return switch (anchor) {
         .three => hashGreedyPlanWithTablesReuse(tokens, allocator, input, options, &scratch.head, scratch.prev.items, true, &scratch.head_initialized, .three),
         .four => hashGreedyPlanWithTablesReuse(tokens, allocator, input, options, &scratch.head, scratch.prev.items, true, &scratch.head_initialized, .four),
@@ -1308,7 +1307,7 @@ fn hashGreedyPlanWithTablesReuse(
     head: anytype,
     prev: anytype,
     comptime lazy_head: bool,
-    initialized: HashHeadInit(lazy_head),
+    initialized: HashHeadInit(lazy_head, @TypeOf(head)),
     comptime anchor: HashAnchor,
 ) !PlanStats {
     var stats = PlanStats{};
@@ -1352,8 +1351,8 @@ fn hashGreedyPlanTinyAllocWithAnchor(
         // while lazy initialization avoids clearing the full head table. Keep
         // the four-byte Zstd path unchanged: its primary blocks were neutral
         // to slightly slower with the extra bitmap checks.
-        var head: [4096]i16 = undefined;
-        var initialized: [hash_head_init_words]u64 = @splat(0);
+        var head: [tiny_hash_head_table_size]i16 = undefined;
+        var initialized: [tiny_hash_head_init_words]u64 = @splat(0);
         var prev_stack: [32 * 1024]i16 = undefined;
         return hashGreedyPlanWithTables(
             allocator,
@@ -1394,14 +1393,21 @@ fn hashPrevIndex(position: usize, prev: anytype, comptime ring: bool) usize {
     return if (ring) position & (prev.len - 1) else position;
 }
 
-fn HashHeadInit(comptime lazy_head: bool) type {
+fn HashHeadInit(comptime lazy_head: bool, comptime Head: type) type {
     // Keep this mode as an explicit comptime parameter on the hot parser
     // rather than wrapping entries/state in a generic object. Both designs are
     // semantically equivalent, but the wrapper increased register pressure and
     // regressed the measured RGB/RGBA adaptive paths by about 2.5%. The direct
     // form still shares one parser state machine and compiles the full-clear
     // reference path without any bitmap branches.
-    return if (lazy_head) *[hash_head_init_words]u64 else void;
+    if (!lazy_head) return void;
+    const pointer = @typeInfo(Head).pointer;
+    const head_len = switch (pointer.size) {
+        .one => @typeInfo(pointer.child).array.len,
+        .slice => hash_head_table_size,
+        else => unreachable,
+    };
+    return *[head_len / 64]u64;
 }
 
 fn hashGreedyPlanWithTables(
@@ -1412,7 +1418,7 @@ fn hashGreedyPlanWithTables(
     prev: anytype,
     comptime ring: bool,
     comptime lazy_head: bool,
-    initialized: HashHeadInit(lazy_head),
+    initialized: HashHeadInit(lazy_head, @TypeOf(head)),
     comptime anchor: HashAnchor,
 ) !GreedyPlan {
     // The heap-backed and stack-backed hash parsers share exactly the same
@@ -1524,7 +1530,7 @@ fn findBestHashMatchWithLayout(
     prev: anytype,
     comptime ring: bool,
     comptime lazy_head: bool,
-    initialized: HashHeadInit(lazy_head),
+    initialized: HashHeadInit(lazy_head, @TypeOf(head)),
     comptime anchor: HashAnchor,
 ) MatchCandidate {
     return findBestHashMatchWithLayoutAndHash(
@@ -1548,7 +1554,7 @@ fn findBestHashMatchWithLayoutAndHash(
     prev: anytype,
     comptime ring: bool,
     comptime lazy_head: bool,
-    initialized: HashHeadInit(lazy_head),
+    initialized: HashHeadInit(lazy_head, @TypeOf(head)),
     comptime anchor: HashAnchor,
 ) HashMatchSearch {
     const hash = hashAtInput(input, pos, head.len, anchor) orelse return .{};
@@ -1744,7 +1750,7 @@ fn hashHeadGet(
     head: anytype,
     hash: usize,
     comptime lazy_head: bool,
-    initialized: HashHeadInit(lazy_head),
+    initialized: HashHeadInit(lazy_head, @TypeOf(head)),
 ) @TypeOf(head[0]) {
     if (lazy_head) {
         const mask = @as(u64, 1) << @intCast(hash & 63);
@@ -1760,7 +1766,7 @@ fn insertHashWithLayout(
     prev: anytype,
     comptime ring: bool,
     comptime lazy_head: bool,
-    initialized: HashHeadInit(lazy_head),
+    initialized: HashHeadInit(lazy_head, @TypeOf(head)),
     comptime anchor: HashAnchor,
 ) void {
     const h = hashAtInput(input, pos, head.len, anchor) orelse return;
@@ -1782,7 +1788,7 @@ fn insertKnownHashWithLayout(
     prev: anytype,
     comptime ring: bool,
     comptime lazy_head: bool,
-    initialized: HashHeadInit(lazy_head),
+    initialized: HashHeadInit(lazy_head, @TypeOf(head)),
 ) void {
     if (lazy_head) {
         const mask = @as(u64, 1) << @intCast(h & 63);
@@ -2242,6 +2248,7 @@ test "reusable tiny hash planner preserves tokens and capacity" {
 
 test "reusable tiny hash scratch preserves tokens across inputs" {
     try std.testing.expectEqual(@as(usize, 8 * 1024), @sizeOf(@FieldType(TinyGreedyScratch, "head")));
+    try std.testing.expectEqual(@as(usize, tiny_hash_head_table_size / 8), @sizeOf(@FieldType(TinyGreedyScratch, "head_initialized")));
     const options = GreedyOptions{ .window_len = 32 * 1024, .max_chain = 64, .nice_len = 64, .max_candidates = 8 };
     const inputs = [_][]const u8{
         "abcabcXabcabcXabcabcX",

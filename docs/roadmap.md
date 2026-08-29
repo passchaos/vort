@@ -7782,6 +7782,17 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   preserve checksums and improve full planned JSON/source/log medians by about
   3.1%/3.5%/3.6% (14/16 wins for each); the seven-row libbrotli encode gate and
   99-case upstream differential remain green.
+  The shared one-shot tiny hash parser now sizes its lazy-head initialization
+  bitmap to the actual 4K bucket table instead of zeroing the generic 32K-table
+  bitmap. Reusable scratch uses the same exact 64-word shape, reducing the
+  per-plan clear from 4096 bytes to 512 bytes without changing head or
+  predecessor indexing. Sixteen alternating ReleaseFast CPU-8 stage pairs at
+  20,000 encodes preserve checksums and improve isolated parser medians by
+  about 1.71x/1.55x/1.59x for JSON/source/log; full planned encoding improves
+  about 14.8%/7.1%/11.8% (16/16, 15/16, and 15/16 wins). Tiny-parser token/stat
+  oracles, the DEFLATE incremental gate, the 90-row native Zstd stage gate, the
+  nine-row libzstd encode gate, the seven-row libbrotli encode gate, and the
+  99-case Brotli differential remain green.
   Brotli complex-prefix decoding now records the ascending active-symbol list
   during its mandatory validation pass and hands it to a trusted sparse
   canonical decoder builder. This avoids rescanning all 256/520/704 code-length
