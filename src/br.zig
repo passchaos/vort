@@ -1017,10 +1017,12 @@ const max_literal_block_types = 32;
 // declared slots, so ordinary streams do not pay per-tree setup cost.
 const max_literal_context_trees = 256;
 const max_command_block_types = 32;
-// Real libbrotli quality-8/9 source frames use 33 distance block types and
-// context trees. Keep a bounded 64-entry tier rather than the format maximum.
-const max_distance_block_types = 64;
-const max_distance_context_trees = 64;
+// RFC 7932 encodes block-type and context-tree counts with a bounded 8-bit
+// varlen code. Real mixed-source libbrotli streams can exceed the former
+// 64-entry implementation tier (68 distance types in the retained corpus), so
+// keep the complete wire range rather than rejecting otherwise valid input.
+const max_distance_block_types = 256;
+const max_distance_context_trees = 256;
 const initial_last_distances = [_]usize{ 16, 15, 11, 4 };
 const planner_max_backward_distance = (@as(usize, 1) << default_window_bits) - 16;
 const SummaryError = Error || error{SummaryHistoryExhausted};

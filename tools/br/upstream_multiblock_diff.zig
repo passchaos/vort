@@ -65,6 +65,30 @@ pub fn main(init: std.process.Init) !void {
     const large_source = try std.Io.Dir.cwd().readFileAlloc(init.io, "src/br.zig", init.gpa, .limited(2 * 1024 * 1024));
     defer init.gpa.free(large_source);
     const large_source_chunks = [_][]const u8{ large_source[0 .. large_source.len / 4], large_source[large_source.len / 4 .. large_source.len / 2], large_source[large_source.len / 2 .. 3 * large_source.len / 4], large_source[3 * large_source.len / 4 ..] };
+    // Build a deterministic heterogeneous source from repository-owned files.
+    // Unlike the specialized clustering fixtures below, this mixes unrelated
+    // codec code, public API declarations, build graph, and prose in one input.
+    // libbrotli quality 8 uses more than the old 64-entry distance type/tree
+    // tier here, pinning that compatibility boundary without relying on an
+    // optional neighboring checkout.
+    const diverse_paths = [_][]const u8{
+        "src/br.zig",
+        "src/zstd.zig",
+        "src/deflate.zig",
+        "src/root.zig",
+        "build.zig",
+        "docs/roadmap.md",
+        "README.md",
+    };
+    var diverse_source_builder: std.ArrayList(u8) = .empty;
+    defer diverse_source_builder.deinit(init.gpa);
+    for (diverse_paths) |path| {
+        const part = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(2 * 1024 * 1024));
+        defer init.gpa.free(part);
+        try diverse_source_builder.appendSlice(init.gpa, part);
+        try diverse_source_builder.appendSlice(init.gpa, "\n/* VORT BROTLI CORPUS BOUNDARY */\n");
+    }
+    const diverse_source = diverse_source_builder.items;
     // A single large source meta-block makes libbrotli's higher-quality
     // clustering exercise more than 32 literal trees. Keep this separate from
     // the flushed case above: flush boundaries intentionally simplify each
@@ -259,6 +283,18 @@ pub fn main(init: std.process.Init) !void {
         progress_matrix_streams += 1;
         one_shot_cases += 1;
     }
+    const diverse_encoded = try reference.encodeWithOptionsAlloc(init.gpa, diverse_source, .{
+        .quality = 8,
+        .mode = 0,
+        .lgwin = 20,
+    });
+    defer init.gpa.free(diverse_encoded);
+    const diverse_summary = try vort.brSummarizeStreamAlloc(init.gpa, diverse_encoded);
+    if (diverse_summary.max_distance_block_types <= 64 or
+        diverse_summary.max_distance_context_trees <= 64)
+        return error.ReferenceEncodeFailed;
+    try decodeProgressChunks(init.gpa, diverse_encoded, diverse_source, 20, 17, 31);
+    one_shot_cases += 1;
     if (caller_history_summaries != 8) return error.ReferenceEncodeFailed;
 
     if (external_cluster_source) |source| {

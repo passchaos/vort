@@ -8157,6 +8157,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   from 431.5 ms to 325.2 ms (`1.33x`), with 20/20 candidate wins and identical
   output checksums. A broader dual-cursor design was rejected after regressing
   the same benchmark by about 2.8%.
+  Expanded the byte-progressive Brotli decoder's distance block-type and
+  context-tree storage from a 64-entry implementation tier to the complete
+  256-entry RFC count range. A repository-owned heterogeneous 5 MiB source
+  corpus makes libbrotli 1.1 quality 8 emit 68 distance types/trees, and the
+  upstream differential now decodes that real stream through 17-byte input and
+  31-byte output chunks. This closes the first incompatibility found by a
+  broader local-source audit while keeping the entropy header bounded and
+  caller-owned history explicit.
   The copy loop now also keeps a local destination cursor while draining each
   output span, removing the remaining per-byte history-write remainder without
   changing literal, stored, or dictionary emission. Twenty alternating
