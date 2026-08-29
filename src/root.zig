@@ -218,6 +218,10 @@ pub const brSummarizeStream = br.summarizeStream;
 pub const brSummarizeStreamLimited = br.summarizeStreamLimited;
 pub const brSummarizeStreamWithDiagnostics = br.summarizeStreamWithDiagnostics;
 pub const brSummarizeStreamLimitedWithDiagnostics = br.summarizeStreamLimitedWithDiagnostics;
+pub const brSummarizeStreamWithHistory = br.summarizeStreamWithHistory;
+pub const brSummarizeStreamLimitedWithHistory = br.summarizeStreamLimitedWithHistory;
+pub const brSummarizeStreamWithHistoryAndDiagnostics = br.summarizeStreamWithHistoryAndDiagnostics;
+pub const brSummarizeStreamLimitedWithHistoryAndDiagnostics = br.summarizeStreamLimitedWithHistoryAndDiagnostics;
 pub const brSummarizeStreamAlloc = br.summarizeStreamAlloc;
 pub const brSummarizeStreamAllocLimited = br.summarizeStreamAllocLimited;
 pub const brSummarizeStreamAllocWithDiagnostics = br.summarizeStreamAllocWithDiagnostics;
@@ -240,6 +244,10 @@ pub const brSummarizeStreamChunks = br.summarizeStreamChunks;
 pub const brSummarizeStreamChunksLimited = br.summarizeStreamChunksLimited;
 pub const brSummarizeStreamChunksWithDiagnostics = br.summarizeStreamChunksWithDiagnostics;
 pub const brSummarizeStreamChunksLimitedWithDiagnostics = br.summarizeStreamChunksLimitedWithDiagnostics;
+pub const brSummarizeStreamChunksWithHistory = br.summarizeStreamChunksWithHistory;
+pub const brSummarizeStreamChunksLimitedWithHistory = br.summarizeStreamChunksLimitedWithHistory;
+pub const brSummarizeStreamChunksWithHistoryAndDiagnostics = br.summarizeStreamChunksWithHistoryAndDiagnostics;
+pub const brSummarizeStreamChunksLimitedWithHistoryAndDiagnostics = br.summarizeStreamChunksLimitedWithHistoryAndDiagnostics;
 pub const brProbeStreamChunks = br.probeStreamChunks;
 pub const brProbeStreamChunksLimited = br.probeStreamChunksLimited;
 pub const brProbeStreamChunksExactSize = br.probeStreamChunksExactSize;
@@ -2133,6 +2141,10 @@ test "root exports lz4 and zstd codec helpers" {
     _ = brSummarizeStreamLimited;
     _ = brSummarizeStreamWithDiagnostics;
     _ = brSummarizeStreamLimitedWithDiagnostics;
+    _ = brSummarizeStreamWithHistory;
+    _ = brSummarizeStreamLimitedWithHistory;
+    _ = brSummarizeStreamWithHistoryAndDiagnostics;
+    _ = brSummarizeStreamLimitedWithHistoryAndDiagnostics;
     _ = brSummarizeStreamAlloc;
     _ = brSummarizeStreamAllocLimited;
     _ = brSummarizeStreamAllocWithDiagnostics;
@@ -2155,6 +2167,10 @@ test "root exports lz4 and zstd codec helpers" {
     _ = brSummarizeStreamChunksLimited;
     _ = brSummarizeStreamChunksWithDiagnostics;
     _ = brSummarizeStreamChunksLimitedWithDiagnostics;
+    _ = brSummarizeStreamChunksWithHistory;
+    _ = brSummarizeStreamChunksLimitedWithHistory;
+    _ = brSummarizeStreamChunksWithHistoryAndDiagnostics;
+    _ = brSummarizeStreamChunksLimitedWithHistoryAndDiagnostics;
     _ = brProbeStreamChunks;
     _ = brProbeStreamChunksLimited;
     _ = brProbeStreamChunksExactSize;
@@ -3395,6 +3411,33 @@ test "root brotli stream summary diagnostics report failure phases" {
     try std.testing.expectError(error.OutputLimitExceeded, brSummarizeStreamChunksLimitedWithDiagnostics(&chunks, join, payload.len - 1, &diagnostics));
     try std.testing.expectEqual(BrotliStreamSummaryErrorPhase.meta_block_header, diagnostics.phase);
     try std.testing.expectEqual(@as(usize, 0), diagnostics.meta_block_index);
+}
+
+test "root brotli caller-history summaries cover contiguous and chunked streams" {
+    const payload = "caller-owned Brotli summary history" ** 64;
+    const encoded = try brEncodePlannedStreamAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(encoded);
+
+    var history: [64]u8 = undefined;
+    const expected = try brSummarizeStream(encoded);
+    const direct = try brSummarizeStreamWithHistory(encoded, &history);
+    try std.testing.expectEqual(expected, direct);
+    try std.testing.expectEqual(payload.len, (try brSummarizeStreamLimitedWithHistory(encoded, &history, payload.len)).decoded_bytes);
+    try std.testing.expectError(error.OutputLimitExceeded, brSummarizeStreamLimitedWithHistory(encoded, &history, payload.len - 1));
+
+    var diagnostics: BrotliStreamSummaryDiagnostics = undefined;
+    const empty_history = try brSummarizeStreamWithHistoryAndDiagnostics(encoded, &.{}, &diagnostics);
+    try std.testing.expectEqual(expected, empty_history);
+    try std.testing.expectEqual(BrotliStreamSummaryErrorPhase.stream, diagnostics.phase);
+
+    const chunks = [_][]const u8{ encoded[0..1], encoded[1 .. encoded.len - 1], encoded[encoded.len - 1 ..] };
+    const joined = try std.testing.allocator.alloc(u8, encoded.len);
+    defer std.testing.allocator.free(joined);
+    const chunked = try brSummarizeStreamChunksWithHistory(&chunks, joined, &history);
+    try std.testing.expectEqual(expected, chunked);
+    try std.testing.expectEqual(payload.len, (try brSummarizeStreamChunksLimitedWithHistory(&chunks, joined, &history, payload.len)).decoded_bytes);
+    try std.testing.expectError(error.OutputLimitExceeded, brSummarizeStreamChunksLimitedWithHistoryAndDiagnostics(&chunks, joined, &history, payload.len - 1, &diagnostics));
+    try std.testing.expectEqual(BrotliStreamSummaryErrorPhase.meta_block_header, diagnostics.phase);
 }
 
 test "root brotli stream probe returns non-throwing support results" {

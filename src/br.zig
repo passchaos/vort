@@ -1053,6 +1053,10 @@ const LiteralHistory = struct {
         self.previous[0] = self.previous[1];
         self.previous[1] = value;
         const bytes = self.storage();
+        if (bytes.len == 0) {
+            self.known_suffix_len = @min(2, self.known_suffix_len + 1);
+            return;
+        }
         if (self.tail_len < bytes.len) {
             bytes[(self.tail_start + self.tail_len) % bytes.len] = value;
             self.tail_len += 1;
@@ -1076,7 +1080,7 @@ const LiteralHistory = struct {
         }
 
         const ring = self.storage();
-        std.debug.assert(ring.len != 0);
+        if (ring.len == 0) return;
         if (values.len >= ring.len) {
             // The newest complete window is already contiguous in `values`;
             // replacing the ring avoids one modulo operation per stored byte.
@@ -2790,6 +2794,30 @@ pub fn summarizeStreamLimitedWithDiagnostics(stream: []const u8, max_output_len:
     };
 }
 
+/// Allocation-free summary with caller-owned Brotli history. The scratch need
+/// not span the declared window when the stream never references farther back;
+/// if a context-dependent literal does require discarded history, the public
+/// error remains `UnsupportedBrotliFeature` just like the fixed-scratch helper.
+pub fn summarizeStreamWithHistory(stream: []const u8, history: []u8) Error!StreamSummary {
+    return summarizeStreamLimitedWithHistory(stream, history, std.math.maxInt(usize));
+}
+
+pub fn summarizeStreamLimitedWithHistory(stream: []const u8, history: []u8, max_output_len: usize) Error!StreamSummary {
+    var diagnostics: StreamSummaryDiagnostics = .{};
+    return summarizeStreamLimitedWithHistoryAndDiagnostics(stream, history, max_output_len, &diagnostics);
+}
+
+pub fn summarizeStreamWithHistoryAndDiagnostics(stream: []const u8, history: []u8, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    return summarizeStreamLimitedWithHistoryAndDiagnostics(stream, history, std.math.maxInt(usize), diagnostics);
+}
+
+pub fn summarizeStreamLimitedWithHistoryAndDiagnostics(stream: []const u8, history: []u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    return summarizeStreamLimitedWithDiagnosticsAndHistory(stream, max_output_len, diagnostics, history) catch |err| switch (err) {
+        error.SummaryHistoryExhausted => error.UnsupportedBrotliFeature,
+        else => |public_err| public_err,
+    };
+}
+
 /// Summarize a Brotli stream while allocating enough history for its declared
 /// RFC window when necessary. Streams covered by Vort's fixed 65,520-byte
 /// scratch do not allocate; larger history is allocated only after that fast
@@ -3040,6 +3068,27 @@ pub fn summarizeStreamChunksLimitedWithDiagnostics(chunks: []const []const u8, c
         return err;
     };
     return try summarizeStreamLimitedWithDiagnostics(joined, max_output_len, diagnostics);
+}
+
+pub fn summarizeStreamChunksWithHistory(chunks: []const []const u8, compressed_scratch: []u8, history: []u8) Error!StreamSummary {
+    return summarizeStreamChunksLimitedWithHistory(chunks, compressed_scratch, history, std.math.maxInt(usize));
+}
+
+pub fn summarizeStreamChunksLimitedWithHistory(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, max_output_len: usize) Error!StreamSummary {
+    var diagnostics: StreamSummaryDiagnostics = .{};
+    return summarizeStreamChunksLimitedWithHistoryAndDiagnostics(chunks, compressed_scratch, history, max_output_len, &diagnostics);
+}
+
+pub fn summarizeStreamChunksWithHistoryAndDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    return summarizeStreamChunksLimitedWithHistoryAndDiagnostics(chunks, compressed_scratch, history, std.math.maxInt(usize), diagnostics);
+}
+
+pub fn summarizeStreamChunksLimitedWithHistoryAndDiagnostics(chunks: []const []const u8, compressed_scratch: []u8, history: []u8, max_output_len: usize, diagnostics: *StreamSummaryDiagnostics) Error!StreamSummary {
+    const joined = joinChunks(chunks, compressed_scratch) catch |err| {
+        diagnostics.* = .{};
+        return err;
+    };
+    return try summarizeStreamLimitedWithHistoryAndDiagnostics(joined, history, max_output_len, diagnostics);
 }
 
 pub fn probeStream(stream: []const u8) StreamProbeResult {
@@ -9106,6 +9155,16 @@ test "br minimal compressed stream keeps literal context after distance-five-thi
     const summary = try summarizeStream(encoded.items);
     try std.testing.expectEqual(@as(usize, expected.len), summary.decoded_bytes);
     try std.testing.expect(summary.uses_compressed_meta_blocks);
+    var exact_history: [513]u8 = undefined;
+    try std.testing.expectEqual(summary, try summarizeStreamWithHistory(encoded.items, &exact_history));
+    var short_history: [512]u8 = undefined;
+    var diagnostics: StreamSummaryDiagnostics = undefined;
+    try std.testing.expectError(error.UnsupportedBrotliFeature, summarizeStreamWithHistoryAndDiagnostics(encoded.items, &short_history, &diagnostics));
+    try std.testing.expectEqual(StreamSummaryErrorPhase.compressed_meta_block, diagnostics.phase);
+    const chunks = [_][]const u8{ encoded.items[0..1], encoded.items[1 .. encoded.items.len - 1], encoded.items[encoded.items.len - 1 ..] };
+    const compressed_scratch = try std.testing.allocator.alloc(u8, encoded.items.len);
+    defer std.testing.allocator.free(compressed_scratch);
+    try std.testing.expectEqual(summary, try summarizeStreamChunksWithHistory(&chunks, compressed_scratch, &exact_history));
     try std.testing.expectError(error.OutputLimitExceeded, decodedStreamSizeLimited(encoded.items, expected.len - 1));
     var into: [expected.len]u8 = undefined;
     try std.testing.expectEqual(@as(usize, expected.len), try decodeStreamInto(encoded.items, &into));

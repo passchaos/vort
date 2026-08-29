@@ -15,7 +15,7 @@ const Case = struct {
     ndirect: ?u32 = null,
     min_compressed_blocks: ?usize = null,
     min_stored_blocks: usize = 0,
-    allow_summary_unsupported: bool = false,
+    retry_summary_with_caller_history: bool = false,
     min_literal_context_trees: usize = 0,
     min_distance_block_types: usize = 0,
     min_distance_context_trees: usize = 0,
@@ -138,10 +138,10 @@ pub fn main(init: std.process.Init) !void {
         .{ .name = "window-sweep", .chunks = &pattern_chunks, .expected = first_pattern ++ second_pattern ++ third_pattern, .qualities = &compact_qualities, .windows = &window_sweep },
         .{ .name = "history-wrap", .chunks = &long_text_chunks, .expected = long_text, .qualities = &compact_qualities },
         .{ .name = "large-source", .chunks = &large_source_chunks, .expected = large_source, .qualities = &compact_qualities, .windows = &.{20}, .lgblock = 18 },
-        .{ .name = "large-source-clustered", .chunks = &clustered_source_chunks, .expected = clustered_source, .qualities = &clustered_qualities, .windows = &.{20}, .lgblock = 16, .min_compressed_blocks = 1, .allow_summary_unsupported = true, .min_literal_context_trees = 39 },
-        .{ .name = "large-source-mixed-clustered", .chunks = &mixed_clustered_source_chunks, .expected = mixed_clustered_source, .qualities = &mixed_clustered_qualities, .windows = &.{20}, .lgblock = 16, .min_compressed_blocks = 1, .allow_summary_unsupported = true, .min_literal_context_trees = 128 },
-        .{ .name = "large-source-distance-clustered", .chunks = &distance_clustered_chunks, .expected = distance_clustered_source, .qualities = &distance_clustered_qualities, .windows = &.{20}, .lgblock = 16, .min_compressed_blocks = 1, .allow_summary_unsupported = true, .min_distance_block_types = 33, .min_distance_context_trees = 33 },
-        .{ .name = "large-source-quality-eleven", .chunks = &large_source_chunks, .expected = large_source, .qualities = &quality_eleven, .windows = &.{ 18, 20, 22, 24 }, .lgblock = 18, .allow_summary_unsupported = true },
+        .{ .name = "large-source-clustered", .chunks = &clustered_source_chunks, .expected = clustered_source, .qualities = &clustered_qualities, .windows = &.{20}, .lgblock = 16, .min_compressed_blocks = 1, .retry_summary_with_caller_history = true, .min_literal_context_trees = 39 },
+        .{ .name = "large-source-mixed-clustered", .chunks = &mixed_clustered_source_chunks, .expected = mixed_clustered_source, .qualities = &mixed_clustered_qualities, .windows = &.{20}, .lgblock = 16, .min_compressed_blocks = 1, .retry_summary_with_caller_history = true, .min_literal_context_trees = 128 },
+        .{ .name = "large-source-distance-clustered", .chunks = &distance_clustered_chunks, .expected = distance_clustered_source, .qualities = &distance_clustered_qualities, .windows = &.{20}, .lgblock = 16, .min_compressed_blocks = 1, .retry_summary_with_caller_history = true, .min_distance_block_types = 33, .min_distance_context_trees = 33 },
+        .{ .name = "large-source-quality-eleven", .chunks = &large_source_chunks, .expected = large_source, .qualities = &quality_eleven, .windows = &.{ 18, 20, 22, 24 }, .lgblock = 18, .retry_summary_with_caller_history = true },
         .{ .name = "far-history", .chunks = &far_history_chunks, .expected = far_history_expected, .qualities = &compact_qualities, .windows = &.{17}, .min_compressed_blocks = 1, .min_stored_blocks = 2 },
         .{ .name = "compressed-stored-compressed", .chunks = &transition_chunks, .expected = text ++ random[0..2048] ++ text, .qualities = &context_qualities, .min_compressed_blocks = 2, .min_stored_blocks = 1 },
         .{ .name = "tiny-flushes", .chunks = &tiny_chunks, .expected = tiny_expected, .qualities = &context_qualities, .lgblock = 14, .min_compressed_blocks = 0 },
@@ -149,7 +149,7 @@ pub fn main(init: std.process.Init) !void {
     };
 
     var cases_run: usize = 0;
-    var summaries_unsupported: usize = 0;
+    var caller_history_summaries: usize = 0;
     for (cases) |case| {
         for (case.qualities) |quality| {
             for (case.modes) |mode| {
@@ -172,28 +172,32 @@ pub fn main(init: std.process.Init) !void {
                         std.debug.print("{s} quality={d} mode={d} lgwin={d}: decode {s} encoded={d} expected={d}\n", .{ case.name, quality, mode, lgwin, @errorName(err), encoded.len, case.expected.len });
                         return err;
                     };
-                    const summary = vort.brSummarizeStream(encoded) catch |err| {
-                        if (case.allow_summary_unsupported and err == error.UnsupportedBrotliFeature) {
-                            const allocated_summary = vort.brSummarizeStreamAlloc(init.gpa, encoded) catch |allocated_err| {
-                                std.debug.print("{s} quality={d} mode={d} lgwin={d}: allocated summary {s}\n", .{ case.name, quality, mode, lgwin, @errorName(allocated_err) });
-                                return allocated_err;
+                    var used_caller_history = false;
+                    const summary = vort.brSummarizeStream(encoded) catch |err| blk: {
+                        if (case.retry_summary_with_caller_history and err == error.UnsupportedBrotliFeature) {
+                            const history_len = @min(case.expected.len, (@as(usize, 1) << @intCast(lgwin)) - 16);
+                            const history = try init.gpa.alloc(u8, history_len);
+                            defer init.gpa.free(history);
+                            used_caller_history = true;
+                            caller_history_summaries += 1;
+                            break :blk vort.brSummarizeStreamWithHistory(encoded, history) catch |history_err| {
+                                std.debug.print("{s} quality={d} mode={d} lgwin={d}: caller-history summary {s}\n", .{ case.name, quality, mode, lgwin, @errorName(history_err) });
+                                return history_err;
                             };
-                            if (allocated_summary.decoded_bytes != case.expected.len) return error.SizeMismatch;
-                            try validateClusterCoverage(case, allocated_summary);
-                            const decoded = try vort.brDecodeStreamAlloc(init.gpa, encoded);
-                            defer init.gpa.free(decoded);
-                            if (!std.mem.eql(u8, decoded, case.expected)) return error.SizeMismatch;
-                            const exact_output = try init.gpa.alloc(u8, case.expected.len);
-                            defer init.gpa.free(exact_output);
-                            const written = try vort.brDecodeStreamIntoExactSize(encoded, exact_output, case.expected.len);
-                            if (written != case.expected.len or !std.mem.eql(u8, exact_output, case.expected)) return error.SizeMismatch;
-                            summaries_unsupported += 1;
-                            cases_run += 1;
-                            continue;
                         }
                         std.debug.print("{s} quality={d} mode={d} lgwin={d}: summary {s} encoded={d} expected={d}\n", .{ case.name, quality, mode, lgwin, @errorName(err), encoded.len, case.expected.len });
                         return err;
                     };
+                    if (summary.decoded_bytes != case.expected.len) return error.SizeMismatch;
+                    if (used_caller_history) {
+                        const decoded = try vort.brDecodeStreamAlloc(init.gpa, encoded);
+                        defer init.gpa.free(decoded);
+                        if (!std.mem.eql(u8, decoded, case.expected)) return error.SizeMismatch;
+                        const exact_output = try init.gpa.alloc(u8, case.expected.len);
+                        defer init.gpa.free(exact_output);
+                        const written = try vort.brDecodeStreamIntoExactSize(encoded, exact_output, case.expected.len);
+                        if (written != case.expected.len or !std.mem.eql(u8, exact_output, case.expected)) return error.SizeMismatch;
+                    }
                     const payload_blocks = summary.compressed_meta_block_count + summary.uncompressed_meta_block_count;
                     try validateClusterCoverage(case, summary);
                     const min_compressed = case.min_compressed_blocks orelse case.chunks.len;
@@ -212,6 +216,7 @@ pub fn main(init: std.process.Init) !void {
             }
         }
     }
+    if (caller_history_summaries != 8) return error.ReferenceEncodeFailed;
 
     if (external_cluster_source) |source| {
         const chunks = [_][]const u8{source};
@@ -264,8 +269,8 @@ pub fn main(init: std.process.Init) !void {
     var stdout_buffer: [256]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &stdout_buffer);
     try stdout.interface.print(
-        "br_upstream_multiblock_diff=ok cases={d} summaries_unsupported={d} reference_version={x}\n",
-        .{ cases_run, summaries_unsupported, reference.version() },
+        "br_upstream_multiblock_diff=ok cases={d} summaries_unsupported=0 caller_history_summaries={d} reference_version={x}\n",
+        .{ cases_run, caller_history_summaries, reference.version() },
     );
     try stdout.interface.flush();
 }

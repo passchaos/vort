@@ -7388,6 +7388,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   after such a copy, preventing one newly decoded literal from incorrectly
   making a two-byte context look valid and turning the limitation into a later
   misleading `CorruptFrame`.
+  Added caller-owned-history summary APIs for contiguous and chunked Brotli
+  input, including output limits and diagnostics. They preserve the fixed
+  allocation-free helper's `UnsupportedBrotliFeature` result when supplied
+  history is genuinely too short, but let integrations provide the declared
+  window without hidden allocation. The upstream multi-meta-block differential
+  now exercises this path for all eight large-window cases that require more
+  than the inline 65,520-byte ring and reports zero unsupported summaries across
+  its 99-case matrix.
   Added byte-progressive metadata handling after compressed blocks. Metadata
   headers and payloads can span arbitrary input chunks, payload bytes are
   skipped without affecting decoded-size accounting, and callers may provide
