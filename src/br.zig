@@ -2448,13 +2448,9 @@ fn encodeDefaultStoredStreamInto(input: []const u8, output: []u8) usize {
     // fields occupy exactly three bytes before byte-aligned payload data.
     std.debug.assert(input.len <= direct_stored_stream_max_input_len);
     std.debug.assert(output.len == input.len + 4);
-    const header: u24 = (@as(u24, @intCast(input.len - 1)) << 4) | (@as(u24, 1) << 20);
-    output[0] = @truncate(header);
-    output[1] = @truncate(header >> 8);
-    output[2] = @truncate(header >> 16);
-    @memcpy(output[3..][0..input.len], input);
-    output[input.len + 3] = 0b11; // ISLAST + ISLASTEMPTY.
-    return input.len + 4;
+    const written = writeDefaultStoredBlockInto(input, output, true);
+    output[written] = 0b11; // ISLAST + ISLASTEMPTY.
+    return written + 1;
 }
 
 pub fn encodeStoredStreamChunksInto(chunks: []const []const u8, output: []u8) Error!usize {
@@ -2464,6 +2460,8 @@ pub fn encodeStoredStreamChunksInto(chunks: []const []const u8, output: []u8) Er
 pub fn encodeStoredStreamChunksWithOptionsInto(chunks: []const []const u8, output: []u8, options: StoredStreamOptions) Error!usize {
     const needed = try encodedStoredStreamChunksBoundWithOptions(chunks, options);
     if (output.len < needed) return error.OutOfMemory;
+    if (options.window_bits == default_window_bits and options.metadata.len == 0 and storedChunksInputLenAtMost(chunks, direct_stored_stream_max_input_len))
+        return encodeDefaultStoredStreamChunksInto(chunks, output[0..needed]);
     var out: std.ArrayList(u8) = .{
         .items = output[0..0],
         .capacity = output.len,
@@ -2472,6 +2470,45 @@ pub fn encodeStoredStreamChunksWithOptionsInto(chunks: []const []const u8, outpu
     try encodeStoredStreamChunksWithOptionsWrite(std.heap.smp_allocator, &writer, chunks, options);
     if (out.items.len != needed) return error.SizeMismatch;
     return out.items.len;
+}
+
+fn storedChunksInputLenAtMost(chunks: []const []const u8, limit: usize) bool {
+    var total: usize = 0;
+    for (chunks) |chunk| {
+        if (chunk.len > limit - total) return false;
+        total += chunk.len;
+    }
+    return true;
+}
+
+fn encodeDefaultStoredStreamChunksInto(chunks: []const []const u8, output: []u8) usize {
+    var output_offset: usize = 0;
+    var first_block = true;
+    for (chunks) |chunk| {
+        if (chunk.len == 0) continue;
+        std.debug.assert(chunk.len <= direct_stored_stream_max_input_len);
+        output_offset += writeDefaultStoredBlockInto(chunk, output[output_offset..], first_block);
+        first_block = false;
+    }
+    if (first_block) {
+        output[0] = 0b110;
+        return 1;
+    }
+    output[output_offset] = 0b11;
+    return output_offset + 1;
+}
+
+fn writeDefaultStoredBlockInto(block: []const u8, output: []u8, first_block: bool) usize {
+    std.debug.assert(block.len != 0 and block.len <= direct_stored_stream_max_input_len);
+    std.debug.assert(output.len >= block.len + 3);
+    const start_bit: u5 = if (first_block) 1 else 0;
+    const header = (@as(u24, @intCast(block.len - 1)) << @intCast(start_bit + 3)) |
+        (@as(u24, 1) << @intCast(start_bit + 19));
+    output[0] = @truncate(header);
+    output[1] = @truncate(header >> 8);
+    output[2] = @truncate(header >> 16);
+    @memcpy(output[3..][0..block.len], block);
+    return block.len + 3;
 }
 
 fn encodeStoredStreamWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8, options: StoredStreamOptions) Error!void {
@@ -7759,6 +7796,43 @@ test "br stored caller output preserves general options path" {
     defer std.testing.allocator.free(output);
     const written = try encodeStoredStreamWithOptionsInto(input, output, metadata_options);
     try std.testing.expectEqualSlices(u8, expected, output[0..written]);
+}
+
+test "br default stored chunked caller output matches append wire" {
+    var input: [direct_stored_stream_max_input_len + 1]u8 = undefined;
+    var state: u32 = 0xd943_72bf;
+    for (&input) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    for ([_]usize{ 0, 1, 39, 512, 4096, direct_stored_stream_max_input_len }) |len| {
+        const split_a = len / 5;
+        const split_b = len * 3 / 5;
+        const chunks = [_][]const u8{
+            input[0..0],
+            input[0..split_a],
+            input[split_a..split_b],
+            input[split_b..len],
+            input[len..len],
+        };
+        var expected: std.ArrayList(u8) = .empty;
+        defer expected.deinit(std.testing.allocator);
+        try encodeStoredStreamChunksAppend(std.testing.allocator, &expected, &chunks);
+        const output = try std.testing.allocator.alloc(u8, try encodedStoredStreamChunksBound(&chunks));
+        defer std.testing.allocator.free(output);
+        const written = try encodeStoredStreamChunksInto(&chunks, output);
+        try std.testing.expectEqualSlices(u8, expected.items, output[0..written]);
+        try std.testing.expectError(error.OutOfMemory, encodeStoredStreamChunksInto(&chunks, output[0 .. output.len - 1]));
+    }
+
+    const over_limit = [_][]const u8{ input[0..direct_stored_stream_max_input_len], input[direct_stored_stream_max_input_len..] };
+    var expected: std.ArrayList(u8) = .empty;
+    defer expected.deinit(std.testing.allocator);
+    try encodeStoredStreamChunksAppend(std.testing.allocator, &expected, &over_limit);
+    const output = try std.testing.allocator.alloc(u8, try encodedStoredStreamChunksBound(&over_limit));
+    defer std.testing.allocator.free(output);
+    const written = try encodeStoredStreamChunksInto(&over_limit, output);
+    try std.testing.expectEqualSlices(u8, expected.items, output[0..written]);
 }
 
 test "br stored allocating paths match independent append writers" {

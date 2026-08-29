@@ -8087,3 +8087,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   1.76x/1.36x/1.60x/1.33x/1.26x, with at least 19/20 wins in every row. The
   stored and root Brotli suites, seven-row planned encode gate, 13-row
   libbrotli reference gate, and 99-case upstream differential remain green.
+  The same direct stored-block writer now covers default-window chunked
+  caller-buffer streams whose combined payload is at most 16 KiB, while
+  preserving one meta-block per non-empty caller chunk and ignoring empty
+  chunks exactly as before. A boundary oracle compares the complete wire with
+  the independent append implementation, including empty interleaves and the
+  16 KiB cutoff; four generated frames also decode byte-for-byte through Node.
+  Twenty alternating ReleaseFast CPU-8 pairs at 20,000 calls improve one-chunk,
+  three-chunk, empty-interleaved, and 32-by-16-byte inputs by about
+  1.68x/1.93x/1.64x/2.36x; a three-chunk 16 KiB stream improves about 8.9%,
+  with 17--20 wins out of 20 and unchanged output checksums.
