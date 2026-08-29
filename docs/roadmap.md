@@ -7995,4 +7995,9 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   the missing-dictionary error path. Seekable encoding now also applies one
   preset dictionary to every independent frame, with direct and dictionary-set
   selection APIs; tests pin per-frame Dictionary_ID metadata and range round
-  trips. Faster indexed lookup remains future work.
+  trips. Repeated range reads can now build a caller-owned cumulative
+  `NativeSeekIndex` once: entry access is O(1), decompressed-offset lookup is
+  O(log n), and indexed decode avoids reparsing the terminal table or scanning
+  from frame zero. The direct/caller-buffer and allocating paths both support
+  dictionary sets and checksum verification; tests cover undersized index
+  storage, empty frames, cross-frame reads, index reuse, and corrupt checksums.

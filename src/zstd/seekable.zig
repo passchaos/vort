@@ -60,6 +60,37 @@ pub const FrameSize = struct {
     checksum: ?u32 = null,
 };
 
+/// Caller-owned cumulative index for repeated seek operations. `entries`
+/// borrows the storage passed to `buildIndex`; `table` continues to borrow the
+/// complete seekable stream.
+pub const Index = struct {
+    table: Table,
+    entries: []const Entry,
+
+    pub fn entry(self: Index, frame_index: u32) Error!Entry {
+        const index = std.math.cast(usize, frame_index) orelse return error.IntegerOverflow;
+        if (index >= self.entries.len) return error.RangeOutOfBounds;
+        return self.entries[index];
+    }
+
+    pub fn frameIndexForDecompressedOffset(self: Index, offset: u64) Error!u32 {
+        if (offset >= self.table.decompressed_size) return error.RangeOutOfBounds;
+        var low: usize = 0;
+        var high = self.entries.len;
+        while (low < high) {
+            const mid = low + (high - low) / 2;
+            const current = self.entries[mid];
+            const end = std.math.add(u64, current.decompressed_offset, current.decompressed_size) catch return error.IntegerOverflow;
+            if (end <= offset)
+                low = mid + 1
+            else
+                high = mid;
+        }
+        if (low >= self.entries.len) return error.RangeOutOfBounds;
+        return @intCast(low);
+    }
+};
+
 pub const Iterator = struct {
     table: Table,
     index: u32 = 0,
@@ -138,6 +169,20 @@ pub fn inspect(stream: []const u8) Error!Table {
 
 pub fn frameIndexForOffset(table: Table, offset: u64) Error!u32 {
     return table.frameIndexForDecompressedOffset(offset);
+}
+
+pub fn buildIndex(table: Table, storage: []Entry) Error!Index {
+    const entry_count = std.math.cast(usize, table.entry_count) orelse return error.IntegerOverflow;
+    if (storage.len < entry_count) return error.OutputTooSmall;
+    var iterator = table.iterator();
+    for (storage[0..entry_count]) |*entry_value|
+        entry_value.* = (try iterator.next()) orelse return error.CorruptFrame;
+    // `Table` is public for cheap by-value use, so defend the indexed API from
+    // a caller-constructed value whose cached totals disagree with its entries.
+    if (iterator.compressed_offset != table.compressed_size or
+        iterator.decompressed_offset != table.decompressed_size or
+        iterator.compressed_offset != table.frame_offset) return error.CorruptFrame;
+    return .{ .table = table, .entries = storage[0..entry_count] };
 }
 
 pub fn encodedTableBound(entry_count: usize, with_checksums: bool) Error!usize {
@@ -256,6 +301,40 @@ test "seek table parser covers checksum and plain entries" {
         try std.testing.expectEqual(@as(u64, 13), (try table.entry(1)).compressed_offset);
         try std.testing.expectError(error.RangeOutOfBounds, table.entry(3));
     }
+}
+
+test "caller-owned seek index skips empty frames and checks storage" {
+    const frame_sizes = [_]FrameSize{
+        .{ .compressed_size = 7, .decompressed_size = 0 },
+        .{ .compressed_size = 8, .decompressed_size = 4 },
+        .{ .compressed_size = 9, .decompressed_size = 0 },
+        .{ .compressed_size = 10, .decompressed_size = 5 },
+        .{ .compressed_size = 11, .decompressed_size = 0 },
+    };
+    var stream: std.ArrayList(u8) = .empty;
+    defer stream.deinit(std.testing.allocator);
+    for (frame_sizes) |frame_size|
+        try stream.appendNTimes(std.testing.allocator, 0xa5, frame_size.compressed_size);
+    try encodeTableAppend(std.testing.allocator, &stream, &frame_sizes, false);
+
+    const table = try inspect(stream.items);
+    var short_storage: [frame_sizes.len - 1]Entry = undefined;
+    try std.testing.expectError(error.OutputTooSmall, buildIndex(table, &short_storage));
+
+    var storage: [frame_sizes.len]Entry = undefined;
+    const index = try buildIndex(table, &storage);
+    try std.testing.expectEqual(@as(usize, frame_sizes.len), index.entries.len);
+    try std.testing.expectEqual(@as(u64, 7), (try index.entry(1)).compressed_offset);
+    try std.testing.expectEqual(@as(u64, 4), (try index.entry(3)).decompressed_offset);
+    try std.testing.expectError(error.RangeOutOfBounds, index.entry(frame_sizes.len));
+
+    // Upper-bound lookup deliberately skips zero-output frames at either side
+    // of an addressable decompressed offset.
+    try std.testing.expectEqual(@as(u32, 1), try index.frameIndexForDecompressedOffset(0));
+    try std.testing.expectEqual(@as(u32, 1), try index.frameIndexForDecompressedOffset(3));
+    try std.testing.expectEqual(@as(u32, 3), try index.frameIndexForDecompressedOffset(4));
+    try std.testing.expectEqual(@as(u32, 3), try index.frameIndexForDecompressedOffset(8));
+    try std.testing.expectError(error.RangeOutOfBounds, index.frameIndexForDecompressedOffset(9));
 }
 
 test "seek table writers round trip and preserve append errors" {
