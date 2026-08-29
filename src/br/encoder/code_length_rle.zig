@@ -313,7 +313,7 @@ test "bounded RLE frequency fusion matches token scan" {
         var lengths: [704]u4 = undefined;
         for (&lengths) |*length| {
             state = state *% 1_664_525 +% 1_013_904_223;
-            length.* = if (state & 3 == 0) 0 else @intCast(1 + (state >> 28));
+            length.* = if (state & 3 == 0) 0 else @intCast(1 + (state >> 28) % 15);
         }
         const stop_index: usize = state % (lengths.len + 1);
         var expected_tokens: [704]Token = undefined;
