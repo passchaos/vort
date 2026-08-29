@@ -1263,10 +1263,11 @@ pub fn encodeStoredStreamAlloc(allocator: std.mem.Allocator, input: []const u8) 
 }
 
 pub fn encodeStoredStreamWithOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: StoredStreamOptions) Error![]u8 {
-    var out: std.ArrayList(u8) = .empty;
-    errdefer out.deinit(allocator);
-    try encodeStoredStreamWithOptionsAppend(allocator, &out, input, options);
-    return out.toOwnedSlice(allocator);
+    const output = try allocator.alloc(u8, try encodedStoredStreamBoundWithOptions(input.len, options));
+    errdefer allocator.free(output);
+    const written = try encodeStoredStreamWithOptionsInto(input, output, options);
+    if (written != output.len) return error.SizeMismatch;
+    return output;
 }
 
 pub fn encodeStoredStreamChunksAlloc(allocator: std.mem.Allocator, chunks: []const []const u8) Error![]u8 {
@@ -1274,10 +1275,11 @@ pub fn encodeStoredStreamChunksAlloc(allocator: std.mem.Allocator, chunks: []con
 }
 
 pub fn encodeStoredStreamChunksWithOptionsAlloc(allocator: std.mem.Allocator, chunks: []const []const u8, options: StoredStreamOptions) Error![]u8 {
-    var out: std.ArrayList(u8) = .empty;
-    errdefer out.deinit(allocator);
-    try encodeStoredStreamChunksWithOptionsAppend(allocator, &out, chunks, options);
-    return out.toOwnedSlice(allocator);
+    const output = try allocator.alloc(u8, try encodedStoredStreamChunksBoundWithOptions(chunks, options));
+    errdefer allocator.free(output);
+    const written = try encodeStoredStreamChunksWithOptionsInto(chunks, output, options);
+    if (written != output.len) return error.SizeMismatch;
+    return output;
 }
 
 pub fn encodeStoredStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8) Error!void {
@@ -7757,6 +7759,43 @@ test "br stored caller output preserves general options path" {
     defer std.testing.allocator.free(output);
     const written = try encodeStoredStreamWithOptionsInto(input, output, metadata_options);
     try std.testing.expectEqualSlices(u8, expected, output[0..written]);
+}
+
+test "br stored allocating paths match independent append writers" {
+    const input = "stored payload with several chunk boundaries" ** 8;
+    const chunks = [_][]const u8{
+        input[0..0],
+        input[0..7],
+        input[7..41],
+        input[41..],
+        input[input.len..],
+    };
+    const options_cases = [_]StoredStreamOptions{
+        .{},
+        .{ .window_bits = 10 },
+        .{ .window_bits = 24 },
+        .{ .metadata = "allocation-oracle" },
+    };
+    for (options_cases) |options| {
+        var contiguous_oracle: std.ArrayList(u8) = .empty;
+        defer contiguous_oracle.deinit(std.testing.allocator);
+        try encodeStoredStreamWithOptionsAppend(std.testing.allocator, &contiguous_oracle, input, options);
+        const contiguous = try encodeStoredStreamWithOptionsAlloc(std.testing.allocator, input, options);
+        defer std.testing.allocator.free(contiguous);
+        try std.testing.expectEqualSlices(u8, contiguous_oracle.items, contiguous);
+
+        var chunked_oracle: std.ArrayList(u8) = .empty;
+        defer chunked_oracle.deinit(std.testing.allocator);
+        try encodeStoredStreamChunksWithOptionsAppend(std.testing.allocator, &chunked_oracle, &chunks, options);
+        const chunked = try encodeStoredStreamChunksWithOptionsAlloc(std.testing.allocator, &chunks, options);
+        defer std.testing.allocator.free(chunked);
+        try std.testing.expectEqualSlices(u8, chunked_oracle.items, chunked);
+    }
+
+    var contiguous_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.OutOfMemory, encodeStoredStreamAlloc(contiguous_failing.allocator(), input));
+    var chunked_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.OutOfMemory, encodeStoredStreamChunksAlloc(chunked_failing.allocator(), &chunks));
 }
 
 test "br stored stream supports all RFC window bits" {

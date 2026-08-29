@@ -8075,3 +8075,15 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   the four-bit WBITS encodings for windows 18--24 correctly; caller-buffer
   tests cover every legal window size and metadata fallback without the former
   spurious `SizeMismatch`.
+  Brotli stored allocating APIs now use their exact encoded-size preflight to
+  allocate once and then call the caller-buffer core, rather than growing an
+  `ArrayList` and potentially remapping it during `toOwnedSlice`. Contiguous
+  and three-chunk output are checked byte-for-byte against the independent
+  append writer for default, alternate-window, and metadata configurations;
+  first-allocation failure is also covered. Twenty alternating ReleaseFast
+  CPU-8 pairs at 20,000 calls preserve observed output checksums. Contiguous
+  0/39/512-byte inputs improve about 2.05x/2.73x/2.41x, with 4/16 KiB improving
+  about 1.43x/1.16x; the corresponding chunked cases improve about
+  1.76x/1.36x/1.60x/1.33x/1.26x, with at least 19/20 wins in every row. The
+  stored and root Brotli suites, seven-row planned encode gate, 13-row
+  libbrotli reference gate, and 99-case upstream differential remain green.
