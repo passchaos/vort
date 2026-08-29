@@ -7268,16 +7268,26 @@ pub fn nativeSeekableRangeScratchLen(table: NativeSeekTable, offset: u64, length
 /// Return the exact scratch requirement using a previously built seek index.
 /// Offset lookup is O(log n), and only intersecting entries are then scanned.
 pub fn nativeSeekableRangeScratchLenWithIndex(index: NativeSeekIndex, offset: u64, length: usize) Error!usize {
-    const range_end = try nativeSeekableRangeEnd(index.table, offset, length);
-    if (length == 0) return 0;
+    return (try prepareNativeSeekableIndexedRange(index, offset, length)).scratch_len;
+}
 
-    const first = try index.frameIndexForDecompressedOffset(offset);
+const NativeSeekableIndexedRange = struct {
+    range_end: u64,
+    first_entry: usize,
+    scratch_len: usize,
+};
+
+fn prepareNativeSeekableIndexedRange(index: NativeSeekIndex, offset: u64, length: usize) Error!NativeSeekableIndexedRange {
+    const range_end = try nativeSeekableRangeEnd(index.table, offset, length);
+    if (length == 0) return .{ .range_end = range_end, .first_entry = 0, .scratch_len = 0 };
+
+    const first = std.math.cast(usize, try index.frameIndexForDecompressedOffset(offset)) orelse return error.IntegerOverflow;
     var needed: usize = 0;
-    for (index.entries[@intCast(first)..]) |entry_value| {
+    for (index.entries[first..]) |entry_value| {
         if (entry_value.decompressed_offset >= range_end) break;
         needed = @max(needed, std.math.cast(usize, entry_value.decompressed_size) orelse return error.IntegerOverflow);
     }
-    return needed;
+    return .{ .range_end = range_end, .first_entry = first, .scratch_len = needed };
 }
 
 fn nativeSeekableRangeEnd(table: NativeSeekTable, offset: u64, length: usize) Error!u64 {
@@ -7332,17 +7342,21 @@ fn decodeNativeSeekableRangeIntoInternal(stream: []const u8, offset: u64, output
 }
 
 fn decodeNativeSeekableRangeIntoWithIndexInternal(index: NativeSeekIndex, offset: u64, output: []u8, frame_scratch: []u8, dictionary_set: ?NativeDictionarySet) Error!usize {
-    const range_end = try nativeSeekableRangeEnd(index.table, offset, output.len);
-    const needed_scratch = try nativeSeekableRangeScratchLenWithIndex(index, offset, output.len);
-    if (frame_scratch.len < needed_scratch) return error.OutputTooSmall;
+    // Preflight range bounds, first-frame lookup, and scratch sizing together.
+    // Repeated one-frame reads otherwise paid for the binary search twice.
+    const range = try prepareNativeSeekableIndexedRange(index, offset, output.len);
+    if (frame_scratch.len < range.scratch_len) return error.OutputTooSmall;
+    return decodeNativeSeekablePreparedRangeInto(index, range, offset, output, frame_scratch, dictionary_set);
+}
+
+fn decodeNativeSeekablePreparedRangeInto(index: NativeSeekIndex, range: NativeSeekableIndexedRange, offset: u64, output: []u8, frame_scratch: []u8, dictionary_set: ?NativeDictionarySet) Error!usize {
     if (output.len == 0) return 0;
 
-    const first = try index.frameIndexForDecompressedOffset(offset);
     var output_offset: usize = 0;
-    for (index.entries[@intCast(first)..]) |entry_value| {
-        if (entry_value.decompressed_offset >= range_end) break;
+    for (index.entries[range.first_entry..]) |entry_value| {
+        if (entry_value.decompressed_offset >= range.range_end) break;
         if (entry_value.decompressed_size == 0) continue;
-        output_offset += try decodeNativeSeekableEntryRange(index.table, entry_value, offset, range_end, output[output_offset..], frame_scratch, dictionary_set);
+        output_offset += try decodeNativeSeekableEntryRange(index.table, entry_value, offset, range.range_end, output[output_offset..], frame_scratch, dictionary_set);
     }
     if (output_offset != output.len) return error.SizeMismatch;
     return output_offset;
@@ -7408,12 +7422,12 @@ fn decodeNativeSeekableRangeAllocInternal(allocator: std.mem.Allocator, stream: 
 }
 
 fn decodeNativeSeekableRangeAllocWithIndexInternal(allocator: std.mem.Allocator, index: NativeSeekIndex, offset: u64, length: usize, dictionary_set: ?NativeDictionarySet) Error![]u8 {
-    const scratch_len = try nativeSeekableRangeScratchLenWithIndex(index, offset, length);
+    const range = try prepareNativeSeekableIndexedRange(index, offset, length);
     const output = try allocator.alloc(u8, length);
     errdefer allocator.free(output);
-    const scratch = try allocator.alloc(u8, scratch_len);
+    const scratch = try allocator.alloc(u8, range.scratch_len);
     defer allocator.free(scratch);
-    _ = try decodeNativeSeekableRangeIntoWithIndexInternal(index, offset, output, scratch, dictionary_set);
+    _ = try decodeNativeSeekablePreparedRangeInto(index, range, offset, output, scratch, dictionary_set);
     return output;
 }
 

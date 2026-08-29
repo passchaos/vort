@@ -8001,3 +8001,10 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   from frame zero. The direct/caller-buffer and allocating paths both support
   dictionary sets and checksum verification; tests cover undersized index
   storage, empty frames, cross-frame reads, index reuse, and corrupt checksums.
+  Indexed decode now also fuses range validation, first-frame lookup, and
+  scratch sizing so one request performs only one binary search; the allocating
+  wrapper reuses that prepared range instead of repeating preflight. A focused
+  16-pair ReleaseFast CPU-8 microbenchmark over 16,384 one-byte frames and
+  65,536 random indexed reads measured a 1.24x median speedup, with 10/16
+  paired wins; the intentionally tiny payload makes this an index-overhead
+  result rather than a general decompression-throughput claim.
