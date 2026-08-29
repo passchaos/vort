@@ -122,6 +122,33 @@ const IncrementalCopyCodec = struct {
     };
     pub const ParsedHeader = struct { header: Header, bits_read: usize };
     pub const Command = struct { insert_len: usize, copy_len: usize, implicit_last_distance: bool };
+    pub const LiteralState = BlockSwitchState(max_literal_block_types);
+    pub const CommandState = BlockSwitchState(max_command_block_types);
+    pub const DistanceState = BlockSwitchState(max_distance_block_types);
+
+    pub fn literalState(header: *const Header) LiteralState {
+        return header.compressed.literal_block;
+    }
+
+    pub fn restoreLiteralState(header: *Header, state: LiteralState) void {
+        header.compressed.literal_block = state;
+    }
+
+    pub fn commandState(header: *const Header) CommandState {
+        return header.compressed.command_block;
+    }
+
+    pub fn restoreCommandState(header: *Header, state: CommandState) void {
+        header.compressed.command_block = state;
+    }
+
+    pub fn distanceState(header: *const Header) DistanceState {
+        return header.compressed.distance_block;
+    }
+
+    pub fn restoreDistanceState(header: *Header, state: DistanceState) void {
+        header.compressed.distance_block = state;
+    }
 
     pub fn parseMetaBlockHeader(prefix: []const u8, decoded_len: usize, final: bool) IncrementalCopyCodec.Error!ParsedHeader {
         var reader = bitstream.BitReader.init(prefix);

@@ -2837,6 +2837,37 @@ pub fn build(b: *std.Build) void {
     );
     br_progressive_copy_bench_gate_step.dependOn(&br_progressive_copy_bench_gate.step);
 
+    const br_progressive_huffman_bench_exe = b.addExecutable(.{
+        .name = "vort-br-progressive-huffman-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/progressive_huffman_bench.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "vort", .module = vort_mod },
+            },
+        }),
+    });
+    const run_br_progressive_huffman_bench = b.addRunArtifact(br_progressive_huffman_bench_exe);
+    if (b.args) |args| run_br_progressive_huffman_bench.addArgs(args);
+    const br_progressive_huffman_bench_step = b.step(
+        "run-br-progressive-huffman-bench",
+        "Measure progressive Brotli command and distance decode workloads",
+    );
+    br_progressive_huffman_bench_step.dependOn(&run_br_progressive_huffman_bench.step);
+    const run_br_progressive_huffman_bench_csv = b.addRunArtifact(br_progressive_huffman_bench_exe);
+    run_br_progressive_huffman_bench_csv.addArgs(&.{ "--iterations", "20" });
+    const br_progressive_huffman_bench_gate = b.addSystemCommand(&.{
+        "python3", "tools/br/progressive_huffman_bench_gate.py", "--csv",
+    });
+    br_progressive_huffman_bench_gate.addFileArg(run_br_progressive_huffman_bench_csv.captureStdOut(.{}));
+    const br_progressive_huffman_bench_gate_step = b.step(
+        "run-br-progressive-huffman-bench-gate",
+        "Validate progressive Brotli command/distance benchmark coverage",
+    );
+    br_progressive_huffman_bench_gate_step.dependOn(&br_progressive_huffman_bench_gate.step);
+
     const zstd_reference_bench_exe = b.addExecutable(.{
         .name = "vort-zstd-reference-bench",
         .root_module = b.createModule(.{
@@ -3871,6 +3902,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&br_static_dictionary_report_exe.step);
     check_step.dependOn(&br_upstream_multiblock_diff_exe.step);
     check_step.dependOn(&br_progressive_copy_bench_exe.step);
+    check_step.dependOn(&br_progressive_huffman_bench_exe.step);
     check_step.dependOn(&zstd_native_frame_probe_exe.step);
     check_step.dependOn(&zstd_native_dictionary_probe_exe.step);
     check_step.dependOn(&lz4_native_dictionary_probe_exe.step);
@@ -3905,6 +3937,7 @@ pub fn build(b: *std.Build) void {
     ci_smoke_step.dependOn(br_planned_chunks_bench_gate_step);
     ci_smoke_step.dependOn(br_upstream_multiblock_diff_step);
     ci_smoke_step.dependOn(br_progressive_copy_bench_gate_step);
+    ci_smoke_step.dependOn(br_progressive_huffman_bench_gate_step);
     ci_smoke_step.dependOn(br_static_dictionary_report_step);
     ci_smoke_step.dependOn(br_static_dictionary_report_dashboard_step);
     ci_smoke_step.dependOn(br_static_dictionary_report_smoke_step);

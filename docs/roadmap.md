@@ -8175,3 +8175,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   twenty-pair ReleaseFast CPU-8 run at 500 decodes records a further 3.4%
   median improvement (paired median `1.029x`, 14/20 wins) with identical
   checksums.
+  Added a dedicated progressive Brotli command/distance benchmark covering
+  structured q4, alternating q5, and a deterministic distance-heavy q8 stream,
+  with schema, throughput, and workload-shape gates. Incremental rollback now
+  snapshots only the mutable literal, command, or distance block-switch state
+  for the active operation instead of copying the complete roughly 290 KiB
+  compressed header before every symbol attempt. On structured q4, sixteen
+  alternating ReleaseFast CPU-8 pairs at 500 decodes improve the median by
+  `22.6x`, with 16/16 wins and identical checksums; the gain removes accidental
+  state-copy overhead rather than changing Huffman semantics.
