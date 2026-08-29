@@ -7804,6 +7804,16 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   10.9%/6.7%/8.3% (16/16, 16/16, and 15/16 wins). The DEFLATE incremental,
   90-row native Zstd stage, nine-row libzstd encode, seven-row libbrotli encode,
   and 99-case Brotli differential gates remain green.
+  Planner wire encoding now caches the command symbol resolved during its
+  mandatory frequency pass for plans of at most 128 commands, avoiding a second
+  pair of insert/copy length classifications and command-table lookup during
+  payload emission. Larger plans keep the previous recomputation path instead
+  of growing stack use with input size; a 128/129-command boundary test covers
+  both paths. Sixteen alternating ReleaseFast CPU-8 stage pairs at 20,000
+  encodes preserve checksums and improve full planned JSON/source/log medians
+  by about 3.8%/5.7%/2.6%, with every pair positive. The bounded-output tests,
+  seven-row libbrotli encode gate, and 99-case upstream differential remain
+  green.
   Brotli complex-prefix decoding now records the ascending active-symbol list
   during its mandatory validation pass and hands it to a trusted sparse
   canonical decoder builder. This avoids rescanning all 256/520/704 code-length

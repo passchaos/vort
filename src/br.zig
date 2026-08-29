@@ -1575,6 +1575,7 @@ const CommandPlanEncodeOptions = struct {
     window_bits: u5 = default_window_bits,
 };
 const min_recent_distance_candidate_count: usize = 64;
+const planned_command_symbol_cache_capacity: usize = 128;
 const LazyWireOptions = struct { try_recent_distances: bool = false };
 
 fn encodePlannedStreamLazyWithWireOptionsAlloc(allocator: std.mem.Allocator, input: []const u8, options: PlannedParserOptions, wire_options: LazyWireOptions) Error![]u8 {
@@ -2196,13 +2197,20 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     var command_alphabet: command_plan.PrefixAlphabet = undefined;
     command_alphabet.len = 0;
     var distance_frequencies: [planned_distance_alphabet_size]u32 = @splat(0);
+    // Frequency collection already resolves every command symbol. Retain the
+    // common small-plan result so payload emission does not repeat both length
+    // classifications and the 24x24 command-table lookup. Large plans keep the
+    // prior recomputation path rather than scaling stack usage with input size.
+    var command_symbols: [planned_command_symbol_cache_capacity]u16 = undefined;
+    const cache_command_symbols = commands.len <= command_symbols.len;
     const frequency_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     var last_distances = initial_last_distances;
-    for (commands) |command| {
+    for (commands, 0..) |command, command_index| {
         const recent_symbol = if (options.use_recent_distances and command.has_copy and command.dictionary_output_len == 0) recentDistanceSymbol(command.distance, &last_distances) else null;
         const use_last_distance = recent_symbol == 0;
         const encoding = commandEntryForLengthsAndDistance(command.insert_len, command.copy_len, use_last_distance) orelse
             commandEntryForLengths(command.insert_len, command.copy_len) orelse return error.InvalidBlockPlan;
+        if (cache_command_symbols) command_symbols[command_index] = encoding.symbol;
         try command_alphabet.recordFrequency(&command_frequencies, encoding.symbol);
         for (input[command.insert_start..][0..command.insert_len], command.insert_start..) |literal, position| {
             try literal_alphabet.recordByteFrequency(&literal_frequencies, &literal_seen, literal);
@@ -2286,10 +2294,13 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     if (io) |active| stats.encoder_ns = elapsedNs(encoder_start.?, active);
     const payload_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     last_distances = initial_last_distances;
-    for (commands) |command| {
+    for (commands, 0..) |command, command_index| {
         const recent_symbol = if (options.use_recent_distances and command.has_copy and command.dictionary_output_len == 0) recentDistanceSymbol(command.distance, &last_distances) else null;
         const use_last_distance = recent_symbol == 0;
-        const encoding = commandEntryForLengthsAndDistance(command.insert_len, command.copy_len, use_last_distance) orelse
+        const encoding = if (cache_command_symbols) blk: {
+            const symbol = command_symbols[command_index];
+            break :blk CommandEncoding{ .symbol = symbol, .command = command_lut.entries[symbol] };
+        } else commandEntryForLengthsAndDistance(command.insert_len, command.copy_len, use_last_distance) orelse
             commandEntryForLengths(command.insert_len, command.copy_len) orelse unreachable;
         if (command_alphabet.len > 1) {
             if (command_alphabet.len <= 4) {
@@ -7943,6 +7954,32 @@ test "br planner-backed encoder emits mixed literal and match commands" {
     try std.testing.expectEqualSlices(u8, payload, decoded);
     try std.testing.expect(encoded.len < payload.len);
     try std.testing.expectError(error.InvalidBlockPlan, encodePlannedStreamAlloc(std.testing.allocator, "all unique"));
+}
+
+test "br planned command symbol cache boundary preserves wire output" {
+    const payload = "abc" ** (planned_command_symbol_cache_capacity + 2);
+    var commands: [planned_command_symbol_cache_capacity + 1]command_plan.Command = undefined;
+    for (&commands, 0..) |*command, i| {
+        command.* = .{
+            .insert_start = if (i == 0) 0 else 3 + i * 3,
+            .insert_len = if (i == 0) 3 else 0,
+            .copy_len = 3,
+            .distance = 3,
+            .has_copy = true,
+        };
+    }
+
+    // The shorter plan uses the cache while the full slice crosses the stack
+    // cap and exercises the recomputation fallback. Both must remain valid.
+    inline for (.{ planned_command_symbol_cache_capacity, planned_command_symbol_cache_capacity + 1 }) |command_count| {
+        const input_len = 3 + command_count * 3;
+        var stats: encoder_stats.PlannedEncodeStats = .{};
+        const encoded = try encodeCommandPlanWithOptionsAlloc(std.testing.allocator, payload[0..input_len], commands[0..command_count], null, &stats, .{});
+        defer std.testing.allocator.free(encoded);
+        const decoded = try decodeStreamAlloc(std.testing.allocator, encoded);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload[0..input_len], decoded);
+    }
 }
 
 test "br planner compression levels select fast and balanced streams" {
