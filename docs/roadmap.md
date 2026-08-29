@@ -8169,3 +8169,9 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   is pinned by tests. A fresh twenty-pair ReleaseFast CPU-8 run at 500 decodes
   improves the focused median by another 19.1% (paired median `1.18x`, 19/20
   wins), again with identical output checksums.
+  Long copy spans now expand the complete caller-output recurrence first and
+  write only the newest history-sized suffix back to the ring, replacing the
+  repeated full-ring round trips from the initial long-span implementation. A
+  twenty-pair ReleaseFast CPU-8 run at 500 decodes records a further 3.4%
+  median improvement (paired median `1.029x`, 14/20 wins) with identical
+  checksums.

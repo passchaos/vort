@@ -472,17 +472,6 @@ pub fn Decoder(comptime Codec: type) type {
         fn copySpan(self: *Self, output: []u8) void {
             std.debug.assert(output.len != 0 and self.copy_distance <= self.history.len);
             if (output.len < 16) return self.copySpanScalar(output);
-            if (output.len > self.history.len) {
-                var offset: usize = 0;
-                while (offset < output.len) {
-                    const n = @min(self.history.len, output.len - offset);
-                    self.copySpan(output[offset..][0..n]);
-                    self.total_output += n;
-                    offset += n;
-                }
-                self.total_output -= output.len;
-                return;
-            }
             const seed_len = @min(output.len, self.copy_distance);
             const source = (self.total_output - self.copy_distance) % self.history.len;
             const first_source_len = @min(seed_len, self.history.len - source);
@@ -500,11 +489,17 @@ pub fn Decoder(comptime Codec: type) type {
                 produced += n;
             }
 
-            const destination = self.total_output % self.history.len;
-            const first_destination_len = @min(output.len, self.history.len - destination);
-            @memcpy(self.history[destination..][0..first_destination_len], output[0..first_destination_len]);
-            if (first_destination_len != output.len)
-                @memcpy(self.history[0 .. output.len - first_destination_len], output[first_destination_len..]);
+            // Only the newest history-sized suffix survives after a long copy.
+            // Commit that suffix once instead of repeatedly round-tripping each
+            // full ring through history while the output already contains the
+            // complete forward-copy recurrence.
+            const retained_len = @min(output.len, self.history.len);
+            const retained = output[output.len - retained_len ..];
+            const destination = (self.total_output + output.len - retained_len) % self.history.len;
+            const first_destination_len = @min(retained.len, self.history.len - destination);
+            @memcpy(self.history[destination..][0..first_destination_len], retained[0..first_destination_len]);
+            if (first_destination_len != retained.len)
+                @memcpy(self.history[0 .. retained.len - first_destination_len], retained[first_destination_len..]);
             self.updatePreviousFromSpan(output);
         }
         fn copySpanScalar(self: *Self, output: []u8) void {
