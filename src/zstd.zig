@@ -4760,6 +4760,13 @@ pub const NativeSkippableFrameHeader = struct {
 pub const NativeSeekTable = seekable.Table;
 pub const NativeSeekTableEntry = seekable.Entry;
 pub const NativeSeekTableIterator = seekable.Iterator;
+pub const NativeSeekTableFrameSize = seekable.FrameSize;
+
+pub const NativeSeekableOptions = struct {
+    frame_size: usize = std.compress.zstd.block_size_max,
+    frame_options: NativeFrameOptions = .{},
+    seek_checksums: bool = true,
+};
 
 pub const NativeStreamSummaryErrorPhase = enum {
     magic,
@@ -7151,6 +7158,58 @@ pub fn inspectNativeSeekTable(stream: []const u8) Error!NativeSeekTable {
 /// Locate the seekable frame that contains an uncompressed byte offset.
 pub fn nativeSeekTableFrameIndexForOffset(table: NativeSeekTable, offset: u64) Error!u32 {
     return seekable.frameIndexForOffset(table, offset);
+}
+
+pub fn encodedNativeSeekTableBound(entry_count: usize, with_checksums: bool) Error!usize {
+    return seekable.encodedTableBound(entry_count, with_checksums);
+}
+
+pub fn encodeNativeSeekTableAlloc(allocator: std.mem.Allocator, entries: []const NativeSeekTableFrameSize, with_checksums: bool) Error![]u8 {
+    return seekable.encodeTableAlloc(allocator, entries, with_checksums);
+}
+
+pub fn encodeNativeSeekTableAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), entries: []const NativeSeekTableFrameSize, with_checksums: bool) Error!void {
+    return seekable.encodeTableAppend(allocator, out, entries, with_checksums);
+}
+
+pub fn encodeNativeSeekTableInto(entries: []const NativeSeekTableFrameSize, with_checksums: bool, output: []u8) Error!usize {
+    return seekable.encodeTableInto(entries, with_checksums, output);
+}
+
+/// Encode independently decompressible native Zstandard frames followed by the
+/// standardized terminal seek table. Per-entry checksums use the low 32 bits of
+/// XXH64 as required by the seekable-format specification and are independent
+/// of each frame's optional content checksum setting.
+pub fn encodeNativeSeekableStreamAlloc(allocator: std.mem.Allocator, input: []const u8, options: NativeSeekableOptions) Error![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(allocator);
+    try encodeNativeSeekableStreamAppend(allocator, &out, input, options);
+    return out.toOwnedSlice(allocator);
+}
+
+pub fn encodeNativeSeekableStreamAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), input: []const u8, options: NativeSeekableOptions) Error!void {
+    if (options.frame_size == 0 or options.frame_size > std.math.maxInt(u32)) return error.InvalidBlockPlan;
+    const frame_count = if (input.len == 0) 1 else std.math.divCeil(usize, input.len, options.frame_size) catch return error.IntegerOverflow;
+    const entries = try allocator.alloc(NativeSeekTableFrameSize, frame_count);
+    defer allocator.free(entries);
+
+    const original_len = out.items.len;
+    errdefer out.shrinkRetainingCapacity(original_len);
+    var encoder = NativeFrameEncoder.init(allocator);
+    defer encoder.deinit();
+    for (entries, 0..) |*entry_value, frame_index| {
+        const start = if (input.len == 0) 0 else frame_index * options.frame_size;
+        const end = if (input.len == 0) 0 else @min(input.len, start + options.frame_size);
+        const chunk = input[start..end];
+        const compressed_start = out.items.len;
+        _ = try encoder.encodeAppend(out, chunk, options.frame_options);
+        entry_value.* = .{
+            .compressed_size = try checkedUsizeToU32(out.items.len - compressed_start),
+            .decompressed_size = try checkedUsizeToU32(chunk.len),
+            .checksum = if (options.seek_checksums) @truncate(std.hash.XxHash64.hash(0, chunk)) else null,
+        };
+    }
+    try encodeNativeSeekTableAppend(allocator, out, entries, options.seek_checksums);
 }
 
 pub fn summarizeNativeStream(frames: []const u8) Error!NativeStreamSummary {
@@ -14324,6 +14383,61 @@ test "zstd skippable frame writer composes with native streams" {
     const decoded = try decodeNativeFrameAlloc(std.testing.allocator, stream.items);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, "firstsecond", decoded);
+}
+
+test "zstd native seekable stream encoder round trips indexed frames" {
+    const payload = "alpha-alpha-alpha-beta-beta-gamma-gamma-delta-delta\n";
+    inline for (.{ false, true }) |with_checksums| {
+        const encoded = try encodeNativeSeekableStreamAlloc(std.testing.allocator, payload, .{
+            .frame_size = 13,
+            .frame_options = .{ .content_checksum = false },
+            .seek_checksums = with_checksums,
+        });
+        defer std.testing.allocator.free(encoded);
+        const table = try inspectNativeSeekTable(encoded);
+        try std.testing.expectEqual(@as(u32, 4), table.entry_count);
+        try std.testing.expectEqual(@as(u64, payload.len), table.decompressed_size);
+        try std.testing.expectEqual(with_checksums, table.has_checksums);
+        try std.testing.expectEqual(@as(u32, 0), try table.frameIndexForDecompressedOffset(0));
+        try std.testing.expectEqual(@as(u32, 1), try table.frameIndexForDecompressedOffset(13));
+        try std.testing.expectEqual(@as(u32, 3), try table.frameIndexForDecompressedOffset(payload.len - 1));
+
+        const decoded = try decodeNativeConcatenatedFrameAlloc(std.testing.allocator, encoded);
+        defer std.testing.allocator.free(decoded);
+        try std.testing.expectEqualSlices(u8, payload, decoded);
+        var entries = table.iterator();
+        var frame_index: usize = 0;
+        while (try entries.next()) |entry_value| : (frame_index += 1) {
+            const expected_start = frame_index * 13;
+            const expected_end = @min(payload.len, expected_start + 13);
+            try std.testing.expectEqual(@as(u32, @intCast(expected_end - expected_start)), entry_value.decompressed_size);
+            if (with_checksums)
+                try std.testing.expectEqual(@as(?u32, @truncate(std.hash.XxHash64.hash(0, payload[expected_start..expected_end]))), entry_value.checksum);
+        }
+    }
+
+    const empty = try encodeNativeSeekableStreamAlloc(std.testing.allocator, "", .{ .seek_checksums = false });
+    defer std.testing.allocator.free(empty);
+    const empty_table = try inspectNativeSeekTable(empty);
+    try std.testing.expectEqual(@as(u32, 1), empty_table.entry_count);
+    try std.testing.expectEqual(@as(u64, 0), empty_table.decompressed_size);
+    const empty_decoded = try decodeNativeConcatenatedFrameAlloc(std.testing.allocator, empty);
+    defer std.testing.allocator.free(empty_decoded);
+    try std.testing.expectEqual(@as(usize, 0), empty_decoded.len);
+
+    var appended: std.ArrayList(u8) = .empty;
+    defer appended.deinit(std.testing.allocator);
+    try appended.appendSlice(std.testing.allocator, "prefix:");
+    try encodeNativeSeekableStreamAppend(std.testing.allocator, &appended, payload, .{
+        .frame_size = 13,
+        .frame_options = .{ .content_checksum = false },
+        .seek_checksums = true,
+    });
+    const appended_table = try inspectNativeSeekTable(appended.items["prefix:".len..]);
+    try std.testing.expectEqual(@as(u64, payload.len), appended_table.decompressed_size);
+    try std.testing.expectEqualSlices(u8, "prefix:", appended.items[0.."prefix:".len]);
+    try std.testing.expectError(error.InvalidBlockPlan, encodeNativeSeekableStreamAlloc(std.testing.allocator, payload, .{ .frame_size = 0 }));
+    try std.testing.expectError(error.InvalidBlockPlan, encodeNativeSeekableStreamAppend(std.testing.allocator, &appended, payload, .{ .frame_size = 0 }));
 }
 
 test "zstd raw/RLE native decoder accepts no-size raw frames" {

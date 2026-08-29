@@ -1,7 +1,7 @@
 const std = @import("std");
 const core = @import("../core.zig");
 
-pub const Error = core.Error;
+pub const Error = core.Error || std.mem.Allocator.Error;
 
 pub const table_skippable_magic: u32 = 0x184d2a5e;
 pub const footer_magic: u32 = 0x8f92eab1;
@@ -52,6 +52,12 @@ pub const Entry = struct {
     checksum: ?u32,
 };
 
+pub const FrameSize = struct {
+    compressed_size: u32,
+    decompressed_size: u32,
+    checksum: ?u32 = null,
+};
+
 pub const Iterator = struct {
     table: Table,
     index: u32 = 0,
@@ -60,6 +66,8 @@ pub const Iterator = struct {
 
     pub fn next(self: *Iterator) Error!?Entry {
         if (self.index >= self.table.entry_count) return null;
+        if (self.table.entry_size != 8 and self.table.entry_size != 12) return error.CorruptFrame;
+        if (self.table.stream.len < footer_len) return error.TruncatedFrame;
         const relative = std.math.mul(usize, @as(usize, self.index), self.table.entry_size) catch return error.IntegerOverflow;
         const entries_offset = std.math.add(usize, self.table.frame_offset, 8) catch return error.IntegerOverflow;
         const offset = std.math.add(usize, entries_offset, relative) catch return error.IntegerOverflow;
@@ -129,10 +137,70 @@ pub fn frameIndexForOffset(table: Table, offset: u64) Error!u32 {
     return table.frameIndexForDecompressedOffset(offset);
 }
 
+pub fn encodedTableBound(entry_count: usize, with_checksums: bool) Error!usize {
+    const entry_size: usize = if (with_checksums) 12 else 8;
+    const entries_len = std.math.mul(usize, entry_count, entry_size) catch return error.IntegerOverflow;
+    const payload_len = std.math.add(usize, entries_len, footer_len) catch return error.IntegerOverflow;
+    _ = std.math.cast(u32, payload_len) orelse return error.IntegerOverflow;
+    return std.math.add(usize, 8, payload_len) catch return error.IntegerOverflow;
+}
+
+pub fn encodeTableAppend(allocator: std.mem.Allocator, out: *std.ArrayList(u8), entries: []const FrameSize, with_checksums: bool) Error!void {
+    const total_len = try encodedTableBound(entries.len, with_checksums);
+    const entry_count = std.math.cast(u32, entries.len) orelse return error.IntegerOverflow;
+    if (with_checksums) for (entries) |entry_value|
+        if (entry_value.checksum == null) return error.InvalidBlockPlan;
+    const payload_len = total_len - 8;
+
+    try appendU32(out, allocator, table_skippable_magic);
+    try appendU32(out, allocator, @intCast(payload_len));
+    for (entries) |entry_value| {
+        try appendU32(out, allocator, entry_value.compressed_size);
+        try appendU32(out, allocator, entry_value.decompressed_size);
+        if (with_checksums) try appendU32(out, allocator, entry_value.checksum.?);
+    }
+    try appendU32(out, allocator, entry_count);
+    try out.append(allocator, if (with_checksums) 0x80 else 0);
+    try appendU32(out, allocator, footer_magic);
+}
+
+pub fn encodeTableAlloc(allocator: std.mem.Allocator, entries: []const FrameSize, with_checksums: bool) Error![]u8 {
+    var out = try std.ArrayList(u8).initCapacity(allocator, try encodedTableBound(entries.len, with_checksums));
+    errdefer out.deinit(allocator);
+    try encodeTableAppend(allocator, &out, entries, with_checksums);
+    return out.toOwnedSlice(allocator);
+}
+
+pub fn encodeTableInto(entries: []const FrameSize, with_checksums: bool, output: []u8) Error!usize {
+    const needed = try encodedTableBound(entries.len, with_checksums);
+    if (with_checksums) for (entries) |entry_value|
+        if (entry_value.checksum == null) return error.InvalidBlockPlan;
+    if (output.len < needed) return error.OutputTooSmall;
+    var out: std.ArrayList(u8) = .{ .items = output[0..0], .capacity = output.len };
+    // The exact bound above guarantees all bounded appends.
+    appendU32Bounded(&out, table_skippable_magic);
+    appendU32Bounded(&out, @intCast(needed - 8));
+    for (entries) |entry_value| {
+        appendU32Bounded(&out, entry_value.compressed_size);
+        appendU32Bounded(&out, entry_value.decompressed_size);
+        if (with_checksums) appendU32Bounded(&out, entry_value.checksum.?);
+    }
+    appendU32Bounded(&out, @intCast(entries.len));
+    out.appendAssumeCapacity(if (with_checksums) 0x80 else 0);
+    appendU32Bounded(&out, footer_magic);
+    return out.items.len;
+}
+
 fn appendU32(out: *std.ArrayList(u8), allocator: std.mem.Allocator, value: u32) !void {
     var bytes: [4]u8 = undefined;
     std.mem.writeInt(u32, &bytes, value, .little);
     try out.appendSlice(allocator, &bytes);
+}
+
+fn appendU32Bounded(out: *std.ArrayList(u8), value: u32) void {
+    var bytes: [4]u8 = undefined;
+    std.mem.writeInt(u32, &bytes, value, .little);
+    out.appendSliceAssumeCapacity(&bytes);
 }
 
 test "seek table parser covers checksum and plain entries" {
@@ -186,6 +254,49 @@ test "seek table parser covers checksum and plain entries" {
     }
 }
 
+test "seek table writers round trip and preserve append errors" {
+    const entries = [_]FrameSize{
+        .{ .compressed_size = 13, .decompressed_size = 5, .checksum = 0x1234_5678 },
+        .{ .compressed_size = 21, .decompressed_size = 34, .checksum = 0x9abc_def0 },
+    };
+    inline for (.{ false, true }) |with_checksums| {
+        const table_bytes = try encodeTableAlloc(std.testing.allocator, &entries, with_checksums);
+        defer std.testing.allocator.free(table_bytes);
+        try std.testing.expectEqual(try encodedTableBound(entries.len, with_checksums), table_bytes.len);
+
+        var stream: std.ArrayList(u8) = .empty;
+        defer stream.deinit(std.testing.allocator);
+        try stream.appendNTimes(std.testing.allocator, 0xa5, 34);
+        try encodeTableAppend(std.testing.allocator, &stream, &entries, with_checksums);
+        const parsed = try inspect(stream.items);
+        try std.testing.expectEqual(@as(u32, entries.len), parsed.entry_count);
+        try std.testing.expectEqual(with_checksums, parsed.has_checksums);
+
+        var output: [64]u8 = undefined;
+        const written = try encodeTableInto(&entries, with_checksums, &output);
+        try std.testing.expectEqualSlices(u8, table_bytes, output[0..written]);
+        try std.testing.expectError(error.OutputTooSmall, encodeTableInto(&entries, with_checksums, output[0 .. written - 1]));
+    }
+
+    const missing_checksum = [_]FrameSize{.{ .compressed_size = 1, .decompressed_size = 1 }};
+    var prefixed: std.ArrayList(u8) = .empty;
+    defer prefixed.deinit(std.testing.allocator);
+    try prefixed.appendSlice(std.testing.allocator, "prefix");
+    try std.testing.expectError(error.InvalidBlockPlan, encodeTableAppend(std.testing.allocator, &prefixed, &missing_checksum, true));
+    try std.testing.expectEqualSlices(u8, "prefix", prefixed.items);
+}
+
+test "empty seek table is valid and has no addressable output" {
+    const encoded = try encodeTableAlloc(std.testing.allocator, &.{}, false);
+    defer std.testing.allocator.free(encoded);
+    const table = try inspect(encoded);
+    try std.testing.expectEqual(@as(u32, 0), table.entry_count);
+    try std.testing.expectEqual(@as(u64, 0), table.compressed_size);
+    try std.testing.expectEqual(@as(u64, 0), table.decompressed_size);
+    try std.testing.expectError(error.RangeOutOfBounds, table.entry(0));
+    try std.testing.expectError(error.RangeOutOfBounds, table.frameIndexForDecompressedOffset(0));
+}
+
 test "seek table parser accepts official seekable encoder output" {
     // Generated by zstd contrib/seekable_format `seekable_compression` from
     // `alpha-alpha-alpha-beta-beta-gamma-gamma-delta-delta\n`, frame size 13,
@@ -220,6 +331,20 @@ test "seek table parser accepts official seekable encoder output" {
     try std.testing.expectEqual(@as(u32, 0), last.decompressed_size);
     try std.testing.expectEqual(@as(?u32, 0x51d8_e999), last.checksum);
     try std.testing.expectEqual(@as(u32, 3), try table.frameIndexForDecompressedOffset(51));
+
+    var frame_sizes: [5]FrameSize = undefined;
+    var entries = table.iterator();
+    for (&frame_sizes) |*frame_size| {
+        const entry_value = (try entries.next()).?;
+        frame_size.* = .{
+            .compressed_size = entry_value.compressed_size,
+            .decompressed_size = entry_value.decompressed_size,
+            .checksum = entry_value.checksum,
+        };
+    }
+    const rewritten = try encodeTableAlloc(std.testing.allocator, &frame_sizes, true);
+    defer std.testing.allocator.free(rewritten);
+    try std.testing.expectEqualSlices(u8, stream[table.frame_offset..], rewritten);
 }
 
 test "seek table parser rejects malformed terminal tables" {
