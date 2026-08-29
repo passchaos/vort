@@ -1763,6 +1763,8 @@ pub const PlannedStreamEncoder = struct {
     /// capacity for the fast and balanced small-block planners. Ratio and large
     /// inputs retain their one-shot paths because they need wider search state.
     pub fn encodeWithOptionsAlloc(self: *PlannedStreamEncoder, allocator: std.mem.Allocator, input: []const u8, options: PlannedEncodeOptions) Error![]u8 {
+        if (options.level == .fast and input.len <= 32 * 1024)
+            return allocator.dupe(u8, try self.encodeScratchWithOptions(input, options));
         if (options.level == .ratio or input.len > 32 * 1024) {
             return encodePlannedStreamWithOptionsAlloc(allocator, input, options);
         }
@@ -8389,6 +8391,36 @@ test "br planner-backed encoder retains reusable arena capacity" {
     defer std.testing.allocator.free(second);
     try std.testing.expectEqualSlices(u8, first, second);
     try std.testing.expect(encoder.retainedCapacity() >= capacity);
+}
+
+test "br reusable fast allocations are independent of retained output" {
+    var encoder = PlannedStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const first_input = "abcabcXabcabcXabcabcX";
+    const second_input = "different-different-different";
+    const first = try encoder.encodeAlloc(std.testing.allocator, first_input);
+    defer std.testing.allocator.free(first);
+    const first_copy = try std.testing.allocator.dupe(u8, first);
+    defer std.testing.allocator.free(first_copy);
+    const second = try encoder.encodeAlloc(std.testing.allocator, second_input);
+    defer std.testing.allocator.free(second);
+
+    try std.testing.expectEqualSlices(u8, first_copy, first);
+    const first_decoded = try decodeStreamAlloc(std.testing.allocator, first);
+    defer std.testing.allocator.free(first_decoded);
+    try std.testing.expectEqualSlices(u8, first_input, first_decoded);
+    const second_decoded = try decodeStreamAlloc(std.testing.allocator, second);
+    defer std.testing.allocator.free(second_decoded);
+    try std.testing.expectEqualSlices(u8, second_input, second_decoded);
+
+    // The borrowed result has already replaced the retained output before the
+    // final caller-owned copy is made.  A failed copy must therefore leave the
+    // reusable encoder ready for the next call.
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    try std.testing.expectError(error.OutOfMemory, encoder.encodeAlloc(failing.allocator(), first_input));
+    const recovered = try encoder.encodeAlloc(std.testing.allocator, first_input);
+    defer std.testing.allocator.free(recovered);
+    try std.testing.expectEqualSlices(u8, first_copy, recovered);
 }
 
 test "br reusable planner retains encoded output scratch" {

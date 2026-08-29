@@ -8051,3 +8051,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   every result. A fixed-CPU-8 median-of-nine benchmark over sixteen repeated
   32 KiB level-1 binary encodes measured 1.14x versus the allocating one-shot
   facade, with identical wire bytes.
+  `PlannedStreamEncoder.encodeWithOptionsAlloc` now builds fast streams up to
+  32 KiB in the encoder-owned output scratch and allocates only the final
+  caller-owned copy. Returned slices remain independent of later calls, and a
+  failed final allocation leaves the reusable encoder ready to recover. Sixteen
+  alternating ReleaseFast CPU-8 pairs at 20,000 encodes preserve output
+  checksums and improve JSON/source/log medians by about 2.7%/2.9%/2.9%
+  (16/16, 15/16, and 16/16 wins). The seven-row planned and 13-row libbrotli
+  reference gates, root Brotli smoke, and 99-case upstream differential remain
+  green.
