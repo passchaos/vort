@@ -8021,3 +8021,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   classifier tests, a 200-case generated 16--64 KiB corpus with matching
   aggregate frame hashes, and serial-wire comparisons cover both scheduling
   branches.
+  Level 1 now also returns an already-computed primary frame immediately for
+  wide-alphabet, single-block input instead of launching its 1/2 KiB adaptive
+  split ladder. A 144-case audit spanning 9--128 KiB, 41--256 symbols, and
+  plain plus copied-tail shapes found zero adaptive winners and identical
+  aggregate frame hashes. Twenty alternating ReleaseFast CPU-8 pairs preserve
+  the locked 80/640/8607-byte level-1 frames and improve the binary median by
+  5.28x with 20/20 wins; text and JSON remain within about 0.6% noise. The
+  low-alphabet JSON path continues to evaluate adaptive candidates because it
+  has a known split winner.

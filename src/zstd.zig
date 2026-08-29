@@ -3704,6 +3704,15 @@ pub fn encodeFrameWithLevelAndOptionsAlloc(
         else
             allocator.free(primary.frame);
     }
+    if (level == 1 and precomputed_primary != null and !preferSerialMixedSearch(input)) {
+        // The fast level has already paid for its complete primary frame. On
+        // wide-alphabet one-block inputs, the 1/2 KiB split ladder has not won
+        // across the retained generated corpus and is disproportionately
+        // expensive because it repeats match and entropy planning per block.
+        const primary = precomputed_primary.?;
+        precomputed_primary = null;
+        return primary.frame;
+    }
     if (level > 0 and input.len > 8 * 1024) {
         var locked_allocator = LockedAllocator{ .child = allocator };
         const parallel_allocator = locked_allocator.allocator();
@@ -16311,7 +16320,7 @@ test "zstd deferred adaptive candidate preserves primary and split winners" {
     try std.testing.expectEqualSlices(u8, split_expected.frame, split_actual);
 }
 
-test "zstd level one defers dominated smallest adaptive candidate" {
+test "zstd level one bypasses adaptive search for wide alphabets" {
     var payload: [32 * 1024]u8 = undefined;
     var state: u32 = 0x9e37_79b9;
     for (&payload) |*byte| {
@@ -16323,6 +16332,7 @@ test "zstd level one defers dominated smallest adaptive candidate" {
     const primary_options = try nativeFrameOptionsForLevel(level, .{});
     const expected = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &payload, primary_options);
     defer std.testing.allocator.free(expected.frame);
+    try std.testing.expect(!preferSerialMixedSearch(&payload));
     const larger_split = try encodeNativeFrameWithOptionsAlloc(std.testing.allocator, &payload, adaptiveLevelCandidateOptions(primary_options, adaptiveLevelBlockSizes(level)[1]));
     defer std.testing.allocator.free(larger_split.frame);
     try std.testing.expect(larger_split.frame.len > expected.frame.len);
