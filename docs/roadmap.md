@@ -8097,3 +8097,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   three-chunk, empty-interleaved, and 32-by-16-byte inputs by about
   1.68x/1.93x/1.64x/2.36x; a three-chunk 16 KiB stream improves about 8.9%,
   with 17--20 wins out of 20 and unchanged output checksums.
+  Reusable `StoredStreamEncoder` owned and borrowed outputs now delegate to the
+  exact-size and direct caller-buffer cores instead of rebuilding through the
+  append API. Owned results remain independent, while warmed scratch output is
+  allocation-free for contiguous and chunked input. Twenty alternating
+  ReleaseFast CPU-8 pairs at 20,000 calls preserve all observed checksums and
+  win 20/20 in all sixteen measured rows: 39/512-byte contiguous owned and
+  scratch paths improve about 2.8--3.6x, chunked variants improve about
+  2.1--2.9x, and 16 KiB variants improve about 1.07--1.34x. Brotli stored/root
+  tests and the planned, libbrotli-reference, and 99-case upstream gates remain
+  green.

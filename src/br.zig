@@ -3290,10 +3290,7 @@ pub const StoredStreamEncoder = struct {
     }
 
     pub fn encodeWithOptionsAlloc(self: *StoredStreamEncoder, input: []const u8, options: StoredStreamOptions) Error![]u8 {
-        var out: std.ArrayList(u8) = .empty;
-        errdefer out.deinit(self.allocator);
-        try self.encodeWithOptionsAppend(&out, input, options);
-        return out.toOwnedSlice(self.allocator);
+        return encodeStoredStreamWithOptionsAlloc(self.allocator, input, options);
     }
 
     pub fn encodeChunksAlloc(self: *StoredStreamEncoder, chunks: []const []const u8) Error![]u8 {
@@ -3301,10 +3298,7 @@ pub const StoredStreamEncoder = struct {
     }
 
     pub fn encodeChunksWithOptionsAlloc(self: *StoredStreamEncoder, chunks: []const []const u8, options: StoredStreamOptions) Error![]u8 {
-        var out: std.ArrayList(u8) = .empty;
-        errdefer out.deinit(self.allocator);
-        try self.encodeChunksWithOptionsAppend(&out, chunks, options);
-        return out.toOwnedSlice(self.allocator);
+        return encodeStoredStreamChunksWithOptionsAlloc(self.allocator, chunks, options);
     }
 
     pub fn encodeScratch(self: *StoredStreamEncoder, input: []const u8) Error![]const u8 {
@@ -3313,7 +3307,10 @@ pub const StoredStreamEncoder = struct {
 
     pub fn encodeScratchWithOptions(self: *StoredStreamEncoder, input: []const u8, options: StoredStreamOptions) Error![]const u8 {
         self.scratch.clearRetainingCapacity();
-        try self.encodeWithOptionsAppend(&self.scratch, input, options);
+        const needed = try encodedStoredStreamBoundWithOptions(input.len, options);
+        try self.scratch.ensureTotalCapacity(self.allocator, needed);
+        const written = try encodeStoredStreamWithOptionsInto(input, self.scratch.allocatedSlice()[0..needed], options);
+        self.scratch.items.len = written;
         return self.scratch.items;
     }
 
@@ -3323,7 +3320,10 @@ pub const StoredStreamEncoder = struct {
 
     pub fn encodeChunksScratchWithOptions(self: *StoredStreamEncoder, chunks: []const []const u8, options: StoredStreamOptions) Error![]const u8 {
         self.scratch.clearRetainingCapacity();
-        try self.encodeChunksWithOptionsAppend(&self.scratch, chunks, options);
+        const needed = try encodedStoredStreamChunksBoundWithOptions(chunks, options);
+        try self.scratch.ensureTotalCapacity(self.allocator, needed);
+        const written = try encodeStoredStreamChunksWithOptionsInto(chunks, self.scratch.allocatedSlice()[0..needed], options);
+        self.scratch.items.len = written;
         return self.scratch.items;
     }
 
@@ -7870,6 +7870,40 @@ test "br stored allocating paths match independent append writers" {
     try std.testing.expectError(error.OutOfMemory, encodeStoredStreamAlloc(contiguous_failing.allocator(), input));
     var chunked_failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.OutOfMemory, encodeStoredStreamChunksAlloc(chunked_failing.allocator(), &chunks));
+}
+
+test "br reusable stored encoder uses exact owned and retained output" {
+    const first_input = "stored reusable first payload" ** 8;
+    const second_input = "second stored output" ** 7;
+    const chunks = [_][]const u8{ first_input[0..0], first_input[0..19], first_input[19..73], first_input[73..] };
+    var expected_chunks: std.ArrayList(u8) = .empty;
+    defer expected_chunks.deinit(std.testing.allocator);
+    try encodeStoredStreamChunksAppend(std.testing.allocator, &expected_chunks, &chunks);
+
+    var encoder = StoredStreamEncoder.init(std.testing.allocator);
+    defer encoder.deinit();
+    const first = try encoder.encodeAlloc(first_input);
+    defer std.testing.allocator.free(first);
+    const second = try encoder.encodeAlloc(second_input);
+    defer std.testing.allocator.free(second);
+    const first_decoded = try decodeStreamAlloc(std.testing.allocator, first);
+    defer std.testing.allocator.free(first_decoded);
+    try std.testing.expectEqualSlices(u8, first_input, first_decoded);
+
+    const scratch = try encoder.encodeChunksScratch(&chunks);
+    try std.testing.expectEqualSlices(u8, expected_chunks.items, scratch);
+    const retained_capacity = encoder.scratch.capacity;
+    // Once sized, the borrowed-output path must not depend on another
+    // allocation. Restore the owning allocator before deinitialization.
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    encoder.allocator = failing.allocator();
+    const repeated = encoder.encodeChunksScratch(&chunks) catch |err| {
+        encoder.allocator = std.testing.allocator;
+        return err;
+    };
+    encoder.allocator = std.testing.allocator;
+    try std.testing.expectEqualSlices(u8, expected_chunks.items, repeated);
+    try std.testing.expectEqual(retained_capacity, encoder.scratch.capacity);
 }
 
 test "br stored stream supports all RFC window bits" {
