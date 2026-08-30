@@ -353,7 +353,34 @@ const IncrementalPlannedEncoderCodec = struct {
     pub const StreamOptions = br.StoredStreamOptions;
     pub const max_block_len = planned_chunk_max_input_len;
     pub const default_block_len = planned_chunk_max_input_len;
-    pub const State = struct { bit_index: u3 = 0, window_bits: u5 = default_window_bits };
+    pub const State = struct {
+        bit_index: u3 = 0,
+        window_bits: u5 = default_window_bits,
+        tokens: std.ArrayList(lz77.Token) = .empty,
+        commands: std.ArrayList(command_plan.Command) = .empty,
+        greedy_scratch: lz77.TinyGreedyScratch = .{},
+    };
+
+    pub fn deinitState(state: *State, allocator: std.mem.Allocator) void {
+        state.greedy_scratch.deinit(allocator);
+        state.tokens.deinit(allocator);
+        state.commands.deinit(allocator);
+    }
+
+    pub fn resetState(state: *State) void {
+        state.bit_index = 0;
+        state.window_bits = default_window_bits;
+        state.tokens.clearRetainingCapacity();
+        state.commands.clearRetainingCapacity();
+        state.greedy_scratch.head_initialized = @splat(0);
+        state.greedy_scratch.prev.clearRetainingCapacity();
+    }
+
+    pub fn stateRetainedCapacity(state: *const State) usize {
+        return state.tokens.capacity * @sizeOf(lz77.Token) +
+            state.commands.capacity * @sizeOf(command_plan.Command) +
+            state.greedy_scratch.retainedCapacity();
+    }
 
     pub fn readyOutputLen(state: *const State, pending_len: usize, final_written: bool) usize {
         if (!final_written and state.bit_index != 0) {
@@ -378,7 +405,7 @@ const IncrementalPlannedEncoderCodec = struct {
         const start_byte = if (start_len == 0) 0 else out.items[start_len - 1];
         const max_backward_distance = (@as(usize, 1) << state.window_bits) - 16;
 
-        const lz_plan = try lz77.hashGreedyPlanAutoTinyAlloc(allocator, block, .{
+        const stats = try lz77.hashGreedyPlanAutoTinyScratchReuse(&state.tokens, &state.greedy_scratch, allocator, block, .{
             .window_len = @min(block.len, max_backward_distance),
             .max_chain = 64,
             .nice_len = 64,
@@ -386,13 +413,11 @@ const IncrementalPlannedEncoderCodec = struct {
             .min_match = 3,
             .max_match = lz77.max_match_len,
         });
-        defer lz_plan.deinit(allocator);
-        var compressed_ok = lz_plan.stats.matches != 0;
+        var compressed_ok = stats.matches != 0;
         if (compressed_ok) {
-            const plan = try command_plan.buildAlloc(allocator, block, lz_plan.tokens);
-            defer plan.deinit(allocator);
-            var stats: encoder_stats.PlannedEncodeStats = .{};
-            encodeCommandPlanWithOptionsWrite(allocator, &writer, block, plan.commands, null, &stats, .{
+            _ = try command_plan.buildTrustedReuse(&state.commands, allocator, block, state.tokens.items);
+            var encode_stats: encoder_stats.PlannedEncodeStats = .{};
+            encodeCommandPlanWithOptionsWrite(allocator, &writer, block, state.commands.items, null, &encode_stats, .{
                 .write_stream_prefix = false,
                 .final_meta_block = false,
             }) catch |err| switch (err) {

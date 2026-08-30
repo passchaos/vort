@@ -59,6 +59,7 @@ pub fn Encoder(comptime Codec: type) type {
             return .{ .allocator = allocator, .options = options };
         }
         pub fn deinit(self: *Self) void {
+            if (@hasDecl(Codec, "deinitState")) Codec.deinitState(&self.codec_state, self.allocator);
             self.plain.deinit(self.allocator);
             self.pending.deinit(self.allocator);
             self.* = undefined;
@@ -73,7 +74,9 @@ pub fn Encoder(comptime Codec: type) type {
             self.options = options;
             self.plain.clearRetainingCapacity();
             self.pending.clearRetainingCapacity();
-            self.codec_state = .{};
+            if (@hasDecl(Codec, "resetState")) {
+                Codec.resetState(&self.codec_state);
+            } else self.codec_state = .{};
             self.pending_offset = 0;
             self.pending_metadata = &.{};
             self.metadata_requested = false;
@@ -108,6 +111,11 @@ pub fn Encoder(comptime Codec: type) type {
                 .finishing = self.finishing,
                 .done = self.done,
             };
+        }
+        pub fn retainedCapacity(self: *const Self) usize {
+            var total = self.plain.capacity + self.pending.capacity;
+            if (@hasDecl(Codec, "stateRetainedCapacity")) total += Codec.stateRetainedCapacity(&self.codec_state);
+            return total;
         }
         pub fn finish(self: *Self) Error!void {
             self.finishing = true;

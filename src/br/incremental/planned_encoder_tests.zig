@@ -50,6 +50,22 @@ test "incremental planned encoder flushes compressed blocks around metadata" {
     try std.testing.expectEqualSlices(u8, first ++ second, decoded);
 }
 
+test "incremental planned encoder retains planner capacity across streams" {
+    const payload = "reusable planned Brotli block payload " ** 32;
+    var encoder = br.IncrementalPlannedStreamEncoder.initWithOptions(std.testing.allocator, .{ .block_len = payload.len });
+    defer encoder.deinit();
+    const first = try encodeIncremental(&encoder, payload, payload.len, 31);
+    defer std.testing.allocator.free(first);
+    const retained = encoder.retainedCapacity();
+    try std.testing.expect(retained > payload.len);
+
+    try encoder.nextStream(.{ .block_len = payload.len });
+    const second = try encodeIncremental(&encoder, payload, payload.len, 31);
+    defer std.testing.allocator.free(second);
+    try std.testing.expectEqualSlices(u8, first, second);
+    try std.testing.expectEqual(retained, encoder.retainedCapacity());
+}
+
 fn encodeIncremental(encoder: *br.IncrementalPlannedStreamEncoder, input: []const u8, input_chunk_len: usize, output_chunk_len: usize) ![]u8 {
     var encoded: std.ArrayList(u8) = .empty;
     errdefer encoded.deinit(std.testing.allocator);

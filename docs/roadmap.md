@@ -8202,7 +8202,9 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   expand. It reuses the stored encoder's backpressure, flush, metadata, limit,
   reset, and continued-stream state machine. Focused tests cover tiny input/
   output slices, mixed compressed/stored blocks, and metadata between flushed
-  compressed blocks.
+  compressed blocks. Its codec-owned token, command, and hash-index storage is
+  retained across blocks and `nextStream` calls; a public retained-capacity
+  metric and repeated-stream test pin that warmed reuse contract.
   The copy loop now also keeps a local destination cursor while draining each
   output span, removing the remaining per-byte history-write remainder without
   changing literal, stored, or dictionary emission. Twenty alternating
