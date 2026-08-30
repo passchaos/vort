@@ -405,10 +405,14 @@ pub fn trainValidatedStandardDictionaryAlloc(
     }
     const content = best_content orelse return error.InvalidDictionaryTraining;
     defer allocator.free(content);
+    const entropy_samples = try allocator.alloc([]const u8, training_samples.len + validation_samples.len);
+    defer allocator.free(entropy_samples);
+    @memcpy(entropy_samples[0..training_samples.len], training_samples);
+    @memcpy(entropy_samples[training_samples.len..], validation_samples);
     return try standardDictionaryFromSelectedContentAndSamplesAlloc(
         allocator,
         content,
-        training_samples,
+        entropy_samples,
         dictionary_id,
     );
 }
@@ -460,6 +464,16 @@ test "standard Zstd validated trainer selects deterministic bounded history" {
     try std.testing.expect(first.view.content.len >= 8);
     try std.testing.expect(first.view.content.len <= 64);
     try std.testing.expectEqualSlices(u8, first.bytes, second.bytes);
+    const training_only = try standardDictionaryFromSelectedContentAndSamplesAlloc(
+        std.testing.allocator,
+        first.view.content,
+        &training,
+        first.view.id,
+    );
+    defer training_only.deinit(std.testing.allocator);
+    // Validation samples participate in final entropy estimation after history
+    // selection, matching the complete corpus supplied to reference trainers.
+    try std.testing.expect(!std.mem.eql(u8, first.bytes, training_only.bytes));
 }
 
 fn standardDictionaryFromSelectedContentAndSamplesAlloc(

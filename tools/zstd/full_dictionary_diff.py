@@ -47,7 +47,7 @@ def main() -> int:
         selector_trained, selector_baseline = sizes("selector")
         if total_trained >= total_baseline:
             raise SystemExit(f"trained dictionary entropy did not improve the aggregate: {output!r}")
-        if text_trained > 507:
+        if text_trained > 490:
             raise SystemExit(f"trained text entropy regressed: {output!r}")
         for name, trained, baseline in (
             ("structured", structured_trained, structured_baseline),

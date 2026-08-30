@@ -8398,6 +8398,16 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   parity. The gate requires aggregate parity, text's existing strict bounds,
   and no JSON row worse than 1.03x. The focused selector control also improves
   from 78 to 76 bytes.
+  After validation chooses history parameters, the standard-dictionary trainer
+  now uses both the training and selector partitions to estimate final Huffman
+  and OF/ML/LL entropy tables; held-out payloads remain untouched. This matches
+  the reference trainer's 36-sample entropy corpus rather than discarding four
+  representative samples after selection. The baseline-control gate improves
+  text `502 -> 486`, structured `72 -> 71`, binary `579 -> 560`, and the focused
+  selector `76 -> 70` bytes. On the four-family parity suite, Vort totals
+  `9304/9352` bytes against zstd and wins all source-code rows
+  (`1842/1808/1788` versus `1857/1819/1800`); text level 3 is within two bytes
+  (`291/293`), while binary level 3 remains the largest open row (`814/796`).
   Extended trainer parity to a deterministic 40-chunk held-out corpus sampled
   across `src/zstd.zig`, `src/dictionary.zig`, `src/root.zig`, and the roadmap.
   At levels 1/3/9 Vort records `1883/1841/1826` bytes versus zstd's
