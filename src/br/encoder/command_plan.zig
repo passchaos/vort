@@ -580,6 +580,24 @@ test "coalesces literals around LZ77 matches" {
     try std.testing.expectEqual(Command{ .insert_start = 6, .insert_len = 1 }, plan.commands[1]);
 }
 
+test "dictionary-seeded command construction validates combined history" {
+    const tokens = [_]lz77.Token{
+        .{ .match = .{ .length = 4, .distance = 4 } },
+        .{ .literal = '!' },
+    };
+    var commands: std.ArrayList(Command) = .empty;
+    defer commands.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 1), try buildWithDictionaryReuse(&commands, std.testing.allocator, "abcd!", 4, &tokens));
+    try std.testing.expectEqual(@as(usize, 2), commands.items.len);
+    try std.testing.expectEqual(@as(usize, 4), commands.items[0].distance);
+    try std.testing.expectEqual(@as(usize, 1), commands.items[1].insert_len);
+
+    const bad_distance = [_]lz77.Token{.{ .match = .{ .length = 4, .distance = 5 } }};
+    try std.testing.expectError(error.InvalidBlockPlan, buildWithDictionaryReuse(&commands, std.testing.allocator, "abcd", 4, &bad_distance));
+    const bad_length = [_]lz77.Token{.{ .match = .{ .length = 5, .distance = 4 } }};
+    try std.testing.expectError(error.InvalidBlockPlan, buildWithDictionaryReuse(&commands, std.testing.allocator, "abcd", 4, &bad_length));
+}
+
 test "coalesces adjacent copies at the same distance" {
     const input = "abcdabcdabcd!abcd";
     const tokens = [_]lz77.Token{

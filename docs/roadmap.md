@@ -8213,6 +8213,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   8 KiB payload. The incremental planner benchmark now retains this as a
   separate `cross_block` row, checks the compression delta and decoded wire,
   and reports the bounded retained state (about 71 KiB on this fixture).
+  Cross-block command construction now has direct malformed-token coverage for
+  distances beyond combined history and matches beyond block output. A WBITS=10
+  incremental regression also verifies that retained history is truncated to
+  the advertised 1,008-byte backward limit instead of leaking a block-sized
+  reference into the wire.
   Added a focused incremental planned-encoder benchmark/gate comparing warmed
   codec-owned state with rebuilding the one-shot fast encoder. On fixed CPU 8
   at 200 iterations both paths emit 120-byte streams for the 4,992-byte
