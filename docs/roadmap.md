@@ -8336,3 +8336,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   remain the measured winner. Upstream zstd's dormant repcode ranking is still
   disabled behind `#if 0`; Vort likewise keeps repcodes `1/4/8` until both its
   encoder state and multi-corpus evidence can validate a change.
+  Added `run-zstd-dictionary-trainer-compare`, a same-corpus held-out comparison
+  against the installed `zstd --train`. It generates deterministic text, JSON,
+  and binary sample families, gives Vort 32 training plus 4 selector samples,
+  reserves 4 independent payloads, and checks levels 1/3/9. Both dictionaries
+  are decoded by Vort, while Vort output is also decoded by libzstd. Current
+  aggregate compressed sizes (`Vort/zstd`) are text `364/344`, `346/293`,
+  `311/273`; JSON `224/196`, `226/184`, `208/185`; and binary `796/795`,
+  `816/796`, `803/810`. This exposes a roughly 0–23% remaining per-row quality
+  gap instead of hiding it behind baseline-only wins. The gate caps any row at
+  1.50x and each corpus's mean ratio at 1.20x until selection improves further.
