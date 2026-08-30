@@ -12,6 +12,7 @@ const incompressible_payload = "qzxwvbnm1234567890QZXWVBNM!@#$%^&*";
 const Case = struct {
     name: []const u8,
     payload: []const u8,
+    quality: ?c_int = null,
     owned: bool = false,
 
     fn deinit(case: Case, allocator: std.mem.Allocator) void {
@@ -24,7 +25,7 @@ const Case = struct {
 const Options = struct {
     iterations: usize = 1000,
     csv_path: ?[]const u8 = null,
-    quality: c_int = 3,
+    quality_override: ?c_int = null,
     path_limit: usize = 128 * 1024,
     paths: std.ArrayList([]const u8) = .empty,
 
@@ -62,7 +63,7 @@ pub fn main(init: std.process.Init) !void {
         errdefer init.gpa.free(source_file);
         const source_name = try init.gpa.dupe(u8, "source32k");
         errdefer init.gpa.free(source_name);
-        try cases.append(init.gpa, .{ .name = source_name, .payload = source_file, .owned = true });
+        try cases.append(init.gpa, .{ .name = source_name, .payload = source_file, .quality = 8, .owned = true });
     } else {
         for (options.paths.items, 0..) |path, index| {
             const file = try std.Io.Dir.cwd().openFile(init.io, path, .{});
@@ -84,9 +85,10 @@ pub fn main(init: std.process.Init) !void {
     defer csv.deinit();
     try csv.writer.writeAll("case,reference_version,quality,input_bytes,vort_bytes,lazy_bytes,ratio_bytes,ratio_dictionary_copies,ratio_dictionary_bytes,reference_bytes,iterations,vort_ns,lazy_ns,ratio_ns,reference_ns,vort_mib_s,lazy_mib_s,ratio_mib_s,reference_mib_s,vort_over_reference,lazy_over_reference,ratio_over_reference,vort_size_over_reference,lazy_size_over_reference,ratio_size_over_reference,checksum\n");
     for (cases.items) |case| {
+        const quality = options.quality_override orelse case.quality orelse 3;
         const vort_encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, case.payload, .{ .level = .fast });
         defer init.gpa.free(vort_encoded);
-        const reference_encoded = try reference.encodeAlloc(init.gpa, case.payload, options.quality);
+        const reference_encoded = try reference.encodeAlloc(init.gpa, case.payload, quality);
         defer init.gpa.free(reference_encoded);
         const lazy_encoded = try vort.brEncodePlannedStreamWithOptionsAlloc(init.gpa, case.payload, .{ .level = .balanced });
         defer init.gpa.free(lazy_encoded);
@@ -101,7 +103,7 @@ pub fn main(init: std.process.Init) !void {
             try reference.decode(encoded, decoded);
             if (!std.mem.eql(u8, case.payload, decoded)) return error.SizeMismatch;
         }
-        const samples = try measureInterleaved(init.io, init.gpa, reference, case.payload, options);
+        const samples = try measureInterleaved(init.io, init.gpa, reference, case.payload, options, quality);
         const lazy_sample = try measurePlanned(init.io, init.gpa, case.payload, options.iterations, .balanced);
         const ratio_sample = try measurePlanned(init.io, init.gpa, case.payload, options.iterations, .ratio);
         const total_bytes = case.payload.len * options.iterations;
@@ -112,7 +114,7 @@ pub fn main(init: std.process.Init) !void {
         try csv.writer.print("{s},{x},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d:.2},{d:.2},{d:.2},{d:.2},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d:.4},{d}\n", .{
             case.name,
             reference.version(),
-            options.quality,
+            quality,
             case.payload.len,
             vort_encoded.len,
             lazy_encoded.len,
@@ -164,13 +166,13 @@ fn measurePlanned(io: std.Io, allocator: std.mem.Allocator, payload: []const u8,
     return best;
 }
 
-fn measureInterleaved(io: std.Io, allocator: std.mem.Allocator, reference: libbrotli.Runtime, payload: []const u8, options: Options) !struct { vort: Sample, reference: Sample } {
+fn measureInterleaved(io: std.Io, allocator: std.mem.Allocator, reference: libbrotli.Runtime, payload: []const u8, options: Options, quality: c_int) !struct { vort: Sample, reference: Sample } {
     var best_vort = Sample{ .ns = std.math.maxInt(u64), .mix = 0 };
     var best_reference = best_vort;
     for (0..5) |round| {
         const vort_first = round & 1 == 0;
-        const first = if (vort_first) try measureVort(io, allocator, payload, options.iterations) else try measureReference(io, allocator, reference, payload, options);
-        const second = if (vort_first) try measureReference(io, allocator, reference, payload, options) else try measureVort(io, allocator, payload, options.iterations);
+        const first = if (vort_first) try measureVort(io, allocator, payload, options.iterations) else try measureReference(io, allocator, reference, payload, options.iterations, quality);
+        const second = if (vort_first) try measureReference(io, allocator, reference, payload, options.iterations, quality) else try measureVort(io, allocator, payload, options.iterations);
         const vort_sample = if (vort_first) first else second;
         const reference_sample = if (vort_first) second else first;
         if (vort_sample.ns < best_vort.ns) best_vort = vort_sample;
@@ -194,11 +196,11 @@ fn measureVort(io: std.Io, allocator: std.mem.Allocator, payload: []const u8, it
     return .{ .ns = elapsed(start, io), .mix = mix };
 }
 
-fn measureReference(io: std.Io, allocator: std.mem.Allocator, reference: libbrotli.Runtime, payload: []const u8, options: Options) !Sample {
+fn measureReference(io: std.Io, allocator: std.mem.Allocator, reference: libbrotli.Runtime, payload: []const u8, iterations: usize, quality: c_int) !Sample {
     var mix: usize = 0;
     const start = std.Io.Clock.awake.now(io);
-    for (0..options.iterations) |_| {
-        const encoded = try reference.encodeAlloc(allocator, payload, options.quality);
+    for (0..iterations) |_| {
+        const encoded = try reference.encodeAlloc(allocator, payload, quality);
         mix +%= encoded.len;
         allocator.free(encoded);
     }
@@ -228,8 +230,9 @@ fn parseOptions(allocator: std.mem.Allocator, args: *std.process.Args.Iterator) 
     var options = Options{};
     errdefer options.deinit(allocator);
     while (args.next()) |arg| {
-        if (std.mem.eql(u8, arg, "--iterations")) options.iterations = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--quality")) options.quality = try std.fmt.parseInt(c_int, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--csv")) options.csv_path = args.next() orelse return error.MissingCorpusPath else if (std.mem.eql(u8, arg, "--limit")) options.path_limit = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--path")) try options.paths.append(allocator, try allocator.dupe(u8, args.next() orelse return error.MissingCorpusPath)) else return error.UnknownArgument;
+        if (std.mem.eql(u8, arg, "--iterations")) options.iterations = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--quality")) options.quality_override = try std.fmt.parseInt(c_int, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--csv")) options.csv_path = args.next() orelse return error.MissingCorpusPath else if (std.mem.eql(u8, arg, "--limit")) options.path_limit = try std.fmt.parseInt(usize, args.next() orelse return error.MissingLimit, 10) else if (std.mem.eql(u8, arg, "--path")) try options.paths.append(allocator, try allocator.dupe(u8, args.next() orelse return error.MissingCorpusPath)) else return error.UnknownArgument;
     }
-    if (options.iterations == 0 or options.path_limit == 0 or options.quality < 0 or options.quality > 11) return error.InvalidBlockPlan;
+    if (options.iterations == 0 or options.path_limit == 0) return error.InvalidBlockPlan;
+    if (options.quality_override) |quality| if (quality < 0 or quality > 11) return error.InvalidBlockPlan;
     return options;
 }

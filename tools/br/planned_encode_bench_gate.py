@@ -33,8 +33,9 @@ def main():
             assert int(row["ratio_dictionary_bytes"]) > 0, row
     source32k = by_case["source32k"]
     assert int(source32k["input_bytes"]) == 32 * 1024, source32k
+    assert int(source32k["quality"]) == 8, source32k
     assert int(source32k["ratio_bytes"]) <= int(source32k["lazy_bytes"]) - 100, source32k
-    assert float(source32k["ratio_size_over_reference"]) <= 1.03, source32k
+    assert float(source32k["ratio_size_over_reference"]) <= 1.02, source32k
     print(f"br_planned_encode_bench_gate=ok rows={len(rows)}")
     return 0
 
