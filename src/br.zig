@@ -29,6 +29,7 @@ const incremental_rle_tests = @import("br/incremental/rle_tests.zig");
 const incremental_stored = @import("br/incremental/stored/decoder.zig");
 const incremental_stored_encoder = @import("br/incremental/stored/encoder.zig");
 const incremental_stored_tests = @import("br/incremental/stored/tests.zig");
+const incremental_planned_encoder_tests = @import("br/incremental/planned_encoder_tests.zig");
 
 pub const Error = core.Error || std.mem.Allocator.Error;
 pub const PlannedEncodeStats = encoder_stats.PlannedEncodeStats;
@@ -307,6 +308,7 @@ const IncrementalStoredEncoderCodec = struct {
     pub const Error = br.Error;
     pub const StreamOptions = br.StoredStreamOptions;
     pub const max_block_len = br.max_uncompressed_meta_block_len;
+    pub const default_block_len = 64 * 1024;
     pub const State = struct { bit_index: u3 = 0 };
 
     pub fn readyOutputLen(state: *const State, pending_len: usize, final_written: bool) usize {
@@ -346,12 +348,95 @@ const IncrementalStoredEncoderCodec = struct {
 
 pub const IncrementalStoredStreamEncoder = incremental_stored_encoder.Encoder(IncrementalStoredEncoderCodec);
 
+const IncrementalPlannedEncoderCodec = struct {
+    pub const Error = br.Error;
+    pub const StreamOptions = br.StoredStreamOptions;
+    pub const max_block_len = planned_chunk_max_input_len;
+    pub const default_block_len = planned_chunk_max_input_len;
+    pub const State = struct { bit_index: u3 = 0, window_bits: u5 = default_window_bits };
+
+    pub fn readyOutputLen(state: *const State, pending_len: usize, final_written: bool) usize {
+        if (!final_written and state.bit_index != 0) {
+            std.debug.assert(pending_len != 0);
+            return pending_len - 1;
+        }
+        return pending_len;
+    }
+
+    pub fn writePrefix(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, options: StreamOptions) br.Error!void {
+        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+        try writeWindowBits(allocator, &writer, options.window_bits);
+        if (options.metadata.len != 0) try writeMetadataMetaBlock(allocator, &writer, options.metadata);
+        state.bit_index = writer.bit_index;
+        state.window_bits = options.window_bits;
+    }
+
+    pub fn writeBlock(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, block: []const u8) br.Error!void {
+        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+        const start_len = out.items.len;
+        const start_bit_index = writer.bit_index;
+        const start_byte = if (start_len == 0) 0 else out.items[start_len - 1];
+        const max_backward_distance = (@as(usize, 1) << state.window_bits) - 16;
+
+        const lz_plan = try lz77.hashGreedyPlanAutoTinyAlloc(allocator, block, .{
+            .window_len = @min(block.len, max_backward_distance),
+            .max_chain = 64,
+            .nice_len = 64,
+            .max_candidates = 8,
+            .min_match = 3,
+            .max_match = lz77.max_match_len,
+        });
+        defer lz_plan.deinit(allocator);
+        var compressed_ok = lz_plan.stats.matches != 0;
+        if (compressed_ok) {
+            const plan = try command_plan.buildAlloc(allocator, block, lz_plan.tokens);
+            defer plan.deinit(allocator);
+            var stats: encoder_stats.PlannedEncodeStats = .{};
+            encodeCommandPlanWithOptionsWrite(allocator, &writer, block, plan.commands, null, &stats, .{
+                .write_stream_prefix = false,
+                .final_meta_block = false,
+            }) catch |err| switch (err) {
+                error.InvalidBlockPlan => compressed_ok = false,
+                else => return err,
+            };
+        }
+        const stored_ceiling = try addStoredUncompressedMetaBlockBitsLen(startBitPosition(start_len, start_bit_index), block.len);
+        if (!compressed_ok or writer.bitPosition() > stored_ceiling) {
+            out.shrinkRetainingCapacity(start_len);
+            if (start_len != 0) out.items[start_len - 1] = start_byte;
+            writer.bit_index = start_bit_index;
+            try writeUncompressedMetaBlock(allocator, &writer, block);
+        }
+        state.bit_index = writer.bit_index;
+    }
+
+    pub fn writeMetadata(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, metadata: []const u8) br.Error!void {
+        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+        try writeMetadataMetaBlock(allocator, &writer, metadata);
+        state.bit_index = writer.bit_index;
+    }
+
+    pub fn writeFinal(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State) br.Error!void {
+        var writer = BitWriter{ .out = out, .bit_index = state.bit_index };
+        try writer.writeBits(allocator, 1, 1);
+        try writer.writeBits(allocator, 1, 1);
+        state.bit_index = writer.bit_index;
+    }
+
+    fn startBitPosition(len: usize, bit_index: u3) usize {
+        return if (bit_index == 0) len * 8 else (len - 1) * 8 + bit_index;
+    }
+};
+
+pub const IncrementalPlannedStreamEncoder = incremental_stored_encoder.Encoder(IncrementalPlannedEncoderCodec);
+
 test {
     _ = incremental_tests;
     _ = incremental_literal_tests;
     _ = incremental_copy_tests;
     _ = incremental_rle_tests;
     _ = incremental_stored_tests;
+    _ = incremental_planned_encoder_tests;
     _ = pattern;
     _ = command_plan;
     _ = literal_context;

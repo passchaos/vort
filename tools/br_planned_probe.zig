@@ -46,6 +46,35 @@ pub fn main(init: std.process.Init) !void {
         try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
         return;
     }
+    if (std.mem.eql(u8, mode, "incremental-planned")) {
+        var payload: [1024]u8 = undefined;
+        @memset(payload[0..512], 'a');
+        var state: u32 = 0x1234_5678;
+        for (payload[512..]) |*byte| {
+            state = state *% 1_664_525 +% 1_013_904_223;
+            byte.* = @truncate(state >> 24);
+        }
+        var encoder = vort.BrotliIncrementalPlannedStreamEncoder.initWithOptions(init.gpa, .{ .block_len = 512 });
+        defer encoder.deinit();
+        var encoded: std.ArrayList(u8) = .empty;
+        defer encoded.deinit(init.gpa);
+        var scratch: [7]u8 = undefined;
+        var offset: usize = 0;
+        while (offset < payload.len) {
+            const end = @min(payload.len, offset + 73);
+            const result = try encoder.step(payload[offset..end], &scratch);
+            offset += result.progress.input_read;
+            try encoded.appendSlice(init.gpa, scratch[0..result.progress.output_written]);
+        }
+        try encoder.finish();
+        while (true) {
+            const result = try encoder.step("", &scratch);
+            try encoded.appendSlice(init.gpa, scratch[0..result.progress.output_written]);
+            if (result.status == .done) break;
+        }
+        try std.Io.File.stdout().writeStreamingAll(init.io, encoded.items);
+        return;
+    }
     const name = if (lazy) mode["lazy-".len..] else if (ratio) mode["ratio-".len..] else if (static_dictionary) mode["dictionary-".len..] else if (stable_fast) mode["stable-fast-".len..] else if (stable_balanced) mode["stable-balanced-".len..] else mode;
     const payload = if (std.mem.eql(u8, name, "json"))
         "{\"kind\":\"event\",\"active\":true,\"values\":[1,2,3,5,8,13]}\n" ** 48

@@ -51,6 +51,17 @@ def main() -> int:
     if len(encoded) >= len(expected) // 100:
         raise SystemExit("ratio-oversized: expected compressed multi-block output")
     print(f"brotli planned ratio-oversized node diff: encoded={len(encoded)} decoded={len(actual)}")
+    state = 0x12345678
+    random_tail = bytearray(512)
+    for i in range(len(random_tail)):
+        state = (state * 1664525 + 1013904223) & 0xFFFFFFFF
+        random_tail[i] = state >> 24
+    expected = b"a" * 512 + random_tail
+    encoded = subprocess.check_output([sys.argv[1], "incremental-planned"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("incremental-planned: node output mismatch")
+    print(f"brotli planned incremental-planned node diff: encoded={len(encoded)} decoded={len(actual)}")
     expected = b" information follows the information"
     encoded = subprocess.check_output([sys.argv[1], "dictionary-words"])
     actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout

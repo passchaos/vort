@@ -8196,6 +8196,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   block stream with per-block compressed/stored fallback. A 2^24+17-byte
   boundary test checks multi-block compression and exact round-trip, and the
   Node differential independently decodes the same oversized stream.
+  Added `BrotliIncrementalPlannedStreamEncoder`, a caller-to-caller encoder
+  that buffers at most one configurable block, plans each block with the fast
+  LZ77/Huffman path, and falls back to stored wire when compression would
+  expand. It reuses the stored encoder's backpressure, flush, metadata, limit,
+  reset, and continued-stream state machine. Focused tests cover tiny input/
+  output slices, mixed compressed/stored blocks, and metadata between flushed
+  compressed blocks.
   The copy loop now also keeps a local destination cursor while draining each
   output span, removing the remaining per-byte history-write remainder without
   changing literal, stored, or dictionary emission. Twenty alternating

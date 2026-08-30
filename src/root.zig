@@ -112,6 +112,7 @@ pub const BrotliIncrementalCopyStreamDecoder = br.IncrementalCopyStreamDecoder;
 pub const BrotliIncrementalRleStreamDecoder = br.IncrementalRleStreamDecoder;
 pub const BrotliIncrementalStoredStreamDecoder = br.IncrementalStoredStreamDecoder;
 pub const BrotliIncrementalStoredStreamEncoder = br.IncrementalStoredStreamEncoder;
+pub const BrotliIncrementalPlannedStreamEncoder = br.IncrementalPlannedStreamEncoder;
 
 test "root Brotli incremental decoder continues framed payloads" {
     const first = try br.IncrementalTestSupport.encodeStored(std.testing.allocator, "one");
@@ -2164,6 +2165,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = BrotliCompressedSupportLimits;
     _ = BrotliPrefixCode;
     _ = BrotliStoredStreamEncoder;
+    _ = BrotliIncrementalPlannedStreamEncoder;
     _ = BrotliStreamDecoder;
     _ = brCompressedSupportLimits;
     _ = brMinimalStaticDictionaryCoverage;

@@ -30,7 +30,7 @@ pub fn Encoder(comptime Codec: type) type {
         pub const Options = struct {
             stream: Codec.StreamOptions = .{},
             max_input_len: usize = std.math.maxInt(usize),
-            block_len: usize = 64 * 1024,
+            block_len: usize = if (@hasDecl(Codec, "default_block_len")) Codec.default_block_len else 64 * 1024,
         };
         pub const Snapshot = struct {
             /// Cumulative source bytes accepted across all continued streams.
