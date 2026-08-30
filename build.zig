@@ -2868,6 +2868,26 @@ pub fn build(b: *std.Build) void {
     );
     br_progressive_huffman_bench_gate_step.dependOn(&br_progressive_huffman_bench_gate.step);
 
+    const br_incremental_planned_bench_exe = b.addExecutable(.{
+        .name = "vort-br-incremental-planned-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/br/incremental_planned_bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const run_br_incremental_planned_bench = b.addRunArtifact(br_incremental_planned_bench_exe);
+    if (b.args) |args| run_br_incremental_planned_bench.addArgs(args);
+    const br_incremental_planned_bench_step = b.step("run-br-incremental-planned-bench", "Compare warmed incremental and one-shot Brotli planning");
+    br_incremental_planned_bench_step.dependOn(&run_br_incremental_planned_bench.step);
+    const run_br_incremental_planned_bench_csv = b.addRunArtifact(br_incremental_planned_bench_exe);
+    run_br_incremental_planned_bench_csv.addArg("200");
+    const br_incremental_planned_bench_gate = b.addSystemCommand(&.{ "python3", "tools/br/incremental_planned_bench_gate.py", "--csv" });
+    br_incremental_planned_bench_gate.addFileArg(run_br_incremental_planned_bench_csv.captureStdOut(.{}));
+    const br_incremental_planned_bench_gate_step = b.step("run-br-incremental-planned-bench-gate", "Validate warmed incremental Brotli planner reuse");
+    br_incremental_planned_bench_gate_step.dependOn(&br_incremental_planned_bench_gate.step);
+
     const zstd_reference_bench_exe = b.addExecutable(.{
         .name = "vort-zstd-reference-bench",
         .root_module = b.createModule(.{
@@ -3903,6 +3923,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&br_upstream_multiblock_diff_exe.step);
     check_step.dependOn(&br_progressive_copy_bench_exe.step);
     check_step.dependOn(&br_progressive_huffman_bench_exe.step);
+    check_step.dependOn(&br_incremental_planned_bench_exe.step);
     check_step.dependOn(&zstd_native_frame_probe_exe.step);
     check_step.dependOn(&zstd_native_dictionary_probe_exe.step);
     check_step.dependOn(&lz4_native_dictionary_probe_exe.step);

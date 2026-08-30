@@ -8205,6 +8205,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   compressed blocks. Its codec-owned token, command, and hash-index storage is
   retained across blocks and `nextStream` calls; a public retained-capacity
   metric and repeated-stream test pin that warmed reuse contract.
+  Added a focused incremental planned-encoder benchmark/gate comparing warmed
+  codec-owned state with rebuilding the one-shot fast encoder. On fixed CPU 8
+  at 200 iterations both paths emit 120-byte streams for the 4,992-byte
+  payload, while retained state is about 25 KiB and improves elapsed time by
+  1.35x. The gate requires at least 1.10x and independently decodes both wires.
   The copy loop now also keeps a local destination cursor while draining each
   output span, removing the remaining per-byte history-write remainder without
   changing literal, stored, or dictionary emission. Twenty alternating

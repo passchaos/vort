@@ -64,6 +64,17 @@ test "incremental planned encoder retains planner capacity across streams" {
     defer std.testing.allocator.free(second);
     try std.testing.expectEqualSlices(u8, first, second);
     try std.testing.expectEqual(retained, encoder.retainedCapacity());
+
+    try encoder.nextStream(.{ .block_len = payload.len });
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    encoder.allocator = failing.allocator();
+    var output: [payload.len + 16]u8 = undefined;
+    const written = encodeIncrementalInto(&encoder, payload, &output) catch |err| {
+        encoder.allocator = std.testing.allocator;
+        return err;
+    };
+    encoder.allocator = std.testing.allocator;
+    try std.testing.expectEqualSlices(u8, first, output[0..written]);
 }
 
 fn encodeIncremental(encoder: *br.IncrementalPlannedStreamEncoder, input: []const u8, input_chunk_len: usize, output_chunk_len: usize) ![]u8 {
@@ -107,5 +118,21 @@ fn drainFinish(encoder: *br.IncrementalPlannedStreamEncoder, encoded: *std.Array
         try encoded.appendSlice(std.testing.allocator, scratch[0..result.progress.output_written]);
         if (result.status == .done) return;
         try std.testing.expectEqual(core.StepResult.Status.need_output, result.status);
+    }
+}
+
+fn encodeIncrementalInto(encoder: *br.IncrementalPlannedStreamEncoder, input: []const u8, output: []u8) !usize {
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (input_offset < input.len) {
+        const result = try encoder.step(input[input_offset..], output[output_offset..]);
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+    }
+    try encoder.finish();
+    while (true) {
+        const result = try encoder.step("", output[output_offset..]);
+        output_offset += result.progress.output_written;
+        if (result.status == .done) return output_offset;
     }
 }
