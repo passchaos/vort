@@ -65,6 +65,9 @@ def main() -> int:
             fields = dict(field.split("=", 1) for field in output.split() if "=" in field)
             if fields.get("case") != kind or fields.get("samples") != "32/4/4":
                 raise SystemExit(f"coverage mismatch: {output!r}")
+            selected_content, reference_content = map(int, fields["content"].split("/", 1))
+            if selected_content <= 0 or selected_content > int(fields["target"]) or reference_content <= 0:
+                raise SystemExit(f"invalid selected history size: {output!r}")
             ratios = []
             for level in ("level1", "level3", "level9"):
                 vort_size, reference_size = map(int, fields[level].split("/", 1))

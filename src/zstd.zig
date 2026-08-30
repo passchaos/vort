@@ -369,9 +369,10 @@ pub fn trainStandardDictionaryAlloc(
 }
 
 /// Validation-guided variant of `trainStandardDictionaryAlloc`. The held-out
-/// samples select among a fixed family of history phrase configurations; the
-/// complete training corpus still supplies the Huffman and sequence entropy
-/// statistics after that history has been chosen.
+/// samples select among a fixed family of phrase configurations, layouts, and
+/// bounded history sizes using a codec-independent stored/literal/match cost.
+/// The complete training corpus still supplies the Huffman and sequence
+/// entropy statistics after that history has been chosen.
 pub fn trainValidatedStandardDictionaryAlloc(
     allocator: std.mem.Allocator,
     training_samples: []const []const u8,
@@ -381,7 +382,28 @@ pub fn trainValidatedStandardDictionaryAlloc(
 ) Error!OwnedStandardDictionary {
     if (dictionary_id == 0) return error.InvalidDictionaryMetadata;
     if (training_samples.len == 0 or validation_samples.len == 0) return error.InvalidDictionaryTraining;
-    const content = try dictionary_mod.trainValidatedAlloc(allocator, training_samples, validation_samples, options);
+    const target_sizes = validatedDictionaryTargetSizes(options.target_size);
+    var best_content: ?[]u8 = null;
+    errdefer if (best_content) |bytes| allocator.free(bytes);
+    var best_estimated_bits: usize = std.math.maxInt(usize);
+    for (target_sizes) |target_size| {
+        if (target_size == 0) continue;
+        var candidate_options = options;
+        candidate_options.target_size = target_size;
+        const candidate = try dictionary_mod.trainValidatedAlloc(allocator, training_samples, validation_samples, candidate_options);
+        errdefer allocator.free(candidate);
+        if (candidate.len < 8) {
+            allocator.free(candidate);
+            continue;
+        }
+        const score = try dictionary_mod.validationScoreAlloc(allocator, candidate, validation_samples, options.min_phrase_len);
+        if (best_content == null or score.estimated_bits < best_estimated_bits) {
+            if (best_content) |bytes| allocator.free(bytes);
+            best_content = candidate;
+            best_estimated_bits = score.estimated_bits;
+        } else allocator.free(candidate);
+    }
+    const content = best_content orelse return error.InvalidDictionaryTraining;
     defer allocator.free(content);
     return try standardDictionaryFromSelectedContentAndSamplesAlloc(
         allocator,
@@ -389,6 +411,55 @@ pub fn trainValidatedStandardDictionaryAlloc(
         training_samples,
         dictionary_id,
     );
+}
+
+fn validatedDictionaryTargetSizes(target_size: usize) [4]usize {
+    // Preserve the requested target first for deterministic ties. The smaller
+    // candidates trade a little coverage for dictionary bytes and cheaper
+    // first-block offsets; all values remain bounded by the caller's budget.
+    return .{
+        target_size,
+        target_size / 2 + target_size / 4,
+        target_size / 2 + target_size / 8,
+        target_size / 2,
+    };
+}
+
+test "standard Zstd validated target ladder is bounded" {
+    try std.testing.expectEqual([4]usize{ 352, 264, 220, 176 }, validatedDictionaryTargetSizes(352));
+    const maximum = validatedDictionaryTargetSizes(std.math.maxInt(usize));
+    for (maximum) |size| try std.testing.expect(size <= std.math.maxInt(usize));
+}
+
+test "standard Zstd validated trainer selects deterministic bounded history" {
+    const training = [_][]const u8{
+        "service=vort region=west status=ok message=alpha alpha alpha",
+        "service=vort region=east status=ok message=beta beta beta",
+        "service=vort region=north status=warn message=gamma gamma",
+    };
+    const validation = [_][]const u8{
+        "service=vort region=south status=ok message=alpha beta",
+        "service=vort region=west status=warn message=gamma alpha",
+    };
+    const first = try trainValidatedStandardDictionaryAlloc(
+        std.testing.allocator,
+        &training,
+        &validation,
+        .{ .target_size = 64 },
+        0x1000_0004,
+    );
+    defer first.deinit(std.testing.allocator);
+    const second = try trainValidatedStandardDictionaryAlloc(
+        std.testing.allocator,
+        &training,
+        &validation,
+        .{ .target_size = 64 },
+        0x1000_0004,
+    );
+    defer second.deinit(std.testing.allocator);
+    try std.testing.expect(first.view.content.len >= 8);
+    try std.testing.expect(first.view.content.len <= 64);
+    try std.testing.expectEqualSlices(u8, first.bytes, second.bytes);
 }
 
 fn standardDictionaryFromSelectedContentAndSamplesAlloc(

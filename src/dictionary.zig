@@ -491,6 +491,39 @@ pub const MatchSummary = struct {
     }
 };
 
+pub const ValidationScore = struct {
+    estimated_bits: usize = 0,
+    covered_bytes: usize = 0,
+    matches: usize = 0,
+    distance_bits: usize = 0,
+};
+
+/// Estimate dictionary-coded wire cost without depending on a particular
+/// codec's encoder heuristics. Each unmatched byte costs eight bits; each match
+/// pays its offset width plus a conservative four-bit sequence overhead.
+/// Including dictionary storage makes target-size candidates comparable rather
+/// than rewarding larger histories solely for marginal extra coverage.
+pub fn validationScoreAlloc(
+    allocator: std.mem.Allocator,
+    dict: []const u8,
+    samples: []const []const u8,
+    min_match_len: usize,
+) !ValidationScore {
+    var score: ValidationScore = .{ .estimated_bits = std.math.mul(usize, dict.len, 8) catch return error.InvalidDictionaryTraining };
+    for (samples) |sample| {
+        const summary = try summarizeMatchesAlloc(allocator, dict, sample, min_match_len);
+        score.covered_bytes = std.math.add(usize, score.covered_bytes, summary.covered_bytes) catch return error.InvalidDictionaryTraining;
+        score.matches = std.math.add(usize, score.matches, summary.matches) catch return error.InvalidDictionaryTraining;
+        score.distance_bits = std.math.add(usize, score.distance_bits, summary.distance_bits) catch return error.InvalidDictionaryTraining;
+        const literal_bits = std.math.mul(usize, sample.len - summary.covered_bytes, 8) catch return error.InvalidDictionaryTraining;
+        score.estimated_bits = std.math.add(usize, score.estimated_bits, literal_bits) catch return error.InvalidDictionaryTraining;
+        score.estimated_bits = std.math.add(usize, score.estimated_bits, summary.distance_bits) catch return error.InvalidDictionaryTraining;
+        const match_overhead = std.math.mul(usize, summary.matches, 4) catch return error.InvalidDictionaryTraining;
+        score.estimated_bits = std.math.add(usize, score.estimated_bits, match_overhead) catch return error.InvalidDictionaryTraining;
+    }
+    return score;
+}
+
 pub fn planTraining(samples: []const []const u8, target_size: usize) TrainingPlan {
     var total: usize = 0;
     for (samples) |sample| total += sample.len;
@@ -522,7 +555,8 @@ pub fn summarizeMatchesAlloc(allocator: std.mem.Allocator, dict: []const u8, sam
     for (matches) |match| {
         summary.covered_bytes += match.length;
         summary.longest = @max(summary.longest, match.length);
-        const distance = dict.len + match.sample_offset - match.dictionary_offset;
+        const logical_position = std.math.add(usize, dict.len, match.sample_offset) catch return error.InvalidDictionaryTraining;
+        const distance = logical_position - match.dictionary_offset;
         summary.distance_bits += std.math.log2_int(usize, distance) + 1;
     }
     return summary;

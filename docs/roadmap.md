@@ -8367,3 +8367,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   `800/810/803` versus zstd's `795/796/810`; all rows remain inside the parity
   gate and the aggregate JSON gap narrows without weakening the existing
   full-dictionary controls.
+  The validated selector now evaluates a bounded history-size ladder at 100%,
+  75%, 62.5%, and 50% of the caller's target. Its codec-independent estimate
+  charges both stored dictionary bytes and unmatched literals, then adds match
+  and offset-width costs. For the 352-byte trainer-parity target this selects
+  264 bytes for text and 176 bytes for JSON/binary. Held-out output becomes
+  text `354/352/311`, JSON `205/213/199`, and binary `792/814/796` at levels
+  1/3/9 respectively, versus the preceding `364/346/311`, `223/216/198`, and
+  `800/810/803`. Aggregate size improves from 4,071 to 4,036 bytes; JSON level
+  9 and binary level 3 regress by only 1 and 4 bytes and remain guarded by the
+  existing per-corpus parity ceiling.

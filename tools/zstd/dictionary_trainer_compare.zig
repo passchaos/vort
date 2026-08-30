@@ -99,8 +99,8 @@ pub fn main(init: std.process.Init) !void {
     var buffer: [512]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
     try stdout.interface.print(
-        "zstd_dictionary_trainer_compare=ok case={s} samples={d}/{d}/{d} dict={d}/{d} level1={d}/{d} level3={d}/{d} level9={d}/{d}\n",
-        .{ case_name, training_count, selector_count, heldout_count, trained.bytes.len, reference_bytes.len, vort_sizes[0], reference_sizes[0], vort_sizes[1], reference_sizes[1], vort_sizes[2], reference_sizes[2] },
+        "zstd_dictionary_trainer_compare=ok case={s} samples={d}/{d}/{d} target={d} content={d}/{d} dict={d}/{d} level1={d}/{d} level3={d}/{d} level9={d}/{d}\n",
+        .{ case_name, training_count, selector_count, heldout_count, target_size, trained.view.content.len, reference.view.content.len, trained.bytes.len, reference_bytes.len, vort_sizes[0], reference_sizes[0], vort_sizes[1], reference_sizes[1], vort_sizes[2], reference_sizes[2] },
     );
     try stdout.interface.flush();
 }
