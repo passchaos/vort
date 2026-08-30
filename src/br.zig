@@ -1594,11 +1594,17 @@ fn selectOptimalRatioCandidates(allocator: std.mem.Allocator, input: []const u8,
     if (optimal_plan.stats.matches == 0) return;
     const optimal_commands = try command_plan.buildAlloc(allocator, input, optimal_plan.tokens);
     defer optimal_commands.deinit(allocator);
-    const candidate = try encodeLazyCommandPlanAlloc(allocator, input, optimal_commands.commands, stats, .{ .try_recent_distances = true });
-    if (candidate.len < baseline.*.len) {
-        allocator.free(baseline.*);
-        baseline.* = candidate;
-    } else allocator.free(candidate);
+    for ([_]u6{ 32, 40, 48, 52, 56, 60 }) |cutoff| {
+        const candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, optimal_commands.commands, null, stats, .{
+            .use_recent_distances = true,
+            .use_utf8_text_contexts = true,
+            .utf8_context_cutoff = cutoff,
+        });
+        if (candidate.len < baseline.*.len) {
+            allocator.free(baseline.*);
+            baseline.* = candidate;
+        } else allocator.free(candidate);
+    }
 }
 
 fn chooseStoredIfSmaller(allocator: std.mem.Allocator, input: []const u8, compressed: []u8) Error![]u8 {
@@ -1699,6 +1705,7 @@ pub fn encodePlannedStreamLazyWithOptionsAlloc(allocator: std.mem.Allocator, inp
 const CommandPlanEncodeOptions = struct {
     use_recent_distances: bool = false,
     use_utf8_text_contexts: bool = false,
+    utf8_context_cutoff: u6 = 56,
     window_bits: u5 = default_window_bits,
     write_stream_prefix: bool = true,
     final_meta_block: bool = true,
@@ -2429,7 +2436,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
                 const previous = if (position == 0) 0 else input[position - 1];
                 const second_previous = if (position < 2) 0 else input[position - 2];
                 const context = literal_context.value(literal_context.mode_utf8, previous, second_previous);
-                literal_context_frequencies[literal_context.utf8TextTree(context)][literal] += 1;
+                literal_context_frequencies[literal_context.utf8SuffixTree(context, options.utf8_context_cutoff)][literal] += 1;
             }
         }
         if (!command.has_copy) continue;
@@ -2480,7 +2487,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     if (io) |active| stats.lengths_ns = elapsedNs(lengths_start.?, active);
     const header_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     if (options.use_utf8_text_contexts) {
-        try writePlannedCompressedHeaderTwoLiteralContexts(allocator, writer, &literal_context_alphabets, &literal_context_lengths, &command_alphabet, &distance_alphabet, distance_alphabet_size, &command_lengths, &distance_lengths);
+        try writePlannedCompressedHeaderTwoLiteralContexts(allocator, writer, &literal_context_alphabets, &literal_context_lengths, options.utf8_context_cutoff, &command_alphabet, &distance_alphabet, distance_alphabet_size, &command_lengths, &distance_lengths);
     } else try writePlannedCompressedHeader(allocator, writer, &literal_alphabet, &command_alphabet, &distance_alphabet, distance_alphabet_size, &literal_lengths, &command_lengths, &distance_lengths);
     if (io) |active| stats.header_ns = elapsedNs(header_start.?, active);
 
@@ -2525,7 +2532,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
                 const previous = if (position == 0) 0 else input[position - 1];
                 const second_previous = if (position < 2) 0 else input[position - 2];
                 const context = literal_context.value(literal_context.mode_utf8, previous, second_previous);
-                const encoder = &literal_context_encoders[literal_context.utf8TextTree(context)];
+                const encoder = &literal_context_encoders[literal_context.utf8SuffixTree(context, options.utf8_context_cutoff)];
                 if (encoder.bits[literal] != 0) try writer.writeHuffmanBits(allocator, encoder.codes[literal], encoder.bits[literal]);
             } else if (literal_alphabet.len > 1) try writer.writeHuffmanBits(allocator, literal_encoder.codes[literal], literal_encoder.bits[literal]);
         }
@@ -8524,7 +8531,7 @@ test "br ratio planner keeps an exact optimal candidate for source blocks" {
     const ratio = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
     defer std.testing.allocator.free(ratio);
     try std.testing.expect(ratio.len < baseline.len);
-    try std.testing.expectEqual(@as(usize, 5534), ratio.len);
+    try std.testing.expectEqual(@as(usize, 5530), ratio.len);
     const decoded = try decodeStreamAllocExactSize(std.testing.allocator, ratio, payload.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
@@ -15889,6 +15896,21 @@ test "br UTF8 text context map uses compact zero-run coding" {
     try std.testing.expect(encoded.items.len <= 4);
 }
 
+test "br UTF8 suffix context maps round trip candidate cutoffs" {
+    for ([_]u6{ 32, 40, 48, 52, 56, 60 }) |cutoff| {
+        var encoded: std.ArrayList(u8) = .empty;
+        defer encoded.deinit(std.testing.allocator);
+        var writer = BitWriter{ .out = &encoded };
+        try writeUtf8SuffixContextMap(std.testing.allocator, &writer, cutoff);
+
+        var reader = bitstream.BitReader.init(encoded.items);
+        var context_map: [64]u8 = undefined;
+        try readContextMap(&reader, &context_map, 2);
+        for (context_map, 0..) |tree, context|
+            try std.testing.expectEqual(literal_context.utf8SuffixTree(context, cutoff), tree);
+    }
+}
+
 test "br distance context map reader preserves nonzero tree indexes" {
     var encoded: std.ArrayList(u8) = .empty;
     defer encoded.deinit(std.testing.allocator);
@@ -16475,6 +16497,7 @@ fn writePlannedCompressedHeaderTwoLiteralContexts(
     writer: *BitWriter,
     literal_alphabets: *const [2]command_plan.PrefixAlphabetFor(256),
     literal_lengths: *const [2][256]u4,
+    context_cutoff: u6,
     command_alphabet: *const command_plan.PrefixAlphabet,
     distance_alphabet: *const command_plan.PrefixAlphabetFor(planned_distance_alphabet_size),
     distance_alphabet_size: usize,
@@ -16488,7 +16511,7 @@ fn writePlannedCompressedHeaderTwoLiteralContexts(
     try writer.writeBits(allocator, 15, 4); // NDIRECT
     try writer.writeBits(allocator, literal_context.mode_utf8, 2);
     try writeBlockTypeCount(allocator, writer, 2);
-    try writeUtf8TextContextMap(allocator, writer);
+    try writeUtf8SuffixContextMap(allocator, writer, context_cutoff);
     try writeBlockTypeCount(allocator, writer, 1);
     inline for (0..2) |tree| try writePrefixSymbolsWithLengths(allocator, writer, 256, &literal_alphabets[tree], &literal_lengths[tree]);
     try writePrefixSymbolsWithLengths(allocator, writer, 704, command_alphabet, command_lengths);
@@ -16496,6 +16519,11 @@ fn writePlannedCompressedHeaderTwoLiteralContexts(
 }
 
 fn writeUtf8TextContextMap(allocator: std.mem.Allocator, writer: *BitWriter) Error!void {
+    return writeUtf8SuffixContextMap(allocator, writer, 56);
+}
+
+fn writeUtf8SuffixContextMap(allocator: std.mem.Allocator, writer: *BitWriter, cutoff: u6) Error!void {
+    if (cutoff < 32 or cutoff > 63) return error.InvalidBlockPlan;
     try writer.writeBits(allocator, 1, 1); // Use zero-run RLE.
     try writer.writeBits(allocator, 5, 4); // RLEMAX = 6.
     try writer.writeBits(allocator, 1, 2); // Simple prefix.
@@ -16504,8 +16532,8 @@ fn writeUtf8TextContextMap(allocator: std.mem.Allocator, writer: *BitWriter) Err
     try writer.writeBits(allocator, 5, alphabetBits(8));
     try writer.writeBits(allocator, 7, alphabetBits(8));
     try writer.writeBits(allocator, 0, 1); // Symbol 5.
-    try writer.writeBits(allocator, 56 - 32, 5);
-    for (0..8) |_| try writer.writeBits(allocator, 1, 1); // Symbol 7.
+    try writer.writeBits(allocator, cutoff - 32, 5);
+    for (cutoff..64) |_| try writer.writeBits(allocator, 1, 1); // Symbol 7.
     try writer.writeBits(allocator, 0, 1); // IMTF = false.
 }
 

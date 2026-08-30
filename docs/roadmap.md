@@ -8179,6 +8179,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   ReleaseFast CPU-8 pairs against the earlier 512-chain/two-proposal version
   preserve source/JSON/log/mixed bytes while improving median ratio-encode
   time by 1.85--1.96x with 16/16 wins in every row.
+  Ratio-mode entropy arbitration now tests six compact two-tree UTF-8 context
+  suffix maps on the selected optimal command plan. Each map is fully encoded
+  and must beat the current exact wire; the source corpus selects context 48
+  instead of the previous lowercase-only context 56 split, trimming another
+  four bytes (5,534 to 5,530) while remaining within 1.2% of libbrotli quality
+  8. Context-map round-trip tests cover every retained cutoff, and the q8
+  source gate pins the new 5,530-byte ceiling.
   The copy loop now also keeps a local destination cursor while draining each
   output span, removing the remaining per-byte history-write remainder without
   changing literal, stored, or dictionary emission. Twenty alternating

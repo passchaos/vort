@@ -28,7 +28,14 @@ pub inline fn valueClustered(mode: u2, previous: u8, second_previous: u8) usize 
 /// Grouping all four consonant contexts with vowels keeps the map compact while
 /// separating text continuation bytes from punctuation/binary contexts.
 pub fn utf8TextTree(context: usize) u1 {
-    return @intFromBool(context >= 56);
+    return utf8SuffixTree(context, 56);
+}
+
+/// Map a contiguous suffix of RFC UTF-8 contexts to the second literal tree.
+/// A contiguous split has a compact run-length-coded context map, making it a
+/// useful bounded candidate for exact whole-wire ratio arbitration.
+pub fn utf8SuffixTree(context: usize, cutoff: u6) u1 {
+    return @intFromBool(context >= cutoff);
 }
 
 fn utf8(previous: u8, second_previous: u8) usize {
@@ -102,6 +109,12 @@ test "utf8 text tree selects lowercase letter contexts" {
     try std.testing.expectEqual(@as(u1, 1), utf8TextTree(value(mode_utf8, 'z', 'a')));
     try std.testing.expectEqual(@as(u1, 0), utf8TextTree(value(mode_utf8, ' ', 'a')));
     try std.testing.expectEqual(@as(u1, 0), utf8TextTree(value(mode_utf8, 0xff, 0xff)));
+}
+
+test "utf8 suffix tree honors boundary cutoffs" {
+    try std.testing.expectEqual(@as(u1, 0), utf8SuffixTree(47, 48));
+    try std.testing.expectEqual(@as(u1, 1), utf8SuffixTree(48, 48));
+    try std.testing.expectEqual(@as(u1, 1), utf8SuffixTree(63, 48));
 }
 
 test "utf8 context separates two-byte and four-byte lead history" {
