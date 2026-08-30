@@ -1522,7 +1522,14 @@ pub fn encodePlannedStreamLazyAlloc(allocator: std.mem.Allocator, input: []const
 /// static-dictionary/stored arbitration so this stable level still accepts
 /// arbitrary payloads inside its documented one-meta-block size range.
 pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []const u8) Error![]u8 {
-    if (input.len > max_uncompressed_meta_block_len) return error.InvalidBlockPlan;
+    if (input.len > max_uncompressed_meta_block_len) {
+        // A Brotli meta-block can describe at most 2^24 output bytes. Keep the
+        // stable ratio API total over larger slices by emitting one bounded
+        // stream of independently planned blocks rather than failing or
+        // returning concatenated Brotli streams (which the format forbids).
+        const chunks = [_][]const u8{input};
+        return encodePlannedStreamChunksAlloc(allocator, &chunks);
+    }
     if (input.len < 5) return encodeStoredStreamAlloc(allocator, input);
     const parser_options = PlannedParserOptions{
         .window_len = (@as(usize, 1) << default_window_bits) - 16,
@@ -9162,6 +9169,24 @@ test "br planned chunked encoder splits large input and streams byte progressive
     try decoder.finish();
     try std.testing.expectEqual(encoded.len, input_offset);
     try std.testing.expectEqualSlices(u8, payload, output[0..output_offset]);
+}
+
+test "br ratio encoder splits input beyond one meta-block" {
+    const input_len = max_uncompressed_meta_block_len + 17;
+    const input = try std.testing.allocator.alloc(u8, input_len);
+    defer std.testing.allocator.free(input);
+    for (input, 0..) |*byte, i| byte.* = "abcd0123"[i & 7];
+
+    const encoded = try encodePlannedStreamRatioAlloc(std.testing.allocator, input);
+    defer std.testing.allocator.free(encoded);
+    const summary = try summarizeStreamAlloc(std.testing.allocator, encoded);
+    try std.testing.expectEqual(input.len, summary.decoded_bytes);
+    try std.testing.expect(summary.compressed_meta_block_count >= 2);
+    try std.testing.expect(encoded.len < input.len / 100);
+
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, encoded, input.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, input, decoded);
 }
 
 test "br simple encoder selects RLE or stored streams" {

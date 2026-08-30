@@ -43,6 +43,14 @@ def main() -> int:
     if actual != expected:
         raise SystemExit("chunked-large: node output mismatch")
     print(f"brotli planned chunked-large node diff: encoded={len(encoded)} decoded={len(actual)}")
+    expected = b"abcd0123" * ((1 << 24) // 8) + b"abcd0123abcd0123a"
+    encoded = subprocess.check_output([sys.argv[1], "ratio-oversized"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("ratio-oversized: node output mismatch")
+    if len(encoded) >= len(expected) // 100:
+        raise SystemExit("ratio-oversized: expected compressed multi-block output")
+    print(f"brotli planned ratio-oversized node diff: encoded={len(encoded)} decoded={len(actual)}")
     expected = b" information follows the information"
     encoded = subprocess.check_output([sys.argv[1], "dictionary-words"])
     actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout

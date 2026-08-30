@@ -8190,6 +8190,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   `0/3/7/15` rather than hard-coding 15. The source plan selects NDIRECT=0,
   reducing its stream by another four bytes to 5,526 (1.08% above libbrotli
   quality 8); every alternative remains guarded by complete final-wire size.
+  Stable Brotli ratio encoding now accepts inputs larger than the RFC 2^24-byte
+  meta-block maximum instead of returning `InvalidBlockPlan`. It routes such
+  slices through the bounded 32 KiB planner and emits one legal multi-meta-
+  block stream with per-block compressed/stored fallback. A 2^24+17-byte
+  boundary test checks multi-block compression and exact round-trip, and the
+  Node differential independently decodes the same oversized stream.
   The copy loop now also keeps a local destination cursor while draining each
   output span, removing the remaining per-byte history-write remainder without
   changing literal, stored, or dictionary emission. Twenty alternating

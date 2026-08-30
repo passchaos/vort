@@ -36,6 +36,16 @@ pub fn main(init: std.process.Init) !void {
         try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
         return;
     }
+    if (std.mem.eql(u8, mode, "ratio-oversized")) {
+        const input_len = vort.brotliMaxUncompressedMetaBlockLen + 17;
+        const payload = try init.gpa.alloc(u8, input_len);
+        defer init.gpa.free(payload);
+        for (payload, 0..) |*byte, i| byte.* = "abcd0123"[i & 7];
+        const encoded = try vort.brEncodePlannedStreamRatioAlloc(init.gpa, payload);
+        defer init.gpa.free(encoded);
+        try std.Io.File.stdout().writeStreamingAll(init.io, encoded);
+        return;
+    }
     const name = if (lazy) mode["lazy-".len..] else if (ratio) mode["ratio-".len..] else if (static_dictionary) mode["dictionary-".len..] else if (stable_fast) mode["stable-fast-".len..] else if (stable_balanced) mode["stable-balanced-".len..] else mode;
     const payload = if (std.mem.eql(u8, name, "json"))
         "{\"kind\":\"event\",\"active\":true,\"values\":[1,2,3,5,8,13]}\n" ** 48
