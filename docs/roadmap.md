@@ -8377,3 +8377,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   `800/810/803`. Aggregate size improves from 4,071 to 4,036 bytes; JSON level
   9 and binary level 3 regress by only 1 and 4 bytes and remain guarded by the
   existing per-corpus parity ceiling.
+  Added a cross-sample phrase-ranking candidate that counts how many distinct
+  training samples contain each retained phrase before considering total
+  frequency, length, and lexical ties. The legacy total-frequency ordering is
+  still evaluated first and remains the public non-validated trainer's exact
+  output. On the held-out parity corpus, this changes the selected text history
+  back to the full 352-byte budget and improves levels 1/3/9 from
+  `354/352/311` to `333/301/271`; it now beats zstd at levels 1 and 9 and is
+  within 2.8% at level 3 (`301/293`). JSON and binary remain unchanged. The
+  gate now pins text to no worse than parity at levels 1/9 and within 5% at
+  level 3.

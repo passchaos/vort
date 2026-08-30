@@ -78,10 +78,17 @@ def main() -> int:
             # to remain within 20% while the selector is improved iteratively.
             if max(ratios) > 1.50 or sum(ratios) / len(ratios) > 1.20:
                 raise SystemExit(f"trainer parity gap exceeded: {output!r}")
+            if kind == "text" and (ratios[0] > 1.0 or ratios[2] > 1.0 or ratios[1] > 1.05):
+                raise SystemExit(f"text trainer parity regressed: {output!r}")
             rows.append((kind, fields, output))
 
     for _, _, output in rows:
         print(output)
+    total_vort = sum(int(fields[level].split("/", 1)[0]) for _, fields, _ in rows for level in ("level1", "level3", "level9"))
+    total_reference = sum(int(fields[level].split("/", 1)[1]) for _, fields, _ in rows for level in ("level1", "level3", "level9"))
+    if total_vort * 100 > total_reference * 103:
+        raise SystemExit(f"aggregate trainer parity gap exceeded: {total_vort}/{total_reference}")
+    print(f"zstd_dictionary_trainer_compare_gate=ok total={total_vort}/{total_reference}")
     return 0
 
 
