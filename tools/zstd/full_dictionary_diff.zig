@@ -44,6 +44,7 @@ pub fn main(init: std.process.Init) !void {
     defer runtime.deinit();
     var trained_size: usize = 0;
     var baseline_size: usize = 0;
+    var trained_sequence_entropy_len: usize = 0;
 
     if (generated_path) |output_path| {
         const generated_id = if (parsed.view.id == std.math.maxInt(u32)) 1 else parsed.view.id + 1;
@@ -82,6 +83,10 @@ pub fn main(init: std.process.Init) !void {
         defer trained_baseline.deinit(init.gpa);
         const trained_summary = try vort.zstdSummarizeStandardDictionary(trained.bytes);
         if (trained_summary.huffman_symbol_count != 256) return error.InvalidDictionaryMetadata;
+        if (trained_summary.offset_accuracy_log != 8 or
+            trained_summary.match_accuracy_log != 9 or
+            trained_summary.literal_accuracy_log != 9) return error.InvalidDictionaryMetadata;
+        trained_sequence_entropy_len = trained_summary.sequence_entropy_len;
         const trained_dictionary = trained.asDictionary();
         const trained_vort = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(init.gpa, payload, .{ .content_checksum = false }, trained_dictionary);
         defer init.gpa.free(trained_vort.frame);
@@ -152,8 +157,8 @@ pub fn main(init: std.process.Init) !void {
     var buffer: [384]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
     try stdout.interface.print(
-        "zstd_full_dictionary_diff=ok version={s} id={d} vort={d} reference={d} generated={s} trained={d} baseline={d}\n",
-        .{ runtime.version(), parsed.view.id, vort_encoded.frame.len, reference_encoded.len, if (generated_path == null) "no" else "yes", trained_size, baseline_size },
+        "zstd_full_dictionary_diff=ok version={s} id={d} vort={d} reference={d} generated={s} trained={d} baseline={d} sequence_entropy={d}\n",
+        .{ runtime.version(), parsed.view.id, vort_encoded.frame.len, reference_encoded.len, if (generated_path == null) "no" else "yes", trained_size, baseline_size, trained_sequence_entropy_len },
     );
     try stdout.interface.flush();
 }

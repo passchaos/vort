@@ -60,25 +60,26 @@ pub fn encodeFromContentInto(content: []const u8, dictionary_id: u32, output: []
     return needed;
 }
 
-pub fn encodedFromEntropyLen(content_len: usize, literal_entropy_len: usize) !usize {
+pub fn encodedFromEntropyLen(content_len: usize, literal_entropy_len: usize, sequence_entropy_len: usize) !usize {
     var total = std.math.add(usize, 8, literal_entropy_len) catch return error.IntegerOverflow;
-    total = std.math.add(usize, total, baseline_sequence_entropy.len) catch return error.IntegerOverflow;
+    total = std.math.add(usize, total, sequence_entropy_len) catch return error.IntegerOverflow;
     total = std.math.add(usize, total, baseline_repcodes.len * @sizeOf(u32)) catch return error.IntegerOverflow;
     return std.math.add(usize, total, content_len) catch return error.IntegerOverflow;
 }
 
-/// Assemble a full dictionary whose literal Huffman description was trained by
-/// the parent codec. Sequence FSE tables and repcodes remain the portable
-/// baseline until sequence-statistics training is implemented.
+/// Assemble a full dictionary from caller-provided Huffman and OF/ML/LL FSE
+/// descriptions. The parent codec owns entropy construction and validation;
+/// repcodes remain the portable baseline here.
 pub fn encodeFromEntropyInto(
     content: []const u8,
     dictionary_id: u32,
     literal_entropy: []const u8,
+    sequence_entropy: []const u8,
     output: []u8,
 ) !usize {
     try validateGenerationInput(content.len, dictionary_id);
-    if (literal_entropy.len == 0) return error.InvalidDictionaryTraining;
-    const needed = try encodedFromEntropyLen(content.len, literal_entropy.len);
+    if (literal_entropy.len == 0 or sequence_entropy.len == 0) return error.InvalidDictionaryTraining;
+    const needed = try encodedFromEntropyLen(content.len, literal_entropy.len, sequence_entropy.len);
     if (output.len < needed) return error.OutputTooSmall;
 
     std.mem.writeInt(u32, output[0..4], magic, .little);
@@ -86,8 +87,8 @@ pub fn encodeFromEntropyInto(
     var offset: usize = 8;
     @memcpy(output[offset..][0..literal_entropy.len], literal_entropy);
     offset += literal_entropy.len;
-    @memcpy(output[offset..][0..baseline_sequence_entropy.len], baseline_sequence_entropy);
-    offset += baseline_sequence_entropy.len;
+    @memcpy(output[offset..][0..sequence_entropy.len], sequence_entropy);
+    offset += sequence_entropy.len;
     for (baseline_repcodes) |repcode| {
         std.mem.writeInt(u32, output[offset..][0..4], repcode, .little);
         offset += 4;
@@ -163,16 +164,17 @@ test "standard dictionary baseline container encoding" {
 test "standard dictionary custom entropy assembly is sized before writes" {
     const content = "dictionary history";
     const literal_entropy = [_]u8{ 128, 0x11 };
-    const needed = try encodedFromEntropyLen(content.len, literal_entropy.len);
+    const needed = try encodedFromEntropyLen(content.len, literal_entropy.len, baseline_sequence_entropy.len);
     var output: [8 + literal_entropy.len + baseline_sequence_entropy.len + 12 + content.len]u8 = undefined;
     try std.testing.expectEqual(output.len, needed);
-    try std.testing.expectEqual(needed, try encodeFromEntropyInto(content, 9, &literal_entropy, &output));
+    try std.testing.expectEqual(needed, try encodeFromEntropyInto(content, 9, &literal_entropy, baseline_sequence_entropy, &output));
     try std.testing.expectEqualSlices(u8, &literal_entropy, output[8 .. 8 + literal_entropy.len]);
     try std.testing.expectEqualSlices(u8, baseline_sequence_entropy, output[8 + literal_entropy.len ..][0..baseline_sequence_entropy.len]);
 
     const before = output;
-    try std.testing.expectError(error.OutputTooSmall, encodeFromEntropyInto(content, 9, &literal_entropy, output[0 .. output.len - 1]));
+    try std.testing.expectError(error.OutputTooSmall, encodeFromEntropyInto(content, 9, &literal_entropy, baseline_sequence_entropy, output[0 .. output.len - 1]));
     try std.testing.expectEqualSlices(u8, &before, &output);
-    try std.testing.expectError(error.InvalidDictionaryTraining, encodeFromEntropyInto(content, 9, &.{}, &output));
-    try std.testing.expectError(error.IntegerOverflow, encodedFromEntropyLen(std.math.maxInt(usize), 1));
+    try std.testing.expectError(error.InvalidDictionaryTraining, encodeFromEntropyInto(content, 9, &.{}, baseline_sequence_entropy, &output));
+    try std.testing.expectError(error.InvalidDictionaryTraining, encodeFromEntropyInto(content, 9, &literal_entropy, &.{}, &output));
+    try std.testing.expectError(error.IntegerOverflow, encodedFromEntropyLen(std.math.maxInt(usize), 1, 1));
 }

@@ -274,6 +274,8 @@ pub const StandardDictionaryEntropySummary = struct {
     content_offset: usize,
     content_len: usize,
     repcodes: [3]u32,
+    huffman_description_len: usize,
+    sequence_entropy_len: usize,
     huffman_symbol_count: usize,
     huffman_max_bit_count: u8,
     literal_table_entries: usize,
@@ -342,11 +344,11 @@ pub fn standardDictionaryFromContentAlloc(allocator: std.mem.Allocator, content:
 }
 
 /// Train a standard full dictionary with a corpus-specific literal Huffman
-/// table and the portable baseline OF/ML/LL FSE tables. This first entropy-
-/// training stage deliberately counts raw sample bytes rather than literals
-/// produced by a Zstd parser, and is therefore not COVER/FastCover-equivalent.
-/// Every byte receives a non-zero prior so the resulting dictionary can encode
-/// arbitrary future literals instead of only symbols observed in the corpus.
+/// table and OF/ML/LL FSE tables derived from dictionary-aware LZ77 parses.
+/// Literal statistics deliberately count raw sample bytes rather than only the
+/// residual literals produced by a full Zstd parser, and the history selector
+/// is not COVER/FastCover-equivalent. Every symbol receives a non-zero prior so
+/// the resulting first-block Repeat_Mode tables accept unseen legal codes.
 pub fn trainStandardDictionaryAlloc(
     allocator: std.mem.Allocator,
     samples: []const []const u8,
@@ -391,10 +393,99 @@ pub fn trainStandardDictionaryAlloc(
         if (!try emitSmallHuffmanTree(allocator, &literal_entropy, &plan)) return error.InvalidDictionaryTraining;
     }
 
-    const bytes = try allocator.alloc(u8, try dictionary_format.encodedFromEntropyLen(content.len, literal_entropy.items.len));
+    var sequence_entropy: std.ArrayList(u8) = .empty;
+    defer sequence_entropy.deinit(allocator);
+    try trainStandardDictionarySequenceEntropy(allocator, &sequence_entropy, samples, content);
+
+    const bytes = try allocator.alloc(u8, try dictionary_format.encodedFromEntropyLen(
+        content.len,
+        literal_entropy.items.len,
+        sequence_entropy.items.len,
+    ));
     errdefer allocator.free(bytes);
-    _ = try dictionary_format.encodeFromEntropyInto(content, dictionary_id, literal_entropy.items, bytes);
+    _ = try dictionary_format.encodeFromEntropyInto(
+        content,
+        dictionary_id,
+        literal_entropy.items,
+        sequence_entropy.items,
+        bytes,
+    );
     return .{ .bytes = bytes, .view = try inspectStandardDictionary(bytes) };
+}
+
+const StandardDictionarySequenceCounts = struct {
+    offset: [sequence_table_symbol_count_max.offset]u32 = @splat(1),
+    match: [sequence_table_symbol_count_max.match]u32 = @splat(1),
+    literal: [sequence_table_symbol_count_max.literal]u32 = @splat(1),
+};
+
+fn trainStandardDictionarySequenceEntropy(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    samples: []const []const u8,
+    dictionary_content: []const u8,
+) Error!void {
+    var counts: StandardDictionarySequenceCounts = .{};
+    var tokens: std.ArrayList(lz77.Token) = .empty;
+    defer tokens.deinit(allocator);
+    var scratch: lz77.DictionaryGreedyScratch = .{};
+    defer scratch.deinit(allocator);
+    for (samples) |sample| {
+        var offset: usize = 0;
+        while (offset < sample.len) {
+            const end = @min(sample.len, offset + std.compress.zstd.block_size_max);
+            const block = sample[offset..end];
+            var options = zstdHashParserOptions(block.len);
+            // Training matches see the selected content exactly as first-block
+            // compression will. Block splitting also keeps literal lengths in
+            // the RFC sequence-code range for arbitrarily large samples.
+            options.window_len = lz77.default_window_len;
+            _ = try lz77.hashGreedyPlanWithDictionaryReuse(
+                &tokens,
+                &scratch,
+                allocator,
+                block,
+                dictionary_content,
+                options,
+            );
+            try addStandardDictionarySequenceCounts(&counts, tokens.items);
+            offset = end;
+        }
+    }
+
+    try emitStandardDictionaryFseTable(allocator, out, &counts.offset, sequence_table_accuracy_log_max.offset);
+    try emitStandardDictionaryFseTable(allocator, out, &counts.match, sequence_table_accuracy_log_max.match);
+    try emitStandardDictionaryFseTable(allocator, out, &counts.literal, sequence_table_accuracy_log_max.literal);
+}
+
+fn addStandardDictionarySequenceCounts(counts: *StandardDictionarySequenceCounts, tokens: []const lz77.Token) Error!void {
+    var literal_len: usize = 0;
+    var repeated_offsets = initial_repeated_offsets;
+    for (tokens) |token| switch (token) {
+        .literal => literal_len += 1,
+        .match => |match| {
+            const offset_code = try chooseOffsetSequenceCode(literal_len, match.distance, &repeated_offsets);
+            const match_code = try sequenceCodeForValue(match.length, &ml_base, &ml_bits);
+            const literal_code = try sequenceCodeForValue(literal_len, &ll_base, &ll_bits);
+            counts.offset[offset_code] += 1;
+            counts.match[match_code] += 1;
+            counts.literal[literal_code] += 1;
+            literal_len = 0;
+        },
+    };
+}
+
+fn emitStandardDictionaryFseTable(
+    allocator: std.mem.Allocator,
+    out: *std.ArrayList(u8),
+    counts: []const u32,
+    table_log: u8,
+) Error!void {
+    var total: usize = 0;
+    for (counts) |count| total = std.math.add(usize, total, count) catch return error.InvalidDictionaryTraining;
+    var normalized: [max_fse_compression_symbol + 1]i16 = @splat(0);
+    normalizeFseCounts(counts, total, table_log, normalized[0..counts.len]) orelse return error.InvalidDictionaryTraining;
+    try emitFseNormalizedCount(allocator, out, normalized[0..counts.len], @intCast(counts.len - 1), table_log);
 }
 
 test "standard Zstd dictionary generator wraps owned content" {
@@ -487,6 +578,63 @@ test "standard Zstd dictionary trainer handles a flat literal corpus" {
     try std.testing.expect(summary.huffman_max_bit_count <= 11);
 }
 
+test "standard Zstd dictionary sequence entropy reflects corpus matches" {
+    const repeated =
+        "prefix-alpha-0000:suffix-alpha-0000\n" ++
+        "prefix-alpha-0001:suffix-alpha-0001\n" ++
+        "prefix-alpha-0002:suffix-alpha-0002\n" ++
+        "prefix-alpha-0003:suffix-alpha-0003\n";
+    const sparse = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+-" ** 2;
+    const repeated_dict = try trainStandardDictionaryAlloc(
+        std.testing.allocator,
+        &.{ repeated, repeated, repeated },
+        .{ .target_size = 96 },
+        0x1000_0001,
+    );
+    defer repeated_dict.deinit(std.testing.allocator);
+    const sparse_dict = try trainStandardDictionaryAlloc(
+        std.testing.allocator,
+        &.{ sparse, sparse },
+        .{ .target_size = 96 },
+        0x1000_0002,
+    );
+    defer sparse_dict.deinit(std.testing.allocator);
+
+    const repeated_summary = try summarizeStandardDictionary(repeated_dict.bytes);
+    const sparse_summary = try summarizeStandardDictionary(sparse_dict.bytes);
+    try std.testing.expectEqual(@as(u8, sequence_table_accuracy_log_max.offset), repeated_summary.offset_accuracy_log);
+    try std.testing.expectEqual(@as(u8, sequence_table_accuracy_log_max.match), repeated_summary.match_accuracy_log);
+    try std.testing.expectEqual(@as(u8, sequence_table_accuracy_log_max.literal), repeated_summary.literal_accuracy_log);
+    const repeated_sequence_start = 8 + repeated_summary.huffman_description_len;
+    const sparse_sequence_start = 8 + sparse_summary.huffman_description_len;
+    // Skip each independently sized Huffman description and compare only the
+    // serialized OF/ML/LL model.
+    try std.testing.expect(!std.mem.eql(
+        u8,
+        repeated_dict.bytes[repeated_sequence_start .. repeated_dict.view.content_offset - 12],
+        sparse_dict.bytes[sparse_sequence_start .. sparse_dict.view.content_offset - 12],
+    ));
+}
+
+test "standard Zstd dictionary sequence training splits large samples" {
+    const sample = try std.testing.allocator.alloc(u8, std.compress.zstd.block_size_max + 17);
+    defer std.testing.allocator.free(sample);
+    var state: u32 = 0x6a09_e667;
+    for (sample) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    const trained = try trainStandardDictionaryAlloc(
+        std.testing.allocator,
+        &.{sample},
+        .{ .target_size = 64 },
+        0x1000_0003,
+    );
+    defer trained.deinit(std.testing.allocator);
+    const summary = try summarizeStandardDictionary(trained.bytes);
+    try std.testing.expect(summary.sequence_entropy_len != 0);
+}
+
 pub const NativeDictionary = struct {
     id: u32,
     content: []const u8,
@@ -568,6 +716,7 @@ fn inspectStandardDictionaryWithEntropy(bytes: []const u8) Error!StandardDiction
         else => return error.InvalidDictionaryMetadata,
     };
     offset += reader.seek;
+    const huffman_description_len = reader.seek;
 
     var dummy_entries: [max_sequence_fse_table_size]FseTableEntry = undefined;
     var table_entries: [3]usize = undefined;
@@ -597,6 +746,8 @@ fn inspectStandardDictionaryWithEntropy(bytes: []const u8) Error!StandardDiction
             .content_offset = view.content_offset,
             .content_len = view.content.len,
             .repcodes = view.repcodes,
+            .huffman_description_len = huffman_description_len,
+            .sequence_entropy_len = offset - 8 - huffman_description_len,
             .huffman_symbol_count = @as(usize, huffman_tree.symbol_count_minus_one) + 1,
             .huffman_max_bit_count = huffman_tree.max_bit_count,
             .offset_table_entries = table_entries[0],

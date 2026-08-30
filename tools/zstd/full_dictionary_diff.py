@@ -36,8 +36,16 @@ def main() -> int:
         if "generated=yes" not in output or not generated.is_file():
             raise SystemExit(f"Vort dictionary generation was not exercised: {output!r}")
         fields = dict(field.split("=", 1) for field in output.split() if "=" in field)
-        if int(fields.get("trained", 0)) >= int(fields.get("baseline", 0)):
-            raise SystemExit(f"trained literal entropy did not improve the control: {output!r}")
+        trained_size = int(fields.get("trained", 0))
+        if trained_size >= int(fields.get("baseline", 0)):
+            raise SystemExit(f"trained dictionary entropy did not improve the control: {output!r}")
+        # Literal-only training produced 508 bytes on this deterministic
+        # control. Keep slack over the current 502-byte result while requiring
+        # the corpus-derived sequence tables to remain beneficial.
+        if trained_size > 507:
+            raise SystemExit(f"trained sequence entropy regressed: {output!r}")
+        if int(fields.get("sequence_entropy", 0)) <= 0:
+            raise SystemExit(f"trained sequence entropy was not reported: {output!r}")
         generated_bytes = generated.read_bytes()
         if generated_bytes[:4] != bytes.fromhex("37a430ec"):
             raise SystemExit("Vort generated dictionary has bad magic")
