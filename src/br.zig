@@ -360,10 +360,12 @@ const IncrementalPlannedEncoderCodec = struct {
         commands: std.ArrayList(command_plan.Command) = .empty,
         history: std.ArrayList(u8) = .empty,
         greedy_scratch: lz77.TinyGreedyScratch = .{},
+        dictionary_greedy_scratch: lz77.DictionaryGreedyScratch = .{},
     };
 
     pub fn deinitState(state: *State, allocator: std.mem.Allocator) void {
         state.greedy_scratch.deinit(allocator);
+        state.dictionary_greedy_scratch.deinit(allocator);
         state.tokens.deinit(allocator);
         state.commands.deinit(allocator);
         state.history.deinit(allocator);
@@ -383,7 +385,8 @@ const IncrementalPlannedEncoderCodec = struct {
         return state.tokens.capacity * @sizeOf(lz77.Token) +
             state.commands.capacity * @sizeOf(command_plan.Command) +
             state.history.capacity +
-            state.greedy_scratch.retainedCapacity();
+            state.greedy_scratch.retainedCapacity() +
+            state.dictionary_greedy_scratch.retainedCapacity();
     }
 
     pub fn readyOutputLen(state: *const State, pending_len: usize, final_written: bool) usize {
@@ -419,7 +422,7 @@ const IncrementalPlannedEncoderCodec = struct {
                 .max_match = lz77.max_match_len,
             })
         else blk: {
-            const plan = try lz77.hashGreedyPlanAllocWithDictionary(allocator, block, state.history.items, .{
+            const history_stats = try lz77.hashGreedyPlanWithDictionaryReuse(&state.tokens, &state.dictionary_greedy_scratch, allocator, block, state.history.items, .{
                 .window_len = max_backward_distance,
                 .max_chain = 64,
                 .nice_len = 64,
@@ -427,10 +430,7 @@ const IncrementalPlannedEncoderCodec = struct {
                 .min_match = 3,
                 .max_match = lz77.max_match_len,
             });
-            defer plan.deinit(allocator);
-            state.tokens.clearRetainingCapacity();
-            try state.tokens.appendSlice(allocator, plan.tokens);
-            break :blk plan.stats;
+            break :blk history_stats;
         };
         var compressed_ok = stats.matches != 0;
         if (compressed_ok) {

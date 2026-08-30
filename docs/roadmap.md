@@ -8218,6 +8218,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   incremental regression also verifies that retained history is truncated to
   the advertised 1,008-byte backward limit instead of leaking a block-sized
   reference into the wire.
+  The dictionary-seeded cross-block LZ77 path now owns reusable head and
+  predecessor arrays instead of allocating and clearing fresh buffers for every
+  block. Sixteen interleaved ReleaseFast CPU-8 pairs at 200 streams preserve
+  the 4,113-byte cross-block wire and improve median encode time by 1.86x with
+  16/16 wins. Retained capacity grows to about 550 KiB for the 4 KiB fixture,
+  trading bounded reusable memory for the removal of hot per-block allocations.
   Added a focused incremental planned-encoder benchmark/gate comparing warmed
   codec-owned state with rebuilding the one-shot fast encoder. On fixed CPU 8
   at 200 iterations both paths emit 120-byte streams for the 4,992-byte

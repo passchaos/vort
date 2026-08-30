@@ -82,6 +82,21 @@ pub const TinyGreedyScratch = struct {
     }
 };
 
+pub const DictionaryGreedyScratch = struct {
+    head: std.ArrayList(isize) = .empty,
+    prev: std.ArrayList(isize) = .empty,
+
+    pub fn retainedCapacity(self: *const DictionaryGreedyScratch) usize {
+        return (self.head.capacity + self.prev.capacity) * @sizeOf(isize);
+    }
+
+    pub fn deinit(self: *DictionaryGreedyScratch, allocator: std.mem.Allocator) void {
+        self.head.deinit(allocator);
+        self.prev.deinit(allocator);
+        self.* = .{};
+    }
+};
+
 pub const OptimalScratch = struct {
     costs: std.ArrayList(usize) = .empty,
     steps: std.ArrayList(Token) = .empty,
@@ -357,43 +372,49 @@ pub fn lazyGreedyPlanTinyReuse(tokens: *std.ArrayList(Token), allocator: std.mem
 pub fn hashGreedyPlanAllocWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: GreedyOptions) !GreedyPlan {
     const dict = activeDictionary(dictionary, options);
     if (dict.len == 0) return hashGreedyPlanAlloc(allocator, input, options);
+    var scratch: DictionaryGreedyScratch = .{};
+    defer scratch.deinit(allocator);
+    var tokens: std.ArrayList(Token) = .empty;
+    defer tokens.deinit(allocator);
+    const stats = try hashGreedyPlanWithDictionaryReuse(&tokens, &scratch, allocator, input, dict, options);
+    return .{ .tokens = try allocator.dupe(Token, tokens.items), .stats = stats };
+}
 
+pub fn hashGreedyPlanWithDictionaryReuse(tokens: *std.ArrayList(Token), scratch: *DictionaryGreedyScratch, allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: GreedyOptions) !PlanStats {
+    const dict = activeDictionary(dictionary, options);
+    if (dict.len == 0) return hashGreedyPlanAutoTinyReuse(tokens, allocator, input, options);
     const table_size = 1 << 15;
-    const head = try allocator.alloc(isize, table_size);
-    defer allocator.free(head);
-    @memset(head, -1);
+    try scratch.head.resize(allocator, table_size);
+    @memset(scratch.head.items, -1);
     const total = dict.len + input.len;
-    const prev = try allocator.alloc(isize, total);
-    defer allocator.free(prev);
-    seedDictionaryHashes(dict, input, head, prev);
-
-    var tokens = try initTokenList(allocator, input.len);
-    errdefer tokens.deinit(allocator);
+    try scratch.prev.resize(allocator, total);
+    seedDictionaryHashes(dict, input, scratch.head.items, scratch.prev.items);
+    tokens.clearRetainingCapacity();
     var stats = PlanStats{};
 
     var pos: usize = 0;
     while (pos < input.len) {
         const current = dict.len + pos;
-        const best = findBestCombinedHashMatch(dict, input, current, options, head, prev);
+        const best = findBestCombinedHashMatch(dict, input, current, options, scratch.head.items, scratch.prev.items);
 
         if (acceptMatch(input, pos, best.length, best.distance, options)) {
-            try tokens.append(allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
+            try appendToken(tokens, allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
             stats.matches += 1;
             stats.matched_bytes += best.length;
             const end = @min(input.len, pos + best.length);
-            insertCombinedHash(dict, input, current, head, prev);
+            insertCombinedHash(dict, input, current, scratch.head.items, scratch.prev.items);
             const tail_start = if (end > pos + 4) end - 4 else pos + 1;
             pos += 1;
             if (pos < tail_start) pos = tail_start;
-            while (pos < end) : (pos += 1) insertCombinedHash(dict, input, dict.len + pos, head, prev);
+            while (pos < end) : (pos += 1) insertCombinedHash(dict, input, dict.len + pos, scratch.head.items, scratch.prev.items);
         } else {
-            try tokens.append(allocator, .{ .literal = input[pos] });
+            try appendToken(tokens, allocator, .{ .literal = input[pos] });
             stats.literals += 1;
-            insertCombinedHash(dict, input, current, head, prev);
+            insertCombinedHash(dict, input, current, scratch.head.items, scratch.prev.items);
             pos += 1;
         }
     }
-    return .{ .tokens = try tokens.toOwnedSlice(allocator), .stats = stats };
+    return stats;
 }
 
 pub fn lazyGreedyPlanAllocWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: GreedyOptions) !GreedyPlan {
