@@ -225,6 +225,12 @@ const Phrase = struct {
 const phrase_hash_threshold = 128;
 
 pub fn trainAlloc(allocator: std.mem.Allocator, samples: []const []const u8, options: TrainOptions) ![]u8 {
+    return trainAllocWithLayout(allocator, samples, options, .ranked);
+}
+
+const TrainLayout = enum { ranked, best_near_end };
+
+fn trainAllocWithLayout(allocator: std.mem.Allocator, samples: []const []const u8, options: TrainOptions, layout: TrainLayout) ![]u8 {
     if (options.target_size == 0) return allocator.alloc(u8, 0);
     if (options.min_phrase_len == 0 or options.min_phrase_len > options.max_phrase_len) return error.InvalidDictionaryTraining;
 
@@ -282,11 +288,23 @@ pub fn trainAlloc(allocator: std.mem.Allocator, samples: []const []const u8, opt
 
     var dict: std.ArrayList(u8) = .empty;
     errdefer dict.deinit(allocator);
+    var selected: std.ArrayList([]const u8) = .empty;
+    defer selected.deinit(allocator);
     for (phrases.items) |phrase| {
         if (dict.items.len >= options.target_size) break;
         if (containsSlice(dict.items, phrase.bytes)) continue;
         const remaining = options.target_size - dict.items.len;
-        try dict.appendSlice(allocator, phrase.bytes[0..@min(remaining, phrase.bytes.len)]);
+        const bytes = phrase.bytes[0..@min(remaining, phrase.bytes.len)];
+        try dict.appendSlice(allocator, bytes);
+        if (layout == .best_near_end) try selected.append(allocator, bytes);
+    }
+    if (layout == .best_near_end) {
+        dict.clearRetainingCapacity();
+        var index = selected.items.len;
+        while (index != 0) {
+            index -= 1;
+            try dict.appendSlice(allocator, selected.items[index]);
+        }
     }
     return dict.toOwnedSlice(allocator);
 }
@@ -315,31 +333,39 @@ pub fn trainValidatedAlloc(
     errdefer if (best) |bytes| allocator.free(bytes);
     var best_covered: usize = 0;
     var best_matches: usize = 0;
+    var best_distance_bits: usize = std.math.maxInt(usize);
     for (candidates) |candidate| {
-        const trained = try trainAlloc(allocator, training_samples, .{
-            .target_size = options.target_size,
-            .min_phrase_len = candidate.min_phrase_len,
-            .max_phrase_len = candidate.max_phrase_len,
-            .max_phrases = candidate.max_phrases,
-        });
-        errdefer allocator.free(trained);
-        var covered: usize = 0;
-        var matches: usize = 0;
-        for (validation_samples) |sample| {
-            const summary = try summarizeMatchesAlloc(allocator, trained, sample, options.min_phrase_len);
-            covered = std.math.add(usize, covered, summary.covered_bytes) catch return error.InvalidDictionaryTraining;
-            matches = std.math.add(usize, matches, summary.matches) catch return error.InvalidDictionaryTraining;
+        for ([_]TrainLayout{ .ranked, .best_near_end }) |layout| {
+            const trained = try trainAllocWithLayout(allocator, training_samples, .{
+                .target_size = options.target_size,
+                .min_phrase_len = candidate.min_phrase_len,
+                .max_phrase_len = candidate.max_phrase_len,
+                .max_phrases = candidate.max_phrases,
+            }, layout);
+            errdefer allocator.free(trained);
+            var covered: usize = 0;
+            var matches: usize = 0;
+            var distance_bits: usize = 0;
+            for (validation_samples) |sample| {
+                const summary = try summarizeMatchesAlloc(allocator, trained, sample, options.min_phrase_len);
+                covered = std.math.add(usize, covered, summary.covered_bytes) catch return error.InvalidDictionaryTraining;
+                matches = std.math.add(usize, matches, summary.matches) catch return error.InvalidDictionaryTraining;
+                distance_bits = std.math.add(usize, distance_bits, summary.distance_bits) catch return error.InvalidDictionaryTraining;
+            }
+            // Coverage and sequence count dominate. For exact ties, prefer the
+            // layout whose matches need fewer offset bits; the original ranked
+            // layout remains first and therefore wins complete ties.
+            if (best == null or covered > best_covered or
+                (covered == best_covered and matches < best_matches) or
+                (covered == best_covered and matches == best_matches and distance_bits < best_distance_bits))
+            {
+                if (best) |bytes| allocator.free(bytes);
+                best = trained;
+                best_covered = covered;
+                best_matches = matches;
+                best_distance_bits = distance_bits;
+            } else allocator.free(trained);
         }
-        // Prefer more covered bytes, then fewer match operations (longer useful
-        // phrases). The first baseline candidate wins complete ties.
-        if (best == null or covered > best_covered or
-            (covered == best_covered and matches < best_matches))
-        {
-            if (best) |bytes| allocator.free(bytes);
-            best = trained;
-            best_covered = covered;
-            best_matches = matches;
-        } else allocator.free(trained);
     }
     return best orelse try allocator.alloc(u8, 0);
 }
@@ -457,6 +483,7 @@ pub const MatchSummary = struct {
     matches: usize = 0,
     covered_bytes: usize = 0,
     longest: usize = 0,
+    distance_bits: usize = 0,
 
     pub fn coverageRatio(self: MatchSummary, sample_len: usize) f64 {
         if (sample_len == 0) return 0.0;
@@ -495,6 +522,8 @@ pub fn summarizeMatchesAlloc(allocator: std.mem.Allocator, dict: []const u8, sam
     for (matches) |match| {
         summary.covered_bytes += match.length;
         summary.longest = @max(summary.longest, match.length);
+        const distance = dict.len + match.sample_offset - match.dictionary_offset;
+        summary.distance_bits += std.math.log2_int(usize, distance) + 1;
     }
     return summary;
 }

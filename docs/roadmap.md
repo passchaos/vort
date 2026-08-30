@@ -8357,3 +8357,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   MB/s to 2.79–2.91/2.51–2.71/0.398–0.404 MB/s while preserving identical
   dictionary checksums. The ReleaseFast gate requires at least 0.30 MB/s on
   every row, including the adversarial high-uniqueness binary workload.
+  Validation-guided history selection now also considers a reverse-segment
+  layout that places the highest-ranked selected phrase nearest the end of the
+  Zstd history, where first-block offsets are cheaper. Coverage and match count
+  remain the primary selectors; estimated offset bit width breaks exact ties,
+  and the original ranked layout remains first on complete ties. The same
+  trainer-parity corpus keeps text unchanged, improves JSON level 1/3/9 from
+  `224/226/208` to `223/216/198` bytes, and changes binary to
+  `800/810/803` versus zstd's `795/796/810`; all rows remain inside the parity
+  gate and the aggregate JSON gap narrows without weakening the existing
+  full-dictionary controls.
