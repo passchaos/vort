@@ -380,7 +380,48 @@ pub fn trainValidatedAlloc(
             }
         }
     }
+
+    // Phrase concatenation is effective for repeated local substrings but can
+    // destroy longer record structure. Keep one raw corpus-tail candidate so
+    // validation can retain naturally adjacent bytes when that structure
+    // generalizes better to held-out payloads.
+    const tail = try trainSampleTailAlloc(allocator, training_samples, options.target_size);
+    errdefer allocator.free(tail);
+    var tail_covered: usize = 0;
+    var tail_matches: usize = 0;
+    var tail_distance_bits: usize = 0;
+    for (validation_samples) |sample| {
+        const summary = try summarizeMatchesAlloc(allocator, tail, sample, options.min_phrase_len);
+        tail_covered = std.math.add(usize, tail_covered, summary.covered_bytes) catch return error.InvalidDictionaryTraining;
+        tail_matches = std.math.add(usize, tail_matches, summary.matches) catch return error.InvalidDictionaryTraining;
+        tail_distance_bits = std.math.add(usize, tail_distance_bits, summary.distance_bits) catch return error.InvalidDictionaryTraining;
+    }
+    if (best == null or tail_covered > best_covered or
+        (tail_covered == best_covered and tail_matches < best_matches) or
+        (tail_covered == best_covered and tail_matches == best_matches and tail_distance_bits < best_distance_bits))
+    {
+        if (best) |bytes| allocator.free(bytes);
+        best = tail;
+    } else allocator.free(tail);
     return best orelse try allocator.alloc(u8, 0);
+}
+
+fn trainSampleTailAlloc(allocator: std.mem.Allocator, samples: []const []const u8, target_size: usize) ![]u8 {
+    var available: usize = 0;
+    for (samples) |sample| available = std.math.add(usize, available, sample.len) catch return error.InvalidDictionaryTraining;
+    const len = @min(available, target_size);
+    const dictionary = try allocator.alloc(u8, len);
+    errdefer allocator.free(dictionary);
+    var written = len;
+    var sample_index = samples.len;
+    while (written != 0 and sample_index != 0) {
+        sample_index -= 1;
+        const sample = samples[sample_index];
+        const copy_len = @min(written, sample.len);
+        written -= copy_len;
+        @memcpy(dictionary[written..][0..copy_len], sample[sample.len - copy_len ..]);
+    }
+    return dictionary;
 }
 
 fn phraseBetter(_: void, lhs: Phrase, rhs: Phrase) bool {

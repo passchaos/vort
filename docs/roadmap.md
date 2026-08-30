@@ -8387,3 +8387,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   within 2.8% at level 3 (`301/293`). JSON and binary remain unchanged. The
   gate now pins text to no worse than parity at levels 1/9 and within 5% at
   level 3.
+  Added a raw corpus-tail history candidate so the validated selector can keep
+  naturally adjacent record bytes instead of always concatenating ranked
+  phrases. The same held-out comparison now selects 176-byte histories for
+  text and JSON: text reaches `334/290/265` against zstd `344/293/273`, while
+  JSON reaches `201/187/187` against `196/184/185` at levels 1/3/9. Binary
+  remains `792/814/796` against `795/796/810`. Across all nine rows Vort now
+  totals 3,866 bytes versus zstd's 3,876, closing the aggregate trainer-quality
+  gap on this deterministic corpus without claiming general COVER/FastCover
+  parity. The gate requires aggregate parity, text's existing strict bounds,
+  and no JSON row worse than 1.03x. The focused selector control also improves
+  from 78 to 76 bytes.
