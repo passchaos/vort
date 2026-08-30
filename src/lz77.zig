@@ -83,11 +83,11 @@ pub const TinyGreedyScratch = struct {
 };
 
 pub const DictionaryGreedyScratch = struct {
-    head: std.ArrayList(isize) = .empty,
-    prev: std.ArrayList(isize) = .empty,
+    head: std.ArrayList(i32) = .empty,
+    prev: std.ArrayList(i32) = .empty,
 
     pub fn retainedCapacity(self: *const DictionaryGreedyScratch) usize {
-        return (self.head.capacity + self.prev.capacity) * @sizeOf(isize);
+        return (self.head.capacity + self.prev.capacity) * @sizeOf(i32);
     }
 
     pub fn deinit(self: *DictionaryGreedyScratch, allocator: std.mem.Allocator) void {
@@ -1611,7 +1611,7 @@ fn maxHashChainWalks(options: GreedyOptions, minimum: usize) usize {
     return options.max_chain * 4;
 }
 
-fn findBestCombinedHashMatch(dict: []const u8, input: []const u8, current: usize, options: GreedyOptions, head: []const isize, prev: []const isize) MatchCandidate {
+fn findBestCombinedHashMatch(dict: []const u8, input: []const u8, current: usize, options: GreedyOptions, head: anytype, prev: anytype) MatchCandidate {
     const minimum = minMatch(options);
     const dict_len = dict.len;
     const pos = current - dict_len;
@@ -1841,12 +1841,12 @@ fn hashAtInput(
     };
 }
 
-fn seedDictionaryHashes(dict: []const u8, input: []const u8, head: []isize, prev: []isize) void {
+fn seedDictionaryHashes(dict: []const u8, input: []const u8, head: anytype, prev: anytype) void {
     var pos: usize = 0;
     while (pos + min_match_len <= dict.len) : (pos += 1) insertCombinedHash(dict, input, pos, head, prev);
 }
 
-fn insertCombinedHash(dict: []const u8, input: []const u8, pos: usize, head: []isize, prev: []isize) void {
+fn insertCombinedHash(dict: []const u8, input: []const u8, pos: usize, head: anytype, prev: anytype) void {
     if (pos + min_match_len > dict.len + input.len) return;
     const h = hash3At(dict, input, pos) & (head.len - 1);
     prev[pos] = head[h];

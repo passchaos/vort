@@ -8222,8 +8222,10 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   predecessor arrays instead of allocating and clearing fresh buffers for every
   block. Sixteen interleaved ReleaseFast CPU-8 pairs at 200 streams preserve
   the 4,113-byte cross-block wire and improve median encode time by 1.86x with
-  16/16 wins. Retained capacity grows to about 550 KiB for the 4 KiB fixture,
-  trading bounded reusable memory for the removal of hot per-block allocations.
+  16/16 wins. The reusable combined-history hash positions now use bounded
+  32-bit indexes rather than machine-width integers: another sixteen-pair
+  CPU-8 run preserves the wire, cuts retained capacity from about 550 KiB to
+  310 KiB, and improves median cross-block encode time by 1.23x with 15/16 wins.
   Added a focused incremental planned-encoder benchmark/gate comparing warmed
   codec-owned state with rebuilding the one-shot fast encoder. On fixed CPU 8
   at 200 iterations both paths emit 120-byte streams for the 4,992-byte
