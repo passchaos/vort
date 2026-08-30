@@ -8226,6 +8226,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   32-bit indexes rather than machine-width integers: another sixteen-pair
   CPU-8 run preserves the wire, cuts retained capacity from about 550 KiB to
   310 KiB, and improves median cross-block encode time by 1.23x with 15/16 wins.
+  Dictionary-seeded hash heads now use a 4 KiB initialized bitmap instead of
+  clearing all 32K buckets on every block. Twenty interleaved CPU-8 pairs retain
+  the same 4,113-byte wire and improve cross-block median time by another 9.3%
+  with 14/20 wins; a repeated-call oracle changes both dictionary and input to
+  prove stale head entries cannot leak between plans.
   Added a focused incremental planned-encoder benchmark/gate comparing warmed
   codec-owned state with rebuilding the one-shot fast encoder. On fixed CPU 8
   at 200 iterations both paths emit 120-byte streams for the 4,992-byte

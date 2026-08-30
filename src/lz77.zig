@@ -85,9 +85,10 @@ pub const TinyGreedyScratch = struct {
 pub const DictionaryGreedyScratch = struct {
     head: std.ArrayList(i32) = .empty,
     prev: std.ArrayList(i32) = .empty,
+    head_initialized: [hash_head_init_words]u64 = @splat(0),
 
     pub fn retainedCapacity(self: *const DictionaryGreedyScratch) usize {
-        return (self.head.capacity + self.prev.capacity) * @sizeOf(i32);
+        return (self.head.capacity + self.prev.capacity) * @sizeOf(i32) + @sizeOf(@FieldType(DictionaryGreedyScratch, "head_initialized"));
     }
 
     pub fn deinit(self: *DictionaryGreedyScratch, allocator: std.mem.Allocator) void {
@@ -385,36 +386,70 @@ pub fn hashGreedyPlanWithDictionaryReuse(tokens: *std.ArrayList(Token), scratch:
     if (dict.len == 0) return hashGreedyPlanAutoTinyReuse(tokens, allocator, input, options);
     const table_size = 1 << 15;
     try scratch.head.resize(allocator, table_size);
-    @memset(scratch.head.items, -1);
+    @memset(&scratch.head_initialized, 0);
     const total = dict.len + input.len;
     try scratch.prev.resize(allocator, total);
-    seedDictionaryHashes(dict, input, scratch.head.items, scratch.prev.items);
+    seedDictionaryHashesLazy(dict, input, scratch.head.items, scratch.prev.items, &scratch.head_initialized);
     tokens.clearRetainingCapacity();
     var stats = PlanStats{};
 
     var pos: usize = 0;
     while (pos < input.len) {
         const current = dict.len + pos;
-        const best = findBestCombinedHashMatch(dict, input, current, options, scratch.head.items, scratch.prev.items);
+        const best = findBestCombinedHashMatchLazy(dict, input, current, options, scratch.head.items, scratch.prev.items, &scratch.head_initialized);
 
         if (acceptMatch(input, pos, best.length, best.distance, options)) {
             try appendToken(tokens, allocator, .{ .match = .{ .length = @intCast(best.length), .distance = @intCast(best.distance) } });
             stats.matches += 1;
             stats.matched_bytes += best.length;
             const end = @min(input.len, pos + best.length);
-            insertCombinedHash(dict, input, current, scratch.head.items, scratch.prev.items);
+            insertCombinedHashLazy(dict, input, current, scratch.head.items, scratch.prev.items, &scratch.head_initialized);
             const tail_start = if (end > pos + 4) end - 4 else pos + 1;
             pos += 1;
             if (pos < tail_start) pos = tail_start;
-            while (pos < end) : (pos += 1) insertCombinedHash(dict, input, dict.len + pos, scratch.head.items, scratch.prev.items);
+            while (pos < end) : (pos += 1) insertCombinedHashLazy(dict, input, dict.len + pos, scratch.head.items, scratch.prev.items, &scratch.head_initialized);
         } else {
             try appendToken(tokens, allocator, .{ .literal = input[pos] });
             stats.literals += 1;
-            insertCombinedHash(dict, input, current, scratch.head.items, scratch.prev.items);
+            insertCombinedHashLazy(dict, input, current, scratch.head.items, scratch.prev.items, &scratch.head_initialized);
             pos += 1;
         }
     }
     return stats;
+}
+
+test "dictionary greedy scratch ignores stale head entries" {
+    var scratch: DictionaryGreedyScratch = .{};
+    defer scratch.deinit(std.testing.allocator);
+    var tokens: std.ArrayList(Token) = .empty;
+    defer tokens.deinit(std.testing.allocator);
+    const options: GreedyOptions = .{ .window_len = 32 * 1024, .max_chain = 64, .nice_len = 64, .max_candidates = 8 };
+
+    const first_dictionary = "abcdefgh" ** 32;
+    const first_input = "abcdefgh" ** 16;
+    _ = try hashGreedyPlanWithDictionaryReuse(&tokens, &scratch, std.testing.allocator, first_input, first_dictionary, options);
+    try expectDictionaryPlanReplays(first_dictionary, first_input, tokens.items);
+
+    const second_dictionary = "qrstuvwx" ** 32;
+    const second_input = "qrstuvwx" ** 16;
+    _ = try hashGreedyPlanWithDictionaryReuse(&tokens, &scratch, std.testing.allocator, second_input, second_dictionary, options);
+    try expectDictionaryPlanReplays(second_dictionary, second_input, tokens.items);
+}
+
+fn expectDictionaryPlanReplays(dictionary: []const u8, expected: []const u8, tokens: []const Token) !void {
+    var output: std.ArrayList(u8) = .empty;
+    defer output.deinit(std.testing.allocator);
+    for (tokens) |token| switch (token) {
+        .literal => |byte| try output.append(std.testing.allocator, byte),
+        .match => |match| for (0..match.length) |_| {
+            const logical_len = dictionary.len + output.items.len;
+            if (match.distance == 0 or match.distance > logical_len) return error.InvalidMatch;
+            const source = logical_len - match.distance;
+            const byte = if (source < dictionary.len) dictionary[source] else output.items[source - dictionary.len];
+            try output.append(std.testing.allocator, byte);
+        },
+    };
+    try std.testing.expectEqualSlices(u8, expected, output.items);
 }
 
 pub fn lazyGreedyPlanAllocWithDictionary(allocator: std.mem.Allocator, input: []const u8, dictionary: []const u8, options: GreedyOptions) !GreedyPlan {
@@ -1645,6 +1680,16 @@ fn findBestCombinedHashMatch(dict: []const u8, input: []const u8, current: usize
     return best;
 }
 
+fn findBestCombinedHashMatchLazy(dict: []const u8, input: []const u8, current: usize, options: GreedyOptions, head: anytype, prev: anytype, initialized: *const [hash_head_init_words]u64) MatchCandidate {
+    const minimum = minMatch(options);
+    const pos = current - dict.len;
+    if (pos + minimum > input.len) return .{};
+    const h = hash3At(dict, input, current) & (head.len - 1);
+    const mask = @as(u64, 1) << @intCast(h & 63);
+    if (initialized[h / 64] & mask == 0) return .{};
+    return findBestCombinedHashMatch(dict, input, current, options, head, prev);
+}
+
 fn matchLength(input: []const u8, a: usize, b: usize, max_len: usize) usize {
     var len: usize = 0;
     // Long matches dominate the optimal and repeat-aware Zstd parsers. Compare
@@ -1846,11 +1891,27 @@ fn seedDictionaryHashes(dict: []const u8, input: []const u8, head: anytype, prev
     while (pos + min_match_len <= dict.len) : (pos += 1) insertCombinedHash(dict, input, pos, head, prev);
 }
 
+fn seedDictionaryHashesLazy(dict: []const u8, input: []const u8, head: anytype, prev: anytype, initialized: *[hash_head_init_words]u64) void {
+    var pos: usize = 0;
+    while (pos + min_match_len <= dict.len) : (pos += 1)
+        insertCombinedHashLazy(dict, input, pos, head, prev, initialized);
+}
+
 fn insertCombinedHash(dict: []const u8, input: []const u8, pos: usize, head: anytype, prev: anytype) void {
     if (pos + min_match_len > dict.len + input.len) return;
     const h = hash3At(dict, input, pos) & (head.len - 1);
     prev[pos] = head[h];
     head[h] = @intCast(pos);
+}
+
+fn insertCombinedHashLazy(dict: []const u8, input: []const u8, pos: usize, head: anytype, prev: anytype, initialized: *[hash_head_init_words]u64) void {
+    if (pos + min_match_len > dict.len + input.len) return;
+    const h = hash3At(dict, input, pos) & (head.len - 1);
+    const mask = @as(u64, 1) << @intCast(h & 63);
+    const word = &initialized[h / 64];
+    prev[pos] = if (word.* & mask == 0) -1 else head[h];
+    head[h] = @intCast(pos);
+    word.* |= mask;
 }
 
 fn hash3At(dict: []const u8, input: []const u8, pos: usize) usize {
