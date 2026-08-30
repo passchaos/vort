@@ -3048,6 +3048,23 @@ pub fn build(b: *std.Build) void {
     const zstd_dictionary_trainer_compare_step = b.step("run-zstd-dictionary-trainer-compare", "Compare Vort and zstd dictionary trainers on held-out corpora");
     zstd_dictionary_trainer_compare_step.dependOn(&zstd_dictionary_trainer_compare.step);
 
+    const dictionary_train_bench_exe = b.addExecutable(.{
+        .name = "vort-dictionary-train-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/dictionary_train_bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "vort", .module = vort_mod_releasefast }},
+        }),
+    });
+    const run_dictionary_train_bench_csv = b.addRunArtifact(dictionary_train_bench_exe);
+    run_dictionary_train_bench_csv.addArgs(&.{ "--iterations", "20", "--rounds", "3", "--csv", "zig-out/vort-dictionary-train-bench.csv" });
+    const dictionary_train_bench_gate = b.addSystemCommand(&.{ "python3", "tools/dictionary_train_bench_gate.py", "--csv", "zig-out/vort-dictionary-train-bench.csv" });
+    if (optimize == .ReleaseFast) dictionary_train_bench_gate.addArg("--enforce-throughput");
+    dictionary_train_bench_gate.step.dependOn(&run_dictionary_train_bench_csv.step);
+    const dictionary_train_bench_gate_step = b.step("run-dictionary-train-bench-gate", "Validate deterministic dictionary training throughput");
+    dictionary_train_bench_gate_step.dependOn(&dictionary_train_bench_gate.step);
+
     const zstd_compat_probe_exe = b.addExecutable(.{
         .name = "vort-zstd-compat-probe",
         .root_module = b.createModule(.{
@@ -3922,6 +3939,7 @@ pub fn build(b: *std.Build) void {
     check_step.dependOn(&zstd_dictionary_probe_exe.step);
     check_step.dependOn(&zstd_full_dictionary_diff_exe.step);
     check_step.dependOn(&zstd_dictionary_trainer_compare_exe.step);
+    check_step.dependOn(&dictionary_train_bench_exe.step);
     check_step.dependOn(&dictionary_deflate_report_exe.step);
     check_step.dependOn(&dictionary_decode_bench_exe.step);
     check_step.dependOn(&level_report_exe.step);

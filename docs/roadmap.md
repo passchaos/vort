@@ -8346,3 +8346,14 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   `816/796`, `803/810`. This exposes a roughly 0–23% remaining per-row quality
   gap instead of hiding it behind baseline-only wins. The gate caps any row at
   1.50x and each corpus's mean ratio at 1.20x until selection improves further.
+  Replaced the deterministic phrase trainer's linear retained-phrase lookup
+  and full worst-candidate scan with a content hash map plus an index-stable
+  min-heap. A linear path remains below 128 retained phrases to avoid hash-table
+  overhead on small jobs, and heap ordering includes the phrase index to keep
+  the previous first-equal tie behavior byte-exact. The new
+  `run-dictionary-train-bench-gate` covers 24×320-byte text, JSON, and binary
+  corpora with 1,024 retained candidates. Against the pre-change implementation
+  on fixed CPU 8, the representative runs improved from roughly 0.47/0.40/0.037
+  MB/s to 2.79–2.91/2.51–2.71/0.398–0.404 MB/s while preserving identical
+  dictionary checksums. The ReleaseFast gate requires at least 0.30 MB/s on
+  every row, including the adversarial high-uniqueness binary workload.

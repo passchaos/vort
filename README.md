@@ -81,6 +81,7 @@ zig build check
 zig build -Doptimize=ReleaseFast ci-smoke
 zig build run -- --help
 zig build -Doptimize=ReleaseFast run-zstd-dictionary-trainer-compare -j1
+zig build -Doptimize=ReleaseFast run-dictionary-train-bench-gate -j1
 zig build run -- checksum "hello vort"
 zig build run -- store-roundtrip "hello vort"
 zig build run -- vort-deflate-roundtrip "hello vort"
