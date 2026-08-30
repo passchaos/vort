@@ -1548,10 +1548,18 @@ pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []cons
     const plan = try command_plan.buildAlloc(allocator, input, lz_plan.tokens);
     defer plan.deinit(allocator);
     var stats: encoder_stats.PlannedEncodeStats = .{};
-    const baseline = try encodeLazyCommandPlanAlloc(allocator, input, plan.commands, &stats, .{ .try_recent_distances = true });
+    var baseline = try encodeLazyCommandPlanAlloc(allocator, input, plan.commands, &stats, .{ .try_recent_distances = true });
+    errdefer allocator.free(baseline);
+
+    // The shared optimal parser uses a bounded fixed-bit proxy rather than
+    // Brotli's final Huffman cost. Run it only for moderate ratio-mode blocks,
+    // then retain it solely when exact wire encoding beats the lazy baseline.
+    // This makes the new search monotonic in output size and keeps large-input
+    // memory/latency on the existing path.
+    if (input.len >= 4 * 1024 and input.len <= 64 * 1024)
+        try selectOptimalRatioCandidates(allocator, input, parser_options, &stats, &baseline);
     if (input.len <= ratio_static_dictionary_max_input_len) return selectRatioStaticDictionaryAlloc(allocator, input, plan.commands, baseline);
     if (input.len <= long_distance.min_distance) return chooseStoredIfSmaller(allocator, input, baseline);
-    errdefer allocator.free(baseline);
 
     const commands = try long_distance.augmentAlloc(allocator, input, plan.commands) orelse return chooseStoredIfSmaller(allocator, input, baseline);
     defer allocator.free(commands);
@@ -1566,6 +1574,35 @@ pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []cons
     }
     allocator.free(candidate);
     return chooseStoredIfSmaller(allocator, input, baseline);
+}
+
+fn selectOptimalRatioCandidates(allocator: std.mem.Allocator, input: []const u8, parser_options: PlannedParserOptions, stats: *encoder_stats.PlannedEncodeStats, baseline: *[]u8) Error!void {
+    // Three-byte matches maximize modeled coverage, while four-byte matching
+    // can avoid expensive one-off command/distance symbols. The fixed-bit DP
+    // is only a proposal stage: exact Brotli wire size decides whether either
+    // candidate survives.
+    for ([_]usize{ 3, 4 }) |min_match| {
+        const optimal_plan = try lz77.optimalPlanAlloc(allocator, input, .{
+            // `optimalPlanAlloc` currently has a precomputed 32 KiB distance-
+            // cost table. Keep this candidate within that modeled window; the
+            // existing lazy and long-distance paths still cover farther hits.
+            .window_len = @min(input.len, lz77.default_window_len),
+            .max_chain = @min(parser_options.max_chain, 256),
+            .nice_len = parser_options.nice_len,
+            .max_candidates = 128,
+            .min_match = min_match,
+            .max_match = lz77.max_match_len,
+        });
+        defer optimal_plan.deinit(allocator);
+        if (optimal_plan.stats.matches == 0) continue;
+        const optimal_commands = try command_plan.buildAlloc(allocator, input, optimal_plan.tokens);
+        defer optimal_commands.deinit(allocator);
+        const candidate = try encodeLazyCommandPlanAlloc(allocator, input, optimal_commands.commands, stats, .{ .try_recent_distances = true });
+        if (candidate.len < baseline.*.len) {
+            allocator.free(baseline.*);
+            baseline.* = candidate;
+        } else allocator.free(candidate);
+    }
 }
 
 fn chooseStoredIfSmaller(allocator: std.mem.Allocator, input: []const u8, compressed: []u8) Error![]u8 {
@@ -8478,6 +8515,23 @@ test "br ratio planner spends more search budget without regressing size" {
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
     try std.testing.expect(ratio.len < balanced.len);
+}
+
+test "br ratio planner keeps an exact optimal candidate for source blocks" {
+    const payload = @embedFile("br.zig")[0 .. 32 * 1024];
+    const baseline = try encodePlannedStreamLazyWithWireOptionsAlloc(std.testing.allocator, payload, .{
+        .window_len = (@as(usize, 1) << default_window_bits) - 16,
+        .max_chain = 512,
+        .nice_len = lz77.max_match_len,
+    }, .{ .try_recent_distances = true });
+    defer std.testing.allocator.free(baseline);
+    const ratio = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
+    defer std.testing.allocator.free(ratio);
+    try std.testing.expect(ratio.len < baseline.len);
+    try std.testing.expectEqual(@as(usize, 5534), ratio.len);
+    const decoded = try decodeStreamAllocExactSize(std.testing.allocator, ratio, payload.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, payload, decoded);
 }
 
 test "br ratio UTF8 context split round trips beyond summary history" {

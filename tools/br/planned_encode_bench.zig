@@ -56,6 +56,13 @@ pub fn main(init: std.process.Init) !void {
         try cases.append(init.gpa, .{ .name = "mixed", .payload = mixed_payload });
         try cases.append(init.gpa, .{ .name = "uppercase", .payload = uppercase_payload });
         try cases.append(init.gpa, .{ .name = "incompressible", .payload = incompressible_payload });
+        const source = try std.Io.Dir.cwd().readFileAlloc(init.io, "src/br.zig", init.gpa, .limited(2 * 1024 * 1024));
+        defer init.gpa.free(source);
+        const source_file = try init.gpa.dupe(u8, source[0 .. 32 * 1024]);
+        errdefer init.gpa.free(source_file);
+        const source_name = try init.gpa.dupe(u8, "source32k");
+        errdefer init.gpa.free(source_name);
+        try cases.append(init.gpa, .{ .name = source_name, .payload = source_file, .owned = true });
     } else {
         for (options.paths.items, 0..) |path, index| {
             const file = try std.Io.Dir.cwd().openFile(init.io, path, .{});

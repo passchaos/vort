@@ -8165,6 +8165,16 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   31-byte output chunks. This closes the first incompatibility found by a
   broader local-source audit while keeping the entropy header bounded and
   caller-owned history explicit.
+  Ratio-mode Brotli encoding now evaluates bounded dynamic-programming LZ77
+  plans with both three- and four-byte minimum matches for 4--64 KiB inputs.
+  Each proposal is fully encoded and retained only when its exact Brotli wire
+  beats the existing lazy plan, so output size remains monotonic and large
+  inputs retain the prior memory/latency path. On the first 32 KiB of
+  `src/br.zig`, the selected stream falls from 5,699 to 5,534 bytes: smaller
+  than libbrotli quality 5 (5,565 bytes) and within 1.3% of quality 8 (5,467
+  bytes), though encoding is intentionally much slower. The planned-encode
+  gate now retains this real-source ratio row in addition to its tiny synthetic
+  cases.
   The copy loop now also keeps a local destination cursor while draining each
   output span, removing the remaining per-byte history-write remainder without
   changing literal, stored, or dictionary emission. Twenty alternating

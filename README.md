@@ -129,6 +129,7 @@ zig build run -- decode-br-hex 40001068656c6c6f03 5
 zig build run-br-stored-corpus
 zig build run-br-literal-cli-diff
 zig build run-br-planned-node-diff
+zig build -Doptimize=ReleaseFast run-br-planned-encode-bench-gate
 zig build -Doptimize=ReleaseFast run-br-planned-chunks-bench-gate
 zig build -Doptimize=ReleaseFast run-br-upstream-multiblock-diff
 zig build -Doptimize=ReleaseFast run-br-progressive-copy-bench-gate
