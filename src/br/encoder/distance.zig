@@ -44,10 +44,12 @@ pub fn decode(encoding: Encoding, ndirect: u16) ?usize {
     return ndirect + base + encoding.extra + 1;
 }
 
-test "regular distance inversion covers window boundaries" {
-    inline for (.{ 1, 2, 15, 16, 17, 18, 31, 32, 33, 64, 127, 128, 255, 1024, 4096, 32768 }) |distance| {
-        const encoded = encode(distance, 15) orelse return error.TestUnexpectedResult;
-        try std.testing.expectEqual(distance, decode(encoded, 15));
+test "regular distance inversion covers direct-count candidates" {
+    inline for (.{ 0, 3, 7, 15 }) |ndirect| {
+        inline for (.{ 1, 2, 15, 16, 17, 18, 31, 32, 33, 64, 127, 128, 255, 1024, 4096, 32768 }) |distance| {
+            const encoded = encode(distance, ndirect) orelse return error.TestUnexpectedResult;
+            try std.testing.expectEqual(distance, decode(encoded, ndirect));
+        }
     }
 }
 

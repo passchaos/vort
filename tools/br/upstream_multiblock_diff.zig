@@ -79,14 +79,33 @@ pub fn main(init: std.process.Init) !void {
         "build.zig",
         "docs/roadmap.md",
         "README.md",
+        "src/lz77.zig",
     };
     var diverse_source_builder: std.ArrayList(u8) = .empty;
     defer diverse_source_builder.deinit(init.gpa);
+    var diverse_parts: [diverse_paths.len][]u8 = undefined;
+    var diverse_part_count: usize = 0;
+    defer for (diverse_parts[0..diverse_part_count]) |part| init.gpa.free(part);
     for (diverse_paths) |path| {
-        const part = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(2 * 1024 * 1024));
-        defer init.gpa.free(part);
-        try diverse_source_builder.appendSlice(init.gpa, part);
-        try diverse_source_builder.appendSlice(init.gpa, "\n/* VORT BROTLI CORPUS BOUNDARY */\n");
+        diverse_parts[diverse_part_count] = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(2 * 1024 * 1024));
+        diverse_part_count += 1;
+    }
+    // Repeat differently ordered passes until the corpus reaches a stable
+    // minimum size. This keeps the distance-clustering boundary from drifting
+    // when comments or tests shrink, while avoiding needless growth as the
+    // repository expands.
+    const diverse_min_len = 15 * 1024 * 1024;
+    var pass: usize = 0;
+    while (diverse_source_builder.items.len < diverse_min_len) : (pass += 1) {
+        for (0..diverse_part_count) |i| {
+            const index = switch (pass % 3) {
+                0 => i,
+                1 => diverse_part_count - 1 - i,
+                else => (i * 3) % diverse_part_count,
+            };
+            try diverse_source_builder.appendSlice(init.gpa, diverse_parts[index]);
+            try diverse_source_builder.appendSlice(init.gpa, "\n/* VORT BROTLI CORPUS BOUNDARY */\n");
+        }
     }
     const diverse_source = diverse_source_builder.items;
     // A single large source meta-block makes libbrotli's higher-quality

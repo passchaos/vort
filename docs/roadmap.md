@@ -8159,7 +8159,7 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   the same benchmark by about 2.8%.
   Expanded the byte-progressive Brotli decoder's distance block-type and
   context-tree storage from a 64-entry implementation tier to the complete
-  256-entry RFC count range. A repository-owned heterogeneous 5 MiB source
+  256-entry RFC count range. A repository-owned heterogeneous 15 MiB source
   corpus makes libbrotli 1.1 quality 8 emit 68 distance types/trees, and the
   upstream differential now decodes that real stream through 17-byte input and
   31-byte output chunks. This closes the first incompatibility found by a
@@ -8186,6 +8186,10 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   four bytes (5,534 to 5,530) while remaining within 1.2% of libbrotli quality
   8. Context-map round-trip tests cover every retained cutoff, and the q8
   source gate pins the new 5,530-byte ceiling.
+  The same exact-wire search now enumerates NPOSTFIX=0 direct-distance counts
+  `0/3/7/15` rather than hard-coding 15. The source plan selects NDIRECT=0,
+  reducing its stream by another four bytes to 5,526 (1.08% above libbrotli
+  quality 8); every alternative remains guarded by complete final-wire size.
   The copy loop now also keeps a local destination cursor while draining each
   output span, removing the remaining per-byte history-write remainder without
   changing literal, stored, or dictionary emission. Twenty alternating

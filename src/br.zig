@@ -1594,17 +1594,16 @@ fn selectOptimalRatioCandidates(allocator: std.mem.Allocator, input: []const u8,
     if (optimal_plan.stats.matches == 0) return;
     const optimal_commands = try command_plan.buildAlloc(allocator, input, optimal_plan.tokens);
     defer optimal_commands.deinit(allocator);
-    for ([_]u6{ 32, 40, 48, 52, 56, 60 }) |cutoff| {
-        const candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, optimal_commands.commands, null, stats, .{
-            .use_recent_distances = true,
-            .use_utf8_text_contexts = true,
-            .utf8_context_cutoff = cutoff,
-        });
-        if (candidate.len < baseline.*.len) {
-            allocator.free(baseline.*);
-            baseline.* = candidate;
-        } else allocator.free(candidate);
-    }
+    const candidate = try encodeCommandPlanWithOptionsAlloc(allocator, input, optimal_commands.commands, null, stats, .{
+        .use_recent_distances = true,
+        .use_utf8_text_contexts = true,
+        .utf8_context_cutoff = 48,
+        .ndirect = 0,
+    });
+    if (candidate.len < baseline.*.len) {
+        allocator.free(baseline.*);
+        baseline.* = candidate;
+    } else allocator.free(candidate);
 }
 
 fn chooseStoredIfSmaller(allocator: std.mem.Allocator, input: []const u8, compressed: []u8) Error![]u8 {
@@ -1706,6 +1705,7 @@ const CommandPlanEncodeOptions = struct {
     use_recent_distances: bool = false,
     use_utf8_text_contexts: bool = false,
     utf8_context_cutoff: u6 = 56,
+    ndirect: u7 = 15,
     window_bits: u5 = default_window_bits,
     write_stream_prefix: bool = true,
     final_meta_block: bool = true,
@@ -2402,6 +2402,9 @@ fn initPlannedLiteralEncoder(lengths: *const [256]u4, alphabet: *const command_p
 
 fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitWriter, input: []const u8, commands: []const command_plan.Command, io: ?std.Io, stats: *encoder_stats.PlannedEncodeStats, options: CommandPlanEncodeOptions) Error!void {
     if (commands.len == 0) return error.InvalidBlockPlan;
+    // This writer currently fixes NPOSTFIX=0, whose four-bit NDIRECT field
+    // directly represents values 0...15.
+    if (options.ndirect > 15) return error.InvalidBlockPlan;
     var literal_frequencies: [256]u32 = undefined;
     var literal_seen: [4]u64 = @splat(0);
     var literal_alphabet: command_plan.PrefixAlphabetFor(256) = undefined;
@@ -2441,7 +2444,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
         }
         if (!command.has_copy) continue;
         if (encoding.command.distance_code == -1) {
-            const distance = if (recent_symbol) |symbol| encoder_distance.Encoding{ .symbol = symbol } else encoder_distance.encode(commandWireDistance(command), 15) orelse return error.InvalidBlockPlan;
+            const distance = if (recent_symbol) |symbol| encoder_distance.Encoding{ .symbol = symbol } else encoder_distance.encode(commandWireDistance(command), options.ndirect) orelse return error.InvalidBlockPlan;
             if (distance.symbol >= planned_distance_alphabet_size) return error.InvalidBlockPlan;
             distance_frequencies[distance.symbol] += 1;
         }
@@ -2474,7 +2477,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     if (!writer.bounded) try writer.out.ensureUnusedCapacity(allocator, commandPlanInitialCapacity(input.len));
     if (options.write_stream_prefix) try writeWindowBits(allocator, writer, options.window_bits);
     try writeCompressedMetaBlockHeader(allocator, writer, input.len, options.final_meta_block);
-    const distance_alphabet_size = planned_distance_alphabet_size;
+    const distance_alphabet_size = 16 + @as(usize, options.ndirect) + 48;
     const lengths_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     const literal_lengths = try literal_alphabet.codeLengths(&literal_frequencies);
     const literal_context_lengths = if (options.use_utf8_text_contexts) blk: {
@@ -2487,8 +2490,8 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
     if (io) |active| stats.lengths_ns = elapsedNs(lengths_start.?, active);
     const header_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
     if (options.use_utf8_text_contexts) {
-        try writePlannedCompressedHeaderTwoLiteralContexts(allocator, writer, &literal_context_alphabets, &literal_context_lengths, options.utf8_context_cutoff, &command_alphabet, &distance_alphabet, distance_alphabet_size, &command_lengths, &distance_lengths);
-    } else try writePlannedCompressedHeader(allocator, writer, &literal_alphabet, &command_alphabet, &distance_alphabet, distance_alphabet_size, &literal_lengths, &command_lengths, &distance_lengths);
+        try writePlannedCompressedHeaderTwoLiteralContexts(allocator, writer, &literal_context_alphabets, &literal_context_lengths, options.utf8_context_cutoff, options.ndirect, &command_alphabet, &distance_alphabet, distance_alphabet_size, &command_lengths, &distance_lengths);
+    } else try writePlannedCompressedHeader(allocator, writer, &literal_alphabet, &command_alphabet, &distance_alphabet, options.ndirect, distance_alphabet_size, &literal_lengths, &command_lengths, &distance_lengths);
     if (io) |active| stats.header_ns = elapsedNs(header_start.?, active);
 
     const encoder_start = if (io) |active| std.Io.Clock.awake.now(active) else null;
@@ -2537,7 +2540,7 @@ fn encodeCommandPlanWithOptionsWrite(allocator: std.mem.Allocator, writer: *BitW
             } else if (literal_alphabet.len > 1) try writer.writeHuffmanBits(allocator, literal_encoder.codes[literal], literal_encoder.bits[literal]);
         }
         if (command.has_copy and encoding.command.distance_code == -1) {
-            const distance = if (recent_symbol) |symbol| encoder_distance.Encoding{ .symbol = symbol } else encoder_distance.encode(commandWireDistance(command), 15) orelse unreachable;
+            const distance = if (recent_symbol) |symbol| encoder_distance.Encoding{ .symbol = symbol } else encoder_distance.encode(commandWireDistance(command), options.ndirect) orelse unreachable;
             if (distance_alphabet.len > 1) {
                 if (distance_alphabet.len <= 4) {
                     const code = distance_alphabet.simpleCode(distance.symbol).?;
@@ -8531,7 +8534,7 @@ test "br ratio planner keeps an exact optimal candidate for source blocks" {
     const ratio = try encodePlannedStreamRatioAlloc(std.testing.allocator, payload);
     defer std.testing.allocator.free(ratio);
     try std.testing.expect(ratio.len < baseline.len);
-    try std.testing.expectEqual(@as(usize, 5530), ratio.len);
+    try std.testing.expectEqual(@as(usize, 5526), ratio.len);
     const decoded = try decodeStreamAllocExactSize(std.testing.allocator, ratio, payload.len);
     defer std.testing.allocator.free(decoded);
     try std.testing.expectEqualSlices(u8, payload, decoded);
@@ -16474,6 +16477,7 @@ fn writePlannedCompressedHeader(
     literal_alphabet: *const command_plan.PrefixAlphabetFor(256),
     command_alphabet: *const command_plan.PrefixAlphabet,
     distance_alphabet: *const command_plan.PrefixAlphabetFor(planned_distance_alphabet_size),
+    ndirect: u7,
     distance_alphabet_size: usize,
     literal_lengths: *const [256]u4,
     command_lengths: *const [704]u4,
@@ -16483,7 +16487,7 @@ fn writePlannedCompressedHeader(
     try writeBlockTypeCount(allocator, writer, 1);
     try writeBlockTypeCount(allocator, writer, 1);
     try writer.writeBits(allocator, 0, 2); // NPOSTFIX
-    try writer.writeBits(allocator, 15, 4); // NDIRECT = 15
+    try writer.writeBits(allocator, ndirect, 4);
     try writer.writeBits(allocator, 0, 2); // literal context mode
     try writeBlockTypeCount(allocator, writer, 1);
     try writeBlockTypeCount(allocator, writer, 1);
@@ -16498,6 +16502,7 @@ fn writePlannedCompressedHeaderTwoLiteralContexts(
     literal_alphabets: *const [2]command_plan.PrefixAlphabetFor(256),
     literal_lengths: *const [2][256]u4,
     context_cutoff: u6,
+    ndirect: u7,
     command_alphabet: *const command_plan.PrefixAlphabet,
     distance_alphabet: *const command_plan.PrefixAlphabetFor(planned_distance_alphabet_size),
     distance_alphabet_size: usize,
@@ -16508,7 +16513,7 @@ fn writePlannedCompressedHeaderTwoLiteralContexts(
     try writeBlockTypeCount(allocator, writer, 1);
     try writeBlockTypeCount(allocator, writer, 1);
     try writer.writeBits(allocator, 0, 2); // NPOSTFIX
-    try writer.writeBits(allocator, 15, 4); // NDIRECT
+    try writer.writeBits(allocator, ndirect, 4);
     try writer.writeBits(allocator, literal_context.mode_utf8, 2);
     try writeBlockTypeCount(allocator, writer, 2);
     try writeUtf8SuffixContextMap(allocator, writer, context_cutoff);
