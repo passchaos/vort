@@ -36,14 +36,24 @@ def main() -> int:
         if "generated=yes" not in output or not generated.is_file():
             raise SystemExit(f"Vort dictionary generation was not exercised: {output!r}")
         fields = dict(field.split("=", 1) for field in output.split() if "=" in field)
-        trained_size = int(fields.get("trained", 0))
-        if trained_size >= int(fields.get("baseline", 0)):
-            raise SystemExit(f"trained dictionary entropy did not improve the control: {output!r}")
-        # Literal-only training produced 508 bytes on this deterministic
-        # control. Keep slack over the current 502-byte result while requiring
-        # the corpus-derived sequence tables to remain beneficial.
-        if trained_size > 507:
-            raise SystemExit(f"trained sequence entropy regressed: {output!r}")
+        def sizes(name: str) -> tuple[int, int]:
+            trained, baseline = fields.get(name, "0/0").split("/", 1)
+            return int(trained), int(baseline)
+
+        text_trained, text_baseline = sizes("text")
+        structured_trained, structured_baseline = sizes("structured")
+        binary_trained, binary_baseline = sizes("binary")
+        total_trained, total_baseline = sizes("total")
+        if total_trained >= total_baseline:
+            raise SystemExit(f"trained dictionary entropy did not improve the aggregate: {output!r}")
+        if text_trained > 507:
+            raise SystemExit(f"trained text entropy regressed: {output!r}")
+        for name, trained, baseline in (
+            ("structured", structured_trained, structured_baseline),
+            ("binary", binary_trained, binary_baseline),
+        ):
+            if trained > baseline:
+                raise SystemExit(f"trained {name} entropy regressed: {output!r}")
         if int(fields.get("sequence_entropy", 0)) <= 0:
             raise SystemExit(f"trained sequence entropy was not reported: {output!r}")
         generated_bytes = generated.read_bytes()

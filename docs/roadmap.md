@@ -8312,3 +8312,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   bidirectional and improves from 1,019 baseline bytes to 502 bytes, with a
   94-byte trained sequence entropy section. Repcode discovery and a stronger
   COVER/FastCover-class history selector remain open.
+  Expanded the full-dictionary gate from one skewed-text control to three
+  independently held-out corpus families, always comparing the trained tables
+  with baseline tables wrapped around the exact same selected history. On
+  libzstd 1.5.5 level 1, text improves `1019 -> 502` bytes, structured JSON
+  improves `100 -> 72`, and skewed binary improves `942 -> 579`; aggregate
+  size improves `2061 -> 1153`. The gate requires an aggregate win and no
+  per-family regression while running both Vort-to-libzstd and
+  libzstd-to-Vort decoding for every trained dictionary.

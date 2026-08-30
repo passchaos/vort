@@ -23,10 +23,99 @@ fn skewedText(comptime seed: u32, comptime len: usize) [len]u8 {
     return bytes;
 }
 
+fn skewedBinary(comptime seed: u32, comptime len: usize) [len]u8 {
+    @setEvalBranchQuota(10_000);
+    var bytes: [len]u8 = undefined;
+    var state = seed;
+    for (&bytes) |*byte| {
+        state = state *% 22_695_477 +% 1;
+        const bucket: u8 = @truncate(state >> 24);
+        byte.* = switch (bucket) {
+            0...95 => 0,
+            96...143 => 0xff,
+            144...175 => 1,
+            176...199 => 2,
+            else => @truncate(state),
+        };
+    }
+    return bytes;
+}
+
 const literal_training_a = skewedText(0x243f_6a88, 384);
 const literal_training_b = skewedText(0x85a3_08d3, 384);
 const literal_training_c = skewedText(0x1319_8a2e, 384);
 const entropy_payload = skewedText(0x0370_7344, 1024);
+const structured_training_a =
+    "{\"kind\":\"event\",\"service\":\"vort\",\"region\":\"us-east-1\",\"status\":\"ok\",\"message\":\"alpha\"}\n" ** 6;
+const structured_training_b =
+    "{\"kind\":\"event\",\"service\":\"vort\",\"region\":\"eu-west-1\",\"status\":\"warn\",\"message\":\"beta\"}\n" ** 6;
+const structured_training_c =
+    "{\"kind\":\"metric\",\"service\":\"vort\",\"region\":\"ap-south-1\",\"status\":\"ok\",\"message\":\"gamma\"}\n" ** 6;
+const structured_payload =
+    "{\"kind\":\"event\",\"service\":\"vort\",\"region\":\"us-west-2\",\"status\":\"ok\",\"message\":\"delta\"}\n" ** 12;
+const binary_training_a = skewedBinary(0xa409_3822, 384);
+const binary_training_b = skewedBinary(0x299f_31d0, 384);
+const binary_training_c = skewedBinary(0x082e_fa98, 384);
+const binary_payload = skewedBinary(0xec4e_6c89, 1024);
+
+const DictionaryCaseResult = struct {
+    trained_size: usize,
+    baseline_size: usize,
+    sequence_entropy_len: usize,
+};
+
+fn nextDictionaryId(id: u32) u32 {
+    return if (id == std.math.maxInt(u32)) 1 else id + 1;
+}
+
+fn compareTrainedDictionaryCase(
+    allocator: std.mem.Allocator,
+    runtime: libzstd.Runtime,
+    samples: []const []const u8,
+    payload: []const u8,
+    dictionary_id: u32,
+) !DictionaryCaseResult {
+    const trained = try vort.zstdTrainStandardDictionaryAlloc(
+        allocator,
+        samples,
+        .{ .target_size = 8 },
+        dictionary_id,
+    );
+    defer trained.deinit(allocator);
+    const baseline = try vort.zstdStandardDictionaryFromContentAlloc(
+        allocator,
+        trained.view.content,
+        trained.view.id,
+    );
+    defer baseline.deinit(allocator);
+    const summary = try vort.zstdSummarizeStandardDictionary(trained.bytes);
+    if (summary.huffman_symbol_count != 256 or
+        summary.offset_accuracy_log != 8 or
+        summary.match_accuracy_log != 9 or
+        summary.literal_accuracy_log != 9 or
+        summary.sequence_entropy_len == 0) return error.InvalidDictionaryMetadata;
+
+    const dictionary = trained.asDictionary();
+    const vort_encoded = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(allocator, payload, .{ .content_checksum = false }, dictionary);
+    defer allocator.free(vort_encoded.frame);
+    const reference_output = try allocator.alloc(u8, payload.len);
+    defer allocator.free(reference_output);
+    try runtime.decodeUsingDict(vort_encoded.frame, reference_output, trained.bytes);
+    if (!std.mem.eql(u8, payload, reference_output)) return error.SizeMismatch;
+
+    const reference_encoded = try runtime.encodeUsingDictAlloc(allocator, payload, trained.bytes, 1);
+    defer allocator.free(reference_encoded);
+    const baseline_encoded = try runtime.encodeUsingDictAlloc(allocator, payload, baseline.bytes, 1);
+    defer allocator.free(baseline_encoded);
+    const decoded = try vort.zstdDecodeFrameAllocWithDictionary(allocator, reference_encoded, dictionary);
+    defer allocator.free(decoded);
+    if (!std.mem.eql(u8, payload, decoded)) return error.SizeMismatch;
+    return .{
+        .trained_size = reference_encoded.len,
+        .baseline_size = baseline_encoded.len,
+        .sequence_entropy_len = summary.sequence_entropy_len,
+    };
+}
 
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
@@ -38,17 +127,24 @@ pub fn main(init: std.process.Init) !void {
     const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(1 << 20));
     defer init.gpa.free(bytes);
     const parsed = try vort.ZstdNativeDictionary.initFromStandardDictionary(bytes);
-    const training_samples = [_][]const u8{ &literal_training_a, &literal_training_b, &literal_training_c };
+    const text_training = [_][]const u8{ &literal_training_a, &literal_training_b, &literal_training_c };
+    const structured_training = [_][]const u8{ structured_training_a, structured_training_b, structured_training_c };
+    const binary_training = [_][]const u8{ &binary_training_a, &binary_training_b, &binary_training_c };
     const payload = &entropy_payload;
     var runtime = try libzstd.Runtime.open();
     defer runtime.deinit();
-    var trained_size: usize = 0;
-    var baseline_size: usize = 0;
+    var text_sizes: DictionaryCaseResult = .{ .trained_size = 0, .baseline_size = 0, .sequence_entropy_len = 0 };
+    var structured_sizes: DictionaryCaseResult = .{ .trained_size = 0, .baseline_size = 0, .sequence_entropy_len = 0 };
+    var binary_sizes: DictionaryCaseResult = .{ .trained_size = 0, .baseline_size = 0, .sequence_entropy_len = 0 };
+    var trained_total: usize = 0;
+    var baseline_total: usize = 0;
     var trained_sequence_entropy_len: usize = 0;
 
     if (generated_path) |output_path| {
-        const generated_id = if (parsed.view.id == std.math.maxInt(u32)) 1 else parsed.view.id + 1;
-        const trained_id = if (generated_id == std.math.maxInt(u32)) 1 else generated_id + 1;
+        const generated_id = nextDictionaryId(parsed.view.id);
+        const text_id = nextDictionaryId(generated_id);
+        const structured_id = nextDictionaryId(text_id);
+        const binary_id = nextDictionaryId(structured_id);
         const generated = try vort.zstdStandardDictionaryFromContentAlloc(
             init.gpa,
             parsed.view.content,
@@ -68,41 +164,13 @@ pub fn main(init: std.process.Init) !void {
         defer init.gpa.free(generated_decoded);
         if (!std.mem.eql(u8, payload, generated_decoded)) return error.SizeMismatch;
 
-        const trained = try vort.zstdTrainStandardDictionaryAlloc(
-            init.gpa,
-            &training_samples,
-            .{ .target_size = 8 },
-            trained_id,
-        );
-        defer trained.deinit(init.gpa);
-        const trained_baseline = try vort.zstdStandardDictionaryFromContentAlloc(
-            init.gpa,
-            trained.view.content,
-            trained.view.id,
-        );
-        defer trained_baseline.deinit(init.gpa);
-        const trained_summary = try vort.zstdSummarizeStandardDictionary(trained.bytes);
-        if (trained_summary.huffman_symbol_count != 256) return error.InvalidDictionaryMetadata;
-        if (trained_summary.offset_accuracy_log != 8 or
-            trained_summary.match_accuracy_log != 9 or
-            trained_summary.literal_accuracy_log != 9) return error.InvalidDictionaryMetadata;
-        trained_sequence_entropy_len = trained_summary.sequence_entropy_len;
-        const trained_dictionary = trained.asDictionary();
-        const trained_vort = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(init.gpa, payload, .{ .content_checksum = false }, trained_dictionary);
-        defer init.gpa.free(trained_vort.frame);
-        var trained_output: [payload.len]u8 = undefined;
-        try runtime.decodeUsingDict(trained_vort.frame, &trained_output, trained.bytes);
-        if (!std.mem.eql(u8, payload, &trained_output)) return error.SizeMismatch;
-        const trained_reference = try runtime.encodeUsingDictAlloc(init.gpa, payload, trained.bytes, 1);
-        defer init.gpa.free(trained_reference);
-        const trained_baseline_reference = try runtime.encodeUsingDictAlloc(init.gpa, payload, trained_baseline.bytes, 1);
-        defer init.gpa.free(trained_baseline_reference);
-        const trained_decoded = try vort.zstdDecodeFrameAllocWithDictionary(init.gpa, trained_reference, trained_dictionary);
-        defer init.gpa.free(trained_decoded);
-        if (!std.mem.eql(u8, payload, trained_decoded)) return error.SizeMismatch;
-        if (trained_reference.len >= trained_baseline_reference.len) return error.CompressionRegression;
-        trained_size = trained_reference.len;
-        baseline_size = trained_baseline_reference.len;
+        text_sizes = try compareTrainedDictionaryCase(init.gpa, runtime, &text_training, payload, text_id);
+        structured_sizes = try compareTrainedDictionaryCase(init.gpa, runtime, &structured_training, structured_payload, structured_id);
+        binary_sizes = try compareTrainedDictionaryCase(init.gpa, runtime, &binary_training, &binary_payload, binary_id);
+        trained_total = text_sizes.trained_size + structured_sizes.trained_size + binary_sizes.trained_size;
+        baseline_total = text_sizes.baseline_size + structured_sizes.baseline_size + binary_sizes.baseline_size;
+        if (trained_total >= baseline_total) return error.CompressionRegression;
+        trained_sequence_entropy_len = text_sizes.sequence_entropy_len;
     }
 
     const vort_encoded = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(init.gpa, payload, .{ .content_checksum = false }, parsed.dictionary);
@@ -157,8 +225,8 @@ pub fn main(init: std.process.Init) !void {
     var buffer: [384]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
     try stdout.interface.print(
-        "zstd_full_dictionary_diff=ok version={s} id={d} vort={d} reference={d} generated={s} trained={d} baseline={d} sequence_entropy={d}\n",
-        .{ runtime.version(), parsed.view.id, vort_encoded.frame.len, reference_encoded.len, if (generated_path == null) "no" else "yes", trained_size, baseline_size, trained_sequence_entropy_len },
+        "zstd_full_dictionary_diff=ok version={s} id={d} vort={d} reference={d} generated={s} text={d}/{d} structured={d}/{d} binary={d}/{d} total={d}/{d} sequence_entropy={d}\n",
+        .{ runtime.version(), parsed.view.id, vort_encoded.frame.len, reference_encoded.len, if (generated_path == null) "no" else "yes", text_sizes.trained_size, text_sizes.baseline_size, structured_sizes.trained_size, structured_sizes.baseline_size, binary_sizes.trained_size, binary_sizes.baseline_size, trained_total, baseline_total, trained_sequence_entropy_len },
     );
     try stdout.interface.flush();
 }
