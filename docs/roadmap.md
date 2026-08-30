@@ -8174,7 +8174,11 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   than libbrotli quality 5 (5,565 bytes) and within 1.3% of quality 8 (5,467
   bytes), though encoding is intentionally much slower. The planned-encode
   gate now retains this real-source ratio row in addition to its tiny synthetic
-  cases.
+  cases. The retained optimal search uses a 256-chain/128-candidate cap and
+  only the profitable four-byte minimum-match proposal; sixteen interleaved
+  ReleaseFast CPU-8 pairs against the earlier 512-chain/two-proposal version
+  preserve source/JSON/log/mixed bytes while improving median ratio-encode
+  time by 1.85--1.96x with 16/16 wins in every row.
   The copy loop now also keeps a local destination cursor while draining each
   output span, removing the remaining per-byte history-write remainder without
   changing literal, stored, or dictionary emission. Twenty alternating

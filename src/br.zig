@@ -1577,32 +1577,28 @@ pub fn encodePlannedStreamRatioAlloc(allocator: std.mem.Allocator, input: []cons
 }
 
 fn selectOptimalRatioCandidates(allocator: std.mem.Allocator, input: []const u8, parser_options: PlannedParserOptions, stats: *encoder_stats.PlannedEncodeStats, baseline: *[]u8) Error!void {
-    // Three-byte matches maximize modeled coverage, while four-byte matching
-    // can avoid expensive one-off command/distance symbols. The fixed-bit DP
-    // is only a proposal stage: exact Brotli wire size decides whether either
-    // candidate survives.
-    for ([_]usize{ 3, 4 }) |min_match| {
-        const optimal_plan = try lz77.optimalPlanAlloc(allocator, input, .{
-            // `optimalPlanAlloc` currently has a precomputed 32 KiB distance-
-            // cost table. Keep this candidate within that modeled window; the
-            // existing lazy and long-distance paths still cover farther hits.
-            .window_len = @min(input.len, lz77.default_window_len),
-            .max_chain = @min(parser_options.max_chain, 256),
-            .nice_len = parser_options.nice_len,
-            .max_candidates = 128,
-            .min_match = min_match,
-            .max_match = lz77.max_match_len,
-        });
-        defer optimal_plan.deinit(allocator);
-        if (optimal_plan.stats.matches == 0) continue;
-        const optimal_commands = try command_plan.buildAlloc(allocator, input, optimal_plan.tokens);
-        defer optimal_commands.deinit(allocator);
-        const candidate = try encodeLazyCommandPlanAlloc(allocator, input, optimal_commands.commands, stats, .{ .try_recent_distances = true });
-        if (candidate.len < baseline.*.len) {
-            allocator.free(baseline.*);
-            baseline.* = candidate;
-        } else allocator.free(candidate);
-    }
+    // Four-byte matching avoids expensive one-off command/distance symbols on
+    // the retained source corpus. The fixed-bit DP is only a proposal stage:
+    // exact Brotli wire size decides whether the candidate survives.
+    const optimal_plan = try lz77.optimalPlanAlloc(allocator, input, .{
+        // `optimalPlanAlloc` currently has a precomputed 32 KiB distance-cost
+        // table. The existing lazy and long-distance paths cover farther hits.
+        .window_len = @min(input.len, lz77.default_window_len),
+        .max_chain = @min(parser_options.max_chain, 256),
+        .nice_len = parser_options.nice_len,
+        .max_candidates = 128,
+        .min_match = 4,
+        .max_match = lz77.max_match_len,
+    });
+    defer optimal_plan.deinit(allocator);
+    if (optimal_plan.stats.matches == 0) return;
+    const optimal_commands = try command_plan.buildAlloc(allocator, input, optimal_plan.tokens);
+    defer optimal_commands.deinit(allocator);
+    const candidate = try encodeLazyCommandPlanAlloc(allocator, input, optimal_commands.commands, stats, .{ .try_recent_distances = true });
+    if (candidate.len < baseline.*.len) {
+        allocator.free(baseline.*);
+        baseline.* = candidate;
+    } else allocator.free(candidate);
 }
 
 fn chooseStoredIfSmaller(allocator: std.mem.Allocator, input: []const u8, compressed: []u8) Error![]u8 {
