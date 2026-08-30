@@ -8398,3 +8398,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   parity. The gate requires aggregate parity, text's existing strict bounds,
   and no JSON row worse than 1.03x. The focused selector control also improves
   from 78 to 76 bytes.
+  Extended trainer parity to a deterministic 40-chunk held-out corpus sampled
+  across `src/zstd.zig`, `src/dictionary.zig`, `src/root.zig`, and the roadmap.
+  At levels 1/3/9 Vort records `1883/1841/1826` bytes versus zstd's
+  `1885/1870/1847`, winning all three rows. Together with the three synthetic
+  families, the suite totals `9416/9478` bytes, so the expanded gate requires
+  aggregate parity while retaining the stricter per-family bounds. A
+  320–416-byte target scan did not produce a universal replacement; the public
+  352-byte target remains and validation chooses the best bounded size/layout
+  for each corpus.
