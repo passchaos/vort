@@ -274,6 +274,8 @@ pub const StandardDictionaryEntropySummary = struct {
     content_offset: usize,
     content_len: usize,
     repcodes: [3]u32,
+    huffman_symbol_count: usize,
+    huffman_max_bit_count: u8,
     literal_table_entries: usize,
     offset_table_entries: usize,
     match_table_entries: usize,
@@ -339,6 +341,62 @@ pub fn standardDictionaryFromContentAlloc(allocator: std.mem.Allocator, content:
     return .{ .bytes = bytes, .view = try inspectStandardDictionary(bytes) };
 }
 
+/// Train a standard full dictionary with a corpus-specific literal Huffman
+/// table and the portable baseline OF/ML/LL FSE tables. This first entropy-
+/// training stage deliberately counts raw sample bytes rather than literals
+/// produced by a Zstd parser, and is therefore not COVER/FastCover-equivalent.
+/// Every byte receives a non-zero prior so the resulting dictionary can encode
+/// arbitrary future literals instead of only symbols observed in the corpus.
+pub fn trainStandardDictionaryAlloc(
+    allocator: std.mem.Allocator,
+    samples: []const []const u8,
+    options: NativeDictionaryTrainOptions,
+    dictionary_id: u32,
+) Error!OwnedStandardDictionary {
+    if (dictionary_id == 0) return error.InvalidDictionaryMetadata;
+    if (samples.len == 0) return error.InvalidDictionaryTraining;
+    var total_sample_bytes: usize = 0;
+    for (samples) |sample| {
+        total_sample_bytes = std.math.add(usize, total_sample_bytes, sample.len) catch return error.InvalidDictionaryTraining;
+    }
+    if (total_sample_bytes > std.math.maxInt(u32) - 1) return error.InvalidDictionaryTraining;
+
+    const content = try dictionary_mod.trainAlloc(allocator, samples, options);
+    defer allocator.free(content);
+    try dictionary_format.validateGenerationInput(content.len, dictionary_id);
+
+    var frequencies: SmallHuffmanFrequencies = @splat(@splat(0));
+    // This mirrors zstd's dictionary trainer: full dictionaries must provide a
+    // complete literal alphabet because Repeat_Mode can use the table before a
+    // frame has transmitted any replacement tree.
+    for (0..256) |symbol| frequencies[0][symbol] = 1;
+    for (samples) |sample| addBytesToSmallHuffmanFrequencies(&frequencies, sample);
+    var plan = smallHuffmanLiteralPlanFromFrequencies(&frequencies);
+    finalizeSmallHuffmanLiteralPlan(&plan) orelse return error.InvalidDictionaryTraining;
+
+    var literal_entropy: std.ArrayList(u8) = .empty;
+    defer literal_entropy.deinit(allocator);
+    if (!try emitSmallHuffmanTree(allocator, &literal_entropy, &plan)) {
+        // A perfectly flat corpus produces an all-equal weight stream, which
+        // the Zstd Huffman header cannot encode profitably. Use the same
+        // slightly perturbed complete alphabet strategy as upstream zstd so
+        // noisy training data still yields a valid, general-purpose table.
+        frequencies = @splat(@splat(0));
+        frequencies[0][0] = 4;
+        for (1..256) |symbol| frequencies[0][symbol] = 2;
+        frequencies[0][253] = 1;
+        frequencies[0][254] = 1;
+        plan = smallHuffmanLiteralPlanFromFrequencies(&frequencies);
+        finalizeSmallHuffmanLiteralPlan(&plan) orelse return error.InvalidDictionaryTraining;
+        if (!try emitSmallHuffmanTree(allocator, &literal_entropy, &plan)) return error.InvalidDictionaryTraining;
+    }
+
+    const bytes = try allocator.alloc(u8, try dictionary_format.encodedFromEntropyLen(content.len, literal_entropy.items.len));
+    errdefer allocator.free(bytes);
+    _ = try dictionary_format.encodeFromEntropyInto(content, dictionary_id, literal_entropy.items, bytes);
+    return .{ .bytes = bytes, .view = try inspectStandardDictionary(bytes) };
+}
+
 test "standard Zstd dictionary generator wraps owned content" {
     const content = "standard dictionary content used as bounded history";
     const owned = try standardDictionaryFromContentAlloc(std.testing.allocator, content, 0x1234_5678);
@@ -369,6 +427,64 @@ test "standard Zstd dictionary generator wraps owned content" {
     var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
     try std.testing.expectError(error.InvalidDictionaryMetadata, standardDictionaryFromContentAlloc(failing.allocator(), content, 0));
     try std.testing.expectError(error.OutOfMemory, standardDictionaryFromContentAlloc(failing.allocator(), content, 1));
+}
+
+test "standard Zstd dictionary trainer emits corpus literal entropy" {
+    const samples = [_][]const u8{
+        "{\"kind\":\"event\",\"service\":\"vort\",\"message\":\"alpha alpha alpha\"}\n",
+        "{\"kind\":\"event\",\"service\":\"vort\",\"message\":\"beta beta beta\"}\n",
+        "{\"kind\":\"event\",\"service\":\"vort\",\"message\":\"gamma gamma gamma\"}\n",
+    };
+    const trained = try trainStandardDictionaryAlloc(
+        std.testing.allocator,
+        &samples,
+        .{ .target_size = 64 },
+        0x7788_99aa,
+    );
+    defer trained.deinit(std.testing.allocator);
+    const baseline = try standardDictionaryFromContentAlloc(
+        std.testing.allocator,
+        trained.view.content,
+        trained.view.id,
+    );
+    defer baseline.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(DictionaryKind.standard_full, trained.asDictionary().kind());
+    try std.testing.expectEqual(@as(u32, 0x7788_99aa), trained.view.id);
+    try std.testing.expectEqualSlices(u8, baseline.view.content, trained.view.content);
+    try std.testing.expectEqual([3]u32{ 1, 4, 8 }, trained.view.repcodes);
+    try std.testing.expect(!std.mem.eql(u8, trained.bytes, baseline.bytes));
+    const summary = try summarizeStandardDictionary(trained.bytes);
+    try std.testing.expectEqual(@as(usize, 256), summary.huffman_symbol_count);
+    try std.testing.expect(summary.huffman_max_bit_count <= 11);
+
+    try std.testing.expectError(error.InvalidDictionaryTraining, trainStandardDictionaryAlloc(
+        std.testing.allocator,
+        &.{},
+        .{ .target_size = 64 },
+        1,
+    ));
+    try std.testing.expectError(error.InvalidDictionaryMetadata, trainStandardDictionaryAlloc(
+        std.testing.allocator,
+        &samples,
+        .{ .target_size = 64 },
+        0,
+    ));
+}
+
+test "standard Zstd dictionary trainer handles a flat literal corpus" {
+    var flat: [256]u8 = undefined;
+    for (&flat, 0..) |*byte, symbol| byte.* = @intCast(symbol);
+    const trained = try trainStandardDictionaryAlloc(
+        std.testing.allocator,
+        &.{&flat},
+        .{ .target_size = 8 },
+        0x1122_3344,
+    );
+    defer trained.deinit(std.testing.allocator);
+    const summary = try summarizeStandardDictionary(trained.bytes);
+    try std.testing.expectEqual(@as(usize, 256), summary.huffman_symbol_count);
+    try std.testing.expect(summary.huffman_max_bit_count <= 11);
 }
 
 pub const NativeDictionary = struct {
@@ -447,7 +563,7 @@ fn inspectStandardDictionaryWithEntropy(bytes: []const u8) Error!StandardDiction
 
     var reader: std.Io.Reader = .fixed(bytes[offset..]);
     var remaining: std.Io.Limit = .limited(bytes.len - offset);
-    _ = decodeStdZstdHuffmanTree(&reader, &remaining) catch |err| switch (err) {
+    const huffman_tree = decodeStdZstdHuffmanTree(&reader, &remaining) catch |err| switch (err) {
         error.EndOfStream => return error.TruncatedFrame,
         else => return error.InvalidDictionaryMetadata,
     };
@@ -481,6 +597,8 @@ fn inspectStandardDictionaryWithEntropy(bytes: []const u8) Error!StandardDiction
             .content_offset = view.content_offset,
             .content_len = view.content.len,
             .repcodes = view.repcodes,
+            .huffman_symbol_count = @as(usize, huffman_tree.symbol_count_minus_one) + 1,
+            .huffman_max_bit_count = huffman_tree.max_bit_count,
             .offset_table_entries = table_entries[0],
             .match_table_entries = table_entries[1],
             .literal_table_entries = table_entries[2],

@@ -899,6 +899,7 @@ pub const zstdStandardDictionaryHeaderLen = zstd.standard_dictionary_header_len;
 pub const zstdStandardDictionaryFromContentBound = zstd.standardDictionaryFromContentBound;
 pub const zstdStandardDictionaryFromContentInto = zstd.standardDictionaryFromContentInto;
 pub const zstdStandardDictionaryFromContentAlloc = zstd.standardDictionaryFromContentAlloc;
+pub const zstdTrainStandardDictionaryAlloc = zstd.trainStandardDictionaryAlloc;
 pub const zstdTrainDictionaryAlloc = zstd.trainDictionaryAlloc;
 pub const zstdDictionarySetFromMetadataAlloc = zstd.dictionarySetFromMetadataAlloc;
 pub const zstdEncodeRawOrRleFrameAlloc = zstd.encodeRawOrRleFrameAlloc;
@@ -2816,6 +2817,7 @@ test "root exports lz4 and zstd codec helpers" {
     _ = zstdStandardDictionaryFromContentBound;
     _ = zstdStandardDictionaryFromContentInto;
     _ = zstdStandardDictionaryFromContentAlloc;
+    _ = zstdTrainStandardDictionaryAlloc;
     _ = zstdDictionarySetFromMetadataAlloc;
     _ = zstdEncodeRawOrRleFrameAlloc;
     _ = zstdEncodeRawOrRleFrameWithOptionsAlloc;
@@ -4341,6 +4343,14 @@ test "root zstd public reusable aliases expose dictionary helpers" {
     try std.testing.expectEqual(ZstdDictionaryKind.standard_full, standard.asDictionary().kind());
     try std.testing.expectEqual(dict.id, zstdStandardDictionaryId(standard.bytes).?);
     try std.testing.expectEqualSlices(u8, dict.content, standard.view.content);
+    const trained_standard = try zstdTrainStandardDictionaryAlloc(
+        std.testing.allocator,
+        &samples,
+        train_options,
+        dict.id +% 1,
+    );
+    defer trained_standard.deinit(std.testing.allocator);
+    try std.testing.expectEqual(ZstdDictionaryKind.standard_full, trained_standard.asDictionary().kind());
 
     var options: ZstdAdvancedFrameOptions = .{
         .selection = .literal_only,

@@ -35,6 +35,9 @@ def main() -> int:
             raise SystemExit(f"dictionary id mismatch: {output!r}")
         if "generated=yes" not in output or not generated.is_file():
             raise SystemExit(f"Vort dictionary generation was not exercised: {output!r}")
+        fields = dict(field.split("=", 1) for field in output.split() if "=" in field)
+        if int(fields.get("trained", 0)) >= int(fields.get("baseline", 0)):
+            raise SystemExit(f"trained literal entropy did not improve the control: {output!r}")
         generated_bytes = generated.read_bytes()
         if generated_bytes[:4] != bytes.fromhex("37a430ec"):
             raise SystemExit("Vort generated dictionary has bad magic")

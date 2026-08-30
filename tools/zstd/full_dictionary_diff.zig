@@ -2,6 +2,32 @@ const std = @import("std");
 const vort = @import("vort");
 const libzstd = @import("libzstd_runtime.zig");
 
+fn skewedText(comptime seed: u32, comptime len: usize) [len]u8 {
+    @setEvalBranchQuota(10_000);
+    var bytes: [len]u8 = undefined;
+    var state = seed;
+    for (&bytes) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        const bucket: u8 = @truncate(state >> 24);
+        byte.* = switch (bucket) {
+            0...71 => ' ',
+            72...115 => 'e',
+            116...147 => 't',
+            148...173 => 'a',
+            174...195 => 'o',
+            196...211 => 'i',
+            212...224 => 'n',
+            else => 'a' + @as(u8, @truncate(state % 26)),
+        };
+    }
+    return bytes;
+}
+
+const literal_training_a = skewedText(0x243f_6a88, 384);
+const literal_training_b = skewedText(0x85a3_08d3, 384);
+const literal_training_c = skewedText(0x1319_8a2e, 384);
+const entropy_payload = skewedText(0x0370_7344, 1024);
+
 pub fn main(init: std.process.Init) !void {
     var args = try std.process.Args.Iterator.initAllocator(init.minimal.args, init.gpa);
     defer args.deinit();
@@ -12,12 +38,16 @@ pub fn main(init: std.process.Init) !void {
     const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, path, init.gpa, .limited(1 << 20));
     defer init.gpa.free(bytes);
     const parsed = try vort.ZstdNativeDictionary.initFromStandardDictionary(bytes);
-    const payload = "standard dictionary sample alpha standard dictionary sample beta";
+    const training_samples = [_][]const u8{ &literal_training_a, &literal_training_b, &literal_training_c };
+    const payload = &entropy_payload;
     var runtime = try libzstd.Runtime.open();
     defer runtime.deinit();
+    var trained_size: usize = 0;
+    var baseline_size: usize = 0;
 
     if (generated_path) |output_path| {
         const generated_id = if (parsed.view.id == std.math.maxInt(u32)) 1 else parsed.view.id + 1;
+        const trained_id = if (generated_id == std.math.maxInt(u32)) 1 else generated_id + 1;
         const generated = try vort.zstdStandardDictionaryFromContentAlloc(
             init.gpa,
             parsed.view.content,
@@ -36,6 +66,38 @@ pub fn main(init: std.process.Init) !void {
         const generated_decoded = try vort.zstdDecodeFrameAllocWithDictionary(init.gpa, generated_reference, generated_dictionary);
         defer init.gpa.free(generated_decoded);
         if (!std.mem.eql(u8, payload, generated_decoded)) return error.SizeMismatch;
+
+        const trained = try vort.zstdTrainStandardDictionaryAlloc(
+            init.gpa,
+            &training_samples,
+            .{ .target_size = 8 },
+            trained_id,
+        );
+        defer trained.deinit(init.gpa);
+        const trained_baseline = try vort.zstdStandardDictionaryFromContentAlloc(
+            init.gpa,
+            trained.view.content,
+            trained.view.id,
+        );
+        defer trained_baseline.deinit(init.gpa);
+        const trained_summary = try vort.zstdSummarizeStandardDictionary(trained.bytes);
+        if (trained_summary.huffman_symbol_count != 256) return error.InvalidDictionaryMetadata;
+        const trained_dictionary = trained.asDictionary();
+        const trained_vort = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(init.gpa, payload, .{ .content_checksum = false }, trained_dictionary);
+        defer init.gpa.free(trained_vort.frame);
+        var trained_output: [payload.len]u8 = undefined;
+        try runtime.decodeUsingDict(trained_vort.frame, &trained_output, trained.bytes);
+        if (!std.mem.eql(u8, payload, &trained_output)) return error.SizeMismatch;
+        const trained_reference = try runtime.encodeUsingDictAlloc(init.gpa, payload, trained.bytes, 1);
+        defer init.gpa.free(trained_reference);
+        const trained_baseline_reference = try runtime.encodeUsingDictAlloc(init.gpa, payload, trained_baseline.bytes, 1);
+        defer init.gpa.free(trained_baseline_reference);
+        const trained_decoded = try vort.zstdDecodeFrameAllocWithDictionary(init.gpa, trained_reference, trained_dictionary);
+        defer init.gpa.free(trained_decoded);
+        if (!std.mem.eql(u8, payload, trained_decoded)) return error.SizeMismatch;
+        if (trained_reference.len >= trained_baseline_reference.len) return error.CompressionRegression;
+        trained_size = trained_reference.len;
+        baseline_size = trained_baseline_reference.len;
     }
 
     const vort_encoded = try vort.zstdEncodeNativeFrameWithDictionaryAlloc(init.gpa, payload, .{ .content_checksum = false }, parsed.dictionary);
@@ -90,8 +152,8 @@ pub fn main(init: std.process.Init) !void {
     var buffer: [384]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
     try stdout.interface.print(
-        "zstd_full_dictionary_diff=ok version={s} id={d} vort={d} reference={d} generated={s}\n",
-        .{ runtime.version(), parsed.view.id, vort_encoded.frame.len, reference_encoded.len, if (generated_path == null) "no" else "yes" },
+        "zstd_full_dictionary_diff=ok version={s} id={d} vort={d} reference={d} generated={s} trained={d} baseline={d}\n",
+        .{ runtime.version(), parsed.view.id, vort_encoded.frame.len, reference_encoded.len, if (generated_path == null) "no" else "yes", trained_size, baseline_size },
     );
     try stdout.interface.flush();
 }

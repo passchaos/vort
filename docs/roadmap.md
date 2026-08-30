@@ -4,7 +4,7 @@ This roadmap is a living checklist toward the larger goal: outperform and
 out-feature `zlib`, `zlib-ng`, `zlib-rs`, and `zstd` without copying their
 architecture blindly.
 
-### Current completion audit (2026-08-29)
+### Current completion audit (2026-08-30)
 
 The long-term objective is **not complete**. Current evidence still leaves these
 major gaps before Vort can claim broad industry-best parity:
@@ -20,10 +20,12 @@ major gaps before Vort can claim broad industry-best parity:
 - Incremental DEFLATE source and JSON throughput now reach or exceed the local
   zlib-ng level-6 comparison on the locked 256 KiB fixtures, while broader
   real-corpus, ratio, memory, and cross-platform parity still needs evidence.
-- Corpus-trained Zstd-compatible dictionary entropy tables and broader
-  entropy-mode parity still require completion and competitor evidence. Vort
-  can now wrap caller-selected history in a dependency-free standard full
-  dictionary using portable baseline tables; standardized seek-table parsing/
+- Full corpus-trained Zstd sequence entropy tables and broader entropy-mode
+  parity still require completion and competitor evidence. Vort can now wrap
+  caller-selected history in a dependency-free standard full dictionary and
+  train its complete 256-symbol literal Huffman table from sample bytes; this
+  first stage retains baseline OF/ML/LL FSE tables and repcodes rather than
+  claiming COVER/FastCover equivalence. Standardized seek-table parsing/
   iteration, one-shot encoding, checksum-aware range decode, and
   dictionary-aware encoding/range decode are also in place.
 - Cross-platform optimized kernels and reproducible competitor measurements are
@@ -8281,3 +8283,16 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   keep structured/alternating controls neutral and improve the deterministic
   distance-heavy q8 median by about 6.6% (paired median `1.07x`, 15/16 wins),
   with matching checksums.
+  Added `zstdTrainStandardDictionaryAlloc`, the first dependency-free corpus-
+  trained entropy stage for RFC 8878 full dictionaries. It uses the existing
+  deterministic history trainer, builds a complete 256-symbol literal Huffman
+  model from raw sample-byte frequencies with a non-zero prior, and combines
+  it with the validated baseline OF/ML/LL FSE suffix and repcodes `1/4/8`. A
+  flat-distribution fallback mirrors upstream zstd's slightly perturbed model
+  so noisy corpora still produce a legal table. The dictionary entropy summary
+  now reports Huffman symbol count and maximum bit width. The libzstd 1.5.5
+  differential validates Vort-to-libzstd and libzstd-to-Vort operation with the
+  trained dictionary; on its deterministic skewed-literal control, libzstd
+  level 1 output falls from 1,019 baseline bytes to 508 trained bytes. This is
+  intentionally not full COVER/FastCover: sequence FSE statistics and trained
+  repcodes remain the next dictionary milestone.
