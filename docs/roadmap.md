@@ -8205,6 +8205,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   compressed blocks. Its codec-owned token, command, and hash-index storage is
   retained across blocks and `nextStream` calls; a public retained-capacity
   metric and repeated-stream test pin that warmed reuse contract.
+  Incremental planned blocks now retain up to the advertised window of decoded
+  source bytes and seed the next block's hash matcher from that history. The
+  history remains codec-owned, bounded, and is cleared by `nextStream`; a
+  duplicated 4 KiB random block falls from 8,199 independent-block bytes to
+  4,113 bytes, while tiny-output Vort and Node decoders reproduce the original
+  8 KiB payload.
   Added a focused incremental planned-encoder benchmark/gate comparing warmed
   codec-owned state with rebuilding the one-shot fast encoder. On fixed CPU 8
   at 200 iterations both paths emit 120-byte streams for the 4,992-byte

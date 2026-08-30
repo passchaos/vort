@@ -62,6 +62,19 @@ def main() -> int:
     if actual != expected:
         raise SystemExit("incremental-planned: node output mismatch")
     print(f"brotli planned incremental-planned node diff: encoded={len(encoded)} decoded={len(actual)}")
+    state = 0x9E3779B9
+    first = bytearray(4096)
+    for i in range(len(first)):
+        state = (state * 1664525 + 1013904223) & 0xFFFFFFFF
+        first[i] = state >> 24
+    expected = first + first
+    encoded = subprocess.check_output([sys.argv[1], "incremental-planned-history"])
+    actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout
+    if actual != expected:
+        raise SystemExit("incremental-planned-history: node output mismatch")
+    if len(encoded) >= len(expected) // 2 + 64:
+        raise SystemExit("incremental-planned-history: cross-block match was not retained")
+    print(f"brotli planned incremental-planned-history node diff: encoded={len(encoded)} decoded={len(actual)}")
     expected = b" information follows the information"
     encoded = subprocess.check_output([sys.argv[1], "dictionary-words"])
     actual = subprocess.run(["node", "-e", script], input=encoded, check=True, capture_output=True).stdout

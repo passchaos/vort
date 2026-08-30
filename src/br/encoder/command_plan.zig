@@ -427,6 +427,37 @@ pub fn buildTrustedReuse(commands: *std.ArrayList(Command), allocator: std.mem.A
     return buildReuseInternal(commands, allocator, input, tokens, false);
 }
 
+/// Build commands from a dictionary-seeded LZ77 plan. Token matches may reach
+/// into the preceding history, so their distance is validated against the
+/// combined dictionary plus current-output position rather than input alone.
+pub fn buildWithDictionaryReuse(commands: *std.ArrayList(Command), allocator: std.mem.Allocator, input: []const u8, dictionary_len: usize, tokens: []const lz77.Token) !usize {
+    commands.clearRetainingCapacity();
+    var position: usize = 0;
+    var insert_start: usize = 0;
+    var insert_len: usize = 0;
+    var match_count: usize = 0;
+    for (tokens) |token| switch (token) {
+        .literal => |byte| {
+            if (position >= input.len or input[position] != byte) return error.InvalidBlockPlan;
+            position += 1;
+            insert_len += 1;
+        },
+        .match => |match| {
+            const copy_len: usize = match.length;
+            const distance: usize = match.distance;
+            if (copy_len == 0 or distance == 0 or distance > dictionary_len + position or copy_len > input.len - position) return error.InvalidBlockPlan;
+            try appendCopyCommand(commands, allocator, insert_start, insert_len, copy_len, distance);
+            position += copy_len;
+            insert_start = position;
+            insert_len = 0;
+            match_count += 1;
+        },
+    };
+    if (position != input.len) return error.InvalidBlockPlan;
+    if (insert_len != 0) try commands.append(allocator, .{ .insert_start = insert_start, .insert_len = insert_len });
+    return match_count;
+}
+
 fn buildReuseInternal(commands: *std.ArrayList(Command), allocator: std.mem.Allocator, input: []const u8, tokens: []const lz77.Token, comptime validate_copies: bool) !usize {
     commands.clearRetainingCapacity();
     var position: usize = 0;

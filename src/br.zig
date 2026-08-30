@@ -358,6 +358,7 @@ const IncrementalPlannedEncoderCodec = struct {
         window_bits: u5 = default_window_bits,
         tokens: std.ArrayList(lz77.Token) = .empty,
         commands: std.ArrayList(command_plan.Command) = .empty,
+        history: std.ArrayList(u8) = .empty,
         greedy_scratch: lz77.TinyGreedyScratch = .{},
     };
 
@@ -365,6 +366,7 @@ const IncrementalPlannedEncoderCodec = struct {
         state.greedy_scratch.deinit(allocator);
         state.tokens.deinit(allocator);
         state.commands.deinit(allocator);
+        state.history.deinit(allocator);
     }
 
     pub fn resetState(state: *State) void {
@@ -372,6 +374,7 @@ const IncrementalPlannedEncoderCodec = struct {
         state.window_bits = default_window_bits;
         state.tokens.clearRetainingCapacity();
         state.commands.clearRetainingCapacity();
+        state.history.clearRetainingCapacity();
         state.greedy_scratch.head_initialized = @splat(0);
         state.greedy_scratch.prev.clearRetainingCapacity();
     }
@@ -379,6 +382,7 @@ const IncrementalPlannedEncoderCodec = struct {
     pub fn stateRetainedCapacity(state: *const State) usize {
         return state.tokens.capacity * @sizeOf(lz77.Token) +
             state.commands.capacity * @sizeOf(command_plan.Command) +
+            state.history.capacity +
             state.greedy_scratch.retainedCapacity();
     }
 
@@ -405,17 +409,35 @@ const IncrementalPlannedEncoderCodec = struct {
         const start_byte = if (start_len == 0) 0 else out.items[start_len - 1];
         const max_backward_distance = (@as(usize, 1) << state.window_bits) - 16;
 
-        const stats = try lz77.hashGreedyPlanAutoTinyScratchReuse(&state.tokens, &state.greedy_scratch, allocator, block, .{
-            .window_len = @min(block.len, max_backward_distance),
-            .max_chain = 64,
-            .nice_len = 64,
-            .max_candidates = 8,
-            .min_match = 3,
-            .max_match = lz77.max_match_len,
-        });
+        const stats = if (state.history.items.len == 0)
+            try lz77.hashGreedyPlanAutoTinyScratchReuse(&state.tokens, &state.greedy_scratch, allocator, block, .{
+                .window_len = @min(block.len, max_backward_distance),
+                .max_chain = 64,
+                .nice_len = 64,
+                .max_candidates = 8,
+                .min_match = 3,
+                .max_match = lz77.max_match_len,
+            })
+        else blk: {
+            const plan = try lz77.hashGreedyPlanAllocWithDictionary(allocator, block, state.history.items, .{
+                .window_len = max_backward_distance,
+                .max_chain = 64,
+                .nice_len = 64,
+                .max_candidates = 8,
+                .min_match = 3,
+                .max_match = lz77.max_match_len,
+            });
+            defer plan.deinit(allocator);
+            state.tokens.clearRetainingCapacity();
+            try state.tokens.appendSlice(allocator, plan.tokens);
+            break :blk plan.stats;
+        };
         var compressed_ok = stats.matches != 0;
         if (compressed_ok) {
-            _ = try command_plan.buildTrustedReuse(&state.commands, allocator, block, state.tokens.items);
+            _ = if (state.history.items.len == 0)
+                try command_plan.buildTrustedReuse(&state.commands, allocator, block, state.tokens.items)
+            else
+                try command_plan.buildWithDictionaryReuse(&state.commands, allocator, block, state.history.items.len, state.tokens.items);
             var encode_stats: encoder_stats.PlannedEncodeStats = .{};
             encodeCommandPlanWithOptionsWrite(allocator, &writer, block, state.commands.items, null, &encode_stats, .{
                 .write_stream_prefix = false,
@@ -433,6 +455,7 @@ const IncrementalPlannedEncoderCodec = struct {
             try writeUncompressedMetaBlock(allocator, &writer, block);
         }
         state.bit_index = writer.bit_index;
+        try appendHistory(&state.history, allocator, block, max_backward_distance);
     }
 
     pub fn writeMetadata(allocator: std.mem.Allocator, out: *std.ArrayList(u8), state: *State, metadata: []const u8) br.Error!void {
@@ -450,6 +473,19 @@ const IncrementalPlannedEncoderCodec = struct {
 
     fn startBitPosition(len: usize, bit_index: u3) usize {
         return if (bit_index == 0) len * 8 else (len - 1) * 8 + bit_index;
+    }
+
+    fn appendHistory(history: *std.ArrayList(u8), allocator: std.mem.Allocator, block: []const u8, limit: usize) br.Error!void {
+        if (block.len >= limit) {
+            history.clearRetainingCapacity();
+            try history.appendSlice(allocator, block[block.len - limit ..]);
+            return;
+        }
+        const keep = @min(history.items.len, limit - block.len);
+        if (keep != history.items.len)
+            std.mem.copyForwards(u8, history.items[0..keep], history.items[history.items.len - keep ..]);
+        history.shrinkRetainingCapacity(keep);
+        try history.appendSlice(allocator, block);
     }
 };
 

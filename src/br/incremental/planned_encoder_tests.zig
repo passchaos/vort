@@ -77,6 +77,28 @@ test "incremental planned encoder retains planner capacity across streams" {
     try std.testing.expectEqualSlices(u8, first, output[0..written]);
 }
 
+test "incremental planned encoder matches across block history" {
+    var first: [4096]u8 = undefined;
+    var state: u32 = 0x9e37_79b9;
+    for (&first) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    const input = first ++ first;
+    var encoder = br.IncrementalPlannedStreamEncoder.initWithOptions(std.testing.allocator, .{ .block_len = first.len });
+    defer encoder.deinit();
+    const encoded = try encodeIncremental(&encoder, &input, 257, 11);
+    defer std.testing.allocator.free(encoded);
+
+    const independent_chunks = [_][]const u8{ &first, &first };
+    const independent = try br.encodePlannedStreamChunksAlloc(std.testing.allocator, &independent_chunks);
+    defer std.testing.allocator.free(independent);
+    try std.testing.expect(encoded.len * 2 < independent.len + 64);
+    const decoded = try br.decodeStreamAllocExactSize(std.testing.allocator, encoded, input.len);
+    defer std.testing.allocator.free(decoded);
+    try std.testing.expectEqualSlices(u8, &input, decoded);
+}
+
 fn encodeIncremental(encoder: *br.IncrementalPlannedStreamEncoder, input: []const u8, input_chunk_len: usize, output_chunk_len: usize) ![]u8 {
     var encoded: std.ArrayList(u8) = .empty;
     errdefer encoded.deinit(std.testing.allocator);
