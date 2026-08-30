@@ -6,7 +6,7 @@ import csv
 from pathlib import Path
 
 COLUMNS = [
-    "input_bytes", "iterations", "one_shot_bytes", "reusable_bytes",
+    "case", "input_bytes", "iterations", "one_shot_bytes", "reusable_bytes",
     "one_shot_ns", "reusable_ns",
     "speedup", "one_shot_checksum", "reusable_checksum",
     "retained_bytes",
@@ -21,13 +21,19 @@ def main() -> int:
         reader = csv.DictReader(handle)
         assert reader.fieldnames == COLUMNS
         rows = list(reader)
-    assert len(rows) == 1
-    row = rows[0]
-    for key in COLUMNS:
-        assert float(row[key]) > 0, row
-    assert int(row["reusable_bytes"]) <= int(row["one_shot_bytes"]) + 2, row
-    assert float(row["speedup"]) >= 1.10, row
-    print("br_incremental_planned_bench_gate=ok rows=1")
+    by_case = {row["case"]: row for row in rows}
+    assert len(rows) == 2 and set(by_case) == {"single_block", "cross_block"}
+    for row in rows:
+        for key in COLUMNS[1:]:
+            assert float(row[key]) > 0, row
+    single = by_case["single_block"]
+    assert int(single["reusable_bytes"]) <= int(single["one_shot_bytes"]) + 2, single
+    assert float(single["speedup"]) >= 1.10, single
+    cross = by_case["cross_block"]
+    assert int(cross["input_bytes"]) == 8192, cross
+    assert int(cross["reusable_bytes"]) * 2 < int(cross["one_shot_bytes"]) + 64, cross
+    assert cross["one_shot_checksum"] == cross["reusable_checksum"], cross
+    print("br_incremental_planned_bench_gate=ok rows=2")
     return 0
 
 

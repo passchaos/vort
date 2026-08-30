@@ -2,6 +2,7 @@ const std = @import("std");
 const vort = @import("vort");
 
 const payload = "incremental planned Brotli payload with repeated fields and values=1234567890\n" ** 64;
+const repeated_block_len = 4096;
 const Sample = struct { elapsed_ns: u64, checksum: usize };
 
 pub fn main(init: std.process.Init) !void {
@@ -27,9 +28,66 @@ pub fn main(init: std.process.Init) !void {
         if (!std.mem.eql(u8, payload, decoded)) return error.SizeMismatch;
     }
 
-    try stdout.interface.writeAll("input_bytes,iterations,one_shot_bytes,reusable_bytes,one_shot_ns,reusable_ns,speedup,one_shot_checksum,reusable_checksum,retained_bytes\n");
-    try stdout.interface.print("{d},{d},{d},{d},{d},{d},{d:.4},{d},{d},{d}\n", .{ payload.len, iterations, one_shot_wire.len, reusable_len, one_shot.elapsed_ns, reusable.elapsed_ns, @as(f64, @floatFromInt(one_shot.elapsed_ns)) / @as(f64, @floatFromInt(reusable.elapsed_ns)), one_shot.checksum, reusable.checksum, reusableRetainedCapacity(init.gpa) });
+    try stdout.interface.writeAll("case,input_bytes,iterations,one_shot_bytes,reusable_bytes,one_shot_ns,reusable_ns,speedup,one_shot_checksum,reusable_checksum,retained_bytes\n");
+    try stdout.interface.print("single_block,{d},{d},{d},{d},{d},{d},{d:.4},{d},{d},{d}\n", .{ payload.len, iterations, one_shot_wire.len, reusable_len, one_shot.elapsed_ns, reusable.elapsed_ns, @as(f64, @floatFromInt(one_shot.elapsed_ns)) / @as(f64, @floatFromInt(reusable.elapsed_ns)), one_shot.checksum, reusable.checksum, reusableRetainedCapacity(init.gpa) });
+    try writeCrossBlockRow(init.io, init.gpa, &stdout.interface, iterations);
     try stdout.interface.flush();
+}
+
+fn writeCrossBlockRow(io: std.Io, allocator: std.mem.Allocator, writer: *std.Io.Writer, iterations: usize) !void {
+    var first: [repeated_block_len]u8 = undefined;
+    var state: u32 = 0x9e37_79b9;
+    for (&first) |*byte| {
+        state = state *% 1_664_525 +% 1_013_904_223;
+        byte.* = @truncate(state >> 24);
+    }
+    const input = first ++ first;
+    const chunks = [_][]const u8{ &first, &first };
+    const independent = try vort.brEncodePlannedStreamChunksAlloc(allocator, &chunks);
+    defer allocator.free(independent);
+
+    var encoder = vort.BrotliIncrementalPlannedStreamEncoder.initWithOptions(allocator, .{ .block_len = first.len });
+    defer encoder.deinit();
+    const output = try allocator.alloc(u8, input.len + 16);
+    defer allocator.free(output);
+    const encoded_len = try encodeCrossBlock(&encoder, &input, output);
+    const decoded = try vort.brDecodeStreamAllocExactSize(allocator, output[0..encoded_len], input.len);
+    defer allocator.free(decoded);
+    if (!std.mem.eql(u8, &input, decoded)) return error.SizeMismatch;
+
+    var best_ns: u64 = std.math.maxInt(u64);
+    var checksum: usize = 0;
+    for (0..5) |_| {
+        var run_checksum: usize = 0;
+        const start = std.Io.Clock.awake.now(io);
+        for (0..iterations) |_| {
+            if (encoder.snapshot().done) try encoder.nextStream(.{ .block_len = first.len });
+            const len = try encodeCrossBlock(&encoder, &input, output);
+            run_checksum +%= std.hash.Wyhash.hash(0, output[0..len]);
+        }
+        const elapsed_ns = elapsed(start, io);
+        if (elapsed_ns < best_ns) {
+            best_ns = elapsed_ns;
+            checksum = run_checksum;
+        }
+    }
+    try writer.print("cross_block,{d},{d},{d},{d},{d},{d},{d:.4},{d},{d},{d}\n", .{ input.len, iterations, independent.len, encoded_len, best_ns, best_ns, 1.0, checksum, checksum, encoder.retainedCapacity() });
+}
+
+fn encodeCrossBlock(encoder: *vort.BrotliIncrementalPlannedStreamEncoder, input: []const u8, output: []u8) !usize {
+    var input_offset: usize = 0;
+    var output_offset: usize = 0;
+    while (input_offset < input.len) {
+        const result = try encoder.step(input[input_offset..], output[output_offset..]);
+        input_offset += result.progress.input_read;
+        output_offset += result.progress.output_written;
+    }
+    try encoder.finish();
+    while (true) {
+        const result = try encoder.step("", output[output_offset..]);
+        output_offset += result.progress.output_written;
+        if (result.status == .done) return output_offset;
+    }
 }
 
 fn measureOneShot(io: std.Io, allocator: std.mem.Allocator, iterations: usize) !Sample {

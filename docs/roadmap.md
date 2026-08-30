@@ -8210,7 +8210,9 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   history remains codec-owned, bounded, and is cleared by `nextStream`; a
   duplicated 4 KiB random block falls from 8,199 independent-block bytes to
   4,113 bytes, while tiny-output Vort and Node decoders reproduce the original
-  8 KiB payload.
+  8 KiB payload. The incremental planner benchmark now retains this as a
+  separate `cross_block` row, checks the compression delta and decoded wire,
+  and reports the bounded retained state (about 71 KiB on this fixture).
   Added a focused incremental planned-encoder benchmark/gate comparing warmed
   codec-owned state with rebuilding the one-shot fast encoder. On fixed CPU 8
   at 200 iterations both paths emit 120-byte streams for the 4,992-byte
