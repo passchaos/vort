@@ -261,6 +261,59 @@ pub fn trainAlloc(allocator: std.mem.Allocator, samples: []const []const u8, opt
     return dict.toOwnedSlice(allocator);
 }
 
+/// Train several bounded deterministic phrase dictionaries and retain the one
+/// with the greatest held-out match coverage. This is a compact validation-
+/// guided selector rather than COVER/FastCover: candidate count is fixed and
+/// scoring uses the same greedy dictionary matcher exposed by this module.
+/// Ties preserve the baseline candidate so existing deterministic output is
+/// stable unless another configuration proves strictly better coverage.
+pub fn trainValidatedAlloc(
+    allocator: std.mem.Allocator,
+    training_samples: []const []const u8,
+    validation_samples: []const []const u8,
+    options: TrainOptions,
+) ![]u8 {
+    const Candidate = struct { min_phrase_len: usize, max_phrase_len: usize, max_phrases: usize };
+    const candidates = [_]Candidate{
+        .{ .min_phrase_len = options.min_phrase_len, .max_phrase_len = options.max_phrase_len, .max_phrases = options.max_phrases },
+        .{ .min_phrase_len = 3, .max_phrase_len = 12, .max_phrases = @max(options.max_phrases, 512) },
+        .{ .min_phrase_len = 4, .max_phrase_len = 24, .max_phrases = @max(options.max_phrases, 512) },
+        .{ .min_phrase_len = 6, .max_phrase_len = 32, .max_phrases = @max(options.max_phrases, 1024) },
+    };
+
+    var best: ?[]u8 = null;
+    errdefer if (best) |bytes| allocator.free(bytes);
+    var best_covered: usize = 0;
+    var best_matches: usize = 0;
+    for (candidates) |candidate| {
+        const trained = try trainAlloc(allocator, training_samples, .{
+            .target_size = options.target_size,
+            .min_phrase_len = candidate.min_phrase_len,
+            .max_phrase_len = candidate.max_phrase_len,
+            .max_phrases = candidate.max_phrases,
+        });
+        errdefer allocator.free(trained);
+        var covered: usize = 0;
+        var matches: usize = 0;
+        for (validation_samples) |sample| {
+            const summary = try summarizeMatchesAlloc(allocator, trained, sample, options.min_phrase_len);
+            covered = std.math.add(usize, covered, summary.covered_bytes) catch return error.InvalidDictionaryTraining;
+            matches = std.math.add(usize, matches, summary.matches) catch return error.InvalidDictionaryTraining;
+        }
+        // Prefer more covered bytes, then fewer match operations (longer useful
+        // phrases). The first baseline candidate wins complete ties.
+        if (best == null or covered > best_covered or
+            (covered == best_covered and matches < best_matches))
+        {
+            if (best) |bytes| allocator.free(bytes);
+            best = trained;
+            best_covered = covered;
+            best_matches = matches;
+        } else allocator.free(trained);
+    }
+    return best orelse try allocator.alloc(u8, 0);
+}
+
 fn findPhrase(phrases: []const Phrase, bytes: []const u8) ?usize {
     for (phrases, 0..) |phrase, i| {
         if (std.mem.eql(u8, phrase.bytes, bytes)) return i;
@@ -679,6 +732,34 @@ test "dictionary trainer is deterministic and extracts repeated phrases" {
     try std.testing.expect(dict1.len <= 32);
     const meta = Metadata.fromBytes(dict1, 32 * 1024);
     try std.testing.expectEqual(dict1.len, meta.content_len);
+}
+
+test "validated dictionary trainer preserves or improves held-out coverage" {
+    const training = [_][]const u8{
+        "service=vort region=west status=ok message=alpha alpha alpha",
+        "service=vort region=east status=ok message=beta beta beta",
+        "service=vort region=north status=warn message=gamma gamma",
+    };
+    const validation = [_][]const u8{
+        "service=vort region=south status=ok message=alpha beta",
+        "service=vort region=west status=warn message=gamma alpha",
+    };
+    const options: TrainOptions = .{ .target_size = 64 };
+    const baseline = try trainAlloc(std.testing.allocator, &training, options);
+    defer std.testing.allocator.free(baseline);
+    const selected = try trainValidatedAlloc(std.testing.allocator, &training, &validation, options);
+    defer std.testing.allocator.free(selected);
+    const again = try trainValidatedAlloc(std.testing.allocator, &training, &validation, options);
+    defer std.testing.allocator.free(again);
+
+    var baseline_covered: usize = 0;
+    var selected_covered: usize = 0;
+    for (validation) |sample| {
+        baseline_covered += (try summarizeMatchesAlloc(std.testing.allocator, baseline, sample, options.min_phrase_len)).covered_bytes;
+        selected_covered += (try summarizeMatchesAlloc(std.testing.allocator, selected, sample, options.min_phrase_len)).covered_bytes;
+    }
+    try std.testing.expect(selected_covered >= baseline_covered);
+    try std.testing.expectEqualSlices(u8, selected, again);
 }
 
 test "dictionary trainer handles empty target" {

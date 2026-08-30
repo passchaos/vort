@@ -8320,3 +8320,19 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   size improves `2061 -> 1153`. The gate requires an aggregate win and no
   per-family regression while running both Vort-to-libzstd and
   libzstd-to-Vort decoding for every trained dictionary.
+  Added validation-guided history selection as an explicit opt-in API,
+  `zstdTrainValidatedStandardDictionaryAlloc`. The shared dictionary trainer
+  evaluates four bounded phrase-length/candidate-cap configurations against
+  caller-provided held-out samples, maximizing covered bytes and then
+  minimizing match operations; strict ties preserve the original deterministic
+  candidate. The selected history is then paired with entropy tables trained
+  from the complete training corpus. A focused selector corpus changes the
+  chosen 64-byte history, improves libzstd 1.5.5 level-1 output from 95 to 78
+  bytes, and round-trips through Vort. This adds an overfitting guard and a
+  useful step toward COVER/FastCover-quality selection without claiming parity.
+  An attempted upstream-style residual-literal-only Huffman histogram was also
+  rejected by the three-family gate: text regressed `502 -> 517`, structured
+  `72 -> 80`, and binary stayed at 579 bytes, so raw-byte Huffman statistics
+  remain the measured winner. Upstream zstd's dormant repcode ranking is still
+  disabled behind `#if 0`; Vort likewise keeps repcodes `1/4/8` until both its
+  encoder state and multi-corpus evidence can validate a change.

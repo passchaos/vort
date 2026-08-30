@@ -365,12 +365,40 @@ pub fn trainStandardDictionaryAlloc(
 
     const content = try dictionary_mod.trainAlloc(allocator, samples, options);
     defer allocator.free(content);
-    try dictionary_format.validateGenerationInput(content.len, dictionary_id);
+    return try standardDictionaryFromSelectedContentAndSamplesAlloc(allocator, content, samples, dictionary_id);
+}
 
+/// Validation-guided variant of `trainStandardDictionaryAlloc`. The held-out
+/// samples select among a fixed family of history phrase configurations; the
+/// complete training corpus still supplies the Huffman and sequence entropy
+/// statistics after that history has been chosen.
+pub fn trainValidatedStandardDictionaryAlloc(
+    allocator: std.mem.Allocator,
+    training_samples: []const []const u8,
+    validation_samples: []const []const u8,
+    options: NativeDictionaryTrainOptions,
+    dictionary_id: u32,
+) Error!OwnedStandardDictionary {
+    if (dictionary_id == 0) return error.InvalidDictionaryMetadata;
+    if (training_samples.len == 0 or validation_samples.len == 0) return error.InvalidDictionaryTraining;
+    const content = try dictionary_mod.trainValidatedAlloc(allocator, training_samples, validation_samples, options);
+    defer allocator.free(content);
+    return try standardDictionaryFromSelectedContentAndSamplesAlloc(
+        allocator,
+        content,
+        training_samples,
+        dictionary_id,
+    );
+}
+
+fn standardDictionaryFromSelectedContentAndSamplesAlloc(
+    allocator: std.mem.Allocator,
+    content: []const u8,
+    samples: []const []const u8,
+    dictionary_id: u32,
+) Error!OwnedStandardDictionary {
+    try dictionary_format.validateGenerationInput(content.len, dictionary_id);
     var frequencies: SmallHuffmanFrequencies = @splat(@splat(0));
-    // This mirrors zstd's dictionary trainer: full dictionaries must provide a
-    // complete literal alphabet because Repeat_Mode can use the table before a
-    // frame has transmitted any replacement tree.
     for (0..256) |symbol| frequencies[0][symbol] = 1;
     for (samples) |sample| addBytesToSmallHuffmanFrequencies(&frequencies, sample);
     var plan = smallHuffmanLiteralPlanFromFrequencies(&frequencies);
@@ -380,9 +408,8 @@ pub fn trainStandardDictionaryAlloc(
     defer literal_entropy.deinit(allocator);
     if (!try emitSmallHuffmanTree(allocator, &literal_entropy, &plan)) {
         // A perfectly flat corpus produces an all-equal weight stream, which
-        // the Zstd Huffman header cannot encode profitably. Use the same
-        // slightly perturbed complete alphabet strategy as upstream zstd so
-        // noisy training data still yields a valid, general-purpose table.
+        // the Zstd Huffman header cannot encode profitably. Use upstream
+        // zstd's slightly perturbed complete alphabet in that case.
         frequencies = @splat(@splat(0));
         frequencies[0][0] = 4;
         for (1..256) |symbol| frequencies[0][symbol] = 2;
@@ -392,24 +419,12 @@ pub fn trainStandardDictionaryAlloc(
         finalizeSmallHuffmanLiteralPlan(&plan) orelse return error.InvalidDictionaryTraining;
         if (!try emitSmallHuffmanTree(allocator, &literal_entropy, &plan)) return error.InvalidDictionaryTraining;
     }
-
     var sequence_entropy: std.ArrayList(u8) = .empty;
     defer sequence_entropy.deinit(allocator);
     try trainStandardDictionarySequenceEntropy(allocator, &sequence_entropy, samples, content);
-
-    const bytes = try allocator.alloc(u8, try dictionary_format.encodedFromEntropyLen(
-        content.len,
-        literal_entropy.items.len,
-        sequence_entropy.items.len,
-    ));
+    const bytes = try allocator.alloc(u8, try dictionary_format.encodedFromEntropyLen(content.len, literal_entropy.items.len, sequence_entropy.items.len));
     errdefer allocator.free(bytes);
-    _ = try dictionary_format.encodeFromEntropyInto(
-        content,
-        dictionary_id,
-        literal_entropy.items,
-        sequence_entropy.items,
-        bytes,
-    );
+    _ = try dictionary_format.encodeFromEntropyInto(content, dictionary_id, literal_entropy.items, sequence_entropy.items, bytes);
     return .{ .bytes = bytes, .view = try inspectStandardDictionary(bytes) };
 }
 

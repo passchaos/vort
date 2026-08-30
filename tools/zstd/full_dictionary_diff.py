@@ -44,6 +44,7 @@ def main() -> int:
         structured_trained, structured_baseline = sizes("structured")
         binary_trained, binary_baseline = sizes("binary")
         total_trained, total_baseline = sizes("total")
+        selector_trained, selector_baseline = sizes("selector")
         if total_trained >= total_baseline:
             raise SystemExit(f"trained dictionary entropy did not improve the aggregate: {output!r}")
         if text_trained > 507:
@@ -56,6 +57,8 @@ def main() -> int:
                 raise SystemExit(f"trained {name} entropy regressed: {output!r}")
         if int(fields.get("sequence_entropy", 0)) <= 0:
             raise SystemExit(f"trained sequence entropy was not reported: {output!r}")
+        if selector_trained > selector_baseline:
+            raise SystemExit(f"validated history selector regressed: {output!r}")
         generated_bytes = generated.read_bytes()
         if generated_bytes[:4] != bytes.fromhex("37a430ec"):
             raise SystemExit("Vort generated dictionary has bad magic")
