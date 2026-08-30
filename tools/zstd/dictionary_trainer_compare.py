@@ -98,6 +98,8 @@ def main() -> int:
                 raise SystemExit(f"text trainer parity regressed: {output!r}")
             if kind == "json" and max(ratios) > 1.03:
                 raise SystemExit(f"JSON trainer parity regressed: {output!r}")
+            if kind == "json" and (ratios[1] > 1.01 or ratios[2] > 1.0):
+                raise SystemExit(f"JSON sequence entropy regressed: {output!r}")
             if kind == "source" and (max(ratios) > 1.50 or sum(ratios) / len(ratios) > 1.25):
                 raise SystemExit(f"source trainer parity gap exceeded: {output!r}")
             rows.append((kind, fields, output))
@@ -106,9 +108,10 @@ def main() -> int:
         print(output)
     total_vort = sum(int(fields[level].split("/", 1)[0]) for _, fields, _ in rows for level in ("level1", "level3", "level9"))
     total_reference = sum(int(fields[level].split("/", 1)[1]) for _, fields, _ in rows for level in ("level1", "level3", "level9"))
-    # Synthetic families now reach aggregate parity. The source corpus is a
-    # deliberately harder realism check and currently trails slightly; keep
-    # the combined suite within one percent while that remaining gap is worked.
+    # The source set is generated from files that include the latest work, so
+    # individual bytes can move as the implementation changes. Require the
+    # expanded suite to remain within one percent while preserving stricter
+    # text and JSON per-family gates above.
     if total_vort * 100 > total_reference * 101:
         raise SystemExit(f"aggregate trainer parity gap exceeded: {total_vort}/{total_reference}")
     print(f"zstd_dictionary_trainer_compare_gate=ok total={total_vort}/{total_reference}")

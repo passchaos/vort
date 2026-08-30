@@ -8417,3 +8417,13 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   320–416-byte target scan did not produce a universal replacement; the public
   352-byte target remains and validation chooses the best bounded size/layout
   for each corpus.
+  Sequence entropy training now merges dictionary-aware greedy and lazy LZ77
+  parses before normalizing OF/ML/LL counts, covering the different match
+  decisions used by speed- and ratio-oriented compressors. The baseline-control
+  sequence header shrinks from 86 to 76 bytes; structured JSON improves
+  `201/187/187 -> 199/185/184`, binary level 1 improves `791 -> 790`, and
+  the retained source snapshot also improves. The synthetic nine-row subtotal
+  is `3862/3876`, about 0.36% smaller than zstd overall. JSON level 3 is within
+  one byte and level 9 wins; binary level 3 (`814/796`) remains the clearest
+  unresolved row. The source files are sampled dynamically, so their exact
+  sizes remain reported by the gate rather than pinned in this roadmap.

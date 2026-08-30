@@ -549,6 +549,9 @@ fn trainStandardDictionarySequenceEntropy(
                 options,
             );
             try addStandardDictionarySequenceCounts(&counts, tokens.items);
+            const lazy = try lz77.lazyGreedyPlanAllocWithDictionary(allocator, block, dictionary_content, options);
+            defer lazy.deinit(allocator);
+            try addStandardDictionarySequenceCounts(&counts, lazy.tokens);
             offset = end;
         }
     }

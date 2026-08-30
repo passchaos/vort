@@ -57,6 +57,8 @@ def main() -> int:
                 raise SystemExit(f"trained {name} entropy regressed: {output!r}")
         if int(fields.get("sequence_entropy", 0)) <= 0:
             raise SystemExit(f"trained sequence entropy was not reported: {output!r}")
+        if int(fields["sequence_entropy"]) > 80:
+            raise SystemExit(f"trained sequence entropy header regressed: {output!r}")
         if selector_trained > selector_baseline:
             raise SystemExit(f"validated history selector regressed: {output!r}")
         generated_bytes = generated.read_bytes()
