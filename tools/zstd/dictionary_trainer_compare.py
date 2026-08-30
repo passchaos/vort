@@ -100,6 +100,8 @@ def main() -> int:
                 raise SystemExit(f"JSON trainer parity regressed: {output!r}")
             if kind == "json" and (ratios[1] > 1.01 or ratios[2] > 1.0):
                 raise SystemExit(f"JSON sequence entropy regressed: {output!r}")
+            if kind == "binary" and max(ratios) > 1.0:
+                raise SystemExit(f"binary trainer parity regressed: {output!r}")
             if kind == "source" and (max(ratios) > 1.50 or sum(ratios) / len(ratios) > 1.25):
                 raise SystemExit(f"source trainer parity gap exceeded: {output!r}")
             rows.append((kind, fields, output))

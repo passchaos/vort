@@ -417,7 +417,7 @@ pub fn trainValidatedStandardDictionaryAlloc(
     );
 }
 
-fn validatedDictionaryTargetSizes(target_size: usize) [4]usize {
+fn validatedDictionaryTargetSizes(target_size: usize) [5]usize {
     // Preserve the requested target first for deterministic ties. The smaller
     // candidates trade a little coverage for dictionary bytes and cheaper
     // first-block offsets; all values remain bounded by the caller's budget.
@@ -426,11 +426,12 @@ fn validatedDictionaryTargetSizes(target_size: usize) [4]usize {
         target_size / 2 + target_size / 4,
         target_size / 2 + target_size / 8,
         target_size / 2,
+        target_size / 4,
     };
 }
 
 test "standard Zstd validated target ladder is bounded" {
-    try std.testing.expectEqual([4]usize{ 352, 264, 220, 176 }, validatedDictionaryTargetSizes(352));
+    try std.testing.expectEqual([5]usize{ 352, 264, 220, 176, 88 }, validatedDictionaryTargetSizes(352));
     const maximum = validatedDictionaryTargetSizes(std.math.maxInt(usize));
     for (maximum) |size| try std.testing.expect(size <= std.math.maxInt(usize));
 }

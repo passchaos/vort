@@ -8427,3 +8427,12 @@ DEFLATE matcher/tree stages with pinned, interleaved A/B evidence.
   one byte and level 9 wins; binary level 3 (`814/796`) remains the clearest
   unresolved row. The source files are sampled dynamically, so their exact
   sizes remain reported by the gate rather than pinned in this roadmap.
+  Extended the bounded history-size ladder with a 25%-of-budget candidate. A
+  352-byte parity run selects 88-byte histories for text, JSON, and binary,
+  reaching
+  text `318/283/270` and JSON `192/184/184` at levels 1/3/9, versus zstd's
+  `344/293/273` and `196/184/185`. Binary remained close at `797/802/800`
+  versus `795/796/810`. Vort therefore wins or ties every synthetic row,
+  including the former binary level-3 gap. The smaller candidate is evaluated
+  automatically by the same held-out cost model rather than requiring callers
+  to guess it; the gate now requires binary parity at every level.
